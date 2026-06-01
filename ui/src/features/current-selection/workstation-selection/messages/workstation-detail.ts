@@ -169,6 +169,8 @@ const workstationDetailMessagesByLocale = {
       `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
     editableConfigurationCronJitterInvalid: (value) =>
       `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
     editableConfigurationCronScheduleRequired:
       "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldHint:
@@ -372,6 +374,8 @@ const workstationDetailMessagesByLocale = {
       `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
     editableConfigurationCronJitterInvalid: (value) =>
       `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
     editableConfigurationCronScheduleRequired:
       "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldHint:
@@ -571,6 +575,8 @@ const workstationDetailMessagesByLocale = {
       `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
     editableConfigurationCronJitterInvalid: (value) =>
       `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
     editableConfigurationCronScheduleRequired:
       "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldHint:
@@ -752,6 +758,8 @@ const workstationDetailMessagesByLocale = {
       `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
     editableConfigurationCronJitterInvalid: (value) =>
       `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+    editableConfigurationCronScheduleInvalid: (schedule, detail) =>
+      `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
     editableConfigurationCronScheduleRequired:
       "cron workstation requires non-empty 'schedule'",
     cronExpiryWindowFieldHint:

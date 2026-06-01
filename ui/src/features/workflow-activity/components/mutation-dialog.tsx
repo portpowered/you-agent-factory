@@ -1,35 +1,22 @@
 import { type ReactNode, useId } from "react";
 import {
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/ui/widget-frame";
-import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import {
+  EMPTY_STATE_CLASS,
+  EMPTY_STATE_COMPACT_CLASS,
+} from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 
 const DIALOG_OVERLAY_CLASS =
   "z-50 flex items-center justify-center bg-af-overlay-strong p-4 backdrop-blur-sm";
-const DIALOG_PANEL_CLASS =
-  "pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-af-border bg-af-surface-raised shadow-af-panel";
-const DIALOG_HEADER_CLASS = "flex items-start justify-between gap-4";
-const DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const DIALOG_DESCRIPTION_CLASS = cn("m-0", DASHBOARD_BODY_TEXT_CLASS);
-const DIALOG_EYEBROW_CLASS = cn(
-  "mb-0 text-xs font-bold uppercase tracking-[0.16em] text-af-accent",
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
 const DIALOG_CONTENT_CLASS = "grid gap-5 p-4 md:p-5";
 const DIALOG_CONTENT_WITH_MEDIA_CLASS =
   "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
-const DIALOG_MAIN_CLASS = "grid content-start gap-4";
-const DIALOG_CLOSE_BUTTON_CLASS =
-  "inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
-const DIALOG_FOOTER_CLASS = "flex flex-wrap justify-end gap-3";
 
 const MESSAGE_PANEL_TONE_CLASS = {
   error: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
@@ -104,7 +91,7 @@ export function DashboardMutationDialog({
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
-        className={DIALOG_PANEL_CLASS}
+        className="pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-af-border bg-af-surface-raised shadow-af-panel"
         role="dialog"
       >
         <div
@@ -115,15 +102,28 @@ export function DashboardMutationDialog({
         >
           {media ? <div>{media}</div> : null}
 
-          <div className={DIALOG_MAIN_CLASS}>
-            <header className={DIALOG_HEADER_CLASS}>
+          <div className="grid content-start gap-4">
+            <header className="flex items-start justify-between gap-4">
               <div className="grid gap-2">
-                <p className={DIALOG_EYEBROW_CLASS}>{resolvedFlowLabel}</p>
-                <h2 className={DIALOG_TITLE_CLASS} id={titleId}>
+                <p
+                  className={cn(
+                    "mb-0 text-xs font-bold uppercase tracking-[0.16em] text-af-accent",
+                    DASHBOARD_SUPPORTING_LABELS_CLASS,
+                  )}
+                >
+                  {resolvedFlowLabel}
+                </p>
+                <h2
+                  className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)}
+                  id={titleId}
+                >
                   {title}
                 </h2>
                 {description ? (
-                  <p className={DIALOG_DESCRIPTION_CLASS} id={descriptionId}>
+                  <p
+                    className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}
+                    id={descriptionId}
+                  >
                     {description}
                   </p>
                 ) : null}
@@ -132,7 +132,7 @@ export function DashboardMutationDialog({
               {showCloseButton && onClose ? (
                 <button
                   aria-label={resolvedCloseLabel}
-                  className={DIALOG_CLOSE_BUTTON_CLASS}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled"
                   disabled={closeDisabled}
                   onClick={onClose}
                   type="button"
@@ -157,7 +157,7 @@ export function DashboardMutationDialog({
 
             {children}
             {footer ? (
-              <div className={DIALOG_FOOTER_CLASS}>{footer}</div>
+              <div className="flex flex-wrap justify-end gap-3">{footer}</div>
             ) : null}
           </div>
         </div>

@@ -1,18 +1,18 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
-import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
-import { describe, expect, it, vi } from "vitest";
-import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
+import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
+import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkStateConfigurationState,
   EditableWorkStateSaveState,
 } from "../lib/detail-card-types";
 import { getWorkStateDetailMessages } from "../messages/work-state-detail";
-import { EditableWorkStateSaveHeaderAction } from "./work-state-save-controls";
 import { StateNodeDetailCard } from "./state-node-detail";
+import { EditableWorkStateConfigurationHeaderActions } from "./work-state-save-controls";
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
   if (value === null || value === undefined) {
@@ -29,11 +29,15 @@ describe("StateNodeDetailCard", () => {
 
   it("renders selected state node detail with current work item references", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
+    );
 
     render(
       <StateNodeDetailCard
@@ -53,12 +57,26 @@ describe("StateNodeDetailCard", () => {
 
     const summaryDetails = screen.getByText("Count").closest("dl");
 
-    expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Current selection" }),
+    ).toBeTruthy();
     expect(screen.getByText("story: implemented")).toBeTruthy();
     expect(summaryDetails).toBeTruthy();
-    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("Work type")).toBeNull();
-    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("State")).toBeNull();
-    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("State node ID")).toBeNull();
+    expect(
+      within(
+        requireValue(summaryDetails, "expected summary details"),
+      ).queryByText("Work type"),
+    ).toBeNull();
+    expect(
+      within(
+        requireValue(summaryDetails, "expected summary details"),
+      ).queryByText("State"),
+    ).toBeNull();
+    expect(
+      within(
+        requireValue(summaryDetails, "expected summary details"),
+      ).queryByText("State node ID"),
+    ).toBeNull();
     expect(screen.getByText("Count")).toBeTruthy();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
@@ -82,11 +100,15 @@ describe("StateNodeDetailCard", () => {
 
   it("omits the supporting time row when current work has no started-at timestamp", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
+    );
 
     render(
       <StateNodeDetailCard
@@ -105,51 +127,85 @@ describe("StateNodeDetailCard", () => {
     const summaryDetails = screen.getByText("Count").closest("dl");
 
     expect(summaryDetails).toBeTruthy();
-    expect(within(requireValue(summaryDetails, "expected summary details")).queryByText("Work type")).toBeNull();
+    expect(
+      within(
+        requireValue(summaryDetails, "expected summary details"),
+      ).queryByText("Work type"),
+    ).toBeNull();
     expect(screen.queryByText(/^Started at /)).toBeNull();
   });
 
   it("renders the state-node selection header as one combined summary", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
     );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
-
-    render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        place={resolvedSelectedState}
+        tokenCount={0}
+      />,
+    );
 
     const header = screen.getByTitle("story:implemented");
-    const summary = within(header).getByText("story: implemented", { selector: "p" });
+    const summary = within(header).getByText("story: implemented", {
+      selector: "p",
+    });
     expect(summary.className).toContain(WIDGET_SUBTITLE_CLASS);
   });
 
   it("renders selected state node empty-position guidance", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
     );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    render(
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        place={resolvedSelectedState}
+        tokenCount={0}
+      />,
+    );
 
-    render(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />);
-
-    expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Current selection" }),
+    ).toBeTruthy();
     expect(screen.getByText("story: implemented")).toBeTruthy();
     expect(screen.queryByText("State")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
-    expect(screen.getByText("No current work is occupying this place.")).toBeTruthy();
+    expect(
+      screen.getByText("No current work is occupying this place."),
+    ).toBeTruthy();
   });
 
   it("renders selected terminal state node detail from terminal-history occupancy", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.output_places?.find(
-      (place) => place.place_id === "story:complete",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.output_places?.find(
+        (place) => place.place_id === "story:complete",
+      );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected terminal state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected terminal state fixture",
+    );
 
     render(
       <StateNodeDetailCard
@@ -168,7 +224,9 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Current selection" }),
+    ).toBeTruthy();
     expect(screen.getByText("story: complete")).toBeTruthy();
     expect(screen.queryByText("State node ID")).toBeNull();
     expect(screen.getByText("Current work")).toBeTruthy();
@@ -183,16 +241,22 @@ describe("StateNodeDetailCard", () => {
     ).toBeTruthy();
     expect(screen.queryByText("trace-done-story")).toBeNull();
     expect(screen.queryByText(/^story$/)).toBeNull();
-    expect(screen.queryByText("No current work is occupying this place.")).toBeNull();
+    expect(
+      screen.queryByText("No current work is occupying this place."),
+    ).toBeNull();
   });
 
   it("renders failed terminal state diagnostics from retained failed-work details", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.implement.output_places?.find(
-      (place) => place.place_id === "story:blocked",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.implement.output_places?.find(
+        (place) => place.place_id === "story:blocked",
+      );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected failed state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected failed state fixture",
+    );
 
     render(
       <StateNodeDetailCard
@@ -200,7 +264,8 @@ describe("StateNodeDetailCard", () => {
         failedWorkDetailsByWorkID={{
           "work-failed-story": {
             dispatch_id: "dispatch-failed-story",
-            failure_message: "Provider rate limit exceeded while generating the repair.",
+            failure_message:
+              "Provider rate limit exceeded while generating the repair.",
             failure_reason: "provider_rate_limit",
             transition_id: "repair",
             work_item: {
@@ -239,38 +304,68 @@ describe("StateNodeDetailCard", () => {
     expect(screen.getByText("Failure reason")).toBeTruthy();
     expect(screen.getByText("provider_rate_limit")).toBeTruthy();
     expect(screen.getByText("Failure message")).toBeTruthy();
-    expect(screen.getByText("Provider rate limit exceeded while generating the repair.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Provider rate limit exceeded while generating the repair.",
+      ),
+    ).toBeTruthy();
   });
 
   it("distinguishes empty terminal state positions from unavailable terminal history", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.output_places?.find(
-      (place) => place.place_id === "story:complete",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.output_places?.find(
+        (place) => place.place_id === "story:complete",
+      );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected terminal state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected terminal state fixture",
+    );
 
     const { rerender } = render(
-      <StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />,
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        place={resolvedSelectedState}
+        tokenCount={0}
+      />,
     );
 
-    expect(screen.getByText("No work is recorded for this place at the selected tick.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "No work is recorded for this place at the selected tick.",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
 
-    rerender(<StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={1} />);
+    rerender(
+      <StateNodeDetailCard
+        currentWorkItems={[]}
+        place={resolvedSelectedState}
+        tokenCount={1}
+      />,
+    );
 
-    expect(screen.getByText("Represented work is unavailable for this place at the selected tick.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Represented work is unavailable for this place at the selected tick.",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
   });
 
   it("calls the selection callback when a listed work item is clicked", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
     const onSelectWorkItem = vi.fn();
 
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
+    );
 
     render(
       <StateNodeDetailCard
@@ -288,7 +383,9 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Select work item Active Story" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select work item Active Story" }),
+    );
 
     expect(onSelectWorkItem).toHaveBeenCalledWith({
       display_name: "Active Story",
@@ -300,31 +397,45 @@ describe("StateNodeDetailCard", () => {
 
   it("renders state-node supporting copy from the zh-CN locale catalog", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.output_places?.find(
-      (place) => place.place_id === "story:complete",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.output_places?.find(
+        (place) => place.place_id === "story:complete",
+      );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected terminal state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected terminal state fixture",
+    );
 
     render(
       <CurrentSelectionLocaleProvider locale="zh-CN">
-        <StateNodeDetailCard currentWorkItems={[]} place={resolvedSelectedState} tokenCount={0} />
+        <StateNodeDetailCard
+          currentWorkItems={[]}
+          place={resolvedSelectedState}
+          tokenCount={0}
+        />
       </CurrentSelectionLocaleProvider>,
     );
 
     expect(screen.queryByText("状态")).toBeNull();
     expect(screen.queryByText("状态节点 ID")).toBeNull();
     expect(screen.getByText("当前工作")).toBeTruthy();
-    expect(screen.getByText("在所选时间刻度，这个位置暂时没有记录到工作。")).toBeTruthy();
+    expect(
+      screen.getByText("在所选时间刻度，这个位置暂时没有记录到工作。"),
+    ).toBeTruthy();
   });
 
   it("renders Started at with the same canonical formatter output as dispatch history for zh-CN", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
-    );
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
 
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
+    );
 
     render(
       <CurrentSelectionLocaleProvider locale="zh-CN">
@@ -374,19 +485,53 @@ function buildFactoryDocument(
   };
 }
 
-function buildWorkStateHeaderSaveAction({
+function workStateDetailHeaderActionSection() {
+  const card = screen.getByRole("article", { name: "Current selection" });
+  const undoButton = within(card).getByRole("button", {
+    name: "Undo selection",
+  });
+  const actionSection = undoButton.closest(
+    "[data-dashboard-action-row-section='actions']",
+  );
+  if (!actionSection) {
+    throw new Error("expected header action section");
+  }
+
+  return actionSection as HTMLElement;
+}
+
+function editableWorkStateConfigurationForm() {
+  const panel = screen.getByRole("article", { name: "Current selection" });
+  const nameInput = within(panel).getByLabelText(
+    getWorkStateDetailMessages().nameFieldLabel,
+  );
+  const form = nameInput.closest("form");
+  if (!form) {
+    throw new Error("expected editable work state configuration form");
+  }
+
+  return form;
+}
+
+function buildWorkStateHeaderActions({
+  canDiscard = false,
   canSave,
-  onClick = vi.fn(),
+  onDiscard = vi.fn(),
+  onSave = vi.fn(),
   saveState = { status: "idle" },
 }: {
+  canDiscard?: boolean;
   canSave: boolean;
-  onClick?: () => void;
+  onDiscard?: () => void;
+  onSave?: () => void;
   saveState?: EditableWorkStateSaveState;
 }) {
   return (
-    <EditableWorkStateSaveHeaderAction
+    <EditableWorkStateConfigurationHeaderActions
+      canDiscard={canDiscard}
       canSave={canSave}
-      onClick={onClick}
+      onDiscard={onDiscard}
+      onSave={onSave}
       saveState={saveState}
     />
   );
@@ -397,10 +542,14 @@ describe("StateNodeDetailCard editable work state configuration", () => {
 
   it("renders editable name and read-only lifecycle type when configuration state is ready", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
     );
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
     const editableConfigurationState: EditableWorkStateConfigurationState = {
       baseVersion: buildFactoryDocument().version,
       canSave: false,
@@ -430,25 +579,34 @@ describe("StateNodeDetailCard editable work state configuration", () => {
       <StateNodeDetailCard
         currentWorkItems={[]}
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkStateHeaderSaveAction({ canSave: false })}
+        headerAction={buildWorkStateHeaderActions({ canSave: false })}
         place={resolvedSelectedState}
         tokenCount={0}
       />,
     );
 
     expect(screen.getByLabelText(messages.nameFieldLabel)).toBeTruthy();
-    expect(screen.getByText(messages.localizeWorkStateType("PROCESSING"))).toBeTruthy();
+    expect(
+      screen.getByText(messages.localizeWorkStateType("PROCESSING")),
+    ).toBeTruthy();
     expect(screen.queryByText("story: implemented")).toBeNull();
-    expect(screen.getByText(messages.editableConfigurationHeading)).toBeTruthy();
+    expect(
+      screen.getByText(messages.editableConfigurationHeading),
+    ).toBeTruthy();
   });
 
   it("shows duplicate-name validation with aria-invalid and role alert", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
     );
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
-    const duplicateMessage = messages.editableConfigurationNameDuplicate("complete");
+    const duplicateMessage =
+      messages.editableConfigurationNameDuplicate("complete");
 
     render(
       <StateNodeDetailCard
@@ -479,7 +637,7 @@ describe("StateNodeDetailCard editable work state configuration", () => {
           },
           workTypeName: "story",
         }}
-        headerAction={buildWorkStateHeaderSaveAction({ canSave: false })}
+        headerAction={buildWorkStateHeaderActions({ canSave: false })}
         place={resolvedSelectedState}
         tokenCount={0}
       />,
@@ -488,19 +646,26 @@ describe("StateNodeDetailCard editable work state configuration", () => {
     const nameInput = screen.getByLabelText(messages.nameFieldLabel);
     expect(nameInput.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByText(duplicateMessage)).toBeTruthy();
-    const saveButtons = screen.getAllByRole("button", {
+    const headerActions = workStateDetailHeaderActionSection();
+    const saveButtons = within(headerActions).getAllByRole("button", {
       name: messages.editableConfigurationSaveAction,
     });
+    expect(saveButtons).toHaveLength(1);
     expect(saveButtons[0]?.getAttribute("disabled")).not.toBeNull();
   });
 
-  it("stacks configuration fields vertically and renders a labeled footer Save", () => {
+  it("stacks configuration fields vertically and renders header save and discard only when dirty", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
     );
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
-    const onSaveConfiguration = vi.fn();
+    const onSave = vi.fn();
+    const onDiscard = vi.fn();
 
     const { container } = render(
       <StateNodeDetailCard
@@ -529,8 +694,12 @@ describe("StateNodeDetailCard editable work state configuration", () => {
           validationErrors: {},
           workTypeName: "story",
         }}
-        headerAction={buildWorkStateHeaderSaveAction({ canSave: true })}
-        onSaveConfiguration={onSaveConfiguration}
+        headerAction={buildWorkStateHeaderActions({
+          canDiscard: true,
+          canSave: true,
+          onDiscard,
+          onSave,
+        })}
         place={resolvedSelectedState}
         tokenCount={0}
       />,
@@ -543,24 +712,44 @@ describe("StateNodeDetailCard editable work state configuration", () => {
     expect(fieldGroup?.className).not.toMatch(/sm:grid-cols-\d/);
     expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
 
-    const saveButtons = screen.getAllByRole("button", {
+    const headerActions = workStateDetailHeaderActionSection();
+    const saveButtons = within(headerActions).getAllByRole("button", {
       name: messages.editableConfigurationSaveAction,
     });
-    expect(saveButtons).toHaveLength(2);
+    const discardButtons = within(headerActions).getAllByRole("button", {
+      name: messages.discardDraftAction,
+    });
+    expect(saveButtons).toHaveLength(1);
+    expect(discardButtons).toHaveLength(1);
 
-    fireEvent.click(saveButtons[1] ?? saveButtons[0]);
-    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
+    fireEvent.click(saveButtons[0]);
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(discardButtons[0]);
+    expect(onDiscard).toHaveBeenCalledTimes(1);
+
     expect(
-      screen.getByRole("button", { name: messages.discardDraftAction }),
-    ).toBeTruthy();
+      within(editableWorkStateConfigurationForm()).queryByRole("button", {
+        name: messages.editableConfigurationSaveAction,
+      }),
+    ).toBeNull();
+    expect(
+      within(editableWorkStateConfigurationForm()).queryByRole("button", {
+        name: messages.discardDraftAction,
+      }),
+    ).toBeNull();
   });
 
   it("keeps runtime work list content when editable configuration is ready", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
     );
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
 
     render(
       <StateNodeDetailCard

@@ -31,6 +31,7 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationBehaviorPollerWorkerUnsupported"
     | "editableConfigurationCronExpiryWindowInvalid"
     | "editableConfigurationCronJitterInvalid"
+    | "editableConfigurationCronScheduleInvalid"
     | "editableConfigurationCronScheduleRequired"
     | "editableConfigurationWorkerRequired"
     | "editableConfigurationWorkerUnavailable"
@@ -86,6 +87,8 @@ export function validateEditableWorkstationDraft(
         cronExpiryWindowInvalid:
           messages.editableConfigurationCronExpiryWindowInvalid,
         cronJitterInvalid: messages.editableConfigurationCronJitterInvalid,
+        cronScheduleInvalid:
+          messages.editableConfigurationCronScheduleInvalid,
         cronScheduleRequired:
           messages.editableConfigurationCronScheduleRequired,
       }),

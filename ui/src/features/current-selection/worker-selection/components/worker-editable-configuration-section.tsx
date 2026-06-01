@@ -1,11 +1,7 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: worker editable fields, validation feedback, save wiring, and shared-impact warnings stay colocated in one section.
 import { type ReactNode, useId, useState } from "react";
 
-import {
-  DashboardActionButton,
-  ExpandablePanelTrigger,
-  Select,
-} from "../../../../components/ui";
+import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -30,7 +26,6 @@ import {
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
-import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import { formatEditableWorkerOverwriteFieldLabels } from "../editing/editable-worker-overwrite-fields";
 import type {
   EditableWorkerConfigurationState,
@@ -44,13 +39,11 @@ import type { getWorkerDetailMessages } from "../messages/worker-detail";
 
 export function WorkerEditableConfigurationSection({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkerSaveState;
   state?: WorkerDetailCardProps["editableConfigurationState"];
   workerName: string;
@@ -121,7 +114,6 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "ready" ? (
             <WorkerEditableConfigurationReadyForm
               messages={messages}
-              onSaveConfiguration={onSaveConfiguration}
               saveState={saveState}
               state={state}
               workerName={workerName}
@@ -135,13 +127,11 @@ export function WorkerEditableConfigurationSection({
 
 function WorkerEditableConfigurationReadyForm({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
   workerName,
 }: {
   messages: ReturnType<typeof getWorkerDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkerSaveState;
   state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
   workerName: string;
@@ -150,7 +140,6 @@ function WorkerEditableConfigurationReadyForm({
     EditableWorkerValidationErrors & Record<string, string | undefined>,
     EditableWorkerSaveValidationErrors
   >(state.validationErrors, saveState);
-  const isSaving = saveState?.status === "submitting";
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
@@ -252,26 +241,6 @@ function WorkerEditableConfigurationReadyForm({
           validationErrors={validationErrors}
         />
       </div>
-      {onSaveConfiguration ? (
-        <EditableConfigurationSaveRow
-          busyLabel={messages.editableConfigurationSaveBusyAction}
-          canSave={state.canSave}
-          isSaving={isSaving}
-          onSave={onSaveConfiguration}
-          resetSlot={
-            state.isDirty ? (
-              <DashboardActionButton
-                disabled={isSaving}
-                onClick={state.onResetToLatest}
-                type="button"
-              >
-                {messages.discardDraftAction}
-              </DashboardActionButton>
-            ) : undefined
-          }
-          saveLabel={messages.editableConfigurationSaveAction}
-        />
-      ) : null}
     </form>
   );
 }

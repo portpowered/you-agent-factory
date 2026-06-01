@@ -11,6 +11,8 @@ const messages: EditableWorkstationCronValidationMessages = {
     `expiry_window must be a positive duration, got ${JSON.stringify(value)}`,
   cronJitterInvalid: (value) =>
     `jitter must be a non-negative duration, got ${JSON.stringify(value)}`,
+  cronScheduleInvalid: (schedule, detail) =>
+    `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
   cronScheduleRequired: "cron workstation requires non-empty 'schedule'",
 };
 

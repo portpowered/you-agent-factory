@@ -1,12 +1,7 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: resource editable fields, validation feedback, and runtime context stay colocated in one section.
 import { type ReactNode, useId, useState } from "react";
 
-import {
-  DashboardActionButton,
-  DashboardActionRow,
-  ExpandablePanelTrigger,
-  Select,
-} from "../../../../components/ui";
+import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -283,18 +278,6 @@ function ResourceEditableConfigurationReadyForm({
         state={state}
         validationErrors={validationErrors}
       />
-      {state.isDirty || state.overwriteFieldNames.length > 0 ? (
-        <DashboardActionRow
-          actions={
-            <DashboardActionButton
-              onClick={state.onResetToLatest}
-              type="button"
-            >
-              {messages.resetToLatestAction}
-            </DashboardActionButton>
-          }
-        />
-      ) : null}
     </form>
   );
 }

@@ -19,6 +19,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/workquery"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/materialize"
@@ -72,7 +73,7 @@ func (s *Server) listWork(
 	params factoryapi.ListWorkParams,
 	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
 ) {
-	if params.StateType != nil && !validWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
+	if params.StateType != nil && !workquery.ValidWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
 		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
 		return
 	}
@@ -139,18 +140,6 @@ func (s *Server) listWork(
 	}
 
 	s.writeJSON(w, http.StatusOK, resp)
-}
-
-func validWorkStateType(stateType factoryapi.WorkStateType) bool {
-	switch stateType {
-	case factoryapi.WorkStateTypeINITIAL,
-		factoryapi.WorkStateTypePROCESSING,
-		factoryapi.WorkStateTypeTERMINAL,
-		factoryapi.WorkStateTypeFAILED:
-		return true
-	default:
-		return false
-	}
 }
 
 type listWorkItem struct {

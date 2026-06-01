@@ -15,6 +15,7 @@ const KNOWN_CRON_DESCRIPTOR_MACROS = new Set([
 export interface EditableWorkstationCronValidationMessages {
   cronExpiryWindowInvalid: (value: string) => string;
   cronJitterInvalid: (value: string) => string;
+  cronScheduleInvalid: (schedule: string, detail: string) => string;
   cronScheduleRequired: string;
 }
 
@@ -35,10 +36,7 @@ export function validateEditableWorkstationCronDraft(
   }
 
   const validationErrors: EditableWorkstationCronValidationErrors = {};
-  const scheduleError = validateCronScheduleExpression(
-    cron.schedule,
-    messages.cronScheduleRequired,
-  );
+  const scheduleError = validateCronScheduleExpression(cron.schedule, messages);
   if (scheduleError) {
     validationErrors.cronSchedule = scheduleError;
   }
@@ -65,20 +63,20 @@ export function validateEditableWorkstationCronDraft(
 
 function validateCronScheduleExpression(
   schedule: string,
-  requiredMessage: string,
+  messages: EditableWorkstationCronValidationMessages,
 ): string | undefined {
   const trimmedSchedule = schedule.trim();
   if (trimmedSchedule.length === 0) {
-    return requiredMessage;
+    return messages.cronScheduleRequired;
   }
 
   if (trimmedSchedule.startsWith("@")) {
-    return validateCronDescriptorSchedule(trimmedSchedule);
+    return validateCronDescriptorSchedule(schedule, messages);
   }
 
   const fields = trimmedSchedule.split(/\s+/);
   if (fields.length !== 5) {
-    return formatInvalidCronSchedule(
+    return messages.cronScheduleInvalid(
       schedule,
       `gocron: CronJob: crontab parse failure\nexpected exactly ${5} fields, found ${fields.length}: [${fields.join(" ")}]`,
     );
@@ -90,11 +88,14 @@ function validateCronScheduleExpression(
   } catch (error) {
     const detail =
       error instanceof Error ? error.message : "crontab parse failure";
-    return formatInvalidCronSchedule(schedule, detail);
+    return messages.cronScheduleInvalid(schedule, detail);
   }
 }
 
-function validateCronDescriptorSchedule(schedule: string): string | undefined {
+function validateCronDescriptorSchedule(
+  schedule: string,
+  messages: EditableWorkstationCronValidationMessages,
+): string | undefined {
   const normalizedSchedule = schedule.toLowerCase();
   if (KNOWN_CRON_DESCRIPTOR_MACROS.has(normalizedSchedule)) {
     return undefined;
@@ -104,7 +105,7 @@ function validateCronDescriptorSchedule(schedule: string): string | undefined {
     const durationValue = schedule.slice("@every ".length).trim();
     const durationNanoseconds = parseGoDurationNanoseconds(durationValue);
     if (durationNanoseconds === null || durationNanoseconds <= 0) {
-      return formatInvalidCronSchedule(
+      return messages.cronScheduleInvalid(
         schedule,
         `invalid @every duration ${JSON.stringify(durationValue)}`,
       );
@@ -113,12 +114,8 @@ function validateCronDescriptorSchedule(schedule: string): string | undefined {
   }
 
   const descriptor = schedule.split(/\s+/)[0] ?? schedule;
-  return formatInvalidCronSchedule(
+  return messages.cronScheduleInvalid(
     schedule,
     `gocron: CronJob: crontab parse failure\nunrecognized descriptor: ${descriptor}`,
   );
-}
-
-function formatInvalidCronSchedule(schedule: string, detail: string): string {
-  return `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`;
 }

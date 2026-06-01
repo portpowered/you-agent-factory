@@ -94,7 +94,7 @@ export const approvedButtonUsageAllowlist = [
   {
     rawButtonFingerprints: [
       'className="pointer-events-auto absolute inset-0"',
-      'className={DIALOG_CLOSE_BUTTON_CLASS}',
+      'className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled"',
     ],
     rawButtonReason:
       "The workflow mutation dialog keeps structural overlay-dismiss and close-icon button semantics in its shared shell.",
