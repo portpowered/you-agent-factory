@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import parser from "cron-parser";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   type EditableWorkstationCronValidationMessages,
   validateEditableWorkstationCronDraft,
 } from "./editable-workstation-cron-validation";
-import { parseGoDurationNanoseconds } from "./go-duration";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const messages: EditableWorkstationCronValidationMessages = {
   cronExpiryWindowInvalid: (value) =>
@@ -15,20 +19,6 @@ const messages: EditableWorkstationCronValidationMessages = {
     `invalid cron schedule ${JSON.stringify(schedule)}: ${detail}`,
   cronScheduleRequired: "cron workstation requires non-empty 'schedule'",
 };
-
-describe("parseGoDurationNanoseconds", () => {
-  it("parses common Go duration strings", () => {
-    expect(parseGoDurationNanoseconds("5m")).toBe(5 * 60 * 1_000_000_000);
-    expect(parseGoDurationNanoseconds("1h30m")).toBe(90 * 60 * 1_000_000_000);
-    expect(parseGoDurationNanoseconds("0s")).toBe(0);
-    expect(parseGoDurationNanoseconds("-1s")).toBe(-1 * 1_000_000_000);
-  });
-
-  it("rejects invalid duration strings", () => {
-    expect(parseGoDurationNanoseconds("not-a-duration")).toBeNull();
-    expect(parseGoDurationNanoseconds("")).toBeNull();
-  });
-});
 
 describe("validateEditableWorkstationCronDraft", () => {
   const validCron = {
@@ -121,6 +111,45 @@ describe("validateEditableWorkstationCronDraft", () => {
       ),
     ).toEqual({});
   });
+});
+
+describe("validateEditableWorkstationCronDraft descriptor schedules", () => {
+  const validCron = {
+    schedule: "0 * * * *",
+    triggerAtStart: false,
+    jitter: "",
+    expiryWindow: "",
+  };
+
+  it.each([
+    "@annually",
+    "@daily",
+    "@hourly",
+    "@midnight",
+    "@monthly",
+    "@weekly",
+    "@yearly",
+  ] as const)("accepts cron descriptor macro %s", (schedule) => {
+    expect(
+      validateEditableWorkstationCronDraft(
+        { ...validCron, schedule },
+        messages,
+      ),
+    ).toEqual({});
+  });
+
+  it("uses a generic parse failure message when cron-parser throws a non-Error", () => {
+    vi.spyOn(parser, "parseExpression").mockImplementation(() => {
+      throw "broken parser";
+    });
+
+    expect(
+      validateEditableWorkstationCronDraft(
+        { ...validCron, schedule: "0 * * * *" },
+        messages,
+      ).cronSchedule,
+    ).toBe('invalid cron schedule "0 * * * *": crontab parse failure');
+  });
 
   it("accepts @every schedules with positive Go durations", () => {
     expect(
@@ -137,18 +166,14 @@ describe("validateEditableWorkstationCronDraft", () => {
         { ...validCron, schedule: "@every bad" },
         messages,
       ).cronSchedule,
-    ).toBe(
-      'invalid cron schedule "@every bad": invalid @every duration "bad"',
-    );
+    ).toBe('invalid cron schedule "@every bad": invalid @every duration "bad"');
 
     expect(
       validateEditableWorkstationCronDraft(
         { ...validCron, schedule: "@every 0s" },
         messages,
       ).cronSchedule,
-    ).toBe(
-      'invalid cron schedule "@every 0s": invalid @every duration "0s"',
-    );
+    ).toBe('invalid cron schedule "@every 0s": invalid @every duration "0s"');
 
     expect(
       validateEditableWorkstationCronDraft(

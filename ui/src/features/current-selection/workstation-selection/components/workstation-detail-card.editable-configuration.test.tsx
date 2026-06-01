@@ -554,6 +554,8 @@ describe("WorkstationDetailCard editable configuration", () => {
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const onCronScheduleChange = vi.fn();
     const onCronTriggerAtStartChange = vi.fn();
+    const onCronJitterChange = vi.fn();
+    const onCronExpiryWindowChange = vi.fn();
 
     render(
       <WorkstationDetailCard
@@ -568,6 +570,8 @@ describe("WorkstationDetailCard editable configuration", () => {
               triggerAtStart: true,
             },
           }),
+          onCronExpiryWindowChange,
+          onCronJitterChange,
           onCronScheduleChange,
           onCronTriggerAtStartChange,
         }}
@@ -583,22 +587,33 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getByDisplayValue("0 9 * * 1-5")).toBeTruthy();
     expect(screen.getByLabelText("Cron trigger at start")).toBeTruthy();
     expect(
-      (screen.getByLabelText("Cron trigger at start") as HTMLInputElement).checked,
+      (screen.getByLabelText("Cron trigger at start") as HTMLInputElement)
+        .checked,
     ).toBe(true);
     expect(screen.getByLabelText("Cron jitter")).toBeTruthy();
     expect(screen.getByDisplayValue("5s")).toBeTruthy();
     expect(screen.getByLabelText("Cron expiry window")).toBeTruthy();
     expect(screen.getByDisplayValue("45s")).toBeTruthy();
     expect(
-      screen.getByText("Required five-field cron expression (for example */5 * * * *)."),
+      screen.getByText(
+        "Required five-field cron expression (for example */5 * * * *).",
+      ),
     ).toBeTruthy();
 
     fireEvent.change(screen.getByLabelText("Cron schedule"), {
       target: { value: "*/10 * * * *" },
     });
+    fireEvent.change(screen.getByLabelText("Cron jitter"), {
+      target: { value: "10s" },
+    });
+    fireEvent.change(screen.getByLabelText("Cron expiry window"), {
+      target: { value: "2m" },
+    });
     fireEvent.click(screen.getByLabelText("Cron trigger at start"));
 
     expect(onCronScheduleChange).toHaveBeenCalledWith("*/10 * * * *");
+    expect(onCronJitterChange).toHaveBeenCalledWith("10s");
+    expect(onCronExpiryWindowChange).toHaveBeenCalledWith("2m");
     expect(onCronTriggerAtStartChange).toHaveBeenCalledWith(false);
   });
 
@@ -686,6 +701,30 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toHaveLength(2);
   });
 
+  it("shows cron trigger-at-start save validation errors on the checkbox field", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "CRON",
+          validationErrors: {
+            cronTriggerAtStart: "trigger_at_start must be a boolean",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    expect(screen.getByText("trigger_at_start must be a boolean")).toBeTruthy();
+  });
+
   it("localizes cron field labels in zh-CN for CRON workstations", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
@@ -720,7 +759,9 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.getByLabelText("Cron 启动时触发")).toBeTruthy();
     expect(screen.getByLabelText("Cron 抖动")).toBeTruthy();
     expect(screen.getByLabelText("Cron 过期窗口")).toBeTruthy();
-    expect(screen.getByText("必填的五字段 cron 表达式（例如 */5 * * * *）。")).toBeTruthy();
+    expect(
+      screen.getByText("必填的五字段 cron 表达式（例如 */5 * * * *）。"),
+    ).toBeTruthy();
   });
 
   it("renders behavior, worker, and prompt controls in the editable form", () => {
