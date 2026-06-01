@@ -5,11 +5,9 @@ import type {
   DashboardTrace,
 } from "../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../provider-session-detail/lib/provider-session-ref";
-import { buildCurrentSelectionSaveToastMessages } from "../base/lib/build-current-selection-save-toast-messages";
 import {
   CurrentSelectionHeaderActionProvider,
   CurrentSelectionLocaleProvider,
-  CurrentSelectionSaveNotifications,
 } from "../base/public";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
@@ -32,6 +30,7 @@ import {
   WorkstationRequestDetailCard,
   WorkTypeDetailCard,
 } from "./current-selection-cards";
+import { CurrentSelectionWidgetSaveNotifications } from "./current-selection-widget-save-notifications";
 import {
   CurrentSelectionWorkstationSaveDialog,
   CurrentSelectionWorkTypeSaveDialog,
@@ -422,122 +421,36 @@ export function CurrentSelectionWidget({
   });
 
   const resolvedLocale = locale ?? undefined;
-  const workstationHasDraftChanges =
-    editableConfigurationState?.status === "ready" &&
-    editableConfigurationState.isDirty;
-  const workerHasDraftChanges =
-    editableWorkerConfigurationState?.status === "ready" &&
-    editableWorkerConfigurationState.isDirty;
-  const resourceHasDraftChanges =
-    editableResourceConfigurationState?.status === "ready" &&
-    editableResourceConfigurationState.isDirty;
-  const workTypeHasDraftChanges =
-    editableWorkTypeConfigurationState?.status === "ready" &&
-    editableWorkTypeConfigurationState.isDirty;
-  const workStateHasDraftChanges =
-    editableWorkStateConfigurationState?.status === "ready" &&
-    editableWorkStateConfigurationState.isDirty;
-  const workStateDisplayName =
-    editableWorkStateConfigurationState?.status === "ready"
-      ? editableWorkStateConfigurationState.draft.name.trim() ||
-        editableWorkStateConfigurationState.originalStateName
-      : workStatePlaceId ?? "";
-  const workerDisplayName =
-    editableWorkerConfigurationState?.status === "ready"
-      ? editableWorkerConfigurationState.draft.name.trim() ||
-        (selectedWorkerName ?? "")
-      : (selectedWorkerName ?? "");
-  const resourceDisplayName =
-    editableResourceConfigurationState?.status === "ready"
-      ? editableResourceConfigurationState.draft.name.trim() ||
-        (selectedResourceName ?? "")
-      : (selectedResourceName ?? "");
-  const workTypeDisplayName =
-    editableWorkTypeConfigurationState?.status === "ready"
-      ? editableWorkTypeConfigurationState.draft.name.trim() ||
-        (selectedWorkTypeName ?? "")
-      : (selectedWorkTypeName ?? "");
 
   return (
     <CurrentSelectionLocaleProvider locale={resolvedLocale}>
       <CurrentSelectionHeaderActionProvider headerAction={headerAction ?? null}>
         {detailCard}
       </CurrentSelectionHeaderActionProvider>
-      {selectedNode ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workstationSaveState}
-          entityKind="workstation"
-          hasDraftChanges={workstationHasDraftChanges}
-          locale={resolvedLocale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: selectedNode.workstation_name,
-            entityKind: "workstation",
-            locale,
-          })}
-          saveAttemptRevision={workstationSave.saveAttemptRevision}
-          saveMutationError={workstationSave.saveMutationError}
-        />
-      ) : null}
-      {selection?.kind === "worker" && selectedWorkerName ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workerSaveState}
-          entityKind="worker"
-          hasDraftChanges={workerHasDraftChanges}
-          locale={resolvedLocale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: workerDisplayName,
-            entityKind: "worker",
-            locale,
-          })}
-          saveAttemptRevision={workerSave.saveAttemptRevision}
-          saveMutationError={workerSave.saveMutationError}
-        />
-      ) : null}
-      {selection?.kind === "resource" && selectedResourceName ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={resourceSaveState}
-          entityKind="resource"
-          hasDraftChanges={resourceHasDraftChanges}
-          locale={resolvedLocale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: resourceDisplayName,
-            entityKind: "resource",
-            locale,
-          })}
-          saveAttemptRevision={resourceSave.saveAttemptRevision}
-          saveMutationError={resourceSave.saveMutationError}
-        />
-      ) : null}
-      {selection?.kind === "work-type" && selectedWorkTypeName ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workTypeSave.saveState}
-          entityKind="work-type"
-          hasDraftChanges={workTypeHasDraftChanges}
-          locale={resolvedLocale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: workTypeDisplayName,
-            entityKind: "work-type",
-            locale,
-          })}
-          saveAttemptRevision={workTypeSave.saveAttemptRevision}
-          saveMutationError={workTypeSave.saveMutationError}
-        />
-      ) : null}
-      {selection?.kind === "state-node" && workStatePlaceId ? (
-        <CurrentSelectionSaveNotifications
-          documentSave={workStateSave.saveState}
-          entityKind="work-state"
-          hasDraftChanges={workStateHasDraftChanges}
-          locale={resolvedLocale}
-          messages={buildCurrentSelectionSaveToastMessages({
-            entityDisplayName: workStateDisplayName,
-            entityKind: "work-state",
-            locale,
-          })}
-          saveAttemptRevision={workStateSave.saveAttemptRevision}
-          saveMutationError={workStateSave.saveMutationError}
-        />
-      ) : null}
+      <CurrentSelectionWidgetSaveNotifications
+        editableConfigurationState={editableConfigurationState}
+        editableResourceConfigurationState={editableResourceConfigurationState}
+        editableWorkStateConfigurationState={
+          editableWorkStateConfigurationState
+        }
+        editableWorkerConfigurationState={editableWorkerConfigurationState}
+        editableWorkTypeConfigurationState={editableWorkTypeConfigurationState}
+        locale={resolvedLocale}
+        resourceSave={resourceSave}
+        resourceSaveState={resourceSaveState}
+        selectedNode={selectedNode}
+        selectedResourceName={selectedResourceName}
+        selectedWorkerName={selectedWorkerName}
+        selectedWorkTypeName={selectedWorkTypeName}
+        selection={selection}
+        workStatePlaceId={workStatePlaceId}
+        workStateSave={workStateSave}
+        workerSave={workerSave}
+        workerSaveState={workerSaveState}
+        workstationSave={workstationSave}
+        workstationSaveState={workstationSaveState}
+        workTypeSave={workTypeSave}
+      />
       <CurrentSelectionWorkstationSaveDialog
         editableConfigurationState={editableConfigurationState}
         locale={locale}

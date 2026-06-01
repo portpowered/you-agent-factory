@@ -24,7 +24,9 @@ describe("buildCurrentSelectionSaveSuccessStableIdentity", () => {
       kind: "success",
       stableId: "worker-save-success",
     });
-    expect(buildCurrentSelectionSaveSuccessStableIdentity("workstation")).toEqual({
+    expect(
+      buildCurrentSelectionSaveSuccessStableIdentity("workstation"),
+    ).toEqual({
       kind: "success",
       stableId: "workstation-save-success",
     });
@@ -32,18 +34,22 @@ describe("buildCurrentSelectionSaveSuccessStableIdentity", () => {
       kind: "success",
       stableId: "resource-save-success",
     });
-    expect(buildCurrentSelectionSaveSuccessStableIdentity("work-type")).toEqual({
-      kind: "success",
-      stableId: "work-type-save-success",
-    });
-    expect(buildCurrentSelectionSaveSuccessStableIdentity("work-state")).toEqual({
+    expect(buildCurrentSelectionSaveSuccessStableIdentity("work-type")).toEqual(
+      {
+        kind: "success",
+        stableId: "work-type-save-success",
+      },
+    );
+    expect(
+      buildCurrentSelectionSaveSuccessStableIdentity("work-state"),
+    ).toEqual({
       kind: "success",
       stableId: "work-state-save-success",
     });
   });
 });
 
-describe("resolveCurrentSelectionSaveToastNotification", () => {
+describe("resolveCurrentSelectionSaveToastNotification success and idle", () => {
   it("returns success toast when scoped save succeeded and the draft is clean", () => {
     expect(
       resolveCurrentSelectionSaveToastNotification({
@@ -103,7 +109,9 @@ describe("resolveCurrentSelectionSaveToastNotification", () => {
       }),
     ).toBeNull();
   });
+});
 
+describe("resolveCurrentSelectionSaveToastNotification errors", () => {
   it("returns warning toast for stale version save failures with stale-version detail", () => {
     const saveMutationError = new CurrentFactoryDefinitionError(
       "The factory definition changed on the server.",
