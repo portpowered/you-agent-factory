@@ -9,6 +9,7 @@ import type {
   EditableResourceConfigurationState,
   EditableResourceSaveState,
 } from "../lib/detail-card-types";
+import { ResourceDetailCard } from "./resource-detail-card";
 import { EditableResourceConfigurationHeaderActions } from "./resource-save-controls";
 
 vi.mock(

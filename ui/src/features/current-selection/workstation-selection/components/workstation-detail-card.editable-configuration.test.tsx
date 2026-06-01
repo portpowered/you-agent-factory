@@ -2054,9 +2054,11 @@ describe("WorkstationDetailCard editable configuration", () => {
           isDirty: true,
           pendingFactoryDefinition: buildDetailCardEditableFactoryDocument(),
         }}
-        headerAction={buildWorkstationHeaderActions({ canSave: true })}
+        headerAction={buildWorkstationHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
         now={DETAIL_CARD_NOW}
-        onSaveConfiguration={vi.fn()}
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
@@ -2076,7 +2078,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       screen.getAllByRole("button", { name: "Save changes" }).length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getByRole("button", { name: "Reset to latest" }),
+      screen.getByRole("button", { name: "Discard local changes" }),
     ).toBeTruthy();
   });
 });

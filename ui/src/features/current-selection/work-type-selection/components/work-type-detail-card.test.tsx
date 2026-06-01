@@ -355,7 +355,10 @@ describe("WorkTypeDetailCard", () => {
     render(
       <WorkTypeDetailCard
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkTypeHeaderSaveAction({ canSave: true })}
+        headerAction={buildWorkTypeHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
         workTypeName="story"
       />,
     );

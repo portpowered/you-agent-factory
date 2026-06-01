@@ -774,8 +774,10 @@ describe("StateNodeDetailCard editable work state configuration", () => {
           validationErrors: {},
           workTypeName: "story",
         }}
-        headerAction={buildWorkStateHeaderSaveAction({ canSave: true })}
-        onSaveConfiguration={vi.fn()}
+        headerAction={buildWorkStateHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
         place={resolvedSelectedState}
         tokenCount={0}
       />,

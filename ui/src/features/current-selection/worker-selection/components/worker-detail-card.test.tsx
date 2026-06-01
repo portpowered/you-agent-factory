@@ -717,8 +717,10 @@ describe("WorkerDetailCard", () => {
     render(
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
-        headerAction={buildWorkerHeaderSaveAction({ canSave: true })}
-        onSaveConfiguration={vi.fn()}
+        headerAction={buildWorkerHeaderActions({
+          canDiscard: true,
+          canSave: true,
+        })}
         workerName="reviewer"
       />,
     );
