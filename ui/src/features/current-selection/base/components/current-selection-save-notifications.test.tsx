@@ -66,6 +66,26 @@ describe("CurrentSelectionSaveNotifications toast delivery", () => {
     expect(toast.warning).not.toHaveBeenCalled();
   });
 
+  it("delivers work type success notifications with entity-specific copy", () => {
+    renderNotifications({
+      documentSave: { status: "success" },
+      entityKind: "work-type",
+      messages: {
+        ...messages,
+        saveSuccessDescription:
+          'Running factory saved. "feature" was refreshed to the saved definition.',
+        saveSuccessTitle: "Work type saved",
+      },
+      saveAttemptRevision: 1,
+    });
+
+    expect(toast.success).toHaveBeenCalledWith("Work type saved", {
+      description:
+        'Running factory saved. "feature" was refreshed to the saved definition.',
+      duration: GLOBAL_TOAST_DURATION_MS,
+    });
+  });
+
   it("calls the sonner error hook when scoped document save fails", () => {
     renderNotifications({
       documentSave: {

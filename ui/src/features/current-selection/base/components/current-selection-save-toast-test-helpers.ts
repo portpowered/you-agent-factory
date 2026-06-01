@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
-import { expect } from "vitest";
 import { toast } from "sonner";
+import { expect } from "vitest";
 
 import {
   GLOBAL_TOAST_DURATION_MS,
@@ -147,6 +147,31 @@ export async function expectWorkStateSaveSuccessToast(stateName: string) {
         description: expect.stringContaining(
           `${stateName} was updated in the running factory definition`,
         ),
+      }),
+    );
+  });
+}
+
+export async function expectWorkTypeSaveSuccessToast(workTypeName: string) {
+  await waitFor(() => {
+    expect(toast.success).toHaveBeenCalledWith(
+      "Work type saved",
+      expect.objectContaining({
+        description: expect.stringContaining(
+          `"${workTypeName}" was refreshed to the saved definition`,
+        ),
+      }),
+    );
+  });
+}
+
+export async function expectWorkTypeSaveFailedToast(errorDetail: string) {
+  await waitFor(() => {
+    expect(toast.error).toHaveBeenCalledWith(
+      "Work type save failed",
+      expect.objectContaining({
+        description: expect.stringContaining(errorDetail),
+        duration: PERSISTENT_TOAST_DURATION_MS,
       }),
     );
   });
