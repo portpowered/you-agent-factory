@@ -5,7 +5,7 @@ import type { useEditableResourceConfigurationState } from "../resource-selectio
 import { useSaveEditableResourceConfiguration } from "../resource-selection/hooks/use-save-editable-resource-configuration";
 import type { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
-import { EditableWorkerSaveHeaderAction } from "../worker-selection/public";
+import { EditableWorkerConfigurationHeaderActions } from "../worker-selection/components/worker-save-controls";
 import { EditableWorkstationConfigurationHeaderActions } from "../workstation-selection/components/workstation-save-controls";
 import type { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
 import {
@@ -89,10 +89,19 @@ export function useCurrentSelectionDetailSave({
     />
   );
   const workerHeaderAction = (
-    <EditableWorkerSaveHeaderAction
+    <EditableWorkerConfigurationHeaderActions
+      canDiscard={
+        editableWorkerConfigurationState?.status === "ready" &&
+        editableWorkerConfigurationState.isDirty
+      }
       canSave={workerSave.canSave}
       locale={locale ?? undefined}
-      onClick={() => void workerSave.save()}
+      onDiscard={() => {
+        if (editableWorkerConfigurationState?.status === "ready") {
+          editableWorkerConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={() => void workerSave.save()}
       saveState={workerSave.saveState}
     />
   );
