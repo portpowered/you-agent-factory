@@ -226,9 +226,10 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 
 	for _, want := range []string{
 		"# Agents",
+		"## Read order",
+		"## CLI-only ingress",
 		"Autonomous agents must submit work only through the CLI",
-		"## Submitting Work",
-		"### Batch submit for agents",
+		"## Batch submit for agents",
 		"### Idempotency and duplicate work",
 		"you submit batch",
 		"requestId",
@@ -237,20 +238,16 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"## Is the factory running?",
 		"you session list",
 		"you factory query",
-		"GET /factory-sessions/{session_id}/status",
-		"factoryState",
-		"runtimeStatus",
-		"categories",
-		"http://localhost:7437/dashboard/ui",
-		"you run --continuously",
+		"you docs sessions",
 		"## Operator loop",
 		"you submit",
 		"--name driver-incident-review",
 		"--work-type-name task",
 		"--payload request.md",
-		"## Command Matrix",
+		"## Command matrix",
 		"Operator-only",
-		"you docs sessions",
+		"## Topic router",
+		"`you docs config`",
 		"[Is the factory running?](#is-the-factory-running?)",
 	} {
 		if !strings.Contains(got, want) {
@@ -260,10 +257,20 @@ func TestMarkdown_AgentsReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, wrapper := range []string{
 		"# Docs",
 		"Run `you docs agents`.",
+		"## Start Here",
+		"## Read Order (Any Factory)",
 	} {
 		if strings.Contains(got, wrapper) {
 			t.Fatalf("Markdown(agents) included wrapper text %q:\n%s", wrapper, got)
 		}
+	}
+	lineCount := strings.Count(got, "\n") + 1
+	if lineCount > 220 {
+		t.Fatalf("Markdown(agents) line count = %d, want at most 220", lineCount)
+	}
+	topicRouter := got[strings.Index(got, "## Topic router"):]
+	if strings.Contains(topicRouter, ".md)") {
+		t.Fatalf("Markdown(agents) topic router must not use packaged-topic .md links:\n%s", topicRouter)
 	}
 }
 
