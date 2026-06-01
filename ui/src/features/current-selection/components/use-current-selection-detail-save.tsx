@@ -1,6 +1,6 @@
 import type { DashboardSelection } from "../base/state/selection-types";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { EditableResourceSaveHeaderAction } from "../resource-selection/components/resource-save-controls";
+import { EditableResourceConfigurationHeaderActions } from "../resource-selection/components/resource-save-controls";
 import type { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSaveEditableResourceConfiguration } from "../resource-selection/hooks/use-save-editable-resource-configuration";
 import type { useEditableWorkerConfigurationState } from "../worker-selection/hooks/use-editable-worker-configuration-state";
@@ -106,10 +106,19 @@ export function useCurrentSelectionDetailSave({
     />
   );
   const resourceHeaderAction = (
-    <EditableResourceSaveHeaderAction
+    <EditableResourceConfigurationHeaderActions
+      canDiscard={
+        editableResourceConfigurationState?.status === "ready" &&
+        editableResourceConfigurationState.isDirty
+      }
       canSave={resourceSave.canSave}
       locale={locale ?? undefined}
-      onClick={() => void resourceSave.save()}
+      onDiscard={() => {
+        if (editableResourceConfigurationState?.status === "ready") {
+          editableResourceConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={() => void resourceSave.save()}
       saveState={resourceSave.saveState}
     />
   );
