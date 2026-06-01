@@ -11,7 +11,10 @@ import type {
   FactoryGraphTopology,
   FactoryWorkstation,
 } from "./factory-graph-draft-types";
-import { edgeChangeId } from "./factory-graph-draft-types";
+import {
+  appendUniqueFactoryGraphEdgeChange,
+  edgeChangeId,
+} from "./factory-graph-draft-types";
 import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "./factory-graph-progress-outcome-connection-anchors";
 
 export {
@@ -218,7 +221,10 @@ export function getFactoryGraphConnectionAnchors(
   return filterWorkstationConnectionAnchors(anchors, context);
 }
 
-export { workstationRendersProgressOutcomeHandleValidation, workstationRendersProgressOutcomeZAxisHintAnchors } from "./factory-graph-progress-outcome-handle-visibility";
+export {
+  workstationRendersProgressOutcomeHandleValidation,
+  workstationRendersProgressOutcomeZAxisHintAnchors,
+} from "./factory-graph-progress-outcome-handle-visibility";
 
 export function getLocalizedFactoryGraphConnectionAnchors(
   kind: FactoryGraphNodeKind,
@@ -389,7 +395,7 @@ export function applyFactoryGraphEdgeAddition(
     );
   }
 
-  nextDraft.edgeChanges.additions = appendUniqueEdgeChange(
+  nextDraft.edgeChanges.additions = appendUniqueFactoryGraphEdgeChange(
     nextDraft.edgeChanges.additions,
     edgeChange,
   );
@@ -423,7 +429,7 @@ export function applyFactoryGraphEdgeRemoval(
     return nextDraft;
   }
 
-  nextDraft.edgeChanges.removals = appendUniqueEdgeChange(
+  nextDraft.edgeChanges.removals = appendUniqueFactoryGraphEdgeChange(
     nextDraft.edgeChanges.removals,
     {
       kind: edge.kind,
@@ -472,15 +478,3 @@ export function buildFactoryGraphConnectionNotice(options: {
     options.targetNode.label,
   );
 }
-
-function appendUniqueEdgeChange(
-  edges: FactoryGraphDraftEdgeChange[],
-  edgeChange: FactoryGraphDraftEdgeChange,
-) {
-  const nextEdgeId = edgeChangeId(edgeChange);
-  if (edges.some((entry) => edgeChangeId(entry) === nextEdgeId)) {
-    return edges;
-  }
-  return [...edges, edgeChange];
-}
-

@@ -251,6 +251,17 @@ export function edgeChangeId(
   return `${edgeChange.kind}:${nodeKeyId(edgeChange.source)}->${nodeKeyId(edgeChange.target)}`;
 }
 
+export function appendUniqueFactoryGraphEdgeChange(
+  edges: FactoryGraphDraftEdgeChange[],
+  edgeChange: FactoryGraphDraftEdgeChange,
+) {
+  const nextEdgeId = edgeChangeId(edgeChange);
+  if (edges.some((entry) => edgeChangeId(entry) === nextEdgeId)) {
+    return edges;
+  }
+  return [...edges, edgeChange];
+}
+
 export function nodeKeyId(key: FactoryGraphNodeKey): string {
   switch (key.kind) {
     case "resource":
