@@ -64,8 +64,6 @@ const TERMINAL_ROW_CLASS =
   "grid gap-2.5 rounded-lg border border-af-border bg-af-surface-subtle p-3";
 const TERMINAL_FAILED_ROW_CLASS = "border-af-danger-border";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
-const TERMINAL_LIST_CLASS = "grid gap-2";
-const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
 const TERMINAL_BUTTON_META_CLASS = cn(
   "leading-snug text-current",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -214,7 +212,7 @@ function TerminalWorkRow({
           </ExpandablePanelTrigger>
         </div>
 
-        <CollapsibleContent className={TERMINAL_LIST_CLASS} id={rowId}>
+        <CollapsibleContent className="grid gap-2" id={rowId}>
           {items.length > 0 ? (
             <StandardListSelection>
               {items.map((item) => (
@@ -229,7 +227,7 @@ function TerminalWorkRow({
                   selected={selectedLabel === item.label}
                   tone={status === "failed" ? "danger" : "info"}
                 >
-                  <span className={TERMINAL_BUTTON_LABEL_CLASS}>
+                  <span className="font-bold">
                     {item.label}
                   </span>
                   {renderTerminalWorkContext(
