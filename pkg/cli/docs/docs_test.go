@@ -380,7 +380,7 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"# Submitted Work",
 		"## Single-Work API Submission",
-		"POST /work",
+		"POST /factory-sessions/{session_id}/work",
 		"workTypeName",
 		"## CLI `you submit` success and verify loop",
 		"Submitted: <name> (<workTypeName>)",

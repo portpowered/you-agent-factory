@@ -72,7 +72,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
-	{topic: TopicWork, description: "Submitted work: POST /work, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
+	{topic: TopicWork, description: "Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicSessions, description: "Live factory sessions: session list, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},

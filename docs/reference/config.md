@@ -9,7 +9,7 @@ behavior that the runtime turns into a Petri-net execution model.
 
 Use this page when you need the canonical factory directory layout, the
 field-by-field `factory.json` topology contract, and where each authored file
-lives. Use `you docs work` for `POST /work`, tags, and batch
+lives. Use `you docs work` for `POST /factory-sessions/{session_id}/work`, tags, and batch
 cross-links. For live session inspection (`you session list`, `you factory query`,
 status API fields, and `--server` / `--session` on HTTP client commands), see
 `you docs sessions`.

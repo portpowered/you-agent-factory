@@ -35,7 +35,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`record-replay` - Record and replay run modes",
 		"`guards` - Workstation, input, and factory guards",
 		"`relationships` - Batch DEPENDS_ON",
-		"`work` - Submitted work: POST /work, tags, batch cross-links, and submission contracts",
+		"`work` - Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts",
 		"`sessions` - Live factory sessions: session list, factory query, status API, dashboard URL, and run modes",
 		"`workstations` - Workstation kinds",
 		"`workers` - Worker types",
