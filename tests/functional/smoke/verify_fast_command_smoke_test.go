@@ -132,6 +132,7 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
 		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n\t@exit 23\n",
 		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
