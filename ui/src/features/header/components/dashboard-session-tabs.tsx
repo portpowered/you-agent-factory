@@ -26,23 +26,12 @@ import {
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { OpenSessionDialog } from "./dashboard-session-tabs-open-dialog";
 
-const SESSION_TABS_SHELL_CLASS =
-  "grid min-w-0 max-w-full flex-1 gap-2 overflow-x-auto";
-const SESSION_TABS_ROW_CLASS =
-  "flex min-w-0 max-w-full items-stretch gap-1 overflow-visible";
-const SESSION_TAB_LIST_CLASS =
-  "flex h-full min-w-full w-max items-left gap-1 overflow-visible";
 const SESSION_TAB_ITEM_CLASS =
   "group relative flex min-h-0 h-full min-w-0 shrink-0 items-stretch self-stretch transition-colors";
 const SESSION_TAB_BUTTON_CLASS =
   "min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_CLOSE_BUTTON_CLASS =
   "px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
-const OPEN_SESSION_TAB_BUTTON_CLASS = cn(
-  "flex shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-af-text-muted transition-colors",
-  "hover:bg-af-overlay-subtle hover:text-af-text",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
-);
 const SESSION_TAB_ACTIVE_CLASS = cn(
   "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-af-surface-subtle text-af-text",
   "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
@@ -63,9 +52,6 @@ const SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS = cn(
   "group-focus-within:bg-af-overlay-focus group-focus-within:text-af-text",
   "focus-visible:bg-af-overlay-focus focus-visible:text-af-text",
 );
-const SESSION_DIALOG_ERROR_CLASS =
-  "rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text";
-
 export function DashboardSessionTabs({
   locale,
   state,
@@ -130,8 +116,8 @@ function DashboardSessionTabsView({
 
   return (
     <>
-      <div className={SESSION_TABS_SHELL_CLASS}>
-        <div className={SESSION_TABS_ROW_CLASS}>
+      <div className="grid min-w-0 max-w-full flex-1 gap-2 overflow-x-auto">
+        <div className="flex min-w-0 max-w-full items-stretch gap-1 overflow-visible">
           <SessionTabsContent
             activeSession={activeSession}
             closingSessionID={
@@ -155,7 +141,10 @@ function DashboardSessionTabsView({
           />
         </div>
         {closeError ? (
-          <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
+          <p
+            className="rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text"
+            role="alert"
+          >
             {closeError.message}
           </p>
         ) : null}
@@ -202,7 +191,11 @@ function OpenSessionButton({
     <button
       aria-haspopup="dialog"
       aria-label={label}
-      className={OPEN_SESSION_TAB_BUTTON_CLASS}
+      className={cn(
+        "flex shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-af-text-muted transition-colors",
+        "hover:bg-af-overlay-subtle hover:text-af-text",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
+      )}
       onClick={onClick}
       type="button"
     >
@@ -302,7 +295,7 @@ function SessionTabsContent({
       >
         <div
           aria-orientation="horizontal"
-          className={SESSION_TAB_LIST_CLASS}
+          className="flex h-full min-w-full w-max items-left gap-1 overflow-visible"
           role="tablist"
         >
           {sessions.map((session, index) => (
