@@ -47,6 +47,7 @@ type OutputParser interface {
 type WorkstationExecutor struct {
 	RuntimeConfig   interfaces.RuntimeConfigLookup
 	DefaultRunnerID string
+	WorkflowContext *factory_context.FactoryContext
 	Executor        WorkstationRequestExecutor
 	Renderer        workerprompting.PromptRenderer
 	Parser          OutputParser
@@ -59,6 +60,7 @@ const classifierFailureRawOutputLimit = 160
 
 type resolvedWorkstationExecutionContext struct {
 	ProjectID        string
+	SessionID        string
 	InputTokens      []interfaces.Token
 	EnvVars          map[string]string
 	Worktree         string
@@ -155,6 +157,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *interfaces.WorkResult) {
 	requestContext := resolvedWorkstationExecutionContext{
 		ProjectID:   dispatch.ProjectID,
+		SessionID:   factorySessionIDFromWorkflowContext(we.WorkflowContext),
 		InputTokens: workDispatchNonResourceTokensForWorkstation(dispatch, workstationDef),
 	}
 
@@ -334,6 +337,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		RunnerID:              selection.RunnerID,
 		RunnerSelectionSource: selection.Source,
 		ProjectID:             requestContext.ProjectID,
+		FactorySessionID:      requestContext.SessionID,
 		InputTokens:           InputTokens(requestContext.InputTokens...),
 		ModelOperation:        workstationDef.Operation,
 		ModelBindings:         modelBindings,
@@ -451,12 +455,13 @@ func executionRequestInputTokens(request interfaces.WorkstationExecutionRequest)
 }
 
 func executionRequestContext(request interfaces.WorkstationExecutionRequest) *factory_context.FactoryContext {
-	if request.WorkingDirectory == "" && len(request.EnvVars) == 0 && request.ProjectID == "" {
+	if request.WorkingDirectory == "" && len(request.EnvVars) == 0 && request.ProjectID == "" && request.FactorySessionID == "" {
 		return nil
 	}
 
 	ctx := &factory_context.FactoryContext{
 		ProjectID:     request.ProjectID,
+		SessionID:     request.FactorySessionID,
 		WorkDirectory: request.WorkingDirectory,
 		EnvVars:       cloneEnvVars(request.EnvVars),
 	}
@@ -467,12 +472,13 @@ func executionRequestContext(request interfaces.WorkstationExecutionRequest) *fa
 }
 
 func (ctx resolvedWorkstationExecutionContext) factoryContext() *factory_context.FactoryContext {
-	if ctx.WorkingDirectory == "" && ctx.Worktree == "" && len(ctx.EnvVars) == 0 && ctx.ProjectID == "" {
+	if ctx.WorkingDirectory == "" && ctx.Worktree == "" && len(ctx.EnvVars) == 0 && ctx.ProjectID == "" && ctx.SessionID == "" {
 		return nil
 	}
 
 	requestContext := &factory_context.FactoryContext{
 		ProjectID:     ctx.ProjectID,
+		SessionID:     ctx.SessionID,
 		WorkDirectory: ctx.WorkingDirectory,
 		EnvVars:       cloneEnvVars(ctx.EnvVars),
 	}
@@ -480,6 +486,13 @@ func (ctx resolvedWorkstationExecutionContext) factoryContext() *factory_context
 		requestContext.WorkDirectory = ctx.Worktree
 	}
 	return requestContext
+}
+
+func factorySessionIDFromWorkflowContext(wfCtx *factory_context.FactoryContext) string {
+	if wfCtx == nil || strings.TrimSpace(wfCtx.SessionID) == "" {
+		return factory_context.DefaultSessionID
+	}
+	return strings.TrimSpace(wfCtx.SessionID)
 }
 
 func (we *WorkstationExecutor) runtimeWorkstation(dispatch interfaces.WorkDispatch) (*interfaces.FactoryWorkstationConfig, bool) {

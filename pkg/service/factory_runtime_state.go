@@ -15,6 +15,7 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -823,14 +824,18 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	}
 }
 
-func runtimeWorkflowContext(cfg *interfaces.FactoryConfig) *factory_context.FactoryContext {
+func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *factory_context.FactoryContext {
 	projectID := factory_context.DefaultProjectID
 	if cfg != nil && cfg.Project != "" {
 		projectID = factory_context.ResolveProjectID(cfg.Project, nil, nil)
 	}
+	if strings.TrimSpace(sessionID) == "" {
+		sessionID = factorysessions.DefaultSessionID
+	}
 	return &factory_context.FactoryContext{
 		ProjectID: projectID,
 		EnvVars:   make(map[string]string),
+		SessionID: sessionID,
 	}
 }
 

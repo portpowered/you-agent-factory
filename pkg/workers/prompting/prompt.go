@@ -57,6 +57,7 @@ type PromptContext struct {
 	WorkDir     string
 	ArtifactDir string
 	Project     string
+	SessionID   string
 	Env         map[string]string
 }
 
@@ -98,6 +99,7 @@ func BuildPromptData(tokens []interfaces.Token, wfCtx *factory_context.FactoryCo
 			WorkDir:     wfCtx.WorkDirectory,
 			ArtifactDir: wfCtx.ArtifactDir,
 			Project:     promptContextProject(tokens, wfCtx),
+			SessionID:   promptContextSessionID(wfCtx),
 			Env:         wfCtx.EnvVars,
 		}
 		if data.Context.Env == nil {
@@ -180,6 +182,13 @@ func promptContextProject(tokens []interfaces.Token, wfCtx *factory_context.Fact
 		}
 	}
 	return factory_context.DefaultProjectID
+}
+
+func promptContextSessionID(wfCtx *factory_context.FactoryContext) string {
+	if wfCtx == nil || strings.TrimSpace(wfCtx.SessionID) == "" {
+		return factory_context.DefaultSessionID
+	}
+	return strings.TrimSpace(wfCtx.SessionID)
 }
 
 func explicitContextProject(wfCtx *factory_context.FactoryContext) string {

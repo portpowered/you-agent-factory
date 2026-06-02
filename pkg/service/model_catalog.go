@@ -10,6 +10,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -151,15 +153,18 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 	bundle := fs.currentRuntimeBundle()
 	var modelResources *localModelResourceLimiter
 	var localModels *managedLocalModelManager
+	var workflowContext *factory_context.FactoryContext
 	if bundle != nil {
 		modelResources = bundle.modelResources
 		localModels = bundle.localModels
+		workflowContext = runtime.WorkflowContext(bundle.factory)
 	}
 	executor := buildWorkerExecutor(
 		runtimeCfg,
 		factoryCfg,
 		workerName,
 		fs.factoryRunnerID(),
+		workflowContext,
 		logger,
 		fs.providerOverride(),
 		fs.providerCommandRunnerOverride(),

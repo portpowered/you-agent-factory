@@ -8,6 +8,7 @@ import (
 	"text/template"
 	"text/template/parse"
 
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -87,6 +88,12 @@ func BuildPromptTemplateContract(inputCount int) PromptTemplateContract {
 			Description: "Resolved project context for the active run.",
 			Example:     "{{ .Context.Project }}",
 			Path:        ".Context.Project",
+		},
+		{
+			Category:    PromptTemplateVariableCategoryContext,
+			Description: "Active factory session id for session-scoped CLI commands such as you submit --session.",
+			Example:     "{{ .Context.SessionID }}",
+			Path:        ".Context.SessionID",
 		},
 		{
 			Category:    PromptTemplateVariableCategoryMapAccess,
@@ -718,7 +725,7 @@ func resolveHistoryField(field, path string) promptValidationValue {
 
 func resolveContextField(field, path string) promptValidationValue {
 	switch field {
-	case "WorkDir", "ArtifactDir", "Project":
+	case "WorkDir", "ArtifactDir", "Project", "SessionID":
 		return promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
 	case "Env":
 		return promptValidationValue{kind: promptValidationValueEnvMap, displayPath: path}
@@ -811,6 +818,7 @@ func buildPromptValidationData(inputCount int) PromptData {
 			WorkDir:     "/tmp/workdir",
 			ArtifactDir: "/tmp/artifacts",
 			Project:     "project",
+			SessionID:   factory_context.DefaultSessionID,
 			Env: map[string]string{
 				"API_KEY": "value",
 			},
