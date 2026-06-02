@@ -4,7 +4,32 @@ import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/fa
 export type TraceFactoryGraphLayoutPosition = {
   x: number;
   y: number;
+  width: number;
+  height: number;
 };
+
+/** Applies ELK layout bounds to a trace React Flow node (work-graph node shell contract). */
+export function applyTraceFactoryGraphLayoutToNode<
+  TNode extends { id: string; position: { x: number; y: number } },
+>(
+  node: TNode,
+  layoutByNodeId: ReadonlyMap<string, TraceFactoryGraphLayoutPosition>,
+): TNode {
+  const layout = layoutByNodeId.get(node.id);
+  if (!layout) {
+    return node;
+  }
+
+  return {
+    ...node,
+    position: { x: layout.x, y: layout.y },
+    width: layout.width,
+    height: layout.height,
+    initialWidth: layout.width,
+    initialHeight: layout.height,
+    measured: { width: layout.width, height: layout.height },
+  };
+}
 
 /**
  * Positions trace React Flow nodes using the shared factory graph editor layout.
@@ -34,6 +59,8 @@ export async function buildTraceFactoryGraphLayoutPositions(
     positionsByTraceFlowNodeId.set(traceFlowNodeId, {
       x: layoutNode.x,
       y: layoutNode.y,
+      width: layoutNode.width,
+      height: layoutNode.height,
     });
   }
 

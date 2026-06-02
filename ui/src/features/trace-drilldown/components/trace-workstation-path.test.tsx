@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: trace workstation path coverage shares one mocked React Flow harness for lineage, layout bounds, and semantics regressions.
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -13,10 +14,16 @@ const { mockBuildTraceFactoryGraphLayoutPositions } = vi.hoisted(() => ({
   mockBuildTraceFactoryGraphLayoutPositions: vi.fn(async () => new Map()),
 }));
 
-vi.mock("../lib/trace-factory-graph-layout", () => ({
-  buildTraceFactoryGraphLayoutPositions:
-    mockBuildTraceFactoryGraphLayoutPositions,
-}));
+vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../lib/trace-factory-graph-layout")
+  >();
+  return {
+    ...actual,
+    buildTraceFactoryGraphLayoutPositions:
+      mockBuildTraceFactoryGraphLayoutPositions,
+  };
+});
 
 vi.mock("@xyflow/react", async () => {
   return {
@@ -70,15 +77,30 @@ vi.mock("@xyflow/react", async () => {
       >;
       nodes: Array<{
         data: Record<string, unknown>;
+        height?: number;
         id: string;
+        initialHeight?: number;
+        initialWidth?: number;
+        measured?: { height: number; width: number };
         position?: { x: number; y: number };
         type: string;
+        width?: number;
       }>;
       onError?: (id: string, message: string) => void;
     }) => (
       <div
         data-edges={JSON.stringify(edges)}
         data-has-on-error={String(Boolean(onError))}
+        data-node-bounds={JSON.stringify(
+          nodes.map((node) => ({
+            height: node.height,
+            id: node.id,
+            initialHeight: node.initialHeight,
+            initialWidth: node.initialWidth,
+            measured: node.measured,
+            width: node.width,
+          })),
+        )}
         data-node-ids={JSON.stringify(nodes.map((node) => node.id))}
         data-node-positions={JSON.stringify(
           nodes.map((node) => ({
@@ -158,6 +180,14 @@ function renderedNodeIDs(): string[] {
   return JSON.parse(nodePayload) as string[];
 }
 
+type RenderedTraceFlowNodeBounds = {
+  height?: number;
+  initialHeight?: number;
+  initialWidth?: number;
+  measured?: { height: number; width: number };
+  width?: number;
+};
+
 function renderedNodePositionsById(): Map<string, { x: number; y: number }> {
   const nodePayload = screen
     .getByTestId("trace-react-flow")
@@ -173,6 +203,32 @@ function renderedNodePositionsById(): Map<string, { x: number; y: number }> {
         position?: { x: number; y: number };
       }>
     ).map((node) => [node.id, node.position ?? { x: 0, y: 0 }]),
+  );
+}
+
+function renderedNodeBoundsById(): Map<string, RenderedTraceFlowNodeBounds> {
+  const nodePayload = screen
+    .getByTestId("trace-react-flow")
+    .getAttribute("data-node-bounds");
+  if (!nodePayload) {
+    throw new Error("Expected mock React Flow node bounds to be captured.");
+  }
+
+  return new Map(
+    (
+      JSON.parse(nodePayload) as Array<
+        { id: string } & RenderedTraceFlowNodeBounds
+      >
+    ).map((node) => [
+      node.id,
+      {
+        height: node.height,
+        initialHeight: node.initialHeight,
+        initialWidth: node.initialWidth,
+        measured: node.measured,
+        width: node.width,
+      },
+    ]),
   );
 }
 
@@ -398,11 +454,12 @@ describe("TraceWorkstationPath captured selections", () => {
 
 describe("TraceWorkstationPath layout", () => {
   it("applies async factory layout positions after layout resolves", async () => {
+    const expectedLayout = new Map([
+      ["dispatch-plan", { x: 420, y: 80, width: 156, height: 196 }],
+      ["dispatch-implement", { x: 860, y: 160, width: 156, height: 196 }],
+    ]);
     mockBuildTraceFactoryGraphLayoutPositions.mockResolvedValue(
-      new Map([
-        ["dispatch-plan", { x: 420, y: 80 }],
-        ["dispatch-implement", { x: 860, y: 160 }],
-      ]),
+      expectedLayout,
     );
 
     render(
@@ -419,14 +476,21 @@ describe("TraceWorkstationPath layout", () => {
     );
 
     await waitFor(() => {
-      expect(renderedNodePositionsById().get("dispatch-plan")).toEqual({
-        x: 420,
-        y: 80,
-      });
-      expect(renderedNodePositionsById().get("dispatch-implement")).toEqual({
-        x: 860,
-        y: 160,
-      });
+      const renderedPositions = renderedNodePositionsById();
+      const renderedBounds = renderedNodeBoundsById();
+      for (const [nodeId, layout] of expectedLayout) {
+        expect(renderedPositions.get(nodeId)).toEqual({
+          x: layout.x,
+          y: layout.y,
+        });
+        expect(renderedBounds.get(nodeId)).toEqual({
+          height: layout.height,
+          initialHeight: layout.height,
+          initialWidth: layout.width,
+          measured: { height: layout.height, width: layout.width },
+          width: layout.width,
+        });
+      }
     });
   });
 });

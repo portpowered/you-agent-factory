@@ -13,6 +13,7 @@ import {
   traceRelationTopologyLayoutKey,
   useTraceRelationFactoryGraphLayoutPositions,
 } from "../hooks/use-trace-relation-factory-graph-layout";
+import { applyTraceFactoryGraphLayoutToNode } from "../lib/trace-factory-graph-layout";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
 import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
@@ -55,15 +56,19 @@ export function TraceRelationFlow({
     topologyKey,
   );
   const baseNodes = useMemo<TraceRelationFlowNode[]>(() => {
-    return graph.nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onSelectWorkID,
-        selectable: Boolean(node.data.workID && onSelectWorkID),
-      },
-      position: positionsByTraceNodeId.get(node.id) ?? node.position,
-    }));
+    return graph.nodes.map((node) =>
+      applyTraceFactoryGraphLayoutToNode(
+        {
+          ...node,
+          data: {
+            ...node.data,
+            onSelectWorkID,
+            selectable: Boolean(node.data.workID && onSelectWorkID),
+          },
+        },
+        positionsByTraceNodeId,
+      ),
+    );
   }, [graph.nodes, onSelectWorkID, positionsByTraceNodeId]);
   const [nodes, setNodes] = useState<TraceRelationFlowNode[]>([]);
   const draggedNodeIdsRef = useRef(new Set<string>());
