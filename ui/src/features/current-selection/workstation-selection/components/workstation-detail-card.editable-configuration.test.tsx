@@ -1012,6 +1012,9 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Worker reviewer is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
       ),
     ).toBeTruthy();
+    expect(
+      screen.queryByText(/updates every workstation that references this worker/i),
+    ).toBeNull();
     expect(screen.queryByLabelText("Model")).toBeNull();
     expect(screen.queryByLabelText("Template")).toBeNull();
   });
@@ -1043,6 +1046,9 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Worker planner is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
       ),
     ).toBeTruthy();
+    expect(
+      screen.queryByText(/updates every workstation that references this worker/i),
+    ).toBeNull();
   });
 
   it("localizes behavior options in zh-CN while keeping canonical option values", () => {

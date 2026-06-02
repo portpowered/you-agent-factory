@@ -19,6 +19,7 @@ export * from "./input";
 export * from "./place-labels";
 export * from "./popover";
 export * from "./resizable";
+export * from "./scroll-area";
 export * from "./select";
 export * from "./selectable-card-button";
 export * from "./skeleton";

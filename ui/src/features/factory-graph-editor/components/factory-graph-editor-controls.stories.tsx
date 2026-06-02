@@ -238,14 +238,14 @@ export const ObserveMode = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const toggle = canvas.getByRole("button", {
-      name: "Enter factory graph editor",
+      name: "Edit mode",
     });
 
-    await expect(canvas.getByText("Observe mode")).toBeVisible();
+    await expect(canvas.getByText("Observe")).toBeVisible();
     await userEvent.hover(toggle);
     await expect(
       await within(canvasElement.ownerDocument.body).findByRole("tooltip", {
-        name: "Enter factory graph editor",
+        name: "Edit mode",
       }),
     ).toBeVisible();
   },
@@ -259,13 +259,13 @@ export const EditorMode = {
       name: "Factory graph editor tools",
     });
     const addMenuButton = within(toolbar).getByRole("button", {
-      name: "Open add entity menu",
+      name: "Add tool",
     });
 
     await expect(addMenuButton).toHaveAttribute("aria-expanded", "false");
     await expect(addMenuButton).toBeVisible();
     await expect(
-      within(toolbar).getByRole("button", { name: "Connect" }),
+      within(toolbar).getByRole("button", { name: "Connect tool" }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(
       within(toolbar).getByRole("button", { name: "Discard changes" }),

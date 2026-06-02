@@ -260,6 +260,7 @@ describe("WorkflowActivityBentoCard", () => {
   it("wraps the React Flow graph without a floating inspector", async () => {
     const locale = "zh-CN";
     const messages = getWorkflowActivityShellMessages(locale);
+    const editorMessages = getFactoryGraphEditorMessages(locale);
     renderWorkflowActivityBentoCard({ locale });
 
     expect(await screen.findByRole("heading", { name: "工厂图" })).toBeTruthy();
@@ -270,15 +271,19 @@ describe("WorkflowActivityBentoCard", () => {
     expect(graphHeader?.className).toContain("min-h-11");
     expect(graphHeader?.className).toContain("px-3");
     expect(
-      within(graphCard).getByRole("button", { name: "进入工厂图编辑器" }),
+      within(graphCard).getByRole("button", {
+        name: editorMessages.modeEnterEditor,
+      }),
     ).toBeTruthy();
     expect(graphHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
     expect(graphHeader?.className).toContain("cursor-grab");
     expect(
       within(graphCard).queryByRole("button", { name: "Move 工厂图" }),
     ).toBeNull();
-    expect(within(graphCard).getByText("观察模式")).toBeTruthy();
-    expect(graphHeader?.textContent).toContain("观察模式");
+    expect(
+      within(graphCard).getByText(editorMessages.modeObserve),
+    ).toBeTruthy();
+    expect(graphHeader?.textContent).toContain(editorMessages.modeObserve);
     expect(
       within(graphCard).queryByRole("heading", { name: "当前活动" }),
     ).toBeNull();
@@ -376,6 +381,7 @@ describe("WorkflowActivityBentoCard header actions", () => {
   it("orders the remove action with the graph header controls instead of before the status pill", async () => {
     const locale = "zh-CN";
     const shellMessages = getWorkflowActivityShellMessages(locale);
+    const editorMessages = getFactoryGraphEditorMessages(locale);
     renderWorkflowActivityBentoCard({
       headerAction: <button type="button">Remove card</button>,
       locale,
@@ -400,7 +406,9 @@ describe("WorkflowActivityBentoCard header actions", () => {
       "button",
     );
 
-    expect(actions[0]?.getAttribute("aria-label")).toBe("进入工厂图编辑器");
+    expect(actions[0]?.getAttribute("aria-label")).toBe(
+      editorMessages.modeEnterEditor,
+    );
     expect(actions[1]?.textContent).toBe("Remove card");
   });
 

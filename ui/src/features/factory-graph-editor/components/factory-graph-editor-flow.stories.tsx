@@ -602,22 +602,22 @@ async function expectLogicalMoveConnectHandles(
   canvas: ReturnType<typeof within>,
 ) {
   await expect(
-    canvas.getByRole("button", { name: "Connect: router Success" }),
+    canvas.getByRole("button", { name: "Connect tool: router Success" }),
   ).toBeVisible();
   await expect(
-    canvas.getByRole("button", { name: "Connect: router Input" }),
+    canvas.getByRole("button", { name: "Connect tool: router Input" }),
   ).toBeVisible();
   await expect(
-    canvas.getByRole("button", { name: "Connect: router Resource" }),
+    canvas.getByRole("button", { name: "Connect tool: router Resource" }),
   ).toBeVisible();
   await expect(
-    canvas.queryByRole("button", { name: "Connect: router Failure" }),
+    canvas.queryByRole("button", { name: "Connect tool: router Failure" }),
   ).toBeNull();
   await expect(
-    canvas.queryByRole("button", { name: "Connect: router Continue" }),
+    canvas.queryByRole("button", { name: "Connect tool: router Continue" }),
   ).toBeNull();
   await expect(
-    canvas.queryByRole("button", { name: "Connect: router Reject" }),
+    canvas.queryByRole("button", { name: "Connect tool: router Reject" }),
   ).toBeNull();
 }
 
@@ -626,27 +626,27 @@ async function expectProgressOutcomeRouteHandles(
   input: { includeContinueAndReject: boolean },
 ) {
   await expect(
-    canvas.getByRole("button", { name: "Connect: draft Success" }),
+    canvas.getByRole("button", { name: "Connect tool: draft Success" }),
   ).toBeVisible();
   await expect(
-    canvas.getByRole("button", { name: "Connect: draft Failure" }),
+    canvas.getByRole("button", { name: "Connect tool: draft Failure" }),
   ).toBeVisible();
 
   if (input.includeContinueAndReject) {
     await expect(
-      canvas.getByRole("button", { name: "Connect: draft Continue" }),
+      canvas.getByRole("button", { name: "Connect tool: draft Continue" }),
     ).toBeVisible();
     await expect(
-      canvas.getByRole("button", { name: "Connect: draft Reject" }),
+      canvas.getByRole("button", { name: "Connect tool: draft Reject" }),
     ).toBeVisible();
     return;
   }
 
   await expect(
-    canvas.queryByRole("button", { name: "Connect: draft Continue" }),
+    canvas.queryByRole("button", { name: "Connect tool: draft Continue" }),
   ).toBeNull();
   await expect(
-    canvas.queryByRole("button", { name: "Connect: draft Reject" }),
+    canvas.queryByRole("button", { name: "Connect tool: draft Reject" }),
   ).toBeNull();
 }
 
@@ -797,13 +797,13 @@ export const ConnectionAnchors = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const failureSource = await canvas.findByRole("button", {
-      name: "Connect: review Failure",
+      name: "Connect tool: review Failure",
     });
     const failureTarget = await canvas.findByRole("button", {
-      name: "Connect: story:queued Failure",
+      name: "Connect tool: story:queued Failure",
     });
     const continueTarget = await canvas.findByRole("button", {
-      name: "Connect: story:queued Continue",
+      name: "Connect tool: story:queued Continue",
     });
 
     await expect(failureSource).toBeVisible();

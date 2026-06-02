@@ -80,7 +80,7 @@ export function WorkRelationshipsSection({
           </p>
         </div>
       ) : relationships.length > 0 ? (
-        <div className="grid gap-3 rounded-xl border border-af-border bg-af-surface-subtle p-3">
+        <div className="grid gap-3 rounded-xl border border-af-border bg-af-surface-raised p-3">
           <RelationshipLegend messages={messages} />
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,16rem)_minmax(0,1fr)] md:grid-rows-[auto_auto_auto] md:items-start">
             <RelationshipLane
@@ -256,7 +256,7 @@ function RelationshipLane({
       <ul className="m-0 grid list-none gap-2 p-0">
         {items.map((relationship) => (
           <li
-            className="grid gap-2 rounded-lg border border-af-border bg-af-surface-subtle p-3"
+            className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
             key={relationship.key}
           >
             <div className="flex items-center gap-2">
@@ -488,7 +488,7 @@ function relationshipDirectionBadgeClass(
       return "border-af-border bg-af-overlay text-af-text";
     default:
       // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-af-border bg-af-surface-subtle text-af-text-muted";
+      return "border-af-border bg-af-surface-raised text-af-text-muted";
   }
 }
 

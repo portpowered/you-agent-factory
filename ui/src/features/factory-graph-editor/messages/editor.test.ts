@@ -23,14 +23,29 @@ describe("getFactoryGraphEditorMessages", () => {
   });
 
   it.each([
-    ["en", "Factory graph editor tools", "Add entity", "Observe mode"],
-    ["zh-CN", "工厂图编辑器工具", "添加实体", "观察模式"],
+    ["en", "Factory graph editor tools", "Add entity", "Observe"],
+    ["zh-CN", "工厂图编辑器工具", "添加实体", "观察"],
   ] as const)("resolves %s editor catalog copy", (locale, expectedToolbarLabel, expectedAddEntityAction, expectedObserveMode) => {
     const messages = getFactoryGraphEditorMessages(locale);
 
     expect(messages.toolbarAriaLabel).toBe(expectedToolbarLabel);
     expect(messages.addDialogAddEntityAction).toBe(expectedAddEntityAction);
     expect(messages.modeObserve).toBe(expectedObserveMode);
+    expect(messages.modeEnterEditor).toBe(
+      locale === "en" ? "Edit mode" : "编辑模式",
+    );
+    expect(messages.modeLeaveEditor).toBe(
+      locale === "en" ? "Leave editor" : "离开编辑器",
+    );
+    expect(messages.toolbarAddLabel).toBe(
+      locale === "en" ? "Add tool" : "添加工具",
+    );
+    expect(messages.toolbarConnectLabel).toBe(
+      locale === "en" ? "Connect tool" : "连接工具",
+    );
+    expect(messages.toolbarDeleteLabel).toBe(
+      locale === "en" ? "Delete tool" : "删除工具",
+    );
     expect(messages.modeUnsavedChanges).toBe(
       locale === "en" ? "Unsaved changes" : "未保存的更改",
     );

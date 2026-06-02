@@ -54,10 +54,10 @@ function createPage(buttons, hintCount = 0) {
 describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
   test("requires success and failure handles without continue or reject", async () => {
     const buttons = new Map([
-      ["Connect: draft Success", createButtonLocator("success")],
-      ["Connect: draft Failure", createButtonLocator("failure")],
-      ["Connect: draft Continue", createButtonLocator("continue", false)],
-      ["Connect: draft Reject", createButtonLocator("reject", false)],
+      ["Connect tool: draft Success", createButtonLocator("success")],
+      ["Connect tool: draft Failure", createButtonLocator("failure")],
+      ["Connect tool: draft Continue", createButtonLocator("continue", false)],
+      ["Connect tool: draft Reject", createButtonLocator("reject", false)],
     ]);
     const expectVisible = vi.fn().mockResolvedValue(undefined);
 
@@ -72,10 +72,10 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
 
   test("fails when continue handles remain visible without stopWords", async () => {
     const buttons = new Map([
-      ["Connect: draft Success", createButtonLocator("success")],
-      ["Connect: draft Failure", createButtonLocator("failure")],
-      ["Connect: draft Continue", createButtonLocator("continue")],
-      ["Connect: draft Reject", createButtonLocator("reject", false)],
+      ["Connect tool: draft Success", createButtonLocator("success")],
+      ["Connect tool: draft Failure", createButtonLocator("failure")],
+      ["Connect tool: draft Continue", createButtonLocator("continue")],
+      ["Connect tool: draft Reject", createButtonLocator("reject", false)],
     ]);
     const expectVisible = vi.fn().mockResolvedValue(undefined);
 
@@ -90,10 +90,10 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
 
   test("requires continue and reject handles when stopWords are configured", async () => {
     const buttons = new Map([
-      ["Connect: draft Success", createButtonLocator("success")],
-      ["Connect: draft Failure", createButtonLocator("failure")],
-      ["Connect: draft Continue", createButtonLocator("continue")],
-      ["Connect: draft Reject", createButtonLocator("reject")],
+      ["Connect tool: draft Success", createButtonLocator("success")],
+      ["Connect tool: draft Failure", createButtonLocator("failure")],
+      ["Connect tool: draft Continue", createButtonLocator("continue")],
+      ["Connect tool: draft Reject", createButtonLocator("reject")],
     ]);
     const expectVisible = vi.fn().mockResolvedValue(undefined);
 
@@ -108,10 +108,10 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
 
   test("fails when z-axis hints remain visible without stopWords", async () => {
     const buttons = new Map([
-      ["Connect: draft Success", createButtonLocator("success")],
-      ["Connect: draft Failure", createButtonLocator("failure")],
-      ["Connect: draft Continue", createButtonLocator("continue", false)],
-      ["Connect: draft Reject", createButtonLocator("reject", false)],
+      ["Connect tool: draft Success", createButtonLocator("success")],
+      ["Connect tool: draft Failure", createButtonLocator("failure")],
+      ["Connect tool: draft Continue", createButtonLocator("continue", false)],
+      ["Connect tool: draft Reject", createButtonLocator("reject", false)],
     ]);
     const expectVisible = vi.fn().mockResolvedValue(undefined);
 
@@ -126,10 +126,10 @@ describe("verifyProgressOutcomeRouteHandlesStorybookResponsive", () => {
 
   test("fails when z-axis hints remain visible with stopWords configured", async () => {
     const buttons = new Map([
-      ["Connect: draft Success", createButtonLocator("success")],
-      ["Connect: draft Failure", createButtonLocator("failure")],
-      ["Connect: draft Continue", createButtonLocator("continue")],
-      ["Connect: draft Reject", createButtonLocator("reject")],
+      ["Connect tool: draft Success", createButtonLocator("success")],
+      ["Connect tool: draft Failure", createButtonLocator("failure")],
+      ["Connect tool: draft Continue", createButtonLocator("continue")],
+      ["Connect tool: draft Reject", createButtonLocator("reject")],
     ]);
     const expectVisible = vi.fn().mockResolvedValue(undefined);
 

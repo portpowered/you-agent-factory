@@ -274,24 +274,16 @@ describe("ReactFlowCurrentActivityCard edit-mode onRejection edge regression", (
 
     await screen.findByRole("region", { name: "Work graph viewport" });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Leave factory graph editor" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Leave editor" })).toBeTruthy();
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Leave factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Leave editor" }));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Enter factory graph editor" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Edit mode" })).toBeTruthy();
     });
 
     expect(

@@ -126,7 +126,7 @@ describe("graph-storybook-responsive", () => {
     });
     expect(page.getByLabel).toHaveBeenCalledWith("Dispatch relationship graph");
     expect(page.getByLabel).toHaveBeenCalledWith("Batch relation graph");
-    expect(page.getByText).toHaveBeenCalledWith("Observe mode");
+    expect(page.getByText).toHaveBeenCalledWith("Observe");
     expect(dispatchViewport.getByText).toHaveBeenCalledWith(
       'Out: story:"Reviewed Story"',
     );

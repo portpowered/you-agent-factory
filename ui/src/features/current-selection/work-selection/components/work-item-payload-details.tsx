@@ -49,7 +49,7 @@ export function WorkItemPayloadList({
 
           return (
             <article
-              className="grid gap-2 rounded-lg border border-af-border bg-af-surface-subtle p-3"
+              className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
               key={workItem.work_id}
             >
               <div className="flex flex-wrap items-center gap-2">

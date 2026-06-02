@@ -19,7 +19,7 @@ describe("runner OpenAPI enum localization", () => {
   it("localizes RunnerSelectionSource values with unknown fallback", () => {
     expect(localizeRunnerSelectionSourceValue("factory", "en")).toBe("Factory");
     expect(localizeRunnerSelectionSourceValue("legacy_provider", "ja")).toBe(
-      "旧 provider",
+      "ワーカー provider",
     );
     expect(localizeRunnerSelectionSourceValue("future-source", "en")).toBe(
       "Unknown type: future-source",

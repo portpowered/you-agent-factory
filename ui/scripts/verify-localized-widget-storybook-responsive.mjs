@@ -104,11 +104,11 @@ export async function verifyLocalizedWorkflowActivity({
     "Localized workflow activity viewport",
   );
   await expectVisible(
-    page.getByRole("button", { name: "进入工厂图编辑器" }),
+    page.getByRole("button", { name: "编辑模式" }),
     "Localized workflow activity editor toggle",
   );
   await expectVisible(
-    page.getByText("观察模式"),
+    page.getByText("观察"),
     "Localized workflow activity observe-mode badge",
   );
   await expectNoHorizontalOverflow(

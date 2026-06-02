@@ -128,7 +128,7 @@ function WorkStateEditableConfigurationReadyForm({
           fieldId="editable-work-state-type"
           input={
             <output
-              className="block w-full rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 text-sm text-af-text-muted"
+              className="block w-full rounded-lg border border-af-border bg-af-surface-raised px-3 py-2 text-sm text-af-text-muted"
               id="editable-work-state-type"
             >
               {messages.localizeWorkStateType(state.draft.type)}

@@ -26,11 +26,11 @@ describe("CurrentActivityGraphHeaderActions", () => {
       "actions",
     );
     expect(
-      within(sections[0] as HTMLElement).getByText("Observe mode"),
+      within(sections[0] as HTMLElement).getByText("Observe"),
     ).toBeTruthy();
     expect(
       within(sections[1] as HTMLElement).getByRole("button", {
-        name: "Enter factory graph editor",
+        name: "Edit mode",
       }),
     ).toBeTruthy();
   });
@@ -48,7 +48,7 @@ describe("CurrentActivityGraphHeaderActions", () => {
     );
 
     const toggle = screen.getByRole("button", {
-      name: "Leave factory graph editor",
+      name: "Leave editor",
     });
 
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
@@ -58,7 +58,7 @@ describe("CurrentActivityGraphHeaderActions", () => {
     await user.hover(toggle);
     expect(
       await screen.findByRole("tooltip", {
-        name: "Leave factory graph editor",
+        name: "Leave editor",
       }),
     ).toBeTruthy();
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
@@ -76,7 +76,7 @@ describe("CurrentActivityGraphHeaderActions", () => {
     );
 
     const toggle = screen.getByRole("button", {
-      name: "Leave factory graph editor",
+      name: "Leave editor",
     });
 
     expect(toggle.className).toContain("border-af-warning-border");
@@ -103,9 +103,7 @@ describe("CurrentActivityGraphHeaderActions", () => {
     const actionButtons = within(actionsSection).getAllByRole("button");
 
     expect(actionButtons).toHaveLength(2);
-    expect(actionButtons[0]?.getAttribute("aria-label")).toBe(
-      "Enter factory graph editor",
-    );
+    expect(actionButtons[0]?.getAttribute("aria-label")).toBe("Edit mode");
     expect(actionButtons[1]?.textContent).toBe("Remove card");
   });
 });

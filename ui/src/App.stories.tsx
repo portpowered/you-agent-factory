@@ -542,16 +542,16 @@ async function expectFactoryGraphHeaderBrowserFlow(
   }
 
   const headerScope = within(graphHeader);
-  await expect(headerScope.getByText("Observe mode")).toBeVisible();
+  await expect(headerScope.getByText("Observe")).toBeVisible();
   await userEvent.click(
     headerScope.getByRole("button", {
-      name: "Enter factory graph editor",
+      name: "Edit mode",
     }),
   );
   await expect(headerScope.getByText("Editor mode active")).toBeVisible();
   await expect(
     headerScope.getByRole("button", {
-      name: "Leave factory graph editor",
+      name: "Leave editor",
     }),
   ).toBeVisible();
   await expect(
@@ -576,10 +576,10 @@ async function expectFactoryGraphHeaderBrowserFlow(
   ).not.toBeInTheDocument();
   await userEvent.click(
     headerScope.getByRole("button", {
-      name: "Leave factory graph editor",
+      name: "Leave editor",
     }),
   );
-  await expect(headerScope.getByText("Observe mode")).toBeVisible();
+  await expect(headerScope.getByText("Observe")).toBeVisible();
 }
 
 function CurrentSelectionEditableConfigurationSaveStory() {

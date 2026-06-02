@@ -1120,9 +1120,9 @@ export const LocalizedZhCN = {
       canvas.getByRole("region", { name: "工作图视口" }),
     ).toBeVisible();
     await expect(
-      canvas.getByRole("button", { name: "进入工厂图编辑器" }),
+      canvas.getByRole("button", { name: "编辑模式" }),
     ).toBeVisible();
-    await expect(canvas.getByText("观察模式")).toBeVisible();
+    await expect(canvas.getByText("观察")).toBeVisible();
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };

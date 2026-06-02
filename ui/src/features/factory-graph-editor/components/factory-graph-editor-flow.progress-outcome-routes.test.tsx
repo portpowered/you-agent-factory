@@ -219,15 +219,15 @@ describe("factory graph editor progress outcome route handles", () => {
       workstations: [standardProcessorWithoutStopWords],
     });
 
-    await screen.findByRole("button", { name: "Connect: draft Success" });
+    await screen.findByRole("button", { name: "Connect tool: draft Success" });
     expect(
-      screen.getByRole("button", { name: "Connect: draft Failure" }),
+      screen.getByRole("button", { name: "Connect tool: draft Failure" }),
     ).not.toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: draft Continue" }),
+      screen.queryByRole("button", { name: "Connect tool: draft Continue" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: draft Reject" }),
+      screen.queryByRole("button", { name: "Connect tool: draft Reject" }),
     ).toBeNull();
 
     expect(
@@ -240,9 +240,9 @@ describe("factory graph editor progress outcome route handles", () => {
       factoryDefinition: factoryWithWorkerStopToken,
     });
 
-    await screen.findByRole("button", { name: "Connect: draft Continue" });
+    await screen.findByRole("button", { name: "Connect tool: draft Continue" });
     expect(
-      screen.getByRole("button", { name: "Connect: draft Reject" }),
+      screen.getByRole("button", { name: "Connect tool: draft Reject" }),
     ).not.toBeNull();
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
@@ -254,9 +254,9 @@ describe("factory graph editor progress outcome route handles", () => {
       workstations: [standardProcessorWithStopWords],
     });
 
-    await screen.findByRole("button", { name: "Connect: draft Continue" });
+    await screen.findByRole("button", { name: "Connect tool: draft Continue" });
     expect(
-      screen.getByRole("button", { name: "Connect: draft Reject" }),
+      screen.getByRole("button", { name: "Connect tool: draft Reject" }),
     ).not.toBeNull();
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
@@ -269,12 +269,12 @@ describe("factory graph editor progress outcome route handles", () => {
       { validationProjection: onRejectionValidationProjection },
     );
 
-    await screen.findByRole("button", { name: "Connect: draft Success" });
+    await screen.findByRole("button", { name: "Connect tool: draft Success" });
     expect(
-      screen.queryByRole("button", { name: "Connect: draft Continue" }),
+      screen.queryByRole("button", { name: "Connect tool: draft Continue" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: draft Reject" }),
+      screen.queryByRole("button", { name: "Connect tool: draft Reject" }),
     ).toBeNull();
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
@@ -315,21 +315,21 @@ describe("factory graph editor logical-move progress outcome route handles", () 
       { topology: logicalMoveComparisonTopology },
     );
 
-    await screen.findByRole("button", { name: "Connect: router Success" });
+    await screen.findByRole("button", { name: "Connect tool: router Success" });
     expect(
-      screen.getByRole("button", { name: "Connect: router Input" }),
+      screen.getByRole("button", { name: "Connect tool: router Input" }),
     ).not.toBeNull();
     expect(
-      screen.getByRole("button", { name: "Connect: router Resource" }),
+      screen.getByRole("button", { name: "Connect tool: router Resource" }),
     ).not.toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: router Failure" }),
+      screen.queryByRole("button", { name: "Connect tool: router Failure" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: router Continue" }),
+      screen.queryByRole("button", { name: "Connect tool: router Continue" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: router Reject" }),
+      screen.queryByRole("button", { name: "Connect tool: router Reject" }),
     ).toBeNull();
   });
 
@@ -344,26 +344,26 @@ describe("factory graph editor logical-move progress outcome route handles", () 
       { topology: logicalMoveComparisonTopology },
     );
 
-    await screen.findByRole("button", { name: "Connect: draft Success" });
+    await screen.findByRole("button", { name: "Connect tool: draft Success" });
     expect(
-      screen.getByRole("button", { name: "Connect: draft Failure" }),
+      screen.getByRole("button", { name: "Connect tool: draft Failure" }),
     ).not.toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: draft Continue" }),
+      screen.queryByRole("button", { name: "Connect tool: draft Continue" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: draft Reject" }),
+      screen.queryByRole("button", { name: "Connect tool: draft Reject" }),
     ).toBeNull();
 
-    await screen.findByRole("button", { name: "Connect: router Success" });
+    await screen.findByRole("button", { name: "Connect tool: router Success" });
     expect(
-      screen.queryByRole("button", { name: "Connect: router Failure" }),
+      screen.queryByRole("button", { name: "Connect tool: router Failure" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: router Continue" }),
+      screen.queryByRole("button", { name: "Connect tool: router Continue" }),
     ).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect: router Reject" }),
+      screen.queryByRole("button", { name: "Connect tool: router Reject" }),
     ).toBeNull();
   });
 });

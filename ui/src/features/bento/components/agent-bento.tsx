@@ -10,6 +10,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { ScrollArea } from "../../../components/ui/scroll-area";
 import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 
@@ -46,6 +47,7 @@ export interface AgentBentoLayoutProps {
 export interface AgentBentoCardProps {
   bodyClassName?: string;
   bodyProps?: HTMLAttributes<HTMLDivElement>;
+  bodyScroll?: boolean;
   children: ReactNode;
   className?: string;
   chromeDensity?: "compact" | "default";
@@ -62,9 +64,13 @@ export interface AgentBentoCardHeaderProps {
 const DEFAULT_BENTO_WIDTH = 1180;
 const BENTO_COLUMNS = 12;
 const BENTO_INTERACTION_BREAKPOINT_PX = 768;
-const BENTO_ROW_HEIGHT = 72;
+export const BENTO_ROW_HEIGHT = 72;
 const BENTO_COMPACT_BREAKPOINT_PX = 640;
-const BENTO_MARGIN = [16, 16] as const;
+export const BENTO_MARGIN = [16, 16] as const;
+
+export function getBentoGridItemHeightPx(h: number): number {
+  return h * BENTO_ROW_HEIGHT + (h - 1) * BENTO_MARGIN[1];
+}
 const BENTO_CONTAINER_PADDING = [0, 0] as const;
 const BENTO_RESIZE_HANDLES = ["se", "s", "e"] as const;
 const BENTO_DRAG_HANDLE_SELECTOR = "[data-bento-drag-handle='true']";
@@ -86,8 +92,9 @@ const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
   "w-full flex-wrap justify-between gap-1.5 sm:w-auto sm:justify-end";
+const BENTO_CARD_BODY_SCROLL_CLASS = "min-h-0 flex-1";
 const BENTO_CARD_BODY_CLASS = cn(
-  "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
+  "grid h-full min-h-0 gap-2.5 px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 px-3 pt-3 pb-4 [&>*]:pb-1";
@@ -299,6 +306,7 @@ export function AgentBentoLayout({
 export function AgentBentoCard({
   bodyClassName = "",
   bodyProps,
+  bodyScroll = true,
   children,
   className = "",
   chromeDensity = "default",
@@ -312,6 +320,23 @@ export function AgentBentoCard({
     compactChrome && BENTO_CARD_BODY_COMPACT_CLASS,
     bodyClassName,
   );
+  const cardBody =
+    bodyScroll === false ? (
+      <div
+        className={cn(BENTO_CARD_BODY_SCROLL_CLASS, cardBodyClassName)}
+        {...bodyProps}
+      >
+        {children}
+      </div>
+    ) : (
+      <ScrollArea
+        className={BENTO_CARD_BODY_SCROLL_CLASS}
+        viewportClassName={cardBodyClassName}
+        viewportProps={bodyProps}
+      >
+        {children}
+      </ScrollArea>
+    );
 
   return (
     <DashboardPanelShell
@@ -325,9 +350,7 @@ export function AgentBentoCard({
         headerAction={headerAction}
         title={title}
       />
-      <div className={cardBodyClassName} {...bodyProps}>
-        {children}
-      </div>
+      {cardBody}
     </DashboardPanelShell>
   );
 }

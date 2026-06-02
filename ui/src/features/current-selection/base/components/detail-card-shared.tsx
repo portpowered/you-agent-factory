@@ -29,7 +29,7 @@ export const EXECUTION_PILL_CLASS = cn(
 export const PROVIDER_SESSION_CARD_CLASS =
   "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
 export const CURRENT_SELECTION_FIELD_PANEL_CLASS =
-  "grid gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-3";
+  "grid gap-2 rounded-2xl border border-af-border bg-af-surface-raised p-3";
 /** Editable configuration field groups must use this stack instead of multi-column grid wrappers. */
 export const CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS =
   "grid grid-cols-1 gap-3";
@@ -46,7 +46,7 @@ export const CURRENT_SELECTION_CODE_SUBTLE_CLASS = cn(
   DASHBOARD_BODY_CODE_CLASS,
 );
 export const HISTORY_HEADER_CLASS =
-  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 [&_h4]:m-0";
+  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2 [&_h4]:m-0";
 export const CURRENT_SELECTION_ACCENT_SURFACE_CLASS =
   "border-af-accent-border bg-af-accent-surface text-af-text";
 export const CURRENT_SELECTION_BADGE_CLASS = cn(
@@ -55,7 +55,7 @@ export const CURRENT_SELECTION_BADGE_CLASS = cn(
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const WORKSTATION_SUMMARY_ITEM_CLASS =
-  "grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2";
+  "grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2";
 export const INFERENCE_ATTEMPT_CARD_CLASS =
   "grid min-w-0 gap-2.5 rounded-lg border border-af-border p-3.5";
 export const INFERENCE_ATTEMPT_DETAIL_CLASS = cn(

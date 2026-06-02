@@ -139,7 +139,7 @@ function WorkstationGuardRow({
   return (
     <article
       aria-labelledby={`${rowId}-heading`}
-      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-subtle p-3"
+      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid min-w-0 gap-1">

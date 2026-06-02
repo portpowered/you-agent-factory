@@ -73,7 +73,7 @@ describe("factory graph editor toolbar controls", () => {
     renderToolbar();
 
     const addMenuButton = screen.getByRole("button", {
-      name: "Open add entity menu",
+      name: "Add tool",
     });
     expect(addMenuButton.textContent).toBe("");
     expect(addMenuButton.getAttribute("aria-expanded")).toBe("false");
@@ -106,11 +106,11 @@ describe("factory graph editor toolbar controls", () => {
 
     renderToolbar();
 
-    const connectButton = screen.getByRole("button", { name: "Connect" });
-    const deleteButton = screen.getByRole("button", { name: "Delete" });
+    const connectButton = screen.getByRole("button", { name: "Connect tool" });
+    const deleteButton = screen.getByRole("button", { name: "Delete tool" });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
     const addButton = screen.getByRole("button", {
-      name: "Open add entity menu",
+      name: "Add tool",
     });
 
     expect(addButton.textContent).toBe("");
@@ -134,7 +134,7 @@ describe("factory graph editor toolbar controls", () => {
     await user.hover(deleteButton);
     expect(
       await screen.findByRole("tooltip", {
-        name: "Remove nodes or edges from the draft",
+        name: "Delete tool",
       }),
     ).toBeTruthy();
   });
@@ -177,7 +177,7 @@ describe("factory graph editor mode toggle controls", () => {
     );
 
     const toggle = screen.getByRole("button", {
-      name: "Leave factory graph editor",
+      name: "Leave editor",
     });
 
     expect(toggle.className).toContain("border-af-warning-border");
@@ -191,7 +191,7 @@ describe("factory graph editor mode toggle controls", () => {
     );
 
     const enterToggle = screen.getByRole("button", {
-      name: "Enter factory graph editor",
+      name: "Edit mode",
     });
     expect(enterToggle.className).toContain("border-af-border");
     expect(enterToggle.className).not.toContain("border-af-warning-border");
@@ -201,7 +201,7 @@ describe("factory graph editor mode toggle controls", () => {
     );
 
     const leaveToggle = screen.getByRole("button", {
-      name: "Leave factory graph editor",
+      name: "Leave editor",
     });
     expect(leaveToggle.className).toContain("border-af-border-strong");
     expect(leaveToggle.className).not.toContain("border-af-warning-border");
@@ -214,11 +214,9 @@ describe("factory graph editor mode toggle controls", () => {
       <FactoryGraphEditorModeToggle editorMode={false} onClick={() => {}} />,
     );
 
-    await user.hover(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    await user.hover(screen.getByRole("button", { name: "Edit mode" }));
     const tooltip = await screen.findByRole("tooltip", {
-      name: "Enter factory graph editor",
+      name: "Edit mode",
     });
     expect(tooltip).toBeTruthy();
     expect(tooltip.className).toContain("border-af-border-strong");
@@ -233,11 +231,9 @@ describe("factory graph editor mode toggle controls", () => {
       <FactoryGraphEditorModeToggle editorMode={false} onClick={() => {}} />,
     );
 
-    await user.hover(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    await user.hover(screen.getByRole("button", { name: "Edit mode" }));
     const tooltip = await screen.findByRole("tooltip", {
-      name: "Enter factory graph editor",
+      name: "Edit mode",
     });
     expect(tooltip.className).toContain("top-full");
     expect(tooltip.className).toContain("mt-2");
@@ -253,12 +249,12 @@ describe("factory graph editor toolbar tooltip placement", () => {
 
     const toolbarTooltips = [
       {
-        buttonName: "Delete",
-        tooltipName: "Remove nodes or edges from the draft",
+        buttonName: "Delete tool",
+        tooltipName: "Delete tool",
       },
       {
-        buttonName: "Connect",
-        tooltipName: "Create compatible graph connections",
+        buttonName: "Connect tool",
+        tooltipName: "Connect tool",
       },
       {
         buttonName: "Open hide or show node classes menu",
@@ -444,10 +440,8 @@ describe("factory graph editor hide/show controls", () => {
         name: "Open hide or show node classes menu",
       }),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Open add entity menu" }),
-    ).toBeNull();
-    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add tool" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Connect tool" })).toBeNull();
   });
 });
 

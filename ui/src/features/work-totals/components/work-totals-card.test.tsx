@@ -1,5 +1,15 @@
 import { render, screen, within } from "@testing-library/react";
+
+import { getBentoGridItemHeightPx } from "../../bento/components/agent-bento";
+import { expectNoVerticalScrollContainer } from "../../trace-drilldown/lib/trace-grid-card-scroll-test-helpers";
 import { WorkTotalsCard } from "./work-totals-card";
+
+const REPRESENTATIVE_TOTALS = {
+  completedCount: 3,
+  dispatchedCount: 5,
+  failedCount: 1,
+  inFlightDispatchCount: 2,
+} as const;
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
   if (value === null || value === undefined) {
@@ -69,6 +79,37 @@ describe("WorkTotalsCard", () => {
     expect(dispatchedCard?.className).not.toContain("border-af-info-border");
     expect(dispatchedCard?.className).not.toContain("border-af-success-border");
     expect(dispatchedCard?.className).not.toContain("border-af-danger-border");
+  });
+
+  it("fits default bento height without vertical scroll for representative counts", () => {
+    const defaultBentoHeightPx = getBentoGridItemHeightPx(2);
+
+    render(
+      <div style={{ height: defaultBentoHeightPx, width: 360 }}>
+        <WorkTotalsCard {...REPRESENTATIVE_TOTALS} />
+      </div>,
+    );
+
+    const card = screen.getByRole("article", { name: "Work totals" });
+    const header = card.querySelector("header");
+    const body = header?.nextElementSibling;
+
+    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeNull();
+    expect(body).toBeTruthy();
+    if (!(body instanceof HTMLElement)) {
+      throw new Error("Expected work totals card body.");
+    }
+
+    expect(body.className).toContain("!h-auto");
+    expect(body.className).toContain("!pb-2.5");
+    expect(body.className).not.toMatch(/overflow-y-(auto|scroll)/);
+    expectNoVerticalScrollContainer(body);
+
+    const statCard = within(card).getByText("In progress").closest("article");
+    expect(statCard?.className).toContain("py-1.5");
+    expect(within(requireValue(statCard)).getByText("2").className).toContain(
+      "text-[1.2rem]",
+    );
   });
 
   it("renders zh-CN widget labels and accessible stat values", () => {

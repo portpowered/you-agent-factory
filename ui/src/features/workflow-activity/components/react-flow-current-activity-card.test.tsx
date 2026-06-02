@@ -918,9 +918,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    expect(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit mode" })).toBeTruthy();
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
     });
@@ -930,9 +928,9 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       }),
     ).toBeTruthy();
     expect(
-      within(toolbar).queryByRole("button", { name: "Open add entity menu" }),
+      within(toolbar).queryByRole("button", { name: "Add tool" }),
     ).toBeNull();
-    expect(screen.getByText("Observe mode")).toBeTruthy();
+    expect(screen.getByText("Observe")).toBeTruthy();
   });
 
   it("shows the add, delete, and connect toolbar in editor mode", async () => {
@@ -946,21 +944,19 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
     });
     expect(
-      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
+      within(toolbar).getByRole("button", { name: "Add tool" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Delete" }),
+      within(toolbar).getByRole("button", { name: "Delete tool" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Connect" }),
+      within(toolbar).getByRole("button", { name: "Connect tool" }),
     ).toBeTruthy();
     expect(screen.getByText("Editor mode active")).toBeTruthy();
   });
@@ -1013,7 +1009,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       }),
     ).toBeTruthy();
     expect(
-      within(toolbar).queryByRole("button", { name: "Open add entity menu" }),
+      within(toolbar).queryByRole("button", { name: "Add tool" }),
     ).toBeNull();
     expect(screen.queryByText("Editor mode active")).toBeNull();
   });
@@ -1034,12 +1030,8 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open add entity menu" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
 
     expect(screen.getByRole("button", { name: "Workstation" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Worker" })).toBeTruthy();
@@ -1075,12 +1067,8 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open add entity menu" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
     fireEvent.click(screen.getByRole("button", { name: "Work type" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "essay" },
@@ -1121,12 +1109,8 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open add entity menu" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
     fireEvent.click(screen.getByRole("button", { name: "Work state" }));
 
     expect(screen.getByText("Add work state")).toBeTruthy();
@@ -1175,12 +1159,8 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: dashboardSnapshotWithEditableFactory(),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open add entity menu" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
     fireEvent.click(screen.getByRole("button", { name: "Work state" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "approved" },
@@ -1251,9 +1231,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     await waitFor(() => {
       expect(
@@ -1388,9 +1366,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     await waitFor(() => {
       expect(
@@ -1426,9 +1402,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     await waitFor(() => {
       expect(
@@ -1463,9 +1437,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot: workerDenseSnapshot(),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     await waitFor(() => {
       expect(
@@ -1504,9 +1476,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     expect(
       await screen.findAllByRole("button", {
@@ -1620,9 +1590,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     expect(
       await screen.findByRole("button", {
@@ -1639,9 +1607,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
@@ -1649,17 +1615,17 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     expect(screen.getByText("Loading editor definition")).toBeTruthy();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Open add entity menu" })
+        .getByRole("button", { name: "Add tool" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Delete" })
+        .getByRole("button", { name: "Delete tool" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Connect" })
+        .getByRole("button", { name: "Connect tool" })
         .getAttribute("disabled"),
     ).not.toBeNull();
   });
@@ -1681,12 +1647,8 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Leave factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave editor" }));
 
     const dialog = await screen.findByRole("dialog", {
       name: "Leave graph editor with unsaved changes?",
@@ -1725,12 +1687,8 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Leave factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave editor" }));
 
     const dialog = await screen.findByRole("dialog", {
       name: "Leave graph editor with unsaved changes?",
@@ -1745,7 +1703,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     expect(resetDraft).not.toHaveBeenCalled();
     expect(
       screen
-        .getByRole("button", { name: "Leave factory graph editor" })
+        .getByRole("button", { name: "Leave editor" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(screen.getByText("Unsaved changes")).toBeTruthy();
@@ -1779,9 +1737,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     const actions = await screen.findByRole("region", {
       name: "Factory graph editor tools",
@@ -1825,9 +1781,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: semanticWorkflowDashboardSnapshot,
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
@@ -1846,7 +1800,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     expect(within(toolbar).queryAllByRole("status")).toHaveLength(0);
 
     const toggle = screen.getByRole("button", {
-      name: "Leave factory graph editor",
+      name: "Leave editor",
     });
     expect(toggle.className).toContain("border-af-warning-border");
     expect(toggle.className).toContain("bg-af-warning-surface");
@@ -1892,9 +1846,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
     fireEvent.click(
       within(
         await screen.findByRole("region", {
@@ -1957,9 +1909,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     expect(
       await screen.findByText("A newer factory definition is available"),
@@ -2004,9 +1954,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(1),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     expect(await screen.findByText("Topology edits are blocked")).toBeTruthy();
     expect(
@@ -2049,12 +1997,8 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       snapshot: dashboardSnapshotWithActiveWorkItemCount(0),
     });
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enter factory graph editor" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Leave factory graph editor" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
+    fireEvent.click(screen.getByRole("button", { name: "Leave editor" }));
     fireEvent.click(
       within(
         await screen.findByRole("dialog", {
@@ -2254,7 +2198,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("Observe mode")).toBeTruthy();
+    expect(screen.getByText("Observe")).toBeTruthy();
     expect(legend?.className).toContain("absolute");
     expect(legend?.className).toContain("left-4");
     expect(legend?.className).toContain("right-4");
@@ -2821,11 +2765,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     try {
       renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 
-      fireEvent.click(
-        screen.getByRole("button", { name: "Enter factory graph editor" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
-      await screen.findByRole("button", { name: "Connect" });
+      await screen.findByRole("button", { name: "Connect tool" });
       await waitFor(() => {
         expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
           0,
@@ -2880,9 +2822,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     try {
       renderCurrentActivity({ snapshot: idleSnapshot });
 
-      fireEvent.click(
-        screen.getByRole("button", { name: "Enter factory graph editor" }),
-      );
+      fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
       await screen.findByRole("button", { name: "Save changes" });
       expect(await screen.findByText("Unsaved changes")).toBeTruthy();

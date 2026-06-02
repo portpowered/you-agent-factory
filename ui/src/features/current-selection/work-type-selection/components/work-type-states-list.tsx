@@ -90,7 +90,7 @@ export function WorkTypeStatesList({
                     className={cn(
                       WORKSTATION_SUMMARY_ITEM_CLASS,
                       "h-auto min-h-0 w-full justify-start rounded-lg px-3 py-2 font-normal shadow-none",
-                      "border-af-border bg-af-surface-subtle text-left hover:border-af-border-strong hover:bg-af-surface",
+                      "border-af-border bg-af-surface-raised text-left hover:border-af-border-strong hover:bg-af-overlay",
                     )}
                     onClick={() => onSelectWorkStateGraphNode(graphNodeId)}
                     tone="outline"

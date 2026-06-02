@@ -316,7 +316,7 @@ describe("resolveWorkstationSummaryRunnerValue", () => {
         getWorkstationDetailMessages("en"),
         modelWorkstationNode,
       ),
-    ).toBe("Codex (Legacy provider)");
+    ).toBe("Codex (Worker provider)");
   });
 
   it("returns unavailable copy for invalid runner ids", () => {

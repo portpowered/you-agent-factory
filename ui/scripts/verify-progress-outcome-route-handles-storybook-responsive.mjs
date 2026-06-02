@@ -4,16 +4,16 @@ export async function verifyProgressOutcomeRoutesWithoutStopWords(
   viewport,
 ) {
   const successHandle = page.getByRole("button", {
-    name: "Connect: draft Success",
+    name: "Connect tool: draft Success",
   });
   const failureHandle = page.getByRole("button", {
-    name: "Connect: draft Failure",
+    name: "Connect tool: draft Failure",
   });
   const continueHandle = page.getByRole("button", {
-    name: "Connect: draft Continue",
+    name: "Connect tool: draft Continue",
   });
   const rejectHandle = page.getByRole("button", {
-    name: "Connect: draft Reject",
+    name: "Connect tool: draft Reject",
   });
 
   await expectVisible(successHandle, "Draft success handle");
@@ -44,16 +44,16 @@ export async function verifyProgressOutcomeRoutesWithStopWords(
   _viewport,
 ) {
   const successHandle = page.getByRole("button", {
-    name: "Connect: draft Success",
+    name: "Connect tool: draft Success",
   });
   const failureHandle = page.getByRole("button", {
-    name: "Connect: draft Failure",
+    name: "Connect tool: draft Failure",
   });
   const continueHandle = page.getByRole("button", {
-    name: "Connect: draft Continue",
+    name: "Connect tool: draft Continue",
   });
   const rejectHandle = page.getByRole("button", {
-    name: "Connect: draft Reject",
+    name: "Connect tool: draft Reject",
   });
 
   await expectVisible(successHandle, "Draft success handle");

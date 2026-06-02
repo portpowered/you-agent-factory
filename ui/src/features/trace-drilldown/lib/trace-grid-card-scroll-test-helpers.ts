@@ -40,12 +40,17 @@ export function expectNoVerticalScrollContainer(
   expect(style.overflowY).not.toBe("scroll");
 }
 
+export function expectAgentBentoScrollViewport(element: HTMLElement): void {
+  expect(element.hasAttribute("data-radix-scroll-area-viewport")).toBe(true);
+}
+
 export function findTraceCardScrollContainer(card: HTMLElement): HTMLElement {
   const scrollContainer = card.querySelector("[data-trace-card-scroll]");
   if (!(scrollContainer instanceof HTMLElement)) {
     throw new Error("Expected trace card scroll container.");
   }
 
+  expectAgentBentoScrollViewport(scrollContainer);
   return scrollContainer;
 }
 
@@ -85,7 +90,7 @@ export function expectNoVerticalScrollBetweenDispatchTableAndCardBody(
   const scrollContainer = findTraceCardScrollContainer(card);
   const tableRegion = findTraceDispatchTableRegion(card);
 
-  expect(scrollContainer.className).toContain("overflow-auto");
+  expectAgentBentoScrollViewport(scrollContainer);
 
   let current: Element | null = tableRegion;
   while (current && current !== scrollContainer) {
