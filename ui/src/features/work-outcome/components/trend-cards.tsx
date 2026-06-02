@@ -61,10 +61,6 @@ const TREND_CHART_CLASS = cn(
   DASHBOARD_CHART_SURFACE_CLASS,
   "min-h-44 border border-af-border",
 );
-const TIMING_RANGE_SUMMARY_CLASS = cn(
-  TREND_SUMMARY_CLASS,
-  "mt-3 md:grid-cols-2",
-);
 const TREND_SUMMARY_TERM_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const TREND_SUMMARY_VALUE_CLASS = WIDGET_SUBTITLE_CLASS;
 const FAILURE_TREND_CHART_STYLE =
@@ -363,7 +359,7 @@ export function TimingTrendCard({
             ))}
           </svg>
           <dl
-            className={TIMING_RANGE_SUMMARY_CLASS}
+            className={cn(TREND_SUMMARY_CLASS, "mt-3 md:grid-cols-2")}
             aria-label={messages.timingRangeLabel}
           >
             <div>
