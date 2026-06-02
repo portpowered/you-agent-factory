@@ -1,3 +1,4 @@
+import { validateEditableWorkstationCronDraft } from "../../current-factory-definition/lib/editable-workstation-cron-validation";
 import { parseWorkerArgsText } from "../../current-factory-definition/lib/worker-editable-values";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
@@ -5,6 +6,16 @@ import {
   resolveEditableWorkstationBehaviorOptions,
   workerSupportsPollerBehavior,
 } from "../../current-factory-definition/lib/workstation-behavior";
+import {
+  buildCanonicalWorkstationCronFromDraft,
+  createEmptyEditableWorkstationCronDraft,
+  type EditableWorkstationCronDraft,
+} from "../../current-factory-definition/lib/workstation-editable-values";
+import {
+  DEFAULT_WORKSTATION_TYPE,
+  type EditableWorkstationType,
+} from "../../current-factory-definition/lib/workstation-type";
+import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
 import type { FactoryGraphEditorMenuAction } from "../components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
@@ -59,9 +70,11 @@ export type FactoryGraphAddEntityDraft =
   | {
       behavior: EditableWorkstationBehavior;
       body: string;
+      cron: EditableWorkstationCronDraft | null;
       kind: "workstation";
       name: string;
       workerName: string;
+      workstationType: EditableWorkstationType;
     };
 
 export type FactoryGraphAddEntityFieldErrors = Partial<
@@ -75,11 +88,24 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "name"
     | "stateType"
     | "behavior"
+    | "cronExpiryWindow"
+    | "cronJitter"
+    | "cronSchedule"
     | "workTypeName"
     | "workerName",
     string
   >
 >;
+
+const FACTORY_GRAPH_ADD_CRON_VALIDATION_MESSAGES = {
+  cronExpiryWindowInvalid: (value: string) =>
+    `Cron expiry window "${value}" must be a positive Go duration.`,
+  cronJitterInvalid: (value: string) =>
+    `Cron jitter "${value}" must be a non-negative Go duration.`,
+  cronScheduleInvalid: (schedule: string, detail: string) =>
+    `Cron schedule "${schedule}" is invalid: ${detail}`,
+  cronScheduleRequired: "Enter a cron schedule before adding this workstation.",
+} as const;
 
 const DEFAULT_RESOURCE_CAPACITY = "1";
 const DEFAULT_WORK_STATE_TYPE: FactoryWorkState["type"] = "PROCESSING";
@@ -167,9 +193,11 @@ export function createFactoryGraphAddEntityDraft(
   return {
     behavior: DEFAULT_WORKSTATION_BEHAVIOR,
     body: "",
+    cron: null,
     kind,
     name: "",
     workerName: factoryDefinition?.workers?.[0]?.name ?? "",
+    workstationType: DEFAULT_WORKSTATION_TYPE,
   };
 }
 
@@ -244,21 +272,37 @@ export function validateFactoryGraphAddEntityDraft(
   }
 
   if (draft.kind === "workstation") {
-    if (draft.workerName.trim().length === 0) {
-      errors.workerName =
-        "Choose an assigned worker before adding this workstation.";
-    } else if (!workerExists(draft.workerName, factoryDefinition)) {
-      errors.workerName = `Worker "${draft.workerName}" is not available in the current draft.`;
-    } else if (
-      draft.behavior === "POLLER" &&
-      !workerSupportsPollerBehavior(
-        (factoryDefinition?.workers ?? []).find(
-          (worker) => worker.name === draft.workerName,
+    const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
+      type: draft.workstationType,
+    });
+
+    if (requiresWorkerAssignment) {
+      if (draft.workerName.trim().length === 0) {
+        errors.workerName =
+          "Choose an assigned worker before adding this workstation.";
+      } else if (!workerExists(draft.workerName, factoryDefinition)) {
+        errors.workerName = `Worker "${draft.workerName}" is not available in the current draft.`;
+      } else if (
+        draft.behavior === "POLLER" &&
+        !workerSupportsPollerBehavior(
+          (factoryDefinition?.workers ?? []).find(
+            (worker) => worker.name === draft.workerName,
+          ),
+        )
+      ) {
+        errors.behavior =
+          "Poller workstations must use a script or hosted worker.";
+      }
+    }
+
+    if (draft.behavior === "CRON") {
+      Object.assign(
+        errors,
+        validateEditableWorkstationCronDraft(
+          draft.cron,
+          FACTORY_GRAPH_ADD_CRON_VALIDATION_MESSAGES,
         ),
-      )
-    ) {
-      errors.behavior =
-        "Poller workstations must use a script or hosted worker.";
+      );
     }
   }
 
@@ -327,18 +371,47 @@ export function applyFactoryGraphAddEntityDraft(
     return nextDraft;
   }
 
+  const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
+    type: entityDraft.workstationType,
+  });
+  const trimmedBody = entityDraft.body.trim();
+
   nextDraft.additions.workstations.push({
     ...(entityDraft.behavior === DEFAULT_WORKSTATION_BEHAVIOR
       ? {}
       : { behavior: entityDraft.behavior }),
-    body: entityDraft.body.trim() || undefined,
+    ...(trimmedBody.length > 0 ? { body: trimmedBody } : {}),
+    ...(entityDraft.behavior === "CRON" && entityDraft.cron
+      ? { cron: buildCanonicalWorkstationCronFromDraft(entityDraft.cron) }
+      : {}),
     inputs: [],
     name: entityDraft.name.trim(),
     outputs: [],
-    type: "MODEL_WORKSTATION",
-    worker: entityDraft.workerName.trim(),
+    type: entityDraft.workstationType,
+    ...(requiresWorkerAssignment
+      ? { worker: entityDraft.workerName.trim() }
+      : { worker: "" }),
   });
   return nextDraft;
+}
+
+export function resolveFactoryGraphAddWorkstationDraftForBehaviorChange(
+  draft: Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }>,
+  behavior: EditableWorkstationBehavior,
+): Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }> {
+  if (behavior === "CRON") {
+    return {
+      ...draft,
+      behavior,
+      cron: draft.cron ?? createEmptyEditableWorkstationCronDraft(),
+    };
+  }
+
+  return {
+    ...draft,
+    behavior,
+    cron: null,
+  };
 }
 
 function entityNameExists(

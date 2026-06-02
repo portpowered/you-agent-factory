@@ -321,9 +321,11 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       draft: {
         behavior: "STANDARD",
         body: "",
+        cron: null,
         kind: "workstation",
         name: "review",
         workerName: "",
+        workstationType: "MODEL_WORKSTATION",
       },
       errors: {
         behavior: "Poller workstations must use a script or hosted worker.",
@@ -350,23 +352,29 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(onChange).toHaveBeenNthCalledWith(1, {
       behavior: "POLLER",
       body: "",
+      cron: null,
       kind: "workstation",
       name: "review",
       workerName: "",
+      workstationType: "MODEL_WORKSTATION",
     });
     expect(onChange).toHaveBeenNthCalledWith(2, {
       behavior: "STANDARD",
       body: "",
+      cron: null,
       kind: "workstation",
       name: "review",
       workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
     });
     expect(onChange).toHaveBeenNthCalledWith(3, {
       behavior: "STANDARD",
       body: "Review the draft.",
+      cron: null,
       kind: "workstation",
       name: "review",
       workerName: "",
+      workstationType: "MODEL_WORKSTATION",
     });
     expect(
       screen.getByText(
