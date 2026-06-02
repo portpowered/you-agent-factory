@@ -801,7 +801,7 @@ func sessionFactoryURL(serverURL, sessionID string) string {
 
 func submitWorkAndExpectStatus(t *testing.T, serverURL, workType, title string, wantStatus int) *http.Response {
 	t.Helper()
-	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"name":"factory-transformation-submit","workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
+	resp, err := http.Post(support.DefaultSessionWorkURL(serverURL, "/work"), "application/json", bytes.NewBufferString(`{"name":"factory-transformation-submit","workTypeName":"`+workType+`","payload":{"title":"`+title+`"}}`))
 	if err != nil {
 		t.Fatalf("POST /work %s: %v", workType, err)
 	}

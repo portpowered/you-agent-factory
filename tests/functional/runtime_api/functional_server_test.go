@@ -50,7 +50,7 @@ func (fs *FunctionalServer) SubmitWork(t *testing.T, workTypeID string, payload 
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	resp, err := http.Post(fs.URL()+"/work", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(fs.URL(), "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -647,7 +647,7 @@ func dashboardCompatWorkTypeID(workTypeID string) string {
 
 func (fs *FunctionalServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
-	resp, err := http.Get(fs.URL() + "/work")
+	resp, err := http.Get(support.DefaultSessionWorkURL(fs.URL(), "/work"))
 	if err != nil {
 		t.Fatalf("GET /work: %v", err)
 	}

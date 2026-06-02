@@ -121,7 +121,7 @@ func postGeneratedMoveWork(t *testing.T, baseURL, workID, stateName string) fact
 	if err != nil {
 		t.Fatalf("marshal move request: %v", err)
 	}
-	resp, err := http.Post(baseURL+"/work/"+workID+"/move", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(baseURL, "/work/"+workID+"/move"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work/%s/move: %v", workID, err)
 	}
@@ -146,7 +146,7 @@ func waitForGeneratedWorkIDsAtState(t *testing.T, baseURL string, workIDs []stri
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 		found := 0
 		for _, item := range work.Results {
 			workID := stringPointerValue(item.WorkId)
@@ -159,14 +159,14 @@ func waitForGeneratedWorkIDsAtState(t *testing.T, baseURL string, workIDs []stri
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 	t.Fatalf("timed out waiting for work IDs %v at state %q; last work response: %#v", workIDs, stateName, work)
 }
 
 func requireGeneratedWorkByID(t *testing.T, baseURL, workID string) factoryapi.Work {
 	t.Helper()
 
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 	for _, item := range work.Results {
 		if stringPointerValue(item.WorkId) == workID {
 			return item

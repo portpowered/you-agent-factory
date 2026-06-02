@@ -16,26 +16,10 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
-
-const generatedDefaultSessionWorkAPIPrefix = "/factory-sessions/" + factorysessions.DefaultSessionID
-
-func generatedDefaultSessionWorkURL(baseURL, path string) string {
-	switch {
-	case path == "/work" || strings.HasPrefix(path, "/work?"):
-		return strings.TrimSuffix(baseURL, "/") + generatedDefaultSessionWorkAPIPrefix + path
-	case strings.HasPrefix(path, "/work/"):
-		return strings.TrimSuffix(baseURL, "/") + generatedDefaultSessionWorkAPIPrefix + path
-	case strings.HasPrefix(path, "/work-requests/"):
-		return strings.TrimSuffix(baseURL, "/") + generatedDefaultSessionWorkAPIPrefix + path
-	default:
-		return strings.TrimSuffix(baseURL, "/") + path
-	}
-}
 
 func TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned(t *testing.T) {
 	support.SkipLongFunctional(t, "slow generated API and live runtime alignment smoke")
@@ -94,7 +78,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptHeaderOnlyStructuredS
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	resp, err := http.Post(generatedDefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -139,7 +123,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectEmptyStructuredSubmis
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	resp, err := http.Post(generatedDefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -166,7 +150,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	resp, err := http.Post(generatedDefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -328,7 +312,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectForgedStructuredFileR
 	if err != nil {
 		t.Fatalf("marshal forged staged-ref request: %v", err)
 	}
-	resp, err := http.Post(generatedDefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work with forged staged ref: %v", err)
 	}
@@ -457,7 +441,7 @@ func submitGeneratedWork(t *testing.T, baseURL string, req factoryapi.SubmitWork
 	if err != nil {
 		t.Fatalf("marshal generated submit request: %v", err)
 	}
-	resp, err := http.Post(generatedDefaultSessionWorkURL(baseURL, "/work"), "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(baseURL, "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -492,7 +476,7 @@ func stageGeneratedSubmitWorkFile(
 	if err != nil {
 		t.Fatalf("marshal stage submit-work request: %v", err)
 	}
-	resp, err := http.Post(generatedDefaultSessionWorkURL(baseURL, "/work/staged-files"), "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(baseURL, "/work/staged-files"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work/staged-files: %v", err)
 	}
@@ -514,7 +498,7 @@ func putGeneratedWorkRequest(t *testing.T, baseURL string, requestID string, req
 	if err != nil {
 		t.Fatalf("marshal generated work request: %v", err)
 	}
-	endpoint := generatedDefaultSessionWorkURL(baseURL, "/work-requests/"+url.PathEscape(requestID))
+	endpoint := support.DefaultSessionWorkURL(baseURL, "/work-requests/"+url.PathEscape(requestID))
 	httpReq, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("build PUT /work-requests request: %v", err)
@@ -562,7 +546,7 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, generatedDefaultSessionWorkURL(baseURL, "/work"))
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 		for _, item := range work.Results {
 			if stringPointerValue(item.TraceId) == traceID && generatedWorkPlaceID(item) == placeID {
 				return work
@@ -570,7 +554,7 @@ func waitForGeneratedWorkAtPlace(t *testing.T, baseURL string, traceID string, p
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, generatedDefaultSessionWorkURL(baseURL, "/work"))
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 	t.Fatalf("timed out waiting for trace %q at %s; last work response: %#v", traceID, placeID, work)
 	return factoryapi.ListWorkResponse{}
 }
@@ -579,7 +563,7 @@ func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType str
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, generatedDefaultSessionWorkURL(baseURL, "/work"))
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 		for _, item := range work.Results {
 			if stringPointerValue(item.WorkTypeName) == workType && generatedWorkStateName(item.State) == "complete" {
 				return item
@@ -587,7 +571,7 @@ func waitForGeneratedWorkTypeComplete(t *testing.T, baseURL string, workType str
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, generatedDefaultSessionWorkURL(baseURL, "/work"))
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 	t.Fatalf("timed out waiting for completed work type %q; last work response: %#v", workType, work)
 	return factoryapi.Work{}
 }
@@ -600,7 +584,7 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, generatedDefaultSessionWorkURL(baseURL, "/work"))
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 		found := make(map[string]factoryapi.Work, len(want))
 		for _, item := range work.Results {
 			workID := stringPointerValue(item.WorkId)
@@ -617,7 +601,7 @@ func waitForGeneratedWorkIDsComplete(t *testing.T, baseURL string, workIDs []str
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, generatedDefaultSessionWorkURL(baseURL, "/work"))
+	work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 	t.Fatalf("timed out waiting for completed work IDs %v; last work response: %#v", workIDs, work)
 	return nil
 }

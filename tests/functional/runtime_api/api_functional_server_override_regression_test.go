@@ -99,7 +99,7 @@ func submitFunctionalServerWork(t *testing.T, server *functionalAPIServer, workT
 		t.Fatalf("marshal submit request: %v", err)
 	}
 
-	resp, err := http.Post(server.URL()+"/work", "application/json", bytes.NewReader(reqBody))
+	resp, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(reqBody))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}

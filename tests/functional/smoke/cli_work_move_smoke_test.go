@@ -161,7 +161,7 @@ func waitForWorkMoveSmokeWorkID(ctx context.Context, baseURL string, timeout tim
 		default:
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/work", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
 		if err != nil {
 			return "", err
 		}
@@ -223,7 +223,7 @@ func waitForWorkMoveSmokeWorkAtState(ctx context.Context, baseURL, workID, state
 		default:
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/work/"+workID, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work/"+workID), nil)
 		if err != nil {
 			return err
 		}

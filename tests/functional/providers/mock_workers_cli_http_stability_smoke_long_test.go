@@ -236,7 +236,7 @@ func assertCLIHTTPStabilityShutdownReadability(
 	sawReachableAfterCancel := false
 	for time.Now().Before(deadline) {
 		statusResp := readCLIHTTPStabilityJSONResponse[factoryapi.StatusResponse](t, baseURL+"/status", cliHTTPStabilityShutdownPhase)
-		workResp := readCLIHTTPStabilityJSONResponse[factoryapi.ListWorkResponse](t, baseURL+"/work", cliHTTPStabilityShutdownPhase)
+		workResp := readCLIHTTPStabilityJSONResponse[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"), cliHTTPStabilityShutdownPhase)
 
 		if statusResp.ok {
 			statusSuccesses++
@@ -273,7 +273,7 @@ func readCLIHTTPStabilityLifecycleSample(
 	t.Helper()
 
 	statusResp := readCLIHTTPStabilityJSONResponse[factoryapi.StatusResponse](t, baseURL+"/status", phase)
-	workResp := readCLIHTTPStabilityJSONResponse[factoryapi.ListWorkResponse](t, baseURL+"/work", phase)
+	workResp := readCLIHTTPStabilityJSONResponse[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"), phase)
 	if !statusResp.ok || !workResp.ok {
 		return cliHTTPStabilityLifecycleSample{}, false
 	}

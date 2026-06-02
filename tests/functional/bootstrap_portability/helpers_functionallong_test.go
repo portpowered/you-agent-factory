@@ -10,6 +10,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func (fs *functionalAPIServer) SubmitWork(t *testing.T, workTypeID string, payload json.RawMessage) string {
@@ -25,7 +26,7 @@ func (fs *functionalAPIServer) SubmitWork(t *testing.T, workTypeID string, paylo
 		t.Fatalf("marshal submit request: %v", err)
 	}
 
-	resp, err := http.Post(fs.URL()+"/work", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(fs.URL(), "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -53,7 +54,7 @@ func waitForGeneratedWorkAtPlace(
 
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+		work := getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 		for _, token := range work.Results {
 			if generatedWorkTraceID(token) == traceID && generatedWorkPlaceID(token) == placeID {
 				return work
@@ -62,7 +63,7 @@ func waitForGeneratedWorkAtPlace(
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	return getGeneratedJSON[factoryapi.ListWorkResponse](t, baseURL+"/work")
+	return getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(baseURL, "/work"))
 }
 
 func generatedWorkPlaceID(work factoryapi.Work) string {
