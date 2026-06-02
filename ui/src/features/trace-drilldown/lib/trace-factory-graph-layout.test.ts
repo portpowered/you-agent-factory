@@ -66,7 +66,12 @@ describe("buildTraceFactoryGraphLayoutPositions", () => {
     );
 
     expect(layoutSpy).toHaveBeenCalledWith(topology);
-    expect(positions.get("dispatch-a")).toEqual({ x: 48, y: 72 });
+    expect(positions.get("dispatch-a")).toEqual({
+      x: 48,
+      y: 72,
+      width: 156,
+      height: 196,
+    });
     expect(positions.has("workstation:dispatch-a")).toBe(false);
     layoutSpy.mockRestore();
   });
@@ -119,7 +124,12 @@ describe("buildTraceFactoryGraphLayoutPositions", () => {
     );
 
     expect(positions.size).toBe(1);
-    expect(positions.get("dispatch-a")).toEqual({ x: 10, y: 20 });
+    expect(positions.get("dispatch-a")).toEqual({
+      x: 10,
+      y: 20,
+      width: 156,
+      height: 196,
+    });
     layoutSpy.mockRestore();
   });
 });
@@ -161,8 +171,26 @@ describe("buildTraceFactoryGraphLayoutPositions dispatch projection", () => {
     );
 
     expect(positions.size).toBe(2);
-    expect(positions.get("dispatch-plan")?.x).toBeLessThan(
-      positions.get("dispatch-build")?.x ?? Number.POSITIVE_INFINITY,
+    const dispatchPlan = positions.get("dispatch-plan");
+    const dispatchBuild = positions.get("dispatch-build");
+    expect(dispatchPlan).toEqual(
+      expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        width: expect.any(Number),
+        height: expect.any(Number),
+      }),
+    );
+    expect(dispatchBuild).toEqual(
+      expect.objectContaining({
+        x: expect.any(Number),
+        y: expect.any(Number),
+        width: expect.any(Number),
+        height: expect.any(Number),
+      }),
+    );
+    expect(dispatchPlan?.x).toBeLessThan(
+      dispatchBuild?.x ?? Number.POSITIVE_INFINITY,
     );
   });
 });
@@ -196,11 +224,24 @@ describe("buildTraceFactoryGraphLayoutPositions relation projection", () => {
     );
 
     expect(positions.size).toBe(3);
-    expect(positions.get("work-plan")?.x).toBeLessThan(
-      positions.get("work-implement")?.x ?? Number.POSITIVE_INFINITY,
+    const workPlan = positions.get("work-plan");
+    const workImplement = positions.get("work-implement");
+    const workRepair = positions.get("work-repair");
+    for (const position of [workPlan, workImplement, workRepair]) {
+      expect(position).toEqual(
+        expect.objectContaining({
+          x: expect.any(Number),
+          y: expect.any(Number),
+          width: expect.any(Number),
+          height: expect.any(Number),
+        }),
+      );
+    }
+    expect(workPlan?.x).toBeLessThan(
+      workImplement?.x ?? Number.POSITIVE_INFINITY,
     );
-    expect(positions.get("work-implement")?.x).toBeLessThan(
-      positions.get("work-repair")?.x ?? Number.POSITIVE_INFINITY,
+    expect(workImplement?.x).toBeLessThan(
+      workRepair?.x ?? Number.POSITIVE_INFINITY,
     );
   });
 });

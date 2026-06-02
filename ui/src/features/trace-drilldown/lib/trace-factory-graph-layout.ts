@@ -4,6 +4,8 @@ import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/fa
 export type TraceFactoryGraphLayoutPosition = {
   x: number;
   y: number;
+  width: number;
+  height: number;
 };
 
 /**
@@ -34,6 +36,8 @@ export async function buildTraceFactoryGraphLayoutPositions(
     positionsByTraceFlowNodeId.set(traceFlowNodeId, {
       x: layoutNode.x,
       y: layoutNode.y,
+      width: layoutNode.width,
+      height: layoutNode.height,
     });
   }
 
