@@ -398,6 +398,40 @@ func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 	if contract.InputCount != 1 || len(contract.AvailableVariables) == 0 || contract.AvailableVariables[0].Path == "" {
 		t.Fatalf("prompt contract = %#v, want populated variable list", contract)
 	}
+	if !promptTemplateContractHasPath(contract.AvailableVariables, ".Context.SessionID") {
+		t.Fatalf("prompt contract = %#v, want .Context.SessionID", contract.AvailableVariables)
+	}
+}
+
+func TestValidateCurrentFactoryWorkstationPromptTemplate_AcceptsContextSessionID(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentFactory: &factoryapi.Factory{
+			Name:         "beta",
+			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"you submit --session {{ .Context.SessionID }} --work follow-up"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSONResponse[factoryapi.PromptTemplateValidationResult](t, rec)
+	if !result.Valid || len(result.Diagnostics) != 0 {
+		t.Fatalf("validation result = %#v, want valid with no diagnostics", result)
+	}
+}
+
+func promptTemplateContractHasPath(references []factoryapi.PromptTemplateVariableReference, want string) bool {
+	for _, reference := range references {
+		if reference.Path == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestValidateCurrentFactoryWorkstationPromptTemplate(t *testing.T) {

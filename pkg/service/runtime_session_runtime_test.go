@@ -15,10 +15,14 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
+	"go.uber.org/zap"
 )
 
 func TestSessionScopedRecordPath_ReplacesGeneratedSessionTokenPerSession(t *testing.T) {
@@ -844,5 +848,95 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 	}
 	if target.Subject.Id != wantField {
 		t.Fatalf("validation target subject id = %q, want %q", target.Subject.Id, wantField)
+	}
+}
+
+func TestRuntimeWorkflowContext_SetsSessionID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		sessionID string
+		want      string
+	}{
+		{name: "default session", sessionID: factorysessions.DefaultSessionID, want: factorysessions.DefaultSessionID},
+		{name: "named session", sessionID: "session-beta", want: "session-beta"},
+		{name: "blank session falls back to default", sessionID: "   ", want: factorysessions.DefaultSessionID},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			wfCtx := runtimeWorkflowContext(&interfaces.FactoryConfig{}, tc.sessionID)
+			if wfCtx == nil {
+				t.Fatal("workflow context = nil")
+			}
+			if wfCtx.SessionID != tc.want {
+				t.Fatalf("SessionID = %q, want %q", wfCtx.SessionID, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildReplacementFactoryRuntime_WiresWorkflowContextSessionID(t *testing.T) {
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	betaDir := writeNamedFactoryFixture(t, rootDir, "beta")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	defaultBundle, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, factorysessions.DefaultSessionID)
+	if err != nil {
+		t.Fatalf("buildReplacementFactoryRuntime(default): %v", err)
+	}
+	defaultCtx := runtime.WorkflowContext(defaultBundle.factory)
+	if defaultCtx == nil || defaultCtx.SessionID != factorysessions.DefaultSessionID {
+		t.Fatalf("default workflow context = %#v, want SessionID %q", defaultCtx, factorysessions.DefaultSessionID)
+	}
+
+	namedBundle, err := svc.buildReplacementFactoryRuntime(context.Background(), rootDir, betaDir, "session-beta")
+	if err != nil {
+		t.Fatalf("buildReplacementFactoryRuntime(named): %v", err)
+	}
+	namedCtx := runtime.WorkflowContext(namedBundle.factory)
+	if namedCtx == nil || namedCtx.SessionID != "session-beta" {
+		t.Fatalf("named workflow context = %#v, want SessionID %q", namedCtx, "session-beta")
+	}
+}
+
+func TestRuntimeWorkflowContext_RendersSessionIDInPromptTemplates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		sessionID string
+		want      string
+	}{
+		{name: "default session", sessionID: factorysessions.DefaultSessionID, want: factory_context.DefaultSessionID},
+		{name: "named session", sessionID: "session-beta", want: "session-beta"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			wfCtx := runtimeWorkflowContext(&interfaces.FactoryConfig{}, tc.sessionID)
+			data := workerprompting.BuildPromptData(nil, wfCtx)
+			if data.Context.SessionID != tc.want {
+				t.Fatalf("Context.SessionID = %q, want %q", data.Context.SessionID, tc.want)
+			}
+		})
 	}
 }

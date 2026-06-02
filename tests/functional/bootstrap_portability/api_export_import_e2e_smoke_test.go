@@ -53,6 +53,16 @@ func TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath(t *
 	}
 }
 
+func TestExportImportSmoke_PreservesBatchInboxGitkeepAfterImport(t *testing.T) {
+	fixture := newExportImportFixture(t)
+	harness := newExportImportSmokeHarness(fixture, withExportImportBeforeExport(seedBatchInboxGitkeep))
+
+	result := harness.Run(t)
+
+	result.AssertAPIContractSuccess(t, fixture)
+	assertBatchInboxGitkeepOnDisk(t, result.ImportedDir)
+}
+
 func TestExportImportSmoke_ImportedFactoryPersistsThinSplitRuntimeLayout(t *testing.T) {
 	fixture := newExportImportFixture(t)
 	harness := newExportImportSmokeHarness(fixture)
@@ -411,4 +421,29 @@ func stringPtrValue(value *string) string {
 		return ""
 	}
 	return *value
+}
+
+func seedBatchInboxGitkeep(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	gitkeepPath := filepath.Join(factoryDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, ".gitkeep")
+	if err := os.MkdirAll(filepath.Dir(gitkeepPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(batch inbox): %v", err)
+	}
+	if err := os.WriteFile(gitkeepPath, nil, 0o644); err != nil {
+		t.Fatalf("WriteFile(batch .gitkeep): %v", err)
+	}
+}
+
+func assertBatchInboxGitkeepOnDisk(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	gitkeepPath := filepath.Join(factoryDir, interfaces.InputsDir, "BATCH", interfaces.DefaultChannelName, ".gitkeep")
+	info, err := os.Stat(gitkeepPath)
+	if err != nil {
+		t.Fatalf("inputs/BATCH/default/.gitkeep after import: %v", err)
+	}
+	if info.IsDir() {
+		t.Fatalf("inputs/BATCH/default/.gitkeep after import: got directory, want regular file")
+	}
 }

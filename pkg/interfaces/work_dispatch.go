@@ -48,6 +48,7 @@ type WorkstationExecutionRequest struct {
 	RunnerID              string                          `json:"runner_id,omitempty"`
 	RunnerSelectionSource RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
 	ProjectID             string                          `json:"project_id,omitempty"`
+	FactorySessionID      string                          `json:"factory_session_id,omitempty"`
 	InputTokens           []any                           `json:"input_tokens,omitempty"`
 	ModelOperation        string                          `json:"model_operation,omitempty"`
 	ModelBindings         []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`

@@ -366,6 +366,25 @@ func TestResolveTemplateFields_ResolvesExplicitRuntimeFieldsTogether(t *testing.
 	}
 }
 
+func TestApplyResolvedFields_PreservesSessionID(t *testing.T) {
+	base := &factory_context.FactoryContext{
+		SessionID:     "session-beta",
+		WorkDirectory: "/original/path",
+	}
+
+	resolved := &ResolvedFields{
+		WorkingDirectory: "/resolved/path",
+	}
+
+	result := applyResolvedFields(base, resolved)
+	if result.SessionID != "session-beta" {
+		t.Fatalf("SessionID = %q, want %q", result.SessionID, "session-beta")
+	}
+	if base.SessionID != "session-beta" {
+		t.Fatal("original SessionID was mutated")
+	}
+}
+
 func TestApplyResolvedFields_OverridesWorkingDirectory(t *testing.T) {
 	base := &factory_context.FactoryContext{
 		WorkDirectory: "/original/path",

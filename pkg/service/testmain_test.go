@@ -1862,6 +1862,7 @@ func loadWorkersFromConfigForServiceTest(
 		factoryCfg,
 		factoryRunnerID,
 		runtimeCfg,
+		nil,
 		logging.NoopLogger{},
 		false,
 		providerOverride,

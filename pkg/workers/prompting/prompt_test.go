@@ -126,6 +126,71 @@ Reviewer feedback: {{ (index .Inputs 0).RejectionFeedback }}
 	}
 }
 
+func TestBuildPromptData_MapsFactoryContextSessionID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		sessionID string
+		want      string
+	}{
+		{name: "default session", sessionID: factory_context.DefaultSessionID, want: factory_context.DefaultSessionID},
+		{name: "named session", sessionID: "session-beta", want: "session-beta"},
+		{name: "blank session falls back to default", sessionID: "  ", want: factory_context.DefaultSessionID},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			data := BuildPromptData(nil, &factory_context.FactoryContext{SessionID: tc.sessionID})
+			if data.Context.SessionID != tc.want {
+				t.Fatalf("Context.SessionID = %q, want %q", data.Context.SessionID, tc.want)
+			}
+		})
+	}
+}
+
+func TestPromptRenderer_ContextSessionID(t *testing.T) {
+	renderer := &DefaultPromptRenderer{}
+
+	tokens := []interfaces.Token{{
+		ID: "tok-session",
+		Color: interfaces.TokenColor{
+			WorkID: "work-session",
+		},
+	}}
+
+	tests := []struct {
+		name      string
+		sessionID string
+		want      string
+	}{
+		{name: "default session", sessionID: factory_context.DefaultSessionID, want: factory_context.DefaultSessionID},
+		{name: "named session", sessionID: "session-beta", want: "session-beta"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			wfCtx := &factory_context.FactoryContext{SessionID: tc.sessionID}
+			result, err := renderer.Render(
+				`you submit --session {{ .Context.SessionID }} --work follow-up`,
+				tokens,
+				wfCtx,
+			)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			want := "you submit --session " + tc.want + " --work follow-up"
+			if result != want {
+				t.Fatalf("rendered prompt = %q, want %q", result, want)
+			}
+		})
+	}
+}
+
 func TestPromptRenderer_ContextFields(t *testing.T) {
 	renderer := &DefaultPromptRenderer{}
 

@@ -133,7 +133,10 @@ func finalizeFactorySplitLayoutWrite(
 	if err := os.MkdirAll(inputsDir, 0o755); err != nil {
 		return fmt.Errorf("create inputs directory %s: %w", inputsDir, err)
 	}
-	return ensureDefaultInputChannelDirectories(targetDir, cfg)
+	if err := ensureDefaultInputChannelDirectories(targetDir, cfg); err != nil {
+		return err
+	}
+	return ensureCanonicalInputInboxSentinels(targetDir, cfg)
 }
 
 func copySupportedPortableBundledFilesFromSource(sourceDir, targetDir string, cfg *interfaces.FactoryConfig) error {
@@ -831,6 +834,57 @@ func ensureDefaultInputChannelDirectories(targetDir string, cfg *interfaces.Fact
 		if err := os.MkdirAll(channelDir, 0o755); err != nil {
 			return fmt.Errorf("create inputs/%s/%s directory: %w", workTypeName, interfaces.DefaultChannelName, err)
 		}
+	}
+	return nil
+}
+
+const batchInputInboxChannelName = "BATCH"
+
+func ensureCanonicalInputInboxSentinels(targetDir string, cfg *interfaces.FactoryConfig) error {
+	if err := ensureInputInboxGitkeep(
+		targetDir,
+		filepath.Join(interfaces.InputsDir, batchInputInboxChannelName, interfaces.DefaultChannelName, ".gitkeep"),
+	); err != nil {
+		return fmt.Errorf("ensure batch inbox sentinel: %w", err)
+	}
+	if cfg == nil {
+		return nil
+	}
+	for _, workType := range cfg.WorkTypes {
+		workTypeName := strings.TrimSpace(workType.Name)
+		if workTypeName == "" {
+			continue
+		}
+		relativePath := filepath.Join(
+			interfaces.InputsDir,
+			workTypeName,
+			interfaces.DefaultChannelName,
+			".gitkeep",
+		)
+		if err := ensureInputInboxGitkeep(targetDir, relativePath); err != nil {
+			return fmt.Errorf("ensure inputs/%s/%s .gitkeep: %w", workTypeName, interfaces.DefaultChannelName, err)
+		}
+	}
+	return nil
+}
+
+func ensureInputInboxGitkeep(targetDir, relativePath string) error {
+	path := filepath.Join(targetDir, relativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create %s parent directory: %w", relativePath, err)
+	}
+	info, err := os.Stat(path)
+	switch {
+	case err == nil:
+		if info.IsDir() {
+			return fmt.Errorf("%s exists as a directory", relativePath)
+		}
+		return nil
+	case !errors.Is(err, os.ErrNotExist):
+		return fmt.Errorf("stat %s: %w", relativePath, err)
+	}
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		return fmt.Errorf("create %s: %w", relativePath, err)
 	}
 	return nil
 }
