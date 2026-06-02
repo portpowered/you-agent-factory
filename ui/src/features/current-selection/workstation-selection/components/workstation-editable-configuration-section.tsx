@@ -176,6 +176,31 @@ function EditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames ?? []}
       />
       <EditableConfigurationDraftStatus messages={messages} state={state} />
+      <EditableConfigurationField
+        errorMessage={validationErrors.name}
+        fieldId="editable-workstation-name"
+        input={
+          <input
+            aria-describedby={
+              validationErrors.name ? "editable-workstation-name-error" : undefined
+            }
+            aria-invalid={validationErrors.name ? "true" : undefined}
+            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            id="editable-workstation-name"
+            onChange={(event) => state.onNameChange(event.target.value)}
+            type="text"
+            value={state.draft.name}
+          />
+        }
+        label={messages.workstationNameFieldLabel}
+        supportingContent={
+          <EditableConfigurationServerChangedHint
+            fieldName="name"
+            messages={messages}
+            state={state}
+          />
+        }
+      />
       {requiresWorkerAssignment ? (
         <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
           <EditableConfigurationField
@@ -314,6 +339,7 @@ function hasOnlyPromptBlockingValidationErrors(
     !validationErrors.cronJitter &&
     !validationErrors.cronSchedule &&
     !validationErrors.cronTriggerAtStart &&
+    !validationErrors.name &&
     !validationErrors.runnerName &&
     !validationErrors.workerName
   );

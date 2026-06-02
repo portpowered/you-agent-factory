@@ -34,6 +34,7 @@ export function buildEditableConfigurationSectionReadyState(
         workstation: string;
         maxVisits: number;
       }>;
+      name?: string;
       prompt?: string;
       runnerName?: string;
     };
@@ -48,7 +49,9 @@ export function buildEditableConfigurationSectionReadyState(
     workerOptionsState:
       | { status: "ready"; options: string[] }
       | { message: string; status: "empty" | "error" };
-    overwriteFieldNames: Array<"worker" | "prompt" | "behavior" | "runner">;
+    overwriteFieldNames: Array<
+      "name" | "worker" | "prompt" | "behavior" | "runner"
+    >;
     workstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
   }>,
 ): EditableConfigurationSectionReadyState {
@@ -71,6 +74,7 @@ export function buildEditableConfigurationSectionReadyState(
       cron,
       guards: overrides?.draft?.guards ?? [],
       inputs: [],
+      name: overrides?.draft?.name ?? "Review",
       prompt: overrides?.draft?.prompt ?? "Review prompt",
       runnerName: overrides?.draft?.runnerName ?? ("gemini" as const),
       workerName: "reviewer",
@@ -117,6 +121,7 @@ export function buildEditableConfigurationSectionReadyState(
     onCronTriggerAtStartChange: vi.fn(),
     onGuardsChange: vi.fn(),
     onInputsChange: vi.fn(),
+    onNameChange: vi.fn(),
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onRunnerChange: vi.fn(),

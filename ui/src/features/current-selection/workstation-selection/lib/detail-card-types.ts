@@ -129,6 +129,7 @@ export type EditableWorkstationConfigurationState =
       onCronJitterChange: (value: string) => void;
       onCronScheduleChange: (value: string) => void;
       onCronTriggerAtStartChange: (value: boolean) => void;
+      onNameChange: (value: string) => void;
       onPromptChange: (value: string) => void;
       onResetToLatest: () => void;
       onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;
