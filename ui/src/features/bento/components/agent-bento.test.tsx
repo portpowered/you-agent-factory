@@ -5,7 +5,9 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { afterEach, beforeEach } from "vitest";
 
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../../current-selection/base/public";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
@@ -21,6 +23,17 @@ const defaultLayout: AgentBentoLayoutItem[] = [
   { h: 2, id: "activity", widgetType: "activity", w: 6, x: 0, y: 0 },
   { h: 2, id: "trace", widgetType: "trace", w: 6, x: 6, y: 0 },
 ];
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 function renderBentoBoard(onLayoutChange = vi.fn()) {
   render(
@@ -84,9 +97,9 @@ describe("AgentBentoLayout", () => {
     const activityTitle = within(activityCard).getByRole("heading", {
       name: "Current activity",
     });
-    const activityBody = screen.getByText(
-      "Active workstation graph goes here.",
-    ).parentElement;
+    const activityBody = activityCard.querySelector(
+      "[data-radix-scroll-area-viewport]",
+    );
 
     expect(
       screen.getByRole("region", { name: "you-agent-factory bento board" }),
@@ -449,6 +462,22 @@ describe("AgentBentoLayout", () => {
 });
 
 describe("AgentBentoCard", () => {
+  it("scrolls overflowing bodies through the shared ScrollArea primitive", () => {
+    render(
+      <AgentBentoCard title="Submit work">
+        <p>Long form body</p>
+      </AgentBentoCard>,
+    );
+
+    const card = screen.getByRole("article", { name: "Submit work" });
+    const viewport = card.querySelector("[data-radix-scroll-area-viewport]");
+
+    expect(viewport).toBeTruthy();
+    expect(viewport?.hasAttribute("data-radix-scroll-area-viewport")).toBe(
+      true,
+    );
+  });
+
   it("renders the canonical shared header with an h3 title and header drag handle", () => {
     render(
       <AgentBentoCard title="Work totals">
@@ -563,15 +592,15 @@ describe("AgentBentoCard", () => {
 
     const card = screen.getByRole("article", { name: "Factory graph" });
     const header = card.querySelector("header");
-    const body = screen.getByText("Graph content").parentElement;
+    const viewport = card.querySelector("[data-radix-scroll-area-viewport]");
 
     expect(header?.className).toContain("min-h-11");
     expect(header?.className).toContain("px-3");
     expect(header?.className).toContain("cursor-grab");
-    expect(body?.className).toContain("px-3");
-    expect(body?.className).toContain("pt-3");
-    expect(body?.className).toContain("pb-4");
-    expect(body?.className).toContain("gap-2");
+    expect(viewport?.className).toContain("px-3");
+    expect(viewport?.className).toContain("pt-3");
+    expect(viewport?.className).toContain("pb-4");
+    expect(viewport?.className).toContain("gap-2");
     expect(
       within(card).queryByRole("button", { name: "Move Factory graph" }),
     ).toBeNull();

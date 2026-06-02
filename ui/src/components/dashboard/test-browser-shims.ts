@@ -220,6 +220,24 @@ function installElementMeasurementShims() {
   };
 }
 
+export function installResizeObserverShim(): () => void {
+  const resizeObserver = globalThis.ResizeObserver;
+  if (resizeObserver) {
+    return () => {};
+  }
+
+  globalThis.ResizeObserver =
+    DashboardResizeObserver as unknown as typeof ResizeObserver;
+
+  return () => {
+    if (resizeObserver) {
+      globalThis.ResizeObserver = resizeObserver;
+    } else {
+      Reflect.deleteProperty(globalThis, "ResizeObserver");
+    }
+  };
+}
+
 export function installDashboardBrowserTestShims(): () => void {
   const restoreAnimationFrame = installAnimationFrameShim();
   const restoreElementMeasurements = installElementMeasurementShims();

@@ -4,6 +4,7 @@ import { installDashboardBrowserTestShims } from "../../../components/dashboard/
 import {
   buildLongDispatchTrace,
   constrainTraceCardHeight,
+  expectAgentBentoScrollViewport,
   expectNoVerticalScrollContainer,
   findTraceCardScrollContainer,
   findTraceDispatchTableRegion,
@@ -37,7 +38,7 @@ describe("TraceGridBentoCard card-level scrolling", () => {
     const traceGridRoot = scrollContainer.firstElementChild;
     const tableRegion = card.querySelector("[data-trace-dispatch-table]");
 
-    expect(scrollContainer.className).toContain("overflow-auto");
+    expectAgentBentoScrollViewport(scrollContainer);
     expect(traceGridRoot).toBeTruthy();
     expect(traceGridRoot?.className).not.toContain("overflow-x-clip");
     expectNoVerticalScrollContainer(traceGridRoot as Element);

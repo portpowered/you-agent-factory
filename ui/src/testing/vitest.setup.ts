@@ -1,4 +1,8 @@
 import { configure } from "@testing-library/react";
+import { installResizeObserverShim } from "../components/dashboard/test-browser-shims";
+
+installResizeObserverShim();
+
 import {
   createElement,
   type ReactNode,

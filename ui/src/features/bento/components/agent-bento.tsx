@@ -10,6 +10,7 @@ import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { ScrollArea } from "../../../components/ui/scroll-area";
 import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";
 
@@ -86,8 +87,9 @@ const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
   "w-full flex-wrap justify-between gap-1.5 sm:w-auto sm:justify-end";
+const BENTO_CARD_BODY_SCROLL_CLASS = "min-h-0 flex-1";
 const BENTO_CARD_BODY_CLASS = cn(
-  "grid h-full min-h-0 flex-1 gap-2.5 overflow-auto px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
+  "grid h-full min-h-0 gap-2.5 px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 px-3 pt-3 pb-4 [&>*]:pb-1";
@@ -325,9 +327,13 @@ export function AgentBentoCard({
         headerAction={headerAction}
         title={title}
       />
-      <div className={cardBodyClassName} {...bodyProps}>
+      <ScrollArea
+        className={BENTO_CARD_BODY_SCROLL_CLASS}
+        viewportClassName={cardBodyClassName}
+        viewportProps={bodyProps}
+      >
         {children}
-      </div>
+      </ScrollArea>
     </DashboardPanelShell>
   );
 }
