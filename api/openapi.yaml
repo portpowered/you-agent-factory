@@ -26,99 +26,6 @@ tags:
   - name: Workflows
     description: Stored workflow inspection.
 paths:
-  /work:
-    post:
-      tags:
-        - Work
-      operationId: submitWork
-      summary: Submit work
-      description: Submits one work item to the running factory.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SubmitWorkRequest'
-            examples:
-              textOnlyContent:
-                summary: Submit one work item with ordered text content parts.
-                value:
-                  name: summary-draft
-                  workTypeName: task
-                  content:
-                    - type: text
-                      text: Draft a short project summary.
-                    - type: text
-                      text: Keep it under 120 words.
-              textPlusImageContent:
-                summary: Submit one work item with ordered text and image content parts.
-                value:
-                  name: screenshot-review
-                  workTypeName: task
-                  content:
-                    - type: text
-                      text: Review this screenshot and list the highest-risk UI issues.
-                    - type: image
-                      url: file://fixtures/ui/dashboard-error-state.png
-      responses:
-        '201':
-          description: Work was accepted for processing.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SubmitWorkResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalError'
-    get:
-      tags:
-        - Work
-      operationId: listWork
-      summary: List work
-      description: Lists current work tokens from the engine state snapshot.
-      parameters:
-        - $ref: '#/components/parameters/MaxResults'
-        - $ref: '#/components/parameters/NextToken'
-        - $ref: '#/components/parameters/StateName'
-        - $ref: '#/components/parameters/StateType'
-        - $ref: '#/components/parameters/SortBy'
-        - $ref: '#/components/parameters/WorkListName'
-        - $ref: '#/components/parameters/WorkListWorkTypeName'
-        - $ref: '#/components/parameters/WorkListTraceId'
-      responses:
-        '200':
-          description: Current work tokens.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ListWorkResponse'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /work/staged-files:
-    post:
-      tags:
-        - Work
-      operationId: stageSubmitWorkFile
-      summary: Stage one submit-work file
-      description: Accepts one dashboard-authored file payload, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/StageSubmitWorkFileRequest'
-      responses:
-        '201':
-          description: File payload staged successfully for later submit-work use.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StageSubmitWorkFileResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work:
     post:
       tags:
@@ -202,37 +109,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
-  /work-requests/{request_id}:
-    put:
-      tags:
-        - Work
-      operationId: upsertWorkRequest
-      summary: Upsert work request
-      description: Submits or retries one canonical work request batch. The request identifier in the URL must match the request_id in the JSON body, and repeated request IDs are idempotent.
-      parameters:
-        - name: request_id
-          in: path
-          required: true
-          description: Stable request identifier used for idempotent submission.
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WorkRequest'
-      responses:
-        '201':
-          description: Work request was accepted or had already been accepted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UpsertWorkRequestResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work-requests/{request_id}:
     put:
       tags:
@@ -265,56 +141,6 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /work/{id}:
-    get:
-      tags:
-        - Work
-      operationId: getWork
-      summary: Get work
-      description: Returns one work item by work or token identifier from the current marking.
-      parameters:
-        - $ref: '#/components/parameters/WorkOrTokenID'
-      responses:
-        '200':
-          description: One work item from the current marking.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Work'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
-  /work/{id}/move:
-    post:
-      tags:
-        - Work
-      operationId: moveWork
-      summary: Move work to another state
-      description: Moves an existing work item to a named authored marking state in the default factory session. Rejects moves while the work item is consumed by an active dispatch.
-      parameters:
-        - $ref: '#/components/parameters/WorkOrTokenID'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MoveWorkRequest'
-      responses:
-        '200':
-          description: Work item at the new marking position.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Work'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/MoveWorkConflict'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/{id}:

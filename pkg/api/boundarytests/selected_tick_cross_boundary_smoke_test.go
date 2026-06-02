@@ -202,7 +202,7 @@ func crossBoundarySelectedTickEvents(t0 time.Time) []generated.FactoryEvent {
 		crossBoundaryWorkRequestEvent(3, t0.Add(3*time.Second), failed),
 		crossBoundaryDispatchCreatedEvent(4, t0.Add(4*time.Second), "dispatch-runtime-pending", pending),
 		crossBoundaryDispatchCreatedEvent(5, t0.Add(5*time.Second), "dispatch-runtime-completed", completed),
-		crossBoundaryInferenceRequestEvent(6, t0.Add(6*time.Second), "dispatch-runtime-completed", "Review the completed runtime story.", "/work/completed-runtime", "/work/completed-runtime/.worktrees/runtime"),
+		crossBoundaryInferenceRequestEvent(6, t0.Add(6*time.Second), "dispatch-runtime-completed", "Review the completed runtime story.", "/factory-sessions/~default/work/completed-runtime", "/factory-sessions/~default/work/completed-runtime/.worktrees/runtime"),
 		crossBoundaryInferenceResponseEvent(
 			7,
 			t0.Add(7*time.Second),
@@ -233,7 +233,7 @@ func crossBoundarySelectedTickEvents(t0 time.Time) []generated.FactoryEvent {
 		),
 		crossBoundaryAcceptedResponseEvent(8, t0.Add(8*time.Second), completed),
 		crossBoundaryDispatchCreatedEvent(9, t0.Add(9*time.Second), "dispatch-runtime-failed", failed),
-		crossBoundaryInferenceRequestEvent(10, t0.Add(10*time.Second), "dispatch-runtime-failed", "Retry the failed runtime story.", "/work/failed-runtime", "/work/failed-runtime/.worktrees/runtime"),
+		crossBoundaryInferenceRequestEvent(10, t0.Add(10*time.Second), "dispatch-runtime-failed", "Retry the failed runtime story.", "/factory-sessions/~default/work/failed-runtime", "/factory-sessions/~default/work/failed-runtime/.worktrees/runtime"),
 		crossBoundaryInferenceResponseEvent(
 			10,
 			t0.Add(10*time.Second),

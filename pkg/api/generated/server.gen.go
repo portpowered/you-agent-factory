@@ -440,11 +440,6 @@ const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
 
-// Defines values for ListWorkParamsSortBy.
-const (
-	ListWorkParamsSortByStateType ListWorkParamsSortBy = "state.type"
-)
-
 // BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
 type BundledFile struct {
 	// Content Inline content payload for a portable bundled file.
@@ -2979,36 +2974,6 @@ type GetProviderSessionDetailsParams struct {
 	Id string `form:"id" json:"id"`
 }
 
-// ListWorkParams defines parameters for ListWork.
-type ListWorkParams struct {
-	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
-	MaxResults *MaxResults `form:"maxResults,omitempty" json:"maxResults,omitempty"`
-
-	// NextToken Optional base64-encoded token ID cursor.
-	NextToken *NextToken `form:"nextToken,omitempty" json:"nextToken,omitempty"`
-
-	// StateName Optional current work state name filter.
-	StateName *StateName `form:"state.name,omitempty" json:"state.name,omitempty"`
-
-	// StateType Optional current work state type filter.
-	StateType *StateType `form:"state.type,omitempty" json:"state.type,omitempty"`
-
-	// SortBy Optional list-work sort field. Use state.type to order by current work state type.
-	SortBy *ListWorkParamsSortBy `form:"sortBy,omitempty" json:"sortBy,omitempty"`
-
-	// Name Optional work name filter. Matches when the work name contains this value, case-insensitively.
-	Name *WorkListName `form:"name,omitempty" json:"name,omitempty"`
-
-	// WorkTypeName Optional work type name filter. Matches when workTypeName equals this value exactly.
-	WorkTypeName *WorkListWorkTypeName `form:"workTypeName,omitempty" json:"workTypeName,omitempty"`
-
-	// TraceId Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly.
-	TraceId *WorkListTraceId `form:"traceId,omitempty" json:"traceId,omitempty"`
-}
-
-// ListWorkParamsSortBy defines parameters for ListWork.
-type ListWorkParamsSortBy string
-
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
 
@@ -3035,18 +3000,6 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
-
-// SubmitWorkJSONRequestBody defines body for SubmitWork for application/json ContentType.
-type SubmitWorkJSONRequestBody = SubmitWorkRequest
-
-// UpsertWorkRequestJSONRequestBody defines body for UpsertWorkRequest for application/json ContentType.
-type UpsertWorkRequestJSONRequestBody = WorkRequest
-
-// StageSubmitWorkFileJSONRequestBody defines body for StageSubmitWorkFile for application/json ContentType.
-type StageSubmitWorkFileJSONRequestBody = StageSubmitWorkFileRequest
-
-// MoveWorkJSONRequestBody defines body for MoveWork for application/json ContentType.
-type MoveWorkJSONRequestBody = MoveWorkRequest
 
 // AsRunRequestEventPayload returns the union data inside the FactoryEvent_Payload as a RunRequestEventPayload
 func (t FactoryEvent_Payload) AsRunRequestEventPayload() (RunRequestEventPayload, error) {
@@ -3825,24 +3778,6 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
-	// List work
-	// (GET /work)
-	ListWork(w http.ResponseWriter, r *http.Request, params ListWorkParams)
-	// Submit work
-	// (POST /work)
-	SubmitWork(w http.ResponseWriter, r *http.Request)
-	// Upsert work request
-	// (PUT /work-requests/{request_id})
-	UpsertWorkRequest(w http.ResponseWriter, r *http.Request, requestId string)
-	// Stage one submit-work file
-	// (POST /work/staged-files)
-	StageSubmitWorkFile(w http.ResponseWriter, r *http.Request)
-	// Get work
-	// (GET /work/{id})
-	GetWork(w http.ResponseWriter, r *http.Request, id WorkOrTokenID)
-	// Move work to another state
-	// (POST /work/{id}/move)
-	MoveWork(w http.ResponseWriter, r *http.Request, id WorkOrTokenID)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -4514,192 +4449,6 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
-// ListWork operation middleware
-func (siw *ServerInterfaceWrapper) ListWork(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListWorkParams
-
-	// ------------- Optional query parameter "maxResults" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "maxResults", r.URL.Query(), &params.MaxResults)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "maxResults", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "nextToken" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "nextToken", r.URL.Query(), &params.NextToken)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "nextToken", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "state.name" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "state.name", r.URL.Query(), &params.StateName)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.name", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "state.type" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "state.type", r.URL.Query(), &params.StateType)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state.type", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "sortBy" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "sortBy", r.URL.Query(), &params.SortBy)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sortBy", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "name" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "name", r.URL.Query(), &params.Name)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "workTypeName" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "workTypeName", r.URL.Query(), &params.WorkTypeName)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "workTypeName", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "traceId" -------------
-
-	err = runtime.BindQueryParameter("form", true, false, "traceId", r.URL.Query(), &params.TraceId)
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "traceId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListWork(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SubmitWork operation middleware
-func (siw *ServerInterfaceWrapper) SubmitWork(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SubmitWork(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// UpsertWorkRequest operation middleware
-func (siw *ServerInterfaceWrapper) UpsertWorkRequest(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "request_id" -------------
-	var requestId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "request_id", mux.Vars(r)["request_id"], &requestId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "request_id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.UpsertWorkRequest(w, r, requestId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// StageSubmitWorkFile operation middleware
-func (siw *ServerInterfaceWrapper) StageSubmitWorkFile(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StageSubmitWorkFile(w, r)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetWork operation middleware
-func (siw *ServerInterfaceWrapper) GetWork(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "id" -------------
-	var id WorkOrTokenID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetWork(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// MoveWork operation middleware
-func (siw *ServerInterfaceWrapper) MoveWork(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "id" -------------
-	var id WorkOrTokenID
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", mux.Vars(r)["id"], &id, runtime.BindStyledParameterOptions{Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.MoveWork(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -4858,18 +4607,6 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/work", wrapper.ListWork).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/work", wrapper.SubmitWork).Methods("POST")
-
-	r.HandleFunc(options.BaseURL+"/work-requests/{request_id}", wrapper.UpsertWorkRequest).Methods("PUT")
-
-	r.HandleFunc(options.BaseURL+"/work/staged-files", wrapper.StageSubmitWorkFile).Methods("POST")
-
-	r.HandleFunc(options.BaseURL+"/work/{id}", wrapper.GetWork).Methods("GET")
-
-	r.HandleFunc(options.BaseURL+"/work/{id}/move", wrapper.MoveWork).Methods("POST")
 
 	return r
 }

@@ -15,6 +15,7 @@ import (
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -196,13 +197,27 @@ func (r *runtimeMoveAPISurface) MoveWork(ctx context.Context, workID, stateName 
 	return r.runtime.MoveWork(ctx, workID, stateName, source, requestID)
 }
 
+func (r *runtimeMoveAPISurface) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+	if sessionID != factorysessions.DefaultSessionID {
+		return interfaces.OperatorMoveResult{}, apisurface.ErrFactorySessionNotFound
+	}
+	return r.runtime.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+}
+
 func (r *runtimeMoveAPISurface) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	return r.runtime.GetEngineStateSnapshot(ctx)
+}
+
+func (r *runtimeMoveAPISurface) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	if sessionID != factorysessions.DefaultSessionID {
+		return nil, apisurface.ErrFactorySessionNotFound
+	}
 	return r.runtime.GetEngineStateSnapshot(ctx)
 }
 
 func postMoveWork(t *testing.T, srv *api.Server, workID, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodPost, "/work/"+workID+"/move", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work/"+workID+"/move", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)

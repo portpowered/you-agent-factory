@@ -146,6 +146,11 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 	}
 
 	for _, retiredPath := range []string{
+		"/work",
+		"/work/staged-files",
+		"/work-requests/{request_id}",
+		"/work/{id}",
+		"/work/{id}/move",
 		"/factories",
 		"/factories/{factory_id}/work",
 		"/factories/{factory_id}/work-requests/{request_id}",
@@ -241,11 +246,12 @@ func TestOpenAPIContract_ListWorkReturnsStructuredWorkResults(t *testing.T) {
 		t.Fatalf("Work.properties.state.$ref = %v, want #/components/schemas/WorkState", got)
 	}
 
-	listWork := doc["paths"].(map[string]any)["/work"].(map[string]any)["get"].(map[string]any)
+	listWork := doc["paths"].(map[string]any)["/factory-sessions/{session_id}/work"].(map[string]any)["get"].(map[string]any)
 	parameters, ok := listWork["parameters"].([]any)
 	if !ok {
-		t.Fatal("paths./work.get.parameters is missing")
+		t.Fatal("paths./factory-sessions/{session_id}/work.get.parameters is missing")
 	}
+	assertParameterRef(t, parameters, "#/components/parameters/SessionID")
 	assertParameterRef(t, parameters, "#/components/parameters/StateName")
 	assertParameterRef(t, parameters, "#/components/parameters/StateType")
 	assertParameterRef(t, parameters, "#/components/parameters/SortBy")
@@ -294,11 +300,11 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 func assertPublishedOperations(t *testing.T, paths map[string]any) {
 	t.Helper()
 	requiredOperations := map[string][]string{
-		"/work":                                  {"get", "post"},
-		"/work/staged-files":                     {"post"},
-		"/work-requests/{request_id}":            {"put"},
-		"/work/{id}":                             {"get"},
-		"/work/{id}/move":                        {"post"},
+		"/factory-sessions/{session_id}/work":                       {"get", "post"},
+		"/factory-sessions/{session_id}/work/staged-files":          {"post"},
+		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
+		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
+		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
 		"/events":                                {"get"},
 		"/status":                                {"get"},
 		"/models":                                {"get"},
@@ -701,16 +707,11 @@ func assertFactoryOperationResponses(t *testing.T, paths map[string]any) {
 	assertResponseRef(t, invokeModel, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, invokeModel, "404", "#/components/responses/NotFound")
 
-	moveWork := pathOperation(t, paths, "/work/{id}/move", "post")
-	assertRequestSchemaRef(t, moveWork, "#/components/schemas/MoveWorkRequest")
-	assertResponseSchemaRef(t, moveWork, "200", "#/components/schemas/Work")
-	assertResponseRef(t, moveWork, "400", "#/components/responses/BadRequest")
-	assertResponseRef(t, moveWork, "404", "#/components/responses/NotFound")
-	assertResponseRef(t, moveWork, "409", "#/components/responses/MoveWorkConflict")
-
 	moveWorkBySession := pathOperation(t, paths, "/factory-sessions/{session_id}/work/{id}/move", "post")
 	assertRequestSchemaRef(t, moveWorkBySession, "#/components/schemas/MoveWorkRequest")
 	assertResponseSchemaRef(t, moveWorkBySession, "200", "#/components/schemas/Work")
+	assertResponseRef(t, moveWorkBySession, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, moveWorkBySession, "404", "#/components/responses/NotFound")
 	assertResponseRef(t, moveWorkBySession, "409", "#/components/responses/MoveWorkConflict")
 }
 

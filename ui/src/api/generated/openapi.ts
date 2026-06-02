@@ -4,50 +4,6 @@
  */
 
 export interface paths {
-  "/work": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List work
-     * @description Lists current work tokens from the engine state snapshot.
-     */
-    get: operations["listWork"];
-    put?: never;
-    /**
-     * Submit work
-     * @description Submits one work item to the running factory.
-     */
-    post: operations["submitWork"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/work/staged-files": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Stage one submit-work file
-     * @description Accepts one dashboard-authored file payload, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
-     */
-    post: operations["stageSubmitWorkFile"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/factory-sessions/{session_id}/work": {
     parameters: {
       query?: never;
@@ -92,26 +48,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/work-requests/{request_id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    /**
-     * Upsert work request
-     * @description Submits or retries one canonical work request batch. The request identifier in the URL must match the request_id in the JSON body, and repeated request IDs are idempotent.
-     */
-    put: operations["upsertWorkRequest"];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/factory-sessions/{session_id}/work-requests/{request_id}": {
     parameters: {
       query?: never;
@@ -126,46 +62,6 @@ export interface paths {
      */
     put: operations["upsertWorkRequestBySessionId"];
     post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/work/{id}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get work
-     * @description Returns one work item by work or token identifier from the current marking.
-     */
-    get: operations["getWork"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/work/{id}/move": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Move work to another state
-     * @description Moves an existing work item to a named authored marking state in the default factory session. Rejects moves while the work item is consumed by an active dispatch.
-     */
-    post: operations["moveWork"];
     delete?: never;
     options?: never;
     head?: never;
@@ -2803,96 +2699,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  listWork: {
-    parameters: {
-      query?: {
-        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
-        maxResults?: components["parameters"]["MaxResults"];
-        /** @description Optional base64-encoded token ID cursor. */
-        nextToken?: components["parameters"]["NextToken"];
-        /** @description Optional current work state name filter. */
-        "state.name"?: components["parameters"]["StateName"];
-        /** @description Optional current work state type filter. */
-        "state.type"?: components["parameters"]["StateType"];
-        /** @description Optional list-work sort field. Use state.type to order by current work state type. */
-        sortBy?: components["parameters"]["SortBy"];
-        /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
-        name?: components["parameters"]["WorkListName"];
-        /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
-        workTypeName?: components["parameters"]["WorkListWorkTypeName"];
-        /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
-        traceId?: components["parameters"]["WorkListTraceId"];
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Current work tokens. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["ListWorkResponse"];
-        };
-      };
-      500: components["responses"]["InternalError"];
-    };
-  };
-  submitWork: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["SubmitWorkRequest"];
-      };
-    };
-    responses: {
-      /** @description Work was accepted for processing. */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SubmitWorkResponse"];
-        };
-      };
-      400: components["responses"]["BadRequest"];
-      500: components["responses"]["InternalError"];
-    };
-  };
-  stageSubmitWorkFile: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["StageSubmitWorkFileRequest"];
-      };
-    };
-    responses: {
-      /** @description File payload staged successfully for later submit-work use. */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["StageSubmitWorkFileResponse"];
-        };
-      };
-      400: components["responses"]["BadRequest"];
-      500: components["responses"]["InternalError"];
-    };
-  };
   listWorkBySessionId: {
     parameters: {
       query?: {
@@ -2995,35 +2801,6 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
-  upsertWorkRequest: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Stable request identifier used for idempotent submission. */
-        request_id: string;
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["WorkRequest"];
-      };
-    };
-    responses: {
-      /** @description Work request was accepted or had already been accepted. */
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["UpsertWorkRequestResponse"];
-        };
-      };
-      400: components["responses"]["BadRequest"];
-      500: components["responses"]["InternalError"];
-    };
-  };
   upsertWorkRequestBySessionId: {
     parameters: {
       query?: never;
@@ -3053,62 +2830,6 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
-      500: components["responses"]["InternalError"];
-    };
-  };
-  getWork: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Work or token identifier, depending on route. */
-        id: components["parameters"]["WorkOrTokenID"];
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description One work item from the current marking. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Work"];
-        };
-      };
-      404: components["responses"]["NotFound"];
-      500: components["responses"]["InternalError"];
-    };
-  };
-  moveWork: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description Work or token identifier, depending on route. */
-        id: components["parameters"]["WorkOrTokenID"];
-      };
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["MoveWorkRequest"];
-      };
-    };
-    responses: {
-      /** @description Work item at the new marking position. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["Work"];
-        };
-      };
-      400: components["responses"]["BadRequest"];
-      404: components["responses"]["NotFound"];
-      409: components["responses"]["MoveWorkConflict"];
       500: components["responses"]["InternalError"];
     };
   };
