@@ -258,6 +258,8 @@ const invokeWorkstationDetail = (
       return [formatter("prompt" as never)];
     case "editableConfigurationNameDuplicate":
       return [formatter("duplicate-workstation" as never)];
+    case "editableConfigurationSaveSuccess":
+      return [formatter("Review" as never)];
     case "editableConfigurationSharedWorkerScopeHint":
       return [formatter("Worker A" as never, "Review, Implement" as never)];
     case "localizeWorkstationBehavior":

@@ -135,6 +135,14 @@ export function CurrentSelectionWidgetSaveNotifications({
       ? editableWorkStateConfigurationState.draft.name.trim() ||
         editableWorkStateConfigurationState.originalStateName
       : (workStatePlaceId ?? "");
+  const workstationDisplayName = resolveEditableDisplayName({
+    draftName:
+      editableConfigurationState?.status === "ready"
+        ? editableConfigurationState.draft.name
+        : "",
+    editableState: editableConfigurationState,
+    fallbackName: selectedNode?.workstation_name ?? "",
+  });
 
   return (
     <>
@@ -148,7 +156,7 @@ export function CurrentSelectionWidgetSaveNotifications({
             )}
             locale={locale}
             messages={buildCurrentSelectionSaveToastMessages({
-              entityDisplayName: selectedNode.workstation_name,
+              entityDisplayName: workstationDisplayName,
               entityKind: "workstation",
               locale,
             })}

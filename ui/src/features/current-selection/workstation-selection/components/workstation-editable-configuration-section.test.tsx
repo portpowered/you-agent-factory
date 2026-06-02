@@ -383,7 +383,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
         onSaveConfiguration={() => undefined}
         saveState={{
           status: "success",
-          message: messages.editableConfigurationSaveSuccess,
+          message: messages.editableConfigurationSaveSuccess("Review"),
         }}
         state={buildEditableConfigurationSectionReadyState({
           isDirty: false,

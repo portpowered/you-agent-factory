@@ -58,8 +58,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "Saving failed.",
     editableConfigurationSaveStaleVersionDetail:
       "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
-    editableConfigurationSaveSuccess:
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `Running factory saved. ${workstationName} was updated in the running factory definition.`,
     editableConfigurationLoading:
       "Loading the current factory definition for this workstation.",
     editableConfigurationValidationStatus:
@@ -303,8 +303,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
     editableConfigurationSaveStaleVersionDetail:
       "最新の実行中ファクトリー値を再読み込みするか、この下書きを保持したままエディターの更新後に再試行してください。",
-    editableConfigurationSaveSuccess:
-      "実行中ファクトリーを保存しました。編集可能なワークステーション値は保存済み定義へ更新されました。",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `実行中ファクトリーを保存しました。${workstationName} は実行中ファクトリー定義で更新されました。`,
     editableConfigurationLoading:
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationValidationStatus:
@@ -550,8 +550,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
     editableConfigurationSaveStaleVersionDetail:
       "최신 실행 중 팩토리 값을 다시 불러오거나, 이 초안을 유지한 채 편집기가 새로고침된 뒤 다시 시도하세요.",
-    editableConfigurationSaveSuccess:
-      "실행 중인 팩토리를 저장했습니다. 편집 가능한 워크스테이션 값이 저장된 정의로 새로 고쳐졌습니다.",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `실행 중인 팩토리를 저장했습니다. ${workstationName} 은(는) 실행 중 팩토리 정의에서 업데이트되었습니다.`,
     editableConfigurationLoading:
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationValidationStatus:
@@ -790,8 +790,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "保存失败。",
     editableConfigurationSaveStaleVersionDetail:
       "请重新加载最新的运行中工厂值，或保留此草稿并在编辑器刷新后重试。",
-    editableConfigurationSaveSuccess:
-      "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `运行中的工厂已保存。${workstationName} 已在运行中的工厂定义中更新。`,
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     editableConfigurationBehaviorPollerWorkerUnsupported:

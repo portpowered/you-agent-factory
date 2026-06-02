@@ -24,6 +24,7 @@ import {
   type UseSaveEditableWorkstationConfigurationResult,
   useSaveEditableWorkstationConfiguration,
 } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
+import { buildWorkstationSaveScopeKey } from "../workstation-selection/lib/workstation-save-scope-key";
 import { EditableWorkstationSaveDialog } from "../workstation-selection/public";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one hook wires save scopes and paired header actions for every editable selection kind.
@@ -68,11 +69,16 @@ export function useCurrentSelectionDetailSave({
 }) {
   const workstationSaveScopeKey =
     selection?.kind === "node" && selectedNode
-      ? `${selectedNode.node_id}:${selectedNode.transition_id}:${selectedNode.workstation_name}`
+      ? buildWorkstationSaveScopeKey({
+          nodeId: selectedNode.node_id,
+          transitionId: selectedNode.transition_id,
+          workstationName: selectedNode.workstation_name,
+        })
       : null;
   const workstationSave = useSaveEditableWorkstationConfiguration({
     editableConfigurationState,
     locale,
+    onWorkstationRenamed: currentSelection.selectWorkstation,
     scopeKey: workstationSaveScopeKey,
   });
   const workerSaveScopeKey =

@@ -4,6 +4,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
+import {
+  mockFactoryDocumentSave,
+} from "../../../../testing/factory-document-save-mocks";
 import { staleFactoryVersionTarget } from "../../../../testing/factory-validation-target-fixtures";
 import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
@@ -213,6 +216,58 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       );
     });
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
+  });
+
+  it("updates workstation selection after a successful rename save", async () => {
+    const markChangesSaved = vi.fn();
+    const onWorkstationRenamed = vi.fn();
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const renamedState = buildReadyEditableConfigurationState({
+      markChangesSaved,
+    });
+    if (renamedState.status === "ready") {
+      renamedState.draft = {
+        ...renamedState.draft,
+        name: "Senior Review",
+      };
+      renamedState.pendingFactoryDefinition = {
+        name: "Current Factory",
+        workers: [],
+        workstations: [
+          {
+            id: "review",
+            name: "Senior Review",
+            worker: "reviewer",
+          },
+        ],
+      };
+    }
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: renamedState,
+          onWorkstationRenamed,
+          scopeKey: "review:transition:Review",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    act(() => {
+      result.current.beginSaveConfirmation();
+    });
+
+    await act(async () => {
+      await result.current.confirmSave();
+    });
+
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+    expect(onWorkstationRenamed).toHaveBeenCalledWith("review");
   });
 
   it("ignores repeated save confirmations while the current save is still in flight", async () => {
