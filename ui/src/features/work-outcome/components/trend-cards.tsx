@@ -61,13 +61,6 @@ const TREND_CHART_CLASS = cn(
   DASHBOARD_CHART_SURFACE_CLASS,
   "min-h-44 border border-af-border",
 );
-const TREND_CAUSE_LIST_CLASS = "mt-4 grid list-none gap-2 p-0";
-const TREND_CAUSE_ITEM_CLASS =
-  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2.5";
-const TREND_CAUSE_LABEL_CLASS = cn(
-  "min-w-0 text-af-text-muted [overflow-wrap:anywhere]",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
 const TIMING_RANGE_SUMMARY_CLASS = cn(
   TREND_SUMMARY_CLASS,
   "mt-3 md:grid-cols-2",
@@ -181,12 +174,22 @@ export function FailureTrendCard({
 
       {model.groups.length > 0 ? (
         <ul
-          className={TREND_CAUSE_LIST_CLASS}
+          className="mt-4 grid list-none gap-2 p-0"
           aria-label={messages.causeGroupsRegionLabel}
         >
           {model.groups.map((group) => (
-            <li className={TREND_CAUSE_ITEM_CLASS} key={group.label}>
-              <span className={TREND_CAUSE_LABEL_CLASS}>{group.label}</span>
+            <li
+              className="flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2.5"
+              key={group.label}
+            >
+              <span
+                className={cn(
+                  "min-w-0 text-af-text-muted [overflow-wrap:anywhere]",
+                  DASHBOARD_BODY_TEXT_CLASS,
+                )}
+              >
+                {group.label}
+              </span>
               <strong className="shrink-0 text-af-danger-text">
                 {group.count}
               </strong>
