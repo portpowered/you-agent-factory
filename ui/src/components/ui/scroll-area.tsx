@@ -4,7 +4,7 @@ import { type ComponentProps, type ComponentRef, forwardRef } from "react";
 import { cn } from "../../lib/cn";
 
 const SCROLL_AREA_VIEWPORT_CLASS = cn(
-  "size-full rounded-[inherit] outline-none",
+  "size-full outline-none",
   "[&>div]:!block [&>div]:size-full",
   "[scrollbar-width:none] [-ms-overflow-style:none]",
   "[&::-webkit-scrollbar]:hidden",
