@@ -25,6 +25,7 @@ type exportImportSmokeHarness struct {
 type exportImportSmokeHarnessOptions struct {
 	sourceFactoryName string
 	importFactoryName string
+	beforeExport      func(*testing.T, string)
 	afterImport       func(*testing.T, exportImportSmokeHarnessResult)
 }
 
@@ -64,6 +65,9 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 
 	rootDir := t.TempDir()
 	sourceFactoryDir := h.fixture.persistAs(t, rootDir, h.options.sourceFactoryName)
+	if h.options.beforeExport != nil {
+		h.options.beforeExport(t, sourceFactoryDir)
+	}
 	if err := config.WriteCurrentFactoryPointer(rootDir, h.options.sourceFactoryName); err != nil {
 		t.Fatalf("WriteCurrentFactoryPointer(%s): %v", h.options.sourceFactoryName, err)
 	}
@@ -203,6 +207,12 @@ func createNamedFactory(t *testing.T, serverURL string, namedFactory factoryapi.
 
 func ptrFactorySaveMode(mode factoryapi.FactorySaveMode) *factoryapi.FactorySaveMode {
 	return &mode
+}
+
+func withExportImportBeforeExport(fn func(*testing.T, string)) exportImportSmokeHarnessOption {
+	return func(options *exportImportSmokeHarnessOptions) {
+		options.beforeExport = fn
+	}
 }
 
 func getCurrentFactory(t *testing.T, serverURL string) factoryapi.Factory {

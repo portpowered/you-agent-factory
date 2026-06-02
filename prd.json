@@ -1,0 +1,79 @@
+{
+  "project": "Factory Import Preserves Inbox Gitkeep",
+  "branchName": "ralph/factory-import-preserve-inbox-gitkeep",
+  "description": "Ensure factory import and named-factory replace materialization preserve canonical input inbox .gitkeep sentinels—especially factory/inputs/BATCH/default/.gitkeep—without treating sentinels as portable bundled content or preserving stale non-sentinel input files.",
+  "context": {
+    "customerAsk": "Running factory import deletes the .gitkeep sentinel for the batch input directory. Preserve inbox .gitkeep files during import/activation, keep portable export unchanged, and add regression coverage when factory/inputs/BATCH/default/.gitkeep exists before import.",
+    "problem": "Named-factory replace builds a clean staging directory from the portable payload and atomically swaps it in. Portable bundled collection ignores .gitkeep and BATCH is not a work type, so ensureDefaultInputChannelDirectories never recreates the batch inbox sentinel. Maintainers lose tracked inbox directories after import.",
+    "solution": "After split-layout materialization on create and replace, ensure canonical input inbox directories and empty .gitkeep sentinels on disk (at minimum BATCH, plus default channels for declared work types). Keep .gitkeep out of export payloads. Add unit and functional regression tests proving import leaves factory/inputs/BATCH/default/.gitkeep present."
+  },
+  "acceptanceCriteria": [
+    "Given factory/inputs/BATCH/default/.gitkeep exists before import or named-factory replace, the file still exists on disk after activation completes.",
+    "Import/replace still updates factory definition, portable bundled files, and split runtime files per existing semantics; stale non-sentinel input files are not preserved unless portable rules already preserve them.",
+    "Portable export and roundtrip comparisons do not include .gitkeep in the public factory payload; collectSharedFactoryStarterWork continues to skip .gitkeep.",
+    "Regression tests at pkg/config and/or pkg/service plus functional bootstrap_portability cover the BATCH sentinel case.",
+    "No change to portable export schema, batch ingestion semantics, or global dotfile preservation.",
+    "Quality gate: Go typecheck, lint, and targeted tests for touched packages pass."
+  ],
+  "userStories": [
+    {
+      "id": "prd-factory-import-preserve-inbox-gitkeep-001",
+      "title": "Regression test for BATCH gitkeep across named-factory replace",
+      "description": "As a factory maintainer, I need a failing-then-passing test that proves named-factory replace does not delete factory/inputs/BATCH/default/.gitkeep when it existed before replace.",
+      "acceptanceCriteria": [
+        "A test in pkg/config or pkg/service seeds a named factory with inputs/BATCH/default/.gitkeep, runs ReplaceNamedFactory or the service save/replace path used by import with a valid portable payload, and asserts inputs/BATCH/default/.gitkeep still exists afterward.",
+        "The test asserts a stale non-sentinel file under an input default channel not in the payload is absent after replace when existing portable semantics would drop it.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-factory-import-preserve-inbox-gitkeep-002",
+      "title": "Ensure canonical inbox sentinels after materialization",
+      "description": "As a factory maintainer, I want import materialization to restore canonical inbox .gitkeep sentinels so batch and work-type inboxes remain present after replace.",
+      "acceptanceCriteria": [
+        "After writeFactorySplitLayout / named-factory persist commit, the factory directory contains inputs/BATCH/default/.gitkeep (create parent directories and an empty file when missing).",
+        "For each work type declared in the factory config, inputs/<workType>/default/.gitkeep exists after materialization when the default channel directory is ensured.",
+        "Sentinel restoration runs for both create and replace persist paths.",
+        "prd-factory-import-preserve-inbox-gitkeep-001 test passes without weakened assertions.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-factory-import-preserve-inbox-gitkeep-003",
+      "title": "Export/import functional smoke preserves BATCH sentinel",
+      "description": "As a maintainer running portability smoke tests, I want export/import activation to leave the batch inbox sentinel on disk in a realistic API harness.",
+      "acceptanceCriteria": [
+        "tests/functional/bootstrap_portability export/import harness seeds inputs/BATCH/default/.gitkeep before import and asserts the post-import factory directory on disk still has that file.",
+        "Existing export/import API contract assertions in the harness remain unchanged (no requirement for .gitkeep in exported factory JSON).",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-factory-import-preserve-inbox-gitkeep-004",
+      "title": "Portable export still ignores gitkeep",
+      "description": "As an export/import user, I do not want .gitkeep treated as authored portable content in export payloads or roundtrip comparisons.",
+      "acceptanceCriteria": [
+        "collectSharedFactoryStarterWork and portable bundled read paths do not add .gitkeep files to bundled file lists when scanning input directories.",
+        "GetCurrentFactory / export readback tests that seed .gitkeep on disk continue to omit .gitkeep from inlined bundled files.",
+        "go test ./pkg/config/portabletests/... and portable bundled file unit tests pass without assertion weakening.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
