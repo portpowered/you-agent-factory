@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	factory_context 	"github.com/portpowered/infinite-you/pkg/factory/context"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 

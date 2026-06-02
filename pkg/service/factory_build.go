@@ -633,6 +633,23 @@ func loadWorkersFromConfig(
 	return opts, nil
 }
 
+func configuredWorkstationExecutor(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	factoryRunnerID string,
+	workflowContext *factory_context.FactoryContext,
+	inner workers.WorkstationRequestExecutor,
+	logger logging.Logger,
+) *workerexecutor.WorkstationExecutor {
+	return &workerexecutor.WorkstationExecutor{
+		RuntimeConfig:   runtimeCfg,
+		DefaultRunnerID: factoryRunnerID,
+		WorkflowContext: workflowContext,
+		Executor:        inner,
+		Renderer:        &workerprompting.DefaultPromptRenderer{},
+		Logger:          logger,
+	}
+}
+
 // buildWorkerExecutor creates a WorkstationExecutor wrapping the appropriate
 // inner executor for the configured worker type. Returns nil for unsupported types.
 func buildWorkerExecutor(
@@ -696,22 +713,9 @@ func buildWorkerExecutor(
 		runner = modelResources.WrapRunner(runner, factoryCfg, def)
 		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
-		return &workerexecutor.WorkstationExecutor{
-			RuntimeConfig:   runtimeCfg,
-			DefaultRunnerID: factoryRunnerID,
-			WorkflowContext: workflowContext,
-			Executor:        agentExec,
-			Renderer:        &workerprompting.DefaultPromptRenderer{},
-			Logger:          logger,
-		}
+		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, agentExec, logger)
 	case interfaces.WorkstationTypeLogical:
-		return &workerexecutor.WorkstationExecutor{
-			RuntimeConfig:   runtimeCfg,
-			DefaultRunnerID: factoryRunnerID,
-			WorkflowContext: workflowContext,
-			Renderer:        &workerprompting.DefaultPromptRenderer{},
-			Logger:          logger,
-		}
+		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, nil, logger)
 	case interfaces.WorkerTypeScript:
 		var scriptOpts []workerexecutor.ScriptExecutorOption
 		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
@@ -726,14 +730,7 @@ func buildWorkerExecutor(
 		} else {
 			scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
 		}
-		return &workerexecutor.WorkstationExecutor{
-			RuntimeConfig:   runtimeCfg,
-			DefaultRunnerID: factoryRunnerID,
-			WorkflowContext: workflowContext,
-			Executor:        scriptExec,
-			Renderer:        &workerprompting.DefaultPromptRenderer{},
-			Logger:          logger,
-		}
+		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, scriptExec, logger)
 	default:
 		return nil
 	}
