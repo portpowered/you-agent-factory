@@ -1,6 +1,9 @@
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
-import { factorySessionScopedPath } from "../session-routing";
+import {
+  factorySessionScopedPath,
+  factorySessionWorkPath,
+} from "../session-routing";
 import { extractAPIErrorPayload, readAPIResponseBody } from "../transport";
 
 type SubmitWorkRequest = components["schemas"]["SubmitWorkRequest"];
@@ -11,7 +14,6 @@ type StageSubmitWorkFileResponse =
   components["schemas"]["StageSubmitWorkFileResponse"];
 type ErrorResponse = components["schemas"]["ErrorResponse"];
 
-const SUBMIT_WORK_ENDPOINT = "/work";
 const STAGE_SUBMIT_WORK_FILE_ENDPOINT = "/work/staged-files";
 const GENERIC_SUBMIT_WORK_ERROR_MESSAGE =
   "Dashboard submission failed. Try again in a moment.";
@@ -71,9 +73,7 @@ export async function submitWork(
   options: { sessionID?: string | null } = {},
 ): Promise<SubmitWorkResponse> {
   const response = await fetch(
-    factoryAPIURL(
-      factorySessionScopedPath(SUBMIT_WORK_ENDPOINT, options.sessionID),
-    ),
+    factoryAPIURL(factorySessionWorkPath(options.sessionID)),
     {
       body: JSON.stringify(request),
       headers: {
