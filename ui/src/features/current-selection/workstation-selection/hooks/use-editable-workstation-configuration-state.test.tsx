@@ -713,6 +713,20 @@ describe("useEditableWorkstationConfigurationState", () => {
         "Prompt validation unavailable. Prompt validation API unavailable.",
     });
   });
+});
+
+describe("useEditableWorkstationConfigurationState guards and cron", () => {
+  beforeEach(() => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue(
+      buildPromptTemplateContractResult(),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue(
+      buildPromptTemplateValidationResult(),
+    );
+  });
 
   it("blocks poller behavior when the selected worker is not poller-capable", async () => {
     const { result } = renderHook(() =>

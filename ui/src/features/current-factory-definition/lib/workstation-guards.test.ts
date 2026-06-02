@@ -14,7 +14,7 @@ import {
   setEditableInputSlotGuard,
 } from "./workstation-guards";
 
-describe("workstation-guards", () => {
+describe("workstation-guards formatting and defaults", () => {
   it("formats VISIT_COUNT and MATCHES_FIELDS summaries", () => {
     expect(
       formatWorkstationGuardSummary({
@@ -105,7 +105,9 @@ describe("workstation-guards", () => {
       workType: "story",
     });
   });
+});
 
+describe("workstation-guards draft equality and rename", () => {
   it("compares guard and full draft equality", () => {
     const left = {
       behavior: "STANDARD" as const,
