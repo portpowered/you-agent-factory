@@ -465,6 +465,75 @@ func TestProjectInitialStructure_RuntimeConfig_UsesTransitionNameForWorkstationM
 	}
 }
 
+func TestProjectInitialStructure_LogicalMoveCronProjectsKindTypeAndNoWorker(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "scheduled-route",
+				Type: interfaces.WorkstationTypeLogical,
+				Kind: interfaces.WorkstationKindCron,
+				Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "init", WorkTypeName: "task"},
+				},
+			},
+		},
+	}
+	mapper := factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("Map: %v", err)
+	}
+
+	runtimeConfig := projectionRuntimeConfig{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"scheduled-route": {
+				Name: "scheduled-route",
+				Type: interfaces.WorkstationTypeLogical,
+				Kind: interfaces.WorkstationKindCron,
+				Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+			},
+		},
+	}
+	got := ProjectInitialStructure(net, runtimeConfig)
+
+	var cronWS *interfaces.FactoryWorkstation
+	for i := range got.Workstations {
+		if got.Workstations[i].ID == "scheduled-route" {
+			cronWS = &got.Workstations[i]
+			break
+		}
+	}
+	if cronWS == nil {
+		t.Fatalf("Workstations = %#v, want scheduled-route cron workstation", got.Workstations)
+	}
+	if cronWS.Kind != "CRON" {
+		t.Fatalf("Kind = %q, want CRON", cronWS.Kind)
+	}
+	if cronWS.WorkerID != "" {
+		t.Fatalf("WorkerID = %q, want empty for workerless cron logical move", cronWS.WorkerID)
+	}
+	if cronWS.Config["type"] != interfaces.WorkstationTypeLogical {
+		t.Fatalf("type config = %q, want %q", cronWS.Config["type"], interfaces.WorkstationTypeLogical)
+	}
+	if cronWS.Config["behavior"] != string(interfaces.WorkstationKindCron) {
+		t.Fatalf("behavior config = %q, want %q", cronWS.Config["behavior"], interfaces.WorkstationKindCron)
+	}
+	if cronWS.Config["worker"] != "" {
+		t.Fatalf("worker config = %q, want empty", cronWS.Config["worker"])
+	}
+}
+
 func TestProjectInitialStructure_RuntimeConfig_DoesNotUseTransitionIDFallback(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{

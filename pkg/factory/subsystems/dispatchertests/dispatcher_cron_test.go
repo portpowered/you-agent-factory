@@ -255,3 +255,69 @@ func TestDispatcher_UsesDispatcherClockForCronTimeWindowGuard(t *testing.T) {
 		t.Fatalf("transition id = %q, want cron-refresh", result.Dispatches[0].Dispatch.TransitionID)
 	}
 }
+
+func TestDispatcher_CronLogicalMoveDispatchUsesWorkstationRunnerKey(t *testing.T) {
+	currentTime := time.Date(2026, time.April, 18, 12, 0, 0, 0, time.UTC)
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			interfaces.SystemTimePendingPlaceID: {ID: interfaces.SystemTimePendingPlaceID},
+			"task:init":                         {ID: "task:init"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"scheduled-route": {
+				ID:   "scheduled-route",
+				Name: "scheduled-route",
+				InputArcs: []petri.Arc{
+					{
+						ID:          "time-in",
+						Name:        "time",
+						PlaceID:     interfaces.SystemTimePendingPlaceID,
+						Direction:   petri.ArcInput,
+						Mode:        interfaces.ArcModeConsume,
+						Guard:       &petri.CronTimeWindowGuard{Workstation: "scheduled-route"},
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+					},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "task-out", Name: "out", PlaceID: "task:init", Direction: petri.ArcOutput},
+				},
+			},
+		},
+	}
+
+	dispatcher := subsystems.NewDispatcher(
+		n,
+		scheduler.NewFIFOScheduler(),
+		nil,
+		nil,
+		subsystems.WithDispatcherClock(func() time.Time { return currentTime }),
+	)
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+			"time-route": dispatcherCronTimeToken("time-route", "scheduled-route", currentTime.Add(-time.Second), currentTime.Add(time.Minute)),
+		}),
+	}
+
+	result, err := dispatcher.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil || len(result.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one workerless cron dispatch", result)
+	}
+
+	dispatch := result.Dispatches[0].Dispatch
+	if dispatch.WorkerType != "" {
+		t.Fatalf("worker type = %q, want empty for logical move cron", dispatch.WorkerType)
+	}
+	if dispatch.WorkstationName != "scheduled-route" {
+		t.Fatalf("workstation name = %q, want scheduled-route", dispatch.WorkstationName)
+	}
+	if dispatch.TransitionID != "scheduled-route" {
+		t.Fatalf("transition id = %q, want scheduled-route", dispatch.TransitionID)
+	}
+	inputTokens := workers.WorkDispatchInputTokens(dispatch)
+	if len(inputTokens) != 1 || inputTokens[0].Color.WorkID != "time-route" {
+		t.Fatalf("cron logical move inputs = %#v, want only due time token", inputTokens)
+	}
+}
