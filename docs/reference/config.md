@@ -295,7 +295,7 @@ and `you docs workers` for worker-side requirement metadata.
 - Use camelCase public config fields in `factory.json`; do not author new
   configs with retired snake_case aliases.
 - Runner precedence is explicit: workstation `runner` override first, then
-  factory `runner`, then legacy worker `modelProvider` compatibility, then the
+  factory `runner`, then worker `modelProvider` compatibility when no explicit runner is set, then the
   default `codex` runner.
 - Validate runner prerequisites before execution. Built-in runner selection
   expects the corresponding local CLI on `PATH`, and runner-specific auth or

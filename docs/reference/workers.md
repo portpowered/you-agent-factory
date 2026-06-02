@@ -230,7 +230,7 @@ execution adapter should run it.
 
 Use `runner` when the operator needs to choose the execution family. Keep
 `modelProvider` for worker-local provider compatibility, diagnostics, and the
-legacy fallback path when no explicit runner is configured.
+worker provider compatibility fallback when no explicit runner is configured.
 
 ## OpenCode Agent Profiles
 

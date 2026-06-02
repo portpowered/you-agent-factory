@@ -20,28 +20,28 @@ type RunnerSelectionSourceLabelCatalog =
 const RUNNER_SELECTION_SOURCE_LABELS_EN = {
   default: "Default",
   factory: "Factory",
-  legacy_provider: "Legacy provider",
+  legacy_provider: "Worker provider",
   workstation: "Workstation",
 } satisfies RunnerSelectionSourceLabelCatalog["labels"];
 
 const RUNNER_SELECTION_SOURCE_LABELS_JA = {
   default: "既定",
   factory: "ファクトリー",
-  legacy_provider: "旧 provider",
+  legacy_provider: "ワーカー provider",
   workstation: "ワークステーション",
 } satisfies RunnerSelectionSourceLabelCatalog["labels"];
 
 const RUNNER_SELECTION_SOURCE_LABELS_KO = {
   default: "기본값",
   factory: "팩토리",
-  legacy_provider: "레거시 provider",
+  legacy_provider: "워커 provider",
   workstation: "워크스테이션",
 } satisfies RunnerSelectionSourceLabelCatalog["labels"];
 
 const RUNNER_SELECTION_SOURCE_LABELS_ZH_CN = {
   default: "默认值",
   factory: "工厂",
-  legacy_provider: "旧 provider",
+  legacy_provider: "工作者 provider",
   workstation: "工作站",
 } satisfies RunnerSelectionSourceLabelCatalog["labels"];
 

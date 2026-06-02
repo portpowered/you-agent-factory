@@ -177,7 +177,7 @@ describe("getWorkstationDetailMessages", () => {
       getWorkstationDetailMessages("en").localizeRunnerSelectionSource(
         "legacy_provider",
       ),
-    ).toBe("Legacy provider");
+    ).toBe("Worker provider");
     expect(
       getWorkstationDetailMessages("ja").localizeRunnerSelectionSource(
         "workstation",

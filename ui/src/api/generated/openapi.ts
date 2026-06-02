@@ -2227,7 +2227,7 @@ export interface components {
       operationBindings?: components["schemas"]["WorkstationOperationBinding"][];
       /** @description Name of a worker declared in the workers list. */
       worker: string;
-      /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
+      /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner. */
       runner?: components["schemas"]["RunnerID"];
       /** @description Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
       openCodeAgent?: string;

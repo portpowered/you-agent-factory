@@ -488,7 +488,7 @@ Do not author new configs with `runtime_type`; use `type`. Do not rely on
 workstation config.
 
 Runner selection resolves in this order: workstation `runner`, then factory
-`runner`, then legacy worker `modelProvider`, then the default `codex`
+`runner`, then worker `modelProvider` compatibility when no explicit runner is set, then the default `codex`
 runner. Selecting a built-in runner expects the corresponding local CLI and
 auth/setup to already be available before execution starts.
 

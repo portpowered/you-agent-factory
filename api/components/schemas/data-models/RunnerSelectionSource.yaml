@@ -8,5 +8,5 @@ enum:
 x-enum-descriptions:
   - Workstation-level runner override resolved the dispatch target.
   - Factory-level default runner resolved the dispatch target.
-  - Legacy worker modelProvider compatibility resolved the dispatch target.
+  - Worker modelProvider compatibility resolved the dispatch target when no explicit runner override is set.
   - The documented default Codex runner resolved the dispatch target.
