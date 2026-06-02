@@ -10,8 +10,12 @@ export interface FactoryGraphTopologyEditorBridgeHandlers {
 interface FactoryGraphTopologyEditorBridgeState {
   graphDraftHasPendingChanges: boolean;
   handlers: FactoryGraphTopologyEditorBridgeHandlers | null;
-  setGraphDraftHasPendingChanges: (graphDraftHasPendingChanges: boolean) => void;
-  setHandlers: (handlers: FactoryGraphTopologyEditorBridgeHandlers | null) => void;
+  setGraphDraftHasPendingChanges: (
+    graphDraftHasPendingChanges: boolean,
+  ) => void;
+  setHandlers: (
+    handlers: FactoryGraphTopologyEditorBridgeHandlers | null,
+  ) => void;
 }
 
 export const useFactoryGraphTopologyEditorBridge =

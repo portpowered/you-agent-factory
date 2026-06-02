@@ -51,9 +51,13 @@ export function FactoryGraphEditorLeaveDialog({
       >
         <DialogHeader>
           <DialogTitle>{messages.leaveDialogTitle}</DialogTitle>
-          <DialogDescription>{messages.leaveDialogDescription}</DialogDescription>
+          <DialogDescription>
+            {messages.leaveDialogDescription}
+          </DialogDescription>
         </DialogHeader>
-        <p className="m-0 text-sm text-af-text-muted">{messages.leaveDialogBody}</p>
+        <p className="m-0 text-sm text-af-text-muted">
+          {messages.leaveDialogBody}
+        </p>
         <DialogFooter>
           <Button
             disabled={isSaving}

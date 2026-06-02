@@ -7,7 +7,9 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
+import type { FactoryWorkItem } from "../../../../api/events";
 import { uniqueSorted } from "./shared";
+import { isSystemTimeWorkItem } from "./systemTime";
 import type {
   TimelineWorkRequestPayload,
   WorldCompletion,
@@ -15,10 +17,8 @@ import type {
   WorldScriptRequest,
   WorldScriptResponse,
 } from "./types";
-import type { FactoryWorkItem } from "../../../../api/events";
-import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
 import { workItemRefWithOutputPayload } from "./workItemRef";
-import { isSystemTimeWorkItem } from "./systemTime";
+import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
 
 const DASHBOARD_TIME_WORK_TYPE_ID = "time";
 
@@ -131,14 +131,18 @@ export function outputWorkItemsFromCompletion(
   appendOutput(completion.terminalWork?.work_item.id);
 
   if (refs.length > 0) {
-    return refs.sort((left, right) => left.work_id.localeCompare(right.work_id));
+    return refs.sort((left, right) =>
+      left.work_id.localeCompare(right.work_id),
+    );
   }
 
   const fallbackItems = completion.outputItems.filter(
     (item) => item.work_type_id !== DASHBOARD_TIME_WORK_TYPE_ID,
   );
   return fallbackItems.length > 0
-    ? [...fallbackItems].sort((left, right) => left.work_id.localeCompare(right.work_id))
+    ? [...fallbackItems].sort((left, right) =>
+        left.work_id.localeCompare(right.work_id),
+      )
     : undefined;
 }
 
@@ -153,7 +157,9 @@ export function sortInferenceAttempts(
   });
 }
 
-export function attemptHasResponse(attempt: DashboardInferenceAttempt): boolean {
+export function attemptHasResponse(
+  attempt: DashboardInferenceAttempt,
+): boolean {
   return attempt.response_time !== undefined && !attemptHasError(attempt);
 }
 
@@ -182,15 +188,28 @@ export function projectWorkstationDispatchRequest(
   dispatch: WorldDispatch,
   completion: WorldCompletion | undefined,
   runtimeRequest: DashboardRuntimeWorkstationRequest | undefined,
-  inferenceAttemptsByDispatchID: Record<string, Record<string, DashboardInferenceAttempt>>,
-  scriptRequestsByDispatchID: Record<string, Record<string, WorldScriptRequest>>,
-  scriptResponsesByDispatchID: Record<string, Record<string, WorldScriptResponse>>,
+  inferenceAttemptsByDispatchID: Record<
+    string,
+    Record<string, DashboardInferenceAttempt>
+  >,
+  scriptRequestsByDispatchID: Record<
+    string,
+    Record<string, WorldScriptRequest>
+  >,
+  scriptResponsesByDispatchID: Record<
+    string,
+    Record<string, WorldScriptResponse>
+  >,
   requestIDsByWorkID: Record<string, string[]>,
   workstationRequestCounts: (
     attempts: Record<string, DashboardInferenceAttempt> | undefined,
     scriptRequests: Record<string, WorldScriptRequest> | undefined,
     scriptResponses: Record<string, WorldScriptResponse> | undefined,
-  ) => { dispatchedCount?: number; erroredCount?: number; respondedCount?: number },
+  ) => {
+    dispatchedCount?: number;
+    erroredCount?: number;
+    respondedCount?: number;
+  },
 ): DashboardWorkstationRequest {
   const inferenceAttempts = sortInferenceAttempts(
     Object.values(inferenceAttemptsByDispatchID[dispatch.dispatchID] ?? {}),
@@ -209,14 +228,14 @@ export function projectWorkstationDispatchRequest(
     scriptResponsesByDispatchID[dispatch.dispatchID],
   );
   const requestIDs = uniqueSorted(
-    dispatch.workItems.flatMap((item) => requestIDsByWorkID[item.work_id] ?? []),
+    dispatch.workItems.flatMap(
+      (item) => requestIDsByWorkID[item.work_id] ?? [],
+    ),
   );
   const requestView = runtimeRequest?.request;
   const responseView = runtimeRequest?.response;
-  const diagnostics = (
-    latestAttempt?.diagnostics?.provider ??
-    completion?.diagnostics?.provider
-  ) as
+  const diagnostics = (latestAttempt?.diagnostics?.provider ??
+    completion?.diagnostics?.provider) as
     | (DashboardProviderDiagnostic & {
         requestMetadata?: Record<string, string>;
         responseMetadata?: Record<string, string>;
@@ -240,7 +259,8 @@ export function projectWorkstationDispatchRequest(
       latestAttempt?.provider_session?.provider ??
       completion?.providerSession?.provider ??
       dispatch.provider,
-    provider_session: latestAttempt?.provider_session ?? completion?.providerSession,
+    provider_session:
+      latestAttempt?.provider_session ?? completion?.providerSession,
     request_view: requestView,
     request_id: requestIDs[0],
     request_metadata: diagnostics?.requestMetadata,
@@ -253,8 +273,10 @@ export function projectWorkstationDispatchRequest(
     script_request: dashboardScriptRequest(latestScriptRequest),
     script_response: dashboardScriptResponse(latestScriptResponse),
     started_at: requestView?.startedAt ?? dispatch.startedAt,
-    total_duration_millis: responseView?.durationMillis ?? completion?.durationMillis,
-    trace_ids: requestView?.traceIds ?? completion?.traceIDs ?? dispatch.traceIDs,
+    total_duration_millis:
+      responseView?.durationMillis ?? completion?.durationMillis,
+    trace_ids:
+      requestView?.traceIds ?? completion?.traceIDs ?? dispatch.traceIDs,
     transition_id: dispatch.transitionID,
     work_items: completion?.workItems ?? dispatch.workItems,
     working_directory: latestAttempt?.working_directory,

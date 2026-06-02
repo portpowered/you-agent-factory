@@ -150,8 +150,14 @@ describe("useCurrentSelection.request-helpers", () => {
       "dispatch-projected": buildProjectedRequest("dispatch-projected"),
     };
     const runtimeInferenceAttempts = {
-      "dispatch-runtime/inference/2": buildInferenceAttempt("dispatch-runtime", 2),
-      "dispatch-runtime/inference/1": buildInferenceAttempt("dispatch-runtime", 1),
+      "dispatch-runtime/inference/2": buildInferenceAttempt(
+        "dispatch-runtime",
+        2,
+      ),
+      "dispatch-runtime/inference/1": buildInferenceAttempt(
+        "dispatch-runtime",
+        1,
+      ),
     };
     const snapshot: DashboardSnapshot = {
       ...buildEmptyDashboardRuntimeFixture(),
@@ -167,19 +173,30 @@ describe("useCurrentSelection.request-helpers", () => {
     } as DashboardSnapshot;
 
     expect(
-      resolveProjectedWorkstationRequestsByDispatchID(snapshot, explicitProjected),
+      resolveProjectedWorkstationRequestsByDispatchID(
+        snapshot,
+        explicitProjected,
+      ),
     ).toBe(explicitProjected);
     expect(
       resolveProjectedWorkstationRequestsByDispatchID(snapshot, undefined),
     ).toEqual({
       "dispatch-runtime": toDashboardWorkstationRequest(
-        snapshot.runtime.workstation_requests_by_dispatch_id["dispatch-runtime"],
+        snapshot.runtime.workstation_requests_by_dispatch_id[
+          "dispatch-runtime"
+        ],
         runtimeInferenceAttempts,
       ),
     });
     expect(
       resolveProjectedWorkstationRequestsByDispatchID(
-        { ...snapshot, runtime: { ...snapshot.runtime, workstation_requests_by_dispatch_id: undefined } },
+        {
+          ...snapshot,
+          runtime: {
+            ...snapshot.runtime,
+            workstation_requests_by_dispatch_id: undefined,
+          },
+        },
         undefined,
       ),
     ).toBeUndefined();
@@ -255,11 +272,13 @@ describe("useCurrentSelection.request-helpers", () => {
       ),
     ).toEqual(["dispatch-newer", "dispatch-same-time", "dispatch-older"]);
     expect(
-      selectWorkstationRequestsForWork(requests, workBeta.work_id).map((request) =>
-        requestDispatchID(request),
+      selectWorkstationRequestsForWork(requests, workBeta.work_id).map(
+        (request) => requestDispatchID(request),
       ),
     ).toEqual(["dispatch-newer", "dispatch-same-time", "dispatch-older"]);
-    expect(selectWorkstationRequestsForWork(undefined, workAlpha.work_id)).toEqual([]);
+    expect(
+      selectWorkstationRequestsForWork(undefined, workAlpha.work_id),
+    ).toEqual([]);
   });
 
   it("derives selected-work dispatch attempts from requests and merges them with provider attempts", () => {
@@ -339,8 +358,14 @@ describe("useCurrentSelection.request-helpers", () => {
   it("converts runtime requests to projected requests and exposes request-owned work items", () => {
     const runtime = buildRuntimeRequest("dispatch-runtime");
     const runtimeInferenceAttempts = {
-      "dispatch-runtime/inference/2": buildInferenceAttempt("dispatch-runtime", 2),
-      "dispatch-runtime/inference/1": buildInferenceAttempt("dispatch-runtime", 1),
+      "dispatch-runtime/inference/2": buildInferenceAttempt(
+        "dispatch-runtime",
+        2,
+      ),
+      "dispatch-runtime/inference/1": buildInferenceAttempt(
+        "dispatch-runtime",
+        1,
+      ),
     };
     const camelCaseRuntime = buildRuntimeRequest("dispatch-runtime-camel", {
       counts: {
@@ -381,10 +406,9 @@ describe("useCurrentSelection.request-helpers", () => {
     });
 
     expect(requestWorkItems(runtime)).toEqual([workAlpha, workBeta]);
-    expect(requestWorkItems(buildProjectedRequest("dispatch-projected"))).toEqual([
-      workAlpha,
-      workBeta,
-    ]);
+    expect(
+      requestWorkItems(buildProjectedRequest("dispatch-projected")),
+    ).toEqual([workAlpha, workBeta]);
     expect(requestDispatchID(runtime)).toBe("dispatch-runtime");
     expect(
       requestDispatchID({
@@ -449,7 +473,9 @@ describe("useCurrentSelection.request-helpers", () => {
       workstation_name: "Review",
       workstation_node_id: "review",
     });
-    expect(toDashboardWorkstationRequest(runtime, runtimeInferenceAttempts)).toEqual({
+    expect(
+      toDashboardWorkstationRequest(runtime, runtimeInferenceAttempts),
+    ).toEqual({
       dispatch_id: "dispatch-runtime",
       dispatched_request_count: 1,
       errored_request_count: 0,
@@ -563,7 +589,9 @@ describe("useCurrentSelection.request-helpers", () => {
       workstation_node_id: "repair",
     });
     expect(
-      toDashboardWorkstationRequest(buildProjectedRequest("dispatch-projected")),
+      toDashboardWorkstationRequest(
+        buildProjectedRequest("dispatch-projected"),
+      ),
     ).toEqual(buildProjectedRequest("dispatch-projected"));
   });
 });

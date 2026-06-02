@@ -6,7 +6,9 @@ describe("getResourceDetailEnumMessages", () => {
       "Model",
     );
     expect(
-      getResourceDetailEnumMessages("ja").localizeResourceType("INVOCATION_SLOT"),
+      getResourceDetailEnumMessages("ja").localizeResourceType(
+        "INVOCATION_SLOT",
+      ),
     ).toBe("呼び出しスロット");
     expect(
       getResourceDetailEnumMessages("zh-CN").localizeResourceType(

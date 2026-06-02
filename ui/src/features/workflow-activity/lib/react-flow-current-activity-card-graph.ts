@@ -32,9 +32,9 @@ import {
   authoredProgressOutcomeSourceHandlesByWorkstationNodeId,
   buildSemanticGraphHandles,
   type CurrentActivityEditorState,
-  shouldWireGraphNodeSelectionHandlers,
   resolveWorkstationConnectionAnchorContext,
   resolveZAxisIncompleteHints,
+  shouldWireGraphNodeSelectionHandlers,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
 
@@ -227,9 +227,7 @@ export function shouldIncludeCurrentActivityGraphEdge(
     return false;
   }
 
-  return (
-    sourceHandles.has(sourceHandle) && targetHandles.has(targetHandle)
-  );
+  return sourceHandles.has(sourceHandle) && targetHandles.has(targetHandle);
 }
 
 export function filterGraphEdgesForRenderedHandles(
@@ -550,7 +548,9 @@ function buildPlaceNode(
     validationProjection,
   );
 
-  const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(input.editor);
+  const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(
+    input.editor,
+  );
 
   if (place.kind === "work_state") {
     return {
@@ -599,7 +599,9 @@ function buildPlaceNode(
       data: {
         ...basePlaceData,
         kind: "worker" as const,
-        ...(wireSelectionHandlers ? { onSelectWorker: input.onSelectWorker } : {}),
+        ...(wireSelectionHandlers
+          ? { onSelectWorker: input.onSelectWorker }
+          : {}),
         place,
         selectedWorker:
           input.selection?.kind === "worker" &&
@@ -678,7 +680,9 @@ function buildWorkstationNode(
     | WorkstationProgressOutcomeRouteContext
     | undefined = connectionAnchorContext?.workstation;
 
-  const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(input.editor);
+  const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(
+    input.editor,
+  );
   const executions =
     input.activeExecutionsByWorkstationNodeID[workstation.node_id] ?? [];
   const position = nodePosition(

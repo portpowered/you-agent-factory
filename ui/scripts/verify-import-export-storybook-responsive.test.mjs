@@ -12,6 +12,7 @@ import {
   waitForStoryRender,
 } from "./verify-import-export-storybook-responsive.mjs";
 import { verifyProviderSessionDetailSuccess } from "./verify-provider-session-storybook-responsive.mjs";
+
 describe("waitForStoryRender", () => {
   test("waits for the Storybook root selector and rendered children", async () => {
     const page = {
@@ -173,7 +174,9 @@ describe("story locators", () => {
 describe("viewport assertions", () => {
   test("expectNoHorizontalOverflow accepts matching widths", async () => {
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 391 }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValue({ clientWidth: 390, scrollWidth: 391 }),
     };
 
     await expect(
@@ -183,7 +186,9 @@ describe("viewport assertions", () => {
 
   test("expectNoHorizontalOverflow rejects horizontal overflow beyond tolerance", async () => {
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 395 }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValue({ clientWidth: 390, scrollWidth: 395 }),
     };
 
     await expect(
@@ -204,7 +209,11 @@ describe("viewport assertions", () => {
     };
 
     await expect(
-      expectDialogWithinViewport(dialog, { height: 844, label: "mobile", width: 390 }, "Export"),
+      expectDialogWithinViewport(
+        dialog,
+        { height: 844, label: "mobile", width: 390 },
+        "Export",
+      ),
     ).resolves.toBeUndefined();
   });
 
@@ -214,7 +223,11 @@ describe("viewport assertions", () => {
     };
 
     await expect(
-      expectDialogWithinViewport(dialog, { height: 844, label: "mobile", width: 390 }, "Export"),
+      expectDialogWithinViewport(
+        dialog,
+        { height: 844, label: "mobile", width: 390 },
+        "Export",
+      ),
     ).rejects.toThrow("Could not measure Export dialog bounds.");
   });
 
@@ -229,7 +242,11 @@ describe("viewport assertions", () => {
     };
 
     await expect(
-      expectDialogWithinViewport(dialog, { height: 844, label: "mobile", width: 390 }, "Export"),
+      expectDialogWithinViewport(
+        dialog,
+        { height: 844, label: "mobile", width: 390 },
+        "Export",
+      ),
     ).rejects.toThrow("Export dialog exceeded the mobile viewport (390x844).");
   });
 
@@ -253,8 +270,16 @@ describe("viewport assertions", () => {
 
   test("expectOrderedLeftEdges accepts left-to-right boxes", async () => {
     const locators = [
-      { boundingBox: vi.fn().mockResolvedValue({ height: 10, width: 20, x: 10, y: 0 }) },
-      { boundingBox: vi.fn().mockResolvedValue({ height: 10, width: 20, x: 31, y: 0 }) },
+      {
+        boundingBox: vi
+          .fn()
+          .mockResolvedValue({ height: 10, width: 20, x: 10, y: 0 }),
+      },
+      {
+        boundingBox: vi
+          .fn()
+          .mockResolvedValue({ height: 10, width: 20, x: 31, y: 0 }),
+      },
     ];
 
     await expect(
@@ -273,8 +298,16 @@ describe("viewport assertions", () => {
 
   test("expectOrderedLeftEdges rejects overlapping order", async () => {
     const locators = [
-      { boundingBox: vi.fn().mockResolvedValue({ height: 10, width: 40, x: 20, y: 0 }) },
-      { boundingBox: vi.fn().mockResolvedValue({ height: 10, width: 30, x: 50, y: 0 }) },
+      {
+        boundingBox: vi
+          .fn()
+          .mockResolvedValue({ height: 10, width: 40, x: 20, y: 0 }),
+      },
+      {
+        boundingBox: vi
+          .fn()
+          .mockResolvedValue({ height: 10, width: 30, x: 50, y: 0 }),
+      },
     ];
 
     await expect(
@@ -287,9 +320,11 @@ describe("story assertions", () => {
   test("verifyExportDialog checks the expected export controls", async () => {
     const textbox = { isVisible: vi.fn().mockResolvedValue(true) };
     const coverImage = {
-      evaluate: vi.fn().mockResolvedValue(
-        "rounded-xl border border-dashed border-af-border-strong bg-af-surface-subtle",
-      ),
+      evaluate: vi
+        .fn()
+        .mockResolvedValue(
+          "rounded-xl border border-dashed border-af-border-strong bg-af-surface-subtle",
+        ),
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const cancelButton = { isVisible: vi.fn().mockResolvedValue(true) };
@@ -315,7 +350,9 @@ describe("story assertions", () => {
       getByText: vi.fn().mockReturnValue(helperCopy),
     };
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
     };
 
     await verifyExportDialog(page, dialog, {
@@ -364,7 +401,9 @@ describe("import story assertions", () => {
       getByText: vi.fn().mockReturnValue(fileName),
     };
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
     };
 
     await verifyImportDialog(page, dialog, {
@@ -385,7 +424,9 @@ describe("import story assertions", () => {
 
 describe("provider-session story assertions", () => {
   test("verifyProviderSessionDetailSuccess checks the provider-session success panel", async () => {
-    const selectedSessionHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
+    const selectedSessionHeading = {
+      waitFor: vi.fn().mockResolvedValue(undefined),
+    };
     const sourceHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
     const sourcePath = { waitFor: vi.fn().mockResolvedValue(undefined) };
     const tokenUsageHeading = { waitFor: vi.fn().mockResolvedValue(undefined) };
@@ -395,7 +436,9 @@ describe("provider-session story assertions", () => {
         .mockResolvedValue({ clientWidth: 390, scrollWidth: 390 }),
       getByRole: vi.fn((role, options) => {
         if (role !== "heading") {
-          throw new Error(`unexpected page role lookup ${role} ${options?.name ?? ""}`);
+          throw new Error(
+            `unexpected page role lookup ${role} ${options?.name ?? ""}`,
+          );
         }
         if (options?.name === "Selected session details") {
           return selectedSessionHeading;

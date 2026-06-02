@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { workerFieldValidationTarget } from "../../../testing/factory-validation-target-fixtures";
-import { STALE_FACTORY_GRAPH_DRAFT_WARNING } from "./graph-document-save-state";
 import {
   buildGraphSaveErrorToastDescription,
   buildStaleVersionToastDescription,
   formatGraphSaveValidationTargetSummary,
   resolveGraphDocumentSaveToastNotification,
 } from "./graph-document-save-notifications";
+import { STALE_FACTORY_GRAPH_DRAFT_WARNING } from "./graph-document-save-state";
 
 const messages = {
   noticeSaveFailedAffectedSummary: (labels: string) => `Affected: ${labels}`,

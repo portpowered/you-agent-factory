@@ -97,9 +97,9 @@ describe("getWorkstationDetailMessages", () => {
     expect(
       messages.editableConfigurationPromptAutocompleteSummary(2, 1),
     ).toContain("2");
-    expect(messages.editableConfigurationPromptAutocompleteDetail).not.toHaveLength(
-      0,
-    );
+    expect(
+      messages.editableConfigurationPromptAutocompleteDetail,
+    ).not.toHaveLength(0);
     expect(messages.historyRequestCountLabel(4)).toContain("4");
     expect(messages.historyRunCountLabel(5)).toContain("5");
     expect(messages.providerSummary("codex", null)).toContain("codex");

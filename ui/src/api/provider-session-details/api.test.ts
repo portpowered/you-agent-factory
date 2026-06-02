@@ -210,8 +210,7 @@ describe("getProviderSessionDetails", () => {
     expect(thrown).toBeInstanceOf(ProviderSessionDetailsAPIError);
     expect(thrown).toMatchObject({
       code: "INTERNAL_ERROR",
-      message:
-        "The provider-session detail API returned an invalid response.",
+      message: "The provider-session detail API returned an invalid response.",
       status: 200,
       statusText: "OK",
     });

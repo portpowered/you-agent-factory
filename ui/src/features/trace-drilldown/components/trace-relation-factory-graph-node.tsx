@@ -1,11 +1,11 @@
 import type { NodeProps } from "@xyflow/react";
-
-import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
+import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   ActivityGraphNodeBadge,
   activityGraphNodeTitleClassName,
@@ -14,9 +14,8 @@ import {
   ActivityGraphNodeShell,
   type PlaceNodeType,
 } from "../../flowchart/components/current-activity-node-shell";
-import { GraphSemanticIcon } from "../../flowchart/components/graph-semantic-icon";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { GraphSemanticIconKind } from "../../flowchart/components/graph-semantic-icon";
+import { GraphSemanticIcon } from "../../flowchart/components/graph-semantic-icon";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
@@ -135,7 +134,9 @@ export const TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES = {
   factoryEntity: TraceRelationFactoryGraphNode,
 };
 
-function relationShellNodeType(kind: FactoryGraphNodeKind): PlaceNodeType | "workstation" {
+function relationShellNodeType(
+  kind: FactoryGraphNodeKind,
+): PlaceNodeType | "workstation" {
   switch (kind) {
     case "work-state":
       return "statePosition";
@@ -191,7 +192,9 @@ function relationStateBadgeClassName(relationState: string): string {
   return RELATION_STATE_BADGE_WARNING_CLASS;
 }
 
-function relationStateToneClassName(relationState: string): "danger" | "success" | "warning" {
+function relationStateToneClassName(
+  relationState: string,
+): "danger" | "success" | "warning" {
   const normalizedState = relationState.trim().toUpperCase();
   if (
     normalizedState === "FAILED" ||

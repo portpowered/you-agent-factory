@@ -4,11 +4,16 @@ import type {
   FactoryPngImportValue,
   ReadFactoryImportPngResult,
 } from "../lib/factory-png-import";
-import { type ReadFactoryImportFile, type UseFactoryPngDropResult, useFactoryPngDrop } from "./use-factory-png-drop";
+import {
+  type ReadFactoryImportFile,
+  type UseFactoryPngDropResult,
+  useFactoryPngDrop,
+} from "./use-factory-png-drop";
 
 describe("useFactoryPngDrop", () => {
   it("ignores non-file drag events and leaves the drop state idle", () => {
-    const onImportReady = vi.fn<(value: FactoryPngImportValue, file: File) => void>();
+    const onImportReady =
+      vi.fn<(value: FactoryPngImportValue, file: File) => void>();
     const readFactoryImportFile = vi.fn<ReadFactoryImportFile>();
     const { result } = renderHook(() =>
       useFactoryPngDrop({ onImportReady, readFactoryImportFile }),
@@ -65,8 +70,12 @@ describe("useFactoryPngDrop", () => {
   it("preserves the reading state during drag enter, over, and leave transitions", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const pending = createDeferred<ReadFactoryImportPngResult>();
-    const readFactoryImportFile = vi.fn<ReadFactoryImportFile>().mockReturnValue(pending.promise);
-    const { result } = renderHook(() => useFactoryPngDrop({ readFactoryImportFile }));
+    const readFactoryImportFile = vi
+      .fn<ReadFactoryImportFile>()
+      .mockReturnValue(pending.promise);
+    const { result } = renderHook(() =>
+      useFactoryPngDrop({ readFactoryImportFile }),
+    );
     const dragEvent = createFileDragEvent(file);
 
     act(() => {
@@ -99,14 +108,17 @@ describe("useFactoryPngDrop", () => {
 
   it("returns to idle and surfaces read errors when the dropped file cannot be imported", async () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
-    const onImportReady = vi.fn<(value: FactoryPngImportValue, file: File) => void>();
-    const readFactoryImportFile = vi.fn<ReadFactoryImportFile>().mockResolvedValue({
-      error: {
-        code: "PNG_METADATA_INVALID",
-        message: "The you-agent-factory factory metadata is not valid JSON.",
-      },
-      ok: false,
-    });
+    const onImportReady =
+      vi.fn<(value: FactoryPngImportValue, file: File) => void>();
+    const readFactoryImportFile = vi
+      .fn<ReadFactoryImportFile>()
+      .mockResolvedValue({
+        error: {
+          code: "PNG_METADATA_INVALID",
+          message: "The you-agent-factory factory metadata is not valid JSON.",
+        },
+        ok: false,
+      });
     const { result } = renderHook(() =>
       useFactoryPngDrop({ onImportReady, readFactoryImportFile }),
     );
@@ -186,13 +198,18 @@ describe("useFactoryPngDrop", () => {
 
   it("keeps superseded failed imports from surfacing a stale drop error", async () => {
     const firstFile = new File(["first"], "first.png", { type: "image/png" });
-    const secondFile = new File(["second"], "second.png", { type: "image/png" });
+    const secondFile = new File(["second"], "second.png", {
+      type: "image/png",
+    });
     const firstPending = createDeferred<ReadFactoryImportPngResult>();
     const secondPending = createDeferred<ReadFactoryImportPngResult>();
-    const readFactoryImportFile = vi.fn<ReadFactoryImportFile>()
+    const readFactoryImportFile = vi
+      .fn<ReadFactoryImportFile>()
       .mockReturnValueOnce(firstPending.promise)
       .mockReturnValueOnce(secondPending.promise);
-    const { result } = renderHook(() => useFactoryPngDrop({ readFactoryImportFile }));
+    const { result } = renderHook(() =>
+      useFactoryPngDrop({ readFactoryImportFile }),
+    );
 
     act(() => {
       void result.current.onDrop(createFileDropEvent(firstFile));
@@ -218,7 +235,10 @@ describe("useFactoryPngDrop", () => {
     });
 
     await act(async () => {
-      secondPending.resolve({ ok: true, value: createFactoryImportValue("blob:second-preview") });
+      secondPending.resolve({
+        ok: true,
+        value: createFactoryImportValue("blob:second-preview"),
+      });
       await secondPending.promise;
     });
 
@@ -227,13 +247,17 @@ describe("useFactoryPngDrop", () => {
 
   it("revokes successful results that resolve after a newer drop supersedes them", async () => {
     const firstFile = new File(["first"], "first.png", { type: "image/png" });
-    const secondFile = new File(["second"], "second.png", { type: "image/png" });
+    const secondFile = new File(["second"], "second.png", {
+      type: "image/png",
+    });
     const firstPending = createDeferred<ReadFactoryImportPngResult>();
     const secondPending = createDeferred<ReadFactoryImportPngResult>();
     const firstImport = createFactoryImportValue("blob:first-preview");
     const secondImport = createFactoryImportValue("blob:second-preview");
-    const onImportReady = vi.fn<(value: FactoryPngImportValue, file: File) => void>();
-    const readFactoryImportFile = vi.fn<ReadFactoryImportFile>()
+    const onImportReady =
+      vi.fn<(value: FactoryPngImportValue, file: File) => void>();
+    const readFactoryImportFile = vi
+      .fn<ReadFactoryImportFile>()
       .mockReturnValueOnce(firstPending.promise)
       .mockReturnValueOnce(secondPending.promise);
     const { result } = renderHook(() =>
@@ -273,8 +297,11 @@ describe("useFactoryPngDrop", () => {
     const file = new File(["png"], "factory-import.png", { type: "image/png" });
     const pending = createDeferred<ReadFactoryImportPngResult>();
     const importValue = createFactoryImportValue();
-    const onImportReady = vi.fn<(value: FactoryPngImportValue, file: File) => void>();
-    const readFactoryImportFile = vi.fn<ReadFactoryImportFile>().mockReturnValue(pending.promise);
+    const onImportReady =
+      vi.fn<(value: FactoryPngImportValue, file: File) => void>();
+    const readFactoryImportFile = vi
+      .fn<ReadFactoryImportFile>()
+      .mockReturnValue(pending.promise);
     const { result, unmount } = renderHook(() =>
       useFactoryPngDrop({ onImportReady, readFactoryImportFile }),
     );
@@ -299,7 +326,9 @@ describe("useFactoryPngDrop", () => {
   });
 });
 
-function createFactoryImportValue(previewImageSrc = "blob:factory-preview"): FactoryPngImportValue {
+function createFactoryImportValue(
+  previewImageSrc = "blob:factory-preview",
+): FactoryPngImportValue {
   return {
     factory: {
       name: "Dropped Factory",
@@ -313,7 +342,9 @@ function createFactoryImportValue(previewImageSrc = "blob:factory-preview"): Fac
   };
 }
 
-function createFileDropEvent(file: File): Parameters<UseFactoryPngDropResult["onDrop"]>[0] {
+function createFileDropEvent(
+  file: File,
+): Parameters<UseFactoryPngDropResult["onDrop"]>[0] {
   return {
     dataTransfer: {
       dropEffect: "none",
@@ -324,7 +355,9 @@ function createFileDropEvent(file: File): Parameters<UseFactoryPngDropResult["on
   } as unknown as Parameters<UseFactoryPngDropResult["onDrop"]>[0];
 }
 
-function createFileDragEvent(file: File): Parameters<UseFactoryPngDropResult["onDragEnter"]>[0] {
+function createFileDragEvent(
+  file: File,
+): Parameters<UseFactoryPngDropResult["onDragEnter"]>[0] {
   return {
     dataTransfer: {
       dropEffect: "none",

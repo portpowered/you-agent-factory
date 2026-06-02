@@ -10,7 +10,8 @@ export interface FactoryPngExportMessages {
 
 const factoryPngExportMessagesByLocale = {
   en: {
-    imageDecodeFailed: "The selected image could not be decoded for PNG export.",
+    imageDecodeFailed:
+      "The selected image could not be decoded for PNG export.",
     metadataWriteFailed: "The exported PNG metadata could not be written.",
   },
   "zh-CN": {

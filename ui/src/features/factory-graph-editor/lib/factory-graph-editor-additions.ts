@@ -13,7 +13,9 @@ import type {
   FactoryWorkState,
 } from "./factory-graph-draft-types";
 
-type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+type CanonicalWorker = NonNullable<
+  CanonicalFactoryDefinition["workers"]
+>[number];
 type ModelProvider = NonNullable<CanonicalWorker["modelProvider"]>;
 
 export type FactoryGraphAddWorkerType = Extract<
@@ -213,10 +215,7 @@ export function validateFactoryGraphAddEntityDraft(
       errors.command = "Enter a command for the new script worker.";
     }
 
-    if (
-      draft.workerType === "SCRIPT_WORKER" &&
-      draft.argsText.includes("\0")
-    ) {
+    if (draft.workerType === "SCRIPT_WORKER" && draft.argsText.includes("\0")) {
       errors.args = "Each script argument must be a single non-empty line.";
     }
   }

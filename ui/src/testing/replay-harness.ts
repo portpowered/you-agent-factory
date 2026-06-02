@@ -1,13 +1,16 @@
 import { act, waitFor } from "@testing-library/react";
 
 import type { DashboardSnapshot } from "../api/dashboard";
-import type { EventSourceLike } from "../api/events/api";
 import type { FactoryEvent } from "../api/events";
+import type { EventSourceLike } from "../api/events/api";
 import {
-  type WorldState,
   useFactoryTimelineStore,
+  type WorldState,
 } from "../features/timeline/state/factoryTimelineStore";
-import { loadReplayFixtureEvents, type ReplayFixtureID } from "./replay-fixtures";
+import {
+  loadReplayFixtureEvents,
+  type ReplayFixtureID,
+} from "./replay-fixtures";
 
 const REPLAY_SETTLE_TIMEOUT_MS = 10_000;
 let originalEventSource: typeof window.EventSource | undefined;
@@ -35,7 +38,8 @@ export class ReplayEventSource implements EventSourceLike {
   public emit(type: string, data: unknown): void {
     if (type === "snapshot") {
       const state = useFactoryTimelineStore.getState();
-      const tracesByWorkID = state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {};
+      const tracesByWorkID =
+        state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {};
       seedTimelineSnapshot(data as DashboardSnapshot, tracesByWorkID);
     }
 
@@ -76,7 +80,10 @@ function timelineSnapshotFromDashboardSnapshot(
   overrides: Partial<
     Pick<
       WorldState,
-      "relationsByWorkID" | "tracesByWorkID" | "workstationRequestsByDispatchID" | "workRequestsByID"
+      | "relationsByWorkID"
+      | "tracesByWorkID"
+      | "workstationRequestsByDispatchID"
+      | "workRequestsByID"
     >
   > = {},
 ): WorldState {
@@ -84,7 +91,8 @@ function timelineSnapshotFromDashboardSnapshot(
     ...snapshot,
     relationsByWorkID: overrides.relationsByWorkID ?? {},
     tracesByWorkID: overrides.tracesByWorkID ?? {},
-    workstationRequestsByDispatchID: overrides.workstationRequestsByDispatchID ?? {},
+    workstationRequestsByDispatchID:
+      overrides.workstationRequestsByDispatchID ?? {},
     workRequestsByID: overrides.workRequestsByID ?? {},
   };
 }
@@ -172,14 +180,19 @@ export function createReplayHarness(): ReplayHarness {
       }
     });
 
-    await waitFor(() => {
-      if (useFactoryTimelineStore.getState().selectedTick < targetTick) {
-        throw new Error(`expected replay to reach tick ${targetTick}`);
-      }
-    }, { timeout: REPLAY_SETTLE_TIMEOUT_MS });
+    await waitFor(
+      () => {
+        if (useFactoryTimelineStore.getState().selectedTick < targetTick) {
+          throw new Error(`expected replay to reach tick ${targetTick}`);
+        }
+      },
+      { timeout: REPLAY_SETTLE_TIMEOUT_MS },
+    );
   }
 
-  async function replayFixture(fixtureID: ReplayFixtureID): Promise<FactoryEvent[]> {
+  async function replayFixture(
+    fixtureID: ReplayFixtureID,
+  ): Promise<FactoryEvent[]> {
     const events = loadReplayFixtureEvents(fixtureID);
     await replayEvents(events);
     return events;

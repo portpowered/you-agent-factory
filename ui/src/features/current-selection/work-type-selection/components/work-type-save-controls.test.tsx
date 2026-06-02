@@ -58,9 +58,9 @@ describe("EditableWorkTypeSaveHeaderAction", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Save changes" }).className).not.toContain(
-      "border-af-warning-border",
-    );
+    expect(
+      screen.getByRole("button", { name: "Save changes" }).className,
+    ).not.toContain("border-af-warning-border");
   });
 });
 

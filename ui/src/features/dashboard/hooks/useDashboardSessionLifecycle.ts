@@ -1,12 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-
+import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import {
   dashboardSessionKey,
   resetDashboardSessionScopedState,
   shouldResetDashboardSessionScopedState,
 } from "../lib/dashboard-session-lifecycle";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export interface UseDashboardSessionLifecycleOptions {
@@ -22,7 +21,9 @@ export function useDashboardSessionLifecycle({
 }: UseDashboardSessionLifecycleOptions) {
   const queryClient = useQueryClient();
   const resetTimeline = useFactoryTimelineStore((state) => state.reset);
-  const resetStreamState = useDashboardStreamStore((state) => state.resetStreamState);
+  const resetStreamState = useDashboardStreamStore(
+    (state) => state.resetStreamState,
+  );
   const lastSessionKeyRef = useRef<string | null>(null);
 
   const sessionKey = useMemo(
@@ -59,12 +60,7 @@ export function useDashboardSessionLifecycle({
     }
 
     resetLocalizedSessionState();
-  }, [
-    refreshToken,
-    resetLocalizedSessionState,
-    sessionID,
-    sessionKey,
-  ]);
+  }, [refreshToken, resetLocalizedSessionState, sessionID, sessionKey]);
 
   return useMemo(
     () => ({

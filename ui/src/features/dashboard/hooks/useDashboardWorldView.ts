@@ -1,8 +1,7 @@
 import { useMemo } from "react";
-
+import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { deriveDashboardWorldViewShellState } from "../lib/dashboard-world-view";
 import { useDashboardSession } from "../session/dashboard-session-provider";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export function useDashboardWorldView() {

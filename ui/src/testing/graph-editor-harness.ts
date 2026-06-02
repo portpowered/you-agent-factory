@@ -8,33 +8,30 @@ import type {
 } from "../api/current-factory-definition";
 import type { DashboardSnapshot } from "../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../components/dashboard/test-fixtures";
-import type { FactoryDocumentSaveState } from "../features/current-selection/base/hooks/factory-document-save-types";
 import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
+import type { FactoryDocumentSaveState } from "../features/current-selection/base/hooks/factory-document-save-types";
 import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
+import {
+  baseFactoryDefinition as draftWorkstationFactoryDefinition,
+  currentFactoryDocument as draftWorkstationFactoryDocument,
+} from "../features/factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../features/factory-graph-editor/lib/factory-graph-draft-graph";
-import { applyFactoryGraphPendingEdits } from "../features/factory-graph-editor/lib/factory-graph-operations";
 import {
   createEmptyFactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
 } from "../features/factory-graph-editor/lib/factory-graph-draft-types";
 import {
-  baseFactoryDefinition as draftWorkstationFactoryDefinition,
-  currentFactoryDocument as draftWorkstationFactoryDocument,
-} from "../features/factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import {
   addFactoryGraphNode,
+  applyFactoryGraphPendingEdits,
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
 } from "../features/factory-graph-editor/lib/factory-graph-operations";
 
-export {
-  draftWorkstationFactoryDefinition,
-  draftWorkstationFactoryDocument,
-};
+export { draftWorkstationFactoryDefinition, draftWorkstationFactoryDocument };
 
 export const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -284,8 +281,7 @@ export function createHookTestGraphEditorDraftState(
     graph: buildFactoryGraphTopologyFromDefinition(document),
     hasChanges: overrides.hasChanges ?? false,
     latestDocument: document,
-    pendingFactoryDefinition:
-      overrides.pendingFactoryDefinition ?? document,
+    pendingFactoryDefinition: overrides.pendingFactoryDefinition ?? document,
     source: overrides.source ?? "current-factory",
     updateDraft: overrides.updateDraft ?? vi.fn(),
     validationErrors: overrides.validationErrors ?? [],

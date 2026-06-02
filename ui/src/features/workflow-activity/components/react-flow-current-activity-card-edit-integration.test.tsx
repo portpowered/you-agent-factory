@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   cleanup,
   fireEvent,
@@ -13,11 +12,11 @@ import {
   within,
 } from "@testing-library/react";
 import type { ReactElement } from "react";
-
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
@@ -145,20 +144,26 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: vi.fn(),
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: vi.fn(),
+  }),
+);
 
 const editableFactoryDocument: CurrentFactoryDocument = {
   name: "Current Factory",
@@ -520,9 +525,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       expect(saveAsync).toHaveBeenCalled();
     });
     await waitFor(() => {
-      expect(
-        screen.queryByRole("button", { name: "worker:spare" }),
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: "worker:spare" })).toBeNull();
     });
     await waitFor(() => {
       expect(

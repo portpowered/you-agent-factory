@@ -14,7 +14,9 @@ export type FactoryImportActivationState =
   | { error: SessionFactoryAPIError; status: "error" };
 
 export interface UseFactoryImportActivationOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
+  activateFactory?: (
+    input: FactoryImportConfirmInput,
+  ) => Promise<ImportFactoryValue>;
   onActivated?: (value: ImportFactoryValue) => void;
   sessionID?: string | null;
 }
@@ -44,7 +46,8 @@ export function useFactoryImportActivation({
         })),
     [activateFactoryOverride, sessionID],
   );
-  const [activationError, setActivationError] = useState<SessionFactoryAPIError | null>(null);
+  const [activationError, setActivationError] =
+    useState<SessionFactoryAPIError | null>(null);
   const mutation = useMutation({
     mutationFn: (input: FactoryImportConfirmInput) => activateFactory(input),
     onError: (error) => {
@@ -56,14 +59,17 @@ export function useFactoryImportActivation({
     },
   });
 
-  const activateImport = useCallback(async (input: FactoryImportConfirmInput) => {
-    setActivationError(null);
-    try {
-      await mutation.mutateAsync(input);
-    } catch {
-      return;
-    }
-  }, [mutation]);
+  const activateImport = useCallback(
+    async (input: FactoryImportConfirmInput) => {
+      setActivationError(null);
+      try {
+        await mutation.mutateAsync(input);
+      } catch {
+        return;
+      }
+    },
+    [mutation],
+  );
 
   const clearActivationError = useCallback(() => {
     setActivationError(null);
@@ -92,8 +98,12 @@ function normalizeActivationError(error: unknown): SessionFactoryAPIError {
   }
 
   if (error instanceof Error) {
-    return new SessionFactoryAPIError(error.message, { code: "INTERNAL_ERROR" });
+    return new SessionFactoryAPIError(error.message, {
+      code: "INTERNAL_ERROR",
+    });
   }
 
-  return new SessionFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
+  return new SessionFactoryAPIError("Factory activation failed.", {
+    code: "INTERNAL_ERROR",
+  });
 }

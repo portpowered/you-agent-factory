@@ -1,10 +1,14 @@
 // @vitest-environment node
 
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-
 import {
-  buildTimeoutMs,
+  buildReplayCoverageReport,
+  formatReplayCoverageReportMarkdown,
+  listBrowserIntegrationReplayScenarios,
+} from "../src/testing/replay-fixture-catalog";
+import {
   browserScenarioTimeoutMs,
+  buildTimeoutMs,
   defaultFactorySessionID,
   expectNoBrowserErrors,
   loadReplayLines,
@@ -13,11 +17,6 @@ import {
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
-import {
-  buildReplayCoverageReport,
-  formatReplayCoverageReportMarkdown,
-  listBrowserIntegrationReplayScenarios,
-} from "../src/testing/replay-fixture-catalog";
 
 const replayCurrentFactoryDefinition = {
   name: "Browser Replay Factory",
@@ -192,11 +191,7 @@ async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
 }
 
 async function assertReplayScenarioRenders(preview, replayFixture) {
-  const {
-    browserIntegration,
-    fileName,
-    id,
-  } = replayFixture;
+  const { browserIntegration, fileName, id } = replayFixture;
   const {
     finalTick,
     headingName,
@@ -262,7 +257,9 @@ async function assertReplayScenarioRenders(preview, replayFixture) {
       inFlightSelectionTick,
       replayServer,
     });
-    const dashboardSummary = browserPage.page.locator('[aria-label="dashboard summary"]');
+    const dashboardSummary = browserPage.page.locator(
+      '[aria-label="dashboard summary"]',
+    );
     expect(
       await dashboardSummary
         .getByRole("status", {
@@ -315,37 +312,46 @@ describe.sequential("captured event stream replay", () => {
     );
   }
 
-  it("opens the default event stream path for browser replay coverage", async () => {
-    const replayServer = await startFactoryApiServer({
-      apiPort: preview.apiPort,
-      currentFactory: replayCurrentFactoryDefinition,
-      eventLines: await loadReplayLines(replayFixtures[0].fileName),
-    });
-    const browserPage = await openBrowserPage();
+  it(
+    "opens the default event stream path for browser replay coverage",
+    async () => {
+      const replayServer = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: replayCurrentFactoryDefinition,
+        eventLines: await loadReplayLines(replayFixtures[0].fileName),
+      });
+      const browserPage = await openBrowserPage();
 
-    try {
-      await browserPage.page.goto(preview.previewURL, { waitUntil: "domcontentloaded" });
-      await browserPage.page
-        .getByRole("heading", {
-          level: 1,
-          name: replayFixtures[0].browserIntegration.headingName,
-          exact: true,
-        })
-        .waitFor();
-      await expect
-        .poll(
-          () => replayServer.requestedEventSessionIDs.includes(defaultFactorySessionID),
-          { timeout: uiInteractionTimeoutMs },
-        )
-        .toBe(true);
-      expectNoBrowserErrors(
-        browserPage.pageErrors,
-        browserPage.consoleErrors,
-        expect,
-      );
-    } finally {
-      await replayServer.stop();
-      await browserPage.close();
-    }
-  }, browserScenarioTimeoutMs);
+      try {
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await browserPage.page
+          .getByRole("heading", {
+            level: 1,
+            name: replayFixtures[0].browserIntegration.headingName,
+            exact: true,
+          })
+          .waitFor();
+        await expect
+          .poll(
+            () =>
+              replayServer.requestedEventSessionIDs.includes(
+                defaultFactorySessionID,
+              ),
+            { timeout: uiInteractionTimeoutMs },
+          )
+          .toBe(true);
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await replayServer.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
 });

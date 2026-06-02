@@ -43,7 +43,8 @@ export function useFactoryPngDrop({
   onImportReady,
   readFactoryImportFile = defaultReadFactoryImportFile,
 }: UseFactoryPngDropOptions = {}): UseFactoryPngDropResult {
-  const [dropState, setDropState] = useState<FactoryPngDropState>(IDLE_DROP_STATE);
+  const [dropState, setDropState] =
+    useState<FactoryPngDropState>(IDLE_DROP_STATE);
   const dragDepthRef = useRef(0);
   const requestIDRef = useRef(0);
   const invalidatePendingDrop = useCallback(() => {
@@ -51,9 +52,12 @@ export function useFactoryPngDrop({
     requestIDRef.current += 1;
   }, []);
 
-  useEffect(() => () => {
-    invalidatePendingDrop();
-  }, [invalidatePendingDrop]);
+  useEffect(
+    () => () => {
+      invalidatePendingDrop();
+    },
+    [invalidatePendingDrop],
+  );
 
   const clearError = useCallback(() => {
     setDropState((currentState) => {
@@ -117,43 +121,50 @@ export function useFactoryPngDrop({
     });
   }, []);
 
-  const onDrop = useCallback<DragEventHandler<HTMLElement>>(async (event) => {
-    if (!isFileDragEvent(event)) {
-      return;
-    }
-
-    event.preventDefault();
-    dragDepthRef.current = 0;
-
-    const file = fileFromDragEvent(event);
-    if (!file) {
-      setDropState(IDLE_DROP_STATE);
-      return;
-    }
-
-    const requestID = requestIDRef.current + 1;
-    requestIDRef.current = requestID;
-    setDropState({ fileName: file.name, status: "reading" });
-
-    const result =
-      locale == null
-        ? await readFactoryImportFile(file)
-        : await readFactoryImportFile(file, locale);
-    if (requestIDRef.current !== requestID) {
-      if (result.ok) {
-        result.value.revokePreviewImageSrc();
+  const onDrop = useCallback<DragEventHandler<HTMLElement>>(
+    async (event) => {
+      if (!isFileDragEvent(event)) {
+        return;
       }
-      return;
-    }
 
-    if (!result.ok) {
-      setDropState({ error: result.error, fileName: file.name, status: "error" });
-      return;
-    }
+      event.preventDefault();
+      dragDepthRef.current = 0;
 
-    setDropState(IDLE_DROP_STATE);
-    onImportReady?.(result.value, file);
-  }, [locale, onImportReady, readFactoryImportFile]);
+      const file = fileFromDragEvent(event);
+      if (!file) {
+        setDropState(IDLE_DROP_STATE);
+        return;
+      }
+
+      const requestID = requestIDRef.current + 1;
+      requestIDRef.current = requestID;
+      setDropState({ fileName: file.name, status: "reading" });
+
+      const result =
+        locale == null
+          ? await readFactoryImportFile(file)
+          : await readFactoryImportFile(file, locale);
+      if (requestIDRef.current !== requestID) {
+        if (result.ok) {
+          result.value.revokePreviewImageSrc();
+        }
+        return;
+      }
+
+      if (!result.ok) {
+        setDropState({
+          error: result.error,
+          fileName: file.name,
+          status: "error",
+        });
+        return;
+      }
+
+      setDropState(IDLE_DROP_STATE);
+      onImportReady?.(result.value, file);
+    },
+    [locale, onImportReady, readFactoryImportFile],
+  );
 
   return {
     clearError,
@@ -181,7 +192,9 @@ function isFileDragEvent(event: Pick<DragEvent, "dataTransfer">): boolean {
   return Array.from(dragTypes).includes(FILE_DRAG_DATA_TYPE);
 }
 
-function fileFromDragEvent(event: Pick<DragEvent, "dataTransfer">): File | null {
+function fileFromDragEvent(
+  event: Pick<DragEvent, "dataTransfer">,
+): File | null {
   const files = event.dataTransfer?.files;
   if (!files || files.length === 0) {
     return null;

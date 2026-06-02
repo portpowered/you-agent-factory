@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 
 import { resolveSupportedLocale } from "../../../i18n";
-import {
-  CompletedFailedWorkstationCard,
-} from "./terminal-work-card";
 import type {
   TerminalWorkDetail,
   TerminalWorkItem,
   TerminalWorkStatus,
 } from "../lib/types";
+import { CompletedFailedWorkstationCard } from "./terminal-work-card";
 
 export interface TerminalWorkWidgetProps {
   completedItems: TerminalWorkItem[];

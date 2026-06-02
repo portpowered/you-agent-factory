@@ -9,11 +9,15 @@ export const defaultMainCoveredMaxWorkers = "2";
 export const defaultShardMainCoveredMaxWorkers = "1";
 export const defaultSlowFileSummaryLimit = 15;
 export const defaultUiCoverageShardTotal = 10;
+export const defaultCapturedStdoutMaxBuffer = 128 * 1024 * 1024;
 
 const vitestFileDurationLinePattern =
   /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+\([^)]+\)\s+(\d+(?:\.\d+)?)ms(?:\s+\d+ MB heap used)?/gm;
 
-const ansiEscapePattern = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
+const ansiEscapePattern = new RegExp(
+  `${String.fromCharCode(27)}\\[[0-9;]*m`,
+  "g",
+);
 
 export function getMainCoveredMaxWorkers(env = process.env, options = {}) {
   if (env.UI_COVERAGE_MAIN_MAX_WORKERS) {
@@ -56,7 +60,10 @@ export function parseUiCoverageShard(env = process.env) {
   return { index, label: raw, total };
 }
 
-export function mainCoveredShardBlobPath(shardIndex, reportsDir = ".vitest-reports") {
+export function mainCoveredShardBlobPath(
+  shardIndex,
+  reportsDir = ".vitest-reports",
+) {
   return join(reportsDir, `main-shard-${shardIndex}.json`);
 }
 
@@ -119,8 +126,7 @@ export function buildMainCoveredVitestArgs(options = {}) {
   const mainCoveredMaxWorkers =
     options.mainCoveredMaxWorkers ??
     getMainCoveredMaxWorkers(options.env, { shard: Boolean(shard) });
-  const blobPath =
-    options.blobPath ?? ".vitest-reports/main.json";
+  const blobPath = options.blobPath ?? ".vitest-reports/main.json";
   const args = [
     "run",
     "--coverage",
@@ -237,7 +243,10 @@ export function parseVitestFileDurationsFromLog(logText) {
   }));
 }
 
-export function rankSlowestTestFiles(fileDurations, limit = defaultSlowFileSummaryLimit) {
+export function rankSlowestTestFiles(
+  fileDurations,
+  limit = defaultSlowFileSummaryLimit,
+) {
   return [...fileDurations]
     .sort((left, right) => right.durationMs - left.durationMs)
     .slice(0, limit);
@@ -248,7 +257,9 @@ export function formatSlowFileSummaryLines(
   { limit = defaultSlowFileSummaryLimit } = {},
 ) {
   if (slowFiles.length === 0) {
-    return [`${phaseLogPrefix} Main covered pass slowest test files: none reported`];
+    return [
+      `${phaseLogPrefix} Main covered pass slowest test files: none reported`,
+    ];
   }
 
   const lines = [
@@ -277,11 +288,15 @@ export function cleanCoverageArtifacts() {
 
 export function runTimedPhase(phase, spawn = spawnSync, options = {}) {
   const captureStdout = options.captureStdout === true;
+  const maxBuffer =
+    options.maxBuffer ??
+    (captureStdout ? defaultCapturedStdoutMaxBuffer : undefined);
   const startedAt = performance.now();
   const result = spawn(phase.command, phase.args, {
     shell: process.platform === "win32",
     stdio: captureStdout ? ["inherit", "pipe", "inherit"] : "inherit",
     encoding: captureStdout ? "utf8" : undefined,
+    ...(maxBuffer === undefined ? {} : { maxBuffer }),
   });
   const elapsedMs = performance.now() - startedAt;
 

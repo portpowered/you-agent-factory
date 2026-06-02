@@ -20,11 +20,8 @@ export function buildPendingFactoryDefinition(
   locale?: string | null,
 ): CanonicalFactoryDefinition | null {
   if (
-    validateFactoryGraphDraftStructural(
-      baseFactoryDefinition,
-      draft,
-      locale,
-    ).length > 0
+    validateFactoryGraphDraftStructural(baseFactoryDefinition, draft, locale)
+      .length > 0
   ) {
     return null;
   }
@@ -210,10 +207,11 @@ export function applyWorkerResourceChanges(
   return nextWorker;
 }
 
-function assignOptionalProperty<
-  T extends object,
-  K extends keyof T,
->(target: T, key: K, value: T[K] | undefined): void {
+function assignOptionalProperty<T extends object, K extends keyof T>(
+  target: T,
+  key: K,
+  value: T[K] | undefined,
+): void {
   if (value === undefined) {
     delete target[key];
     return;
@@ -373,7 +371,9 @@ function edgeToIO(
   };
 }
 
-function dedupeIOEntries(items: FactoryWorkstationIO[]): FactoryWorkstationIO[] {
+function dedupeIOEntries(
+  items: FactoryWorkstationIO[],
+): FactoryWorkstationIO[] {
   const seen = new Set<string>();
   return items.filter((item) => {
     const key = `${item.workType}:${item.state}`;

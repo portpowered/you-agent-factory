@@ -1,10 +1,13 @@
 import type { FactoryEvent } from "../../../../api/events";
 
-export function uniqueSorted(values: Array<string | null | undefined>): string[] {
+export function uniqueSorted(
+  values: Array<string | null | undefined>,
+): string[] {
   return [
     ...new Set(
       values.filter(
-        (value): value is string => typeof value === "string" && value.length > 0,
+        (value): value is string =>
+          typeof value === "string" && value.length > 0,
       ),
     ),
   ].sort();
@@ -24,5 +27,3 @@ export function orderedEvents(events: FactoryEvent[]): FactoryEvent[] {
     return left.id.localeCompare(right.id);
   });
 }
-
-

@@ -10,8 +10,8 @@ describe("work-type-selection/public", () => {
       "getWorkTypeDetailMessages",
     ]);
     expect(workTypeSelectionPublic.WorkTypeDetailCard).toBeTypeOf("function");
-    expect(
-      workTypeSelectionPublic.EditableWorkTypeSaveHeaderAction,
-    ).toBeTypeOf("function");
+    expect(workTypeSelectionPublic.EditableWorkTypeSaveHeaderAction).toBeTypeOf(
+      "function",
+    );
   });
 });

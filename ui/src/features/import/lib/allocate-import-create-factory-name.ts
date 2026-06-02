@@ -2,7 +2,10 @@ function normalizeFactoryName(name: string): string {
   return name.trim();
 }
 
-function isFactoryNameTaken(name: string, existingNames: ReadonlySet<string>): boolean {
+function isFactoryNameTaken(
+  name: string,
+  existingNames: ReadonlySet<string>,
+): boolean {
   const normalized = normalizeFactoryName(name);
   return normalized.length > 0 && existingNames.has(normalized);
 }

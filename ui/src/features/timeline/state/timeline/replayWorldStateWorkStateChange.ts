@@ -3,7 +3,11 @@ import type {
   DashboardWorkMoveOperationSource,
 } from "../../../../api/dashboard";
 import type { FactoryWorkItem } from "../../../../api/events";
-import { addToken, removeWorkToken, removeWorkTokenFromPlace } from "./replayGraphState";
+import {
+  addToken,
+  removeWorkToken,
+  removeWorkTokenFromPlace,
+} from "./replayGraphState";
 import type { WorkStateChangeEvent } from "./replayWorldStateTypes";
 import type { ReplayWorldState } from "./types";
 
@@ -44,7 +48,8 @@ function placeCategory(
   state: ReplayWorldState,
   placeIDValue: string | undefined,
 ): string | undefined {
-  return state.topology.places?.find((place) => place.id === placeIDValue)?.category;
+  return state.topology.places?.find((place) => place.id === placeIDValue)
+    ?.category;
 }
 
 export function applyWorkStateChange(

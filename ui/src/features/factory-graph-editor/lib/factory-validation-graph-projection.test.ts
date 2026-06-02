@@ -168,7 +168,11 @@ describe("factory-validation-graph-projection", () => {
     const projection = projectFactoryValidationTargets(targets);
     const draftNodeId = factoryGraphNodeIdForWorkstation("draft");
     const handleErrors = validationHandleErrorsForNode(projection, draftNodeId);
-    expect(handleErrors).toBeDefined();
+    if (!handleErrors) {
+      throw new Error(
+        "expected validation handle errors for draft workstation",
+      );
+    }
 
     const standardProcessorWithoutStopWords = {
       type: "MODEL_WORKSTATION" as const,
@@ -180,7 +184,7 @@ describe("factory-validation-graph-projection", () => {
     };
 
     const filteredWithoutStopWords = filterValidationHandleErrorsForWorkstation(
-      handleErrors!,
+      handleErrors,
       standardProcessorWithoutStopWords,
     );
     expect([...filteredWithoutStopWords.keys()]).toEqual([
@@ -200,7 +204,7 @@ describe("factory-validation-graph-projection", () => {
     ).toBe(true);
 
     const filteredForRepeater = filterValidationHandleErrorsForWorkstation(
-      handleErrors!,
+      handleErrors,
       repeaterWorkstation,
     );
     expect([...filteredForRepeater.keys()]).toEqual([

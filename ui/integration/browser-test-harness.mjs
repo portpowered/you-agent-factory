@@ -52,10 +52,9 @@ export async function fillWorkstationPromptBody(scope, text) {
     await scope.page().keyboard.type(text);
   }
 }
-const sharedApiPort = 43117;
-const sharedPreviewPort = 43118;
 const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
 let browserArtifactSequence = 0;
+let sharedBrowserPorts = null;
 export const exportCoverImagePath = path.resolve(
   packageRoot,
   "..",
@@ -141,6 +140,58 @@ function sanitizeArtifactLabel(value) {
 function localPackageBinaryCommand(name) {
   const suffix = process.platform === "win32" ? ".cmd" : "";
   return path.join(packageRoot, "node_modules", ".bin", `${name}${suffix}`);
+}
+
+async function findAvailablePort() {
+  const probe = http.createServer();
+  await new Promise((resolve, reject) => {
+    probe.once("error", reject);
+    probe.listen(0, previewHost, resolve);
+  });
+
+  const address = probe.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Expected browser integration port probe to bind to TCP.");
+  }
+
+  await new Promise((resolve, reject) => {
+    probe.close((error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve();
+    });
+  });
+
+  return address.port;
+}
+
+function configuredPort(name) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    return null;
+  }
+
+  const port = Number(value);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error(`Expected ${name} to be a valid TCP port, got "${value}".`);
+  }
+  return port;
+}
+
+async function browserPreviewPorts() {
+  if (sharedBrowserPorts) {
+    return sharedBrowserPorts;
+  }
+
+  const apiPort = configuredPort("AGENT_FACTORY_BROWSER_API_PORT");
+  const previewPort = configuredPort("AGENT_FACTORY_BROWSER_PREVIEW_PORT");
+  sharedBrowserPorts = {
+    apiPort: apiPort ?? (await findAvailablePort()),
+    previewPort: previewPort ?? (await findAvailablePort()),
+  };
+  return sharedBrowserPorts;
 }
 
 function hasBun() {
@@ -351,8 +402,7 @@ function ensureSessionState(
 }
 
 export async function startBrowserPreview() {
-  const apiPort = sharedApiPort;
-  const previewPort = sharedPreviewPort;
+  const { apiPort, previewPort } = await browserPreviewPorts();
   const apiOrigin = `http://${previewHost}:${apiPort}`;
   const previewURL = `http://${previewHost}:${previewPort}/dashboard/ui/`;
 

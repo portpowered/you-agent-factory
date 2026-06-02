@@ -119,8 +119,13 @@ function indexToPosition(sourceText: string, index: number) {
 }
 
 function hasExceptionMarker(sourceLines: string[], lineNumber: number) {
-  const candidateLines = sourceLines.slice(Math.max(0, lineNumber - 2), lineNumber);
-  return candidateLines.some((line) => line.includes(semanticColorExceptionMarker));
+  const candidateLines = sourceLines.slice(
+    Math.max(0, lineNumber - 2),
+    lineNumber,
+  );
+  return candidateLines.some((line) =>
+    line.includes(semanticColorExceptionMarker),
+  );
 }
 
 function createViolation(
@@ -242,7 +247,9 @@ function findViolationsInSource(
   );
 
   if (path.basename(filePath) !== "styles.css") {
-    violations.push(...collectNonStyleViolations(sourceText, filePath, sourceLines));
+    violations.push(
+      ...collectNonStyleViolations(sourceText, filePath, sourceLines),
+    );
   }
 
   return violations;
@@ -310,7 +317,10 @@ export async function scanSemanticColorTokens(rootDirectory = sourceDir) {
   });
 }
 
-function formatViolation(rootDirectory: string, violation: SemanticColorTokenViolation) {
+function formatViolation(
+  rootDirectory: string,
+  violation: SemanticColorTokenViolation,
+) {
   const relativeFilePath = path.relative(rootDirectory, violation.filePath);
   return [
     `${relativeFilePath}:${violation.position.line}:${violation.position.column}`,

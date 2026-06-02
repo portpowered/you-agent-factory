@@ -50,9 +50,9 @@ describe("factory-document-save-mocks", () => {
       CurrentFactoryDefinitionError,
     );
     expect(factoryDocumentSaveError("generic")).toBeInstanceOf(Error);
-    expect(factoryDocumentSaveError("generic", { message: "Save failed." })).toEqual(
-      new Error("Save failed."),
-    );
+    expect(
+      factoryDocumentSaveError("generic", { message: "Save failed." }),
+    ).toEqual(new Error("Save failed."));
   });
 
   it("mockFactoryDocumentSave resolves custom documents for success mode", async () => {

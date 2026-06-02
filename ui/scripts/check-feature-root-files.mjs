@@ -11,7 +11,8 @@ const featureRootDir = process.env.AGENT_FACTORY_UI_FEATURES_DIR
   ? path.resolve(process.env.AGENT_FACTORY_UI_FEATURES_DIR)
   : path.join(defaultUiDir, "src", "features");
 const uiDir = path.dirname(path.dirname(featureRootDir));
-const allowlistOverride = process.env.AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST;
+const allowlistOverride =
+  process.env.AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST;
 
 function getConfiguredAllowlist() {
   if (!allowlistOverride) {
@@ -41,27 +42,38 @@ export async function scanFeatureRootFiles(
   allowlist = allowlistedFeatureRootFiles,
 ) {
   const rootUiDirectory = path.dirname(path.dirname(rootDirectory));
-  const allowlistedPaths = new Set(allowlist.map((filePath) => toPosixPath(filePath)));
+  const allowlistedPaths = new Set(
+    allowlist.map((filePath) => toPosixPath(filePath)),
+  );
   const observedAllowlistedPaths = new Set();
   const featureEntries = await readdir(rootDirectory, { withFileTypes: true });
   const allowlistedDebt = [];
   const violations = [];
 
-  for (const featureEntry of featureEntries.sort((left, right) => left.name.localeCompare(right.name))) {
+  for (const featureEntry of featureEntries.sort((left, right) =>
+    left.name.localeCompare(right.name),
+  )) {
     if (!featureEntry.isDirectory()) {
       continue;
     }
 
     const featureDirectory = path.join(rootDirectory, featureEntry.name);
-    const directChildren = await readdir(featureDirectory, { withFileTypes: true });
+    const directChildren = await readdir(featureDirectory, {
+      withFileTypes: true,
+    });
 
-    for (const childEntry of directChildren.sort((left, right) => left.name.localeCompare(right.name))) {
+    for (const childEntry of directChildren.sort((left, right) =>
+      left.name.localeCompare(right.name),
+    )) {
       if (!childEntry.isFile()) {
         continue;
       }
 
       const absoluteFilePath = path.join(featureDirectory, childEntry.name);
-      const relativeFilePath = toUiRelativePath(absoluteFilePath, rootUiDirectory);
+      const relativeFilePath = toUiRelativePath(
+        absoluteFilePath,
+        rootUiDirectory,
+      );
       const record = {
         featureName: featureEntry.name,
         filePath: absoluteFilePath,
@@ -90,7 +102,10 @@ export async function scanFeatureRootFiles(
 }
 
 async function main() {
-  const report = await scanFeatureRootFiles(featureRootDir, getConfiguredAllowlist());
+  const report = await scanFeatureRootFiles(
+    featureRootDir,
+    getConfiguredAllowlist(),
+  );
   const allowlistedDebtReport = report.allowlistedDebt
     .map((entry) =>
       formatViolation(
@@ -124,8 +139,12 @@ async function main() {
         "Each ui/src/features/<feature>/ directory may contain subdirectories only, with no root-level files.",
         "New hard-fail violations:",
         violationReport,
-        staleAllowlistReport.length > 0 ? ["Stale allowlist entries:", staleAllowlistReport].join("\n\n") : "",
-        allowlistedDebtReport.length > 0 ? ["Allowlisted legacy debt:", allowlistedDebtReport].join("\n\n") : "",
+        staleAllowlistReport.length > 0
+          ? ["Stale allowlist entries:", staleAllowlistReport].join("\n\n")
+          : "",
+        allowlistedDebtReport.length > 0
+          ? ["Allowlisted legacy debt:", allowlistedDebtReport].join("\n\n")
+          : "",
       ]
         .filter(Boolean)
         .join("\n\n"),

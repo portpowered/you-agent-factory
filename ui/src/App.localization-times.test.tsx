@@ -1,14 +1,11 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-
-import {
-  dashboardWorkstationRequestFixtures,
-} from "./components/dashboard/fixtures";
+import type { DashboardTrace } from "./api/dashboard";
+import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
 import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "./components/ui/formatters";
-import type { DashboardTrace } from "./api/dashboard";
 import {
   activeSnapshot,
   registerAppDashboardTestLifecycle,
@@ -177,13 +174,15 @@ it("rerenders current-selection request history and request-detail times when th
       "en",
     );
 
-    expect(within(getCurrentSelection()).getByText("request-ready-story")).toBeTruthy();
-    expect(within(englishAttempt).getAllByText(englishRequestTime).length).toBeGreaterThan(
-      0,
-    );
-    expect(within(englishAttempt).getAllByText(englishResponseTime).length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      within(getCurrentSelection()).getByText("request-ready-story"),
+    ).toBeTruthy();
+    expect(
+      within(englishAttempt).getAllByText(englishRequestTime).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(englishAttempt).getAllByText(englishResponseTime).length,
+    ).toBeGreaterThan(0);
     openAttemptBodies(
       englishAttempt,
       "Expand request body",
@@ -219,15 +218,19 @@ it("rerenders current-selection request history and request-detail times when th
       "zh-CN",
     );
 
-    expect(within(localizedSelection).getByText("request-ready-story")).toBeTruthy();
-    expect(within(localizedAttempt).getAllByText(chineseRequestTime).length).toBeGreaterThan(
-      0,
-    );
-    expect(within(localizedAttempt).getAllByText(chineseResponseTime).length).toBeGreaterThan(
-      0,
-    );
+    expect(
+      within(localizedSelection).getByText("request-ready-story"),
+    ).toBeTruthy();
+    expect(
+      within(localizedAttempt).getAllByText(chineseRequestTime).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(localizedAttempt).getAllByText(chineseResponseTime).length,
+    ).toBeGreaterThan(0);
     expect(within(localizedAttempt).queryByText(englishRequestTime)).toBeNull();
-    expect(within(localizedAttempt).queryByText(englishResponseTime)).toBeNull();
+    expect(
+      within(localizedAttempt).queryByText(englishResponseTime),
+    ).toBeNull();
     assertAttemptPayload(
       localizedAttempt,
       "Retry the review with the latest context.",
@@ -274,9 +277,13 @@ it("shows localized fallback copy for invalid request-detail timestamps without 
     selectReviewRequest(invalidRequest.dispatch_id);
 
     const englishAttempt = expandedAttempt(1);
-    expect(within(getCurrentSelection()).getByText("request-invalid-story")).toBeTruthy();
+    expect(
+      within(getCurrentSelection()).getByText("request-invalid-story"),
+    ).toBeTruthy();
     expect(within(englishAttempt).getAllByText("Unavailable")).toHaveLength(2);
-    expect(within(englishAttempt).queryByText(" definitely-not-a-date ")).toBeNull();
+    expect(
+      within(englishAttempt).queryByText(" definitely-not-a-date "),
+    ).toBeNull();
 
     switchLocale("简体中文");
 
@@ -288,7 +295,9 @@ it("shows localized fallback copy for invalid request-detail timestamps without 
       within(getCurrentSelection()).getByRole("region", { name: "推理尝试" }),
     ).getByRole("article", { name: "推理尝试 1" });
     expect(within(localizedAttempt).getAllByText("不可用")).toHaveLength(2);
-    expect(within(localizedAttempt).queryByText(" definitely-not-a-date ")).toBeNull();
+    expect(
+      within(localizedAttempt).queryByText(" definitely-not-a-date "),
+    ).toBeNull();
   } finally {
     dateNowSpy.mockRestore();
   }

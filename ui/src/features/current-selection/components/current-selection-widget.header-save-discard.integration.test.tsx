@@ -1,9 +1,13 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, screen, within } from "@testing-library/react";
-
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import {
+  currentSelectionHeaderActionSection,
+  expandDetailCardWorkerConfiguration,
+  expandDetailCardWorkstationConfiguration,
+} from "../base/components/detail-card-save-test-helpers";
 import {
   buildDetailCardCurrentSelection,
   buildDetailCardEditableFactoryDocument,
@@ -11,11 +15,6 @@ import {
   buildDetailCardFactoryDocumentSaveHookReturn,
   DETAIL_CARD_NOW,
 } from "../base/components/detail-card-test-helpers";
-import {
-  currentSelectionHeaderActionSection,
-  expandDetailCardWorkerConfiguration,
-  expandDetailCardWorkstationConfiguration,
-} from "../base/components/detail-card-save-test-helpers";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
@@ -82,7 +81,8 @@ function assertHeaderSaveDiscardOnly({
   expect(saveButtons).toHaveLength(1);
   expect(discardButtons).toHaveLength(1);
 
-  const configurationSection = editableConfigurationSection(configurationHeading);
+  const configurationSection =
+    editableConfigurationSection(configurationHeading);
   expect(
     within(configurationSection).queryByRole("button", { name: saveLabel }),
   ).toBeNull();

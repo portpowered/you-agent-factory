@@ -1,6 +1,6 @@
-import { expandTraceWithCausalPredecessors } from "./useTrace";
-import type { DashboardTrace } from "../../../api/dashboard/types";
 import { describe, expect, it } from "vitest";
+import type { DashboardTrace } from "../../../api/dashboard/types";
+import { expandTraceWithCausalPredecessors } from "./useTrace";
 
 function buildTrace(
   traceID: string,
@@ -100,10 +100,9 @@ describe("expandTraceWithCausalPredecessors", () => {
       work_ids: ["work-a", "work-b"],
       workstation_sequence: ["Research", "Implement"],
     });
-    expect(expanded?.dispatches.map((dispatch) => dispatch.dispatch_id)).toEqual([
-      "dispatch-b",
-      "dispatch-a",
-    ]);
+    expect(
+      expanded?.dispatches.map((dispatch) => dispatch.dispatch_id),
+    ).toEqual(["dispatch-b", "dispatch-a"]);
     expect(expanded?.work_items).toBeUndefined();
   });
 

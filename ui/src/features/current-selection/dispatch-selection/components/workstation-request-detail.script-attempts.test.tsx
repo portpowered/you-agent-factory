@@ -13,8 +13,7 @@ it("renders pending script-backed workstation-request details without inference 
           args: ["--work", "work-active-story"],
           attempt: 1,
           command: "script-tool",
-          script_request_id:
-            "dispatch-review-script-pending/script-request/1",
+          script_request_id: "dispatch-review-script-pending/script-request/1",
         },
       })}
     />,
@@ -80,7 +79,9 @@ it("renders script-backed request fallbacks when projected script metadata is in
       "Script request details are not available for this workstation request.",
     ),
   ).toBeTruthy();
-  expect(requestDetails.getByText("Script attempt is not available yet.")).toBeTruthy();
+  expect(
+    requestDetails.getByText("Script attempt is not available yet."),
+  ).toBeTruthy();
   expect(
     requestDetails.getByText(
       "Script command details are not available for this workstation request.",
@@ -108,14 +109,12 @@ it("renders successful script-backed workstation-request response details", () =
           args: ["--work", "work-active-story"],
           attempt: 1,
           command: "script-tool",
-          script_request_id:
-            "dispatch-review-script-success/script-request/1",
+          script_request_id: "dispatch-review-script-success/script-request/1",
         },
         script_response: {
           duration_millis: 222,
           outcome: "SUCCEEDED",
-          script_request_id:
-            "dispatch-review-script-success/script-request/1",
+          script_request_id: "dispatch-review-script-success/script-request/1",
           stderr: "",
           stdout: "script success stdout\n",
         },
@@ -210,8 +209,7 @@ it("renders script response field fallbacks when a response is present but spars
           args: ["--work", "work-active-story"],
           attempt: 1,
           command: "script-tool",
-          script_request_id:
-            "dispatch-review-script-minimal/script-request/1",
+          script_request_id: "dispatch-review-script-minimal/script-request/1",
         },
         script_response: {
           duration_millis: undefined,

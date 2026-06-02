@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
-import { WorkItemDetailCard } from "./work-item-card";
 import {
   getSelectedWorkItemFixture,
   workstationRequest,
 } from "../../base/components/detail-card-test-helpers";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
+import { WorkItemDetailCard } from "./work-item-card";
 
 function renderWorkItemDetailCard({
   onSelectWorkID,

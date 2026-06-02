@@ -1,9 +1,7 @@
-export {
-  buildSelectedWorkRelationshipGraph,
-} from "../work-selection/public";
 export type {
+  SelectedWorkRelationshipEdge,
   SelectedWorkRelationshipGraph,
   SelectedWorkRelationshipNode,
-  SelectedWorkRelationshipEdge,
   SelectedWorkRelationshipRole,
 } from "../work-selection/public";
+export { buildSelectedWorkRelationshipGraph } from "../work-selection/public";

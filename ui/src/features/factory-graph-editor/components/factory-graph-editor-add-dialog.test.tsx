@@ -111,7 +111,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
 
     expect(screen.getByRole("combobox", { name: "Worker type" })).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Model provider" })).toBeTruthy();
+    expect(
+      screen.getByRole("combobox", { name: "Model provider" }),
+    ).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Model" })).toBeTruthy();
     expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Args" })).toBeNull();
@@ -203,7 +205,9 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       />,
     );
 
-    expect(screen.queryByRole("combobox", { name: "Model provider" })).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Model provider" }),
+    ).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Model" })).toBeNull();
     expect(screen.getByRole("textbox", { name: "Command" })).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Args" })).toBeTruthy();

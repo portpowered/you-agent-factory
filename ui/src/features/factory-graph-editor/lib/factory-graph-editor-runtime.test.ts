@@ -1,6 +1,6 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { buildFactoryGraphWorkerStatusMap } from "./factory-graph-editor-runtime";
 import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
+import { buildFactoryGraphWorkerStatusMap } from "./factory-graph-editor-runtime";
 
 const factoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",

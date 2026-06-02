@@ -12,7 +12,8 @@ it("renders markdown-authored request and response bodies inside inference attem
         inference_attempts: [
           inferenceAttempt("dispatch-review-markdown", {
             attempt: 1,
-            inference_request_id: "dispatch-review-markdown/inference-request/1",
+            inference_request_id:
+              "dispatch-review-markdown/inference-request/1",
             prompt: [
               "## Review checklist",
               "",
@@ -204,9 +205,7 @@ it("renders embedded raw html in prompts as inert text inside inference attempts
     inferenceAttempts.queryByRole("button", { name: "danger" }),
   ).toBeNull();
   expect(container.querySelector("script")).toBeNull();
-  expect(
-    inferenceAttempts.getByText(/<button>danger<\/button>/),
-  ).toBeTruthy();
+  expect(inferenceAttempts.getByText(/<button>danger<\/button>/)).toBeTruthy();
   expect(
     inferenceAttempts.getByText(/<script>alert\("xss"\)<\/script>/),
   ).toBeTruthy();

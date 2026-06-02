@@ -742,10 +742,14 @@ describe("StateNodeDetailCard editable work state configuration", () => {
 
   it("omits global unsaved helper paragraphs for dirty ready-state work state drafts", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
-    const selectedState = snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
-      (place) => place.place_id === "story:implemented",
+    const selectedState =
+      snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
+        (place) => place.place_id === "story:implemented",
+      );
+    const resolvedSelectedState = requireValue(
+      selectedState,
+      "expected implemented state fixture",
     );
-    const resolvedSelectedState = requireValue(selectedState, "expected implemented state fixture");
 
     render(
       <StateNodeDetailCard
@@ -792,8 +796,9 @@ describe("StateNodeDetailCard editable work state configuration", () => {
       ),
     ).toBeNull();
     expect(
-      screen.getAllByRole("button", { name: messages.editableConfigurationSaveAction })
-        .length,
+      screen.getAllByRole("button", {
+        name: messages.editableConfigurationSaveAction,
+      }).length,
     ).toBeGreaterThan(0);
     expect(
       screen.getByRole("button", { name: messages.discardDraftAction }),

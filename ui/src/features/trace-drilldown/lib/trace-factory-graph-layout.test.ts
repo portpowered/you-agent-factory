@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import * as factoryGraphEditorLayout from "../../factory-graph-editor/lib/factory-graph-editor-layout";
-import { buildTraceFactoryGraphLayoutPositions } from "./trace-factory-graph-layout";
 import { projectTraceDispatchesToFactoryGraph } from "./trace-dispatch-factory-graph";
+import { buildTraceFactoryGraphLayoutPositions } from "./trace-factory-graph-layout";
 import { projectTraceRelationsToFactoryGraph } from "./trace-relation-factory-graph";
 
 const EMPTY_TOPOLOGY: FactoryGraphTopology = {

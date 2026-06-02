@@ -187,7 +187,10 @@ function classifyFactorySessionFolderValidationTarget(
     case "not_runnable":
     case "target_not_found":
     case "unreadable":
-      return validationTarget.code.replace("factory.session.field.", "") as FolderValidationErrorReason;
+      return validationTarget.code.replace(
+        "factory.session.field.",
+        "",
+      ) as FolderValidationErrorReason;
     default:
       return "unknown";
   }

@@ -713,9 +713,9 @@ describe("useEditableWorkstationConfigurationState", () => {
       expect(result.current?.status).toBe("ready");
     });
 
-    expect(result.current?.status === "ready" ? result.current.isDirty : true).toBe(
-      false,
-    );
+    expect(
+      result.current?.status === "ready" ? result.current.isDirty : true,
+    ).toBe(false);
 
     act(() => {
       if (result.current?.status !== "ready") {

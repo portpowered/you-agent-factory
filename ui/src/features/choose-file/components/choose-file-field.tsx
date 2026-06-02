@@ -8,8 +8,8 @@ import {
 import { cn } from "../../../lib/cn";
 import {
   CHOOSE_FILE_FIELD_GROUP_CLASS,
-  chooseFileShellClassName,
   type ChooseFileShellClassNameOptions,
+  chooseFileShellClassName,
 } from "../lib/choose-file-shell";
 
 export interface ChooseFileFieldProps extends ChooseFileShellClassNameOptions {

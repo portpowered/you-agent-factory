@@ -1,5 +1,5 @@
-import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type { FactoryEvent } from "../../../api/events";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
 
 function factoryEvent(
   id: string,
@@ -30,7 +30,8 @@ export const scriptDashboardIntegrationFixtureIDs = {
   inferenceDurationMillis: 740,
   inferencePromptSource: "factory-renderer",
   inferenceProviderSessionID: "sess-script-dashboard-inference",
-  inferenceResponseText: "The inference-backed dashboard story is ready for the next workstation.",
+  inferenceResponseText:
+    "The inference-backed dashboard story is ready for the next workstation.",
   inferenceTraceID: "trace-script-dashboard-inference",
   inferenceWorkID: "work-script-dashboard-inference",
   inferenceWorkLabel: "Inference Story",
@@ -67,15 +68,17 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
             name: "model-reviewer",
           },
         ],
-        workTypes: [{
-          name: "story",
-          states: [
-            { name: "new", type: "INITIAL" },
-            { name: "review", type: "PROCESSING" },
-            { name: "done", type: "TERMINAL" },
-            { name: "failed", type: "FAILED" },
-          ],
-        }],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "review", type: "PROCESSING" },
+              { name: "done", type: "TERMINAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
         workstations: [reviewWorkstation],
       },
     },
@@ -86,12 +89,14 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
     FACTORY_EVENT_TYPES.workRequest,
     {
       type: "FACTORY_REQUEST_BATCH",
-      works: [{
-        name: scriptDashboardIntegrationFixtureIDs.scriptSuccessWorkLabel,
-        trace_id: scriptDashboardIntegrationFixtureIDs.scriptSuccessTraceID,
-        work_id: scriptDashboardIntegrationFixtureIDs.scriptSuccessWorkID,
-        work_type_name: "story",
-      }],
+      works: [
+        {
+          name: scriptDashboardIntegrationFixtureIDs.scriptSuccessWorkLabel,
+          trace_id: scriptDashboardIntegrationFixtureIDs.scriptSuccessTraceID,
+          work_id: scriptDashboardIntegrationFixtureIDs.scriptSuccessWorkID,
+          work_type_name: "story",
+        },
+      ],
     },
   ),
   factoryEvent(
@@ -100,12 +105,14 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
     FACTORY_EVENT_TYPES.workRequest,
     {
       type: "FACTORY_REQUEST_BATCH",
-      works: [{
-        name: scriptDashboardIntegrationFixtureIDs.failedWorkLabel,
-        trace_id: scriptDashboardIntegrationFixtureIDs.failedTraceID,
-        work_id: scriptDashboardIntegrationFixtureIDs.failedWorkID,
-        work_type_name: "story",
-      }],
+      works: [
+        {
+          name: scriptDashboardIntegrationFixtureIDs.failedWorkLabel,
+          trace_id: scriptDashboardIntegrationFixtureIDs.failedTraceID,
+          work_id: scriptDashboardIntegrationFixtureIDs.failedWorkID,
+          work_type_name: "story",
+        },
+      ],
     },
   ),
   factoryEvent(
@@ -114,12 +121,14 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
     FACTORY_EVENT_TYPES.workRequest,
     {
       type: "FACTORY_REQUEST_BATCH",
-      works: [{
-        name: scriptDashboardIntegrationFixtureIDs.inferenceWorkLabel,
-        trace_id: scriptDashboardIntegrationFixtureIDs.inferenceTraceID,
-        work_id: scriptDashboardIntegrationFixtureIDs.inferenceWorkID,
-        work_type_name: "story",
-      }],
+      works: [
+        {
+          name: scriptDashboardIntegrationFixtureIDs.inferenceWorkLabel,
+          trace_id: scriptDashboardIntegrationFixtureIDs.inferenceTraceID,
+          work_id: scriptDashboardIntegrationFixtureIDs.inferenceWorkID,
+          work_type_name: "story",
+        },
+      ],
     },
   ),
   factoryEvent(
@@ -150,7 +159,10 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
     4,
     FACTORY_EVENT_TYPES.scriptRequest,
     {
-      args: ["--work", scriptDashboardIntegrationFixtureIDs.scriptSuccessWorkID],
+      args: [
+        "--work",
+        scriptDashboardIntegrationFixtureIDs.scriptSuccessWorkID,
+      ],
       attempt: 1,
       command: "script-tool",
       dispatchId: scriptDashboardIntegrationFixtureIDs.scriptSuccessDispatchID,
@@ -316,7 +328,8 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
     {
       attempt: 1,
       dispatchId: scriptDashboardIntegrationFixtureIDs.inferenceDispatchID,
-      durationMillis: scriptDashboardIntegrationFixtureIDs.inferenceDurationMillis,
+      durationMillis:
+        scriptDashboardIntegrationFixtureIDs.inferenceDurationMillis,
       inferenceRequestId: `${scriptDashboardIntegrationFixtureIDs.inferenceDispatchID}/inference-request/1`,
       outcome: "SUCCEEDED",
       response: scriptDashboardIntegrationFixtureIDs.inferenceResponseText,
@@ -333,17 +346,20 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
           model: "gpt-5.4",
           provider: "codex",
           requestMetadata: {
-            prompt_source: scriptDashboardIntegrationFixtureIDs.inferencePromptSource,
+            prompt_source:
+              scriptDashboardIntegrationFixtureIDs.inferencePromptSource,
             source: "script-dashboard-integration-fixture",
           },
           responseMetadata: {
-            provider_session_id: scriptDashboardIntegrationFixtureIDs.inferenceProviderSessionID,
+            provider_session_id:
+              scriptDashboardIntegrationFixtureIDs.inferenceProviderSessionID,
             retry_count: "0",
           },
         },
       },
       dispatchId: scriptDashboardIntegrationFixtureIDs.inferenceDispatchID,
-      durationMillis: scriptDashboardIntegrationFixtureIDs.inferenceDurationMillis,
+      durationMillis:
+        scriptDashboardIntegrationFixtureIDs.inferenceDurationMillis,
       outcome: "ACCEPTED",
       output: scriptDashboardIntegrationFixtureIDs.inferenceResponseText,
       outputWork: [
@@ -368,14 +384,16 @@ export const scriptDashboardIntegrationTimelineEvents: FactoryEvent[] = [
   ),
 ];
 
-scriptDashboardIntegrationTimelineEvents[1].context.requestId = "request-script-dashboard-success";
+scriptDashboardIntegrationTimelineEvents[1].context.requestId =
+  "request-script-dashboard-success";
 scriptDashboardIntegrationTimelineEvents[1].context.traceIds = [
   scriptDashboardIntegrationFixtureIDs.scriptSuccessTraceID,
 ];
 scriptDashboardIntegrationTimelineEvents[1].context.workIds = [
   scriptDashboardIntegrationFixtureIDs.scriptSuccessWorkID,
 ];
-scriptDashboardIntegrationTimelineEvents[2].context.requestId = "request-script-dashboard-failed";
+scriptDashboardIntegrationTimelineEvents[2].context.requestId =
+  "request-script-dashboard-failed";
 scriptDashboardIntegrationTimelineEvents[2].context.traceIds = [
   scriptDashboardIntegrationFixtureIDs.failedTraceID,
 ];

@@ -2,6 +2,7 @@ import type { DashboardSnapshot } from "../../api/dashboard/types";
 import type { WorkstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
 import { workstationIconMetadata } from "../../features/flowchart/lib/workstation-icon-metadata";
 import { buildFactoryTimelineSnapshot } from "../../features/timeline/state/factoryTimelineStore";
+import { resourceCountTimelineEvents } from "./fixtures/resource-count-events";
 import {
   activeWorkRuntimeOverlay,
   activeWorkWithMultimodalPayloadRuntimeOverlay,
@@ -12,7 +13,6 @@ import {
   rejectedOutcomeRuntimeOverlay,
   retryAttemptRuntimeOverlay,
 } from "./fixtures/runtime";
-import { resourceCountTimelineEvents } from "./fixtures/resource-count-events";
 import {
   mediumBranchingDashboardTopology,
   oneNodeDashboardTopology,
@@ -78,13 +78,16 @@ export const workstationKindParityExpectations: WorkstationKindParityExpectation
     };
   });
 
-export const twentyNodeDashboardSnapshot: DashboardSnapshot = buildDashboardSnapshotFixture(
-  twentyNodeTopologyFixture,
-  [activeWorkRuntimeOverlay, failedOutcomeRuntimeOverlay],
-);
+export const twentyNodeDashboardSnapshot: DashboardSnapshot =
+  buildDashboardSnapshotFixture(twentyNodeTopologyFixture, [
+    activeWorkRuntimeOverlay,
+    failedOutcomeRuntimeOverlay,
+  ]);
 
 export const twentyNodeDashboardTopology = twentyNodeDashboardSnapshot.topology;
 
-export function resourceOccupancySnapshotForTick(tick: number): DashboardSnapshot {
+export function resourceOccupancySnapshotForTick(
+  tick: number,
+): DashboardSnapshot {
   return buildFactoryTimelineSnapshot(resourceCountTimelineEvents, tick);
 }

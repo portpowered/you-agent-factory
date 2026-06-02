@@ -7,9 +7,9 @@ import {
   multimodalSelectedWorkPayloadOverrides,
   withMultimodalSelectedWorkPayload,
 } from "../base/components/detail-card-test-helpers";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import type { DashboardSelection } from "../state/selection-types";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { renderWithQueryClient } from "./current-selection-widget-test-utils";
 
@@ -65,7 +65,9 @@ function buildCurrentSelection(
 function buildMultimodalWorkItemSelection(): {
   executionDetails: ReturnType<typeof selectWorkItemExecutionDetails>;
   providerSessions: NonNullable<
-    ReturnType<typeof getSelectedWorkItemFixture>["snapshot"]["runtime"]["session"]["provider_sessions"]
+    ReturnType<
+      typeof getSelectedWorkItemFixture
+    >["snapshot"]["runtime"]["session"]["provider_sessions"]
   >;
   selectedNode: ReturnType<typeof getSelectedWorkItemFixture>["selectedNode"];
   selectedWorkRequestHistory: ReturnType<
@@ -158,12 +160,15 @@ describe("CurrentSelectionWidget work contents", () => {
 
     expect(
       within(workContents).getByText(
-        MULTIMODAL_SELECTED_WORK_PAYLOAD_CONTENT.find((part) => part.type === "text")
-          ?.text ?? "",
+        MULTIMODAL_SELECTED_WORK_PAYLOAD_CONTENT.find(
+          (part) => part.type === "text",
+        )?.text ?? "",
       ),
     ).toBeTruthy();
     expect(within(workContents).getByText(/"priority": 1/)).toBeTruthy();
-    expect(within(workContents).getByText("Image: screenshot.png")).toBeTruthy();
+    expect(
+      within(workContents).getByText("Image: screenshot.png"),
+    ).toBeTruthy();
     expect(workItem).toMatchObject(multimodalSelectedWorkPayloadOverrides());
   });
 });

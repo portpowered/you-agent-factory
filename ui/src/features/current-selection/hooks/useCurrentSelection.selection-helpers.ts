@@ -25,14 +25,14 @@ import type {
   TerminalWorkDetail,
 } from "../state/selection-types";
 import {
+  type DispatchWorkstationRequest,
   requestDispatchID,
   requestStartedAt,
   requestTransitionID,
-  requestWorkstationNodeID,
-  requestWorkstationName,
   requestWorkItems,
+  requestWorkstationName,
+  requestWorkstationNodeID,
   sortWorkstationRequests,
-  type DispatchWorkstationRequest,
 } from "./useCurrentSelection.request-helpers";
 
 export function buildTerminalWorkItems(
@@ -50,16 +50,21 @@ export function buildTerminalWorkItems(
     const matchingAttempts =
       attempts?.filter((attempt) =>
         attempt.work_items?.some(
-          (workItem) => workItem.display_name === label || workItem.work_id === label,
+          (workItem) =>
+            workItem.display_name === label || workItem.work_id === label,
         ),
       ) ?? [];
     const latestAttempt = matchingAttempts[matchingAttempts.length - 1];
     const matchedWorkItem = matchingAttempts
       .flatMap((attempt) => attempt.work_items ?? [])
-      .find((workItem) => workItem.display_name === label || workItem.work_id === label);
+      .find(
+        (workItem) =>
+          workItem.display_name === label || workItem.work_id === label,
+      );
     const matchingRequests = requests.filter((request) =>
       requestWorkItems(request).some(
-        (workItem) => workItem.display_name === label || workItem.work_id === label,
+        (workItem) =>
+          workItem.display_name === label || workItem.work_id === label,
       ),
     );
     const latestRequest = matchingRequests[0];
@@ -67,7 +72,9 @@ export function buildTerminalWorkItems(
       (detail) =>
         detail.work_item.display_name === label ||
         detail.work_item.work_id === label ||
-        (matchedWorkItem ? detail.work_item.work_id === matchedWorkItem.work_id : false),
+        (matchedWorkItem
+          ? detail.work_item.work_id === matchedWorkItem.work_id
+          : false),
     );
 
     return {
@@ -76,10 +83,15 @@ export function buildTerminalWorkItems(
         matchedFailureDetail?.dispatch_id ??
         (latestRequest ? requestDispatchID(latestRequest) : undefined) ??
         latestAttempt?.dispatch_id,
-      failureMessage: matchedFailureDetail?.failure_message ?? latestAttempt?.failure_message,
-      failureReason: matchedFailureDetail?.failure_reason ?? latestAttempt?.failure_reason,
+      failureMessage:
+        matchedFailureDetail?.failure_message ?? latestAttempt?.failure_message,
+      failureReason:
+        matchedFailureDetail?.failure_reason ?? latestAttempt?.failure_reason,
       label,
-      traceWorkID: matchedWorkItem?.work_id ?? matchedFailureDetail?.work_item.work_id ?? label,
+      traceWorkID:
+        matchedWorkItem?.work_id ??
+        matchedFailureDetail?.work_item.work_id ??
+        label,
       workItem: matchedWorkItem ?? matchedFailureDetail?.work_item,
       workstationName: terminalWorkstationName(
         matchedFailureDetail,
@@ -105,7 +117,10 @@ function terminalWorkstationName(
   );
 }
 
-export function findStatePlace(snapshot: DashboardSnapshot, placeId: string): DashboardPlaceRef | null {
+export function findStatePlace(
+  snapshot: DashboardSnapshot,
+  placeId: string,
+): DashboardPlaceRef | null {
   return findDashboardStatePlace(snapshot, placeId);
 }
 
@@ -130,7 +145,8 @@ export function terminalHistoryItemsForPlace(
 ): StatePositionWorkItem[] {
   return snapshot && placeId
     ? enrichStatePositionWorkItems(
-        snapshot.runtime.place_occupancy_work_items_by_place_id?.[placeId] ?? [],
+        snapshot.runtime.place_occupancy_work_items_by_place_id?.[placeId] ??
+          [],
         snapshot,
         workstationRequestsByDispatchID,
       )
@@ -184,7 +200,9 @@ export function activeExecutionsForSelectedWorkstation(
     return [];
   }
 
-  return Object.values(snapshot.runtime.active_executions_by_dispatch_id ?? {}).filter(
+  return Object.values(
+    snapshot.runtime.active_executions_by_dispatch_id ?? {},
+  ).filter(
     (execution) =>
       execution.workstation_node_id === selectedNode.node_id ||
       execution.transition_id === selectedNode.transition_id ||
@@ -211,11 +229,10 @@ export function resolveWorkItemSelectionByWorkID({
     return null;
   }
 
-  const failedDetail = snapshot.runtime.session.failed_work_details_by_work_id?.[workID];
+  const failedDetail =
+    snapshot.runtime.session.failed_work_details_by_work_id?.[workID];
   const preferredFailureDispatchID =
-    dispatchID ??
-    terminalWorkDetail?.dispatchID ??
-    failedDetail?.dispatch_id;
+    dispatchID ?? terminalWorkDetail?.dispatchID ?? failedDetail?.dispatch_id;
   const preferredSelection = resolvePreferredWorkItemSelection({
     failedDetail,
     nodeID,
@@ -230,11 +247,19 @@ export function resolveWorkItemSelectionByWorkID({
   }
 
   const workstationRequest = Object.values(
-    workstationRequestsByDispatchID ?? snapshot.runtime.workstation_requests_by_dispatch_id ?? {},
-  ).find((request) => requestWorkItems(request).some((item) => item.work_id === workID));
+    workstationRequestsByDispatchID ??
+      snapshot.runtime.workstation_requests_by_dispatch_id ??
+      {},
+  ).find((request) =>
+    requestWorkItems(request).some((item) => item.work_id === workID),
+  );
 
-  for (const execution of Object.values(snapshot.runtime.active_executions_by_dispatch_id ?? {})) {
-    const matchedWorkItem = execution.work_items?.find((candidate) => candidate.work_id === workID);
+  for (const execution of Object.values(
+    snapshot.runtime.active_executions_by_dispatch_id ?? {},
+  )) {
+    const matchedWorkItem = execution.work_items?.find(
+      (candidate) => candidate.work_id === workID,
+    );
     if (matchedWorkItem) {
       return {
         dispatchId: execution.dispatch_id,
@@ -249,7 +274,8 @@ export function resolveWorkItemSelectionByWorkID({
   const fallbackWorkItem =
     findWorkItemReference(snapshot, workID) ??
     terminalWorkDetail?.workItem ??
-    snapshot.runtime.session.failed_work_details_by_work_id?.[workID]?.work_item;
+    snapshot.runtime.session.failed_work_details_by_work_id?.[workID]
+      ?.work_item;
   if (!fallbackWorkItem) {
     return null;
   }
@@ -263,11 +289,12 @@ export function resolveWorkItemSelectionByWorkID({
     };
   }
 
-  const providerAttempt = snapshot.runtime.session.provider_sessions?.find((attempt) =>
-    attempt.work_items?.some((item) => item.work_id === workID),
+  const providerAttempt = snapshot.runtime.session.provider_sessions?.find(
+    (attempt) => attempt.work_items?.some((item) => item.work_id === workID),
   );
   const providerNodeID =
-    providerAttempt?.transition_id && snapshot.topology.workstation_nodes_by_id[providerAttempt.transition_id]
+    providerAttempt?.transition_id &&
+    snapshot.topology.workstation_nodes_by_id[providerAttempt.transition_id]
       ? providerAttempt.transition_id
       : Object.values(snapshot.topology.workstation_nodes_by_id).find(
           (node) => node.workstation_name === providerAttempt?.workstation_name,
@@ -277,13 +304,16 @@ export function resolveWorkItemSelectionByWorkID({
       dispatchId: providerAttempt.dispatch_id,
       kind: "work-item",
       nodeId: providerNodeID,
-      workItem: providerAttempt.work_items?.find((item) => item.work_id === workID) ?? fallbackWorkItem,
+      workItem:
+        providerAttempt.work_items?.find((item) => item.work_id === workID) ??
+        fallbackWorkItem,
     };
   }
 
   if (failedDetail) {
     const failedNodeID =
-      snapshot.topology.workstation_nodes_by_id[failedDetail.transition_id]?.node_id ??
+      snapshot.topology.workstation_nodes_by_id[failedDetail.transition_id]
+        ?.node_id ??
       Object.values(snapshot.topology.workstation_nodes_by_id).find(
         (node) => node.workstation_name === failedDetail.workstation_name,
       )?.node_id;
@@ -339,7 +369,9 @@ function resolvePreferredWorkItemSelection({
   }
 
   const preferredExecution =
-    snapshot.runtime.active_executions_by_dispatch_id?.[preferredFailureDispatchID];
+    snapshot.runtime.active_executions_by_dispatch_id?.[
+      preferredFailureDispatchID
+    ];
   if (
     preferredExecution &&
     (!nodeID || preferredExecution.workstation_node_id === nodeID)
@@ -348,7 +380,9 @@ function resolvePreferredWorkItemSelection({
       (candidate) => candidate.work_id === workID,
     );
     const resolvedWorkItem =
-      matchedWorkItem ?? failedDetail?.work_item ?? terminalWorkDetail?.workItem;
+      matchedWorkItem ??
+      failedDetail?.work_item ??
+      terminalWorkDetail?.workItem;
     if (!resolvedWorkItem) {
       return null;
     }
@@ -361,10 +395,10 @@ function resolvePreferredWorkItemSelection({
     };
   }
 
-  const preferredRequest = (
-    workstationRequestsByDispatchID ??
-    snapshot.runtime.workstation_requests_by_dispatch_id
-  )?.[preferredFailureDispatchID];
+  const preferredRequest = (workstationRequestsByDispatchID ??
+    snapshot.runtime.workstation_requests_by_dispatch_id)?.[
+    preferredFailureDispatchID
+  ];
   if (preferredRequest) {
     return selectionFromWorkstationRequest(
       preferredRequest,
@@ -386,8 +420,9 @@ function selectionFromWorkstationRequest(
   fallbackWorkItem: DashboardWorkItemRef | undefined,
 ): DashboardSelection | null {
   const resolvedWorkItem =
-    requestWorkItems(request).find((candidate) => candidate.work_id === workID) ??
-    fallbackWorkItem;
+    requestWorkItems(request).find(
+      (candidate) => candidate.work_id === workID,
+    ) ?? fallbackWorkItem;
   if (!resolvedWorkItem) {
     return null;
   }
@@ -404,7 +439,8 @@ function selectionFromFailedDetail(
   failedDetail: DashboardFailedWorkDetail,
 ): DashboardSelection | null {
   const failedNodeID =
-    snapshot.topology.workstation_nodes_by_id[failedDetail.transition_id]?.node_id ??
+    snapshot.topology.workstation_nodes_by_id[failedDetail.transition_id]
+      ?.node_id ??
     Object.values(snapshot.topology.workstation_nodes_by_id).find(
       (node) => node.workstation_name === failedDetail.workstation_name,
     )?.node_id;
@@ -424,7 +460,9 @@ export function placeNodeID(
   snapshot: DashboardSnapshot | null | undefined,
   place: DashboardPlaceRef,
 ): string | undefined {
-  return snapshot ? findWorkstationNodeIDForPlace(snapshot, place.place_id) : undefined;
+  return snapshot
+    ? findWorkstationNodeIDForPlace(snapshot, place.place_id)
+    : undefined;
 }
 
 export function inferStateWorkTerminalStatus(
@@ -436,16 +474,26 @@ export function inferStateWorkTerminalStatus(
     return null;
   }
 
-  if (snapshot.runtime.session.failed_work_details_by_work_id?.[workItem.work_id]) {
+  if (
+    snapshot.runtime.session.failed_work_details_by_work_id?.[workItem.work_id]
+  ) {
     return "failed";
   }
 
   const displayLabel = workItem.display_name?.trim() || workItem.work_id;
   const labels = [workItem.work_id, displayLabel];
-  if (labels.some((label) => (snapshot.runtime.session.failed_work_labels ?? []).includes(label))) {
+  if (
+    labels.some((label) =>
+      (snapshot.runtime.session.failed_work_labels ?? []).includes(label),
+    )
+  ) {
     return "failed";
   }
-  if (labels.some((label) => (snapshot.runtime.session.completed_work_labels ?? []).includes(label))) {
+  if (
+    labels.some((label) =>
+      (snapshot.runtime.session.completed_work_labels ?? []).includes(label),
+    )
+  ) {
     return "completed";
   }
   if (place.state_category === "FAILED") {
@@ -462,21 +510,29 @@ export function findTerminalWorkItem(
   workItem: DashboardWorkItemRef,
 ): TerminalWorkItem | undefined {
   const workLabel = workItem.display_name?.trim() || workItem.work_id;
-  return items.find((item) => (
-    item.traceWorkID === workItem.work_id ||
-    item.workItem?.work_id === workItem.work_id ||
-    item.label === workLabel
-  ));
+  return items.find(
+    (item) =>
+      item.traceWorkID === workItem.work_id ||
+      item.workItem?.work_id === workItem.work_id ||
+      item.label === workLabel,
+  );
 }
 
-function findTrackedWorkNodeID(snapshot: DashboardSnapshot, workID: string): string | undefined {
-  for (const [placeID, workItems] of Object.entries(snapshot.runtime.current_work_items_by_place_id ?? {})) {
+function findTrackedWorkNodeID(
+  snapshot: DashboardSnapshot,
+  workID: string,
+): string | undefined {
+  for (const [placeID, workItems] of Object.entries(
+    snapshot.runtime.current_work_items_by_place_id ?? {},
+  )) {
     if (workItems.some((workItem) => workItem.work_id === workID)) {
       return findWorkstationNodeIDForPlace(snapshot, placeID);
     }
   }
 
-  for (const [placeID, workItems] of Object.entries(snapshot.runtime.place_occupancy_work_items_by_place_id ?? {})) {
+  for (const [placeID, workItems] of Object.entries(
+    snapshot.runtime.place_occupancy_work_items_by_place_id ?? {},
+  )) {
     if (workItems.some((workItem) => workItem.work_id === workID)) {
       return findWorkstationNodeIDForPlace(snapshot, placeID);
     }

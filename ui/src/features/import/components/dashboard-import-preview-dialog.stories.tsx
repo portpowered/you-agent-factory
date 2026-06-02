@@ -1,12 +1,11 @@
 import { useState } from "react";
 
 import { expect, userEvent, within } from "storybook/test";
-
+import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 import {
   DashboardImportPreviewDialog,
   type DashboardImportPreviewDialogProps,
 } from "./dashboard-import-preview-dialog";
-import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 
 function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["importPreviewState"] {
   return {
@@ -27,11 +26,12 @@ function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["imp
 }
 
 function ImportPreviewStory() {
-  const [activationStatus, setActivationStatus] = useState("No factory activated yet.");
-  const [importPreviewState, setImportPreviewState] =
-    useState<DashboardImportPreviewDialogProps["importPreviewState"]>(
-      createReadyImportPreviewState(),
-    );
+  const [activationStatus, setActivationStatus] = useState(
+    "No factory activated yet.",
+  );
+  const [importPreviewState, setImportPreviewState] = useState<
+    DashboardImportPreviewDialogProps["importPreviewState"]
+  >(createReadyImportPreviewState());
 
   return (
     <>
@@ -81,17 +81,27 @@ export const Ready = {
     const messages = getImportPreviewDialogMessages("en");
     const dialog = await page.findByRole("dialog", { name: messages.title });
     const scope = within(dialog);
-    const cancelButton = scope.getByRole("button", { name: messages.cancelAction });
-    const activateButton = scope.getByRole("button", { name: messages.activateAction });
-    const closeButton = scope.getByRole("button", { name: messages.closeLabel });
+    const cancelButton = scope.getByRole("button", {
+      name: messages.cancelAction,
+    });
+    const activateButton = scope.getByRole("button", {
+      name: messages.activateAction,
+    });
+    const closeButton = scope.getByRole("button", {
+      name: messages.closeLabel,
+    });
 
     await expect(
-      scope.getByRole("img", { name: messages.previewImageAlt("Dropped Factory") }),
+      scope.getByRole("img", {
+        name: messages.previewImageAlt("Dropped Factory"),
+      }),
     ).toBeVisible();
     await expect(scope.getByText("factory-import.png")).toBeVisible();
     await expect(scope.getByText(messages.hint)).toBeVisible();
     await expect(
-      scope.getByRole("radio", { name: new RegExp(messages.replaceCurrentOption) }),
+      scope.getByRole("radio", {
+        name: new RegExp(messages.replaceCurrentOption),
+      }),
     ).toBeChecked();
 
     cancelButton.focus();
@@ -112,7 +122,9 @@ export const LocalizedZhCn = {
     const scope = within(dialog);
 
     await expect(
-      scope.getByRole("img", { name: messages.previewImageAlt("Dropped Factory") }),
+      scope.getByRole("img", {
+        name: messages.previewImageAlt("Dropped Factory"),
+      }),
     ).toBeVisible();
     await expect(scope.getByText("factory-import.png")).toBeVisible();
     await expect(scope.getByText(messages.hint)).toBeVisible();

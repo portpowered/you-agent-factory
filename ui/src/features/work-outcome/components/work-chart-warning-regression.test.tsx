@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
-import type { WorkChartModel } from "../lib/trends";
 import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
+import type { WorkChartModel } from "../lib/trends";
+import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const restoreBrowserShims = installDashboardBrowserTestShims();
 
@@ -106,7 +106,8 @@ const chartSeries: readonly WorkChartSeriesDefinition[] = [
   },
 ];
 
-const chartSizingWarning = "The width(-1) and height(-1) of chart should be greater than 0";
+const chartSizingWarning =
+  "The width(-1) and height(-1) of chart should be greater than 0";
 
 afterAll(() => {
   restoreBrowserShims();
@@ -153,7 +154,9 @@ describe("WorkChart warning regression", () => {
         }),
       );
 
-      expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+      expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+        "10,20,40",
+      );
       for (const call of [...warnSpy.mock.calls, ...errorSpy.mock.calls]) {
         expect(call.join(" ")).not.toContain(chartSizingWarning);
       }

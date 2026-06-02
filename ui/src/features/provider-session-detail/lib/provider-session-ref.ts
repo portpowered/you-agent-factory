@@ -1,7 +1,7 @@
 import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
 import {
-  toProviderSessionDetailRef,
   type ProviderSessionDetailRef,
+  toProviderSessionDetailRef,
 } from "../../../api/provider-session-details";
 
 export interface LoadableProviderSessionRef extends ProviderSessionDetailRef {
@@ -9,7 +9,10 @@ export interface LoadableProviderSessionRef extends ProviderSessionDetailRef {
 }
 
 export function getLoadableProviderSessionRef(
-  attempt: Pick<DashboardProviderSessionAttempt, "dispatch_id" | "provider_session">,
+  attempt: Pick<
+    DashboardProviderSessionAttempt,
+    "dispatch_id" | "provider_session"
+  >,
 ): LoadableProviderSessionRef | null {
   const request = toProviderSessionDetailRef({
     id: attempt.provider_session?.id,
@@ -27,7 +30,10 @@ export function getLoadableProviderSessionRef(
 }
 
 export function providerSessionSelectionKey(
-  session: Pick<LoadableProviderSessionRef, "dispatchID" | "id" | "kind" | "provider">,
+  session: Pick<
+    LoadableProviderSessionRef,
+    "dispatchID" | "id" | "kind" | "provider"
+  >,
 ): string {
   return `${session.dispatchID}:${session.provider}:${session.kind}:${session.id}`;
 }

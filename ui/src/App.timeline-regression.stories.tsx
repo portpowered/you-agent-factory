@@ -12,8 +12,8 @@ import { DashboardHeader } from "./features/header/public";
 import { WorkTotalsWidget } from "./features/work-totals/public";
 import {
   activeStoryTrace,
-  expectCompactedTopDashboardSection,
   currentSelectionCard,
+  expectCompactedTopDashboardSection,
   expectCurrentSelectionCardID,
   expectNoPageHorizontalOverflow,
   expectTimelineToolbarAlignment,
@@ -148,7 +148,9 @@ export const HeaderActionButtonsVerification = {
       );
       await expect(sessionButton).toHaveAttribute("aria-haspopup", "dialog");
       expect(
-        within(toolbar).queryByRole("button", { name: "Return to current tick" }),
+        within(toolbar).queryByRole("button", {
+          name: "Return to current tick",
+        }),
       ).toBeNull();
 
       const slider = await canvas.findByRole<HTMLInputElement>("slider", {

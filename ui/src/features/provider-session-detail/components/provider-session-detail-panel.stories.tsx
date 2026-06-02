@@ -117,11 +117,11 @@ export const MixedTranscript = {
                 eventCount: 6,
                 functionCalls: [
                   {
-                    arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+                    arguments: '{"path":"pkg/api/provider_session_details.go"}',
                     callId: "call_1",
                     name: "read_file",
                     order: 4,
-                    output: "{\"lines\":128}",
+                    output: '{"lines":128}',
                     status: "completed",
                     turnIndex: 1,
                     type: "function_call",
@@ -208,7 +208,7 @@ export const MixedTranscript = {
                   type: "reasoning",
                 },
                 {
-                  arguments: "{\"path\":\"pkg/api/provider_session_details.go\"}",
+                  arguments: '{"path":"pkg/api/provider_session_details.go"}',
                   callId: "call_1",
                   lineNumber: 4,
                   name: "read_file",
@@ -280,10 +280,14 @@ export const MixedTranscript = {
     }
 
     expect(
-      canvas.getAllByText("{\"path\":\"pkg/api/provider_session_details.go\"}"),
+      canvas.getAllByText('{"path":"pkg/api/provider_session_details.go"}'),
     ).toHaveLength(1);
-    expect(canvas.getAllByText("Inspect the parser branch before retrying.")).toHaveLength(1);
-    expect(canvas.getAllByText("Encrypted reasoning").length).toBeGreaterThan(0);
+    expect(
+      canvas.getAllByText("Inspect the parser branch before retrying."),
+    ).toHaveLength(1);
+    expect(canvas.getAllByText("Encrypted reasoning").length).toBeGreaterThan(
+      0,
+    );
     const panel = canvas.getByLabelText("Selected session details");
     expect(panel.className).toContain("af-provider-session-sans");
 

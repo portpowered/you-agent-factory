@@ -2,12 +2,15 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
-import { DETAIL_CARD_NOW, inferenceAttempt } from "../../base/components/detail-card-test-helpers";
+import {
+  DETAIL_CARD_NOW,
+  inferenceAttempt,
+} from "../../base/components/detail-card-test-helpers";
+import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 import {
   ExecutionDetailsSection,
   InferenceAttemptsSection,
 } from "./execution-details";
-import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 
 describe("ExecutionDetailsSection", () => {
   it("renders available execution details with trace actions and workstation request projection guidance", () => {
@@ -62,7 +65,9 @@ describe("ExecutionDetailsSection", () => {
     expect(
       within(section).getByRole("link", { name: "Open trace" }),
     ).toBeTruthy();
-    const traceIdValue = within(section).getByText("trace-alpha (selected)").closest("dd");
+    const traceIdValue = within(section)
+      .getByText("trace-alpha (selected)")
+      .closest("dd");
     if (!traceIdValue) {
       throw new Error("Expected trace ID list container.");
     }
@@ -79,8 +84,12 @@ describe("ExecutionDetailsSection", () => {
     expect(within(workstationRequest).getAllByText("1")).toHaveLength(2);
     expect(within(workstationRequest).getByText("Failed")).toBeTruthy();
     expect(within(workstationRequest).getByText("640ms")).toBeTruthy();
-    expect(within(workstationRequest).getByText(expectedStartedAt)).toBeTruthy();
-    expect(within(workstationRequest).queryByText("2026-04-08T12:00:00Z")).toBeNull();
+    expect(
+      within(workstationRequest).getByText(expectedStartedAt),
+    ).toBeTruthy();
+    expect(
+      within(workstationRequest).queryByText("2026-04-08T12:00:00Z"),
+    ).toBeNull();
     expect(
       within(workstationRequest).getByText("provider_timeout"),
     ).toBeTruthy();
@@ -181,9 +190,7 @@ describe("ExecutionDetailsSection", () => {
     expect(within(section).getByText("分派 ID")).toBeTruthy();
     expect(within(section).getByText("工作站")).toBeTruthy();
     expect(
-      within(section).getByText(
-        "当前所选运行暂时没有工作站详情。",
-      ),
+      within(section).getByText("当前所选运行暂时没有工作站详情。"),
     ).toBeTruthy();
     expect(
       within(section).getByText(
@@ -197,9 +204,7 @@ describe("ExecutionDetailsSection", () => {
       within(section).getByRole("link", { name: "打开追踪" }),
     ).toBeTruthy();
     expect(
-      within(section).getByText(
-        "当前所选工作项暂时没有推理事件。",
-      ),
+      within(section).getByText("当前所选工作项暂时没有推理事件。"),
     ).toBeTruthy();
   });
 });
@@ -300,7 +305,9 @@ describe("InferenceAttemptsSection", () => {
     fireEvent.click(expandAttempt2);
 
     expect(expandAttempt2.getAttribute("aria-expanded")).toBe("true");
-    expect(within(section).getByText("dispatch-review/inference-request/2")).toBeTruthy();
+    expect(
+      within(section).getByText("dispatch-review/inference-request/2"),
+    ).toBeTruthy();
     expect(within(section).queryByText("Retry the story.")).toBeNull();
     expect(within(section).queryByText("Needs more evidence.")).toBeNull();
     expect(

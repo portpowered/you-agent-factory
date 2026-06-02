@@ -23,7 +23,9 @@ describe("WorkstationDetailCard lifecycle separation", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
     const workstationRequests: DashboardWorkstationRequest[] = [
       {
         dispatch_id: "dispatch-review-active",
@@ -83,7 +85,9 @@ describe("WorkstationDetailCard lifecycle separation", () => {
     const summaryHeading = screen.getByRole("heading", {
       name: "Workstation summary",
     });
-    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
+    const activeWorkHeading = screen.getByRole("heading", {
+      name: "Active work",
+    });
     const requestHistoryHeading = screen.getByRole("heading", {
       name: "Request history",
     });
@@ -101,7 +105,9 @@ describe("WorkstationDetailCard lifecycle separation", () => {
 
     expect(within(activeWorkSection).getByText("Active Story")).toBeTruthy();
     expect(
-      within(activeWorkSection).queryByText("No active work is running on this workstation."),
+      within(activeWorkSection).queryByText(
+        "No active work is running on this workstation.",
+      ),
     ).toBeNull();
     expect(within(activeWorkSection).queryByText("Rejected Story")).toBeNull();
 
@@ -109,10 +115,18 @@ describe("WorkstationDetailCard lifecycle separation", () => {
       within(requestHistorySection).getByRole("button", { name: "Expand" }),
     );
 
-    expect(within(requestHistorySection).getByText("Rejected Story")).toBeTruthy();
-    expect(within(requestHistorySection).queryByText("Input work types")).toBeNull();
-    expect(within(requestHistorySection).queryByText("Output work types")).toBeNull();
+    expect(
+      within(requestHistorySection).getByText("Rejected Story"),
+    ).toBeTruthy();
+    expect(
+      within(requestHistorySection).queryByText("Input work types"),
+    ).toBeNull();
+    expect(
+      within(requestHistorySection).queryByText("Output work types"),
+    ).toBeNull();
     expect(within(requestHistorySection).queryByText("Active runs")).toBeNull();
-    expect(within(requestHistorySection).queryByText("Historical requests")).toBeNull();
+    expect(
+      within(requestHistorySection).queryByText("Historical requests"),
+    ).toBeNull();
   });
 });

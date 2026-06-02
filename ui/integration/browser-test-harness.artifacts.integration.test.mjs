@@ -9,7 +9,8 @@ import { browserArtifactDirectory } from "./browser-test-harness.mjs";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
-const originalArtifactDirectory = process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR;
+const originalArtifactDirectory =
+  process.env.AGENT_FACTORY_BROWSER_ARTIFACT_DIR;
 
 afterEach(() => {
   if (originalArtifactDirectory === undefined) {

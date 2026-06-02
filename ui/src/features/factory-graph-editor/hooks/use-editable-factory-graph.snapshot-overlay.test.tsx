@@ -1,11 +1,11 @@
 import { act } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
   renderEditableFactoryGraphHook,
   setupEditableFactoryGraphSaveTestEnvironment,
 } from "../../../testing/editable-factory-graph-hook-test-helpers";
+import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 
 const sharedWorkType = {
   name: "story",

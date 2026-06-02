@@ -1,11 +1,11 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
+import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "./current-activity-factory-graph-layout";
-import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import {
   buildEditorHandles,
   resolveWorkstationConnectionAnchorContext,
@@ -181,9 +181,15 @@ it("does not attach progress-outcome validation to hidden logical-move anchors",
     validationProjection,
   });
 
-  expect(handles.find((handle) => handle.id === "workstation-on-failure-source")).toBeUndefined();
-  expect(handles.find((handle) => handle.id === "workstation-on-rejection-source")).toBeUndefined();
-  expect(handles.find((handle) => handle.id === "workstation-on-continue-source")).toBeUndefined();
+  expect(
+    handles.find((handle) => handle.id === "workstation-on-failure-source"),
+  ).toBeUndefined();
+  expect(
+    handles.find((handle) => handle.id === "workstation-on-rejection-source"),
+  ).toBeUndefined();
+  expect(
+    handles.find((handle) => handle.id === "workstation-on-continue-source"),
+  ).toBeUndefined();
 });
 
 it("omits worker-assignment-target on LOGICAL_MOVE workstations", () => {
@@ -284,8 +290,9 @@ it("resolves assigned worker stop tokens from factory definitions", () => {
 });
 
 it("builds current-activity workstation nodes without worker-assignment handles on logical-move stations", async () => {
-  const graphLayout =
-    await buildCurrentActivityGraphLayoutFromFactory(factoryWithLogicalMove);
+  const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(
+    factoryWithLogicalMove,
+  );
   const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
   const workstations = (factoryWithLogicalMove.workstations ?? []).map(
     dashboardWorkstationFromFactory,

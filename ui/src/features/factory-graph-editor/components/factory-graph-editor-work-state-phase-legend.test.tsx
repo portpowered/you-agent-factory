@@ -7,9 +7,9 @@ describe("FactoryGraphEditorWorkStatePhaseLegend", () => {
     render(<FactoryGraphEditorWorkStatePhaseLegend visible={true} />);
 
     const legend = screen.getByLabelText("Work state lifecycle colors");
-    expect(legend.getAttribute("data-factory-graph-work-state-phase-legend")).toBe(
-      "",
-    );
+    expect(
+      legend.getAttribute("data-factory-graph-work-state-phase-legend"),
+    ).toBe("");
     expect(screen.getByText("Initial")).toBeTruthy();
     expect(screen.getByText("Processing")).toBeTruthy();
     expect(screen.getByText("Completed")).toBeTruthy();
@@ -26,8 +26,6 @@ describe("FactoryGraphEditorWorkStatePhaseLegend", () => {
   it("hides the legend when not visible", () => {
     render(<FactoryGraphEditorWorkStatePhaseLegend visible={false} />);
 
-    expect(
-      screen.queryByLabelText("Work state lifecycle colors"),
-    ).toBeNull();
+    expect(screen.queryByLabelText("Work state lifecycle colors")).toBeNull();
   });
 });

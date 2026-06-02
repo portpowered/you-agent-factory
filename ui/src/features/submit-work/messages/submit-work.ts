@@ -62,7 +62,8 @@ export type SubmitWorkItemTypeLabelKey =
 const submitWorkMessagesByLocale = {
   en: {
     addItemAction: "Add input",
-    addItemMenuDescription: "Choose the next item to append to this submission.",
+    addItemMenuDescription:
+      "Choose the next item to append to this submission.",
     addItemMenuLabel: "Add input menu",
     addItemOptionLabel: (type) =>
       ({
@@ -101,11 +102,9 @@ const submitWorkMessagesByLocale = {
     textItemTypeLabel: "Text",
     workTypeLabel: "Work type",
     statusMessages: {
-      emptyGuidance:
-        "Choose a work type and enter a request name to continue.",
+      emptyGuidance: "Choose a work type and enter a request name to continue.",
       errorFallback: "We couldn't submit your request. Try again in a moment.",
-      fileItemsNeedAttention:
-        "Stage each file-backed item before submitting.",
+      fileItemsNeedAttention: "Stage each file-backed item before submitting.",
       noWorkTypes: "No work types are available to submit right now.",
       ready: "Ready to submit.",
       requestOnly: "Enter a request name to continue.",
@@ -116,8 +115,7 @@ const submitWorkMessagesByLocale = {
     validationMessages: {
       bothMissing:
         "Choose a work type and enter a request name before submitting.",
-      fileItemNeedsStaging:
-        "Stage each file-backed item before submitting.",
+      fileItemNeedsStaging: "Stage each file-backed item before submitting.",
       fileItemStillStaging:
         "Wait for file staging to finish before submitting.",
       fallback: "Fix the highlighted fields before submitting.",
@@ -187,7 +185,9 @@ const submitWorkMessagesByLocale = {
   },
 } satisfies LocalizedMessageCatalog<SubmitWorkMessages>;
 
-export function getSubmitWorkMessages(locale?: string | null): SubmitWorkMessages {
+export function getSubmitWorkMessages(
+  locale?: string | null,
+): SubmitWorkMessages {
   return resolveLocalizedMessages(submitWorkMessagesByLocale, locale);
 }
 

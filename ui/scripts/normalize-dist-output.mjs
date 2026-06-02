@@ -1,5 +1,12 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,7 +26,7 @@ async function listFiles(rootDir, currentDir = rootDir) {
   for (const entry of entries) {
     const fullPath = path.join(currentDir, entry.name);
     if (entry.isDirectory()) {
-      files.push(...await listFiles(rootDir, fullPath));
+      files.push(...(await listFiles(rootDir, fullPath)));
       continue;
     }
 
@@ -36,7 +43,9 @@ async function normalizeEntryAsset(extension, targetName) {
       (name === targetName || name.startsWith("index-")),
   );
   if (assetNames.length !== 1) {
-    throw new Error(`Expected exactly one ${extension} entry asset in dist/assets, found ${assetNames.length}.`);
+    throw new Error(
+      `Expected exactly one ${extension} entry asset in dist/assets, found ${assetNames.length}.`,
+    );
   }
 
   const sourcePath = path.join(assetsDir, assetNames[0]);
@@ -52,8 +61,14 @@ async function rewriteIndexHtml() {
   const indexPath = path.join(distDir, "index.html");
   const current = await readFile(indexPath, "utf8");
   const normalized = current
-    .replace(/\/dashboard\/ui\/assets\/[^"]+\.js/g, "/dashboard/ui/assets/index.js")
-    .replace(/\/dashboard\/ui\/assets\/[^"]+\.css/g, "/dashboard/ui/assets/index.css");
+    .replace(
+      /\/dashboard\/ui\/assets\/[^"]+\.js/g,
+      "/dashboard/ui/assets/index.js",
+    )
+    .replace(
+      /\/dashboard\/ui\/assets\/[^"]+\.css/g,
+      "/dashboard/ui/assets/index.css",
+    );
 
   if (normalized !== current) {
     await writeFile(indexPath, normalized);

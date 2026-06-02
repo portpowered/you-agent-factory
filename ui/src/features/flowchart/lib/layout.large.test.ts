@@ -1,22 +1,31 @@
-import { buildGraphLayout } from "./layout";
+import { describe, expect, it } from "vitest";
 import { twentyNodeDashboardTopology } from "../../../components/dashboard/test-fixtures";
-import { describe, it, expect } from "vitest";
+import { buildGraphLayout } from "./layout";
 
 describe("buildGraphLayout", () => {
-
   it("spreads a representative 20-node workflow left to right", async () => {
     const layout = await buildGraphLayout(twentyNodeDashboardTopology);
     const nodesById = new Map(layout.nodes.map((node) => [node.nodeId, node]));
     const distinctColumns = new Set(layout.nodes.map((node) => node.column));
-    const workstationNodes = layout.nodes.filter((node) => node.nodeKind === "workstation");
-    const statePositionNodes = layout.nodes.filter((node) => node.nodeKind === "state_position");
-    const resourceNodes = layout.nodes.filter((node) => node.nodeKind === "resource");
+    const workstationNodes = layout.nodes.filter(
+      (node) => node.nodeKind === "workstation",
+    );
+    const statePositionNodes = layout.nodes.filter(
+      (node) => node.nodeKind === "state_position",
+    );
+    const resourceNodes = layout.nodes.filter(
+      (node) => node.nodeKind === "resource",
+    );
 
     expect(workstationNodes).toHaveLength(20);
     expect(statePositionNodes.length).toBeGreaterThan(20);
     expect(resourceNodes).toHaveLength(1);
     expect(resourceNodes[0]?.height).toBe(86);
-    expect(statePositionNodes.every((node) => node.height === resourceNodes[0]?.height)).toBe(true);
+    expect(
+      statePositionNodes.every(
+        (node) => node.height === resourceNodes[0]?.height,
+      ),
+    ).toBe(true);
     expect(layout.edges.length).toBeGreaterThan(40);
     expect(distinctColumns.size).toBeGreaterThan(10);
     expect(layout.width).toBeGreaterThan(5000);
@@ -43,4 +52,3 @@ describe("buildGraphLayout", () => {
     ).toBeGreaterThan(4000);
   });
 });
-

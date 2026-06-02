@@ -3,7 +3,6 @@ import {
   isSubmitWorkAPIError,
   type submitWork,
 } from "../../../api/work";
-import type { SubmitWorkMessages } from "../messages/submit-work";
 import type {
   SubmitWorkDraft,
   SubmitWorkDraftItem,
@@ -11,9 +10,12 @@ import type {
   SubmitWorkStatus,
   SubmitWorkValidationErrors,
 } from "../components/submit-work-card";
+import type { SubmitWorkMessages } from "../messages/submit-work";
 
 export const DEFAULT_TEXT_ITEM_ID = "submission-item-1";
-export type StructuredSubmitItems = NonNullable<Parameters<typeof submitWork>[0]["items"]>;
+export type StructuredSubmitItems = NonNullable<
+  Parameters<typeof submitWork>[0]["items"]
+>;
 
 export function createDefaultDraft(): SubmitWorkDraft {
   return {
@@ -52,7 +54,9 @@ export function createDraftItem(
   };
 }
 
-export function resetDraftPreservingWorkType(workTypeName: string): SubmitWorkDraft {
+export function resetDraftPreservingWorkType(
+  workTypeName: string,
+): SubmitWorkDraft {
   return {
     ...createDefaultDraft(),
     workTypeName,
@@ -208,8 +212,7 @@ export function validateDraft(
       messages.validationMessages.workTypeRequired;
   }
   if (draft.requestName.trim().length === 0) {
-    validationErrors.requestName =
-      messages.validationMessages.requestRequired;
+    validationErrors.requestName = messages.validationMessages.requestRequired;
   }
   if (hasStagingFileItems(draft)) {
     validationErrors.submissionItems =

@@ -7,13 +7,13 @@ import {
   type AgentBentoLayoutItem,
 } from "../../bento/components/agent-bento";
 import type { WorkChartModel } from "../lib/trends";
-import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-story-contract";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
 } from "../lib/work-chart-legend-story-contract";
 import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
+import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-story-contract";
 import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
 import { WorkOutcomeWidget } from "./work-outcome-widget";

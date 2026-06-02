@@ -9,9 +9,7 @@ import { AgentBentoCard, AgentBentoLayout } from "./agent-bento";
 function expectBentoCardHeaderSemantics(
   card: HTMLElement,
   title: string,
-  {
-    compactChrome = false,
-  }: { compactChrome?: boolean } = {},
+  { compactChrome = false }: { compactChrome?: boolean } = {},
 ) {
   const header = card.querySelector("header");
   expect(header).toBeTruthy();
@@ -43,7 +41,10 @@ function expectBentoCardHeaderSemantics(
 describe("bento card header consistency", () => {
   it("keeps default-density header semantics on a representative dashboard widget", () => {
     render(
-      <DashboardWidgetFrame title="Provider session" widgetId="provider-session">
+      <DashboardWidgetFrame
+        title="Provider session"
+        widgetId="provider-session"
+      >
         <p>Session body</p>
       </DashboardWidgetFrame>,
     );

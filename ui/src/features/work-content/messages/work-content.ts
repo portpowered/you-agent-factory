@@ -44,8 +44,5 @@ const workContentInspectMessagesByLocale = {
 export function getWorkContentInspectMessages(
   locale?: string,
 ): WorkContentInspectMessages {
-  return resolveLocalizedMessages(
-    workContentInspectMessagesByLocale,
-    locale,
-  );
+  return resolveLocalizedMessages(workContentInspectMessagesByLocale, locale);
 }

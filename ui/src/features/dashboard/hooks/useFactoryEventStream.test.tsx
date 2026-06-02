@@ -1,5 +1,5 @@
-import { QueryClientProvider } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
@@ -7,12 +7,12 @@ import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {
-  CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
+  CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useDashboardSessionStore } from "../state/dashboardSessionStore";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { DashboardSessionProvider } from "../session/dashboard-session-provider";
+import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
@@ -136,7 +136,10 @@ describe("useFactoryEventStream transport", () => {
           refreshToken,
           sessionID: DEFAULT_FACTORY_SESSION_ID,
         }),
-      { initialProps: { refreshToken: 0 }, wrapper: createWrapper(queryClient) },
+      {
+        initialProps: { refreshToken: 0 },
+        wrapper: createWrapper(queryClient),
+      },
     );
 
     expect(replayHarness.getStreams()).toHaveLength(1);
@@ -173,7 +176,9 @@ describe("useFactoryEventStream transport", () => {
     });
 
     await waitFor(() => {
-      expect(useDashboardStreamStore.getState().streamState.status).toBe("offline");
+      expect(useDashboardStreamStore.getState().streamState.status).toBe(
+        "offline",
+      );
     });
     expect(replayHarness.getStreams()).toHaveLength(1);
 
@@ -260,10 +265,12 @@ describe("useFactoryEventStream side effects", () => {
                 type: "MODEL_WORKER",
               },
             ],
-            workTypes: [{
-              name: "story",
-              states: [{ name: "new", type: "INITIAL" }],
-            }],
+            workTypes: [
+              {
+                name: "story",
+                states: [{ name: "new", type: "INITIAL" }],
+              },
+            ],
             workstations: [
               {
                 body: "Updated prompt",
@@ -285,18 +292,17 @@ describe("useFactoryEventStream side effects", () => {
     });
 
     await waitFor(() => {
-      expect(queryClient.getQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY)).toMatchObject(
-        {
-          workers: [expect.objectContaining({ model: "gpt-5.6" })],
-        },
-      );
+      expect(
+        queryClient.getQueryData(CURRENT_FACTORY_DEFINITION_QUERY_KEY),
+      ).toMatchObject({
+        workers: [expect.objectContaining({ model: "gpt-5.6" })],
+      });
     });
 
     await waitFor(() => {
       expect(
-        queryClient.getQueryState(
-          CURRENT_FACTORY_DOCUMENT_QUERY_KEY,
-        )?.isInvalidated,
+        queryClient.getQueryState(CURRENT_FACTORY_DOCUMENT_QUERY_KEY)
+          ?.isInvalidated,
       ).toBe(true);
     });
   });

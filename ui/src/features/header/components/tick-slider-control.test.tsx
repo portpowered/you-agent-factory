@@ -62,18 +62,23 @@ describe("TickSliderControl", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     act(() => {
       useFactoryTimelineStore.getState().replaceEvents([
-        timelineEvent("tick-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-          factory: {
-            workTypes: [
-              {
-                name: "story",
-                states: [{ name: "ready", type: "INITIAL" }],
-              },
-            ],
-            workstations: [],
-            workers: [],
+        timelineEvent(
+          "tick-1",
+          1,
+          FACTORY_EVENT_TYPES.initialStructureRequest,
+          {
+            factory: {
+              workTypes: [
+                {
+                  name: "story",
+                  states: [{ name: "ready", type: "INITIAL" }],
+                },
+              ],
+              workstations: [],
+              workers: [],
+            },
           },
-        }),
+        ),
       ]);
     });
 

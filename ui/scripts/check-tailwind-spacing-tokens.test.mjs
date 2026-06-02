@@ -1,8 +1,8 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
@@ -15,7 +15,9 @@ const scriptPath = path.resolve(
 );
 
 async function createSourceTree(files) {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "tailwind-spacing-guard-"));
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "tailwind-spacing-guard-"),
+  );
   const srcDir = path.join(tempRoot, "src");
   await mkdir(srcDir, { recursive: true });
 
@@ -66,10 +68,22 @@ test("scanTailwindSpacingTokens rejects arbitrary spacing utilities and custom b
 
   try {
     await expect(scanTailwindSpacingTokens(srcDir)).resolves.toEqual([
-      expect.objectContaining({ kind: "arbitrary-spacing", token: "gap-[0.8rem]" }),
-      expect.objectContaining({ kind: "arbitrary-spacing", token: "rounded-[1.25rem]" }),
-      expect.objectContaining({ kind: "arbitrary-spacing", token: "max-w-[32rem]" }),
-      expect.objectContaining({ kind: "custom-breakpoint", token: "max-[900px]:p-3" }),
+      expect.objectContaining({
+        kind: "arbitrary-spacing",
+        token: "gap-[0.8rem]",
+      }),
+      expect.objectContaining({
+        kind: "arbitrary-spacing",
+        token: "rounded-[1.25rem]",
+      }),
+      expect.objectContaining({
+        kind: "arbitrary-spacing",
+        token: "max-w-[32rem]",
+      }),
+      expect.objectContaining({
+        kind: "custom-breakpoint",
+        token: "max-[900px]:p-3",
+      }),
       expect.objectContaining({
         kind: "custom-breakpoint",
         token: "min-[901px]:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]",

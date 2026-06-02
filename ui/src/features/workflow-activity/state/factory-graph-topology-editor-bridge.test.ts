@@ -16,7 +16,8 @@ describe("useFactoryGraphTopologyEditorBridge graphDraftHasPendingChanges", () =
   it("registers graph draft pending state as false by default", () => {
     expect(readGraphDraftHasPendingChanges()).toBe(false);
     expect(
-      useFactoryGraphTopologyEditorBridge.getState().graphDraftHasPendingChanges,
+      useFactoryGraphTopologyEditorBridge.getState()
+        .graphDraftHasPendingChanges,
     ).toBe(false);
   });
 

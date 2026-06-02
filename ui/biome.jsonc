@@ -6,7 +6,13 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!coverage", "!dist", "!storybook-static"]
+    "includes": [
+      "**",
+      "!.vitest-reports",
+      "!coverage",
+      "!dist",
+      "!storybook-static"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -263,11 +269,85 @@
       "includes": ["src/api/factory-definition/api.ts"],
       "linter": {
         "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 150,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          },
           "nursery": {
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
                 "maxLines": 3500,
+                "skipBlankLines": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/components/dashboard/test-browser-shims.ts",
+        "src/features/current-selection/resource-selection/components/resource-editable-configuration-section.tsx",
+        "src/features/current-selection/work-selection/components/work-item-relationship-graph.tsx",
+        "src/features/current-selection/workstation-selection/components/provider-session-attempts.tsx",
+        "src/features/dashboard/lib/dashboard-event-stream.test.ts",
+        "src/features/factory-graph-editor/components/factory-graph-editor-flow.test.tsx",
+        "src/features/import/lib/factory-png-import.ts",
+        "src/features/timeline/state/timeline/replayWorldState.test.ts",
+        "src/features/workflow-activity/components/mutation-dialog.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 200,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          },
+          "nursery": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 700,
+                "skipBlankLines": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": [
+        "src/features/current-selection/workstation-selection/components/workstation-detail-card.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noExcessiveLinesPerFunction": {
+              "level": "error",
+              "options": {
+                "maxLines": 1000,
+                "skipBlankLines": true,
+                "skipIifes": true
+              }
+            }
+          },
+          "nursery": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 5000,
                 "skipBlankLines": true
               }
             }
@@ -298,6 +378,22 @@
               "level": "error",
               "options": {
                 "maxLines": 5000,
+                "skipBlankLines": true
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["scripts/loadtest-agent-fails-memory.ts"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noExcessiveLinesPerFile": {
+              "level": "error",
+              "options": {
+                "maxLines": 600,
                 "skipBlankLines": true
               }
             }

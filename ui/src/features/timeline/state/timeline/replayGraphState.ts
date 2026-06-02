@@ -4,7 +4,11 @@ import type {
   DashboardTraceToken,
   DashboardWorkRelation,
 } from "../../../../api/dashboard";
-import type { FactoryRelation, FactoryResource, FactoryWorkItem } from "../../../../api/events";
+import type {
+  FactoryRelation,
+  FactoryResource,
+  FactoryWorkItem,
+} from "../../../../api/events";
 import { uniqueSortedWorkRefs } from "./cloneTimelineSnapshot";
 import { uniqueSorted } from "./shared";
 import { dashboardPlaceID, dashboardWorkTypeID } from "./systemTime";
@@ -29,7 +33,9 @@ function relationKey(relation: RelationKeyFields): string {
   ].join("|");
 }
 
-function dedupeRelations(relations: DashboardWorkRelation[]): DashboardWorkRelation[] {
+function dedupeRelations(
+  relations: DashboardWorkRelation[],
+): DashboardWorkRelation[] {
   const seen = new Set<string>();
   return relations
     .filter((relation) => {
@@ -54,9 +60,12 @@ function toDashboardRelation(relation: FactoryRelation): DashboardWorkRelation {
     request_id: relation.request_id,
     required_state: relation.requiredState ?? legacyRelation.required_state,
     source_work_id: relation.source_work_id,
-    source_work_name: relation.sourceWorkName ?? legacyRelation.source_work_name,
-    target_work_id: relation.targetWorkId ?? legacyRelation.target_work_id ?? "",
-    target_work_name: relation.targetWorkName ?? legacyRelation.target_work_name,
+    source_work_name:
+      relation.sourceWorkName ?? legacyRelation.source_work_name,
+    target_work_id:
+      relation.targetWorkId ?? legacyRelation.target_work_id ?? "",
+    target_work_name:
+      relation.targetWorkName ?? legacyRelation.target_work_name,
     trace_id: relation.trace_id,
     type: relation.type,
   };
@@ -75,13 +84,19 @@ function emptyTrace(traceID: string): DashboardTrace {
   };
 }
 
-export function addTraceWork(state: ReplayWorldState, item: FactoryWorkItem): void {
+export function addTraceWork(
+  state: ReplayWorldState,
+  item: FactoryWorkItem,
+): void {
   if (!item.trace_id) {
     return;
   }
   const trace = state.tracesByID[item.trace_id] ?? emptyTrace(item.trace_id);
   trace.work_ids = uniqueSorted([...trace.work_ids, item.id]);
-  trace.work_items = uniqueSortedWorkRefs([...(trace.work_items ?? []), workRef(item)]);
+  trace.work_items = uniqueSortedWorkRefs([
+    ...(trace.work_items ?? []),
+    workRef(item),
+  ]);
   state.tracesByID[item.trace_id] = trace;
 }
 
@@ -107,11 +122,17 @@ function addTraceRelation(
     return;
   }
   const trace = state.tracesByID[traceID] ?? emptyTrace(traceID);
-  trace.relations = dedupeRelations([...(trace.relations ?? []), toDashboardRelation(relation)]);
+  trace.relations = dedupeRelations([
+    ...(trace.relations ?? []),
+    toDashboardRelation(relation),
+  ]);
   state.tracesByID[traceID] = trace;
 }
 
-export function addRelation(state: ReplayWorldState, relation: FactoryRelation): void {
+export function addRelation(
+  state: ReplayWorldState,
+  relation: FactoryRelation,
+): void {
   const targetWorkID =
     relation.targetWorkId ??
     (relation as FactoryRelation & { target_work_id?: string }).target_work_id;
@@ -119,28 +140,49 @@ export function addRelation(state: ReplayWorldState, relation: FactoryRelation):
     return;
   }
   const relations = state.relationsByWorkID[relation.source_work_id] ?? [];
-  if (!relations.some((current) => relationKey(current) === relationKey(relation))) {
-    state.relationsByWorkID[relation.source_work_id] = [...relations, relation].sort(
-      (left, right) => relationKey(left).localeCompare(relationKey(right)),
+  if (
+    !relations.some((current) => relationKey(current) === relationKey(relation))
+  ) {
+    state.relationsByWorkID[relation.source_work_id] = [
+      ...relations,
+      relation,
+    ].sort((left, right) =>
+      relationKey(left).localeCompare(relationKey(right)),
     );
   }
   addTraceRelation(state, relation.trace_id, relation);
-  addTraceRelation(state, state.workItemsByID[relation.source_work_id]?.trace_id, relation);
-  addTraceRelation(state, state.workItemsByID[targetWorkID]?.trace_id, relation);
+  addTraceRelation(
+    state,
+    state.workItemsByID[relation.source_work_id]?.trace_id,
+    relation,
+  );
+  addTraceRelation(
+    state,
+    state.workItemsByID[targetWorkID]?.trace_id,
+    relation,
+  );
 }
 
 export function addTraceDispatch(
   state: ReplayWorldState,
   traceID: string,
   completion: WorldCompletion,
-  completionToTraceDispatch: (completion: WorldCompletion) => DashboardTraceDispatch,
+  completionToTraceDispatch: (
+    completion: WorldCompletion,
+  ) => DashboardTraceDispatch,
 ): void {
   if (!traceID) {
     return;
   }
   const trace = state.tracesByID[traceID] ?? emptyTrace(traceID);
-  trace.dispatches = [...trace.dispatches, completionToTraceDispatch(completion)];
-  trace.transition_ids = uniqueSorted([...trace.transition_ids, completion.transitionID]);
+  trace.dispatches = [
+    ...trace.dispatches,
+    completionToTraceDispatch(completion),
+  ];
+  trace.transition_ids = uniqueSorted([
+    ...trace.transition_ids,
+    completion.transitionID,
+  ]);
   trace.workstation_sequence = [
     ...trace.workstation_sequence,
     completion.workstationName ?? completion.transitionID,
@@ -164,11 +206,18 @@ export function addToken(
     workItemIDs: [],
   };
   if (workItemID) {
-    occupancy.workItemIDs = uniqueSorted([...occupancy.workItemIDs, workItemID]);
+    occupancy.workItemIDs = uniqueSorted([
+      ...occupancy.workItemIDs,
+      workItemID,
+    ]);
   } else {
-    occupancy.resourceTokenIDs = uniqueSorted([...occupancy.resourceTokenIDs, tokenID]);
+    occupancy.resourceTokenIDs = uniqueSorted([
+      ...occupancy.resourceTokenIDs,
+      tokenID,
+    ]);
   }
-  occupancy.tokenCount = occupancy.resourceTokenIDs.length + occupancy.workItemIDs.length;
+  occupancy.tokenCount =
+    occupancy.resourceTokenIDs.length + occupancy.workItemIDs.length;
   state.occupancyByID[placeID] = occupancy;
 }
 
@@ -185,14 +234,19 @@ export function removeWorkTokenFromPlace(
     return;
   }
   occupancy.workItemIDs = occupancy.workItemIDs.filter((id) => id !== workID);
-  occupancy.tokenCount = occupancy.resourceTokenIDs.length + occupancy.workItemIDs.length;
+  occupancy.tokenCount =
+    occupancy.resourceTokenIDs.length + occupancy.workItemIDs.length;
   if (occupancy.tokenCount === 0) {
     delete state.occupancyByID[placeID];
   }
 }
 
 export function removeWorkToken(state: ReplayWorldState, workID: string): void {
-  removeWorkTokenFromPlace(state, workID, state.workItemsByID[workID]?.place_id);
+  removeWorkTokenFromPlace(
+    state,
+    workID,
+    state.workItemsByID[workID]?.place_id,
+  );
 }
 
 function removeResourceToken(
@@ -204,8 +258,11 @@ function removeResourceToken(
   if (!occupancy) {
     return;
   }
-  occupancy.resourceTokenIDs = occupancy.resourceTokenIDs.filter((id) => id !== tokenID);
-  occupancy.tokenCount = occupancy.resourceTokenIDs.length + occupancy.workItemIDs.length;
+  occupancy.resourceTokenIDs = occupancy.resourceTokenIDs.filter(
+    (id) => id !== tokenID,
+  );
+  occupancy.tokenCount =
+    occupancy.resourceTokenIDs.length + occupancy.workItemIDs.length;
   if (occupancy.tokenCount === 0) {
     delete state.occupancyByID[placeID];
   }
@@ -216,7 +273,8 @@ function firstAvailableResourceTokenID(
   resourceAvailablePlaceID: (resourceID: string) => string,
   resourceID: string,
 ): string | undefined {
-  return state.occupancyByID[resourceAvailablePlaceID(resourceID)]?.resourceTokenIDs[0];
+  return state.occupancyByID[resourceAvailablePlaceID(resourceID)]
+    ?.resourceTokenIDs[0];
 }
 
 export function resourceAvailablePlaceID(resourceID: string): string {
@@ -228,8 +286,12 @@ export function resourceTokenID(resourceID: string, index: number): string {
   return `${resourceID}:resource:${index}`;
 }
 
-function resourceIDsFromEvent(resources: FactoryResource[] | undefined): string[] {
-  return (resources ?? []).map((resource) => resource.name).filter((name) => name.length > 0);
+function resourceIDsFromEvent(
+  resources: FactoryResource[] | undefined,
+): string[] {
+  return (resources ?? [])
+    .map((resource) => resource.name)
+    .filter((name) => name.length > 0);
 }
 
 export function consumeResourceUnits(
@@ -238,7 +300,12 @@ export function consumeResourceUnits(
 ): ResourceUnit[] {
   return resourceIDsFromEvent(resources).map((resourceID) => {
     const placeID = resourceAvailablePlaceID(resourceID);
-    const tokenID = firstAvailableResourceTokenID(state, resourceAvailablePlaceID, resourceID) ?? "";
+    const tokenID =
+      firstAvailableResourceTokenID(
+        state,
+        resourceAvailablePlaceID,
+        resourceID,
+      ) ?? "";
     if (tokenID) {
       removeResourceToken(state, placeID, tokenID);
     }
@@ -254,7 +321,8 @@ export function releaseResourceUnits(
   const released = new Set<number>();
   for (const resourceID of resourceIDsFromEvent(resources)) {
     const index = consumed.findIndex(
-      (unit, candidateIndex) => !released.has(candidateIndex) && unit.resourceID === resourceID,
+      (unit, candidateIndex) =>
+        !released.has(candidateIndex) && unit.resourceID === resourceID,
     );
     if (index < 0) {
       continue;
@@ -264,11 +332,18 @@ export function releaseResourceUnits(
     if (!unit?.tokenID) {
       continue;
     }
-    addToken(state, unit.placeID || resourceAvailablePlaceID(unit.resourceID), unit.tokenID);
+    addToken(
+      state,
+      unit.placeID || resourceAvailablePlaceID(unit.resourceID),
+      unit.tokenID,
+    );
   }
 }
 
-export function traceToken(item: FactoryWorkItem, eventTime: string): DashboardTraceToken {
+export function traceToken(
+  item: FactoryWorkItem,
+  eventTime: string,
+): DashboardTraceToken {
   return {
     created_at: eventTime,
     entered_at: eventTime,
@@ -281,4 +356,3 @@ export function traceToken(item: FactoryWorkItem, eventTime: string): DashboardT
     work_type_id: dashboardWorkTypeID(item.work_type_id),
   };
 }
-

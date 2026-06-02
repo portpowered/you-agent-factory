@@ -1,7 +1,13 @@
 import "@xyflow/react/dist/style.css";
 
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import "../../../styles.css";
@@ -207,14 +213,18 @@ function renderEditorFlow(
     factoryDefinition?: CanonicalFactoryDefinition | null;
     pendingAdditionNodeIds?: ReadonlySet<string>;
     pendingRemovalNodeIds?: ReadonlySet<string>;
-    workerStatusByName?: ReadonlyMap<string, "active" | "errored" | "idle" | "unavailable">;
+    workerStatusByName?: ReadonlyMap<
+      string,
+      "active" | "errored" | "idle" | "unavailable"
+    >;
   },
 ) {
   const flow = buildFactoryGraphEditorFlowModel({
     canEditConnections,
     factoryDefinition: options?.factoryDefinition,
     pendingAdditionEdgeIds: new Set<string>(),
-    pendingAdditionNodeIds: options?.pendingAdditionNodeIds ?? new Set<string>(),
+    pendingAdditionNodeIds:
+      options?.pendingAdditionNodeIds ?? new Set<string>(),
     pendingConnectionSource: null,
     pendingRemovalEdgeIds: new Set<string>(),
     pendingRemovalNodeIds: options?.pendingRemovalNodeIds ?? new Set<string>(),
@@ -264,7 +274,9 @@ describe("factory graph editor edge labels", () => {
     expect(reviewNode).not.toBeNull();
     expect(writerNode).not.toBeNull();
     expect(
-      reviewNode.querySelector("[data-factory-entity-semantic-icon] [data-graph-semantic-icon='workstation']"),
+      reviewNode.querySelector(
+        "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='workstation']",
+      ),
     ).not.toBeNull();
     expect(
       reviewNode.querySelector("[data-factory-entity-title]")?.textContent,
@@ -273,7 +285,9 @@ describe("factory graph editor edge labels", () => {
     expect(reviewNode.textContent).toContain("Pending");
 
     expect(
-      writerNode.querySelector("[data-factory-entity-semantic-icon] [data-graph-semantic-icon='active-work']"),
+      writerNode.querySelector(
+        "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='active-work']",
+      ),
     ).not.toBeNull();
     expect(writerNode.textContent).toContain("Worker");
     expect(writerNode.textContent).toContain("Active");
@@ -346,14 +360,18 @@ describe("factory graph editor edge labels", () => {
     const position = (nodeId: string) =>
       flow.nodes.find((node) => node.id === nodeId)?.position.x ?? -1;
 
-    expect(position("resource:prompt-kit")).toBeLessThan(position("worker:writer"));
-    expect(position("worker:writer")).toBeLessThan(position("workstation:review"));
+    expect(position("resource:prompt-kit")).toBeLessThan(
+      position("worker:writer"),
+    );
+    expect(position("worker:writer")).toBeLessThan(
+      position("workstation:review"),
+    );
     expect(position("workstation:review")).toBeLessThan(
       position("work-state:story:done"),
     );
-    expect(flow.nodes.find((node) => node.id === "workstation:review")?.position).toEqual(
-      positionsByNodeId.get("workstation:review"),
-    );
+    expect(
+      flow.nodes.find((node) => node.id === "workstation:review")?.position,
+    ).toEqual(positionsByNodeId.get("workstation:review"));
   });
 });
 
@@ -375,8 +393,9 @@ describe("factory graph editor work state lifecycle styling", () => {
     ],
   } satisfies CanonicalFactoryDefinition;
 
-  const lifecycleTopology =
-    buildFactoryGraphTopologyFromDefinition(lifecycleFactoryDefinition);
+  const lifecycleTopology = buildFactoryGraphTopologyFromDefinition(
+    lifecycleFactoryDefinition,
+  );
 
   beforeEach(() => {
     restoreBrowserTestShims = installDashboardBrowserTestShims();
@@ -489,9 +508,9 @@ describe("factory graph editor edge interaction states", () => {
     );
 
     expect(
-      edge.querySelector(".agent-factory-editor-edge")?.getAttribute(
-        "data-label-visible",
-      ),
+      edge
+        .querySelector(".agent-factory-editor-edge")
+        ?.getAttribute("data-label-visible"),
     ).toBe("true");
   });
 });

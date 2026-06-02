@@ -38,7 +38,8 @@ export function ResourceNodeView({
   const messages = getWorkflowActivityShellMessages(data.locale);
   const activityGraphMessages = getActivityGraphMessages(data.locale);
   const label = resourceName(data.place);
-  const resourceLabel = activityGraphMessages.graphSemanticIconLabel("resource");
+  const resourceLabel =
+    activityGraphMessages.graphSemanticIconLabel("resource");
   const selectable = data.onSelectResource !== undefined;
 
   return (

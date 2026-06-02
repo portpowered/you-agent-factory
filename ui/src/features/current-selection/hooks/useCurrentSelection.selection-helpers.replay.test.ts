@@ -1,10 +1,11 @@
 import terminalSummaryRegressionReplayFixtureText from "../../../../integration/fixtures/terminal-summary-regression-replay.jsonl?raw";
-
-import { buildFactoryTimelineSnapshot } from "../../timeline/state/factoryTimelineStore";
 import { parseReplayFixtureEvents } from "../../../testing/replay-fixtures";
-import { buildTerminalWorkItems } from "./useCurrentSelection.selection-helpers";
+import { buildFactoryTimelineSnapshot } from "../../timeline/state/factoryTimelineStore";
 import { resolveProjectedWorkstationRequestsByDispatchID } from "./useCurrentSelection.request-helpers";
-import { resolveWorkItemSelectionByWorkID } from "./useCurrentSelection.selection-helpers";
+import {
+  buildTerminalWorkItems,
+  resolveWorkItemSelectionByWorkID,
+} from "./useCurrentSelection.selection-helpers";
 
 describe("terminal summary replay regression", () => {
   it("uses replayed terminal dispatch outcomes instead of earlier provider-attempt context", () => {
@@ -24,8 +25,7 @@ describe("terminal summary replay regression", () => {
 
     expect(
       failedWorkItems.find(
-        (item) =>
-          item.label === "fix-gocoveragecheck-zero-coverage-report-gap",
+        (item) => item.label === "fix-gocoveragecheck-zero-coverage-report-gap",
       ),
     ).toEqual(
       expect.objectContaining({
@@ -49,11 +49,12 @@ describe("terminal summary replay regression", () => {
     );
 
     const fixFailedItem = failedWorkItems.find(
-      (item) =>
-        item.label === "fix-gocoveragecheck-zero-coverage-report-gap",
+      (item) => item.label === "fix-gocoveragecheck-zero-coverage-report-gap",
     );
     if (!fixFailedItem) {
-      throw new Error("expected replay fixture to include fix-gocoveragecheck failed item");
+      throw new Error(
+        "expected replay fixture to include fix-gocoveragecheck failed item",
+      );
     }
 
     expect(
@@ -68,7 +69,8 @@ describe("terminal summary replay regression", () => {
           workItem: fixFailedItem.workItem,
         },
         workID: fixFailedItem.traceWorkID,
-        workstationRequestsByDispatchID: projectedWorkstationRequestsByDispatchID,
+        workstationRequestsByDispatchID:
+          projectedWorkstationRequestsByDispatchID,
       }),
     ).toEqual({
       dispatchId: "eb246a85-7d42-4aa7-9a61-0b3c4b9b284b",

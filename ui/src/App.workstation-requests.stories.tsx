@@ -9,8 +9,8 @@ import {
   dispatchHistoryCard,
   expectCurrentSelectionCardID,
   markdownReadyWorkstationRequest,
-  selectWorkstationRequest,
   selectedWorkDispatchHistoryStoryParameters,
+  selectWorkstationRequest,
   workstationRequestStoryParameters,
 } from "./stories/dashboardStorySupport";
 
@@ -360,7 +360,9 @@ export const WorkstationRequestSelectionRejected = {
       inferenceAttempts.getByRole("button", { name: "Expand request body" }),
     );
     await expect(
-      within(inferenceAttempts.getByRole("region", { name: "Request body" })).getByText(
+      within(
+        inferenceAttempts.getByRole("region", { name: "Request body" }),
+      ).getByText(
         "Review the active story and explain what needs to change before approval.",
       ),
     ).toBeVisible();
@@ -373,9 +375,9 @@ export const WorkstationRequestSelectionRejected = {
       inferenceAttempts.getByRole("button", { name: "Expand response body" }),
     );
     await expect(
-      within(inferenceAttempts.getByRole("region", { name: "Response body" })).getByText(
-        "The active story needs revision before it can continue.",
-      ),
+      within(
+        inferenceAttempts.getByRole("region", { name: "Response body" }),
+      ).getByText("The active story needs revision before it can continue."),
     ).toBeVisible();
     expect(
       responseDetails.queryByText(/Inference attempts when available/),
@@ -456,9 +458,9 @@ export const WorkstationRequestSelectionErrored = {
       currentSelection.getByRole("button", { name: "Expand request body" }),
     );
     await expect(
-      within(currentSelection.getByRole("region", { name: "Request body" })).getByText(
-        "Review the blocked story and explain the failure.",
-      ),
+      within(
+        currentSelection.getByRole("region", { name: "Request body" }),
+      ).getByText("Review the blocked story and explain the failure."),
     ).toBeVisible();
     expect(
       currentSelection.queryByRole("heading", { name: "Active work" }),
@@ -518,15 +520,11 @@ export const SelectedWorkDispatchHistorySmoke = {
     await expect(
       within(activeCard).getByText("Current dispatch"),
     ).toBeVisible();
-    await expect(
-      within(activeCard).getByRole("strong"),
-    ).toBeVisible();
+    await expect(within(activeCard).getByRole("strong")).toBeVisible();
     expect(within(activeCard).getByRole("strong")).toHaveTextContent(
       "Active Story",
     );
-    await expect(
-      within(activeCard).getByText("Started at"),
-    ).toBeVisible();
+    await expect(within(activeCard).getByText("Started at")).toBeVisible();
     await expect(
       within(activeCard).getAllByText(
         formatExpectedLocalDateTime("2026-04-08T12:00:06Z"),
@@ -586,7 +584,9 @@ export const SelectedWorkDispatchHistorySmoke = {
       name: "Expand",
     });
     expect(scriptAttemptsToggle.getAttribute("aria-expanded")).toBe("false");
-    expect(within(scriptSuccessCard).queryByText("script success stdout")).toBeNull();
+    expect(
+      within(scriptSuccessCard).queryByText("script success stdout"),
+    ).toBeNull();
     await userEvent.click(scriptAttemptsToggle);
     expect(scriptAttemptsToggle.getAttribute("aria-expanded")).toBe("true");
     await expect(
@@ -617,7 +617,9 @@ export const SelectedWorkDispatchHistorySmoke = {
         formatExpectedLocalDateTime("2026-04-08T12:00:00Z"),
       ).length,
     ).toBeGreaterThan(0);
-    expect(within(scriptFailedCard).queryByText("2026-04-08T12:00:00Z")).toBeNull();
+    expect(
+      within(scriptFailedCard).queryByText("2026-04-08T12:00:00Z"),
+    ).toBeNull();
     expect(within(scriptFailedCard).queryByText("Current dispatch")).toBeNull();
 
     await expect(

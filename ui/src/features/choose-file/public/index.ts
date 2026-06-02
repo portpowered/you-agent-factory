@@ -5,6 +5,6 @@ export {
 export {
   CHOOSE_FILE_FIELD_GROUP_CLASS,
   CHOOSE_FILE_NATIVE_INPUT_CLASS,
-  chooseFileShellClassName,
   type ChooseFileShellClassNameOptions,
+  chooseFileShellClassName,
 } from "../lib/choose-file-shell";

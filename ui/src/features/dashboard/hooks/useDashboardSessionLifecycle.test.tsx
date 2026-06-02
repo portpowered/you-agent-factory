@@ -163,7 +163,9 @@ describe("useDashboardSessionLifecycle document cache", () => {
       ),
     ).toBeUndefined();
     expect(
-      queryClient.getQueryData(currentFactoryDefinitionQueryKey("session-beta")),
+      queryClient.getQueryData(
+        currentFactoryDefinitionQueryKey("session-beta"),
+      ),
     ).toBeUndefined();
   });
 });
@@ -228,7 +230,8 @@ describe("useDashboardSessionLifecycle", () => {
           }),
         {
           initialProps: { refreshToken: 0 },
-          wrapper: createWrapper(queryClient) },
+          wrapper: createWrapper(queryClient),
+        },
       );
 
       act(() => {

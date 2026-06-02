@@ -3,11 +3,11 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/factory-graph-topology-impact";
 import type { GraphLayout } from "../../flowchart/lib/layout";
+import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 import {
   useCurrentActivityGraphLayout,
   useCurrentActivityGraphLayoutForFactory,
 } from "./react-flow-current-activity-card-graph-layout";
-import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 
 type BuildGraphLayout = (
   topology: typeof singleNodeDashboardSnapshot.topology,
@@ -193,9 +193,9 @@ describe("useCurrentActivityGraphLayout", () => {
     expect(result.current.nodes.map((node) => node.nodeId).sort()).toContain(
       "workstation:Document Only",
     );
-    expect(result.current.nodes.map((node) => node.nodeId).sort()).not.toContain(
-      "workstation:Snapshot Only",
-    );
+    expect(
+      result.current.nodes.map((node) => node.nodeId).sort(),
+    ).not.toContain("workstation:Snapshot Only");
   });
 
   it("keeps an empty layout when factory override is null even if the snapshot factory is present", async () => {

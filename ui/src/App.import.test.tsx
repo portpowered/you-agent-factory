@@ -1,17 +1,13 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
-import {
-  MockEventSource,
-  baselineSnapshot,
-  createFactoryImportValue,
-  createFileDropTransfer,
-  importedFactorySnapshot,
-  jsonResponse,
-  registerAppDashboardTestLifecycle,
-  renderApp,
-} from "./testing/app-shell-test-utils";
 import {
   createDeferredPromise,
   currentNamedFactoryExportResponse,
@@ -20,6 +16,16 @@ import {
   fromBase64,
   installExportDownloadProbe,
 } from "./testing/app-shell-export-test-utils";
+import {
+  baselineSnapshot,
+  createFactoryImportValue,
+  createFileDropTransfer,
+  importedFactorySnapshot,
+  jsonResponse,
+  MockEventSource,
+  registerAppDashboardTestLifecycle,
+  renderApp,
+} from "./testing/app-shell-test-utils";
 
 const defaultSessionFactoryVersion = {
   logical: "9",
@@ -57,7 +63,9 @@ function resolveFetchMethod(
   return "GET";
 }
 
-function expectNoPostFactoriesActivation(fetchMock: ReturnType<typeof vi.fn>): void {
+function expectNoPostFactoriesActivation(
+  fetchMock: ReturnType<typeof vi.fn>,
+): void {
   const postFactoriesCall = fetchMock.mock.calls.find(([url, init]) => {
     const path = resolveFetchPath(url);
     return path === "/factories" && resolveFetchMethod(url, init) === "POST";
@@ -71,9 +79,7 @@ describe("App shell import flows", () => {
   it("renders the operator graph for an empty runtime snapshot", async () => {
     renderApp({ snapshot: baselineSnapshot });
 
-    expect(
-      await screen.findByRole("heading", { name: "U" }),
-    ).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "U" })).toBeTruthy();
     expectNoRetiredDashboardBranding();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
     expect(screen.getByText("In progress")).toBeTruthy();
@@ -81,13 +87,13 @@ describe("App shell import flows", () => {
       await screen.findByRole("region", { name: "Work graph viewport" }),
     ).toBeTruthy();
     expect(
-      within(screen.getByRole("region", { name: "Work graph viewport" })).getByRole("button", {
+      within(
+        screen.getByRole("region", { name: "Work graph viewport" }),
+      ).getByRole("button", {
         name: "Zoom In",
       }),
     ).toBeTruthy();
-    expect(
-      screen.getByText("Waiting for more ticks"),
-    ).toBeTruthy();
+    expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(screen.queryByText("Idle")).toBeNull();
     expect(screen.queryByText("Live Workstation Dashboard")).toBeNull();
     expect(
@@ -154,7 +160,9 @@ describe("App shell import flows", () => {
 
     await waitFor(() => {
       expect(
-        within(previewDialog).getByRole("button", { name: "Activating factory..." }),
+        within(previewDialog).getByRole("button", {
+          name: "Activating factory...",
+        }),
       ).toBeTruthy();
     });
     expect(
@@ -171,9 +179,12 @@ describe("App shell import flows", () => {
     );
 
     await waitFor(() => {
-      expect(fetchMock).toHaveBeenCalledWith("/factory-sessions/~default/factory", {
-        method: "GET",
-      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/factory-sessions/~default/factory",
+        {
+          method: "GET",
+        },
+      );
     });
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
@@ -289,9 +300,10 @@ describe("App shell import flows", () => {
       await factoryPngExportModule.writeFactoryExportPng({
         factory: currentNamedFactoryExportResponse,
         image: exportImageFile(),
-        rasterizeImageToPngBytes: async () => fromBase64(
-          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
-        ),
+        rasterizeImageToPngBytes: async () =>
+          fromBase64(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+          ),
       });
     if (!mockedExportResult.ok) {
       throw new Error(

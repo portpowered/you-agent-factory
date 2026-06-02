@@ -1,5 +1,5 @@
-import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import { getFactoryPngImportMessages } from "../messages/factory-png-import";
 
 type FactoryPngImportMessages = ReturnType<typeof getFactoryPngImportMessages>;
@@ -131,7 +131,10 @@ export async function readFactoryImportPng({
   };
 }
 
-async function readPngBytes(file: Blob, messages: FactoryPngImportMessages): Promise<ImportStepResult<Uint8Array>> {
+async function readPngBytes(
+  file: Blob,
+  messages: FactoryPngImportMessages,
+): Promise<ImportStepResult<Uint8Array>> {
   let pngBytes: Uint8Array;
   try {
     pngBytes = await readBlobToUint8Array(file);
@@ -162,7 +165,10 @@ async function readPngBytes(file: Blob, messages: FactoryPngImportMessages): Pro
   };
 }
 
-function readFactoryMetadataText(pngBytes: Uint8Array, messages: FactoryPngImportMessages): ImportStepResult<string> {
+function readFactoryMetadataText(
+  pngBytes: Uint8Array,
+  messages: FactoryPngImportMessages,
+): ImportStepResult<string> {
   try {
     let offset = PNG_SIGNATURE.length;
 
@@ -170,7 +176,10 @@ function readFactoryMetadataText(pngBytes: Uint8Array, messages: FactoryPngImpor
       const chunk = readChunkAtOffset(pngBytes, offset);
       offset = chunk.nextOffset;
 
-      if (chunk.type !== PNG_TEXT_CHUNK && chunk.type !== PNG_INTERNATIONAL_TEXT_CHUNK) {
+      if (
+        chunk.type !== PNG_TEXT_CHUNK &&
+        chunk.type !== PNG_INTERNATIONAL_TEXT_CHUNK
+      ) {
         continue;
       }
 
@@ -204,7 +213,10 @@ function readFactoryMetadataText(pngBytes: Uint8Array, messages: FactoryPngImpor
   };
 }
 
-function parseFactoryMetadata(metadataText: string, messages: FactoryPngImportMessages): ImportStepResult<FactoryPngMetadata> {
+function parseFactoryMetadata(
+  metadataText: string,
+  messages: FactoryPngImportMessages,
+): ImportStepResult<FactoryPngMetadata> {
   let parsedMetadata: unknown;
   try {
     parsedMetadata = JSON.parse(metadataText);
@@ -263,7 +275,10 @@ function parseFactoryMetadata(metadataText: string, messages: FactoryPngImportMe
   };
 }
 
-function normalizeFactoryMetadata(parsedMetadata: Record<string, unknown>, messages: FactoryPngImportMessages): ImportStepResult<FactoryPngMetadata> {
+function normalizeFactoryMetadata(
+  parsedMetadata: Record<string, unknown>,
+  messages: FactoryPngImportMessages,
+): ImportStepResult<FactoryPngMetadata> {
   let normalizedFactory: CanonicalFactoryDefinition;
   try {
     normalizedFactory = normalizeFactoryPayload(parsedMetadata);
@@ -277,7 +292,10 @@ function normalizeFactoryMetadata(parsedMetadata: Record<string, unknown>, messa
     };
   }
 
-  const normalizedFactoryName = readFactoryMetadataName(parsedMetadata, messages);
+  const normalizedFactoryName = readFactoryMetadataName(
+    parsedMetadata,
+    messages,
+  );
   if (!normalizedFactoryName.ok) {
     return normalizedFactoryName;
   }
@@ -298,7 +316,10 @@ function normalizeFactoryPayload(
   return normalizeFactoryDefinition(factoryPayload);
 }
 
-function readFactoryMetadataName(parsedMetadata: Record<string, unknown>, messages: FactoryPngImportMessages): ImportStepResult<string> {
+function readFactoryMetadataName(
+  parsedMetadata: Record<string, unknown>,
+  messages: FactoryPngImportMessages,
+): ImportStepResult<string> {
   const canonicalFactoryName = readCanonicalFactoryMetadataName(parsedMetadata);
   if (canonicalFactoryName !== null) {
     return {
@@ -324,7 +345,10 @@ async function validatePreviewImageInBrowser(file: Blob): Promise<void> {
     return;
   }
 
-  if (typeof document !== "undefined" && typeof URL.createObjectURL === "function") {
+  if (
+    typeof document !== "undefined" &&
+    typeof URL.createObjectURL === "function"
+  ) {
     const objectUrl = URL.createObjectURL(file);
     try {
       await loadImageElement(objectUrl);
@@ -395,7 +419,11 @@ function readChunkAtOffset(pngBytes: Uint8Array, offset: number): ParsedChunk {
     throw new Error("PNG chunk header is truncated.");
   }
 
-  const view = new DataView(pngBytes.buffer, pngBytes.byteOffset, pngBytes.byteLength);
+  const view = new DataView(
+    pngBytes.buffer,
+    pngBytes.byteOffset,
+    pngBytes.byteLength,
+  );
   const length = view.getUint32(offset);
   const dataOffset = offset + 8;
   const dataEnd = dataOffset + length;
@@ -412,7 +440,10 @@ function readChunkAtOffset(pngBytes: Uint8Array, offset: number): ParsedChunk {
   };
 }
 
-function readTextChunk(type: string, data: Uint8Array): { keyword: string; text: string } {
+function readTextChunk(
+  type: string,
+  data: Uint8Array,
+): { keyword: string; text: string } {
   if (type === PNG_TEXT_CHUNK) {
     return readTextKeywordAndValue(data);
   }
@@ -420,7 +451,10 @@ function readTextChunk(type: string, data: Uint8Array): { keyword: string; text:
   return readInternationalTextKeywordAndValue(data);
 }
 
-function readTextKeywordAndValue(data: Uint8Array): { keyword: string; text: string } {
+function readTextKeywordAndValue(data: Uint8Array): {
+  keyword: string;
+  text: string;
+} {
   const keywordEnd = data.indexOf(0);
   if (keywordEnd < 0) {
     throw new Error("PNG tEXt chunk keyword is invalid.");
@@ -432,7 +466,10 @@ function readTextKeywordAndValue(data: Uint8Array): { keyword: string; text: str
   };
 }
 
-function readInternationalTextKeywordAndValue(data: Uint8Array): { keyword: string; text: string } {
+function readInternationalTextKeywordAndValue(data: Uint8Array): {
+  keyword: string;
+  text: string;
+} {
   const keywordEnd = data.indexOf(0);
   if (keywordEnd < 0) {
     throw new Error("PNG iTXt chunk keyword is invalid.");
@@ -476,7 +513,9 @@ function decodeAscii(value: Uint8Array): string {
   return String.fromCharCode(...value);
 }
 
-function readCanonicalFactoryMetadataName(value: Record<string, unknown>): string | null {
+function readCanonicalFactoryMetadataName(
+  value: Record<string, unknown>,
+): string | null {
   if (!isNonEmptyString(value.name)) {
     return null;
   }
@@ -484,12 +523,16 @@ function readCanonicalFactoryMetadataName(value: Record<string, unknown>): strin
   return value.name.trim();
 }
 
-function stripMetadataSchemaVersion(metadata: FactoryPngMetadata): CanonicalFactoryDefinition {
+function stripMetadataSchemaVersion(
+  metadata: FactoryPngMetadata,
+): CanonicalFactoryDefinition {
   const { schemaVersion: _schemaVersion, ...factory } = metadata;
   return factory;
 }
 
-function _isStringMap(value: unknown): value is Record<string, string> | undefined {
+function _isStringMap(
+  value: unknown,
+): value is Record<string, string> | undefined {
   if (value === undefined) {
     return true;
   }
@@ -501,8 +544,14 @@ function _isStringMap(value: unknown): value is Record<string, string> | undefin
   return Object.values(value).every((entry) => typeof entry === "string");
 }
 
-function _isOptionalArray<T>(value: unknown, predicate: (entry: unknown) => boolean): value is T[] | undefined {
-  return value === undefined || (Array.isArray(value) && value.every((entry) => predicate(entry)));
+function _isOptionalArray<T>(
+  value: unknown,
+  predicate: (entry: unknown) => boolean,
+): value is T[] | undefined {
+  return (
+    value === undefined ||
+    (Array.isArray(value) && value.every((entry) => predicate(entry)))
+  );
 }
 
 function isNonEmptyString(value: unknown): value is string {

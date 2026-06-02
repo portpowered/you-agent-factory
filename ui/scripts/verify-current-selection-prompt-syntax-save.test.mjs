@@ -81,8 +81,7 @@ function createPromptSyntaxSaveFixture() {
     },
     locator: vi.fn((selector) => {
       if (
-        selector ===
-        '[data-monaco-editor="workstation-prompt"] .squiggly-error'
+        selector === '[data-monaco-editor="workstation-prompt"] .squiggly-error'
       ) {
         return squiggle;
       }

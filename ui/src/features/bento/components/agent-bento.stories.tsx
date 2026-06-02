@@ -21,7 +21,14 @@ const multiCardLayout: AgentBentoLayoutItem[] = [
 
 const featureBoardLayout: AgentBentoLayoutItem[] = [
   { h: 2, id: "work-totals", widgetType: "work-totals", w: 4, x: 0, y: 0 },
-  { h: 4, id: "current-selection", widgetType: "current-selection", w: 8, x: 4, y: 0 },
+  {
+    h: 4,
+    id: "current-selection",
+    widgetType: "current-selection",
+    w: 8,
+    x: 4,
+    y: 0,
+  },
 ];
 
 function card(id: string, title: string, body: string) {
@@ -45,7 +52,13 @@ export const Default = {
   render: () => (
     <div style={{ padding: "1rem" }}>
       <AgentBentoLayout
-        cards={[card("summary", "Factory summary", "One bento card can hold plain text.")]}
+        cards={[
+          card(
+            "summary",
+            "Factory summary",
+            "One bento card can hold plain text.",
+          ),
+        ]}
         layout={defaultLayout}
       />
     </div>
@@ -54,10 +67,16 @@ export const Default = {
     const canvas = within(canvasElement);
 
     await expect(
-      await canvas.findByRole("region", { name: "you-agent-factory bento board" }),
+      await canvas.findByRole("region", {
+        name: "you-agent-factory bento board",
+      }),
     ).toBeVisible();
-    await expect(await canvas.findByRole("article", { name: "Factory summary" })).toBeVisible();
-    await expect(await canvas.findByText("One bento card can hold plain text.")).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Factory summary" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByText("One bento card can hold plain text."),
+    ).toBeVisible();
   },
 };
 
@@ -66,9 +85,21 @@ export const MultiCard = {
     <div style={{ padding: "1rem" }}>
       <AgentBentoLayout
         cards={[
-          card("activity", "Current activity", "Workflow graph card placeholder."),
-          card("trace", "Trace grid", "Trace rows remain independently testable."),
-          card("terminal", "Terminal work", "Completed and failed work share the board."),
+          card(
+            "activity",
+            "Current activity",
+            "Workflow graph card placeholder.",
+          ),
+          card(
+            "trace",
+            "Trace grid",
+            "Trace rows remain independently testable.",
+          ),
+          card(
+            "terminal",
+            "Terminal work",
+            "Completed and failed work share the board.",
+          ),
         ]}
         layout={multiCardLayout}
       />
@@ -76,7 +107,9 @@ export const MultiCard = {
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const activity = await canvas.findByRole("article", { name: "Current activity" });
+    const activity = await canvas.findByRole("article", {
+      name: "Current activity",
+    });
     const dragHeader = within(activity).getByRole("heading", {
       level: 3,
       name: "Current activity",
@@ -89,8 +122,12 @@ export const MultiCard = {
     ]);
 
     await expect(activity).toBeVisible();
-    await expect(await canvas.findByRole("article", { name: "Trace grid" })).toBeVisible();
-    await expect(await canvas.findByRole("article", { name: "Terminal work" })).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Trace grid" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Terminal work" }),
+    ).toBeVisible();
   },
 };
 
@@ -125,10 +162,16 @@ export const RealDashboardState = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    await expect(await canvas.findByRole("article", { name: "Work totals" })).toBeVisible();
+    await expect(
+      await canvas.findByRole("article", { name: "Work totals" }),
+    ).toBeVisible();
     await expect(await canvas.findByText("In progress")).toBeVisible();
-    await expect(await canvas.findByRole("article", { name: "Current selection" })).toBeVisible();
-    await expect(await canvas.findByRole("button", { name: "Undo selection" })).toBeDisabled();
+    await expect(
+      await canvas.findByRole("article", { name: "Current selection" }),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByRole("button", { name: "Undo selection" }),
+    ).toBeDisabled();
     await expect(
       await canvas.findByText(
         "Select a workstation, work item, or state node to inspect live details.",
@@ -142,7 +185,11 @@ export const ConstrainedWidth = {
     <div style={{ maxWidth: "520px", padding: "1rem" }}>
       <AgentBentoLayout
         cards={[
-          card("activity", "Current activity", "The layout can render in a narrow shell."),
+          card(
+            "activity",
+            "Current activity",
+            "The layout can render in a narrow shell.",
+          ),
           card("trace", "Trace grid", "Cards keep their content on the board."),
         ]}
         initialWidth={520}
@@ -156,7 +203,11 @@ export const ConstrainedWidth = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    await expect(await canvas.findByText("The layout can render in a narrow shell.")).toBeVisible();
-    await expect(await canvas.findByText("Cards keep their content on the board.")).toBeVisible();
+    await expect(
+      await canvas.findByText("The layout can render in a narrow shell."),
+    ).toBeVisible();
+    await expect(
+      await canvas.findByText("Cards keep their content on the board."),
+    ).toBeVisible();
   },
 };

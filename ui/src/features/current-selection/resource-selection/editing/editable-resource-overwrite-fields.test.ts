@@ -24,9 +24,9 @@ describe("resolveEditableResourceOverwriteFields", () => {
   it("returns no fields when session, draft, and latest match", () => {
     const draft = buildDraft();
 
-    expect(
-      resolveEditableResourceOverwriteFields(draft, draft, draft),
-    ).toEqual([]);
+    expect(resolveEditableResourceOverwriteFields(draft, draft, draft)).toEqual(
+      [],
+    );
   });
 
   it("flags resource fields that diverged locally and on the server", () => {
@@ -85,7 +85,15 @@ describe("formatEditableResourceOverwriteFieldLabels", () => {
   it("formats overwrite field labels for the overwrite warning banner", () => {
     const messages = getResourceDetailMessages();
     const formatted = formatEditableResourceOverwriteFieldLabels(
-      ["type", "capacity", "model", "backend", "loadPolicy", "provider", "name"],
+      [
+        "type",
+        "capacity",
+        "model",
+        "backend",
+        "loadPolicy",
+        "provider",
+        "name",
+      ],
       messages,
     );
 

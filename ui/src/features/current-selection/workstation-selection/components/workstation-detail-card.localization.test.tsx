@@ -87,6 +87,8 @@ describe("WorkstationDetailCard localization", () => {
       requestHistorySection,
       "expected localized request history section",
     );
-    expect(resolvedRequestHistorySection.textContent).toContain("总运行时间: 4s");
+    expect(resolvedRequestHistorySection.textContent).toContain(
+      "总运行时间: 4s",
+    );
   });
 });

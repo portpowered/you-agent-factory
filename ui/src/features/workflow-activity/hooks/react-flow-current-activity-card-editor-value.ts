@@ -1,18 +1,18 @@
 import type { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import type { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
-import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
-import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
-import type { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
 
 export function buildCurrentActivityGraphEditorValue(args: {
   activeTool: FactoryGraphEditorTool;
@@ -26,9 +26,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   connectionNotice: string | null;
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
-  editableDefinitionQuery: ReturnType<
-    typeof useCurrentFactoryDocument
-  >;
+  editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
   handleCancelRemoval: () => void;

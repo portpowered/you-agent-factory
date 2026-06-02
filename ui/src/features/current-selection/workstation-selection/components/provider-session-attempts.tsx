@@ -2,19 +2,24 @@ import { useEffect, useState } from "react";
 import type { DashboardProviderSession } from "../../../../api/dashboard/types";
 
 import { ExpandablePanelTrigger } from "../../../../components/ui";
-import { getProviderSessionLogTarget } from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
+import { getProviderSessionLogTarget } from "../../../../components/ui/formatters";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { cn } from "../../../../lib/cn";
 import {
-  CurrentSelectionSectionHeader,
+  getLoadableProviderSessionRef,
+  providerSessionSelectionKey,
+} from "../../../provider-session-detail/lib/provider-session-ref";
+import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
+import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   CURRENT_SELECTION_BADGE_CLASS,
+  CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
@@ -26,15 +31,11 @@ import type {
   ProviderSessionAttemptsProps,
   ProviderSessionLogAccessProps,
 } from "../../base/components/detail-card-types";
-import {
-  getLoadableProviderSessionRef,
-  providerSessionSelectionKey,
-} from "../../../provider-session-detail/lib/provider-session-ref";
-import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
-import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
+import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
-const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES = getWorkstationDetailMessages(undefined);
+const DEFAULT_PROVIDER_SESSION_ATTEMPT_MESSAGES =
+  getWorkstationDetailMessages(undefined);
 
 type ProviderSessionLabelMessages = Pick<
   WorkstationDetailMessages,
@@ -49,9 +50,10 @@ function formatLocalizedProviderSessionLabel(
     return messages.unavailableValue;
   }
 
-  const parts = [session.provider, localizedProviderSessionKind(session.kind, messages)].filter(
-    (value): value is string => value !== undefined && value !== "",
-  );
+  const parts = [
+    session.provider,
+    localizedProviderSessionKind(session.kind, messages),
+  ].filter((value): value is string => value !== undefined && value !== "");
   if (parts.length === 0) {
     return session.id;
   }
@@ -106,7 +108,10 @@ export function CollapsibleProviderSessionAttempts({
   }, []);
 
   return (
-    <section aria-labelledby={`${historyID}-heading`} className="mt-4 grid gap-2.5">
+    <section
+      aria-labelledby={`${historyID}-heading`}
+      className="mt-4 grid gap-2.5"
+    >
       <CurrentSelectionSectionHeader
         action={
           <ExpandablePanelTrigger
@@ -163,11 +168,19 @@ export function ProviderSessionAttempts({
   workstationRequestsByDispatchID,
 }: ProviderSessionAttemptsProps) {
   const resolvedTitle = title ?? messages.requestHistoryHeading;
-  const headingId = `${resolvedTitle}-heading`.toLowerCase().replace(/\s+/g, "-");
+  const headingId = `${resolvedTitle}-heading`
+    .toLowerCase()
+    .replace(/\s+/g, "-");
 
   return (
-    <section aria-labelledby={headingId} className="mt-4 grid gap-2.5 [&_h4]:m-0">
-      <CurrentSelectionSectionHeader headingId={headingId} title={resolvedTitle} />
+    <section
+      aria-labelledby={headingId}
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    >
+      <CurrentSelectionSectionHeader
+        headingId={headingId}
+        title={resolvedTitle}
+      />
       <ProviderSessionAttemptList
         attempts={attempts}
         currentDispatchID={currentDispatchID}
@@ -226,7 +239,8 @@ function ProviderSessionAttemptList({
           selectedProviderSessionKey ===
             providerSessionSelectionKey(loadableProviderSession);
         const request = workstationRequestsByDispatchID?.[attempt.dispatch_id];
-        const requestSelected = selectedRequestDispatchID === attempt.dispatch_id;
+        const requestSelected =
+          selectedRequestDispatchID === attempt.dispatch_id;
 
         return (
           <article
@@ -238,11 +252,18 @@ function ProviderSessionAttemptList({
           >
             <div className="flex items-start justify-between gap-3">
               <strong>{renderHeading(attempt)}</strong>
-              <span className={EXECUTION_PILL_CLASS}>{attempt.dispatch_id}</span>
+              <span className={EXECUTION_PILL_CLASS}>
+                {attempt.dispatch_id}
+              </span>
             </div>
             <div className="mt-2 grid gap-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+                <p
+                  className={cn(
+                    "m-0 text-af-text-muted",
+                    DASHBOARD_BODY_TEXT_CLASS,
+                  )}
+                >
                   {outcome.label}
                 </p>
                 {isCurrentDispatch ? (
@@ -267,7 +288,8 @@ function ProviderSessionAttemptList({
                 className={cn(
                   "mt-2",
                   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
-                  providerSessionSelected && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
+                  providerSessionSelected &&
+                    CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
                 )}
                 onClick={() => onSelectProviderSession(loadableProviderSession)}
                 type="button"
@@ -277,11 +299,15 @@ function ProviderSessionAttemptList({
                     ? messages.providerSessionSelectedAction
                     : messages.providerSessionSelectAction}
                 </span>
-                <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
+                <code className={DASHBOARD_BODY_CODE_CLASS}>
+                  {providerSessionLabel}
+                </code>
               </button>
             ) : (
               <div className="mt-2 grid gap-1">
-                <code className={DASHBOARD_BODY_CODE_CLASS}>{providerSessionLabel}</code>
+                <code className={DASHBOARD_BODY_CODE_CLASS}>
+                  {providerSessionLabel}
+                </code>
                 <p className={REQUEST_SELECTION_STATUS_CLASS}>
                   {messages.providerSessionSelectionUnavailable}
                 </p>
@@ -290,7 +316,9 @@ function ProviderSessionAttemptList({
             <ProviderSessionLogAccess
               messages={messages}
               session={attempt.provider_session}
-              startedAt={attempt.diagnostics?.provider?.request_metadata?.request_time}
+              startedAt={
+                attempt.diagnostics?.provider?.request_metadata?.request_time
+              }
             />
             <div className="mt-2 grid gap-2">
               {attempt.work_items && attempt.work_items.length > 0 ? (
@@ -373,7 +401,12 @@ function ProviderSessionLogAccess({
           {messages.providerSessionLogAction}
         </a>
       ) : (
-        <span className={cn("font-bold text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <span
+          className={cn(
+            "font-bold text-af-text-muted",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.providerSessionLogUnavailable}
         </span>
       )}

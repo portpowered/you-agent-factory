@@ -1,9 +1,9 @@
-import { GripVerticalIcon } from "./resizable-icons";
 import type { ComponentProps } from "react";
-import { cn } from "../../lib/cn";
 import { Group, Panel, Separator } from "react-resizable-panels";
+import { cn } from "../../lib/cn";
+import { GripVerticalIcon } from "./resizable-icons";
 
-export { Panel as ResizablePanel, Group as ResizablePanelGroup };
+export { Group as ResizablePanelGroup, Panel as ResizablePanel };
 
 export function ResizableHandle({
   className,

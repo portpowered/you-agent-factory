@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
 import { scanFeatureRootFiles } from "./check-feature-root-files.mjs";
@@ -15,7 +15,9 @@ const scriptPath = path.resolve(
 );
 
 async function createFeatureTree(features) {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "feature-root-file-guard-"));
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "feature-root-file-guard-"),
+  );
   const featuresDir = path.join(tempRoot, "src", "features");
   await mkdir(featuresDir, { recursive: true });
 
@@ -70,14 +72,25 @@ test("scanFeatureRootFiles distinguishes allowlisted debt from new hard-fail vio
 
   try {
     await expect(
-      scanFeatureRootFiles(featuresDir, ["src/features/alpha/index.ts", "src/features/beta/widget.test.ts"]),
+      scanFeatureRootFiles(featuresDir, [
+        "src/features/alpha/index.ts",
+        "src/features/beta/widget.test.ts",
+      ]),
     ).resolves.toEqual({
       allowlistedDebt: [
-        expect.objectContaining({ relativeFilePath: "src/features/alpha/index.ts" }),
-        expect.objectContaining({ relativeFilePath: "src/features/beta/widget.test.ts" }),
+        expect.objectContaining({
+          relativeFilePath: "src/features/alpha/index.ts",
+        }),
+        expect.objectContaining({
+          relativeFilePath: "src/features/beta/widget.test.ts",
+        }),
       ],
       staleAllowlistEntries: [],
-      violations: [expect.objectContaining({ relativeFilePath: "src/features/alpha/README.md" })],
+      violations: [
+        expect.objectContaining({
+          relativeFilePath: "src/features/alpha/README.md",
+        }),
+      ],
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
@@ -93,7 +106,9 @@ test("scanFeatureRootFiles reports stale allowlist entries when the root file no
   });
 
   try {
-    await expect(scanFeatureRootFiles(featuresDir, ["src/features/alpha/index.ts"])).resolves.toEqual({
+    await expect(
+      scanFeatureRootFiles(featuresDir, ["src/features/alpha/index.ts"]),
+    ).resolves.toEqual({
       allowlistedDebt: [],
       staleAllowlistEntries: ["src/features/alpha/index.ts"],
       violations: [],
@@ -117,11 +132,14 @@ test("CLI reports allowlisted legacy debt during a passing run", async () => {
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
-          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
+            "src/features/bento/index.ts",
         },
       }),
     ).resolves.toMatchObject({
-      stdout: expect.stringContaining("Feature root file guard passed with allowlisted legacy debt."),
+      stdout: expect.stringContaining(
+        "Feature root file guard passed with allowlisted legacy debt.",
+      ),
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
@@ -145,7 +163,8 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
-          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
+            "src/features/bento/index.ts",
         },
       }),
     ).rejects.toMatchObject({
@@ -158,7 +177,8 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
-          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
+            "src/features/bento/index.ts",
         },
       }),
     ).rejects.toMatchObject({
@@ -170,7 +190,8 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
         env: {
           ...process.env,
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
-          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST: "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
+            "src/features/bento/index.ts",
         },
       }),
     ).rejects.toMatchObject({

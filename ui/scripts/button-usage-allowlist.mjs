@@ -9,7 +9,7 @@ export const approvedButtonUsageAllowlist = [
     buttonVariantsCount: 2,
     buttonVariantsReason:
       "Shared dialog owner may compose buttonVariants for its structural close and action controls.",
-    rawButtonFingerprints: ['aria-label={resolvedCloseLabel}'],
+    rawButtonFingerprints: ["aria-label={resolvedCloseLabel}"],
     rawButtonReason:
       "Shared dialog owner keeps one raw semantic close trigger around the action rows.",
     relativeFilePath: "src/components/ui/dialog.tsx",
@@ -31,26 +31,28 @@ export const approvedButtonUsageAllowlist = [
   {
     rawButtonFingerprints: [
       'aria-haspopup="dialog"',
-      'aria-controls={controlsID}',
-      'aria-label={sessionCloseLabel(session, messages)}',
+      "aria-controls={controlsID}",
+      "aria-label={sessionCloseLabel(session, messages)}",
     ],
     rawButtonReason:
       "Session tabs keep dedicated tab and tab-close button semantics instead of collapsing into the ordinary Button lane.",
-    relativeFilePath: "src/features/header/components/dashboard-session-tabs.tsx",
+    relativeFilePath:
+      "src/features/header/components/dashboard-session-tabs.tsx",
   },
   {
     rawButtonFingerprints: [
-      'aria-label={workstationMessages.selectProviderSessionLabel(',
+      "aria-label={workstationMessages.selectProviderSessionLabel(",
     ],
     rawButtonReason:
       "Inference attempt provider-session rows use selection shells inside the current-selection detail surface.",
-    relativeFilePath: "src/features/current-selection/work-selection/components/inference-attempt.tsx",
+    relativeFilePath:
+      "src/features/current-selection/work-selection/components/inference-attempt.tsx",
   },
   {
     rawButtonFingerprints: [
-      'aria-label={messages.selectProviderSessionLabel(',
-      'aria-label={messages.selectWorkItemLabel(',
-      'aria-label={messages.selectWorkstationRequestLabel(',
+      "aria-label={messages.selectProviderSessionLabel(",
+      "aria-label={messages.selectWorkItemLabel(",
+      "aria-label={messages.selectWorkstationRequestLabel(",
     ],
     rawButtonReason:
       "Provider-session attempt rows use selection semantics rather than ordinary action-button styling.",
@@ -58,34 +60,41 @@ export const approvedButtonUsageAllowlist = [
       "src/features/current-selection/workstation-selection/components/provider-session-attempts.tsx",
   },
   {
-    rawButtonFingerprints: ['aria-label={selectWorkItemAccessibleLabel('],
+    rawButtonFingerprints: ["aria-label={selectWorkItemAccessibleLabel("],
     rawButtonReason:
       "Shared selected-work dispatch controls use work-selection chip semantics rather than ordinary actions.",
     relativeFilePath:
       "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-history-card-shared.tsx",
   },
   {
-    rawButtonFingerprints: ['aria-label={messages.selectWorkItemLabel(workLabel)}'],
+    rawButtonFingerprints: [
+      "aria-label={messages.selectWorkItemLabel(workLabel)}",
+    ],
     rawButtonReason:
       "State-node work rows are selection shells that need full-row button semantics.",
     relativeFilePath:
       "src/features/current-selection/work-state-selection/components/state-node-detail.tsx",
   },
   {
-    rawButtonFingerprints: ['aria-label={messages.relatedWorkSelectLabel(label)}'],
+    rawButtonFingerprints: [
+      "aria-label={messages.relatedWorkSelectLabel(label)}",
+    ],
     rawButtonReason:
       "Work-item relationship nodes use selection-chip semantics to jump between related work items rather than performing ordinary button-lane actions.",
     relativeFilePath:
       "src/features/current-selection/work-selection/components/work-item-relationship-graph.tsx",
   },
   {
-    rawButtonFingerprints: ['aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}'],
+    rawButtonFingerprints: [
+      "aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}",
+    ],
     rawButtonReason:
       "Consumed-work payload rows use work-selection chip semantics rather than ordinary action buttons.",
-    relativeFilePath: "src/features/current-selection/work-selection/components/work-item-payload-details.tsx",
+    relativeFilePath:
+      "src/features/current-selection/work-selection/components/work-item-payload-details.tsx",
   },
   {
-    rawButtonFingerprints: ['aria-controls={panelID} aria-expanded={expanded}'],
+    rawButtonFingerprints: ["aria-controls={panelID} aria-expanded={expanded}"],
     rawButtonReason:
       "Transcript code blocks use a disclosure toggle for expandable inline code content.",
     relativeFilePath:
@@ -98,6 +107,7 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "The workflow mutation dialog keeps structural overlay-dismiss and close-icon button semantics in its shared shell.",
-    relativeFilePath: "src/features/workflow-activity/components/mutation-dialog.tsx",
+    relativeFilePath:
+      "src/features/workflow-activity/components/mutation-dialog.tsx",
   },
 ];

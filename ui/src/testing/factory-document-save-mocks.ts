@@ -97,8 +97,7 @@ export function mockFactoryDocumentSave(
   options: MockFactoryDocumentSaveOptions = {},
 ): MockFactoryDocumentSaveReturn {
   const mode = options.mode ?? "idle";
-  const saveAsync =
-    options.saveAsync ?? buildFactoryDocumentSaveAsync(options);
+  const saveAsync = options.saveAsync ?? buildFactoryDocumentSaveAsync(options);
   const isPending = options.isPending ?? mode === "pending";
   const save = vi.fn((input: FactoryDocumentSaveInput) => {
     void saveAsync(input);

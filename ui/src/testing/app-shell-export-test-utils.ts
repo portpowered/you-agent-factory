@@ -1,6 +1,6 @@
+import type { CurrentFactoryDocument } from "../api/current-factory-definition";
 import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
-import type { CurrentFactoryDocument } from "../api/current-factory-definition";
 import type { ImportFactoryValue } from "../api/session-factory";
 import { defaultSessionFactoryVersion } from "./session-factory-mocks";
 
@@ -108,11 +108,9 @@ export function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 export function exportImageFile(): File {
-  return new File(
-    [toArrayBuffer(fromBase64(onePixelPngBase64))],
-    "cover.png",
-    { type: "image/png" },
-  );
+  return new File([toArrayBuffer(fromBase64(onePixelPngBase64))], "cover.png", {
+    type: "image/png",
+  });
 }
 
 export function createDeferredPromise<T>(): {

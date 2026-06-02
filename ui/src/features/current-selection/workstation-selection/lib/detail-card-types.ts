@@ -19,8 +19,8 @@ import type {
   EditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
-import type { RunnerID } from "../editing/runner-metadata";
 import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
+import type { RunnerID } from "../editing/runner-metadata";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
 export interface WorkstationDetailCardProps {

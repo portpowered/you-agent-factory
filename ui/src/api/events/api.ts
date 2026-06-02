@@ -21,7 +21,10 @@ function factoryEventSource(): EventSourceCtor | null {
 
 export function openFactoryEventStream(
   onEvent: (event: FactoryEvent) => void,
-  onStatusChange: (status: "connecting" | "live" | "offline", message: string) => void,
+  onStatusChange: (
+    status: "connecting" | "live" | "offline",
+    message: string,
+  ) => void,
   sessionID?: string | null,
 ): EventSourceLike | null {
   const EventSourceImpl = factoryEventSource();
@@ -38,7 +41,10 @@ export function openFactoryEventStream(
     onStatusChange("live", "Factory event stream connected.");
   };
   stream.onerror = () => {
-    onStatusChange("offline", "Factory event stream disconnected. Showing last event state.");
+    onStatusChange(
+      "offline",
+      "Factory event stream disconnected. Showing last event state.",
+    );
   };
   stream.addEventListener("message", (event) => {
     if (event instanceof MessageEvent) {

@@ -45,7 +45,8 @@ const runtimeShapedFactory: CanonicalFactoryDefinition = {
 };
 
 it("does not synthesize worker nodes or assignment edges for empty workstation worker names", () => {
-  const topology = buildFactoryGraphTopologyFromDefinition(runtimeShapedFactory);
+  const topology =
+    buildFactoryGraphTopologyFromDefinition(runtimeShapedFactory);
 
   expect(topology.nodes.map((node) => node.id)).toEqual(
     expect.arrayContaining([
@@ -60,9 +61,9 @@ it("does not synthesize worker nodes or assignment edges for empty workstation w
       "worker-assignment:worker:router->workstation:route-story",
     ]),
   );
-  expect(
-    topology.edges.some((edge) => edge.kind === "worker-assignment"),
-  ).toBe(true);
+  expect(topology.edges.some((edge) => edge.kind === "worker-assignment")).toBe(
+    true,
+  );
   expect(
     topology.edges.filter((edge) => edge.kind === "worker-assignment"),
   ).toHaveLength(1);
@@ -84,8 +85,6 @@ it("treats whitespace-only workstation worker names as unassigned", () => {
 
   expect(topology.nodes.map((node) => node.id)).not.toContain("worker:");
   expect(topology.edges.map((edge) => edge.id)).not.toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/^worker-assignment:/),
-    ]),
+    expect.arrayContaining([expect.stringMatching(/^worker-assignment:/)]),
   );
 });

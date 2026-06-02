@@ -6,7 +6,8 @@ import { Button, type ButtonProps } from "./button";
 const DASHBOARD_ICON_BUTTON_SHELL_BASE_CLASS = "relative shrink-0";
 const DASHBOARD_ICON_BUTTON_SHELL_SIZE_CLASS = "h-10 w-10 rounded-lg";
 
-export interface DashboardIconButtonShellProps extends Omit<ButtonProps, "size"> {}
+export interface DashboardIconButtonShellProps
+  extends Omit<ButtonProps, "size"> {}
 
 export const DashboardIconButtonShell = forwardRef<
   HTMLButtonElement,

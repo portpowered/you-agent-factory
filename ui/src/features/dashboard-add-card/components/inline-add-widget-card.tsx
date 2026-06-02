@@ -5,11 +5,10 @@ import {
   useMemo,
   useState,
 } from "react";
-
-import { AgentBentoCard } from "../../bento/public";
 import type { DashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { getInlineAddWidgetMessages } from "../../bento/messages/inline-add-widget";
 import { getInlineWidgetPickerOptions } from "../../bento/messages/inline-widget-picker";
+import { AgentBentoCard } from "../../bento/public";
 import { InlineAddWidgetAddButton } from "./inline-add-widget-add-button";
 import { InlineAddWidgetSelector } from "./inline-add-widget-selector";
 

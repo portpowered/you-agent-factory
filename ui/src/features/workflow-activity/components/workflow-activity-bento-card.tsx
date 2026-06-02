@@ -1,9 +1,9 @@
 import { type ReactNode, useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { AgentBentoCard } from "../../bento/public";
 import type { DashboardSelection } from "../../current-selection/public";
+import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
@@ -52,8 +52,9 @@ export function WorkflowActivityBentoCard({
 }: WorkflowActivityBentoCardProps) {
   const messages = getWorkflowActivityShellMessages(locale);
   const { sessionID } = useDashboardSession();
-  const setTopologyEditorBridgeHandlers =
-    useFactoryGraphTopologyEditorBridge((state) => state.setHandlers);
+  const setTopologyEditorBridgeHandlers = useFactoryGraphTopologyEditorBridge(
+    (state) => state.setHandlers,
+  );
   const editor = useCurrentActivityGraphEditor(
     snapshot,
     locale,

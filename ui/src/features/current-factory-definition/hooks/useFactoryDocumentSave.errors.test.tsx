@@ -4,11 +4,11 @@ import {
   CurrentFactoryDefinitionError,
   saveFactoryForSessionDocument,
 } from "../../../api/current-factory-definition";
+import { useFactoryDocumentSave } from "./useFactoryDocumentSave";
 import {
   createFactoryDocumentSaveQueryClientWrapper,
   editableFactoryDefinition,
 } from "./useFactoryDocumentSave.test-helpers";
-import { useFactoryDocumentSave } from "./useFactoryDocumentSave";
 
 vi.mock("../../../api/current-factory-definition", async () => {
   const actual = await vi.importActual(
@@ -37,7 +37,10 @@ describe("useFactoryDocumentSave operator errors", () => {
     {
       code: "INVALID_FACTORY_DEFINITION" as const,
     },
-  ])("surfaces $code through saveAsync rejections", async ({ code, status }) => {
+  ])("surfaces $code through saveAsync rejections", async ({
+    code,
+    status,
+  }) => {
     const error = new CurrentFactoryDefinitionError(
       `Save failed with ${code}.`,
       {

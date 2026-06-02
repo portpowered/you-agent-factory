@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render } from "@testing-library/react";
 import type { FactoryEvent } from "../api/events";
 import { FACTORY_EVENT_TYPES } from "../api/events";
+import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import { useTraceDrilldown } from "../features/trace-drilldown/hooks/useTraceDrilldown";
 import { TraceDrilldownWidget } from "../features/trace-drilldown/public";
-import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 
 export const activeWorkID = "work-active-story";
 export const fanInResultLabel = "Implemented Story";
@@ -58,21 +58,26 @@ const completeWorkstation = {
 } as const;
 
 function traceFanInFactory(): FactoryEvent {
-  return factoryEvent("trace-fan-in-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-    factory: {
-      workTypes: [
-        {
-          name: "story",
-          states: [
-            { name: "new", type: "INITIAL" },
-            { name: "review", type: "PROCESSING" },
-            { name: "active", type: "PROCESSING" },
-          ],
-        },
-      ],
-      workstations: [reviewWorkstation, completeWorkstation],
+  return factoryEvent(
+    "trace-fan-in-1",
+    1,
+    FACTORY_EVENT_TYPES.initialStructureRequest,
+    {
+      factory: {
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "review", type: "PROCESSING" },
+              { name: "active", type: "PROCESSING" },
+            ],
+          },
+        ],
+        workstations: [reviewWorkstation, completeWorkstation],
+      },
     },
-  });
+  );
 }
 
 function traceFanInRequestEvents(): FactoryEvent[] {
@@ -270,21 +275,26 @@ export function buildTraceFanInTimelineEvents(): FactoryEvent[] {
 
 export function buildLegacyTraceTimelineEvents(): FactoryEvent[] {
   return [
-    factoryEvent("trace-legacy-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-      factory: {
-        workTypes: [
-          {
-            name: "story",
-            states: [
-              { name: "new", type: "INITIAL" },
-              { name: "review", type: "PROCESSING" },
-              { name: "active", type: "PROCESSING" },
-            ],
-          },
-        ],
-        workstations: [reviewWorkstation, completeWorkstation],
+    factoryEvent(
+      "trace-legacy-1",
+      1,
+      FACTORY_EVENT_TYPES.initialStructureRequest,
+      {
+        factory: {
+          workTypes: [
+            {
+              name: "story",
+              states: [
+                { name: "new", type: "INITIAL" },
+                { name: "review", type: "PROCESSING" },
+                { name: "active", type: "PROCESSING" },
+              ],
+            },
+          ],
+          workstations: [reviewWorkstation, completeWorkstation],
+        },
       },
-    }),
+    ),
     withFactoryEventContext(
       factoryEvent("trace-legacy-2", 2, FACTORY_EVENT_TYPES.workRequest, {
         source: "api",
@@ -298,7 +308,11 @@ export function buildLegacyTraceTimelineEvents(): FactoryEvent[] {
           },
         ],
       }),
-      { requestId: "request-legacy", traceIds: ["trace-legacy"], workIds: ["work-legacy"] },
+      {
+        requestId: "request-legacy",
+        traceIds: ["trace-legacy"],
+        workIds: ["work-legacy"],
+      },
     ),
     withFactoryEventContext(
       factoryEvent("trace-legacy-3", 3, FACTORY_EVENT_TYPES.dispatchRequest, {

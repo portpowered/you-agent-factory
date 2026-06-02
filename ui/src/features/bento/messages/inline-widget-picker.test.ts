@@ -41,7 +41,9 @@ describe("getInlineWidgetPickerMessages", () => {
 
 describe("getInlineWidgetPickerOptions", () => {
   it("returns the allowed widget catalog in picker order", () => {
-    expect(getInlineWidgetPickerOptions().map((option) => option.widgetType)).toEqual([
+    expect(
+      getInlineWidgetPickerOptions().map((option) => option.widgetType),
+    ).toEqual([
       "work-totals",
       "work-graph",
       "current-selection",

@@ -1,10 +1,10 @@
-import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
 import {
   getProviderSessionDetails,
-  type ProviderSessionDetailsAPIError,
   type ProviderSessionDetailResponse,
+  type ProviderSessionDetailsAPIError,
 } from "../../../api/provider-session-details";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 
@@ -37,7 +37,9 @@ export function useProviderSessionDetail(
     ],
     queryFn: () => {
       if (session === null) {
-        throw new Error("Provider-session detail query requires a selected session.");
+        throw new Error(
+          "Provider-session detail query requires a selected session.",
+        );
       }
 
       return getProviderSessionDetails(session);
@@ -103,11 +105,5 @@ export function useProviderSessionDetail(
       sessionDetail: query.data,
       status: "success",
     };
-  }, [
-    query.data,
-    query.error,
-    query.isFetching,
-    query.isPending,
-    session,
-  ]);
+  }, [query.data, query.error, query.isFetching, query.isPending, session]);
 }

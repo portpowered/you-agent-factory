@@ -1,6 +1,6 @@
+import { cn } from "../../lib/cn";
 import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "./dashboard-typography";
 import { formatLocalTimezoneContext } from "./formatters";
-import { cn } from "../../lib/cn";
 
 export function LocalizedTimezoneNote({
   children,

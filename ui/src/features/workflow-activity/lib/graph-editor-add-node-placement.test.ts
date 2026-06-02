@@ -8,10 +8,7 @@ import {
   resolveInitialPlacementTopLeft,
 } from "./graph-editor-add-node-placement";
 
-function workerNode(
-  id: string,
-  position: { x: number; y: number },
-): Node {
+function workerNode(id: string, position: { x: number; y: number }): Node {
   return {
     data: { kind: "worker" },
     height: 86,

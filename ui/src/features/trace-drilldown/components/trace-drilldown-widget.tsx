@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-
-import { TraceGridBentoCard } from "./trace-grid-card";
 import type { TraceGridState } from "./trace-grid-card";
+import { TraceGridBentoCard } from "./trace-grid-card";
 
 export interface TraceDrilldownWidgetProps {
   headerAction?: ReactNode;

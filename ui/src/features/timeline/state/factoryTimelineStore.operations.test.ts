@@ -165,7 +165,9 @@ describe("factory timeline store operations", () => {
       3,
     );
 
-    expect(snapshot.runtime.work_move_operations_by_work_id?.["work-ops"]).toEqual([
+    expect(
+      snapshot.runtime.work_move_operations_by_work_id?.["work-ops"],
+    ).toEqual([
       expect.objectContaining({
         work_id: "work-ops",
         from_state: "init",
@@ -174,7 +176,9 @@ describe("factory timeline store operations", () => {
         tick: 3,
       }),
     ]);
-    expect(snapshot.runtime.workstation_requests_by_dispatch_id).toBeUndefined();
+    expect(
+      snapshot.runtime.workstation_requests_by_dispatch_id,
+    ).toBeUndefined();
     expect(snapshot.runtime.session.has_data).toBe(true);
   });
 

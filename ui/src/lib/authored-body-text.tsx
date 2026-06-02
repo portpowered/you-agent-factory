@@ -1,5 +1,5 @@
-import { Fragment } from "react";
 import type { ReactNode } from "react";
+import { Fragment } from "react";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../components/ui/dashboard-typography";
 import { cn } from "./cn";
 
@@ -60,7 +60,7 @@ function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
   const lines = value.split(/\r?\n/);
   const blocks: RequestAuthoredBlock[] = [];
 
-  for (let lineIndex = 0; lineIndex < lines.length;) {
+  for (let lineIndex = 0; lineIndex < lines.length; ) {
     const line = lines[lineIndex];
 
     if (!line.trim()) {
@@ -139,7 +139,10 @@ function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
 
     const paragraphLines: string[] = [];
 
-    while (lineIndex < lines.length && shouldContinueParagraph(lines[lineIndex])) {
+    while (
+      lineIndex < lines.length &&
+      shouldContinueParagraph(lines[lineIndex])
+    ) {
       paragraphLines.push(lines[lineIndex]);
       lineIndex += 1;
     }
@@ -158,13 +161,18 @@ function shouldContinueParagraph(line: string): boolean {
     return false;
   }
 
-  return !/^(#{1,6})\s+/.test(line)
-    && !/^[-*+]\s+/.test(line)
-    && !/^\d+\.\s+/.test(line)
-    && !/^```([^\s`]+)?\s*$/.test(line);
+  return (
+    !/^(#{1,6})\s+/.test(line) &&
+    !/^[-*+]\s+/.test(line) &&
+    !/^\d+\.\s+/.test(line) &&
+    !/^```([^\s`]+)?\s*$/.test(line)
+  );
 }
 
-function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) {
+function renderRequestAuthoredBlock(
+  block: RequestAuthoredBlock,
+  index: number,
+) {
   switch (block.type) {
     case "code-block":
       return (
@@ -184,7 +192,10 @@ function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) 
       return (
         <ol key={`ordered-list-${index}`}>
           {stableListKeys(block.items).map(({ item, key }) => (
-            <li className="whitespace-pre-wrap" key={`ordered-list-item-${index}-${key}`}>
+            <li
+              className="whitespace-pre-wrap"
+              key={`ordered-list-item-${index}-${key}`}
+            >
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -194,7 +205,10 @@ function renderRequestAuthoredBlock(block: RequestAuthoredBlock, index: number) 
       return (
         <ul key={`unordered-list-${index}`}>
           {stableListKeys(block.items).map(({ item, key }) => (
-            <li className="whitespace-pre-wrap" key={`unordered-list-item-${index}-${key}`}>
+            <li
+              className="whitespace-pre-wrap"
+              key={`unordered-list-item-${index}-${key}`}
+            >
               {renderInlineMarkdown(item)}
             </li>
           ))}
@@ -220,9 +234,7 @@ function renderInlineMarkdown(value: string): ReactNode[] {
       segments.push(value.slice(lastIndex, match.index));
     }
 
-    segments.push(
-      <code key={`inline-code-${match.index}`}>{match[1]}</code>,
-    );
+    segments.push(<code key={`inline-code-${match.index}`}>{match[1]}</code>);
     lastIndex = inlineCodePattern.lastIndex;
     match = inlineCodePattern.exec(value);
   }
@@ -236,7 +248,11 @@ function renderInlineMarkdown(value: string): ReactNode[] {
     if (typeof segment === "string") {
       const occurrence = (seenStringSegments.get(segment) ?? 0) + 1;
       seenStringSegments.set(segment, occurrence);
-      return <Fragment key={`inline-text-${segment}-${occurrence}`}>{segment}</Fragment>;
+      return (
+        <Fragment key={`inline-text-${segment}-${occurrence}`}>
+          {segment}
+        </Fragment>
+      );
     }
 
     return segment;

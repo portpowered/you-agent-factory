@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type {
   DispatchRequestPayload,
   DispatchResponsePayload,
@@ -10,7 +11,6 @@ import type {
   InitialStructureRequestPayload,
   RunRequestPayload,
 } from "../../../api/events/index";
-import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type { WorldState } from "../../timeline/state/factoryTimelineStore";
 import {
   buildWorkChartModel,
@@ -56,21 +56,18 @@ export function useWorkOutcomeChart({
   timelineEvents: FactoryEvent[];
   worldViewCache: Record<number, WorldState | DashboardSnapshot | unknown>;
 }) {
-  const workOutcomeSamples = useMemo(
-    () => {
-      if (timelineEvents.length > 0) {
-        return buildWorkOutcomeTimelineSamplesFromEvents(
-          timelineEvents,
-          selectedTimelineTick,
-        );
-      }
-      return buildWorkOutcomeTimelineSamplesFromCachedSnapshots(
-        worldViewCache,
+  const workOutcomeSamples = useMemo(() => {
+    if (timelineEvents.length > 0) {
+      return buildWorkOutcomeTimelineSamplesFromEvents(
+        timelineEvents,
         selectedTimelineTick,
       );
-    },
-    [selectedTimelineTick, timelineEvents, worldViewCache],
-  );
+    }
+    return buildWorkOutcomeTimelineSamplesFromCachedSnapshots(
+      worldViewCache,
+      selectedTimelineTick,
+    );
+  }, [selectedTimelineTick, timelineEvents, worldViewCache]);
 
   return useMemo(
     () =>
@@ -111,7 +108,9 @@ export function buildWorkOutcomeTimelineSamplesFromEvents(
   for (let index = 0; index < orderedEvents.length; index += 1) {
     const event = orderedEvents[index];
     if (event.context.tick !== currentTick) {
-      samples.push(snapshotThroughputState(state, currentTick, currentObservedAt));
+      samples.push(
+        snapshotThroughputState(state, currentTick, currentObservedAt),
+      );
       currentTick = event.context.tick;
     }
     currentObservedAt = observedAtForEvent(event, index);
@@ -198,8 +197,12 @@ function applyFactoryDefinition(
   }
   const workTypes =
     factory.workTypes ??
-    ((factory as FactoryDefinition & { work_types?: FactoryDefinition["workTypes"] }).work_types ??
-      []);
+    (
+      factory as FactoryDefinition & {
+        work_types?: FactoryDefinition["workTypes"];
+      }
+    ).work_types ??
+    [];
   for (const workType of workTypes) {
     if (workType.name === SYSTEM_TIME_WORK_TYPE_ID) {
       continue;
@@ -250,7 +253,10 @@ function applyDispatchRequest(
 
   const inputWorkIDs = (payload.inputs ?? [])
     .map((input) => input.workId)
-    .filter((workID): workID is string => typeof workID === "string" && workID.length > 0);
+    .filter(
+      (workID): workID is string =>
+        typeof workID === "string" && workID.length > 0,
+    );
 
   for (const workID of inputWorkIDs) {
     const workItem = state.workItemsByID[workID];
@@ -338,8 +344,9 @@ function snapshotThroughputState(
   return {
     completedCount: state.completedAcceptedCount,
     dispatchedCount:
-      Object.values(state.activeDispatches).filter((dispatch) => !dispatch.systemOnly)
-        .length + state.completedDispatchCount,
+      Object.values(state.activeDispatches).filter(
+        (dispatch) => !dispatch.systemOnly,
+      ).length + state.completedDispatchCount,
     failedByWorkType,
     failedCount: failedWorkItems.length,
     failedWorkLabels: uniqueSorted(

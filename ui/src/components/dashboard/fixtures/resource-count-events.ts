@@ -1,5 +1,5 @@
-import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type { FactoryEvent } from "../../../api/events";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
 
 export const resourceCountAvailablePlaceID = "agent-slot:available";
 
@@ -33,58 +33,82 @@ const resourceWorkstation = {
 };
 
 export const resourceCountTimelineEvents: FactoryEvent[] = [
-  factoryEvent("resource-count-structure", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-    factory: {
-      resources: [{ capacity: 2, name: "agent-slot" }],
-      workTypes: [{
-        name: "story",
-        states: [
-          { name: "new", type: "INITIAL" },
-          { name: "done", type: "TERMINAL" },
+  factoryEvent(
+    "resource-count-structure",
+    1,
+    FACTORY_EVENT_TYPES.initialStructureRequest,
+    {
+      factory: {
+        resources: [{ capacity: 2, name: "agent-slot" }],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
         ],
-      }],
-      workstations: [resourceWorkstation],
+        workstations: [resourceWorkstation],
+      },
     },
-  }),
-  factoryEvent("resource-count-work-input", 2, FACTORY_EVENT_TYPES.workRequest, {
-    type: "FACTORY_REQUEST_BATCH",
-    works: [{
-      name: "Resource Occupancy Story",
-      trace_id: "trace-resource-count",
-      work_id: "work-resource-count",
-      work_type_name: "story",
-    }],
-  }),
-  factoryEvent("resource-count-request", 3, FACTORY_EVENT_TYPES.dispatchRequest, {
-    dispatchId: "dispatch-resource-count",
-    inputs: [
-      {
-        name: "Resource Occupancy Story",
-        trace_id: "trace-resource-count",
-        work_id: "work-resource-count",
-        work_type_name: "story",
-      },
-    ],
-    resources: [{ capacity: 2, name: "agent-slot" }],
-    transitionId: "implement",
-    workstation: resourceWorkstation,
-  }),
-  factoryEvent("resource-count-response", 4, FACTORY_EVENT_TYPES.dispatchResponse, {
-    dispatchId: "dispatch-resource-count",
-    durationMillis: 1000,
-    outcome: "ACCEPTED",
-    outputResources: [{ capacity: 2, name: "agent-slot" }],
-    outputWork: [
-      {
-        name: "Resource Occupancy Story",
-        trace_id: "trace-resource-count",
-        work_id: "work-resource-count",
-        work_type_name: "story",
-      },
-    ],
-    transitionId: "implement",
-    workstation: resourceWorkstation,
-  }),
+  ),
+  factoryEvent(
+    "resource-count-work-input",
+    2,
+    FACTORY_EVENT_TYPES.workRequest,
+    {
+      type: "FACTORY_REQUEST_BATCH",
+      works: [
+        {
+          name: "Resource Occupancy Story",
+          trace_id: "trace-resource-count",
+          work_id: "work-resource-count",
+          work_type_name: "story",
+        },
+      ],
+    },
+  ),
+  factoryEvent(
+    "resource-count-request",
+    3,
+    FACTORY_EVENT_TYPES.dispatchRequest,
+    {
+      dispatchId: "dispatch-resource-count",
+      inputs: [
+        {
+          name: "Resource Occupancy Story",
+          trace_id: "trace-resource-count",
+          work_id: "work-resource-count",
+          work_type_name: "story",
+        },
+      ],
+      resources: [{ capacity: 2, name: "agent-slot" }],
+      transitionId: "implement",
+      workstation: resourceWorkstation,
+    },
+  ),
+  factoryEvent(
+    "resource-count-response",
+    4,
+    FACTORY_EVENT_TYPES.dispatchResponse,
+    {
+      dispatchId: "dispatch-resource-count",
+      durationMillis: 1000,
+      outcome: "ACCEPTED",
+      outputResources: [{ capacity: 2, name: "agent-slot" }],
+      outputWork: [
+        {
+          name: "Resource Occupancy Story",
+          trace_id: "trace-resource-count",
+          work_id: "work-resource-count",
+          work_type_name: "story",
+        },
+      ],
+      transitionId: "implement",
+      workstation: resourceWorkstation,
+    },
+  ),
 ];
 
 resourceCountTimelineEvents[1].context.requestId = "request-resource-count";
@@ -96,4 +120,3 @@ resourceCountTimelineEvents[2].context.workIds = ["work-resource-count"];
 resourceCountTimelineEvents[3].context.dispatchId = "dispatch-resource-count";
 resourceCountTimelineEvents[3].context.traceIds = ["trace-resource-count"];
 resourceCountTimelineEvents[3].context.workIds = ["work-resource-count"];
-

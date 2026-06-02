@@ -18,8 +18,7 @@ it("rerenders request and response timestamps for the active locale", () => {
     inference_attempts: [
       inferenceAttempt("dispatch-review-timestamps", {
         attempt: 1,
-        inference_request_id:
-          "dispatch-review-timestamps/inference-request/1",
+        inference_request_id: "dispatch-review-timestamps/inference-request/1",
         duration_millis: 875,
         prompt: "Review the completed runtime story.",
         request_time: requestTime,
@@ -42,7 +41,9 @@ it("rerenders request and response timestamps for the active locale", () => {
   expect(
     screen.getByText("Times on this card are shown in your local timezone."),
   ).toBeTruthy();
-  expect(screen.getByText(formatLocalTimezoneContext("Timezone", "en"))).toBeTruthy();
+  expect(
+    screen.getByText(formatLocalTimezoneContext("Timezone", "en")),
+  ).toBeTruthy();
   const expectedEnglishRequestTime = formatLocalDateTime(
     requestTime,
     "Unavailable",
@@ -58,12 +59,12 @@ it("rerenders request and response timestamps for the active locale", () => {
     inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
   );
 
-  expect(inferenceAttempts.getAllByText(expectedEnglishRequestTime)).toHaveLength(
-    1,
-  );
-  expect(inferenceAttempts.getAllByText(expectedEnglishResponseTime)).toHaveLength(
-    1,
-  );
+  expect(
+    inferenceAttempts.getAllByText(expectedEnglishRequestTime),
+  ).toHaveLength(1);
+  expect(
+    inferenceAttempts.getAllByText(expectedEnglishResponseTime),
+  ).toHaveLength(1);
   expect(inferenceAttempts.getByTitle(requestTime)).toBeTruthy();
   expect(inferenceAttempts.getByTitle(responseTime)).toBeTruthy();
   expect(inferenceAttempts.getByText("Elapsed time: 875ms")).toBeTruthy();
@@ -94,7 +95,9 @@ it("rerenders request and response timestamps for the active locale", () => {
     screen.getByRole("region", { name: "推理尝试" }),
   );
   expect(screen.getByText("此卡片中的时间会按你的本地时区显示。")).toBeTruthy();
-  expect(screen.getByText(formatLocalTimezoneContext("时区", "zh-CN"))).toBeTruthy();
+  expect(
+    screen.getByText(formatLocalTimezoneContext("时区", "zh-CN")),
+  ).toBeTruthy();
   const expectedChineseRequestTime = formatLocalDateTime(
     requestTime,
     "不可用",
@@ -106,12 +109,12 @@ it("rerenders request and response timestamps for the active locale", () => {
     "zh-CN",
   );
 
-  expect(localizedInferenceAttempts.getAllByText(expectedChineseRequestTime)).toHaveLength(
-    1,
-  );
-  expect(localizedInferenceAttempts.getAllByText(expectedChineseResponseTime)).toHaveLength(
-    1,
-  );
+  expect(
+    localizedInferenceAttempts.getAllByText(expectedChineseRequestTime),
+  ).toHaveLength(1);
+  expect(
+    localizedInferenceAttempts.getAllByText(expectedChineseResponseTime),
+  ).toHaveLength(1);
   expect(localizedInferenceAttempts.getByText("耗时: 875毫秒")).toBeTruthy();
   expect(
     localizedInferenceAttempts.queryByText(expectedEnglishRequestTime),

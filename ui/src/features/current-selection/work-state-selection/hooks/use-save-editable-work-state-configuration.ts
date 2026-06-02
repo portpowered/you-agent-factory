@@ -1,8 +1,6 @@
 import { useCallback, useMemo } from "react";
 
-import type {
-  CurrentFactoryDefinitionError,
-} from "../../../../api/current-factory-definition";
+import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { useCurrentActivityGraphStore } from "../../../workflow-activity/state/currentActivityGraphStore";
 import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
 import type {
@@ -47,11 +45,11 @@ export function useSaveEditableWorkStateConfiguration({
     saveNow,
     saveState,
   } = useScopedFactoryDocumentSave<EditableWorkStateSaveValidationErrors>({
-      fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
-      isDirty,
-      mapSaveErrorToFieldErrors: resolveSaveFieldErrors,
-      scopeKey,
-    });
+    fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
+    isDirty,
+    mapSaveErrorToFieldErrors: resolveSaveFieldErrors,
+    scopeKey,
+  });
 
   const canSave =
     editableConfigurationState?.status === "ready" &&

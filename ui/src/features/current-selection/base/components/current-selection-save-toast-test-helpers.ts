@@ -159,10 +159,12 @@ export async function expectGraphDraftConflictWarningToast() {
 
 export async function expectNoGraphDraftConflictWarningToast() {
   await waitFor(() => {
-    const conflictCalls = vi.mocked(toast.warning).mock.calls.filter(
-      (call) =>
-        call[0] === graphDraftConflictMessages.graphDraftConflictWarningTitle,
-    );
+    const conflictCalls = vi
+      .mocked(toast.warning)
+      .mock.calls.filter(
+        (call) =>
+          call[0] === graphDraftConflictMessages.graphDraftConflictWarningTitle,
+      );
     expect(conflictCalls).toHaveLength(0);
   });
 }

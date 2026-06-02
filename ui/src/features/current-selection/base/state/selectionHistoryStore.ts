@@ -1,7 +1,6 @@
 import { create } from "zustand";
-
-import type { DashboardSelection } from "./dashboardSelection";
 import type { TerminalWorkDetail } from "../state/selection-types";
+import type { DashboardSelection } from "./dashboardSelection";
 
 const SELECTION_HISTORY_LIMIT = 50;
 
@@ -26,7 +25,9 @@ const EMPTY_SELECTION_HISTORY_ENTRY: SelectionHistoryEntry = {
   terminalWorkDetail: null,
 };
 
-function selectionHistorySelectionKey(selection: DashboardSelection | null): string {
+function selectionHistorySelectionKey(
+  selection: DashboardSelection | null,
+): string {
   if (!selection) {
     return "none";
   }
@@ -91,82 +92,87 @@ function boundedHistory(
   return [...past, nextEntry].slice(-SELECTION_HISTORY_LIMIT);
 }
 
-export const useSelectionHistoryStore = create<SelectionHistoryStoreState>()((set) => ({
-  future: [],
-  past: [],
-  present: EMPTY_SELECTION_HISTORY_ENTRY,
-  clear: () => {
-    set((state) => {
-      if (
-        state.past.length === 0 &&
-        state.future.length === 0 &&
-        sameSelectionHistoryEntry(state.present, EMPTY_SELECTION_HISTORY_ENTRY)
-      ) {
-        return state;
-      }
+export const useSelectionHistoryStore = create<SelectionHistoryStoreState>()(
+  (set) => ({
+    future: [],
+    past: [],
+    present: EMPTY_SELECTION_HISTORY_ENTRY,
+    clear: () => {
+      set((state) => {
+        if (
+          state.past.length === 0 &&
+          state.future.length === 0 &&
+          sameSelectionHistoryEntry(
+            state.present,
+            EMPTY_SELECTION_HISTORY_ENTRY,
+          )
+        ) {
+          return state;
+        }
 
-      return {
-        future: [],
-        past: [],
-        present: EMPTY_SELECTION_HISTORY_ENTRY,
-      };
-    });
-  },
-  commitSelectionState: (entry) => {
-    set((state) => {
-      if (sameSelectionHistoryEntry(state.present, entry)) {
-        return state;
-      }
+        return {
+          future: [],
+          past: [],
+          present: EMPTY_SELECTION_HISTORY_ENTRY,
+        };
+      });
+    },
+    commitSelectionState: (entry) => {
+      set((state) => {
+        if (sameSelectionHistoryEntry(state.present, entry)) {
+          return state;
+        }
 
-      return {
-        future: [],
-        past: boundedHistory(state.past, state.present),
-        present: entry,
-      };
-    });
-  },
-  redo: () => {
-    set((state) => {
-      const [nextPresent, ...nextFuture] = state.future;
-      if (!nextPresent) {
-        return state;
-      }
+        return {
+          future: [],
+          past: boundedHistory(state.past, state.present),
+          present: entry,
+        };
+      });
+    },
+    redo: () => {
+      set((state) => {
+        const [nextPresent, ...nextFuture] = state.future;
+        if (!nextPresent) {
+          return state;
+        }
 
-      return {
-        future: nextFuture,
-        past: boundedHistory(state.past, state.present),
-        present: nextPresent,
-      };
-    });
-  },
-  replacePresent: (entry) => {
-    set((state) => {
-      if (sameSelectionHistoryEntry(state.present, entry)) {
-        return state;
-      }
+        return {
+          future: nextFuture,
+          past: boundedHistory(state.past, state.present),
+          present: nextPresent,
+        };
+      });
+    },
+    replacePresent: (entry) => {
+      set((state) => {
+        if (sameSelectionHistoryEntry(state.present, entry)) {
+          return state;
+        }
 
-      return {
-        ...state,
-        present: entry,
-      };
-    });
-  },
-  undo: () => {
-    set((state) => {
-      const nextPast = state.past.slice(0, -1);
-      const nextPresent = state.past[state.past.length - 1];
-      if (!nextPresent) {
-        return state;
-      }
+        return {
+          ...state,
+          present: entry,
+        };
+      });
+    },
+    undo: () => {
+      set((state) => {
+        const nextPast = state.past.slice(0, -1);
+        const nextPresent = state.past[state.past.length - 1];
+        if (!nextPresent) {
+          return state;
+        }
 
-      return {
-        future: [state.present, ...state.future],
-        past: nextPast,
-        present: nextPresent,
-      };
-    });
-  },
-}));
+        return {
+          future: [state.present, ...state.future],
+          past: nextPast,
+          present: nextPresent,
+        };
+      });
+    },
+  }),
+);
 
 export function resetSelectionHistoryStore(): void {
   useSelectionHistoryStore.setState({

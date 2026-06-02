@@ -1,7 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
-
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 
 const fixtureState = vi.hoisted(() => {
@@ -218,9 +217,9 @@ describe("useGraphEditorSaveFlow", () => {
 
     expect(fixtureState.draftState.resetDraft).toHaveBeenCalledTimes(1);
     expect(fixtureState.addEntityController.reset).toHaveBeenCalledTimes(1);
-    expect(fixtureState.documentSaveControls.clearSaveFeedback).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(
+      fixtureState.documentSaveControls.clearSaveFeedback,
+    ).toHaveBeenCalledTimes(1);
     expect(setEditorMode).not.toHaveBeenCalled();
     expect(setActiveTool).not.toHaveBeenCalled();
     expect(result.current.isConfirmingLeaveEditor).toBe(false);
@@ -240,7 +239,9 @@ describe("useGraphEditorSaveFlow", () => {
     });
 
     expect(didSave).toBe(false);
-    expect(fixtureState.documentSaveControls.clearSaveFeedback).toHaveBeenCalled();
+    expect(
+      fixtureState.documentSaveControls.clearSaveFeedback,
+    ).toHaveBeenCalled();
   });
 
   it("discards pending changes and leaves editor mode from the leave dialog path", () => {

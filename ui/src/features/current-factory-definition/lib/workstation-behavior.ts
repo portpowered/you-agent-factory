@@ -3,7 +3,9 @@ import type { CanonicalFactoryDefinition } from "../../../api/current-factory-de
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
 >[number];
-type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+type CanonicalWorker = NonNullable<
+  CanonicalFactoryDefinition["workers"]
+>[number];
 
 export type EditableWorkstationBehavior = NonNullable<
   CanonicalWorkstation["behavior"]
@@ -35,9 +37,7 @@ export function resolveEditableWorkstationBehaviorOptions(
 export function workerSupportsPollerBehavior(
   worker: Pick<CanonicalWorker, "type"> | null | undefined,
 ): boolean {
-  return (
-    worker?.type === "HOSTED_WORKER" || worker?.type === "SCRIPT_WORKER"
-  );
+  return worker?.type === "HOSTED_WORKER" || worker?.type === "SCRIPT_WORKER";
 }
 
 export function workstationBehaviorRequiresPrompt(

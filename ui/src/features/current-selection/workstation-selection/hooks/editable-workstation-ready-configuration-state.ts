@@ -5,7 +5,7 @@ import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
   type EditableWorkstationValues,
-  resolveEditableWorkstationValues,
+  type resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
 import {
@@ -88,11 +88,7 @@ function createEditableWorkstationDraftHandlers(
     },
     onBehaviorChange: (value: EditableWorkstationBehavior) => {
       updateDraft((draft) =>
-        resolveDraftForBehaviorChange(
-          draft,
-          value,
-          selectedEditableValues,
-        ),
+        resolveDraftForBehaviorChange(draft, value, selectedEditableValues),
       );
     },
     onCronExpiryWindowChange: (value: string) => {

@@ -186,8 +186,9 @@ describe("projectTraceDispatchesToFactoryGraph workstation node ids", () => {
       "workstation:74d8f3b3-d91b-4bcc-927d-b2643e71bc8a",
       "workstation:82d4be6a-68c3-4c94-ad3b-53fd53326015",
     ]);
-    expect(projection.topology.nodes.every((node) => node.kind === "workstation"))
-      .toBe(true);
+    expect(
+      projection.topology.nodes.every((node) => node.kind === "workstation"),
+    ).toBe(true);
   });
 });
 

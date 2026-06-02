@@ -1,17 +1,18 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { RefObject } from "react";
-
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
-import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import { normalizeFactoryDefinition } from "../../../api/factory-definition";
 import {
-  currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
+  currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 
-export function clearQueuedFlush(flushHandleRef: RefObject<number | null>): void {
+export function clearQueuedFlush(
+  flushHandleRef: RefObject<number | null>,
+): void {
   if (flushHandleRef.current === null) {
     return;
   }
@@ -76,9 +77,8 @@ export function syncCurrentFactoryDefinition(
       currentFactoryDefinitionQueryKey(sessionID),
       normalizedFactory,
     );
-    const document = toCurrentFactoryDocumentFromNormalizedFactory(
-      normalizedFactory,
-    );
+    const document =
+      toCurrentFactoryDocumentFromNormalizedFactory(normalizedFactory);
     if (document) {
       queryClient.setQueryData(
         currentFactoryDocumentQueryKey(sessionID),
@@ -101,7 +101,8 @@ function toCurrentFactoryDocumentFromNormalizedFactory(
   if (
     version == null ||
     typeof version !== "object" ||
-    (typeof version.logical !== "string" && typeof version.logical !== "number") ||
+    (typeof version.logical !== "string" &&
+      typeof version.logical !== "number") ||
     typeof version.physical !== "string"
   ) {
     return null;

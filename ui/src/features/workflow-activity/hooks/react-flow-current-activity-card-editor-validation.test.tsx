@@ -2,14 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { FactoryValidationResult } from "../../../api/factory-validation";
+import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/factory-graph-operations";
+import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/use-factory-validation";
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
-import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/use-factory-validation";
+import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/factory-graph-operations";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 
 const validationFixtures = vi.hoisted(() => {
@@ -178,13 +177,19 @@ vi.mock("../../../api/factory-validation", async () => {
   };
 });
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
-  useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  () => ({
+    useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
+  }),
+);
 
-vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: () => hookState.saveEditableDefinition,
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: () => hookState.saveEditableDefinition,
+  }),
+);
 
 vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
   useEditableFactoryGraph: () => ({
@@ -388,9 +393,9 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     await waitFor(
       () => {
         expect(result.current.structuralValidation.targets).toHaveLength(1);
-        expect(result.current.structuralValidation.targets[0]?.subject.location).toBe(
-          "ON_FAILURE",
-        );
+        expect(
+          result.current.structuralValidation.targets[0]?.subject.location,
+        ).toBe("ON_FAILURE");
       },
       { timeout: 1_000 },
     );

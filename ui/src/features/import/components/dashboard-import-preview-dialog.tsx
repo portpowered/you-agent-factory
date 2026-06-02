@@ -1,14 +1,4 @@
 import { useId, useMemo, useState } from "react";
-
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import {
-  EMPTY_STATE_CLASS,
-} from "../../../components/ui/widget-frame";
 import {
   Button,
   Dialog,
@@ -18,7 +8,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../../components/ui/dashboard-typography";
+import { EMPTY_STATE_CLASS } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
+import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
+import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 import { allocateImportCreateFactoryName } from "../lib/allocate-import-create-factory-name";
 import type {
   FactoryImportConfirmInput,
@@ -28,8 +27,6 @@ import {
   getImportPreviewDialogMessages,
   IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN,
 } from "../messages/import-preview-dialog";
-import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
-import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 
 const IMPORT_DIALOG_CONTENT_CLASS =
   "w-full max-w-5xl gap-6 p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:p-5";
@@ -45,7 +42,10 @@ const IMPORT_SAVE_CHOICE_OPTION_CLASS =
 const IMPORT_ERROR_PANEL_CLASS =
   "border-af-danger-border bg-af-danger-surface text-af-danger-text";
 
-type ReadyFactoryImportPreviewState = Extract<FactoryImportPreviewState, { status: "ready" }>;
+type ReadyFactoryImportPreviewState = Extract<
+  FactoryImportPreviewState,
+  { status: "ready" }
+>;
 
 export interface FactoryImportPreviewDialogProps {
   activationState: FactoryImportActivationState;
@@ -182,9 +182,18 @@ function FactoryImportSaveChoiceFieldset({
       className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4"
       disabled={isSubmitting}
     >
-      <legend className={IMPORT_DIALOG_LABEL_CLASS}>{messages.saveChoiceLegend}</legend>
-      <div className="grid gap-2" role="radiogroup" aria-label={messages.saveChoiceLegend}>
-        <label className={IMPORT_SAVE_CHOICE_OPTION_CLASS} htmlFor={replaceOptionId}>
+      <legend className={IMPORT_DIALOG_LABEL_CLASS}>
+        {messages.saveChoiceLegend}
+      </legend>
+      <div
+        className="grid gap-2"
+        role="radiogroup"
+        aria-label={messages.saveChoiceLegend}
+      >
+        <label
+          className={IMPORT_SAVE_CHOICE_OPTION_CLASS}
+          htmlFor={replaceOptionId}
+        >
           <span className="flex items-start gap-3">
             <input
               checked={choice === "replace_current"}
@@ -210,7 +219,10 @@ function FactoryImportSaveChoiceFieldset({
             </span>
           </span>
         </label>
-        <label className={IMPORT_SAVE_CHOICE_OPTION_CLASS} htmlFor={createOptionId}>
+        <label
+          className={IMPORT_SAVE_CHOICE_OPTION_CLASS}
+          htmlFor={createOptionId}
+        >
           <span className="flex items-start gap-3">
             <input
               checked={choice === "create_new_named"}
@@ -234,7 +246,9 @@ function FactoryImportSaveChoiceFieldset({
                 <span className={IMPORT_DIALOG_LABEL_CLASS}>
                   {messages.createResolvedNameLabel}
                 </span>
-                <span className="text-sm font-semibold text-af-text">{createFactoryName}</span>
+                <span className="text-sm font-semibold text-af-text">
+                  {createFactoryName}
+                </span>
               </span>
             </span>
           </span>
@@ -255,7 +269,8 @@ export function FactoryImportPreviewDialog({
 }: FactoryImportPreviewDialogProps) {
   const isSubmitting = activationState.status === "submitting";
   const messages = getImportPreviewDialogMessages(locale);
-  const [choice, setChoice] = useState<FactoryImportSaveChoice>("replace_current");
+  const [choice, setChoice] =
+    useState<FactoryImportSaveChoice>("replace_current");
   const resolvedExistingFactoryNames = useMemo(
     () =>
       collectExistingFactoryNames(
@@ -263,7 +278,11 @@ export function FactoryImportPreviewDialog({
         previewState.value.factory.name,
         existingFactoryNames,
       ),
-    [currentSessionFactoryName, existingFactoryNames, previewState.value.factory.name],
+    [
+      currentSessionFactoryName,
+      existingFactoryNames,
+      previewState.value.factory.name,
+    ],
   );
   const createFactoryName = useMemo(
     () =>
@@ -335,11 +354,17 @@ export function FactoryImportPreviewDialog({
 
           <dl className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-sm text-af-text-muted">
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.droppedFileLabel}</dt>
-              <dd className="m-0 font-semibold text-af-text">{previewState.file.name}</dd>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
+                {messages.droppedFileLabel}
+              </dt>
+              <dd className="m-0 font-semibold text-af-text">
+                {previewState.file.name}
+              </dd>
             </div>
             <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>{messages.embeddedFactoryLabel}</dt>
+              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
+                {messages.embeddedFactoryLabel}
+              </dt>
               <dd className="m-0 font-semibold text-af-text">
                 {previewState.value.factory.name}
               </dd>
@@ -358,11 +383,19 @@ export function FactoryImportPreviewDialog({
           <p className={IMPORT_DIALOG_HINT_CLASS}>{messages.hint}</p>
 
           {activationState.status === "error" ? (
-            <FactoryImportActivationErrorPanel error={activationState.error} locale={locale} />
+            <FactoryImportActivationErrorPanel
+              error={activationState.error}
+              locale={locale}
+            />
           ) : null}
 
           <DialogFooter>
-            <Button disabled={isSubmitting} onClick={onCancel} tone="outline" type="button">
+            <Button
+              disabled={isSubmitting}
+              onClick={onCancel}
+              tone="outline"
+              type="button"
+            >
               {messages.cancelAction}
             </Button>
             <Button
@@ -371,7 +404,9 @@ export function FactoryImportPreviewDialog({
               onClick={handleConfirm}
               type="button"
             >
-              {isSubmitting ? messages.activatingAction : messages.activateAction}
+              {isSubmitting
+                ? messages.activatingAction
+                : messages.activateAction}
             </Button>
           </DialogFooter>
         </div>

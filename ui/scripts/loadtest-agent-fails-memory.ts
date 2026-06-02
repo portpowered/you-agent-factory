@@ -69,9 +69,20 @@ interface AggregateReport {
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(dirname, "..");
 const repoRoot = path.resolve(packageRoot, "..", "..", "..");
-const defaultLogPath = path.join(repoRoot, "factory", "logs", "agent-fails.json");
+const defaultLogPath = path.join(
+  repoRoot,
+  "factory",
+  "logs",
+  "agent-fails.json",
+);
 const defaultAmplifiedCopies = 8;
-const heavyPayloadKeys = ["feedback", "prompt", "responseText", "stderr", "stdout"] as const;
+const heavyPayloadKeys = [
+  "feedback",
+  "prompt",
+  "responseText",
+  "stderr",
+  "stdout",
+] as const;
 
 function parseArgs(argv: string[]) {
   const options: {
@@ -94,7 +105,11 @@ function parseArgs(argv: string[]) {
     }
     if (arg === "--scenario") {
       const value = argv[index + 1];
-      if (value === "baseline" || value === "stripped" || value === "amplified") {
+      if (
+        value === "baseline" ||
+        value === "stripped" ||
+        value === "amplified"
+      ) {
         options.scenario = value;
         index += 1;
         continue;
@@ -113,7 +128,9 @@ function parseArgs(argv: string[]) {
     if (arg === "--amplify") {
       const value = Number(argv[index + 1]);
       if (!Number.isInteger(value) || value < 1) {
-        throw new Error(`--amplify must be a positive integer, received ${argv[index + 1] ?? "<missing>"}`);
+        throw new Error(
+          `--amplify must be a positive integer, received ${argv[index + 1] ?? "<missing>"}`,
+        );
       }
       options.amplify = value;
       index += 1;
@@ -138,7 +155,10 @@ function sampleMemoryMB(): MemorySample {
   };
 }
 
-function memoryDeltaMB(before: MemorySample, after: MemorySample): MemorySample {
+function memoryDeltaMB(
+  before: MemorySample,
+  after: MemorySample,
+): MemorySample {
   return {
     heapTotalMB: Number((after.heapTotalMB - before.heapTotalMB).toFixed(1)),
     heapUsedMB: Number((after.heapUsedMB - before.heapUsedMB).toFixed(1)),
@@ -186,7 +206,9 @@ function payloadByteSummary(events: FactoryEvent[]): PayloadByteSummary {
   };
 
   for (const event of events) {
-    summary.totalStructuredJsonBytes += Buffer.byteLength(JSON.stringify(event));
+    summary.totalStructuredJsonBytes += Buffer.byteLength(
+      JSON.stringify(event),
+    );
     const payload = event.payload;
     if (!payload || typeof payload !== "object") {
       continue;
@@ -217,7 +239,9 @@ function payloadByteSummary(events: FactoryEvent[]): PayloadByteSummary {
   return summary;
 }
 
-function payloadByteSummaryMB(summary: PayloadByteSummary): PayloadByteSummaryMB {
+function payloadByteSummaryMB(
+  summary: PayloadByteSummary,
+): PayloadByteSummaryMB {
   return {
     feedbackMB: mb(summary.feedbackBytes),
     promptMB: mb(summary.promptBytes),
@@ -247,7 +271,10 @@ function amplifyEvents(events: FactoryEvent[], copies: number): FactoryEvent[] {
     return structuredClone(events);
   }
 
-  const latestBaseTick = events.reduce((maxTick, event) => Math.max(maxTick, event.context.tick), 0);
+  const latestBaseTick = events.reduce(
+    (maxTick, event) => Math.max(maxTick, event.context.tick),
+    0,
+  );
   const amplified: FactoryEvent[] = [];
 
   for (let copyIndex = 0; copyIndex < copies; copyIndex += 1) {
@@ -268,7 +295,10 @@ function amplifyEvents(events: FactoryEvent[], copies: number): FactoryEvent[] {
 }
 
 function latestTick(events: FactoryEvent[]): number {
-  return events.reduce((maxTick, event) => Math.max(maxTick, event.context.tick), 0);
+  return events.reduce(
+    (maxTick, event) => Math.max(maxTick, event.context.tick),
+    0,
+  );
 }
 
 function buildScenarioEvents(
@@ -328,9 +358,12 @@ function measureScenario(
     payloadBytesMB: payloadByteSummaryMB(eventPayloadBytes),
     selectedTick: state.selectedTick,
     skippedBlocks: parsed.skippedBlocks,
-    traceCount: Object.keys(state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {}).length,
+    traceCount: Object.keys(
+      state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {},
+    ).length,
     workstationRequestCount: Object.keys(
-      state.worldViewCache[state.selectedTick]?.workstationRequestsByDispatchID ?? {},
+      state.worldViewCache[state.selectedTick]
+        ?.workstationRequestsByDispatchID ?? {},
     ).length,
   };
 }
@@ -343,7 +376,16 @@ function runScenarioInChild(
   const scriptPath = fileURLToPath(import.meta.url);
   const child = spawnSync(
     process.execPath,
-    [scriptPath, "--scenario", scenario, "--input", logPath, "--amplify", String(amplify), "--json"],
+    [
+      scriptPath,
+      "--scenario",
+      scenario,
+      "--input",
+      logPath,
+      "--amplify",
+      String(amplify),
+      "--json",
+    ],
     {
       cwd: packageRoot,
       encoding: "utf8",
@@ -397,10 +439,13 @@ function summarizeFindings(
   return findings;
 }
 
-function confirmHighMemoryCost(reports: Record<ScenarioName, ScenarioReport>): boolean {
+function confirmHighMemoryCost(
+  reports: Record<ScenarioName, ScenarioReport>,
+): boolean {
   return (
     reports.baseline.memoryDeltaMB.rssMB >= 30 &&
-    reports.stripped.parsedJsonBytesMB <= reports.baseline.parsedJsonBytesMB - 1 &&
+    reports.stripped.parsedJsonBytesMB <=
+      reports.baseline.parsedJsonBytesMB - 1 &&
     reports.amplified.memoryAfterMB.rssMB >= 350
   );
 }
@@ -412,8 +457,12 @@ function printHumanReport(report: AggregateReport): void {
   console.log(`events: ${report.eventCount}`);
   console.log(`malformed blocks skipped: ${report.invalidBlocksDetected}`);
   console.log("");
-  console.log(`baseline: ${baseline.memoryDeltaMB.rssMB} MB RSS delta, ${baseline.durationMs} ms, ${baseline.payloadBytesMB.promptMB} MB prompts`);
-  console.log(`stripped: ${stripped.memoryDeltaMB.rssMB} MB RSS delta, ${stripped.durationMs} ms`);
+  console.log(
+    `baseline: ${baseline.memoryDeltaMB.rssMB} MB RSS delta, ${baseline.durationMs} ms, ${baseline.payloadBytesMB.promptMB} MB prompts`,
+  );
+  console.log(
+    `stripped: ${stripped.memoryDeltaMB.rssMB} MB RSS delta, ${stripped.durationMs} ms`,
+  );
   console.log(
     `amplified x${amplified.amplifiedCopies}: ${amplified.memoryAfterMB.rssMB} MB final RSS, ${amplified.durationMs} ms, ${amplified.eventCount} events`,
   );
@@ -422,7 +471,9 @@ function printHumanReport(report: AggregateReport): void {
     console.log(`- ${finding}`);
   }
   console.log("");
-  console.log(`confirmed high memory cost: ${report.confirmedHighMemoryCost ? "yes" : "no"}`);
+  console.log(
+    `confirmed high memory cost: ${report.confirmedHighMemoryCost ? "yes" : "no"}`,
+  );
 }
 
 function ensureLogExists(logPath: string): void {
@@ -438,13 +489,22 @@ function main(): void {
   if (options.scenario !== null) {
     gcIfAvailable();
     const parsed = parseSSEEventLog(fs.readFileSync(options.logPath, "utf8"));
-    const report = measureScenario(options.scenario, options.logPath, parsed, options.amplify);
+    const report = measureScenario(
+      options.scenario,
+      options.logPath,
+      parsed,
+      options.amplify,
+    );
     process.stdout.write(JSON.stringify(report));
     return;
   }
 
   const reports: Record<ScenarioName, ScenarioReport> = {
-    amplified: runScenarioInChild("amplified", options.logPath, options.amplify),
+    amplified: runScenarioInChild(
+      "amplified",
+      options.logPath,
+      options.amplify,
+    ),
     baseline: runScenarioInChild("baseline", options.logPath, options.amplify),
     stripped: runScenarioInChild("stripped", options.logPath, options.amplify),
   };

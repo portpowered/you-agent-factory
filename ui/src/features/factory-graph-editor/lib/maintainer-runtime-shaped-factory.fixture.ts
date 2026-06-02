@@ -1,8 +1,8 @@
-import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
 } from "./factory-graph-customer-display";
+import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
 
 /** Minimal maintainer-shaped factory with runtime-injected system-time routes. */
 export const maintainerRuntimeShapedFactory = {

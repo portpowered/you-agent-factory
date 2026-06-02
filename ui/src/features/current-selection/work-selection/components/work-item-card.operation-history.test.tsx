@@ -10,8 +10,8 @@ import {
   getSelectedWorkItemFixture,
   workstationRequest,
 } from "../../base/components/detail-card-test-helpers";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function renderWorkItemWithOperationHistory(
@@ -102,7 +102,9 @@ describe("WorkItemDetailCard operation history", () => {
       within(workstationCard).getAllByText("Workstation").length,
     ).toBeGreaterThan(0);
     expect(
-      within(workstationCard).getByRole("heading", { name: "Inference attempts" }),
+      within(workstationCard).getByRole("heading", {
+        name: "Inference attempts",
+      }),
     ).toBeTruthy();
   });
 
@@ -134,7 +136,9 @@ describe("WorkItemDetailCard operation history", () => {
       }),
     ).toBeNull();
     expect(
-      within(logicalMoveCard).queryByRole("heading", { name: "Request details" }),
+      within(logicalMoveCard).queryByRole("heading", {
+        name: "Request details",
+      }),
     ).toBeNull();
   });
 });

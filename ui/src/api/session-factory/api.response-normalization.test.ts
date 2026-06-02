@@ -1,5 +1,6 @@
-import { sessionFactoryAPIErrorMessages } from "./messages";
 import { getSessionFactory, saveSessionFactory } from "./api";
+import { sessionFactoryAPIErrorMessages } from "./messages";
+
 describe("getSessionFactory response normalization", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -9,11 +10,16 @@ describe("getSessionFactory response normalization", () => {
     await expect(
       getSessionFactory("~default", {
         fetch: vi.fn().mockResolvedValue(
-          new Response(JSON.stringify({ version: { logical: "1", physical: "2026-05-31T00:00:00Z" } }), {
-            headers: { "Content-Type": "application/json" },
-            status: 200,
-            statusText: "OK",
-          }),
+          new Response(
+            JSON.stringify({
+              version: { logical: "1", physical: "2026-05-31T00:00:00Z" },
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
         ),
       }),
     ).rejects.toMatchObject({

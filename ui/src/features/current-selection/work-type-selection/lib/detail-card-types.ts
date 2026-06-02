@@ -4,12 +4,12 @@ import type {
   CanonicalFactoryDefinition,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { EditableWorkTypeValidationErrors } from "../../../current-factory-definition/lib/work-type-editable-validation";
 import type {
   EditableWorkTypeDraft,
   EditableWorkTypeValues,
 } from "../../../current-factory-definition/lib/work-type-editable-values";
+import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 
 export type EditableWorkTypeSaveValidationErrors = {
   handlingBehavior?: string;

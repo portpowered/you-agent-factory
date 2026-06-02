@@ -5,10 +5,10 @@ import type {
 import {
   buildEdge,
   buildNode,
-  nodeKeyId,
   type FactoryGraphEdge,
   type FactoryGraphNode,
   type FactoryGraphTopology,
+  nodeKeyId,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
@@ -77,7 +77,8 @@ export function projectTraceRelationsToFactoryGraph(
 
   const sortedEndpoints = [...endpointRecords.values()].sort(
     (left, right) =>
-      left.order - right.order || left.endpointKey.localeCompare(right.endpointKey),
+      left.order - right.order ||
+      left.endpointKey.localeCompare(right.endpointKey),
   );
   const nodeIdByEndpointKey = new Map<string, string>();
   const endpointKeyByNodeId = new Map<string, string>();
@@ -263,10 +264,7 @@ function normalizeStateName(state: string): string {
   return state.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
-function slugifyWorkTypeName(
-  value: string,
-  fallback = "work",
-): string {
+function slugifyWorkTypeName(value: string, fallback = "work"): string {
   const slug = value
     .trim()
     .toLowerCase()

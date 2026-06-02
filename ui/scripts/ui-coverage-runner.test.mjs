@@ -8,6 +8,7 @@ import {
   buildMainCoveredShardPhase,
   buildUiCoverageMergePhases,
   buildUiCoveragePhases,
+  defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
   defaultShardMainCoveredMaxWorkers,
   defaultUiCoverageShardTotal,
@@ -180,7 +181,9 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
   expect(phase.args).toContain(
     `--outputFile.blob=${mainCoveredShardBlobPath(3)}`,
   );
-  expect(phase.args).not.toContain("--outputFile.blob=.vitest-reports/main.json");
+  expect(phase.args).not.toContain(
+    "--outputFile.blob=.vitest-reports/main.json",
+  );
   expect(phase.args).toContain(
     `--maxWorkers=${defaultShardMainCoveredMaxWorkers}`,
   );
@@ -217,9 +220,9 @@ test("parses UI_COVERAGE_MERGE truthy values", () => {
 test("defaults and validates UI_COVERAGE_SHARD_TOTAL for merge mode", () => {
   expect(getUiCoverageShardTotal({})).toBe(defaultUiCoverageShardTotal);
   expect(getUiCoverageShardTotal({ UI_COVERAGE_SHARD_TOTAL: "3" })).toBe(3);
-  expect(() => getUiCoverageShardTotal({ UI_COVERAGE_SHARD_TOTAL: "0" })).toThrow(
-    /positive integer/,
-  );
+  expect(() =>
+    getUiCoverageShardTotal({ UI_COVERAGE_SHARD_TOTAL: "0" }),
+  ).toThrow(/positive integer/);
 });
 
 test("buildUiCoverageMergePhases runs follow-on phases without the main pass", () => {
@@ -235,9 +238,7 @@ test("findMissingShardBlobIndices reports absent shard blobs", () => {
   writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
 
   expect(findMissingShardBlobIndices(2, { reportsDir })).toEqual([2]);
-  expect(formatMissingShardBlobSummary([2], 2)).toContain(
-    "main-shard-2.json",
-  );
+  expect(formatMissingShardBlobSummary([2], 2)).toContain("main-shard-2.json");
 });
 
 test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist", () => {
@@ -255,7 +256,11 @@ test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist",
   expect(spawn).toHaveBeenCalledTimes(3);
   expect(spawn.mock.calls.map(([, args]) => args)).toEqual(
     expect.arrayContaining([
-      expect.arrayContaining(["--mergeReports", ".vitest-reports", "--coverage"]),
+      expect.arrayContaining([
+        "--mergeReports",
+        ".vitest-reports",
+        "--coverage",
+      ]),
     ]),
   );
   expect(exit).not.toHaveBeenCalled();
@@ -336,6 +341,29 @@ test("emits elapsed output before returning a failing phase status", () => {
   expect(log).toHaveBeenCalledWith(
     expect.stringContaining("Failing covered pass elapsed:"),
   );
+
+  log.mockRestore();
+});
+
+test("uses a larger buffer when capturing noisy Vitest output", () => {
+  const spawn = vi.fn(() => ({ status: 0, stdout: fixtureLogSnippet }));
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  runTimedPhase(
+    {
+      args: ["--coverage"],
+      command: "vitest",
+      name: "Main covered Vitest pass",
+    },
+    spawn,
+    { captureStdout: true },
+  );
+
+  expect(spawn.mock.calls[0][2]).toMatchObject({
+    encoding: "utf8",
+    maxBuffer: defaultCapturedStdoutMaxBuffer,
+    stdio: ["inherit", "pipe", "inherit"],
+  });
 
   log.mockRestore();
 });

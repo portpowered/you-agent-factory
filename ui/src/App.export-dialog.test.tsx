@@ -1,8 +1,24 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { ImportFactoryValue } from "./api/session-factory";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
-import type { ImportFactoryValue } from "./api/session-factory";
+import {
+  createDeferredPromise,
+  currentNamedFactoryExportResponse,
+  currentSessionFactoryExportAPIResponse,
+  exportImageFile,
+  exportTimelineEvents,
+  fromBase64,
+  installExportDownloadProbe,
+  toArrayBuffer,
+} from "./testing/app-shell-export-test-utils";
 import {
   baselineSnapshot,
   fetchCallPaths,
@@ -11,16 +27,6 @@ import {
   registerAppDashboardTestLifecycle,
   renderApp,
 } from "./testing/app-shell-test-utils";
-import {
-  currentNamedFactoryExportResponse,
-  currentSessionFactoryExportAPIResponse,
-  createDeferredPromise,
-  exportTimelineEvents,
-  exportImageFile,
-  fromBase64,
-  installExportDownloadProbe,
-  toArrayBuffer,
-} from "./testing/app-shell-export-test-utils";
 
 describe("App shell export dialog flows", () => {
   registerAppDashboardTestLifecycle();
@@ -107,7 +113,13 @@ describe("App shell export dialog flows", () => {
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockResolvedValue({
         blob: new Blob(
-          [toArrayBuffer(fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="))],
+          [
+            toArrayBuffer(
+              fromBase64(
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+              ),
+            ),
+          ],
           { type: "image/png" },
         ),
         metadata: {
@@ -130,10 +142,7 @@ describe("App shell export dialog flows", () => {
             ? `${input.pathname}${input.search}`
             : input.url;
 
-      if (
-        path !==
-        `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`
-      ) {
+      if (path !== `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`) {
         throw new Error(`unexpected fetch for ${path}`);
       }
 
@@ -291,7 +300,13 @@ describe("App shell export dialog flows", () => {
       await act(async () => {
         pendingExport.resolve({
           blob: new Blob(
-            [toArrayBuffer(fromBase64("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg=="))],
+            [
+              toArrayBuffer(
+                fromBase64(
+                  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4////fwAJ+wP9KobjigAAAABJRU5ErkJggg==",
+                ),
+              ),
+            ],
             { type: "image/png" },
           ),
           metadata: {

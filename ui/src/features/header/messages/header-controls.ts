@@ -227,7 +227,8 @@ const headerControlsMessagesByLocale = {
     streamStatusConnectingLabel: "イベントストリームを接続中",
     streamStatusLiveLabel: "イベントストリームはライブです",
     streamStatusOfflineLabel: "イベントストリームはオフラインです",
-    targetPickerHint: "このフォルダーから実行可能なターゲットを 1 つ選択してください。",
+    targetPickerHint:
+      "このフォルダーから実行可能なターゲットを 1 つ選択してください。",
     targetPickerTitle: "実行可能なターゲットを選択",
     waitingForMoreTicks: "ティックが増えるまで待機しています",
   },

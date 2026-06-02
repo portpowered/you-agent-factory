@@ -27,9 +27,9 @@ describe("resolveEditableWorkerOverwriteFields", () => {
   it("returns no fields when session, draft, and latest match", () => {
     const draft = buildDraft();
 
-    expect(
-      resolveEditableWorkerOverwriteFields(draft, draft, draft),
-    ).toEqual([]);
+    expect(resolveEditableWorkerOverwriteFields(draft, draft, draft)).toEqual(
+      [],
+    );
   });
 
   it("flags model worker fields that diverged locally and on the server", () => {
@@ -79,9 +79,7 @@ describe("resolveEditableWorkerOverwriteFields", () => {
 
     expect(
       resolveEditableWorkerOverwriteFields(sessionStart, current, latest),
-    ).toEqual(
-      expect.arrayContaining(["command", "args", "body", "provider"]),
-    );
+    ).toEqual(expect.arrayContaining(["command", "args", "body", "provider"]));
   });
 
   it("flags fields when session start and draft both differ from the latest server draft", () => {

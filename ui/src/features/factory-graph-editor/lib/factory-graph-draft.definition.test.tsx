@@ -1,14 +1,13 @@
 import { renderHook } from "@testing-library/react";
-
-import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
-import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
-import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
 import { useFactoryGraphDraftState } from "../hooks/factory-graph-draft-hook";
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
 } from "./factory-graph-draft.test-helpers";
+import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
 
 it("derives graph nodes and relations from the canonical editable definition", () => {
   const topology = buildFactoryGraphTopologyFromDefinition(
@@ -400,9 +399,9 @@ it("bases editable graph topology on the factory document, not snapshot-only wor
     }),
   );
 
-  expect(snapshotFactory.workstations?.map((workstation) => workstation.name)).toEqual(
-    ["document-only", "snapshot-only"],
-  );
+  expect(
+    snapshotFactory.workstations?.map((workstation) => workstation.name),
+  ).toEqual(["document-only", "snapshot-only"]);
   expect(result.current.source).toBe("current-factory");
   expect(result.current.baseDocument).toEqual(documentFactory);
   expect(result.current.latestDocument).toEqual(documentFactory);

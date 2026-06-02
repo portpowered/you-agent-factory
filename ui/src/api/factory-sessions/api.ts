@@ -60,7 +60,13 @@ export class FactorySessionsAPIError extends Error {
 
   public constructor(
     message: string,
-    { code, responseBody, status, statusText, targets }: FactorySessionsAPIErrorDetails,
+    {
+      code,
+      responseBody,
+      status,
+      statusText,
+      targets,
+    }: FactorySessionsAPIErrorDetails,
   ) {
     super(message);
     this.name = "FactorySessionsAPIError";

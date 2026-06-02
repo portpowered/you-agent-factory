@@ -9,8 +9,11 @@ import type {
   TerminalWorkItem,
   TerminalWorkStatus,
 } from "../../terminal-work/lib/types";
-import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
 import { selectDefaultSelection } from "../base/state/dashboardSelection";
+import type {
+  DashboardSelection,
+  TerminalWorkDetail,
+} from "../state/selection-types";
 import {
   findTerminalWorkItem,
   inferStateWorkTerminalStatus,
@@ -19,10 +22,15 @@ import {
 } from "./useCurrentSelection.helpers";
 
 type CurrentSelectionActionArgs = {
-  commitSelectionState: (state: { selection: DashboardSelection | null; terminalWorkDetail: TerminalWorkDetail | null }) => void;
+  commitSelectionState: (state: {
+    selection: DashboardSelection | null;
+    terminalWorkDetail: TerminalWorkDetail | null;
+  }) => void;
   completedWorkItems: TerminalWorkItem[];
   failedWorkItems: TerminalWorkItem[];
-  projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
+  projectedWorkstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
   terminalWorkDetail: TerminalWorkDetail | null;
@@ -162,7 +170,10 @@ export function useCurrentSelectionActions({
     });
   };
 
-  const openTerminalWorkDetail = (status: TerminalWorkStatus, item: TerminalWorkItem) => {
+  const openTerminalWorkDetail = (
+    status: TerminalWorkStatus,
+    item: TerminalWorkItem,
+  ) => {
     const detail = buildTerminalWorkDetail(status, item);
     const { resolvedSelection } = resolveCanonicalWorkItemSelection(
       item.traceWorkID,
@@ -176,7 +187,10 @@ export function useCurrentSelectionActions({
     });
   };
 
-  const selectStateWorkItem = (place: DashboardPlaceRef, workItem: DashboardWorkItemRef) => {
+  const selectStateWorkItem = (
+    place: DashboardPlaceRef,
+    workItem: DashboardWorkItemRef,
+  ) => {
     const resolvedSelection = resolveStateWorkItemSelection({
       place,
       projectedWorkstationRequestsByDispatchID,
@@ -191,7 +205,11 @@ export function useCurrentSelectionActions({
       return;
     }
 
-    const terminalStatus = inferStateWorkTerminalStatus(snapshot, place, workItem);
+    const terminalStatus = inferStateWorkTerminalStatus(
+      snapshot,
+      place,
+      workItem,
+    );
     if (!terminalStatus) {
       return;
     }
@@ -207,7 +225,11 @@ export function useCurrentSelectionActions({
 
     commitSelectionState({
       selection,
-      terminalWorkDetail: fallbackTerminalWorkDetail(snapshot, terminalStatus, workItem),
+      terminalWorkDetail: fallbackTerminalWorkDetail(
+        snapshot,
+        terminalStatus,
+        workItem,
+      ),
     });
   };
 
@@ -242,7 +264,9 @@ function resolveStateWorkItemSelection({
   workItem,
 }: {
   place: DashboardPlaceRef;
-  projectedWorkstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined;
+  projectedWorkstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined;
   snapshot: DashboardSnapshot | null | undefined;
   workItem: DashboardWorkItemRef;
 }): DashboardSelection | null {
@@ -259,7 +283,10 @@ function fallbackTerminalWorkDetail(
   status: TerminalWorkStatus,
   workItem: DashboardWorkItemRef,
 ): TerminalWorkDetail {
-  const failedDetail = snapshot?.runtime.session.failed_work_details_by_work_id?.[workItem.work_id];
+  const failedDetail =
+    snapshot?.runtime.session.failed_work_details_by_work_id?.[
+      workItem.work_id
+    ];
   return {
     failureMessage: failedDetail?.failure_message,
     failureReason: failedDetail?.failure_reason,

@@ -1,7 +1,7 @@
 import {
+  type DashboardChartSemanticRole,
   getDashboardChartSemanticStyle,
   getDashboardWorkChartSeriesDefinitions,
-  type DashboardChartSemanticRole,
 } from "./chart-contract";
 
 const EXPECTED_CHART_COLORS: Record<DashboardChartSemanticRole, string> = {
@@ -17,7 +17,10 @@ const EXPECTED_CHART_COLORS: Record<DashboardChartSemanticRole, string> = {
 describe("dashboard chart contract", () => {
   it("maps each semantic role onto the canonical dashboard chart token family", () => {
     for (const [role, color] of Object.entries(EXPECTED_CHART_COLORS)) {
-      expect(getDashboardChartSemanticStyle(role as DashboardChartSemanticRole).color).toBe(color);
+      expect(
+        getDashboardChartSemanticStyle(role as DashboardChartSemanticRole)
+          .color,
+      ).toBe(color);
     }
   });
 
@@ -56,4 +59,3 @@ describe("dashboard chart contract", () => {
     ]);
   });
 });
-

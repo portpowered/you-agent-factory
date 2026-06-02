@@ -5,7 +5,10 @@ import {
   expectWorkChartLegendClearOfCardTitle,
 } from "./work-chart-legend-contract";
 
-export { expectWorkChartCompactLegendContract, expectWorkChartLegendClearOfCardTitle };
+export {
+  expectWorkChartCompactLegendContract,
+  expectWorkChartLegendClearOfCardTitle,
+};
 
 export function expectWorkChartAxisLabelsVisible(
   chart: HTMLElement,

@@ -9,6 +9,4 @@ export type {
   EditableWorkTypeSaveState,
   WorkTypeDetailCardProps,
 } from "../lib/detail-card-types";
-export {
-  getWorkTypeDetailMessages,
-} from "../messages/work-type-detail";
+export { getWorkTypeDetailMessages } from "../messages/work-type-detail";

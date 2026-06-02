@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-
+import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import { updateFactoryGraphNodeField } from "./factory-graph-field-operations";
 import {
@@ -11,7 +11,6 @@ import {
   removeFactoryGraphNode,
 } from "./factory-graph-operations";
 import { projectFactoryGraphToReactFlow } from "./factory-graph-react-flow-projection";
-import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps the operation contract scenarios co-located.
 describe("factory graph operations", () => {

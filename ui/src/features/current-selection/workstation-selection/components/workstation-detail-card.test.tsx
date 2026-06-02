@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
@@ -6,7 +7,6 @@ import {
   DASHBOARD_SUPPORTING_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
-import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { DETAIL_CARD_NOW } from "../../base/components/detail-card-test-helpers";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
@@ -41,7 +41,9 @@ function expectLocalizedSelectionControlNames() {
   const snapshot = semanticWorkflowDashboardSnapshot;
   const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
   const activeExecution =
-    snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+    snapshot.runtime.active_executions_by_dispatch_id?.[
+      "dispatch-review-active"
+    ];
   const onSelectWorkID = vi.fn();
   const onSelectWorkstationRequest = vi.fn();
   const workstationRequests: DashboardWorkstationRequest[] = [
@@ -102,8 +104,13 @@ function expectLocalizedSelectionControlNames() {
     />,
   );
 
-  let activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-  let resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
+  let activeWorkSection = screen
+    .getByRole("heading", { name: "Active work" })
+    .closest("section");
+  let resolvedActiveWorkSection = requireValue(
+    activeWorkSection,
+    "expected active work section",
+  );
   let requestHistorySection = screen
     .getByRole("heading", { name: "Request history" })
     .closest("section");
@@ -123,7 +130,11 @@ function expectLocalizedSelectionControlNames() {
     }),
   ).toBeTruthy();
 
-  fireEvent.click(within(resolvedRequestHistorySection).getByRole("button", { name: "Expand" }));
+  fireEvent.click(
+    within(resolvedRequestHistorySection).getByRole("button", {
+      name: "Expand",
+    }),
+  );
   expect(
     within(resolvedRequestHistorySection).getByRole("button", {
       name: "Select request Rejected Story (dispatch-review-rejected)",
@@ -143,8 +154,13 @@ function expectLocalizedSelectionControlNames() {
     />,
   );
 
-  activeWorkSection = screen.getByRole("heading", { name: "アクティブな作業" }).closest("section");
-  resolvedActiveWorkSection = requireValue(activeWorkSection, "expected localized active work section");
+  activeWorkSection = screen
+    .getByRole("heading", { name: "アクティブな作業" })
+    .closest("section");
+  resolvedActiveWorkSection = requireValue(
+    activeWorkSection,
+    "expected localized active work section",
+  );
   requestHistorySection = screen
     .getByRole("heading", { name: "リクエスト履歴" })
     .closest("section");
@@ -165,7 +181,9 @@ function expectLocalizedSelectionControlNames() {
   ).toBeTruthy();
 
   expect(
-    within(resolvedRequestHistorySection).getByRole("button", { name: "折りたたむ" }),
+    within(resolvedRequestHistorySection).getByRole("button", {
+      name: "折りたたむ",
+    }),
   ).toBeTruthy();
   expect(
     within(resolvedRequestHistorySection).getByRole("button", {
@@ -248,17 +266,23 @@ describe("WorkstationDetailCard", () => {
     const configurationHeading = screen.getByRole("heading", {
       name: "Configuration",
     });
-    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
+    const activeWorkHeading = screen.getByRole("heading", {
+      name: "Active work",
+    });
     expect(summaryHeading).toBeTruthy();
     expect(configurationHeading).toBeTruthy();
     expect(activeWorkHeading).toBeTruthy();
     expect(screen.getByText("Worker type")).toBeTruthy();
     expect(screen.getByText("Selected runner")).toBeTruthy();
-    expect(screen.getByText("No active work is running on this workstation.")).toBeTruthy();
+    expect(
+      screen.getByText("No active work is running on this workstation."),
+    ).toBeTruthy();
     expectHeadingBefore(summaryHeading, configurationHeading);
     expectHeadingBefore(configurationHeading, activeWorkHeading);
 
-    const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
     const resolvedRunHistorySection = requireValue(
       runHistorySection,
       "expected fallback run history section",
@@ -272,7 +296,6 @@ describe("WorkstationDetailCard", () => {
       ),
     ).toBeTruthy();
   });
-
 
   it("renders workstation-detail copy from the requested locale when provided", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
@@ -303,7 +326,9 @@ describe("WorkstationDetailCard", () => {
     expect(screen.getByText("ワーカータイプ")).toBeTruthy();
     expect(screen.getByText("選択中の runner")).toBeTruthy();
     expect(
-      screen.getByText("このワークステーションでは現在アクティブな作業は実行されていません。"),
+      screen.getByText(
+        "このワークステーションでは現在アクティブな作業は実行されていません。",
+      ),
     ).toBeTruthy();
     expectHeadingBefore(summaryHeading, configurationHeading);
     expectHeadingBefore(configurationHeading, activeWorkHeading);
@@ -382,24 +407,36 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    let runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
+    let runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
     let resolvedRunHistorySection = requireValue(
       runHistorySection,
       "expected fallback run history section",
     );
-    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }),
+    );
 
     expect(
-      within(resolvedRunHistorySection).getByRole("link", { name: "Codex session log" }),
+      within(resolvedRunHistorySection).getByRole("link", {
+        name: "Codex session log",
+      }),
     ).toBeTruthy();
-    expect(within(resolvedRunHistorySection).getByText("Work selected")).toBeTruthy();
     expect(
-      within(resolvedRunHistorySection).getAllByText("Session log unavailable").length,
+      within(resolvedRunHistorySection).getByText("Work selected"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).getAllByText("Session log unavailable")
+        .length,
     ).toBeGreaterThan(0);
     expect(
-      within(resolvedRunHistorySection).getByText("Work details unavailable for dispatch", {
-        exact: false,
-      }),
+      within(resolvedRunHistorySection).getByText(
+        "Work details unavailable for dispatch",
+        {
+          exact: false,
+        },
+      ),
     ).toBeTruthy();
 
     rerender(
@@ -414,7 +451,9 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    runHistorySection = screen.getByRole("heading", { name: "ラン履歴" }).closest("section");
+    runHistorySection = screen
+      .getByRole("heading", { name: "ラン履歴" })
+      .closest("section");
     resolvedRunHistorySection = requireValue(
       runHistorySection,
       "expected localized run history section",
@@ -430,12 +469,18 @@ describe("WorkstationDetailCard", () => {
         name: "ワークアイテム Active Story を選択",
       }),
     ).toBeTruthy();
-    expect(within(resolvedRunHistorySection).getByText("ワークを選択済み")).toBeTruthy();
     expect(
-      within(resolvedRunHistorySection).getAllByText("セッションログは利用できません").length,
+      within(resolvedRunHistorySection).getByText("ワークを選択済み"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).getAllByText(
+        "セッションログは利用できません",
+      ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(resolvedRunHistorySection).getByText("ディスパッチ dispatch-review-missing-work の作業詳細は利用できません。"),
+      within(resolvedRunHistorySection).getByText(
+        "ディスパッチ dispatch-review-missing-work の作業詳細は利用できません。",
+      ),
     ).toBeTruthy();
   });
 
@@ -443,7 +488,9 @@ describe("WorkstationDetailCard", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
     const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
       (attempt) =>
         attempt.transition_id === selectedNode.transition_id ||
@@ -468,12 +515,24 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { name: "Current selection" })).toBeTruthy();
-    expect(screen.getAllByText(selectedNode.workstation_name).length).toBeGreaterThan(0);
-    const summaryHeading = screen.getByRole("heading", { name: "Workstation summary" });
-    const configurationHeading = screen.getByRole("heading", { name: "Configuration" });
-    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
-    const runHistoryHeading = screen.getByRole("heading", { name: "Run history" });
+    expect(
+      screen.getByRole("heading", { name: "Current selection" }),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByText(selectedNode.workstation_name).length,
+    ).toBeGreaterThan(0);
+    const summaryHeading = screen.getByRole("heading", {
+      name: "Workstation summary",
+    });
+    const configurationHeading = screen.getByRole("heading", {
+      name: "Configuration",
+    });
+    const activeWorkHeading = screen.getByRole("heading", {
+      name: "Active work",
+    });
+    const runHistoryHeading = screen.getByRole("heading", {
+      name: "Run history",
+    });
     expectHeadingBefore(summaryHeading, configurationHeading);
     expectHeadingBefore(configurationHeading, activeWorkHeading);
     expectHeadingBefore(activeWorkHeading, runHistoryHeading);
@@ -487,22 +546,37 @@ describe("WorkstationDetailCard", () => {
       activeWorkSection,
       "expected active work section",
     );
-    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
+    expect(
+      within(resolvedActiveWorkSection).getByText("Active Story"),
+    ).toBeTruthy();
     expect(
       within(resolvedActiveWorkSection).getByText("Elapsed: 4s"),
     ).toBeTruthy();
 
-    expect(screen.getByRole("button", { name: "Expand" }).getAttribute("aria-expanded")).toBe(
-      "false",
-    );
+    expect(
+      screen
+        .getByRole("button", { name: "Expand" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
     expect(screen.queryByText("Rejected Story")).toBeNull();
 
     const summarySection = summaryHeading.closest("section");
-    const resolvedSummarySection = requireValue(summarySection, "expected workstation summary section");
-    expect(within(resolvedSummarySection).getByText("Input work types")).toBeTruthy();
-    expect(within(resolvedSummarySection).getByText("Output work types")).toBeTruthy();
-    expect(within(resolvedSummarySection).getByText("Active runs")).toBeTruthy();
-    expect(within(resolvedSummarySection).getByText("Historical runs")).toBeTruthy();
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
+    );
+    expect(
+      within(resolvedSummarySection).getByText("Input work types"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Output work types"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Active runs"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Historical runs"),
+    ).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("1")).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("2")).toBeTruthy();
   });
@@ -511,7 +585,9 @@ describe("WorkstationDetailCard", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
     const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
       (attempt) =>
         attempt.transition_id === selectedNode.transition_id ||
@@ -538,8 +614,13 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
+    const activeWorkSection = screen
+      .getByRole("heading", { name: "Active work" })
+      .closest("section");
+    const resolvedActiveWorkSection = requireValue(
+      activeWorkSection,
+      "expected active work section",
+    );
     const activeWorkCard = requireValue(
       within(resolvedActiveWorkSection).getByText("Active Story").closest("li"),
       "expected active work card",
@@ -564,9 +645,16 @@ describe("WorkstationDetailCard", () => {
     );
     expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
 
-    const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
-    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
+    const resolvedRunHistorySection = requireValue(
+      runHistorySection,
+      "expected run history section",
+    );
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }),
+    );
     fireEvent.click(
       within(resolvedRunHistorySection).getByRole("button", {
         name: "Select work item Rejected Story",
@@ -583,7 +671,9 @@ describe("WorkstationDetailCard", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
     const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
       (attempt) =>
         attempt.transition_id === selectedNode.transition_id ||
@@ -651,8 +741,13 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
+    const activeWorkSection = screen
+      .getByRole("heading", { name: "Active work" })
+      .closest("section");
+    const resolvedActiveWorkSection = requireValue(
+      activeWorkSection,
+      "expected active work section",
+    );
     const activeWorkCard = requireValue(
       within(resolvedActiveWorkSection).getByText("Active Story").closest("li"),
       "expected active work card",
@@ -675,7 +770,9 @@ describe("WorkstationDetailCard", () => {
         name: "Select workstation request dispatch-review-active",
       }),
     );
-    expect(onSelectWorkstationRequest).toHaveBeenCalledWith(workstationRequests[0]);
+    expect(onSelectWorkstationRequest).toHaveBeenCalledWith(
+      workstationRequests[0],
+    );
 
     const requestHistorySection = screen
       .getByRole("heading", { name: "Request history" })
@@ -684,20 +781,28 @@ describe("WorkstationDetailCard", () => {
       requestHistorySection,
       "expected request history section",
     );
-    fireEvent.click(within(resolvedRequestHistorySection).getByRole("button", { name: "Expand" }));
+    fireEvent.click(
+      within(resolvedRequestHistorySection).getByRole("button", {
+        name: "Expand",
+      }),
+    );
     fireEvent.click(
       within(resolvedRequestHistorySection).getByRole("button", {
         name: "Select request Rejected Story (dispatch-review-rejected)",
       }),
     );
-    expect(onSelectWorkstationRequest).toHaveBeenCalledWith(workstationRequests[1]);
+    expect(onSelectWorkstationRequest).toHaveBeenCalledWith(
+      workstationRequests[1],
+    );
   });
 
   it("renders work selection affordances for projected request history", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
     const onSelectWorkID = vi.fn();
     const workstationRequests: DashboardWorkstationRequest[] = [
       {
@@ -757,7 +862,9 @@ describe("WorkstationDetailCard", () => {
     );
 
     const requestHistorySection = requireValue(
-      screen.getByRole("heading", { name: "Request history" }).closest("section"),
+      screen
+        .getByRole("heading", { name: "Request history" })
+        .closest("section"),
       "expected request history section",
     );
 
@@ -777,7 +884,9 @@ describe("WorkstationDetailCard", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
 
     const resolvedActiveExecution = requireValue(
       activeExecution,
@@ -798,10 +907,15 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const unavailableWorkStatus = screen.getByText("Work details unavailable for dispatch", {
-      exact: false,
-    });
-    expect(unavailableWorkStatus.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
+    const unavailableWorkStatus = screen.getByText(
+      "Work details unavailable for dispatch",
+      {
+        exact: false,
+      },
+    );
+    expect(unavailableWorkStatus.className).toContain(
+      DASHBOARD_SUPPORTING_TEXT_CLASS,
+    );
     expect(unavailableWorkStatus.className).not.toContain("text-[0.78rem]");
 
     rerender(
@@ -813,14 +927,20 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    expect(screen.queryByText("Work details unavailable for dispatch", { exact: false })).toBeNull();
+    expect(
+      screen.queryByText("Work details unavailable for dispatch", {
+        exact: false,
+      }),
+    ).toBeNull();
   });
 
   it("renders explicit unavailable work copy when a dispatch has no work item details", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
 
     const resolvedActiveExecution = requireValue(
       activeExecution,
@@ -829,19 +949,29 @@ describe("WorkstationDetailCard", () => {
 
     render(
       <WorkstationDetailCard
-        activeExecutions={[{ ...resolvedActiveExecution, work_items: undefined }]}
+        activeExecutions={[
+          { ...resolvedActiveExecution, work_items: undefined },
+        ]}
         now={DETAIL_CARD_NOW}
         providerSessions={[]}
         selectedNode={selectedNode}
       />,
     );
 
-    const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
+    const activeWorkSection = screen
+      .getByRole("heading", { name: "Active work" })
+      .closest("section");
+    const resolvedActiveWorkSection = requireValue(
+      activeWorkSection,
+      "expected active work section",
+    );
     expect(
-      within(resolvedActiveWorkSection).getByText("Work details unavailable for dispatch", {
-        exact: false,
-      }),
+      within(resolvedActiveWorkSection).getByText(
+        "Work details unavailable for dispatch",
+        {
+          exact: false,
+        },
+      ),
     ).toBeTruthy();
   });
 
@@ -849,7 +979,9 @@ describe("WorkstationDetailCard", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
     const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
       (attempt) =>
         attempt.transition_id === selectedNode.transition_id ||
@@ -874,37 +1006,64 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
-    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
+    const activeWorkSection = screen
+      .getByRole("heading", { name: "Active work" })
+      .closest("section");
+    const resolvedActiveWorkSection = requireValue(
+      activeWorkSection,
+      "expected active work section",
+    );
+    expect(
+      within(resolvedActiveWorkSection).getByText("Active Story"),
+    ).toBeTruthy();
     expect(screen.queryByText("Rejected Story")).toBeNull();
 
-    const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
-    const expandButton = within(resolvedRunHistorySection).getByRole("button", { name: "Expand" });
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
+    const resolvedRunHistorySection = requireValue(
+      runHistorySection,
+      "expected run history section",
+    );
+    const expandButton = within(resolvedRunHistorySection).getByRole("button", {
+      name: "Expand",
+    });
     fireEvent.click(expandButton);
 
     expect(
-      within(resolvedRunHistorySection).getByRole("button", { name: "Collapse" }).getAttribute(
-        "aria-expanded",
-      ),
+      within(resolvedRunHistorySection)
+        .getByRole("button", { name: "Collapse" })
+        .getAttribute("aria-expanded"),
     ).toBe("true");
-    expect(within(resolvedRunHistorySection).getByText("Active Story")).toBeTruthy();
-    expect(within(resolvedRunHistorySection).getByText("Rejected Story")).toBeTruthy();
-    expect(within(resolvedRunHistorySection).getAllByText("dispatch-review-active").length).toBeGreaterThan(
-      0,
-    );
-    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).getByText("Active Story"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).getByText("Rejected Story"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).getAllByText("dispatch-review-active")
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(resolvedActiveWorkSection).getByText("Active Story"),
+    ).toBeTruthy();
 
-    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Collapse" }));
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", {
+        name: "Collapse",
+      }),
+    );
 
     expect(
-      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }).getAttribute(
-        "aria-expanded",
-      ),
+      within(resolvedRunHistorySection)
+        .getByRole("button", { name: "Expand" })
+        .getAttribute("aria-expanded"),
     ).toBe("false");
     expect(screen.queryByText("Rejected Story")).toBeNull();
-    expect(within(resolvedActiveWorkSection).getByText("Active Story")).toBeTruthy();
+    expect(
+      within(resolvedActiveWorkSection).getByText("Active Story"),
+    ).toBeTruthy();
   });
 
   it("renders explicit Codex session log links from local JSONL metadata", () => {
@@ -941,9 +1100,16 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
-    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
+    const resolvedRunHistorySection = requireValue(
+      runHistorySection,
+      "expected run history section",
+    );
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }),
+    );
 
     const sessionLogLink = within(resolvedRunHistorySection).getByRole("link", {
       name: "Codex session log",
@@ -951,8 +1117,14 @@ describe("WorkstationDetailCard", () => {
     expect(sessionLogLink.getAttribute("href")).toBe(
       "file:///C:/Users/operator/codex/sess-jsonl.jsonl",
     );
-    expect(within(resolvedRunHistorySection).getByText(/codex \/ Session ID \/ sess-jsonl/)).toBeTruthy();
-    expect(within(resolvedRunHistorySection).queryByText("Session log unavailable")).toBeNull();
+    expect(
+      within(resolvedRunHistorySection).getByText(
+        /codex \/ Session ID \/ sess-jsonl/,
+      ),
+    ).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).queryByText("Session log unavailable"),
+    ).toBeNull();
   });
 
   it("falls back to secondary provider metadata when no explicit session log exists", () => {
@@ -978,17 +1150,31 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
-    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
-
-    expect(within(resolvedRunHistorySection).getAllByText("Session log unavailable").length).toBeGreaterThan(
-      0,
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
+    const resolvedRunHistorySection = requireValue(
+      runHistorySection,
+      "expected run history section",
     );
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }),
+    );
+
     expect(
-      within(resolvedRunHistorySection).getByText(/codex \/ Session ID \/ sess-rejected-story/),
+      within(resolvedRunHistorySection).getAllByText("Session log unavailable")
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(resolvedRunHistorySection).getByText(
+        /codex \/ Session ID \/ sess-rejected-story/,
+      ),
     ).toBeTruthy();
-    expect(within(resolvedRunHistorySection).queryByRole("link", { name: "Codex session log" })).toBeNull();
+    expect(
+      within(resolvedRunHistorySection).queryByRole("link", {
+        name: "Codex session log",
+      }),
+    ).toBeNull();
   });
 
   it("renders selected workstation empty active-work guidance with compact counts", () => {
@@ -1012,40 +1198,67 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const activeWorkSection = screen.getByRole("heading", { name: "Active work" }).closest("section");
-    const resolvedActiveWorkSection = requireValue(activeWorkSection, "expected active work section");
+    const activeWorkSection = screen
+      .getByRole("heading", { name: "Active work" })
+      .closest("section");
+    const resolvedActiveWorkSection = requireValue(
+      activeWorkSection,
+      "expected active work section",
+    );
     expect(
-      within(resolvedActiveWorkSection).getByText("No active work is running on this workstation."),
+      within(resolvedActiveWorkSection).getByText(
+        "No active work is running on this workstation.",
+      ),
     ).toBeTruthy();
 
-    const summarySection = screen.getByRole("heading", { name: "Workstation summary" }).closest(
-      "section",
+    const summarySection = screen
+      .getByRole("heading", { name: "Workstation summary" })
+      .closest("section");
+    const resolvedSummarySection = requireValue(
+      summarySection,
+      "expected workstation summary section",
     );
-    const resolvedSummarySection = requireValue(summarySection, "expected workstation summary section");
-    expect(within(resolvedSummarySection).getByText("Active runs")).toBeTruthy();
-    expect(within(resolvedSummarySection).getByText("Historical runs")).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Active runs"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Historical runs"),
+    ).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("0")).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("1")).toBeTruthy();
 
-    const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
-    const resolvedRunHistorySection = requireValue(runHistorySection, "expected run history section");
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
+    const resolvedRunHistorySection = requireValue(
+      runHistorySection,
+      "expected run history section",
+    );
     expect(
-      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }).getAttribute(
-        "aria-expanded",
-      ),
+      within(resolvedRunHistorySection)
+        .getByRole("button", { name: "Expand" })
+        .getAttribute("aria-expanded"),
     ).toBe("false");
 
-    fireEvent.click(within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }));
+    fireEvent.click(
+      within(resolvedRunHistorySection).getByRole("button", { name: "Expand" }),
+    );
 
-    expect(within(resolvedRunHistorySection).getByText("Retry Story")).toBeTruthy();
-    expect(within(resolvedRunHistorySection).getByText("Session log unavailable")).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).getByText("Retry Story"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedRunHistorySection).getByText("Session log unavailable"),
+    ).toBeTruthy();
   });
 
   it("applies shared typography helpers to workstation drill-down cards", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const activeExecution =
-      snapshot.runtime.active_executions_by_dispatch_id?.["dispatch-review-active"];
+      snapshot.runtime.active_executions_by_dispatch_id?.[
+        "dispatch-review-active"
+      ];
     const providerSessions = snapshot.runtime.session.provider_sessions?.filter(
       (attempt) =>
         attempt.transition_id === selectedNode.transition_id ||
@@ -1070,17 +1283,29 @@ describe("WorkstationDetailCard", () => {
       />,
     );
 
-    const activeWorkHeading = screen.getByRole("heading", { name: "Active work" });
-    expect(activeWorkHeading.className).toContain(DASHBOARD_SECTION_HEADING_CLASS);
+    const activeWorkHeading = screen.getByRole("heading", {
+      name: "Active work",
+    });
+    expect(activeWorkHeading.className).toContain(
+      DASHBOARD_SECTION_HEADING_CLASS,
+    );
     const activeWorkCard = screen.getByText("Active Story").closest("li");
     expect(activeWorkCard?.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
 
-    const runHistorySection = screen.getByRole("heading", { name: "Run history" }).closest("section");
+    const runHistorySection = screen
+      .getByRole("heading", { name: "Run history" })
+      .closest("section");
     expect(runHistorySection).toBeTruthy();
-    const countText = within(runHistorySection as HTMLElement).getByText("2 runs");
+    const countText = within(runHistorySection as HTMLElement).getByText(
+      "2 runs",
+    );
     expect(countText.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
 
-    fireEvent.click(within(runHistorySection as HTMLElement).getByRole("button", { name: "Expand" }));
+    fireEvent.click(
+      within(runHistorySection as HTMLElement).getByRole("button", {
+        name: "Expand",
+      }),
+    );
 
     const dispatchPill = within(runHistorySection as HTMLElement)
       .getAllByText("dispatch-review-active")

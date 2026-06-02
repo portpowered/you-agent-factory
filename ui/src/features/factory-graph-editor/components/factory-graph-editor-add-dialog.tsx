@@ -201,7 +201,10 @@ function renderEntitySpecificFields({
             });
           }}
           options={(
-            ["MODEL_WORKER", "SCRIPT_WORKER"] as const satisfies FactoryGraphAddWorkerType[]
+            [
+              "MODEL_WORKER",
+              "SCRIPT_WORKER",
+            ] as const satisfies FactoryGraphAddWorkerType[]
           ).map((workerType) => ({
             label: workerMessages.localizeWorkerType(workerType),
             value: workerType,

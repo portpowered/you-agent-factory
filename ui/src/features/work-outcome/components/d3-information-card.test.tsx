@@ -1,4 +1,3 @@
-import userEvent from "@testing-library/user-event";
 import {
   cleanup,
   fireEvent,
@@ -6,6 +5,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import type { WorkChartModel } from "../lib/trends";
 import {
@@ -187,9 +187,7 @@ const zoomableTrend: WorkChartModel = {
       key: "failed",
       label: "Failed/retried",
       unit: "count",
-      points: [
-        { label: "Failed: 0", observedAt: 2000, order: 1, value: 0 },
-      ],
+      points: [{ label: "Failed: 0", observedAt: 2000, order: 1, value: 0 }],
     },
   ],
 };
@@ -541,7 +539,9 @@ describe("D3CompletionInformationCard", () => {
       y: 0,
     });
 
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
 
     fireEvent.mouseDown(chart, { clientX: 40, clientY: 168 });
     fireEvent.mouseMove(chart, { clientX: 200, clientY: 168 });
@@ -558,7 +558,9 @@ describe("D3CompletionInformationCard", () => {
     expect(document.activeElement).toBe(resetZoom);
     await user.keyboard("[Enter]");
 
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
     expect(
       screen.queryByRole("button", { name: messages.chart.resetZoomLabel }),
     ).toBeNull();

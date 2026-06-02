@@ -1,11 +1,11 @@
 import { act } from "@testing-library/react";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
-import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
   renderEditableFactoryGraphHook,
   setupEditableFactoryGraphSaveTestEnvironment,
 } from "../../../testing/editable-factory-graph-hook-test-helpers";
+import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
@@ -100,7 +100,8 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
     );
     expect(
       result.current.draftState.graph.edges.some(
-        (edge) => edge.id === "worker-assignment:worker:writer->workstation:draft",
+        (edge) =>
+          edge.id === "worker-assignment:worker:writer->workstation:draft",
       ),
     ).toBe(false);
     expect(
@@ -163,12 +164,12 @@ describe("useEditableFactoryGraph logical-move worker handles", () => {
       currentFactoryDocument: logicalMoveFactoryDocument,
     });
 
-    expect(anchorIdsForWorkstation(result.current.projection, "router")).not.toContain(
-      "worker-assignment-target",
-    );
-    expect(anchorIdsForWorkstation(result.current.projection, "draft")).toContain(
-      "worker-assignment-target",
-    );
+    expect(
+      anchorIdsForWorkstation(result.current.projection, "router"),
+    ).not.toContain("worker-assignment-target");
+    expect(
+      anchorIdsForWorkstation(result.current.projection, "draft"),
+    ).toContain("worker-assignment-target");
 
     act(() => {
       result.current.actions.addNode({

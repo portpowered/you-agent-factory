@@ -1,5 +1,4 @@
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../../components/ui/dashboard-typography";
-import type { SelectedWorkRelationshipNode } from "../lib/selected-work-relationship-graph";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
@@ -7,6 +6,7 @@ import {
   RUNTIME_DETAIL_VALUE_CLASS,
   TRACE_ACTION_LINK_CLASS,
 } from "../../base/components/detail-card-shared";
+import type { SelectedWorkRelationshipNode } from "../lib/selected-work-relationship-graph";
 
 export function FocusedRelationshipSummary({
   activeTraceID,

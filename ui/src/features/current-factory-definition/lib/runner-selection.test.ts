@@ -3,9 +3,7 @@ import { resolveRunnerSelection } from "./runner-selection";
 
 describe("resolveRunnerSelection", () => {
   it("prefers workstation overrides, then factory, then legacy modelProvider, then default", () => {
-    expect(
-      resolveRunnerSelection("gemini", "codex", "CODEX"),
-    ).toEqual({
+    expect(resolveRunnerSelection("gemini", "codex", "CODEX")).toEqual({
       runnerId: "gemini",
       source: "workstation",
     });

@@ -197,10 +197,7 @@ interface DurationUnits {
   hours?: number;
 }
 
-const COMPACT_DURATION_LABELS: Record<
-  string,
-  Record<DurationUnit, string>
-> = {
+const COMPACT_DURATION_LABELS: Record<string, Record<DurationUnit, string>> = {
   en: {
     hour: "h",
     minute: "m",
@@ -307,7 +304,10 @@ function formatCompactDurationParts(
     .join(" ");
 }
 
-function formatVerboseDurationParts(units: DurationUnits, locale: string): string {
+function formatVerboseDurationParts(
+  units: DurationUnits,
+  locale: string,
+): string {
   return getDurationParts(units, {
     omitZeroValues: true,
   })
@@ -370,11 +370,10 @@ function shouldOmitDurationUnitSpacing(locale: string): boolean {
   return locale === "zh-CN" || locale === "ko";
 }
 
-function getCompactDurationLabel(
-  unit: DurationUnit,
-  locale: string,
-): string {
-  return COMPACT_DURATION_LABELS[locale]?.[unit] ?? COMPACT_DURATION_LABELS.en[unit];
+function getCompactDurationLabel(unit: DurationUnit, locale: string): string {
+  return (
+    COMPACT_DURATION_LABELS[locale]?.[unit] ?? COMPACT_DURATION_LABELS.en[unit]
+  );
 }
 
 function getVerboseDurationLabel(
@@ -382,7 +381,8 @@ function getVerboseDurationLabel(
   locale: string,
   value: number,
 ): string {
-  const labels = VERBOSE_DURATION_LABELS[locale]?.[unit] ?? VERBOSE_DURATION_LABELS.en[unit];
+  const labels =
+    VERBOSE_DURATION_LABELS[locale]?.[unit] ?? VERBOSE_DURATION_LABELS.en[unit];
   if (typeof labels === "string") {
     return labels;
   }

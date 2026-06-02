@@ -1,24 +1,23 @@
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
-
-import {
-  type CurrentSelectionDispatchHistoryMessages,
-  getCurrentSelectionDispatchHistoryMessages,
-} from "../messages/current-selection-dispatch-history";
+import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
+import type { WorkstationDetailMessages } from "../../messages/workstation-detail-types";
 import {
   type CurrentSelectionDetailMessages,
   getCurrentSelectionDetailMessages,
 } from "../messages/current-selection-detail";
 import {
-  type CurrentSelectionShellMessages,
-  getCurrentSelectionShellMessages,
-} from "../messages/current-selection-shell";
+  type CurrentSelectionDispatchHistoryMessages,
+  getCurrentSelectionDispatchHistoryMessages,
+} from "../messages/current-selection-dispatch-history";
 import {
   type CurrentSelectionOperationalEnumMessages,
   getCurrentSelectionOperationalEnumMessages,
 } from "../messages/current-selection-operational-enums";
-import type { WorkstationDetailMessages } from "../../messages/workstation-detail-types";
-import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
+import {
+  type CurrentSelectionShellMessages,
+  getCurrentSelectionShellMessages,
+} from "../messages/current-selection-shell";
 
 interface CurrentSelectionLocaleMessages {
   detail: CurrentSelectionDetailMessages;

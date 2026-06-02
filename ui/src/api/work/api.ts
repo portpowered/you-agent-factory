@@ -71,7 +71,9 @@ export async function submitWork(
   options: { sessionID?: string | null } = {},
 ): Promise<SubmitWorkResponse> {
   const response = await fetch(
-    factoryAPIURL(factorySessionScopedPath(SUBMIT_WORK_ENDPOINT, options.sessionID)),
+    factoryAPIURL(
+      factorySessionScopedPath(SUBMIT_WORK_ENDPOINT, options.sessionID),
+    ),
     {
       body: JSON.stringify(request),
       headers: {
@@ -94,7 +96,10 @@ export async function stageSubmitWorkFile(
 ): Promise<StageSubmitWorkFileResponse> {
   const response = await fetch(
     factoryAPIURL(
-      factorySessionScopedPath(STAGE_SUBMIT_WORK_FILE_ENDPOINT, options.sessionID),
+      factorySessionScopedPath(
+        STAGE_SUBMIT_WORK_FILE_ENDPOINT,
+        options.sessionID,
+      ),
     ),
     {
       body: JSON.stringify(request),
@@ -112,19 +117,25 @@ export async function stageSubmitWorkFile(
   throw await stageSubmitWorkFileErrorFromResponse(response);
 }
 
-async function submitWorkErrorFromResponse(response: Response): Promise<SubmitWorkAPIError> {
+async function submitWorkErrorFromResponse(
+  response: Response,
+): Promise<SubmitWorkAPIError> {
   const responseBody = await readAPIResponseBody(response);
   const errorResponse = extractAPIErrorPayload(responseBody);
   const message = normalizeSubmitWorkErrorMessage(errorResponse?.message);
   return new SubmitWorkAPIError({
-    code: message ? normalizeSubmitWorkErrorCode(errorResponse?.code) : undefined,
+    code: message
+      ? normalizeSubmitWorkErrorCode(errorResponse?.code)
+      : undefined,
     message: message ?? GENERIC_SUBMIT_WORK_ERROR_MESSAGE,
     status: response.status,
     statusText: response.statusText,
   });
 }
 
-function normalizeSubmitWorkErrorMessage(message: string | undefined): string | undefined {
+function normalizeSubmitWorkErrorMessage(
+  message: string | undefined,
+): string | undefined {
   if (typeof message !== "string") {
     return undefined;
   }
@@ -151,7 +162,9 @@ function normalizeSubmitWorkErrorCode(
   }
 }
 
-export function isSubmitWorkAPIError(error: unknown): error is SubmitWorkAPIError {
+export function isSubmitWorkAPIError(
+  error: unknown,
+): error is SubmitWorkAPIError {
   return error instanceof SubmitWorkAPIError;
 }
 
@@ -162,7 +175,9 @@ async function stageSubmitWorkFileErrorFromResponse(
   const errorResponse = extractAPIErrorPayload(responseBody);
   const message = normalizeSubmitWorkErrorMessage(errorResponse?.message);
   return new StageSubmitWorkFileAPIError({
-    code: message ? normalizeSubmitWorkErrorCode(errorResponse?.code) : undefined,
+    code: message
+      ? normalizeSubmitWorkErrorCode(errorResponse?.code)
+      : undefined,
     message: message ?? GENERIC_STAGE_SUBMIT_WORK_FILE_ERROR_MESSAGE,
     status: response.status,
     statusText: response.statusText,

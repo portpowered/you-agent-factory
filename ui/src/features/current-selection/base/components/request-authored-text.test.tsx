@@ -18,13 +18,19 @@ describe("AuthoredBodyText", () => {
       />,
     );
 
-    expect(screen.getByRole("heading", { level: 2, name: "Review checklist" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Review checklist" }),
+    ).toBeTruthy();
     expect(screen.getByRole("list")).toBeTruthy();
     expect(screen.getByText("Confirm the latest diff")).toBeTruthy();
     const codeBlocks = screen.getAllByText("bun test", { selector: "code" });
     expect(codeBlocks).toHaveLength(2);
-    expect(screen.getAllByText("bun test", { selector: "pre code" })).toHaveLength(1);
-    expect(container.firstElementChild?.className).toContain("[&_code]:rounded-sm");
+    expect(
+      screen.getAllByText("bun test", { selector: "pre code" }),
+    ).toHaveLength(1);
+    expect(container.firstElementChild?.className).toContain(
+      "[&_code]:rounded-sm",
+    );
     expect(container.firstElementChild?.className).toContain("[&_code]:px-1");
     expect(container.firstElementChild?.className).toContain("[&_code]:py-0.5");
   });
@@ -42,13 +48,19 @@ describe("AuthoredBodyText", () => {
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.queryByRole("list")).toBeNull();
     expect(container.querySelectorAll("p")).toHaveLength(1);
-    expect(container.textContent).toContain("Review the current story before approval.");
-    expect(container.textContent).toContain("Keep the existing response rendering unchanged.");
+    expect(container.textContent).toContain(
+      "Review the current story before approval.",
+    );
+    expect(container.textContent).toContain(
+      "Keep the existing response rendering unchanged.",
+    );
   });
 
   it("renders embedded raw html as inert text", () => {
     const { container } = render(
-      <AuthoredBodyText value={'<button>danger</button>\n\n<script>alert("xss")</script>'} />,
+      <AuthoredBodyText
+        value={'<button>danger</button>\n\n<script>alert("xss")</script>'}
+      />,
     );
 
     expect(screen.queryByRole("button", { name: "danger" })).toBeNull();
@@ -60,6 +72,8 @@ describe("AuthoredBodyText", () => {
   it("keeps the request-authored wrapper aligned with the shared formatter", () => {
     render(<RequestAuthoredText value="## Review checklist" />);
 
-    expect(screen.getByRole("heading", { level: 2, name: "Review checklist" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Review checklist" }),
+    ).toBeTruthy();
   });
 });

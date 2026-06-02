@@ -8,7 +8,8 @@ const DASHBOARD_STATUS_PILL_TONE_CLASS = {
   active: "border-af-accent-border bg-af-accent-surface text-af-text",
   danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
-  warning: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+  warning:
+    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
 };
 
 export interface DashboardStatusPillProps

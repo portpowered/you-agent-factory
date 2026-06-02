@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from "react";
 import { Plus } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import {
   Button,
@@ -43,7 +43,9 @@ export interface SubmitWorkDraftFileItem {
   url?: string;
 }
 
-export type SubmitWorkDraftItem = SubmitWorkDraftFileItem | SubmitWorkDraftTextItem;
+export type SubmitWorkDraftItem =
+  | SubmitWorkDraftFileItem
+  | SubmitWorkDraftTextItem;
 export type SubmitWorkDraftItemType = SubmitWorkDraftItem["type"];
 
 export interface SubmitWorkValidationErrors {
@@ -76,7 +78,8 @@ export interface SubmitWorkCardProps {
 }
 
 const FORM_CLASS = "grid h-full min-h-0 content-start gap-3";
-const FORM_FIELDS_CLASS = "grid min-h-0 content-start gap-4 overflow-y-auto pr-1";
+const FORM_FIELDS_CLASS =
+  "grid min-h-0 content-start gap-4 overflow-y-auto pr-1";
 const FIELD_GROUP_CLASS = "grid gap-2";
 const ACTION_ROW_CLASS = "grid gap-3";
 const HELP_TEXT_CLASS = cn(

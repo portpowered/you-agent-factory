@@ -14,7 +14,9 @@ const fixtureState = vi.hoisted(() => ({
     status: "success" as const,
   },
   draftState: {
-    baseDocument: undefined as typeof divergentDocumentPlaneFactoryDocument | undefined,
+    baseDocument: undefined as
+      | typeof divergentDocumentPlaneFactoryDocument
+      | undefined,
     draft: {
       additions: {
         resources: [],
@@ -36,7 +38,9 @@ const fixtureState = vi.hoisted(() => ({
       },
     },
     hasChanges: false,
-    latestDocument: undefined as typeof divergentDocumentPlaneFactoryDocument | undefined,
+    latestDocument: undefined as
+      | typeof divergentDocumentPlaneFactoryDocument
+      | undefined,
     pendingFactoryDefinition: undefined as
       | typeof divergentDocumentPlaneFactoryDocument
       | undefined,
@@ -66,13 +70,19 @@ function resetDivergentDocumentFixtureState() {
   };
 }
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
-  useCurrentFactoryDocument: () => fixtureState.currentFactoryQuery,
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  () => ({
+    useCurrentFactoryDocument: () => fixtureState.currentFactoryQuery,
+  }),
+);
 
-vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: () => fixtureState.saveEditableDefinition,
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: () => fixtureState.saveEditableDefinition,
+  }),
+);
 
 vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
   useEditableFactoryGraph: () => ({
@@ -207,15 +217,17 @@ describe("useCurrentActivityGraphEditor document plane", () => {
       result.current.handleEditorModeToggle();
     });
 
-    expect(
-      result.current.editorUnavailableClassifierWorkstationName,
-    ).toBe("Document Only");
+    expect(result.current.editorUnavailableClassifierWorkstationName).toBe(
+      "Document Only",
+    );
     expect(result.current.canInteractWithEditor).toBe(false);
   });
 
   it("allows editor entry when only the snapshot plane has a classifier workstation", () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
-    const snapshotFactory = structuredClone(buildDivergentSnapshotPlaneFactory());
+    const snapshotFactory = structuredClone(
+      buildDivergentSnapshotPlaneFactory(),
+    );
     const classifierWorkstation = snapshotFactory.workstations?.find(
       (workstation) => workstation.name === "Snapshot Only",
     );
@@ -268,8 +280,8 @@ describe("useCurrentActivityGraphEditor document plane", () => {
     );
 
     expect(result.current.editorMode).toBe(false);
-    expect(
-      result.current.editorUnavailableClassifierWorkstationName,
-    ).toBe("Review");
+    expect(result.current.editorUnavailableClassifierWorkstationName).toBe(
+      "Review",
+    );
   });
 });

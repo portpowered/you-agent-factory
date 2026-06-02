@@ -28,10 +28,19 @@ const defaultMaxHeapDeltaMB = 64;
 
 const fixturePathByName: Record<FixtureName, string> = {
   baseline: path.join(fixtureDirectory, "event-stream-replay.jsonl"),
-  "failure-analysis": path.join(fixtureDirectory, "failure-analysis-replay.jsonl"),
-  "graph-state-smoke": path.join(fixtureDirectory, "graph-state-smoke-replay.jsonl"),
+  "failure-analysis": path.join(
+    fixtureDirectory,
+    "failure-analysis-replay.jsonl",
+  ),
+  "graph-state-smoke": path.join(
+    fixtureDirectory,
+    "graph-state-smoke-replay.jsonl",
+  ),
   "runtime-config": path.join(fixtureDirectory, "event-stream-replay-2.jsonl"),
-  "runtime-details": path.join(fixtureDirectory, "runtime-details-replay.jsonl"),
+  "runtime-details": path.join(
+    fixtureDirectory,
+    "runtime-details-replay.jsonl",
+  ),
 };
 
 function parseArgs(argv: string[]): Options {
@@ -74,7 +83,9 @@ function parseArgs(argv: string[]): Options {
 function positiveInteger(value: string | undefined, flagName: string): number {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`${flagName} must be a positive integer, received ${value ?? "<missing>"}`);
+    throw new Error(
+      `${flagName} must be a positive integer, received ${value ?? "<missing>"}`,
+    );
   }
   return parsed;
 }
@@ -82,7 +93,9 @@ function positiveInteger(value: string | undefined, flagName: string): number {
 function positiveNumber(value: string | undefined, flagName: string): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
-    throw new Error(`${flagName} must be a positive number, received ${value ?? "<missing>"}`);
+    throw new Error(
+      `${flagName} must be a positive number, received ${value ?? "<missing>"}`,
+    );
   }
   return parsed;
 }
@@ -155,7 +168,10 @@ function main(): void {
   gcIfAvailable();
   const heapBeforeMB = sampleHeapUsedMB();
   const startedAt = performance.now();
-  const samples = buildWorkOutcomeTimelineSamplesFromEvents(events, selectedTick);
+  const samples = buildWorkOutcomeTimelineSamplesFromEvents(
+    events,
+    selectedTick,
+  );
   const durationMs = Number((performance.now() - startedAt).toFixed(1));
   gcIfAvailable();
   const heapAfterMB = sampleHeapUsedMB();

@@ -1,7 +1,7 @@
 import {
   CurrentFactoryDefinitionError,
-  getCurrentFactoryDocument,
   type CurrentFactoryDocument,
+  getCurrentFactoryDocument,
 } from "../current-factory-definition";
 import { extractAPIErrorPayload } from "../transport";
 import {
@@ -24,9 +24,12 @@ export async function getCurrentFactory(
   const fetchImplementation = options.fetch ?? globalThis.fetch;
 
   if (typeof fetchImplementation !== "function") {
-    throw new SessionFactoryAPIError("Current factory export is unavailable in this environment.", {
-      code: "NETWORK_ERROR",
-    });
+    throw new SessionFactoryAPIError(
+      "Current factory export is unavailable in this environment.",
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
   }
 
   try {
@@ -53,7 +56,9 @@ function resolveSessionFactoryAPIErrorCode(
     return normalizeSessionFactoryAPIErrorCode(errorBody.code);
   }
 
-  return normalizeSessionFactoryAPIErrorCodeFromCurrentFactoryDefinition(error.code);
+  return normalizeSessionFactoryAPIErrorCodeFromCurrentFactoryDefinition(
+    error.code,
+  );
 }
 
 function toSessionFactoryAPIErrorFromCurrentFactoryDefinition(
@@ -73,10 +78,14 @@ function toSessionFactoryAPIErrorFromCurrentFactoryDefinition(
   }
 
   if (error instanceof Error) {
-    return new SessionFactoryAPIError(error.message, { code: "INTERNAL_ERROR" });
+    return new SessionFactoryAPIError(error.message, {
+      code: "INTERNAL_ERROR",
+    });
   }
 
-  return new SessionFactoryAPIError("Factory activation failed.", { code: "INTERNAL_ERROR" });
+  return new SessionFactoryAPIError("Factory activation failed.", {
+    code: "INTERNAL_ERROR",
+  });
 }
 
 function normalizeSessionFactoryAPIErrorCodeFromCurrentFactoryDefinition(

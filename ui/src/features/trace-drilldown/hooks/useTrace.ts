@@ -1,6 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import type { DashboardTrace, DashboardTraceDispatch, DashboardWorkRelation } from "../../../api/dashboard/types";
+import type {
+  DashboardTrace,
+  DashboardTraceDispatch,
+  DashboardWorkRelation,
+} from "../../../api/dashboard/types";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 
 const DASHBOARD_WORK_TRACE_QUERY_KEY = ["agent-factory-work-trace"] as const;
@@ -34,8 +38,13 @@ export function expandTraceWithCausalPredecessors(
 
     includedTraceIDs.add(traceID);
 
-    for (const predecessorTraceID of predecessorTraceIDsForDispatches(currentTrace.dispatches)) {
-      if (!includedTraceIDs.has(predecessorTraceID) && tracesByID[predecessorTraceID]) {
+    for (const predecessorTraceID of predecessorTraceIDsForDispatches(
+      currentTrace.dispatches,
+    )) {
+      if (
+        !includedTraceIDs.has(predecessorTraceID) &&
+        tracesByID[predecessorTraceID]
+      ) {
         pendingTraceIDs.push(predecessorTraceID);
       }
     }
@@ -47,7 +56,9 @@ export function expandTraceWithCausalPredecessors(
 
   const includedTraces = [...includedTraceIDs]
     .map((traceID) => tracesByID[traceID])
-    .filter((candidate): candidate is DashboardTrace => candidate !== undefined);
+    .filter(
+      (candidate): candidate is DashboardTrace => candidate !== undefined,
+    );
   const dispatches = sortDispatchesByTime(
     dedupeDispatches(
       includedTraces.flatMap((candidate) => candidate.dispatches),
@@ -80,32 +91,43 @@ export function expandTraceWithCausalPredecessors(
   };
 }
 
-export function useDashboardTrace(workID: string | null, traceID?: string | null) {
+export function useDashboardTrace(
+  workID: string | null,
+  traceID?: string | null,
+) {
   const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
   const tracesByWorkID = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {},
   );
   const eventTrace = useFactoryTimelineStore(
-    (state) => state.worldViewCache[state.selectedTick]?.tracesByWorkID[workID ?? ""],
+    (state) =>
+      state.worldViewCache[state.selectedTick]?.tracesByWorkID[workID ?? ""],
   );
-  const directTrace = useFactoryTimelineStore(
-    (state) => {
-      if (!traceID) {
-        return undefined;
-      }
+  const directTrace = useFactoryTimelineStore((state) => {
+    if (!traceID) {
+      return undefined;
+    }
 
-      return Object.values(state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {}).find(
-        (trace) => trace.trace_id === traceID,
-      );
-    },
-  );
+    return Object.values(
+      state.worldViewCache[state.selectedTick]?.tracesByWorkID ?? {},
+    ).find((trace) => trace.trace_id === traceID);
+  });
   const trace = useMemo(
-    () => expandTraceWithCausalPredecessors(directTrace ?? eventTrace, tracesByWorkID),
+    () =>
+      expandTraceWithCausalPredecessors(
+        directTrace ?? eventTrace,
+        tracesByWorkID,
+      ),
     [directTrace, eventTrace, tracesByWorkID],
   );
 
   return useQuery({
-    queryKey: [...DASHBOARD_WORK_TRACE_QUERY_KEY, workID, traceID ?? "", selectedTick],
+    queryKey: [
+      ...DASHBOARD_WORK_TRACE_QUERY_KEY,
+      workID,
+      traceID ?? "",
+      selectedTick,
+    ],
     queryFn: () => trace,
     enabled: trace !== undefined,
     initialData: trace,
@@ -114,16 +136,23 @@ export function useDashboardTrace(workID: string | null, traceID?: string | null
   });
 }
 
-function indexTracesByID(tracesByWorkID: Record<string, DashboardTrace>): Record<string, DashboardTrace> {
-  return Object.values(tracesByWorkID).reduce<Record<string, DashboardTrace>>((indexed, trace) => {
-    if (trace.trace_id && indexed[trace.trace_id] === undefined) {
-      indexed[trace.trace_id] = trace;
-    }
-    return indexed;
-  }, {});
+function indexTracesByID(
+  tracesByWorkID: Record<string, DashboardTrace>,
+): Record<string, DashboardTrace> {
+  return Object.values(tracesByWorkID).reduce<Record<string, DashboardTrace>>(
+    (indexed, trace) => {
+      if (trace.trace_id && indexed[trace.trace_id] === undefined) {
+        indexed[trace.trace_id] = trace;
+      }
+      return indexed;
+    },
+    {},
+  );
 }
 
-function predecessorTraceIDsForDispatches(dispatches: DashboardTraceDispatch[]): string[] {
+function predecessorTraceIDsForDispatches(
+  dispatches: DashboardTraceDispatch[],
+): string[] {
   return uniqueNonEmptyStrings(
     dispatches.flatMap((dispatch) => [
       ...(dispatch.previous_chaining_trace_ids ?? []),
@@ -134,13 +163,19 @@ function predecessorTraceIDsForDispatches(dispatches: DashboardTraceDispatch[]):
   );
 }
 
-function dedupeDispatches(dispatches: DashboardTraceDispatch[]): DashboardTraceDispatch[] {
-  return [...new Map(
-    dispatches.map((dispatch) => [dispatch.dispatch_id, dispatch] as const),
-  ).values()];
+function dedupeDispatches(
+  dispatches: DashboardTraceDispatch[],
+): DashboardTraceDispatch[] {
+  return [
+    ...new Map(
+      dispatches.map((dispatch) => [dispatch.dispatch_id, dispatch] as const),
+    ).values(),
+  ];
 }
 
-function sortDispatchesByTime(dispatches: DashboardTraceDispatch[]): DashboardTraceDispatch[] {
+function sortDispatchesByTime(
+  dispatches: DashboardTraceDispatch[],
+): DashboardTraceDispatch[] {
   return [...dispatches].sort((left, right) => {
     if (left.start_time !== right.start_time) {
       return left.start_time.localeCompare(right.start_time);
@@ -152,7 +187,9 @@ function sortDispatchesByTime(dispatches: DashboardTraceDispatch[]): DashboardTr
   });
 }
 
-function dedupeRelations(relations: DashboardWorkRelation[]): DashboardWorkRelation[] {
+function dedupeRelations(
+  relations: DashboardWorkRelation[],
+): DashboardWorkRelation[] {
   const keyedRelations = new Map<string, DashboardWorkRelation>();
 
   for (const relation of relations) {
@@ -172,9 +209,17 @@ function dedupeRelations(relations: DashboardWorkRelation[]): DashboardWorkRelat
 }
 
 function uniqueNonEmptyStrings(values: Array<string | undefined>): string[] {
-  return [...new Set(values.filter((value): value is string => Boolean(value?.trim())))];
+  return [
+    ...new Set(
+      values.filter((value): value is string => Boolean(value?.trim())),
+    ),
+  ];
 }
 
-function sortedUniqueNonEmptyStrings(values: Array<string | undefined>): string[] {
-  return uniqueNonEmptyStrings(values).sort((left, right) => left.localeCompare(right));
+function sortedUniqueNonEmptyStrings(
+  values: Array<string | undefined>,
+): string[] {
+  return uniqueNonEmptyStrings(values).sort((left, right) =>
+    left.localeCompare(right),
+  );
 }

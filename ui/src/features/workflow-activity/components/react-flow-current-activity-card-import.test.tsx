@@ -11,8 +11,12 @@ import {
 describe("react-flow-current-activity-card-import", () => {
   it("exposes the drop state status for graph viewport attributes", () => {
     expect(graphDropStateAttribute({ status: "idle" })).toBe("idle");
-    expect(graphDropStateAttribute({ status: "drag-active" })).toBe("drag-active");
-    expect(graphDropStateAttribute({ fileName: "factory.png", status: "reading" })).toBe("reading");
+    expect(graphDropStateAttribute({ status: "drag-active" })).toBe(
+      "drag-active",
+    );
+    expect(
+      graphDropStateAttribute({ fileName: "factory.png", status: "reading" }),
+    ).toBe("reading");
     expect(
       graphDropStateAttribute({
         error: {
@@ -27,17 +31,21 @@ describe("react-flow-current-activity-card-import", () => {
 
   it("renders localized drag-active and reading overlay copy and hides idle state", () => {
     const japaneseMessages = getWorkflowActivityGraphImportMessages("ja");
-    const { rerender } = render(<GraphDropOverlay dropState={{ status: "idle" }} />);
+    const { rerender } = render(
+      <GraphDropOverlay dropState={{ status: "idle" }} />,
+    );
 
     expect(screen.queryByText(japaneseMessages.graphDropTitle)).toBeNull();
 
-    rerender(<GraphDropOverlay dropState={{ status: "drag-active" }} locale="ja" />);
+    rerender(
+      <GraphDropOverlay dropState={{ status: "drag-active" }} locale="ja" />,
+    );
 
     expect(screen.getByText(japaneseMessages.graphDropTitle)).toBeTruthy();
     expect(screen.getByText(japaneseMessages.graphDropHint)).toBeTruthy();
-    expect(screen.getByText(japaneseMessages.graphDropHint).className).toContain(
-      "text-af-text-muted",
-    );
+    expect(
+      screen.getByText(japaneseMessages.graphDropHint).className,
+    ).toContain("text-af-text-muted");
 
     rerender(
       <GraphDropOverlay
@@ -46,14 +54,20 @@ describe("react-flow-current-activity-card-import", () => {
       />,
     );
 
-    expect(screen.getByText(japaneseMessages.graphImportLoadingTitle)).toBeTruthy();
-    expect(screen.getByText(japaneseMessages.graphDropReadingMessage("factory.png"))).toBeTruthy();
+    expect(
+      screen.getByText(japaneseMessages.graphImportLoadingTitle),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(japaneseMessages.graphDropReadingMessage("factory.png")),
+    ).toBeTruthy();
   });
 
   it("falls back to default English overlay copy for unsupported locales", () => {
     const englishMessages = getWorkflowActivityGraphImportMessages("en");
 
-    render(<GraphDropOverlay dropState={{ status: "drag-active" }} locale="fr-CA" />);
+    render(
+      <GraphDropOverlay dropState={{ status: "drag-active" }} locale="fr-CA" />,
+    );
 
     expect(screen.getByText(englishMessages.graphDropTitle)).toBeTruthy();
     expect(screen.getByText(englishMessages.graphDropHint)).toBeTruthy();
@@ -110,29 +124,30 @@ describe("react-flow-current-activity-card-import", () => {
       undefined,
       "This PNG appears truncated or malformed, so import stopped before any activation request.",
     ],
-  ] as const)(
-    "renders import error copy for %s",
-    (code, details, expectedMessage) => {
-      const englishMessages = getWorkflowActivityGraphImportMessages("en");
-      render(
-        <GraphImportErrorPanel
-          error={{
+  ] as const)("renders import error copy for %s", (code, details, expectedMessage) => {
+    const englishMessages = getWorkflowActivityGraphImportMessages("en");
+    render(
+      <GraphImportErrorPanel
+        error={
+          {
             code,
             details,
             message: "Fallback error message.",
-          } satisfies ReadFactoryImportPngError}
-          fileName="factory.png"
-          locale="en"
-          onDismiss={vi.fn()}
-        />,
-      );
+          } satisfies ReadFactoryImportPngError
+        }
+        fileName="factory.png"
+        locale="en"
+        onDismiss={vi.fn()}
+      />,
+    );
 
-      expect(screen.getByRole("alert")).toBeTruthy();
-      expect(screen.getByText(englishMessages.graphImportErrorTitle)).toBeTruthy();
-      expect(screen.getByText("factory.png")).toBeTruthy();
-      expect(screen.getByText(expectedMessage)).toBeTruthy();
-    },
-  );
+    expect(screen.getByRole("alert")).toBeTruthy();
+    expect(
+      screen.getByText(englishMessages.graphImportErrorTitle),
+    ).toBeTruthy();
+    expect(screen.getByText("factory.png")).toBeTruthy();
+    expect(screen.getByText(expectedMessage)).toBeTruthy();
+  });
 
   it("renders localized dismiss copy and falls back to the backend-provided error message", () => {
     const onDismiss = vi.fn();
@@ -150,7 +165,9 @@ describe("react-flow-current-activity-card-import", () => {
       />,
     );
 
-    expect(screen.getByText(japaneseMessages.importErrorNotPngFile)).toBeTruthy();
+    expect(
+      screen.getByText(japaneseMessages.importErrorNotPngFile),
+    ).toBeTruthy();
 
     rerender(
       <GraphImportErrorPanel

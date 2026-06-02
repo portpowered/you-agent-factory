@@ -56,9 +56,9 @@ describe("findClassifierGraphEditorUnsupportedWorkstationName", () => {
       ],
     };
 
-    expect(
-      findClassifierGraphEditorUnsupportedWorkstationName(factory),
-    ).toBe("review");
+    expect(findClassifierGraphEditorUnsupportedWorkstationName(factory)).toBe(
+      "review",
+    );
   });
 
   it("detects classifier workstations by labeled routes without explicit type", () => {
@@ -78,8 +78,8 @@ describe("findClassifierGraphEditorUnsupportedWorkstationName", () => {
       ],
     };
 
-    expect(
-      findClassifierGraphEditorUnsupportedWorkstationName(factory),
-    ).toBe("review");
+    expect(findClassifierGraphEditorUnsupportedWorkstationName(factory)).toBe(
+      "review",
+    );
   });
 });

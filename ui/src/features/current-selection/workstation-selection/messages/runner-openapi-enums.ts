@@ -1,8 +1,5 @@
 import type { components } from "../../../../api/generated/openapi";
-import {
-  localizeEnumLabel,
-  type EnumLabelCatalog,
-} from "../../../../i18n";
+import { type EnumLabelCatalog, localizeEnumLabel } from "../../../../i18n";
 
 export type ApiRunnerID = components["schemas"]["RunnerID"];
 export type ApiRunnerSelectionSource =

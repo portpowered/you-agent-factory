@@ -83,9 +83,7 @@ export async function verifyCurrentSelectionPromptHint({
     "Prompt diagnostics summary",
   );
   await expectVisible(
-    currentSelection.getByText(
-      "Fix highlighted issues before saving.",
-    ),
+    currentSelection.getByText("Fix highlighted issues before saving."),
     "Prompt validation blocking guidance",
   );
   await expectVisible(

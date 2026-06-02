@@ -1,34 +1,34 @@
 import {
-  DASHBOARD_CHART_AXIS_CLASS,
-  DASHBOARD_CHART_SURFACE_CLASS,
-  getDashboardChartSemanticStyle,
-} from "../lib/chart-contract";
-import { cn } from "../../../lib/cn";
-import {
-  formatDurationMillis,
-  formatTraceOutcome,
-} from "../../../components/ui/formatters";
-import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 } from "../../../components/ui/dashboard-typography";
 import {
-  THROUGHPUT_RANGE_OPTIONS,
-  type FailureTrendModel,
-  type ReworkTrendModel,
-  type ThroughputRangeID,
-  type TimingTrendModel,
-} from "../lib/trends";
-import { getWorkOutcomeMessages } from "../messages/work-outcome";
+  formatDurationMillis,
+  formatTraceOutcome,
+} from "../../../components/ui/formatters";
 import {
+  DashboardWidgetFrame,
   DETAIL_CARD_WIDE_CLASS,
   DETAIL_COPY_CLASS,
   EMPTY_STATE_CLASS,
   EMPTY_STATE_COMPACT_CLASS,
   WIDGET_SUBTITLE_CLASS,
 } from "../../../components/ui/widget-frame";
-import { DashboardWidgetFrame } from "../../../components/ui/widget-frame";
+import { cn } from "../../../lib/cn";
+import {
+  DASHBOARD_CHART_AXIS_CLASS,
+  DASHBOARD_CHART_SURFACE_CLASS,
+  getDashboardChartSemanticStyle,
+} from "../lib/chart-contract";
+import {
+  type FailureTrendModel,
+  type ReworkTrendModel,
+  THROUGHPUT_RANGE_OPTIONS,
+  type ThroughputRangeID,
+  type TimingTrendModel,
+} from "../lib/trends";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 
 interface FailureTrendCardProps {
   className?: string;
@@ -62,12 +62,14 @@ const TREND_RANGE_SELECT_CLASS = cn(
   "rounded-lg border border-af-accent-border bg-af-surface-raised px-2 py-2 text-af-text",
   DASHBOARD_BODY_TEXT_CLASS,
 );
-const TREND_SUMMARY_CLASS =
-  cn(
-    "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-af-border [&_div]:bg-af-surface-subtle [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
-    DASHBOARD_SUPPORTING_LABELS_CLASS,
-  );
-const TREND_CHART_CLASS = cn(DASHBOARD_CHART_SURFACE_CLASS, "min-h-44 border border-af-border");
+const TREND_SUMMARY_CLASS = cn(
+  "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-af-border [&_div]:bg-af-surface-subtle [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
+  DASHBOARD_SUPPORTING_LABELS_CLASS,
+);
+const TREND_CHART_CLASS = cn(
+  DASHBOARD_CHART_SURFACE_CLASS,
+  "min-h-44 border border-af-border",
+);
 const TREND_CAUSE_LIST_CLASS = "mt-4 grid list-none gap-2 p-0";
 const TREND_CAUSE_ITEM_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2.5";
@@ -75,10 +77,14 @@ const TREND_CAUSE_LABEL_CLASS = cn(
   "min-w-0 text-af-text-muted [overflow-wrap:anywhere]",
   DASHBOARD_BODY_TEXT_CLASS,
 );
-const TIMING_RANGE_SUMMARY_CLASS = cn(TREND_SUMMARY_CLASS, "mt-3 md:grid-cols-2");
+const TIMING_RANGE_SUMMARY_CLASS = cn(
+  TREND_SUMMARY_CLASS,
+  "mt-3 md:grid-cols-2",
+);
 const TREND_SUMMARY_TERM_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const TREND_SUMMARY_VALUE_CLASS = WIDGET_SUBTITLE_CLASS;
-const FAILURE_TREND_CHART_STYLE = getDashboardChartSemanticStyle("failureTrend");
+const FAILURE_TREND_CHART_STYLE =
+  getDashboardChartSemanticStyle("failureTrend");
 const REWORK_TREND_CHART_STYLE = getDashboardChartSemanticStyle("reworkTrend");
 const TIMING_TREND_CHART_STYLE = getDashboardChartSemanticStyle("timingTrend");
 
@@ -104,9 +110,7 @@ export function FailureTrendCard({
       widgetId={widgetId}
     >
       <div className={TREND_TOOLBAR_CLASS}>
-        <p className={WIDGET_SUBTITLE_CLASS}>
-          {messages.failureSummary}
-        </p>
+        <p className={WIDGET_SUBTITLE_CLASS}>{messages.failureSummary}</p>
         <label className={TREND_RANGE_LABEL_CLASS}>
           <span className={TREND_RANGE_TEXT_CLASS}>{messages.rangeLabel}</span>
           <select
@@ -126,15 +130,21 @@ export function FailureTrendCard({
 
       <dl className={TREND_SUMMARY_CLASS}>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.failedInRangeLabel}</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.failedInRangeLabel}
+          </dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.failureDelta}</dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.totalFailedLabel}</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.totalFailedLabel}
+          </dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.currentFailed}</dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.causeGroupsLabel}</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.causeGroupsLabel}
+          </dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.groups.length}</dd>
         </div>
       </dl>
@@ -181,7 +191,9 @@ export function FailureTrendCard({
           {model.groups.map((group) => (
             <li className={TREND_CAUSE_ITEM_CLASS} key={group.label}>
               <span className={TREND_CAUSE_LABEL_CLASS}>{group.label}</span>
-              <strong className="shrink-0 text-af-danger-text">{group.count}</strong>
+              <strong className="shrink-0 text-af-danger-text">
+                {group.count}
+              </strong>
             </li>
           ))}
         </ul>
@@ -206,21 +218,29 @@ export function ReworkTrendCard({
       title={messages.reworkTitle}
       widgetId={widgetId}
     >
-      <p className={WIDGET_SUBTITLE_CLASS}>
-        {messages.reworkSummary}
-      </p>
+      <p className={WIDGET_SUBTITLE_CLASS}>{messages.reworkSummary}</p>
 
       <dl className={TREND_SUMMARY_CLASS}>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.traceWorkLabel}</dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.currentWorkLabel}</dd>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.traceWorkLabel}
+          </dt>
+          <dd className={TREND_SUMMARY_VALUE_CLASS}>
+            {model.currentWorkLabel}
+          </dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.retryOrReworkLabel}</dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.retryOrReworkCount}</dd>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.retryOrReworkLabel}
+          </dt>
+          <dd className={TREND_SUMMARY_VALUE_CLASS}>
+            {model.retryOrReworkCount}
+          </dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.latestOutcomeLabel}</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.latestOutcomeLabel}
+          </dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>
             {formatTraceOutcome(model.terminalOutcome)}
           </dd>
@@ -251,7 +271,10 @@ export function ReworkTrendCard({
               r={REWORK_TREND_CHART_STYLE.pointRadius}
             >
               <title>
-                {messages.reworkPointLabel(point.dispatchLabel, point.reworkCount)}
+                {messages.reworkPointLabel(
+                  point.dispatchLabel,
+                  point.reworkCount,
+                )}
               </title>
             </circle>
           ))}
@@ -280,23 +303,29 @@ export function TimingTrendCard({
       title={messages.timingTitle}
       widgetId={widgetId}
     >
-      <p className={WIDGET_SUBTITLE_CLASS}>
-        {messages.timingSummary}
-      </p>
+      <p className={WIDGET_SUBTITLE_CLASS}>{messages.timingSummary}</p>
 
       <dl className={TREND_SUMMARY_CLASS}>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.traceWorkLabel}</dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.currentWorkLabel}</dd>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.traceWorkLabel}
+          </dt>
+          <dd className={TREND_SUMMARY_VALUE_CLASS}>
+            {model.currentWorkLabel}
+          </dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.slowestDurationLabel}</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.slowestDurationLabel}
+          </dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>
             {formatDurationMillis(model.slowestDurationMillis)}
           </dd>
         </div>
         <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.averageDurationLabel}</dt>
+          <dt className={TREND_SUMMARY_TERM_CLASS}>
+            {messages.averageDurationLabel}
+          </dt>
           <dd className={TREND_SUMMARY_VALUE_CLASS}>
             {formatDurationMillis(model.averageDurationMillis)}
           </dd>
@@ -328,7 +357,8 @@ export function TimingTrendCard({
                 r={TIMING_TREND_CHART_STYLE.pointRadius}
               >
                 <title>
-                  {point.dispatchLabel}: {formatDurationMillis(point.durationMillis)}
+                  {point.dispatchLabel}:{" "}
+                  {formatDurationMillis(point.durationMillis)}
                 </title>
               </circle>
             ))}
@@ -338,13 +368,17 @@ export function TimingTrendCard({
             aria-label={messages.timingRangeLabel}
           >
             <div>
-              <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.fastestDurationLabel}</dt>
+              <dt className={TREND_SUMMARY_TERM_CLASS}>
+                {messages.fastestDurationLabel}
+              </dt>
               <dd className={TREND_SUMMARY_VALUE_CLASS}>
                 {formatDurationMillis(model.fastestDurationMillis)}
               </dd>
             </div>
             <div>
-              <dt className={TREND_SUMMARY_TERM_CLASS}>{messages.latestDurationLabel}</dt>
+              <dt className={TREND_SUMMARY_TERM_CLASS}>
+                {messages.latestDurationLabel}
+              </dt>
               <dd className={TREND_SUMMARY_VALUE_CLASS}>
                 {formatDurationMillis(model.latestDurationMillis)}
               </dd>
@@ -364,8 +398,20 @@ export function TimingTrendCard({
 function TrendAxes() {
   return (
     <>
-      <line className={DASHBOARD_CHART_AXIS_CLASS} x1="14" x2="306" y1="106" y2="106" />
-      <line className={DASHBOARD_CHART_AXIS_CLASS} x1="14" x2="14" y1="14" y2="106" />
+      <line
+        className={DASHBOARD_CHART_AXIS_CLASS}
+        x1="14"
+        x2="306"
+        y1="106"
+        y2="106"
+      />
+      <line
+        className={DASHBOARD_CHART_AXIS_CLASS}
+        x1="14"
+        x2="14"
+        y1="14"
+        y2="106"
+      />
     </>
   );
 }

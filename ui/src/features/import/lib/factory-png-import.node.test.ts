@@ -71,7 +71,10 @@ function buildInternationalTextData(keyword: string, text: string): Uint8Array {
   ]);
 }
 
-function injectMetadataChunk(pngBytes: Uint8Array, metadataChunk: Uint8Array): Uint8Array {
+function injectMetadataChunk(
+  pngBytes: Uint8Array,
+  metadataChunk: Uint8Array,
+): Uint8Array {
   const chunks: Uint8Array[] = [PNG_SIGNATURE];
   let offset = PNG_SIGNATURE.length;
   let inserted = false;
@@ -91,7 +94,11 @@ function injectMetadataChunk(pngBytes: Uint8Array, metadataChunk: Uint8Array): U
 }
 
 function readChunkAtOffset(pngBytes: Uint8Array, offset: number): ParsedChunk {
-  const view = new DataView(pngBytes.buffer, pngBytes.byteOffset, pngBytes.byteLength);
+  const view = new DataView(
+    pngBytes.buffer,
+    pngBytes.byteOffset,
+    pngBytes.byteLength,
+  );
   const length = view.getUint32(offset);
   const dataOffset = offset + 8;
   const chunkEnd = dataOffset + length + 4;

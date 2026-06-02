@@ -6,18 +6,18 @@ import {
   type CurrentFactoryDocument,
   saveFactoryForSessionDocument,
 } from "../../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
+import {
+  defaultGraphDocumentScopeKey,
+  renderEditableFactoryGraphHook,
+} from "../../../testing/editable-factory-graph-hook-test-helpers";
 import {
   createHookTestGraphEditorDraftState,
   draftWorkstationFactoryDocument,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
-import {
-  defaultGraphDocumentScopeKey,
-  renderEditableFactoryGraphHook,
-} from "../../../testing/editable-factory-graph-hook-test-helpers";
 import { currentFactoryDocumentQueryKey } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
+import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
 
 const hookState = vi.hoisted(() => ({
   draftState: {} as MockGraphEditorDraftState,
@@ -60,7 +60,10 @@ beforeEach(() => {
 describe("useEditableFactoryGraph save query cache", () => {
   it("updates the current factory document query cache exactly once on successful save", async () => {
     const queryClient = new QueryClient({
-      defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
     });
     const documentQueryKey = currentFactoryDocumentQueryKey("~default");
     const savedDocument: CurrentFactoryDocument = {

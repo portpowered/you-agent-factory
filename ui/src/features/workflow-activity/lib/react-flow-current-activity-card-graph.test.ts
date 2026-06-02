@@ -477,12 +477,12 @@ describe("current activity graph editor handles", () => {
       storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
-    expect(nodes.find((node) => node.id === "work-type:task")?.data).toMatchObject(
-      {
-        isDefaultWorkType: true,
-        kind: "work-type",
-      },
-    );
+    expect(
+      nodes.find((node) => node.id === "work-type:task")?.data,
+    ).toMatchObject({
+      isDefaultWorkType: true,
+      kind: "work-type",
+    });
   });
 
   it("wires editor-mode work type nodes to onSelectWorkType instead of onSelectWorkstation", async () => {

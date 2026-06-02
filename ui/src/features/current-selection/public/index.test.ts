@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-
-import * as currentSelectionPublic from "./index";
 import type {
   DashboardSelection,
   DashboardWorkItemSelection,
   DashboardWorkstationRequestSelection,
   StatePositionWorkItem,
 } from "./index";
+import * as currentSelectionPublic from "./index";
 
 describe("current-selection public barrel", () => {
   it("keeps the public runtime surface focused on the widget", () => {

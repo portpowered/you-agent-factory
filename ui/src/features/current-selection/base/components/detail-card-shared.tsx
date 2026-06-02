@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { DashboardPlaceRef } from "../../../../api/dashboard/types";
-import { cn } from "../../../../lib/cn";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
@@ -15,22 +14,25 @@ import {
   REQUEST_AUTHORED_TEXT_CLASS,
   RequestAuthoredText,
 } from "../../../../lib/authored-body-text";
+import { cn } from "../../../../lib/cn";
+import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 import type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
   MetadataSectionProps,
 } from "./detail-card-types";
-import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
 
 export const EXECUTION_PILL_CLASS = cn(
   "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info",
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
-export const PROVIDER_SESSION_CARD_CLASS = "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
+export const PROVIDER_SESSION_CARD_CLASS =
+  "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
 export const CURRENT_SELECTION_FIELD_PANEL_CLASS =
   "grid gap-2 rounded-2xl border border-af-border bg-af-surface-subtle p-3";
 /** Editable configuration field groups must use this stack instead of multi-column grid wrappers. */
-export const CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS = "grid grid-cols-1 gap-3";
+export const CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS =
+  "grid grid-cols-1 gap-3";
 export const CURRENT_SELECTION_NOTICE_SUBTLE_CLASS = cn(
   "m-0 text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -107,7 +109,12 @@ export function CurrentSelectionSectionHeader({
           {title}
         </h4>
         {supportingText ? (
-          <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          <p
+            className={cn(
+              "m-0 text-af-text-subtle",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
             {supportingText}
           </p>
         ) : null}
@@ -124,7 +131,10 @@ export function InferenceAttemptTextSection({
   return (
     <section aria-label={label} className="grid gap-1">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <AuthoredBodyText className={INFERENCE_ATTEMPT_TEXT_CLASS} value={value} />
+      <AuthoredBodyText
+        className={INFERENCE_ATTEMPT_TEXT_CLASS}
+        value={value}
+      />
     </section>
   );
 }
@@ -186,13 +196,17 @@ export function MetadataSection({
 }
 
 export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
-  return place.state_category === "TERMINAL" || place.state_category === "FAILED";
+  return (
+    place.state_category === "TERMINAL" || place.state_category === "FAILED"
+  );
 }
 
 export function emptyStatePlaceMessage(
   messages: Pick<
     CurrentSelectionDetailMessages,
-    "noCurrentWorkInPlace" | "noWorkRecordedAtSelectedTick" | "selectedTickWorkUnavailable"
+    | "noCurrentWorkInPlace"
+    | "noWorkRecordedAtSelectedTick"
+    | "selectedTickWorkUnavailable"
   >,
   usesRetainedWorkItems: boolean,
   tokenCount: number,
@@ -208,7 +222,9 @@ export function emptyStatePlaceMessage(
   return messages.noWorkRecordedAtSelectedTick;
 }
 
-export function normalizeDetailText(value: string | undefined): string | undefined {
+export function normalizeDetailText(
+  value: string | undefined,
+): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
 }

@@ -1,7 +1,4 @@
-import {
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 
 export function useDashboardNow(): number {
   const [now, setNow] = useState(() => Date.now());
@@ -18,4 +15,3 @@ export function useDashboardNow(): number {
 
   return now;
 }
-

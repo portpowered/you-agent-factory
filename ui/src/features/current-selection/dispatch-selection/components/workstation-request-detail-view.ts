@@ -1,7 +1,7 @@
-import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
+import type { DashboardSelectedRunner } from "../../../../api/dashboard/types";
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
 import { normalizeDetailText } from "../../base/components/detail-card-shared";
-import type { DashboardSelectedRunner } from "../../../../api/dashboard/types";
+import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
 
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
@@ -28,7 +28,9 @@ export function buildWorkstationRequestDetailView(
   const hasFailureDetails =
     normalizedFailureReason !== undefined ||
     normalizedFailureMessage !== undefined;
-  const normalizedOutcome = (request.outcome ?? request.script_response?.outcome)
+  const normalizedOutcome = (
+    request.outcome ?? request.script_response?.outcome
+  )
     ?.trim()
     .toUpperCase();
   const hasFailedOutcome =
@@ -60,9 +62,8 @@ export function buildWorkstationRequestDetailView(
 function workstationRequestTitle(
   request: WorkstationRequestDetailCardProps["request"],
 ): string {
-  const namedInputWorkItem = request.request_view?.input_work_items?.find(
-    hasWorkFacingLabel,
-  );
+  const namedInputWorkItem =
+    request.request_view?.input_work_items?.find(hasWorkFacingLabel);
   if (namedInputWorkItem) {
     return formatWorkItemLabel(namedInputWorkItem);
   }
@@ -75,6 +76,9 @@ function workstationRequestTitle(
   return request.request_id || request.dispatch_id;
 }
 
-function hasWorkFacingLabel(workItem: { display_name?: string; work_id: string }) {
+function hasWorkFacingLabel(workItem: {
+  display_name?: string;
+  work_id: string;
+}) {
   return Boolean(workItem.display_name?.trim() || workItem.work_id.trim());
 }

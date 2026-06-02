@@ -28,7 +28,9 @@ describe("session factory import activation replace-current default session", ()
         new Response(
           JSON.stringify({
             name: "Session Current Name",
-            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {
@@ -49,7 +51,9 @@ describe("session factory import activation replace-current default session", ()
       activateImportedFactoryForSession(
         {
           name: "Imported Factory Name",
-          workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+          workTypes: [
+            { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+          ],
           workers: [],
           workstations: [],
         },
@@ -57,15 +61,21 @@ describe("session factory import activation replace-current default session", ()
       ),
     ).resolves.toEqual({
       name: "Session Current Name",
-      workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+      workTypes: [
+        { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+      ],
       workers: [],
       workstations: [],
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/factory-sessions/~default/factory", {
-      method: "GET",
-    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/factory-sessions/~default/factory",
+      {
+        method: "GET",
+      },
+    );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/factory-sessions/~default/factory",
@@ -74,7 +84,9 @@ describe("session factory import activation replace-current default session", ()
           mode: "REPLACE_CURRENT",
           factory: {
             name: "Session Current Name",
-            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {
@@ -124,7 +136,9 @@ describe("session factory import activation replace-current scoped session", () 
         new Response(
           JSON.stringify({
             name: "Scoped Factory",
-            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {
@@ -145,7 +159,9 @@ describe("session factory import activation replace-current scoped session", () 
       activateImportedFactoryForSession(
         {
           name: "Imported Scoped Name",
-          workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+          workTypes: [
+            { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+          ],
           workers: [],
           workstations: [],
         },
@@ -156,14 +172,20 @@ describe("session factory import activation replace-current scoped session", () 
       ),
     ).resolves.toEqual({
       name: "Scoped Factory",
-      workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+      workTypes: [
+        { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+      ],
       workers: [],
       workstations: [],
     });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/factory-sessions/session-2/factory", {
-      method: "GET",
-    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/factory-sessions/session-2/factory",
+      {
+        method: "GET",
+      },
+    );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/factory-sessions/session-2/factory",

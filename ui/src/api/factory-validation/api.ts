@@ -1,6 +1,6 @@
-import type { components } from "../generated/openapi";
 import { factoryAPIURL } from "../baseUrl";
 import type { CanonicalFactoryDefinition } from "../factory-definition";
+import type { components } from "../generated/openapi";
 import {
   extractAPIErrorPayload,
   isAPIRecord,
@@ -157,7 +157,9 @@ function isFactoryValidationResult(
   return value.targets.every(isFactoryValidationTarget);
 }
 
-function isFactoryValidationTarget(value: unknown): value is FactoryValidationTarget {
+function isFactoryValidationTarget(
+  value: unknown,
+): value is FactoryValidationTarget {
   if (!isAPIRecord(value)) {
     return false;
   }

@@ -1,8 +1,8 @@
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
-import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
+import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 
 const CURRENT_FACTORY_DEFINITION: CanonicalFactoryDefinition = {
   name: "Current Factory",

@@ -234,7 +234,8 @@ function findPlaceOccupancyRef(
 
 describe("replayWorldState payload lineage golden fixtures", () => {
   it("replays work-request-with-content and projects selected refs", () => {
-    const fixture = workRequestWithContentFixture as PayloadLineageGoldenFixture;
+    const fixture =
+      workRequestWithContentFixture as PayloadLineageGoldenFixture;
     const { runtime, state } = replayGoldenFixture(fixture);
 
     for (const [workID, expected] of Object.entries(
@@ -297,7 +298,12 @@ describe("replayWorldState payload lineage golden fixtures", () => {
 
 describe("replayWorldState payload lineage synthetic replay submit-only", () => {
   it("projects submit-only content into place occupancy", () => {
-    const item = lineageWorkItem("work-submit-only", "Submit only", "trace-1", "submit-only-v1");
+    const item = lineageWorkItem(
+      "work-submit-only",
+      "Submit only",
+      "trace-1",
+      "submit-only-v1",
+    );
     const events: FactoryEvent[] = [
       initialStructureRequest,
       lineageWorkRequestEvent(1, "request/submit-only", item),
@@ -406,7 +412,12 @@ describe("replayWorldState payload lineage synthetic replay dispatch output", ()
 
 describe("replayWorldState payload lineage synthetic replay consumed pin", () => {
   it("keeps consumed-input pin unchanged when the same work ID is resubmitted later", () => {
-    const initial = lineageWorkItem("work-child", "Child", "trace-child", "child-v1");
+    const initial = lineageWorkItem(
+      "work-child",
+      "Child",
+      "trace-child",
+      "child-v1",
+    );
     const laterSelected = lineageWorkItem(
       "work-child",
       "Child",
@@ -417,7 +428,12 @@ describe("replayWorldState payload lineage synthetic replay consumed pin", () =>
     const events: FactoryEvent[] = [
       initialStructureRequest,
       lineageWorkRequestEvent(1, "request/child-v1", initial),
-      lineageDispatchRequestEvent(2, "dispatch-consume-child", "t-follow-up", initial),
+      lineageDispatchRequestEvent(
+        2,
+        "dispatch-consume-child",
+        "t-follow-up",
+        initial,
+      ),
       lineageWorkRequestEvent(3, "request/child-v2", laterSelected),
     ];
 

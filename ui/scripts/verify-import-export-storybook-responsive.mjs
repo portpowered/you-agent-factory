@@ -1,5 +1,6 @@
 import process from "node:process";
 import { chromium } from "playwright";
+import { assertChooseFileShellNeutral } from "./choose-file-shell-assertions.mjs";
 import { verifyDashboardShellConsolidation } from "./dashboard-shell-storybook-responsive.mjs";
 import {
   expectDialogWithinViewport,
@@ -31,7 +32,6 @@ import {
   verifyProgressOutcomeRoutesWithoutStopWords as verifyProgressOutcomeRoutesWithoutStopWordsImpl,
   verifyProgressOutcomeRoutesWithStopWords as verifyProgressOutcomeRoutesWithStopWordsImpl,
 } from "./verify-progress-outcome-route-handles-storybook-responsive.mjs";
-import { assertChooseFileShellNeutral } from "./choose-file-shell-assertions.mjs";
 import { verifyProviderSessionDetailSuccess as verifyProviderSessionDetailSuccessImpl } from "./verify-provider-session-storybook-responsive.mjs";
 
 const STORYBOOK_HOST = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
@@ -196,10 +196,7 @@ export async function verifyExportDialog(page, dialog, viewport) {
   const coverImageClassName = await coverImageInput.evaluate(
     (element) => element.className,
   );
-  assertChooseFileShellNeutral(
-    coverImageClassName,
-    "export cover-image input",
-  );
+  assertChooseFileShellNeutral(coverImageClassName, "export cover-image input");
   await expectVisible(
     dialog.getByRole("button", { name: "Cancel" }),
     "Export cancel button",

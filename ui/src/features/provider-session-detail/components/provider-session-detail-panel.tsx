@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
@@ -8,8 +7,9 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
+import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
+import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/base/public";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
@@ -557,7 +557,9 @@ function TimestampMetricValue({
 
   return (
     <span className="grid gap-1">
-      <span title={timestampDisplay.rawTimestamp}>{timestampDisplay.label}</span>
+      <span title={timestampDisplay.rawTimestamp}>
+        {timestampDisplay.label}
+      </span>
       <details className="grid gap-1">
         <summary
           className={cn(

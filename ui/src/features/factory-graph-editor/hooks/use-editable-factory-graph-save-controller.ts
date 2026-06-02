@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from "react";
-
-import { useScopedFactoryDocumentSave } from "../../current-selection/base/public";
 import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
+import { useScopedFactoryDocumentSave } from "../../current-selection/base/public";
 import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
 import {
   applyFactoryGraphPendingEdits,

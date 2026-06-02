@@ -20,10 +20,12 @@ export function useDashboardSnapshot({
 }: UseDashboardSnapshotOptions = {}) {
   const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
-  const { error, isInitialLoading, snapshot, streamState } = useDashboardWorldView();
+  const { error, isInitialLoading, snapshot, streamState } =
+    useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
-  const queuedAppendRef = useRef<(events: FactoryEvent[]) => void>(appendEvents);
+  const queuedAppendRef =
+    useRef<(events: FactoryEvent[]) => void>(appendEvents);
 
   queuedAppendRef.current = appendEvents;
 

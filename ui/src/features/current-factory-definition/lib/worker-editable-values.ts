@@ -1,6 +1,8 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 
-type CanonicalWorker = NonNullable<CanonicalFactoryDefinition["workers"]>[number];
+type CanonicalWorker = NonNullable<
+  CanonicalFactoryDefinition["workers"]
+>[number];
 type WorkerType = NonNullable<CanonicalWorker["type"]>;
 type ModelProvider = NonNullable<CanonicalWorker["modelProvider"]>;
 type ModelLocality = NonNullable<CanonicalWorker["modelLocality"]>;
@@ -77,7 +79,10 @@ export function resolveEditableWorkerValues(
     provider: worker.provider ?? null,
     type: worker.type,
     workerName: worker.name,
-    workstationNames: resolveWorkstationNamesReferencingWorker(factory, workerName),
+    workstationNames: resolveWorkstationNamesReferencingWorker(
+      factory,
+      workerName,
+    ),
   };
 }
 

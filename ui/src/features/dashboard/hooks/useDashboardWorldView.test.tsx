@@ -2,13 +2,13 @@ import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useDashboardWorldView } from "./useDashboardWorldView";
 
 function createWrapper() {
@@ -53,7 +53,8 @@ describe("useDashboardWorldView", () => {
       useDashboardStreamStore.setState({
         streamState: {
           status: "offline",
-          message: "Factory event stream disconnected. Showing last event state.",
+          message:
+            "Factory event stream disconnected. Showing last event state.",
         },
       });
     });

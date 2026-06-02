@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
-
+import type {
+  DashboardSessionRuntime,
+  DashboardSnapshot,
+} from "../../../api/dashboard/types";
 import {
   buildWorkChartModel,
   recordThroughputSample,
   type ThroughputSample,
 } from "./trends";
-import type {
-  DashboardSessionRuntime,
-  DashboardSnapshot,
-} from "../../../api/dashboard/types";
 
 function session(
   dispatchedCount: number,
@@ -20,7 +19,8 @@ function session(
     dispatched_count: dispatchedCount,
     failed_by_work_type: failedCount > 0 ? { task: failedCount } : {},
     failed_count: failedCount,
-    failed_work_labels: failedCount > 0 ? ["task failed because review rejected it"] : [],
+    failed_work_labels:
+      failedCount > 0 ? ["task failed because review rejected it"] : [],
     has_data: true,
   };
 }
@@ -67,8 +67,16 @@ function snapshot(
 
 describe("recordThroughputSample", () => {
   it("records changing website-visible session totals", () => {
-    const samples = recordThroughputSample([], snapshot(session(2, 1), 2, 1), 1000);
-    const nextSamples = recordThroughputSample(samples, snapshot(session(4, 3), 1, 2, 2), 2000);
+    const samples = recordThroughputSample(
+      [],
+      snapshot(session(2, 1), 2, 1),
+      1000,
+    );
+    const nextSamples = recordThroughputSample(
+      samples,
+      snapshot(session(4, 3), 1, 2, 2),
+      2000,
+    );
 
     expect(nextSamples).toMatchObject([
       {
@@ -93,15 +101,31 @@ describe("recordThroughputSample", () => {
   });
 
   it("does not append duplicate samples when totals are unchanged", () => {
-    const samples = recordThroughputSample([], snapshot(session(2, 1), 2, 1), 1000);
-    const nextSamples = recordThroughputSample(samples, snapshot(session(2, 1), 2, 1), 2000);
+    const samples = recordThroughputSample(
+      [],
+      snapshot(session(2, 1), 2, 1),
+      1000,
+    );
+    const nextSamples = recordThroughputSample(
+      samples,
+      snapshot(session(2, 1), 2, 1),
+      2000,
+    );
 
     expect(nextSamples).toEqual(samples);
   });
 
   it("keeps unchanged totals when they arrive on a new factory tick", () => {
-    const samples = recordThroughputSample([], snapshot(session(2, 1), 2, 1, 1), 1000);
-    const nextSamples = recordThroughputSample(samples, snapshot(session(2, 1), 2, 1, 2), 2000);
+    const samples = recordThroughputSample(
+      [],
+      snapshot(session(2, 1), 2, 1, 1),
+      1000,
+    );
+    const nextSamples = recordThroughputSample(
+      samples,
+      snapshot(session(2, 1), 2, 1, 2),
+      2000,
+    );
 
     expect(nextSamples.map((sample) => sample.tick)).toEqual([1, 2]);
   });
@@ -135,33 +159,47 @@ describe("buildWorkChartModel", () => {
 
   it("maps throughput samples into deterministic work chart series", () => {
     const first = buildWorkChartModel(sessionSamples, "15m", 10_000);
-    const second = buildWorkChartModel([...sessionSamples].reverse(), "15m", 10_000);
+    const second = buildWorkChartModel(
+      [...sessionSamples].reverse(),
+      "15m",
+      10_000,
+    );
     const expectedSeriesOrder = ["queued", "inFlight", "completed", "failed"];
 
-    expect(first.series.map((series) => series.key)).toEqual(expectedSeriesOrder);
+    expect(first.series.map((series) => series.key)).toEqual(
+      expectedSeriesOrder,
+    );
     expect(first.series[0]?.label).toBe("Queued");
     expect(first.series[0]?.points.map((point) => point.value)).toEqual([3, 1]);
     expect(first.points.map((point) => point.tick)).toEqual([1, 10]);
-    expect(first.points.map((point) => point.label)).toEqual(["Tick 1", "Tick 10"]);
+    expect(first.points.map((point) => point.label)).toEqual([
+      "Tick 1",
+      "Tick 10",
+    ]);
     expect(first.series.every((series) => series.unit === "count")).toBe(true);
     expect(first).toEqual(second);
   });
 
   it("localizes work chart series, tick labels, and failure groups", () => {
-    const model = buildWorkChartModel([
-      ...sessionSamples,
-      {
-        completedCount: 4,
-        dispatchedCount: 6,
-        failedByWorkType: { task: 1 },
-        failedCount: 1,
-        failedWorkLabels: ["task validation failed"],
-        inFlightCount: 0,
-        observedAt: 11_000,
-        queuedCount: 0,
-        tick: 11,
-      },
-    ], "session", 11_000, "zh-CN");
+    const model = buildWorkChartModel(
+      [
+        ...sessionSamples,
+        {
+          completedCount: 4,
+          dispatchedCount: 6,
+          failedByWorkType: { task: 1 },
+          failedCount: 1,
+          failedWorkLabels: ["task validation failed"],
+          inFlightCount: 0,
+          observedAt: 11_000,
+          queuedCount: 0,
+          tick: 11,
+        },
+      ],
+      "session",
+      11_000,
+      "zh-CN",
+    );
 
     expect(model.rangeLabel).toBe("会话");
     expect(model.points.map((point) => point.label)).toEqual([
@@ -176,6 +214,8 @@ describe("buildWorkChartModel", () => {
       "失败/重试",
     ]);
     expect(model.series[0]?.points[0]?.label).toBe("排队中：3");
-    expect(model.failureGroups).toEqual([{ count: 1, label: "工作类型：task" }]);
+    expect(model.failureGroups).toEqual([
+      { count: 1, label: "工作类型：task" },
+    ]);
   });
 });

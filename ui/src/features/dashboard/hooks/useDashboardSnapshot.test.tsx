@@ -6,20 +6,20 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
-import { useDashboardSessionStore } from "../state/dashboardSessionStore";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
-import {
-  type WorldState,
-  useFactoryTimelineStore,
-} from "../../timeline/state/factoryTimelineStore";
-import {
-  createDefaultDashboardStreamState,
-  useDashboardStreamStore,
-} from "../state/dashboardStreamStore";
 import {
   FACTORY_TIMELINE_DEBUG_GLOBAL,
   FACTORY_TIMELINE_DEBUG_STORAGE_KEY,
 } from "../../timeline/state/factoryTimelineDebug";
+import {
+  useFactoryTimelineStore,
+  type WorldState,
+} from "../../timeline/state/factoryTimelineStore";
+import { DashboardSessionProvider } from "../session/dashboard-session-provider";
+import { useDashboardSessionStore } from "../state/dashboardSessionStore";
+import {
+  createDefaultDashboardStreamState,
+  useDashboardStreamStore,
+} from "../state/dashboardStreamStore";
 import { useDashboardSnapshot } from "./useDashboardSnapshot";
 
 const replayHarness = createReplayHarness();
@@ -105,11 +105,17 @@ describe("useDashboardSnapshot composer", () => {
 
   it("composes lifecycle, stream, and world view on refresh", async () => {
     const { result, rerender } = renderHook(
-      ({ refreshToken }: { refreshToken: number }) => useDashboardSnapshot({ refreshToken }),
-      { initialProps: { refreshToken: 0 }, wrapper: createWrapper(queryClient) },
+      ({ refreshToken }: { refreshToken: number }) =>
+        useDashboardSnapshot({ refreshToken }),
+      {
+        initialProps: { refreshToken: 0 },
+        wrapper: createWrapper(queryClient),
+      },
     );
 
-    expect(result.current.snapshot?.tick_count).toBe(SEEDED_SNAPSHOT.tick_count);
+    expect(result.current.snapshot?.tick_count).toBe(
+      SEEDED_SNAPSHOT.tick_count,
+    );
     expect(replayHarness.getStreams()).toHaveLength(1);
 
     act(() => {
@@ -127,7 +133,9 @@ describe("useDashboardSnapshot composer", () => {
     });
 
     await waitFor(() => {
-      expect(useFactoryTimelineStore.getState().selectedTick).toBe(REFRESHED_SNAPSHOT.tick_count);
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(
+        REFRESHED_SNAPSHOT.tick_count,
+      );
     });
     expect(result.current.isInitialLoading).toBe(false);
     expect(result.current.error).toBeNull();
@@ -177,10 +185,12 @@ describe("useDashboardSnapshot composer", () => {
         id: "event-1",
         payload: {
           factory: {
-            workTypes: [{
-              name: "story",
-              states: [{ name: "new", type: "INITIAL" }],
-            }],
+            workTypes: [
+              {
+                name: "story",
+                states: [{ name: "new", type: "INITIAL" }],
+              },
+            ],
             workstations: [],
             workers: [],
           },
@@ -197,7 +207,9 @@ describe("useDashboardSnapshot composer", () => {
     });
     expect(useFactoryTimelineStore.getState().latestTick).toBe(1);
     expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]).toBeUndefined();
-    expect(window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),
+    ).toBeNull();
   });
 });
 

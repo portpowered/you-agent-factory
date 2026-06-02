@@ -5,6 +5,7 @@ import {
   PromptEditorDiagnosticsPanel,
 } from "../../../../components/prompt-editor";
 import { HorizontalResizableWidth } from "../../../../components/prompt-editor/horizontal-resizable-width";
+import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,7 +15,6 @@ import {
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
-import { ExpandablePanelTrigger } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import {
   CURRENT_SELECTION_CODE_SUBTLE_CLASS,

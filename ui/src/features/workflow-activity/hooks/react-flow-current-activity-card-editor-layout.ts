@@ -1,14 +1,15 @@
-import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
 import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
 import {
   createWorkflowTopologyAsyncCache,
   useWorkflowTopologyAsyncCache,
 } from "./workflow-topology-async-cache";
 
 const EMPTY_LAYOUT_POSITIONS = new Map<string, { x: number; y: number }>();
-const EDITOR_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<
-  Awaited<ReturnType<typeof buildFactoryGraphEditorLayout>>
->();
+const EDITOR_LAYOUT_CACHE =
+  createWorkflowTopologyAsyncCache<
+    Awaited<ReturnType<typeof buildFactoryGraphEditorLayout>>
+  >();
 
 export function useFactoryGraphEditorLayoutPositions(
   topology: FactoryGraphTopology,

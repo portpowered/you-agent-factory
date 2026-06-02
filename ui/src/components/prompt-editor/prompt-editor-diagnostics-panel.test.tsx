@@ -68,9 +68,7 @@ describe("PromptEditorDiagnosticsPanel", () => {
     expect(panel).toBeTruthy();
     expect(panel?.getAttribute("role")).toBe("alert");
     expect(screen.getByText("Prompt diagnostics")).toBeTruthy();
-    expect(
-      screen.getByText("line 2: unexpected EOF in if block"),
-    ).toBeTruthy();
+    expect(screen.getByText("line 2: unexpected EOF in if block")).toBeTruthy();
     expect(
       screen.queryByText("Template syntax: unexpected EOF in if block"),
     ).toBeNull();

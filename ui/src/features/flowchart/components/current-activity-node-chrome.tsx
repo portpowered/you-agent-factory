@@ -17,8 +17,10 @@ const BADGE_TONE_CLASS_NAME: Record<ActivityGraphNodeBadgeTone, string> = {
   danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   info: "border-af-info-border bg-af-info-surface text-af-info",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
-  success: "border-af-success-border bg-af-success-surface text-af-success-text",
-  warning: "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+  success:
+    "border-af-success-border bg-af-success-surface text-af-success-text",
+  warning:
+    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
 };
 
 const BADGE_WEIGHT_CLASS_NAME: Record<ActivityGraphNodeBadgeWeight, string> = {

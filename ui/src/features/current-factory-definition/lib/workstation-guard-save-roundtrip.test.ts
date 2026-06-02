@@ -1,12 +1,12 @@
-import { normalizeFactoryDefinition } from "../../../api/factory-definition/api";
-import { validateFactoryDefinition } from "../../../api/factory-validation";
 import {
   CURRENT_FACTORY_EDITOR_SAVE_MODE,
+  type CurrentFactoryDocument,
   getCurrentFactoryDocument,
   saveFactoryForSessionDocument,
-  type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
+import { normalizeFactoryDefinition } from "../../../api/factory-definition/api";
+import { validateFactoryDefinition } from "../../../api/factory-validation";
 import { validateEditableWorkstationDraft } from "../../current-selection/workstation-selection/hooks/use-editable-workstation-configuration-state";
 import {
   applyEditableWorkstationDraft,
@@ -93,7 +93,9 @@ describe("workstation guard save round-trip", () => {
 
     const editedDraft = {
       ...editableWorkstationDraftFromValues(editableValues),
-      guards: [{ maxVisits: 4, type: "VISIT_COUNT" as const, workstation: "Plan" }],
+      guards: [
+        { maxVisits: 4, type: "VISIT_COUNT" as const, workstation: "Plan" },
+      ],
       inputs: [
         { guards: [], state: "queued", workType: "planItem" },
         {
@@ -142,9 +144,12 @@ describe("workstation guard save round-trip", () => {
         statusText: "OK",
       }),
     );
-    const validationResult = await validateFactoryDefinition(normalizedFactory, {
-      fetch: validationFetch,
-    });
+    const validationResult = await validateFactoryDefinition(
+      normalizedFactory,
+      {
+        fetch: validationFetch,
+      },
+    );
     expect(validationFetch).toHaveBeenCalledWith(
       expect.stringContaining("/factory-validations"),
       expect.objectContaining({ method: "POST" }),

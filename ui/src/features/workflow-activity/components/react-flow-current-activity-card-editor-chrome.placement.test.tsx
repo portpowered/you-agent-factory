@@ -1,4 +1,4 @@
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
@@ -71,5 +71,6 @@ describe("useFactoryGraphAddEntityController placement", () => {
       modelProvider: "CURSOR",
       name: "reviewer",
     });
+    expect(setActiveTool).toHaveBeenCalledWith(null);
   });
 });

@@ -1,8 +1,9 @@
 import type { components } from "../../../api/generated/openapi";
+import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import {
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { AuthoredBodyText, REQUEST_AUTHORED_TEXT_CLASS } from "../../../lib/authored-body-text";
+  AuthoredBodyText,
+  REQUEST_AUTHORED_TEXT_CLASS,
+} from "../../../lib/authored-body-text";
 import { cn } from "../../../lib/cn";
 import { describeWorkContentPart } from "../lib/describe-work-content-part";
 
@@ -36,7 +37,10 @@ function renderWorkContentPart(part: WorkContentPart, index: number) {
         ? part.json
         : JSON.stringify(part.json ?? null, null, 2);
     return (
-      <pre className={REQUEST_AUTHORED_TEXT_CLASS} key={`work-content-part-${index}`}>
+      <pre
+        className={REQUEST_AUTHORED_TEXT_CLASS}
+        key={`work-content-part-${index}`}
+      >
         <code>{value}</code>
       </pre>
     );

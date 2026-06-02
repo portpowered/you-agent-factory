@@ -144,7 +144,9 @@ describe("selectWorkItemExecutionDetails", () => {
       responded_count: 1,
     });
     expect(details.workstationRequest?.response?.duration_millis).toBe(1200);
-    expect(details.inferenceAttempts.map((attempt) => attempt.inference_request_id)).toEqual([
+    expect(
+      details.inferenceAttempts.map((attempt) => attempt.inference_request_id),
+    ).toEqual([
       "dispatch-runtime/inference-request/1",
       "dispatch-runtime/inference-request/2",
     ]);
@@ -197,7 +199,9 @@ describe("selectWorkItemExecutionDetails", () => {
     expect(details.dispatchID).toBe("dispatch-runtime");
     expect(details.workstationName).toBe("Review");
     expect(details.workstationRequest?.response).toBeUndefined();
-    expect(details.workstationRequest?.request.started_at).toBe("2026-04-18T12:00:00Z");
+    expect(details.workstationRequest?.request.started_at).toBe(
+      "2026-04-18T12:00:00Z",
+    );
     expect(details.workstationRequest?.counts).toEqual({
       dispatched_count: 1,
       errored_count: 0,
@@ -386,8 +390,12 @@ describe("selectWorkItemExecutionDetails", () => {
       workItem: selectedWorkItem,
     });
 
-    expect(JSON.stringify(details)).not.toContain("Never expose this raw system prompt.");
-    expect(JSON.stringify(details)).not.toContain("Never expose this raw user message.");
+    expect(JSON.stringify(details)).not.toContain(
+      "Never expose this raw system prompt.",
+    );
+    expect(JSON.stringify(details)).not.toContain(
+      "Never expose this raw user message.",
+    );
     expect(JSON.stringify(details)).not.toContain("factory-renderer");
     expect(JSON.stringify(details)).not.toContain("sha256:system-runtime");
   });

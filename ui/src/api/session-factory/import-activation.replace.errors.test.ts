@@ -1,5 +1,5 @@
-import { activateImportedFactoryForSession } from "./import-activation";
 import { SessionFactoryAPIError } from "./errors";
+import { activateImportedFactoryForSession } from "./import-activation";
 
 const defaultSessionFactoryVersion = {
   logical: "9",

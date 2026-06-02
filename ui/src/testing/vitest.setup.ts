@@ -1,5 +1,11 @@
 import { configure } from "@testing-library/react";
-import { createElement, type ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  createElement,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { vi } from "vitest";
 
 Object.assign(globalThis, {
@@ -73,7 +79,10 @@ vi.mock("@monaco-editor/react", () => ({
           },
           onDidChangeModelContent: () => ({ dispose() {} }),
           onDidScrollChange: (
-            listener: (event: { scrollLeft: number; scrollTop: number }) => void,
+            listener: (event: {
+              scrollLeft: number;
+              scrollTop: number;
+            }) => void,
           ) => {
             listener({ scrollLeft: 3, scrollTop: 4 });
             return { dispose() {} };

@@ -5,9 +5,10 @@ import type { ReplayWorldState, WorldState } from "./types";
 export function buildFactoryTimelineSnapshot(
   events: FactoryEvent[],
   selectedTick: number,
-  reconstructWorldState: (events: FactoryEvent[], selectedTick: number) => ReplayWorldState,
+  reconstructWorldState: (
+    events: FactoryEvent[],
+    selectedTick: number,
+  ) => ReplayWorldState,
 ): WorldState {
   return projectSnapshot(reconstructWorldState(events, selectedTick));
 }
-
-

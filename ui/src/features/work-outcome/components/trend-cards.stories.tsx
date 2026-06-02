@@ -1,15 +1,23 @@
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
-import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { FailureTrendCard, ReworkTrendCard, TimingTrendCard } from "./trend-cards";
-import type { FailureTrendModel, ReworkTrendModel, TimingTrendModel } from "../lib/trends";
+import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
+import type {
+  FailureTrendModel,
+  ReworkTrendModel,
+  TimingTrendModel,
+} from "../lib/trends";
+import {
+  FailureTrendCard,
+  ReworkTrendCard,
+  TimingTrendCard,
+} from "./trend-cards";
 
 const failureTrend = {
   currentFailed: 3,
@@ -70,7 +78,9 @@ function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
   const shell = canvasElement.querySelector<HTMLElement>("[data-story-shell]");
 
   expect(shell).not.toBeNull();
-  expect(shell ? shell.getBoundingClientRect().width : 0).toBeLessThanOrEqual(360);
+  expect(shell ? shell.getBoundingClientRect().width : 0).toBeLessThanOrEqual(
+    360,
+  );
   expect((shell?.scrollWidth ?? 0) <= (shell?.clientWidth ?? 0) + 1).toBe(true);
 }
 
@@ -103,18 +113,34 @@ export const TypographyScale = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    await expect(canvas.getByRole("heading", { name: "Failure trend" })).toBeVisible();
+    await expect(
+      canvas.getByRole("heading", { name: "Failure trend" }),
+    ).toBeVisible();
     await expect(
       canvas.getByRole("heading", { name: "Retry and rework trend" }),
     ).toBeVisible();
-    await expect(canvas.getByRole("heading", { name: "Timing trend" })).toBeVisible();
+    await expect(
+      canvas.getByRole("heading", { name: "Timing trend" }),
+    ).toBeVisible();
 
-    const failureCard = canvas.getByRole("heading", { name: "Failure trend" }).closest("article");
-    const timingCard = canvas.getByRole("heading", { name: "Timing trend" }).closest("article");
-    const failureChart = canvas.getByRole("img", { name: "Failed work trend for 15m" });
+    const failureCard = canvas
+      .getByRole("heading", { name: "Failure trend" })
+      .closest("article");
+    const timingCard = canvas
+      .getByRole("heading", { name: "Timing trend" })
+      .closest("article");
+    const failureChart = canvas.getByRole("img", {
+      name: "Failed work trend for 15m",
+    });
 
-    const resolvedFailureCard = requireValue(failureCard, "expected failure trend card");
-    const resolvedTimingCard = requireValue(timingCard, "expected timing trend card");
+    const resolvedFailureCard = requireValue(
+      failureCard,
+      "expected failure trend card",
+    );
+    const resolvedTimingCard = requireValue(
+      timingCard,
+      "expected timing trend card",
+    );
     expectTrendChartContract(failureChart, "failureTrend");
 
     const failureScope = within(resolvedFailureCard);
@@ -126,11 +152,14 @@ export const TypographyScale = {
     expect(failureScope.getByLabelText("Time range").className).toContain(
       DASHBOARD_BODY_TEXT_CLASS,
     );
-    expect(failureScope.getByText("Failed in range").closest("dl")?.className).toContain(
-      DASHBOARD_SUPPORTING_LABELS_CLASS,
-    );
     expect(
-      failureScope.getByText("Failed in range").closest("div")?.querySelector("dd")?.className,
+      failureScope.getByText("Failed in range").closest("dl")?.className,
+    ).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
+    expect(
+      failureScope
+        .getByText("Failed in range")
+        .closest("div")
+        ?.querySelector("dd")?.className,
     ).toContain(DASHBOARD_WIDGET_SUBTITLE_CLASS);
     expect(timingScope.getByLabelText("Timing range").className).toContain(
       DASHBOARD_SUPPORTING_LABELS_CLASS,
@@ -140,7 +169,10 @@ export const TypographyScale = {
 
 export const FailureTrendConstrainedWidth = {
   render: () => (
-    <div data-story-shell="failure-trend" style={{ maxWidth: "360px", padding: "1rem" }}>
+    <div
+      data-story-shell="failure-trend"
+      style={{ maxWidth: "360px", padding: "1rem" }}
+    >
       <FailureTrendCard
         model={failureTrend}
         onRangeChange={() => undefined}
@@ -151,7 +183,9 @@ export const FailureTrendConstrainedWidth = {
   ),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const chart = await canvas.findByRole("img", { name: "Failed work trend for 15m" });
+    const chart = await canvas.findByRole("img", {
+      name: "Failed work trend for 15m",
+    });
 
     expect(chart).toBeVisible();
     expectTrendChartContract(chart, "failureTrend");

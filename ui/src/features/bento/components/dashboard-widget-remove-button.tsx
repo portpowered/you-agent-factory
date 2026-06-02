@@ -9,7 +9,7 @@ export interface DashboardWidgetRemoveButtonProps {
   widgetTitle: string;
 }
 
-export function  DashboardWidgetRemoveButton({
+export function DashboardWidgetRemoveButton({
   locale,
   onClick,
   widgetTitle,

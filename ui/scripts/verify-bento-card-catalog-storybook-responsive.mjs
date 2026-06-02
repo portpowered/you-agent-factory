@@ -22,8 +22,9 @@ async function expectFocusable(locator, label) {
 }
 
 async function expectBentoGeometry(page, viewport) {
-  const geometry = await page.locator("[data-bento-card-id]").evaluateAll(
-    (elements) =>
+  const geometry = await page
+    .locator("[data-bento-card-id]")
+    .evaluateAll((elements) =>
       elements.map((element) => {
         const rect = element.getBoundingClientRect();
         return {
@@ -32,7 +33,7 @@ async function expectBentoGeometry(page, viewport) {
           x: rect.x,
         };
       }),
-  );
+    );
 
   if (geometry.length < BENTO_CARD_NAMES.length) {
     throw new Error(
@@ -55,11 +56,15 @@ async function expectBentoGeometry(page, viewport) {
   const distinctColumns = new Set(geometry.map((item) => Math.round(item.x)));
 
   if (viewport.label === "mobile" && distinctColumns.size !== 1) {
-    throw new Error("Mobile bento catalog did not stack cards into one column.");
+    throw new Error(
+      "Mobile bento catalog did not stack cards into one column.",
+    );
   }
 
   if (viewport.label === "desktop" && distinctColumns.size < 2) {
-    throw new Error("Desktop bento catalog did not preserve multi-column sizing.");
+    throw new Error(
+      "Desktop bento catalog did not preserve multi-column sizing.",
+    );
   }
 }
 

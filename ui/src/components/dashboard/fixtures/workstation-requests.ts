@@ -79,9 +79,8 @@ export function buildDashboardWorkstationRequestFixture(
   };
 }
 
-export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
-  READY_DISPATCH_ID,
-  {
+export const readyWorkstationRequestFixture =
+  buildDashboardWorkstationRequestFixture(READY_DISPATCH_ID, {
     counts: {
       dispatched_count: 2,
       errored_count: 1,
@@ -144,12 +143,10 @@ export const readyWorkstationRequestFixture = buildDashboardWorkstationRequestFi
     },
     total_duration_millis: 63_000,
     trace_ids: ["trace-active-story"],
-  },
-);
+  });
 
-export const noResponseWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
-  PENDING_DISPATCH_ID,
-  {
+export const noResponseWorkstationRequestFixture =
+  buildDashboardWorkstationRequestFixture(PENDING_DISPATCH_ID, {
     request_view: {
       input_work_items: [
         {
@@ -167,12 +164,10 @@ export const noResponseWorkstationRequestFixture = buildDashboardWorkstationRequ
     request_metadata: {
       prompt_source: "factory-renderer",
     },
-  },
-);
+  });
 
-export const rejectedWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
-  REJECTED_DISPATCH_ID,
-  {
+export const rejectedWorkstationRequestFixture =
+  buildDashboardWorkstationRequestFixture(REJECTED_DISPATCH_ID, {
     counts: {
       dispatched_count: 1,
       errored_count: 0,
@@ -184,7 +179,8 @@ export const rejectedWorkstationRequestFixture = buildDashboardWorkstationReques
         duration_millis: 920,
         inference_request_id: `${REJECTED_DISPATCH_ID}/inference-request/1`,
         outcome: "SUCCEEDED",
-        prompt: "Review the active story and explain what needs to change before approval.",
+        prompt:
+          "Review the active story and explain what needs to change before approval.",
         response: "The active story needs revision before it can continue.",
         response_time: "2026-04-08T12:00:03Z",
       }),
@@ -229,12 +225,10 @@ export const rejectedWorkstationRequestFixture = buildDashboardWorkstationReques
     },
     total_duration_millis: 2_000,
     trace_ids: ["trace-active-story"],
-  },
-);
+  });
 
-export const erroredWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
-  ERRORED_DISPATCH_ID,
-  {
+export const erroredWorkstationRequestFixture =
+  buildDashboardWorkstationRequestFixture(ERRORED_DISPATCH_ID, {
     counts: {
       dispatched_count: 1,
       errored_count: 1,
@@ -269,16 +263,15 @@ export const erroredWorkstationRequestFixture = buildDashboardWorkstationRequest
     request_id: "request-error-story",
     responded_request_count: 0,
     response_view: {
-      failure_message: "Provider rate limit exceeded while reviewing the story.",
+      failure_message:
+        "Provider rate limit exceeded while reviewing the story.",
       failure_reason: "provider_rate_limit",
       outcome: "FAILED",
     },
-  },
-);
+  });
 
-export const scriptPendingWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
-  "dispatch-review-script-pending",
-  {
+export const scriptPendingWorkstationRequestFixture =
+  buildDashboardWorkstationRequestFixture("dispatch-review-script-pending", {
     prompt: undefined,
     request_id: "request-script-pending-story",
     responded_request_count: 0,
@@ -288,12 +281,10 @@ export const scriptPendingWorkstationRequestFixture = buildDashboardWorkstationR
       command: "script-tool",
       script_request_id: "dispatch-review-script-pending/script-request/1",
     },
-  },
-);
+  });
 
-export const scriptSuccessWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
-  "dispatch-review-script-success",
-  {
+export const scriptSuccessWorkstationRequestFixture =
+  buildDashboardWorkstationRequestFixture("dispatch-review-script-success", {
     request_id: "request-script-success-story",
     responded_request_count: 1,
     script_request: {
@@ -309,12 +300,10 @@ export const scriptSuccessWorkstationRequestFixture = buildDashboardWorkstationR
       stderr: "",
       stdout: "script success stdout\n",
     },
-  },
-);
+  });
 
-export const scriptFailedWorkstationRequestFixture = buildDashboardWorkstationRequestFixture(
-  "dispatch-review-script-failed",
-  {
+export const scriptFailedWorkstationRequestFixture =
+  buildDashboardWorkstationRequestFixture("dispatch-review-script-failed", {
     errored_request_count: 1,
     failure_message: "Script timed out.",
     failure_reason: "script_timeout",
@@ -334,8 +323,7 @@ export const scriptFailedWorkstationRequestFixture = buildDashboardWorkstationRe
       stderr: "script timed out\n",
       stdout: "",
     },
-  },
-);
+  });
 
 export const dashboardWorkstationRequestFixtures = {
   noResponse: noResponseWorkstationRequestFixture,

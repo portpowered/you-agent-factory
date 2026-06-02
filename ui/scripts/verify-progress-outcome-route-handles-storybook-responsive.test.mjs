@@ -20,12 +20,8 @@ function createHintLocator(count) {
 
 function createPage(buttons, hintCount = 0) {
   const hints = createHintLocator(hintCount);
-  const continueHint = createHintLocator(
-    hintCount > 0 ? 1 : 0,
-  );
-  const rejectHint = createHintLocator(
-    hintCount > 0 ? 1 : 0,
-  );
+  const continueHint = createHintLocator(hintCount > 0 ? 1 : 0);
+  const rejectHint = createHintLocator(hintCount > 0 ? 1 : 0);
 
   return {
     getByRole: vi.fn((role, options) => {

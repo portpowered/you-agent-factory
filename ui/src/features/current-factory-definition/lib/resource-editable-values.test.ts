@@ -56,7 +56,9 @@ describe("resolveEditableResourceValues", () => {
       workTypes: [],
     };
 
-    expect(resolveEditableResourceValues(factory, "missing-resource")).toBeNull();
+    expect(
+      resolveEditableResourceValues(factory, "missing-resource"),
+    ).toBeNull();
   });
 });
 
@@ -184,15 +186,19 @@ describe("applyEditableResourceDraft", () => {
       workTypes: [],
     };
 
-    const updatedFactory = applyEditableResourceDraft(factory, "anthropic-quota", {
-      backend: "",
-      capacityText: "5",
-      loadPolicy: "",
-      model: "",
-      name: "anthropic-quota",
-      provider: "anthropic",
-      type: "PROVIDER_QUOTA",
-    });
+    const updatedFactory = applyEditableResourceDraft(
+      factory,
+      "anthropic-quota",
+      {
+        backend: "",
+        capacityText: "5",
+        loadPolicy: "",
+        model: "",
+        name: "anthropic-quota",
+        provider: "anthropic",
+        type: "PROVIDER_QUOTA",
+      },
+    );
 
     expect(updatedFactory?.resources?.[0]).toEqual({
       capacity: 5,

@@ -40,13 +40,18 @@ declare module "elkjs/lib/elk.bundled.js" {
   export interface ELK {
     layout<T extends ElkNode>(
       graph: T,
-    ): Promise<Omit<T, "children"> & { children?: Array<T["children"] extends Array<infer U> ? U & ElkNode : ElkNode> }>;
+    ): Promise<
+      Omit<T, "children"> & {
+        children?: Array<
+          T["children"] extends Array<infer U> ? U & ElkNode : ElkNode
+        >;
+      }
+    >;
   }
 
   const ElkConstructor: {
-    new(): ELK;
+    new (): ELK;
   };
 
   export default ElkConstructor;
 }
-

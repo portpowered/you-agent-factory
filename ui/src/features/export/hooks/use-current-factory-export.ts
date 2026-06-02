@@ -5,9 +5,7 @@ import {
   type CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import type { ImportFactoryValue } from "../../../api/session-factory";
-import {
-  useCurrentFactoryDocument,
-} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 
 const CURRENT_FACTORY_UNAVAILABLE_MESSAGE =
@@ -35,7 +33,9 @@ export interface UseCurrentFactoryExportResult {
   isPreparing: boolean;
 }
 
-export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryExportResult {
+export function useCurrentFactoryExport(
+  isEnabled: boolean,
+): UseCurrentFactoryExportResult {
   const { rawSessionID } = useDashboardSession();
   const isQueryEnabled = isEnabled && rawSessionID != null;
   const documentQuery = useCurrentFactoryDocument(isQueryEnabled);
@@ -52,7 +52,8 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
       };
     }
 
-    const isRefreshingCurrentFactory = isQueryEnabled && documentQuery.isFetching;
+    const isRefreshingCurrentFactory =
+      isQueryEnabled && documentQuery.isFetching;
 
     if (rawSessionID == null) {
       return {
@@ -68,14 +69,19 @@ export function useCurrentFactoryExport(isEnabled: boolean): UseCurrentFactoryEx
     if (documentQuery.data && !isRefreshingCurrentFactory) {
       return {
         currentFactoryExport: {
-          factoryDefinition: currentFactoryDocumentToExportValue(documentQuery.data),
+          factoryDefinition: currentFactoryDocumentToExportValue(
+            documentQuery.data,
+          ),
           ok: true,
         },
         isPreparing: false,
       };
     }
 
-    if (isQueryEnabled && (documentQuery.isPending || isRefreshingCurrentFactory)) {
+    if (
+      isQueryEnabled &&
+      (documentQuery.isPending || isRefreshingCurrentFactory)
+    ) {
       return {
         currentFactoryExport: {
           code: "FACTORY_DEFINITION_UNAVAILABLE",
@@ -113,7 +119,10 @@ function currentFactoryDocumentToExportValue(
 }
 
 function currentFactoryExportFailureMessage(error: unknown): string {
-  if (error instanceof CurrentFactoryDefinitionError && error.code === "NOT_FOUND") {
+  if (
+    error instanceof CurrentFactoryDefinitionError &&
+    error.code === "NOT_FOUND"
+  ) {
     return CURRENT_FACTORY_UNAVAILABLE_MESSAGE;
   }
 

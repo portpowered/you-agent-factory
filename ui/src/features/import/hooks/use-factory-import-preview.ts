@@ -21,10 +21,12 @@ const IDLE_PREVIEW_STATE: FactoryImportPreviewState = { status: "idle" };
 export function useFactoryImportPreview({
   onPreviewReady,
 }: UseFactoryImportPreviewOptions = {}): UseFactoryImportPreviewResult {
-  const [previewState, setPreviewState] = useState<FactoryImportPreviewState>(IDLE_PREVIEW_STATE);
-  const activePreviewRef = useRef<Extract<FactoryImportPreviewState, { status: "ready" }> | null>(
-    null,
-  );
+  const [previewState, setPreviewState] =
+    useState<FactoryImportPreviewState>(IDLE_PREVIEW_STATE);
+  const activePreviewRef = useRef<Extract<
+    FactoryImportPreviewState,
+    { status: "ready" }
+  > | null>(null);
 
   const revokeActivePreview = useCallback(() => {
     const activePreview = activePreviewRef.current;
@@ -41,18 +43,24 @@ export function useFactoryImportPreview({
     setPreviewState(IDLE_PREVIEW_STATE);
   }, [revokeActivePreview]);
 
-  const openPreview = useCallback((value: FactoryPngImportValue, file: File) => {
-    revokeActivePreview();
+  const openPreview = useCallback(
+    (value: FactoryPngImportValue, file: File) => {
+      revokeActivePreview();
 
-    const nextPreviewState = { file, status: "ready", value } as const;
-    activePreviewRef.current = nextPreviewState;
-    setPreviewState(nextPreviewState);
-    onPreviewReady?.(value, file);
-  }, [onPreviewReady, revokeActivePreview]);
+      const nextPreviewState = { file, status: "ready", value } as const;
+      activePreviewRef.current = nextPreviewState;
+      setPreviewState(nextPreviewState);
+      onPreviewReady?.(value, file);
+    },
+    [onPreviewReady, revokeActivePreview],
+  );
 
-  useEffect(() => () => {
-    revokeActivePreview();
-  }, [revokeActivePreview]);
+  useEffect(
+    () => () => {
+      revokeActivePreview();
+    },
+    [revokeActivePreview],
+  );
 
   return {
     closePreview,

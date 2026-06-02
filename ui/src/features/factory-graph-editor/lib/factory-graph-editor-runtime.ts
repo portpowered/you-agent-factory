@@ -7,12 +7,13 @@ export type FactoryGraphWorkerRuntimeStatus =
   | "idle"
   | "unavailable";
 
-const WORKER_STATUS_PRIORITY: Record<FactoryGraphWorkerRuntimeStatus, number> = {
-  active: 4,
-  unavailable: 3,
-  errored: 2,
-  idle: 1,
-};
+const WORKER_STATUS_PRIORITY: Record<FactoryGraphWorkerRuntimeStatus, number> =
+  {
+    active: 4,
+    unavailable: 3,
+    errored: 2,
+    idle: 1,
+  };
 
 export function buildFactoryGraphWorkerStatusMap(input: {
   factoryDefinition: CanonicalFactoryDefinition | null;

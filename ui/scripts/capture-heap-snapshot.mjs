@@ -30,7 +30,9 @@ function parseBooleanFlag(value, fallback) {
 function parsePositiveInteger(value, flagName) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`${flagName} must be a positive integer, received ${value ?? "<missing>"}`);
+    throw new Error(
+      `${flagName} must be a positive integer, received ${value ?? "<missing>"}`,
+    );
   }
   return parsed;
 }
@@ -58,12 +60,18 @@ function parseArgs(argv) {
       continue;
     }
     if (arg === "--snapshot-delay-ms") {
-      options.snapshotDelayMs = parsePositiveInteger(argv[index + 1], "--snapshot-delay-ms");
+      options.snapshotDelayMs = parsePositiveInteger(
+        argv[index + 1],
+        "--snapshot-delay-ms",
+      );
       index += 1;
       continue;
     }
     if (arg === "--sample-interval-ms") {
-      options.sampleIntervalMs = parsePositiveInteger(argv[index + 1], "--sample-interval-ms");
+      options.sampleIntervalMs = parsePositiveInteger(
+        argv[index + 1],
+        "--sample-interval-ms",
+      );
       index += 1;
       continue;
     }
@@ -94,12 +102,24 @@ function printHelp() {
   console.log("  node scripts/capture-heap-snapshot.mjs [options]");
   console.log("");
   console.log("Options:");
-  console.log(`  --url <value>                 Page URL to open. Default: ${defaultURL}`);
-  console.log(`  --out-dir <path>              Snapshot output directory. Default: ${defaultOutDir}`);
-  console.log(`  --snapshot-delay-ms <value>   Delay before taking the heap snapshot. Default: ${defaultSnapshotDelayMs}`);
-  console.log(`  --sample-interval-ms <value>  Interval between memory samples. Default: ${defaultSampleIntervalMs}`);
-  console.log(`  --timeout-ms <value>          Overall timeout. Default: ${defaultTimeoutMs}`);
-  console.log("  --headless <true|false>       Launch Chromium headless. Default: true");
+  console.log(
+    `  --url <value>                 Page URL to open. Default: ${defaultURL}`,
+  );
+  console.log(
+    `  --out-dir <path>              Snapshot output directory. Default: ${defaultOutDir}`,
+  );
+  console.log(
+    `  --snapshot-delay-ms <value>   Delay before taking the heap snapshot. Default: ${defaultSnapshotDelayMs}`,
+  );
+  console.log(
+    `  --sample-interval-ms <value>  Interval between memory samples. Default: ${defaultSampleIntervalMs}`,
+  );
+  console.log(
+    `  --timeout-ms <value>          Overall timeout. Default: ${defaultTimeoutMs}`,
+  );
+  console.log(
+    "  --headless <true|false>       Launch Chromium headless. Default: true",
+  );
 }
 
 function sleep(ms) {
@@ -123,7 +143,10 @@ async function capturePageSample(page, cdpSession) {
       const performanceMemory = globalThis.performance?.memory;
       const debugGlobal = globalThis.window?.__agentFactoryTimelineDebug__;
       return {
-        debugSummary: typeof debugGlobal?.summarize === "function" ? debugGlobal.summarize() : null,
+        debugSummary:
+          typeof debugGlobal?.summarize === "function"
+            ? debugGlobal.summarize()
+            : null,
         jsHeapSizeLimit:
           typeof performanceMemory?.jsHeapSizeLimit === "number"
             ? performanceMemory.jsHeapSizeLimit
@@ -141,7 +164,10 @@ async function capturePageSample(page, cdpSession) {
   ]);
 
   const metrics = Object.fromEntries(
-    (performanceMetrics.metrics ?? []).map((metric) => [metric.name, metric.value]),
+    (performanceMetrics.metrics ?? []).map((metric) => [
+      metric.name,
+      metric.value,
+    ]),
   );
 
   return {
@@ -202,8 +228,14 @@ async function main() {
   await ensureOutputDirectory(options.outDir);
 
   const runStamp = isoStamp();
-  const summaryPath = path.join(options.outDir, `heap-capture-${runStamp}.summary.json`);
-  const snapshotPath = path.join(options.outDir, `heap-capture-${runStamp}.heapsnapshot`);
+  const summaryPath = path.join(
+    options.outDir,
+    `heap-capture-${runStamp}.summary.json`,
+  );
+  const snapshotPath = path.join(
+    options.outDir,
+    `heap-capture-${runStamp}.heapsnapshot`,
+  );
 
   const browser = await chromium.launch({
     headless: options.headless,
@@ -264,11 +296,15 @@ async function main() {
   if (summary.snapshotCaptured) {
     console.log(`heap snapshot: ${snapshotPath}`);
   } else {
-    console.log("heap snapshot was not captured before the page closed or crashed");
+    console.log(
+      "heap snapshot was not captured before the page closed or crashed",
+    );
   }
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+  console.error(
+    error instanceof Error ? (error.stack ?? error.message) : String(error),
+  );
   process.exitCode = 1;
 });

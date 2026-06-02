@@ -4,8 +4,8 @@ import {
   verifyLocalizedCurrentSelection,
   verifyLocalizedSubmitWorkCard,
   verifyLocalizedTraceGrid,
-  verifyLocalizedWorkOutcomeChart,
   verifyLocalizedWorkflowActivity,
+  verifyLocalizedWorkOutcomeChart,
 } from "./verify-localized-widget-storybook-responsive.mjs";
 
 function createVisibleLocator() {
@@ -220,8 +220,7 @@ describe("verify-localized-widget-storybook-responsive", () => {
       expectVisible,
       page,
       submissionItems,
-    } =
-      createSubmitWorkHarness();
+    } = createSubmitWorkHarness();
 
     await verifyLocalizedSubmitWorkCard({
       expectNoHorizontalOverflow,
@@ -230,10 +229,16 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("article", { name: "提交工作" });
+    expect(page.getByRole).toHaveBeenCalledWith("article", {
+      name: "提交工作",
+    });
     expect(card.waitFor).toHaveBeenCalledWith({ state: "visible" });
-    expect(card.getByRole).toHaveBeenCalledWith("combobox", { name: "工作类型" });
-    expect(card.getByRole).toHaveBeenCalledWith("textbox", { name: "请求名称" });
+    expect(card.getByRole).toHaveBeenCalledWith("combobox", {
+      name: "工作类型",
+    });
+    expect(card.getByRole).toHaveBeenCalledWith("textbox", {
+      name: "请求名称",
+    });
     expect(card.getByRole).toHaveBeenCalledWith("list", { name: "提交项" });
     expect(card.getByRole).toHaveBeenCalledWith("textbox", {
       name: "文本项 1",
@@ -263,7 +268,9 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("article", { name: "追踪下钻" });
+    expect(page.getByRole).toHaveBeenCalledWith("article", {
+      name: "追踪下钻",
+    });
     expect(card.waitFor).toHaveBeenCalledWith({ state: "visible" });
     expect(card.getByText).toHaveBeenCalledWith("追踪分派表");
     expect(card.getByText).toHaveBeenCalledWith("分派流");
@@ -287,7 +294,9 @@ describe("verify-localized-widget-storybook-responsive", () => {
       viewport: createViewport(),
     });
 
-    expect(page.getByRole).toHaveBeenCalledWith("article", { name: "工作结果图表" });
+    expect(page.getByRole).toHaveBeenCalledWith("article", {
+      name: "工作结果图表",
+    });
     expect(card.getByRole).toHaveBeenCalledWith("img", {
       name: "15m 的工作结果图表",
     });

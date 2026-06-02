@@ -145,7 +145,9 @@ describe("buildReadyEditableWorkstationConfigurationState session lifecycle", ()
     readyState.onCronScheduleChange("0 0 * * *");
     readyState.markChangesSaved();
 
-    expect(getSessionState().sessionStartDraft.cron?.schedule).toBe("0 0 * * *");
+    expect(getSessionState().sessionStartDraft.cron?.schedule).toBe(
+      "0 0 * * *",
+    );
     expect(buildReady().isDirty).toBe(false);
   });
 
@@ -173,7 +175,9 @@ describe("buildReadyEditableWorkstationConfigurationState save projection", () =
 
     readyState.onCronScheduleChange("0 8 * * *");
 
-    const pending = buildReady(getSessionState().draft).pendingFactoryDefinition;
+    const pending = buildReady(
+      getSessionState().draft,
+    ).pendingFactoryDefinition;
     expect(pending?.workstations?.[0]?.cron).toEqual({
       expiryWindow: "30m",
       jitter: "5s",

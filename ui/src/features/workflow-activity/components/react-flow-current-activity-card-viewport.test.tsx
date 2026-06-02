@@ -79,18 +79,18 @@ describe("CurrentActivityGraphViewport", () => {
     ).toBeNull();
   });
 
-  it.each([{ editorMode: false }, { editorMode: true }])(
-    "does not render the top-right work-state phase legend when editorMode is $editorMode",
-    ({ editorMode }) => {
-      const { container } = renderViewport({ editorMode });
+  it.each([
+    { editorMode: false },
+    { editorMode: true },
+  ])("does not render the top-right work-state phase legend when editorMode is $editorMode", ({
+    editorMode,
+  }) => {
+    const { container } = renderViewport({ editorMode });
 
-      expect(
-        container.querySelector(
-          "[data-factory-graph-work-state-phase-legend]",
-        ),
-      ).toBeNull();
-    },
-  );
+    expect(
+      container.querySelector("[data-factory-graph-work-state-phase-legend]"),
+    ).toBeNull();
+  });
 
   it.each([
     {

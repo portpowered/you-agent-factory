@@ -16,20 +16,20 @@ import type {
   FactoryGraphTopology,
   FactoryWorkstation,
 } from "../lib/factory-graph-draft-types";
-import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphConnectionEndpoint } from "../lib/factory-graph-editor-connections";
+import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
-import type { FactoryValidationGraphProjection } from "../lib/factory-validation-graph-projection";
 import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../lib/factory-graph-react-flow-projection";
-import type { FactoryGraphWorkStateType } from "../lib/factory-graph-work-state-type";
 import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSemanticIconKind,
   workStatePhaseSurfaceClassName,
 } from "../lib/factory-graph-work-state-phase-styling";
+import type { FactoryGraphWorkStateType } from "../lib/factory-graph-work-state-type";
+import type { FactoryValidationGraphProjection } from "../lib/factory-validation-graph-projection";
 import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 
 type FactoryGraphEditorNode = FactoryGraphReactFlowNode;

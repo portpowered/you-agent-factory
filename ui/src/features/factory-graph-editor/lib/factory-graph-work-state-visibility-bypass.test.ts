@@ -171,9 +171,7 @@ describe("projectFactoryGraphByHiddenNodeClasses work-state bypass", () => {
 
     expect(hidden.nodes.some((node) => node.kind === "work-state")).toBe(false);
     expect(
-      hidden.edges.some(
-        (edge) => edge.kind === "work-state-visibility-bypass",
-      ),
+      hidden.edges.some((edge) => edge.kind === "work-state-visibility-bypass"),
     ).toBe(true);
     expect(
       hidden.edges.some(

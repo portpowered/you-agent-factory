@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import {
   DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
@@ -14,7 +14,10 @@ const messages = {
 describe("DetailCardFactorySaveFeedback", () => {
   it("renders nothing for idle, confirming, and submitting save states", () => {
     const { container, rerender } = render(
-      <DetailCardFactorySaveFeedback messages={messages} saveState={{ status: "idle" }} />,
+      <DetailCardFactorySaveFeedback
+        messages={messages}
+        saveState={{ status: "idle" }}
+      />,
     );
 
     expect(container.firstChild).toBeNull();

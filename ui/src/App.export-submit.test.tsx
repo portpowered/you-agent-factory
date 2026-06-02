@@ -1,14 +1,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { ImportFactoryValue } from "./api/session-factory";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import { readFactoryImportPng } from "./features/import/lib/factory-png-import";
-import type { ImportFactoryValue } from "./api/session-factory";
-import {
-  baselineSnapshot,
-  jsonResponse,
-  registerAppDashboardTestLifecycle,
-  renderApp,
-} from "./testing/app-shell-test-utils";
 import {
   currentNamedFactoryExportResponse,
   currentSessionFactoryExportAPIResponse,
@@ -18,6 +12,12 @@ import {
   installExportDownloadProbe,
   toArrayBuffer,
 } from "./testing/app-shell-export-test-utils";
+import {
+  baselineSnapshot,
+  jsonResponse,
+  registerAppDashboardTestLifecycle,
+  renderApp,
+} from "./testing/app-shell-test-utils";
 
 const currentFactoryWithBundledFiles = {
   ...currentNamedFactoryExportResponse,

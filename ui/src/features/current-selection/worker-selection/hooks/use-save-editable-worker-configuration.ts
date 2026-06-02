@@ -45,11 +45,11 @@ export function useSaveEditableWorkerConfiguration({
     saveNow,
     saveState,
   } = useScopedFactoryDocumentSave<EditableWorkerSaveValidationErrors>({
-      fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
-      isDirty,
-      mapSaveErrorToFieldErrors: mapWorkerSaveErrorToFieldErrors,
-      scopeKey,
-    });
+    fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
+    isDirty,
+    mapSaveErrorToFieldErrors: mapWorkerSaveErrorToFieldErrors,
+    scopeKey,
+  });
 
   const canSave =
     editableConfigurationState?.status === "ready" &&

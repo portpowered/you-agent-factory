@@ -1,11 +1,11 @@
-import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
+import type { useCurrentWorkstationPromptTemplateContract } from "../hooks/useCurrentWorkstationPromptTemplateContract";
+import type { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
 import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
 } from "../lib/detail-card-types";
-import type { useCurrentWorkstationPromptTemplateContract } from "../hooks/useCurrentWorkstationPromptTemplateContract";
-import type { useCurrentWorkstationPromptTemplateValidation } from "../hooks/useCurrentWorkstationPromptTemplateValidation";
+import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
 export function resolvePromptHelpState(
   promptTemplateContract: ReturnType<
@@ -110,9 +110,7 @@ function isPromptTemplateValidationInFlight(
 
 function editablePromptDiagnosticFromAPI(
   diagnostic: NonNullable<
-    ReturnType<
-      typeof useCurrentWorkstationPromptTemplateValidation
-    >["data"]
+    ReturnType<typeof useCurrentWorkstationPromptTemplateValidation>["data"]
   >["diagnostics"][number],
 ): EditableWorkstationPromptDiagnostic {
   return {

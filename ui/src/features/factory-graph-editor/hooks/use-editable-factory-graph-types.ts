@@ -1,5 +1,5 @@
-import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 import type { useFactoryDocumentSave } from "../../current-factory-definition/public";
+import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 
 export type EditableFactoryGraphSaveMutation = Pick<
   ReturnType<typeof useFactoryDocumentSave>,
@@ -11,6 +11,7 @@ export interface EditableFactoryGraphDocumentSaveControls {
   cancelConfirmation: () => void;
   clearSaveFeedback: () => void;
 }
+
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDocument,

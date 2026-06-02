@@ -169,7 +169,9 @@ describe("CurrentSelectionWidget work-type selection", () => {
       ),
     ).toBeNull();
     expect(
-      within(currentSelection).getByLabelText("Work type").getAttribute("value"),
+      within(currentSelection)
+        .getByLabelText("Work type")
+        .getAttribute("value"),
     ).toBe("story");
     expect(
       within(currentSelection).getByRole("heading", { name: "States" }),

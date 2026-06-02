@@ -40,7 +40,9 @@ describe("factory event types", () => {
     expect(request.type).toBe("INFERENCE_REQUEST");
     expect(response.type).toBe("INFERENCE_RESPONSE");
     expect(request.context.dispatchId).toBe("dispatch-1");
-    expect(response.payload.inferenceRequestId).toBe(request.payload.inferenceRequestId);
+    expect(response.payload.inferenceRequestId).toBe(
+      request.payload.inferenceRequestId,
+    );
   });
 
   it("includes the canonical run response payload in the maintained event union", () => {
@@ -74,7 +76,9 @@ describe("factory event types", () => {
       payload: {
         factory: {
           name: "factory",
-          workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+          workTypes: [
+            { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+          ],
         },
       },
       schemaVersion: "agent-factory.event.v1",
@@ -82,33 +86,45 @@ describe("factory event types", () => {
     };
 
     expect(event.type).toBe("FACTORY_CHANGE");
-    expect((event.payload as { factory: { name: string } }).factory.name).toBe("factory");
+    expect((event.payload as { factory: { name: string } }).factory.name).toBe(
+      "factory",
+    );
   });
 
   it("exposes typed script request and response payloads", () => {
-    const request = scriptEvent("event-script-request", FACTORY_EVENT_TYPES.scriptRequest, {
-      args: ["--work", "work-1", "--project", "docs"],
-      attempt: 1,
-      command: "script-tool",
-      dispatchId: "dispatch-script-1",
-      scriptRequestId: "script-request-1",
-      transitionId: "transition-script-1",
-    });
-    const response = scriptEvent("event-script-response", FACTORY_EVENT_TYPES.scriptResponse, {
-      attempt: 1,
-      dispatchId: "dispatch-script-1",
-      durationMillis: 238,
-      exitCode: 3,
-      outcome: "FAILED_EXIT_CODE",
-      scriptRequestId: "script-request-1",
-      stderr: "script stderr\n",
-      stdout: "script stdout\n",
-      transitionId: "transition-script-1",
-    });
+    const request = scriptEvent(
+      "event-script-request",
+      FACTORY_EVENT_TYPES.scriptRequest,
+      {
+        args: ["--work", "work-1", "--project", "docs"],
+        attempt: 1,
+        command: "script-tool",
+        dispatchId: "dispatch-script-1",
+        scriptRequestId: "script-request-1",
+        transitionId: "transition-script-1",
+      },
+    );
+    const response = scriptEvent(
+      "event-script-response",
+      FACTORY_EVENT_TYPES.scriptResponse,
+      {
+        attempt: 1,
+        dispatchId: "dispatch-script-1",
+        durationMillis: 238,
+        exitCode: 3,
+        outcome: "FAILED_EXIT_CODE",
+        scriptRequestId: "script-request-1",
+        stderr: "script stderr\n",
+        stdout: "script stdout\n",
+        transitionId: "transition-script-1",
+      },
+    );
 
     expect(request.type).toBe("SCRIPT_REQUEST");
     expect(response.type).toBe("SCRIPT_RESPONSE");
-    expect(response.payload.scriptRequestId).toBe(request.payload.scriptRequestId);
+    expect(response.payload.scriptRequestId).toBe(
+      request.payload.scriptRequestId,
+    );
   });
 });
 
@@ -126,7 +142,9 @@ function inferenceEvent(
 ): FactoryEvent<InferenceResponsePayload>;
 function inferenceEvent(
   id: string,
-  type: typeof FACTORY_EVENT_TYPES.inferenceRequest | typeof FACTORY_EVENT_TYPES.inferenceResponse,
+  type:
+    | typeof FACTORY_EVENT_TYPES.inferenceRequest
+    | typeof FACTORY_EVENT_TYPES.inferenceResponse,
   dispatchId: string,
   payload: InferenceRequestPayload | InferenceResponsePayload,
 ): FactoryEvent<InferenceRequestPayload | InferenceResponsePayload> {
@@ -156,7 +174,9 @@ function scriptEvent(
 ): FactoryEvent<ScriptResponsePayload>;
 function scriptEvent(
   id: string,
-  type: typeof FACTORY_EVENT_TYPES.scriptRequest | typeof FACTORY_EVENT_TYPES.scriptResponse,
+  type:
+    | typeof FACTORY_EVENT_TYPES.scriptRequest
+    | typeof FACTORY_EVENT_TYPES.scriptResponse,
   payload: ScriptRequestPayload | ScriptResponsePayload,
 ): FactoryEvent<ScriptRequestPayload | ScriptResponsePayload> {
   return {

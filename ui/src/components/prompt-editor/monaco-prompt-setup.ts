@@ -4,11 +4,11 @@ import type {
 } from "monaco-editor";
 
 import type { PromptTemplateContract } from "../../api/current-factory-prompt-template";
-import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-message";
 import {
   WORKSTATION_PROMPT_MONARCH_LANGUAGE,
   WORKSTATION_PROMPT_THEME,
 } from "./monaco-prompt-language";
+import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-message";
 import type {
   PromptEditorAutocompleteState,
   PromptEditorDiagnostic,

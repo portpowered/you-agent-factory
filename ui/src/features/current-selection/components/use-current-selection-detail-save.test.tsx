@@ -15,9 +15,12 @@ vi.mock(
   }),
 );
 
-vi.mock("../worker-selection/hooks/use-save-editable-worker-configuration", () => ({
-  useSaveEditableWorkerConfiguration: vi.fn(),
-}));
+vi.mock(
+  "../worker-selection/hooks/use-save-editable-worker-configuration",
+  () => ({
+    useSaveEditableWorkerConfiguration: vi.fn(),
+  }),
+);
 
 vi.mock(
   "../workstation-selection/hooks/use-save-editable-workstation-configuration",

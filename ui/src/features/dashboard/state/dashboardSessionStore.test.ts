@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
@@ -17,8 +17,12 @@ describe("useDashboardSessionStore", () => {
   });
 
   it("tracks pause and resume for a normalized session id", () => {
-    useDashboardSessionStore.getState().setSessionPaused("  session-beta  ", true);
-    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual(["session-beta"]);
+    useDashboardSessionStore
+      .getState()
+      .setSessionPaused("  session-beta  ", true);
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([
+      "session-beta",
+    ]);
 
     useDashboardSessionStore.getState().setSessionPaused("session-beta", false);
     expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([]);
@@ -27,7 +31,9 @@ describe("useDashboardSessionStore", () => {
   it("does not duplicate paused session ids", () => {
     useDashboardSessionStore.getState().setSessionPaused("session-beta", true);
     useDashboardSessionStore.getState().setSessionPaused("session-beta", true);
-    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual(["session-beta"]);
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([
+      "session-beta",
+    ]);
   });
 
   it("clears the selected session when set to null", () => {

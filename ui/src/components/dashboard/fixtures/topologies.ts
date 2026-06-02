@@ -1,4 +1,7 @@
-import type { DashboardPlaceRef, DashboardTopology } from "../../../api/dashboard/types";
+import type {
+  DashboardPlaceRef,
+  DashboardTopology,
+} from "../../../api/dashboard/types";
 
 function workStatePlace(
   workTypeId: string,
@@ -74,7 +77,10 @@ export const mediumBranchingDashboardTopology = {
       workstation_name: "Implement",
       worker_type: "agent",
       workstation_kind: "repeater",
-      input_places: [workStatePlace("story", "ready", "PROCESSING"), agentSlotPlace],
+      input_places: [
+        workStatePlace("story", "ready", "PROCESSING"),
+        agentSlotPlace,
+      ],
       output_places: [
         workStatePlace("story", "implemented", "PROCESSING"),
         workStatePlace("story", "blocked", "FAILED"),
@@ -112,7 +118,11 @@ export const mediumBranchingDashboardTopology = {
         workStatePlace("story", "complete", "TERMINAL"),
         workStatePlace("story", "ready", "PROCESSING"),
       ],
-      input_place_ids: ["story:implemented", "story:documented", "quality-gate:ready"],
+      input_place_ids: [
+        "story:implemented",
+        "story:documented",
+        "quality-gate:ready",
+      ],
       output_place_ids: ["story:complete", "story:ready"],
       input_work_type_ids: ["story"],
       output_work_type_ids: ["story"],
@@ -272,7 +282,10 @@ export const workstationKindParityDashboardTopology = {
   ],
 } satisfies DashboardTopology;
 
-const largeWorkflowNodeIds = Array.from({ length: 20 }, (_, index) => `station-${index + 1}`);
+const largeWorkflowNodeIds = Array.from(
+  { length: 20 },
+  (_, index) => `station-${index + 1}`,
+);
 
 export const twentyNodeDashboardTopology = {
   submit_work_types: [...storySubmitWorkTypes],
@@ -280,7 +293,10 @@ export const twentyNodeDashboardTopology = {
   workstation_nodes_by_id: Object.fromEntries(
     largeWorkflowNodeIds.map((nodeId, index) => {
       const inputState = index === 0 ? "new" : `step-${index}`;
-      const outputState = index === largeWorkflowNodeIds.length - 1 ? "complete" : `step-${index + 1}`;
+      const outputState =
+        index === largeWorkflowNodeIds.length - 1
+          ? "complete"
+          : `step-${index + 1}`;
 
       return [
         nodeId,
@@ -291,14 +307,20 @@ export const twentyNodeDashboardTopology = {
           worker_type: index % 3 === 0 ? "reviewer" : "agent",
           workstation_kind: index % 5 === 0 ? "repeater" : "standard",
           input_places: [
-            workStatePlace("story", inputState, index === 0 ? "INITIAL" : "PROCESSING"),
+            workStatePlace(
+              "story",
+              inputState,
+              index === 0 ? "INITIAL" : "PROCESSING",
+            ),
             ...(index % 4 === 0 ? [agentSlotPlace] : []),
           ],
           output_places: [
             workStatePlace(
               "story",
               outputState,
-              index === largeWorkflowNodeIds.length - 1 ? "TERMINAL" : "PROCESSING",
+              index === largeWorkflowNodeIds.length - 1
+                ? "TERMINAL"
+                : "PROCESSING",
             ),
           ],
           input_place_ids: [

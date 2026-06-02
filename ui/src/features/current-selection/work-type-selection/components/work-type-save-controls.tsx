@@ -1,8 +1,7 @@
 import { Save } from "lucide-react";
-
-import { DashboardMutationDialog } from "../../../workflow-activity/components/mutation-dialog";
 import { Button, DashboardActionButton } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
+import { DashboardMutationDialog } from "../../../workflow-activity/components/mutation-dialog";
 import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
 import type { EditableWorkTypeSaveState } from "../lib/detail-card-types";
 import { getWorkTypeDetailMessages } from "../messages/work-type-detail";

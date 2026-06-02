@@ -1,8 +1,4 @@
-import {
-  BaseEdge,
-  getBezierPath,
-  type EdgeProps,
-} from "@xyflow/react";
+import { BaseEdge, type EdgeProps, getBezierPath } from "@xyflow/react";
 import { useEffect, useRef, useState } from "react";
 
 type FactoryGraphEditorEdgeData = {

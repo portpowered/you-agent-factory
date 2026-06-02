@@ -2,9 +2,7 @@ import { QueryClient } from "@tanstack/react-query";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
-import {
-  type WorldState,
-} from "../../timeline/state/factoryTimelineStore";
+import type { WorldState } from "../../timeline/state/factoryTimelineStore";
 
 export const SEEDED_SNAPSHOT: DashboardSnapshot = {
   factory_state: "IDLE",
@@ -46,13 +44,15 @@ export const CANONICAL_SELECTED_TICK_EVENTS = [
     id: "event-1",
     payload: {
       factory: {
-        workTypes: [{
-          name: "story",
-          states: [
-            { name: "new", type: "INITIAL" },
-            { name: "done", type: "TERMINAL" },
-          ],
-        }],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
         workstations: [
           {
             id: "review",

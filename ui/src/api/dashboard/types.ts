@@ -384,7 +384,10 @@ export interface DashboardRuntime {
     string,
     DashboardRuntimeWorkstationRequest
   >;
-  work_move_operations_by_work_id?: Record<string, DashboardWorkMoveOperation[]>;
+  work_move_operations_by_work_id?: Record<
+    string,
+    DashboardWorkMoveOperation[]
+  >;
   workstation_activity_by_node_id?: Record<
     string,
     DashboardWorkstationActivity

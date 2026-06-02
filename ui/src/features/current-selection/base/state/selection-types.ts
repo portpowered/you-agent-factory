@@ -1,6 +1,5 @@
-import type {
-  DashboardWorkItemRef,
-} from "../../../../api/dashboard/types";
+import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
+
 export type { TerminalWorkDetail } from "../../../terminal-work/lib/types";
 
 export type {

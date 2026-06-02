@@ -1,16 +1,16 @@
-import userEvent from "@testing-library/user-event";
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
+import type { WorkChartModel } from "../lib/trends";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { WorkChartCard } from "./d3-information-card";
 import {
   WORK_CHART_MARGIN,
   WorkChart,
   type WorkChartSeriesDefinition,
 } from "./work-chart";
-import type { WorkChartModel } from "../lib/trends";
-import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
-import { getWorkOutcomeMessages } from "../messages/work-outcome";
 
 const sparseWorkChartModel: WorkChartModel = {
   delta: {
@@ -115,7 +115,9 @@ const zeroValuedFailedSeriesModel: WorkChartModel = {
     seriesEntry.key === "failed"
       ? {
           ...seriesEntry,
-          points: [{ label: "Failed: 0", observedAt: 2000, order: 1, value: 0 }],
+          points: [
+            { label: "Failed: 0", observedAt: 2000, order: 1, value: 0 },
+          ],
         }
       : seriesEntry,
   ),
@@ -171,7 +173,9 @@ describe("WorkChart", () => {
       />,
     );
 
-    const chart = screen.getByRole("img", { name: "Work chart legend placement" });
+    const chart = screen.getByRole("img", {
+      name: "Work chart legend placement",
+    });
     expect(chart.getAttribute("data-work-chart-legend-placement")).toBe(
       "shell-row",
     );
@@ -198,7 +202,9 @@ describe("WorkChart", () => {
       </div>,
     );
 
-    const chart = screen.getByRole("img", { name: "Work chart compact legend" });
+    const chart = screen.getByRole("img", {
+      name: "Work chart compact legend",
+    });
     const legend = chart.querySelector("[data-work-chart-legend='true']");
     expect(legend?.getAttribute("data-work-chart-legend-density")).toBe(
       "compact",
@@ -325,7 +331,9 @@ describe("WorkChart", () => {
       />,
     );
 
-    const chart = screen.getByRole("img", { name: "Work chart legend keyboard" });
+    const chart = screen.getByRole("img", {
+      name: "Work chart legend keyboard",
+    });
     const queuedLegendControl = within(chart).getByRole("button", {
       name: "Hide Queued series",
     });
@@ -333,7 +341,9 @@ describe("WorkChart", () => {
     queuedLegendControl.focus();
     expect(document.activeElement).toBe(queuedLegendControl);
     expect(queuedLegendControl.className).toContain("focus-visible:outline-2");
-    expect(queuedLegendControl.className).toContain("focus-visible:outline-af-focus");
+    expect(queuedLegendControl.className).toContain(
+      "focus-visible:outline-af-focus",
+    );
 
     await user.keyboard("[Enter]");
     expect(chart.getAttribute("data-work-chart-hidden-series")).toBe("queued");
@@ -423,7 +433,9 @@ describe("WorkChart", () => {
       />,
     );
 
-    expect(screen.getByRole("img", { name: "Zero work chart" }).textContent).toContain("Failed");
+    expect(
+      screen.getByRole("img", { name: "Zero work chart" }).textContent,
+    ).toContain("Failed");
   });
 
   it("renders explicit no-data state when timeline points are unavailable", () => {
@@ -437,7 +449,9 @@ describe("WorkChart", () => {
 
     expect(screen.getByText("No work outcome samples")).toBeTruthy();
     expect(
-      screen.getByText("Work outcome data appears after the event stream receives work history."),
+      screen.getByText(
+        "Work outcome data appears after the event stream receives work history.",
+      ),
     ).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Work chart empty" })).toBeNull();
   });
@@ -453,16 +467,13 @@ describe("WorkChart", () => {
 
     expect(screen.getByRole("status")).toBeTruthy();
     expect(screen.getByText("No work outcome samples")).toBeTruthy();
-    expect(screen.queryByRole("img", { name: "Work chart zero series" })).toBeNull();
+    expect(
+      screen.queryByRole("img", { name: "Work chart zero series" }),
+    ).toBeNull();
   });
 
   it("renders zh-CN chart labels", () => {
-    render(
-      <WorkChartCard
-        locale="zh-CN"
-        model={sparseWorkChartModel}
-      />,
-    );
+    render(<WorkChartCard locale="zh-CN" model={sparseWorkChartModel} />);
 
     const chart = screen.getByRole("img", { name: "15m 的工作结果图表" });
     expect(within(chart).getByText("排队中")).toBeTruthy();
@@ -501,7 +512,9 @@ describe("WorkChart", () => {
       y: 0,
     });
 
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
 
     fireEvent.mouseDown(chart, { clientX: 40, clientY: 168 });
     fireEvent.mouseMove(chart, { clientX: 200, clientY: 168 });
@@ -518,7 +531,9 @@ describe("WorkChart", () => {
 
     await user.click(resetZoom);
 
-    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "10,20,40",
+    );
     expect(screen.queryByText("已缩放到刻度 10-20")).toBeNull();
   });
 
@@ -536,7 +551,9 @@ describe("WorkChart", () => {
         />,
       );
 
-      const chart = screen.getByRole("img", { name: "Work chart keyboard zoom" });
+      const chart = screen.getByRole("img", {
+        name: "Work chart keyboard zoom",
+      });
       vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
         bottom: 240,
         height: 240,
@@ -562,7 +579,9 @@ describe("WorkChart", () => {
       expect(document.activeElement).toBe(resetZoom);
       await user.keyboard("[Enter]");
 
-      expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
+      expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+        "10,20,40",
+      );
       expect(
         screen.queryByRole("button", { name: "Reset work outcome chart zoom" }),
       ).toBeNull();
@@ -585,9 +604,13 @@ describe("WorkChart", () => {
     const loadingState = screen.getByRole("status");
     expect(loadingState.getAttribute("aria-busy")).toBe("true");
     expect(screen.getByText("Loading work outcome samples")).toBeTruthy();
-    expect(screen.getByText("Waiting for dashboard timeline data.")).toBeTruthy();
+    expect(
+      screen.getByText("Waiting for dashboard timeline data."),
+    ).toBeTruthy();
     expect(loadingState.querySelector(".animate-pulse")).toBeTruthy();
-    expect(screen.queryByRole("img", { name: "Work chart loading" })).toBeNull();
+    expect(
+      screen.queryByRole("img", { name: "Work chart loading" }),
+    ).toBeNull();
   });
 
   it("uses caller-provided loading, empty, and error copy", () => {
@@ -659,6 +682,8 @@ describe("WorkChart", () => {
         "Chart data is incomplete, so the dashboard cannot draw this work outcome view yet.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("img", { name: "Work chart malformed" })).toBeNull();
+    expect(
+      screen.queryByRole("img", { name: "Work chart malformed" }),
+    ).toBeNull();
   });
 });

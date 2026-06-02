@@ -3,7 +3,7 @@ import { useCurrentFactoryDocument } from "../../current-factory-definition/hook
 import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
 
 export function useCurrentActivityEditableGraph({
-  editorMode,
+  editorMode: _editorMode,
   factoryDocumentScopeKey,
   locale,
   snapshot,

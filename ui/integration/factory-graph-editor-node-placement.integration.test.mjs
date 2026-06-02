@@ -370,20 +370,36 @@ async function addResource(page, toolbar, { capacity = "1", name }) {
 async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
   const node = page.getByTestId(nodeTestId);
   await node.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-  const viewport = await graphViewport(page);
+  const initialFlowPosition = await readNodeFlowPosition(page, nodeTestId);
   const nodeBox = await node.boundingBox();
-  const viewportBox = await viewport.boundingBox();
-  if (!nodeBox || !viewportBox) {
+  if (!nodeBox) {
     throw new Error(`Expected bounding boxes for ${nodeTestId} drag.`);
   }
 
-  await node.dragTo(viewport, {
-    sourcePosition: { x: 20, y: 20 },
-    targetPosition: {
-      x: nodeBox.x - viewportBox.x + deltaX,
-      y: nodeBox.y - viewportBox.y + deltaY,
-    },
-  });
+  const startX = nodeBox.x + nodeBox.width / 2;
+  const startY = nodeBox.y + nodeBox.height / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, startY + deltaY, { steps: 16 });
+  await page.mouse.up();
+
+  const mouseFlowPosition = await readNodeFlowPosition(page, nodeTestId);
+  if (
+    initialFlowPosition &&
+    mouseFlowPosition &&
+    (Math.abs(mouseFlowPosition.x - initialFlowPosition.x) > 8 ||
+      Math.abs(mouseFlowPosition.y - initialFlowPosition.y) > 8)
+  ) {
+    return;
+  }
+
+  await node.focus();
+  for (let step = 0; step < Math.ceil(Math.abs(deltaX) / 10); step += 1) {
+    await page.keyboard.press(deltaX > 0 ? "ArrowRight" : "ArrowLeft");
+  }
+  for (let step = 0; step < Math.ceil(Math.abs(deltaY) / 10); step += 1) {
+    await page.keyboard.press(deltaY > 0 ? "ArrowDown" : "ArrowUp");
+  }
 }
 
 async function saveGraphDraft(page, toolbar) {

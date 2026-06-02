@@ -1,8 +1,7 @@
 import type { ReactFlowInstance } from "@xyflow/react";
 import { useMemo, useRef } from "react";
-
-import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";

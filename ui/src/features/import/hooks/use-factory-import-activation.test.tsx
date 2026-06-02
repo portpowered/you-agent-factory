@@ -4,25 +4,28 @@ import type { ReactNode } from "react";
 
 import {
   activateImportedFactoryForSession,
-  SessionFactoryAPIError,
   type ImportFactoryValue,
+  SessionFactoryAPIError,
 } from "../../../api/session-factory";
 
 vi.mock("../../../api/session-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
-    "../../../api/session-factory",
-  );
+  const actual = await vi.importActual<
+    typeof import("../../../api/session-factory")
+  >("../../../api/session-factory");
   return {
     ...actual,
-    activateImportedFactoryForSession: vi.fn(actual.activateImportedFactoryForSession),
+    activateImportedFactoryForSession: vi.fn(
+      actual.activateImportedFactoryForSession,
+    ),
   };
 });
+
 import { writeFactoryExportPng } from "../../export/lib/factory-png-export";
+import { createFactoryImportConfirmInput } from "../lib/factory-import-confirm-input.test-helpers";
 import {
   PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
   readFactoryImportPng,
 } from "../lib/factory-png-import";
-import { createFactoryImportConfirmInput } from "../lib/factory-import-confirm-input.test-helpers";
 import { useFactoryImportActivation } from "./use-factory-import-activation";
 
 const ONE_PIXEL_PNG_BASE64 =
@@ -71,7 +74,9 @@ const canonicalFactory: ImportFactoryValue = {
   ],
 };
 
-const mockedActivateImportedFactoryForSession = vi.mocked(activateImportedFactoryForSession);
+const mockedActivateImportedFactoryForSession = vi.mocked(
+  activateImportedFactoryForSession,
+);
 
 describe("useFactoryImportActivation", () => {
   beforeEach(() => {
@@ -131,13 +136,18 @@ describe("useFactoryImportActivation", () => {
     rerender({ sessionID: "session-2" });
 
     await act(async () => {
-      await result.current.activateImport(createFactoryImportConfirmInput(importValue));
+      await result.current.activateImport(
+        createFactoryImportConfirmInput(importValue),
+      );
     });
 
     await waitFor(() => {
       expect(mockedActivateImportedFactoryForSession).toHaveBeenCalledWith(
         canonicalFactory,
-        expect.objectContaining({ sessionID: "session-2", choice: "replace_current" }),
+        expect.objectContaining({
+          sessionID: "session-2",
+          choice: "replace_current",
+        }),
       );
     });
     expect(mockedActivateImportedFactoryForSession).toHaveBeenCalledTimes(1);
@@ -145,7 +155,11 @@ describe("useFactoryImportActivation", () => {
 
   it("activates the direct factory payload while preserving the PNG factory metadata", async () => {
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
+      .fn<
+        (
+          input: ReturnType<typeof createFactoryImportConfirmInput>,
+        ) => Promise<ImportFactoryValue>
+      >()
       .mockImplementation(async (input) => input.value.factory);
     const onActivated = vi.fn<(value: ImportFactoryValue) => void>();
     const pngBytes = fromBase64(ONE_PIXEL_PNG_BASE64);
@@ -167,7 +181,9 @@ describe("useFactoryImportActivation", () => {
 
     const importResult = await readFactoryImportPng({
       createPreviewImageSrc: () => "blob:factory-roundtrip-preview",
-      file: new File([exportResult.blob], "factory-roundtrip.png", { type: "image/png" }),
+      file: new File([exportResult.blob], "factory-roundtrip.png", {
+        type: "image/png",
+      }),
       validatePreviewImage: async () => {},
     });
 
@@ -195,14 +211,20 @@ describe("useFactoryImportActivation", () => {
     expect(activateFactory).toHaveBeenCalledTimes(1);
     expect(onActivated).toHaveBeenCalledWith(canonicalFactory);
     expect(importResult.value.factory).toEqual(canonicalFactory);
-    expect(importResult.value.schemaVersion).toBe(PORT_OS_FACTORY_PNG_SCHEMA_VERSION);
+    expect(importResult.value.schemaVersion).toBe(
+      PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+    );
     expect(result.current.activationState).toEqual({ status: "idle" });
   });
 
   it("reports a submitting state until activation resolves", async () => {
     let resolveActivation: ((value: ImportFactoryValue) => void) | null = null;
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
+      .fn<
+        (
+          input: ReturnType<typeof createFactoryImportConfirmInput>,
+        ) => Promise<ImportFactoryValue>
+      >()
       .mockImplementation(
         () =>
           new Promise<ImportFactoryValue>((resolve) => {
@@ -244,7 +266,11 @@ describe("useFactoryImportActivation", () => {
   it("stores generic activation failures and clears them on request", async () => {
     const activationError = new Error("Factory name already exists.");
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
+      .fn<
+        (
+          input: ReturnType<typeof createFactoryImportConfirmInput>,
+        ) => Promise<ImportFactoryValue>
+      >()
       .mockRejectedValue(
         Object.assign(activationError, {
           code: "FACTORY_ALREADY_EXISTS",
@@ -288,7 +314,11 @@ describe("useFactoryImportActivation", () => {
 
   it("preserves explicit named factory api errors from activation failures", async () => {
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
+      .fn<
+        (
+          input: ReturnType<typeof createFactoryImportConfirmInput>,
+        ) => Promise<ImportFactoryValue>
+      >()
       .mockRejectedValue(
         new SessionFactoryAPIError(
           "Current factory runtime must be idle before activation.",
@@ -326,7 +356,11 @@ describe("useFactoryImportActivation", () => {
 
   it("normalizes non-error activation failures to a generic internal error", async () => {
     const activateFactory = vi
-      .fn<(input: ReturnType<typeof createFactoryImportConfirmInput>) => Promise<ImportFactoryValue>>()
+      .fn<
+        (
+          input: ReturnType<typeof createFactoryImportConfirmInput>,
+        ) => Promise<ImportFactoryValue>
+      >()
       .mockRejectedValue("unstructured failure");
 
     const { result } = renderHook(
@@ -395,7 +429,11 @@ describe("useFactoryImportActivation", () => {
   });
 });
 
-function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => ReactNode {
+function createQueryClientWrapper(): ({
+  children,
+}: {
+  children: ReactNode;
+}) => ReactNode {
   const queryClient = new QueryClient({
     defaultOptions: {
       mutations: {
@@ -408,8 +446,14 @@ function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => 
     },
   });
 
-  return function QueryClientWrapper({ children }: { children: ReactNode }): ReactNode {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return function QueryClientWrapper({
+    children,
+  }: {
+    children: ReactNode;
+  }): ReactNode {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
   };
 }
 

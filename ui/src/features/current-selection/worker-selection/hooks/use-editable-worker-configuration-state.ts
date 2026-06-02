@@ -136,7 +136,9 @@ function buildReadyEditableWorkerConfigurationState({
   const validationErrors = mergeEditableWorkerContractValidationErrors(
     validateEditableWorkerDraft(sessionState.draft, messages, {
       originalWorkerName: workerName,
-      workerNames: (editableDefinition.workers ?? []).map((worker) => worker.name),
+      workerNames: (editableDefinition.workers ?? []).map(
+        (worker) => worker.name,
+      ),
     }),
     pendingFactoryDefinition,
     workerName,

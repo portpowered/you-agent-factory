@@ -1,6 +1,4 @@
-import type {
-  DashboardRuntime,
-} from "../../../../api/dashboard";
+import type { DashboardRuntime } from "../../../../api/dashboard";
 import type { FactoryWorkItem } from "../../../../api/events";
 import {
   cloneFailedWorkDetailsByWorkID,
@@ -17,8 +15,12 @@ import { workItemRefsForIDs } from "./workItemRef";
 
 export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
   const activeDispatches = Object.values(state.activeDispatches);
-  const customerActiveDispatches = activeDispatches.filter(dispatchHasCustomerWork);
-  const customerCompletedDispatches = state.completedDispatches.filter(dispatchHasCustomerWork);
+  const customerActiveDispatches = activeDispatches.filter(
+    dispatchHasCustomerWork,
+  );
+  const customerCompletedDispatches = state.completedDispatches.filter(
+    dispatchHasCustomerWork,
+  );
   const failedWorkItems = projectFailedWorkItems(state);
   const activeExecutions = Object.fromEntries(
     customerActiveDispatches.map((dispatch) => [
@@ -43,7 +45,8 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
         .map((occupancy) => [occupancy.placeID, occupancy.tokenCount]),
     ),
     current_work_items_by_place_id: projectCurrentWorkItemsByPlaceID(state),
-    place_occupancy_work_items_by_place_id: projectOccupancyWorkItemsByPlaceID(state),
+    place_occupancy_work_items_by_place_id:
+      projectOccupancyWorkItemsByPlaceID(state),
     workstation_requests_by_dispatch_id: projectRuntimeWorkstationRequests({
       activeDispatches: customerActiveDispatches,
       attemptsByDispatchID: state.inferenceAttemptsByDispatchID,
@@ -65,24 +68,28 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
           (work) => work.work_item.display_name ?? work.work_item.id,
         ),
       ),
-      dispatched_count: activeDispatchIDs.length + customerCompletedDispatches.length,
+      dispatched_count:
+        activeDispatchIDs.length + customerCompletedDispatches.length,
       failed_by_work_type: countFailedByWorkType(failedWorkItems),
       failed_count: countFailedWorkItems(failedWorkItems),
       failed_work_details_by_work_id: cloneFailedWorkDetailsByWorkID(
         state.failedWorkDetailsByWorkID,
       ),
       failed_work_labels: uniqueSorted(
-        failedWorkItems.map(
-          (work) => work.display_name ?? work.id,
-        ),
+        failedWorkItems.map((work) => work.display_name ?? work.id),
       ),
       has_data:
         activeDispatchIDs.length > 0 ||
         customerCompletedDispatches.length > 0 ||
-        Object.values(state.workItemsByID).some((item) => !isSystemTimeWorkItem(item)),
+        Object.values(state.workItemsByID).some(
+          (item) => !isSystemTimeWorkItem(item),
+        ),
       provider_sessions: cloneProviderSessionAttempts(state.providerSessions),
     },
-    workstation_activity_by_node_id: projectActivity(state, customerActiveDispatches),
+    workstation_activity_by_node_id: projectActivity(
+      state,
+      customerActiveDispatches,
+    ),
   };
 }
 
@@ -90,11 +97,17 @@ function dispatchHasCustomerWork(dispatch: WorldDispatch): boolean {
   return !dispatch.systemOnly;
 }
 
-function projectCurrentWorkItemsByPlaceID(state: ReplayWorldState): DashboardRuntime["current_work_items_by_place_id"] {
-  const workTypeIDs = new Set((state.topology.work_types ?? []).map((workType) => workType.id));
+function projectCurrentWorkItemsByPlaceID(
+  state: ReplayWorldState,
+): DashboardRuntime["current_work_items_by_place_id"] {
+  const workTypeIDs = new Set(
+    (state.topology.work_types ?? []).map((workType) => workType.id),
+  );
   const entries = (state.topology.places ?? [])
     .filter((place) => workTypeIDs.has(place.type_id))
-    .filter((place) => place.category !== "TERMINAL" && place.category !== "FAILED")
+    .filter(
+      (place) => place.category !== "TERMINAL" && place.category !== "FAILED",
+    )
     .sort((left, right) => left.id.localeCompare(right.id))
     .map((place) => {
       const occupancy = state.occupancyByID[place.id];
@@ -252,9 +265,7 @@ function countFailedByWorkType(
   return Object.keys(counts).length > 0 ? counts : undefined;
 }
 
-function countFailedWorkItems(
-  values: FactoryWorkItem[],
-): number {
+function countFailedWorkItems(values: FactoryWorkItem[]): number {
   let count = 0;
   for (const item of values) {
     if (isSystemTimeWorkItem(item)) {
@@ -264,5 +275,3 @@ function countFailedWorkItems(
   }
   return count;
 }
-
-

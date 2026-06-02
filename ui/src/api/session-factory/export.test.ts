@@ -35,9 +35,12 @@ describe("session factory export API success paths", () => {
       workers: [],
       workstations: [],
     });
-    expect(fetchMock).toHaveBeenCalledWith("/factory-sessions/~default/factory", {
-      method: "GET",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/~default/factory",
+      {
+        method: "GET",
+      },
+    );
   });
 
   it("reads the current factory through the session-scoped route for non-default sessions", async () => {

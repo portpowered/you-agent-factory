@@ -1,8 +1,8 @@
 import type { components } from "../../../api/generated/openapi";
 import {
+  type ApiRunnerID,
   isOpenApiRunnerID,
   normalizeRunnerID,
-  type ApiRunnerID,
 } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
 
 export type RunnerSelectionSource =

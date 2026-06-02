@@ -62,7 +62,9 @@ describe("useCurrentWorkstationPromptTemplateValidation fetch gating", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    expect(validateCurrentFactoryWorkstationPromptTemplate).not.toHaveBeenCalled();
+    expect(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
       data: undefined,
       error: null,
@@ -101,9 +103,9 @@ describe("useCurrentWorkstationPromptTemplateValidation success", () => {
   beforeEach(resetValidationHookTestState);
 
   it("loads authoritative prompt validation for the active draft", async () => {
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockResolvedValue(
-      promptTemplateValidationResult,
-    );
+    vi.mocked(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).mockResolvedValue(promptTemplateValidationResult);
 
     const { result } = renderHook(
       () =>
@@ -123,18 +125,18 @@ describe("useCurrentWorkstationPromptTemplateValidation success", () => {
       });
     });
 
-    expect(validateCurrentFactoryWorkstationPromptTemplate).toHaveBeenCalledWith(
-      "Review",
-      "Use {{ .Prompt }}",
-      { sessionID: "~default" },
-    );
+    expect(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).toHaveBeenCalledWith("Review", "Use {{ .Prompt }}", {
+      sessionID: "~default",
+    });
   });
 
   it("validates the active prompt draft through the selected session", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockResolvedValue(
-      promptTemplateValidationResult,
-    );
+    vi.mocked(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).mockResolvedValue(promptTemplateValidationResult);
 
     const { result } = renderHook(
       () =>
@@ -149,11 +151,11 @@ describe("useCurrentWorkstationPromptTemplateValidation success", () => {
       expect(result.current.status).toBe("success");
     });
 
-    expect(validateCurrentFactoryWorkstationPromptTemplate).toHaveBeenCalledWith(
-      "Review",
-      "Use {{ .Prompt }}",
-      { sessionID: "session-beta" },
-    );
+    expect(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).toHaveBeenCalledWith("Review", "Use {{ .Prompt }}", {
+      sessionID: "session-beta",
+    });
   });
 });
 
@@ -161,13 +163,13 @@ describe("useCurrentWorkstationPromptTemplateValidation API failures", () => {
   beforeEach(resetValidationHookTestState);
 
   it("surfaces typed validation API failures for the active draft", async () => {
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockRejectedValue(
-      {
-        code: "BAD_REQUEST",
-        message: "Prompt validation request was rejected.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    vi.mocked(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).mockRejectedValue({
+      code: "BAD_REQUEST",
+      message: "Prompt validation request was rejected.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () =>
@@ -192,13 +194,13 @@ describe("useCurrentWorkstationPromptTemplateValidation API failures", () => {
   });
 
   it("surfaces not-found failures from the prompt-template validation query", async () => {
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockRejectedValue(
-      {
-        code: "NOT_FOUND",
-        message: "Current factory workstation not found.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    vi.mocked(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).mockRejectedValue({
+      code: "NOT_FOUND",
+      message: "Current factory workstation not found.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () =>
@@ -223,14 +225,14 @@ describe("useCurrentWorkstationPromptTemplateValidation API failures", () => {
   });
 
   it("surfaces network failures from the prompt-template validation query", async () => {
-    vi.mocked(validateCurrentFactoryWorkstationPromptTemplate).mockRejectedValue(
-      {
-        code: "NETWORK_ERROR",
-        message:
-          "The dashboard could not reach the current factory prompt-template validation API.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    vi.mocked(
+      validateCurrentFactoryWorkstationPromptTemplate,
+    ).mockRejectedValue({
+      code: "NETWORK_ERROR",
+      message:
+        "The dashboard could not reach the current factory prompt-template validation API.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () =>

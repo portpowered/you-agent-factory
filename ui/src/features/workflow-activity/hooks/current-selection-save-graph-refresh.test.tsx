@@ -48,7 +48,7 @@ function useObserverGraphAfterCurrentSelectionSave({
   const editor = createObserverEditorStub(savedDocument);
   const displayFactory =
     currentActivityCardFactoryDefinition(editor, snapshot, "current") ??
-      undefined;
+    undefined;
   const layoutFactory = useTopologyStableFactoryForLayout(displayFactory);
   const graphLayout = useCurrentActivityGraphLayoutForFactory(
     snapshot,
@@ -221,7 +221,9 @@ const topologySaveCases = [
     afterWorkerResourceLinkSave,
     (before: string[], after: string[]) => {
       expect(after).toContain("worker-resource:resource:gpu->worker:writer");
-      expect(before).not.toContain("worker-resource:resource:gpu->worker:writer");
+      expect(before).not.toContain(
+        "worker-resource:resource:gpu->worker:writer",
+      );
     },
   ],
   [
@@ -255,41 +257,40 @@ describe("current-selection save graph refresh", () => {
     window.localStorage.clear();
   });
 
-  it.each(topologySaveCases)(
-    "refreshes observer graph layout after topology-affecting %s save",
-    async (_label, applySave, assertRefresh) => {
-      const snapshot = buildStaleSnapshotFactoryDocument();
-      const initialDocument = cloneSavedDocument();
-      const { result, rerender } = renderHook(
-        ({ savedDocument }) =>
-          useObserverGraphAfterCurrentSelectionSave({
-            savedDocument,
-            snapshot,
-          }),
-        { initialProps: { savedDocument: initialDocument } },
-      );
+  it.each(
+    topologySaveCases,
+  )("refreshes observer graph layout after topology-affecting %s save", async (_label, applySave, assertRefresh) => {
+    const snapshot = buildStaleSnapshotFactoryDocument();
+    const initialDocument = cloneSavedDocument();
+    const { result, rerender } = renderHook(
+      ({ savedDocument }) =>
+        useObserverGraphAfterCurrentSelectionSave({
+          savedDocument,
+          snapshot,
+        }),
+      { initialProps: { savedDocument: initialDocument } },
+    );
 
-      await waitForGraphNodes(result);
-      const graphIdsBeforeSave = [
+    await waitForGraphNodes(result);
+    const graphIdsBeforeSave = [
+      ...result.current.nodeIds,
+      ...result.current.edgeIds,
+    ];
+
+    rerender({
+      savedDocument: applySave(initialDocument),
+    });
+
+    await waitFor(() => {
+      assertRefresh(graphIdsBeforeSave, [
         ...result.current.nodeIds,
         ...result.current.edgeIds,
-      ];
-
-      rerender({
-        savedDocument: applySave(initialDocument),
-      });
-
-      await waitFor(() => {
-        assertRefresh(graphIdsBeforeSave, [
-          ...result.current.nodeIds,
-          ...result.current.edgeIds,
-        ]);
-      });
-      expect(result.current.layoutTopologyKey).not.toBe(
-        buildFactoryGraphLayoutTopologyKey(initialDocument),
-      );
-    },
-  );
+      ]);
+    });
+    expect(result.current.layoutTopologyKey).not.toBe(
+      buildFactoryGraphLayoutTopologyKey(initialDocument),
+    );
+  });
 
   it("keeps graph layout topology key stable after non-topology workstation prompt save", async () => {
     const buildLayoutSpy = vi.spyOn(

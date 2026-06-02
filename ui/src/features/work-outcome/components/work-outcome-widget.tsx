@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-
-import { WorkChartCard } from "./d3-information-card";
 import type { WorkChartModel } from "../lib/trends";
+import { WorkChartCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
 
 export interface WorkOutcomeWidgetProps {

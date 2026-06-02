@@ -1,8 +1,6 @@
 import type { NodeProps } from "@xyflow/react";
 
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
 import { formatTraceOutcome } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import {
@@ -11,8 +9,8 @@ import {
 } from "../../flowchart/components/current-activity-node-chrome";
 import { ActivityGraphNodeShell } from "../../flowchart/components/current-activity-node-shell";
 import { GraphSemanticIcon } from "../../flowchart/components/graph-semantic-icon";
-import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
+import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const WORKSTATION_NODE_CLASS =
   "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";

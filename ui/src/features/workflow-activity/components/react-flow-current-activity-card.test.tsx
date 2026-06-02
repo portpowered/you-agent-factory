@@ -47,8 +47,8 @@ import {
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/maintainer-runtime-shaped-factory.fixture";
 import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/factory-graph-operations";
+import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/maintainer-runtime-shaped-factory.fixture";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,

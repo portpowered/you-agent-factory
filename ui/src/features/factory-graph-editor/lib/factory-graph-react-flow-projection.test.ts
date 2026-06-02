@@ -143,8 +143,8 @@ describe("factory graph React Flow projection", () => {
         ?.data.workStateType,
     ).toBe("PROCESSING");
     expect(
-      projection.nodes.find((node) => node.id === "work-state:story:done")
-        ?.data.workStateType,
+      projection.nodes.find((node) => node.id === "work-state:story:done")?.data
+        .workStateType,
     ).toBe("TERMINAL");
     expect(
       projection.nodes.find((node) => node.id === "work-state:story:failed")
@@ -613,10 +613,16 @@ describe("factory graph React Flow projection", () => {
 
     expect(logicalMoveAnchorIds).not.toContain("worker-assignment-target");
     expect(modelWorkstationAnchorIds).toContain("worker-assignment-target");
-    expect(logicalMoveAnchorIds).not.toContain("workstation-on-continue-source");
+    expect(logicalMoveAnchorIds).not.toContain(
+      "workstation-on-continue-source",
+    );
     expect(logicalMoveAnchorIds).not.toContain("workstation-on-failure-source");
-    expect(logicalMoveAnchorIds).not.toContain("workstation-on-rejection-source");
-    expect(modelWorkstationAnchorIds).toContain("workstation-on-failure-source");
+    expect(logicalMoveAnchorIds).not.toContain(
+      "workstation-on-rejection-source",
+    );
+    expect(modelWorkstationAnchorIds).toContain(
+      "workstation-on-failure-source",
+    );
   });
 
   it("exposes continue and reject handles when stopWords is configured", () => {

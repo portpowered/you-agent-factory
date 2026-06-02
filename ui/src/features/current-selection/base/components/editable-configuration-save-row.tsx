@@ -1,6 +1,9 @@
 import type { ReactNode } from "react";
 
-import { DashboardActionButton, DashboardActionRow } from "../../../../components/ui";
+import {
+  DashboardActionButton,
+  DashboardActionRow,
+} from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 
 export interface EditableConfigurationSaveRowProps {

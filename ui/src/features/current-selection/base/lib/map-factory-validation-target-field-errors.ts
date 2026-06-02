@@ -15,7 +15,7 @@ export function mapFactoryValidationTargetsToFieldErrors<
   error: FactorySaveValidationErrorLike,
   resolveTargetFieldName: (
     target: FactoryValidationTargetLike,
-  ) => keyof TFieldErrors & string | null,
+  ) => (keyof TFieldErrors & string) | null,
 ): TFieldErrors | undefined {
   const fieldErrors: Record<string, string> = {};
 

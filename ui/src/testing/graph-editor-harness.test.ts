@@ -1,21 +1,24 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
+import { mockFactoryDocumentSave } from "./factory-document-save-mocks";
 import {
   baseFactoryDefinitionDocument,
   createHookTestGraphEditorDraftState,
   createMockEditableFactoryGraph,
   createMockGraphEditorDraftState,
   draftWorkstationFactoryDocument,
+  type MockEditableFactoryGraphHooks,
   mockEditableFactoryGraph,
   wireMockEditableFactoryGraph,
-  type MockEditableFactoryGraphHooks,
 } from "./graph-editor-harness";
-import { mockFactoryDocumentSave } from "./factory-document-save-mocks";
 
-vi.mock("../features/current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: vi.fn(),
-}));
+vi.mock(
+  "../features/current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: vi.fn(),
+  }),
+);
 
 describe("graph-editor-harness", () => {
   it("createMockGraphEditorDraftState seeds empty draft state with factory fixtures", () => {
@@ -32,11 +35,13 @@ describe("graph-editor-harness", () => {
     });
     const graph = createMockEditableFactoryGraph({}, draftState);
 
-    expect(graph.actions.addNode({ kind: "work-type", name: "story" })).toEqual({
-      message: "Load the current factory before editing graph nodes.",
-      ok: false,
-      reason: "INVALID_FIELD",
-    });
+    expect(graph.actions.addNode({ kind: "work-type", name: "story" })).toEqual(
+      {
+        message: "Load the current factory before editing graph nodes.",
+        ok: false,
+        reason: "INVALID_FIELD",
+      },
+    );
     expect(graph.saveState.canSave).toBe(false);
   });
 

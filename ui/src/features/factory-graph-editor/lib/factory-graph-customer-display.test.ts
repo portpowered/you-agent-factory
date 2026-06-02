@@ -5,8 +5,8 @@ import {
   systemTimeGraphNodeId,
 } from "./factory-graph-customer-display";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
-import { buildNode } from "./factory-graph-draft-types";
 import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
+import { buildNode } from "./factory-graph-draft-types";
 import { maintainerRuntimeShapedFactory } from "./maintainer-runtime-shaped-factory.fixture";
 
 const pureSystemTimeFactory = {
@@ -234,7 +234,9 @@ describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
       expect.arrayContaining(["worker:processor", "worker:workspace-setup"]),
     );
     expect(
-      edgeIds(filtered).some((edgeId) => edgeId.startsWith("worker-assignment:")),
+      edgeIds(filtered).some((edgeId) =>
+        edgeId.startsWith("worker-assignment:"),
+      ),
     ).toBe(true);
   });
 

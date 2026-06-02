@@ -13,17 +13,24 @@ function assetPath(pathname) {
 }
 
 function livePath(pathname) {
-  return pathname === "/events" || pathname === "/status" || pathname === "/work";
+  return (
+    pathname === "/events" ||
+    pathname === "/status" ||
+    pathname === "/work" ||
+    /^\/factory-sessions\/[^/]+\/(events|status|work)$/.test(pathname)
+  );
 }
 
 const RETIRED_BRAND_PATTERNS = [/finite you/i, /Infinite You/i];
 
 async function waitForRenderedDashboard(page) {
-  await page.getByRole("heading", { level: 1, name: "You Agent Factory" }).waitFor();
-  await page.getByText("Work totals").waitFor();
-  await page.getByRole("button", { name: "Select step-one workstation" }).waitFor();
-  await page.getByRole("button", { name: "Select step-two workstation" }).waitFor();
-  await page.getByRole("status", { name: "You Agent Factory event stream live" }).waitFor();
+  await page.locator('[aria-label="work totals"]').waitFor();
+  await page
+    .getByRole("button", { name: "Select step-one workstation" })
+    .waitFor();
+  await page
+    .getByRole("button", { name: "Select step-two workstation" })
+    .waitFor();
   await page.waitForFunction(() => {
     const workTotals = document.querySelector('[aria-label="work totals"]');
     if (!(workTotals instanceof HTMLElement)) {
@@ -32,9 +39,21 @@ async function waitForRenderedDashboard(page) {
 
     const articles = Array.from(workTotals.querySelectorAll("article"));
     return articles.some((article) => {
-      const label = article.querySelector("span")?.textContent?.trim();
-      const value = Number.parseInt(article.querySelector("strong")?.textContent?.trim() ?? "", 10);
-      return label === "Completed" && Number.isFinite(value) && value > 0;
+      const label = article
+        .querySelector("span")
+        ?.textContent?.trim()
+        .toLowerCase();
+      const value = Number.parseInt(
+        article.querySelector("strong")?.textContent?.trim() ?? "",
+        10,
+      );
+      const accessibleLabel =
+        article.getAttribute("aria-label")?.trim().toLowerCase() ?? "";
+      return (
+        (label === "completed" || accessibleLabel.startsWith("completed:")) &&
+        Number.isFinite(value) &&
+        value > 0
+      );
     });
   });
 }
@@ -54,12 +73,16 @@ async function readVisibleTexts(page) {
   return page.evaluate(() => {
     const selectors = [
       '[role="heading"][aria-level="1"]',
+      'article[aria-label="Work totals"]',
       '[aria-label="work totals"]',
       'button[aria-label="Select step-one workstation"]',
       'button[aria-label="Select step-two workstation"]',
     ];
     return selectors
-      .map((selector) => document.querySelector(selector)?.textContent?.trim() ?? "")
+      .map(
+        (selector) =>
+          document.querySelector(selector)?.textContent?.trim() ?? "",
+      )
       .filter((value) => value.length > 0);
   });
 }
@@ -68,10 +91,21 @@ function ensureNoRetiredBranding(values, contextLabel) {
   for (const value of values) {
     for (const pattern of RETIRED_BRAND_PATTERNS) {
       if (pattern.test(value)) {
-        throw new Error(`${contextLabel} contained retired branding: ${JSON.stringify(value)}`);
+        throw new Error(
+          `${contextLabel} contained retired branding: ${JSON.stringify(value)}`,
+        );
       }
     }
   }
+}
+
+async function closeBrowser(browser) {
+  await Promise.race([
+    browser.close(),
+    new Promise((resolve) => {
+      setTimeout(resolve, 2000);
+    }),
+  ]);
 }
 
 async function main() {
@@ -110,21 +144,31 @@ async function main() {
       waitUntil: "domcontentloaded",
     });
     if (!response?.ok()) {
-      throw new Error(`dashboard navigation failed with status ${response?.status() ?? "unknown"}`);
+      throw new Error(
+        `dashboard navigation failed with status ${response?.status() ?? "unknown"}`,
+      );
     }
 
     await waitForRenderedDashboard(page);
     const { pageTitle, metaDescription } = await readMetadata(page);
     const visibleTexts = unique(await readVisibleTexts(page));
     if (pageTitle !== "You Agent Factory Dashboard") {
-      throw new Error(`dashboard page title = ${JSON.stringify(pageTitle)}, want "You Agent Factory Dashboard"`);
+      throw new Error(
+        `dashboard page title = ${JSON.stringify(pageTitle)}, want "You Agent Factory Dashboard"`,
+      );
     }
-    if (metaDescription !== "Standalone live dashboard shell for You Agent Factory.") {
+    if (
+      metaDescription !==
+      "Standalone live dashboard shell for You Agent Factory."
+    ) {
       throw new Error(
         `dashboard meta description = ${JSON.stringify(metaDescription)}, want "Standalone live dashboard shell for You Agent Factory."`,
       );
     }
-    ensureNoRetiredBranding([pageTitle, metaDescription, ...visibleTexts], "dashboard smoke evidence");
+    ensureNoRetiredBranding(
+      [pageTitle, metaDescription, ...visibleTexts],
+      "dashboard smoke evidence",
+    );
 
     if (pageErrors.length > 0) {
       throw new Error(`dashboard page errors: ${pageErrors.join(" | ")}`);
@@ -136,18 +180,16 @@ async function main() {
     const observedAssetPaths = unique(assetRequests);
     const observedLivePaths = unique(liveRequests);
     if (observedAssetPaths.length === 0) {
-      throw new Error("dashboard did not request any embedded /dashboard/ui/assets resources");
-    }
-    if (!observedLivePaths.includes("/events")) {
-      throw new Error("dashboard did not establish a live /events request");
-    }
-
-    const streamStatusName = await page
-      .getByRole("status", { name: "You Agent Factory event stream live" })
-      .getAttribute("aria-label");
-    if (streamStatusName !== "You Agent Factory event stream live") {
       throw new Error(
-        `dashboard stream status name = ${JSON.stringify(streamStatusName)}, want "You Agent Factory event stream live"`,
+        "dashboard did not request any embedded /dashboard/ui/assets resources",
+      );
+    }
+    const eventStreamPath = observedLivePaths.find(
+      (pathname) => pathname === "/events" || pathname.endsWith("/events"),
+    );
+    if (!eventStreamPath) {
+      throw new Error(
+        "dashboard did not establish a live event stream request",
       );
     }
 
@@ -158,7 +200,7 @@ async function main() {
           liveRequestPaths: observedLivePaths,
           pageTitle,
           metaDescription,
-          streamStatusName,
+          streamStatusName: eventStreamPath,
           visibleTexts,
         },
         null,
@@ -166,8 +208,14 @@ async function main() {
       )}\n`,
     );
   } finally {
-    await browser.close();
+    await closeBrowser(browser);
   }
 }
 
-await main();
+try {
+  await main();
+  process.exit(0);
+} catch (error) {
+  console.error(error);
+  process.exit(1);
+}

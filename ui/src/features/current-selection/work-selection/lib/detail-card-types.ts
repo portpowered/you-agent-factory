@@ -6,10 +6,10 @@ import type {
 } from "../../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import type { SelectedWorkRequestHistoryItem } from "../../base/components/detail-card-types";
-import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
 import type { DashboardWorkItemSelection } from "../../base/state/selection-types";
-import type { SelectedWorkRelationshipGraph } from "./selected-work-relationship-graph";
+import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
+import type { SelectedWorkRelationshipGraph } from "./selected-work-relationship-graph";
 
 export interface ExecutionDetailsSectionProps {
   activeTraceID?: string | null;

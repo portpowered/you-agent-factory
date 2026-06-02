@@ -1,6 +1,4 @@
 import { describe, expect, it } from "vitest";
-
-import { validateRequiredLocaleMessages } from "./messages";
 import {
   enumLocalizationContract,
   enumLocalizationMessagesByLocale,
@@ -8,6 +6,7 @@ import {
   getLocalizedEnumCategoryLabel,
   localizeEnumLabel,
 } from "./enum-localization";
+import { validateRequiredLocaleMessages } from "./messages";
 
 describe("enumLocalizationContract", () => {
   it("defines the customer-visible enum categories in scope", () => {
@@ -104,8 +103,8 @@ describe("localizeEnumLabel", () => {
 
 describe("enumLocalizationMessagesByLocale", () => {
   it("includes complete required locale coverage", () => {
-    expect(validateRequiredLocaleMessages(enumLocalizationMessagesByLocale)).toEqual(
-      [],
-    );
+    expect(
+      validateRequiredLocaleMessages(enumLocalizationMessagesByLocale),
+    ).toEqual([]);
   });
 });

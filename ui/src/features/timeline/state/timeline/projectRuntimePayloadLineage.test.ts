@@ -41,29 +41,34 @@ describe("projectRuntime payload lineage", () => {
   it("projects selected payload into current_work_items_by_place_id", () => {
     const item = workItem("work-1", "hello from sse");
     const events: FactoryEvent[] = [
-      factoryEvent("event-structure", 0, FACTORY_EVENT_TYPES.initialStructureRequest, {
-        factory: {
-          workTypes: [
-            {
-              name: "task",
-              states: [
-                { name: "init", type: "INITIAL" },
-                { name: "review", type: "PROCESSING" },
-              ],
-            },
-          ],
-          workstations: [
-            {
-              id: "t-review",
-              inputs: [{ state: "init", workType: "task" }],
-              name: "Review",
-              outputs: [{ state: "review", workType: "task" }],
-              worker: "reviewer",
-            },
-          ],
-          workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+      factoryEvent(
+        "event-structure",
+        0,
+        FACTORY_EVENT_TYPES.initialStructureRequest,
+        {
+          factory: {
+            workTypes: [
+              {
+                name: "task",
+                states: [
+                  { name: "init", type: "INITIAL" },
+                  { name: "review", type: "PROCESSING" },
+                ],
+              },
+            ],
+            workstations: [
+              {
+                id: "t-review",
+                inputs: [{ state: "init", workType: "task" }],
+                name: "Review",
+                outputs: [{ state: "review", workType: "task" }],
+                worker: "reviewer",
+              },
+            ],
+            workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+          },
         },
-      }),
+      ),
       factoryEvent(
         "event-work-request",
         1,

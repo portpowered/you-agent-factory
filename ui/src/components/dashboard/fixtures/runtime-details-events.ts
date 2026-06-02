@@ -1,5 +1,5 @@
-import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type { FactoryEvent } from "../../../api/events";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
 
 function factoryEvent(
   id: string,
@@ -37,7 +37,8 @@ export const runtimeDetailsFixtureIDs = {
   failedDispatchID: "dispatch-runtime-failed",
   failedDurationMillis: 600,
   failedErrorClass: "rate_limited",
-  failedFailureMessage: "Provider rate limit exceeded while reviewing the failed runtime story.",
+  failedFailureMessage:
+    "Provider rate limit exceeded while reviewing the failed runtime story.",
   failedFailureReason: "provider_rate_limit",
   failedPromptSource: "retry-renderer",
   failedProviderSessionID: "sess-runtime-failed",
@@ -58,53 +59,66 @@ const reviewWorkstation = {
 };
 
 export const runtimeDetailsTimelineEvents: FactoryEvent[] = [
-  factoryEvent("runtime-details-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-    factory: {
-      workers: [
-        {
-          executorProvider: "script_wrap",
-          modelProvider: "codex",
-          name: "runtime-reviewer",
-        },
-      ],
-      workTypes: [{
-        name: "story",
-        states: [
-          { name: "new", type: "INITIAL" },
-          { name: "review", type: "PROCESSING" },
-          { name: "done", type: "TERMINAL" },
-          { name: "failed", type: "FAILED" },
+  factoryEvent(
+    "runtime-details-1",
+    1,
+    FACTORY_EVENT_TYPES.initialStructureRequest,
+    {
+      factory: {
+        workers: [
+          {
+            executorProvider: "script_wrap",
+            modelProvider: "codex",
+            name: "runtime-reviewer",
+          },
         ],
-      }],
-      workstations: [reviewWorkstation],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "review", type: "PROCESSING" },
+              { name: "done", type: "TERMINAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
+        ],
+        workstations: [reviewWorkstation],
+      },
     },
-  }),
+  ),
   factoryEvent("runtime-details-2", 2, FACTORY_EVENT_TYPES.workRequest, {
     type: "FACTORY_REQUEST_BATCH",
-    works: [{
-      name: runtimeDetailsFixtureIDs.activeWorkLabel,
-      trace_id: runtimeDetailsFixtureIDs.activeTraceID,
-      work_id: runtimeDetailsFixtureIDs.activeWorkID,
-      work_type_name: "story",
-    }],
+    works: [
+      {
+        name: runtimeDetailsFixtureIDs.activeWorkLabel,
+        trace_id: runtimeDetailsFixtureIDs.activeTraceID,
+        work_id: runtimeDetailsFixtureIDs.activeWorkID,
+        work_type_name: "story",
+      },
+    ],
   }),
   factoryEvent("runtime-details-3", 2, FACTORY_EVENT_TYPES.workRequest, {
     type: "FACTORY_REQUEST_BATCH",
-    works: [{
-      name: runtimeDetailsFixtureIDs.completedWorkLabel,
-      trace_id: runtimeDetailsFixtureIDs.completedTraceID,
-      work_id: runtimeDetailsFixtureIDs.completedWorkID,
-      work_type_name: "story",
-    }],
+    works: [
+      {
+        name: runtimeDetailsFixtureIDs.completedWorkLabel,
+        trace_id: runtimeDetailsFixtureIDs.completedTraceID,
+        work_id: runtimeDetailsFixtureIDs.completedWorkID,
+        work_type_name: "story",
+      },
+    ],
   }),
   factoryEvent("runtime-details-4", 2, FACTORY_EVENT_TYPES.workRequest, {
     type: "FACTORY_REQUEST_BATCH",
-    works: [{
-      name: runtimeDetailsFixtureIDs.failedWorkLabel,
-      trace_id: runtimeDetailsFixtureIDs.failedTraceID,
-      work_id: runtimeDetailsFixtureIDs.failedWorkID,
-      work_type_name: "story",
-    }],
+    works: [
+      {
+        name: runtimeDetailsFixtureIDs.failedWorkLabel,
+        trace_id: runtimeDetailsFixtureIDs.failedTraceID,
+        work_id: runtimeDetailsFixtureIDs.failedWorkID,
+        work_type_name: "story",
+      },
+    ],
   }),
   factoryEvent("runtime-details-5", 3, FACTORY_EVENT_TYPES.dispatchRequest, {
     dispatchId: runtimeDetailsFixtureIDs.activeDispatchID,
@@ -169,7 +183,8 @@ export const runtimeDetailsTimelineEvents: FactoryEvent[] = [
           source: "runtime-details-fixture",
         },
         responseMetadata: {
-          provider_session_id: runtimeDetailsFixtureIDs.completedProviderSessionID,
+          provider_session_id:
+            runtimeDetailsFixtureIDs.completedProviderSessionID,
           retry_count: "0",
         },
       },
@@ -229,15 +244,20 @@ export const runtimeDetailsTimelineEvents: FactoryEvent[] = [
     workingDirectory: "/work/failed-runtime",
     worktree: "/work/failed-runtime/.worktrees/runtime",
   }),
-  factoryEvent("runtime-details-12", 10, FACTORY_EVENT_TYPES.inferenceResponse, {
-    attempt: 1,
-    dispatchId: runtimeDetailsFixtureIDs.failedDispatchID,
-    durationMillis: runtimeDetailsFixtureIDs.failedDurationMillis,
-    errorClass: runtimeDetailsFixtureIDs.failedErrorClass,
-    inferenceRequestId: `${runtimeDetailsFixtureIDs.failedDispatchID}/inference-request/1`,
-    outcome: "FAILED",
-    transitionId: "review",
-  }),
+  factoryEvent(
+    "runtime-details-12",
+    10,
+    FACTORY_EVENT_TYPES.inferenceResponse,
+    {
+      attempt: 1,
+      dispatchId: runtimeDetailsFixtureIDs.failedDispatchID,
+      durationMillis: runtimeDetailsFixtureIDs.failedDurationMillis,
+      errorClass: runtimeDetailsFixtureIDs.failedErrorClass,
+      inferenceRequestId: `${runtimeDetailsFixtureIDs.failedDispatchID}/inference-request/1`,
+      outcome: "FAILED",
+      transitionId: "review",
+    },
+  ),
   factoryEvent("runtime-details-13", 11, FACTORY_EVENT_TYPES.dispatchResponse, {
     diagnostics: {
       provider: {
@@ -277,38 +297,95 @@ export const runtimeDetailsTimelineEvents: FactoryEvent[] = [
 ];
 
 runtimeDetailsTimelineEvents[1].context.requestId = "request-runtime-pending";
-runtimeDetailsTimelineEvents[1].context.traceIds = [runtimeDetailsFixtureIDs.activeTraceID];
-runtimeDetailsTimelineEvents[1].context.workIds = [runtimeDetailsFixtureIDs.activeWorkID];
+runtimeDetailsTimelineEvents[1].context.traceIds = [
+  runtimeDetailsFixtureIDs.activeTraceID,
+];
+runtimeDetailsTimelineEvents[1].context.workIds = [
+  runtimeDetailsFixtureIDs.activeWorkID,
+];
 runtimeDetailsTimelineEvents[2].context.requestId = "request-runtime-completed";
-runtimeDetailsTimelineEvents[2].context.traceIds = [runtimeDetailsFixtureIDs.completedTraceID];
-runtimeDetailsTimelineEvents[2].context.workIds = [runtimeDetailsFixtureIDs.completedWorkID];
+runtimeDetailsTimelineEvents[2].context.traceIds = [
+  runtimeDetailsFixtureIDs.completedTraceID,
+];
+runtimeDetailsTimelineEvents[2].context.workIds = [
+  runtimeDetailsFixtureIDs.completedWorkID,
+];
 runtimeDetailsTimelineEvents[3].context.requestId = "request-runtime-failed";
-runtimeDetailsTimelineEvents[3].context.traceIds = [runtimeDetailsFixtureIDs.failedTraceID];
-runtimeDetailsTimelineEvents[3].context.workIds = [runtimeDetailsFixtureIDs.failedWorkID];
-runtimeDetailsTimelineEvents[4].context.dispatchId = runtimeDetailsFixtureIDs.activeDispatchID;
-runtimeDetailsTimelineEvents[4].context.traceIds = [runtimeDetailsFixtureIDs.activeTraceID];
-runtimeDetailsTimelineEvents[4].context.workIds = [runtimeDetailsFixtureIDs.activeWorkID];
-runtimeDetailsTimelineEvents[5].context.dispatchId = runtimeDetailsFixtureIDs.completedDispatchID;
-runtimeDetailsTimelineEvents[5].context.traceIds = [runtimeDetailsFixtureIDs.completedTraceID];
-runtimeDetailsTimelineEvents[5].context.workIds = [runtimeDetailsFixtureIDs.completedWorkID];
-runtimeDetailsTimelineEvents[6].context.dispatchId = runtimeDetailsFixtureIDs.completedDispatchID;
-runtimeDetailsTimelineEvents[6].context.traceIds = [runtimeDetailsFixtureIDs.completedTraceID];
-runtimeDetailsTimelineEvents[6].context.workIds = [runtimeDetailsFixtureIDs.completedWorkID];
-runtimeDetailsTimelineEvents[7].context.dispatchId = runtimeDetailsFixtureIDs.completedDispatchID;
-runtimeDetailsTimelineEvents[7].context.traceIds = [runtimeDetailsFixtureIDs.completedTraceID];
-runtimeDetailsTimelineEvents[7].context.workIds = [runtimeDetailsFixtureIDs.completedWorkID];
-runtimeDetailsTimelineEvents[8].context.dispatchId = runtimeDetailsFixtureIDs.completedDispatchID;
-runtimeDetailsTimelineEvents[8].context.traceIds = [runtimeDetailsFixtureIDs.completedTraceID];
-runtimeDetailsTimelineEvents[8].context.workIds = [runtimeDetailsFixtureIDs.completedWorkID];
-runtimeDetailsTimelineEvents[9].context.dispatchId = runtimeDetailsFixtureIDs.failedDispatchID;
-runtimeDetailsTimelineEvents[9].context.traceIds = [runtimeDetailsFixtureIDs.failedTraceID];
-runtimeDetailsTimelineEvents[9].context.workIds = [runtimeDetailsFixtureIDs.failedWorkID];
-runtimeDetailsTimelineEvents[10].context.dispatchId = runtimeDetailsFixtureIDs.failedDispatchID;
-runtimeDetailsTimelineEvents[10].context.traceIds = [runtimeDetailsFixtureIDs.failedTraceID];
-runtimeDetailsTimelineEvents[10].context.workIds = [runtimeDetailsFixtureIDs.failedWorkID];
-runtimeDetailsTimelineEvents[11].context.dispatchId = runtimeDetailsFixtureIDs.failedDispatchID;
-runtimeDetailsTimelineEvents[11].context.traceIds = [runtimeDetailsFixtureIDs.failedTraceID];
-runtimeDetailsTimelineEvents[11].context.workIds = [runtimeDetailsFixtureIDs.failedWorkID];
-runtimeDetailsTimelineEvents[12].context.dispatchId = runtimeDetailsFixtureIDs.failedDispatchID;
-runtimeDetailsTimelineEvents[12].context.traceIds = [runtimeDetailsFixtureIDs.failedTraceID];
-runtimeDetailsTimelineEvents[12].context.workIds = [runtimeDetailsFixtureIDs.failedWorkID];
+runtimeDetailsTimelineEvents[3].context.traceIds = [
+  runtimeDetailsFixtureIDs.failedTraceID,
+];
+runtimeDetailsTimelineEvents[3].context.workIds = [
+  runtimeDetailsFixtureIDs.failedWorkID,
+];
+runtimeDetailsTimelineEvents[4].context.dispatchId =
+  runtimeDetailsFixtureIDs.activeDispatchID;
+runtimeDetailsTimelineEvents[4].context.traceIds = [
+  runtimeDetailsFixtureIDs.activeTraceID,
+];
+runtimeDetailsTimelineEvents[4].context.workIds = [
+  runtimeDetailsFixtureIDs.activeWorkID,
+];
+runtimeDetailsTimelineEvents[5].context.dispatchId =
+  runtimeDetailsFixtureIDs.completedDispatchID;
+runtimeDetailsTimelineEvents[5].context.traceIds = [
+  runtimeDetailsFixtureIDs.completedTraceID,
+];
+runtimeDetailsTimelineEvents[5].context.workIds = [
+  runtimeDetailsFixtureIDs.completedWorkID,
+];
+runtimeDetailsTimelineEvents[6].context.dispatchId =
+  runtimeDetailsFixtureIDs.completedDispatchID;
+runtimeDetailsTimelineEvents[6].context.traceIds = [
+  runtimeDetailsFixtureIDs.completedTraceID,
+];
+runtimeDetailsTimelineEvents[6].context.workIds = [
+  runtimeDetailsFixtureIDs.completedWorkID,
+];
+runtimeDetailsTimelineEvents[7].context.dispatchId =
+  runtimeDetailsFixtureIDs.completedDispatchID;
+runtimeDetailsTimelineEvents[7].context.traceIds = [
+  runtimeDetailsFixtureIDs.completedTraceID,
+];
+runtimeDetailsTimelineEvents[7].context.workIds = [
+  runtimeDetailsFixtureIDs.completedWorkID,
+];
+runtimeDetailsTimelineEvents[8].context.dispatchId =
+  runtimeDetailsFixtureIDs.completedDispatchID;
+runtimeDetailsTimelineEvents[8].context.traceIds = [
+  runtimeDetailsFixtureIDs.completedTraceID,
+];
+runtimeDetailsTimelineEvents[8].context.workIds = [
+  runtimeDetailsFixtureIDs.completedWorkID,
+];
+runtimeDetailsTimelineEvents[9].context.dispatchId =
+  runtimeDetailsFixtureIDs.failedDispatchID;
+runtimeDetailsTimelineEvents[9].context.traceIds = [
+  runtimeDetailsFixtureIDs.failedTraceID,
+];
+runtimeDetailsTimelineEvents[9].context.workIds = [
+  runtimeDetailsFixtureIDs.failedWorkID,
+];
+runtimeDetailsTimelineEvents[10].context.dispatchId =
+  runtimeDetailsFixtureIDs.failedDispatchID;
+runtimeDetailsTimelineEvents[10].context.traceIds = [
+  runtimeDetailsFixtureIDs.failedTraceID,
+];
+runtimeDetailsTimelineEvents[10].context.workIds = [
+  runtimeDetailsFixtureIDs.failedWorkID,
+];
+runtimeDetailsTimelineEvents[11].context.dispatchId =
+  runtimeDetailsFixtureIDs.failedDispatchID;
+runtimeDetailsTimelineEvents[11].context.traceIds = [
+  runtimeDetailsFixtureIDs.failedTraceID,
+];
+runtimeDetailsTimelineEvents[11].context.workIds = [
+  runtimeDetailsFixtureIDs.failedWorkID,
+];
+runtimeDetailsTimelineEvents[12].context.dispatchId =
+  runtimeDetailsFixtureIDs.failedDispatchID;
+runtimeDetailsTimelineEvents[12].context.traceIds = [
+  runtimeDetailsFixtureIDs.failedTraceID,
+];
+runtimeDetailsTimelineEvents[12].context.workIds = [
+  runtimeDetailsFixtureIDs.failedWorkID,
+];

@@ -6,7 +6,9 @@ function referencesResourceName(
   requirements: ReadonlyArray<{ name: string }> | undefined,
   resourceName: string,
 ): boolean {
-  return (requirements ?? []).some((requirement) => requirement.name === resourceName);
+  return (requirements ?? []).some(
+    (requirement) => requirement.name === resourceName,
+  );
 }
 
 export function resourceAvailablePlaceId(resourceName: string): string {
@@ -34,7 +36,9 @@ export function findResourceInFactoryDefinition(
   factory: CanonicalFactoryDefinition,
   resourceName: string,
 ): FactoryResource | undefined {
-  return (factory.resources ?? []).find((resource) => resource.name === resourceName);
+  return (factory.resources ?? []).find(
+    (resource) => resource.name === resourceName,
+  );
 }
 
 export function workerNamesReferencingResourceInFactoryDefinition(

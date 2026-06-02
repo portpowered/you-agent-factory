@@ -26,7 +26,8 @@ const workflowActivityGraphImportMessagesByLocale = {
     dialogCloseLabel: "Close dialog",
     dialogFlowLabel: "Mutation flow",
     dismissAction: "Dismiss",
-    graphDropHint: "Drop a you-agent-factory PNG onto this graph to start import.",
+    graphDropHint:
+      "Drop a you-agent-factory PNG onto this graph to start import.",
     graphDropReadingMessage: (fileName) =>
       `${fileName} is being parsed and validated locally before import continues.`,
     graphDropTitle: "Import factory PNG",
@@ -80,7 +81,8 @@ const workflowActivityGraphImportMessagesByLocale = {
     dialogCloseLabel: "대화상자 닫기",
     dialogFlowLabel: "변경 흐름",
     dismissAction: "닫기",
-    graphDropHint: "이 그래프에 you-agent-factory PNG를 놓아 가져오기를 시작하세요.",
+    graphDropHint:
+      "이 그래프에 you-agent-factory PNG를 놓아 가져오기를 시작하세요.",
     graphDropReadingMessage: (fileName) =>
       `${fileName} 파일을 로컬에서 파싱하고 검증하는 중이며, 완료되면 가져오기가 계속됩니다.`,
     graphDropTitle: "팩토리 PNG 가져오기",
@@ -92,7 +94,8 @@ const workflowActivityGraphImportMessagesByLocale = {
       "브라우저가 드롭한 파일을 읽지 못했습니다. PNG를 다시 드롭해 보세요.",
     importErrorMetadataMissing:
       "이 PNG에는 가져오기에 필요한 you-agent-factory 팩토리 메타데이터가 없습니다.",
-    importErrorNotPngFile: "you-agent-factory에서 내보낸 PNG 이미지를 드롭하세요.",
+    importErrorNotPngFile:
+      "you-agent-factory에서 내보낸 PNG 이미지를 드롭하세요.",
     importErrorPngInvalid:
       "이 PNG는 잘렸거나 손상된 것 같아서 활성화 요청 전에 가져오기가 중단되었습니다.",
     importErrorPreviewUnavailable:

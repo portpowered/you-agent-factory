@@ -54,8 +54,12 @@ describe("DashboardWidgetFrame", () => {
     expect(subtitle.className).toContain(WIDGET_SUBTITLE_CLASS);
     expect(bodyCopy.className).toContain(DETAIL_COPY_CLASS);
     expect(emptyHeading.parentElement?.className).toContain(EMPTY_STATE_CLASS);
-    expect(emptyHeading.parentElement?.className).toContain("border-af-border-strong");
-    expect(emptyHeading.parentElement?.className).toContain("bg-af-surface-subtle");
+    expect(emptyHeading.parentElement?.className).toContain(
+      "border-af-border-strong",
+    );
+    expect(emptyHeading.parentElement?.className).toContain(
+      "bg-af-surface-subtle",
+    );
   });
 
   it("routes header actions through AgentBentoCard without a custom header slot", () => {
@@ -84,8 +88,10 @@ describe("DashboardWidgetFrame", () => {
     expect(
       within(card).queryByRole("button", { name: "Move Provider session" }),
     ).toBeNull();
-    expect(toolsRegion?.contains(screen.getByRole("button", { name: "Remove card" }))).toBe(
-      true,
-    );
+    expect(
+      toolsRegion?.contains(
+        screen.getByRole("button", { name: "Remove card" }),
+      ),
+    ).toBe(true);
   });
 });

@@ -1,8 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
-
-import { verifyDashboardHeader } from "./verify-import-export-storybook-responsive.mjs";
 import { verifyDashboardSessionSwitching } from "./verify-dashboard-session-switching-storybook-responsive.mjs";
 import { verifyDashboardSessionTabs } from "./verify-dashboard-session-tabs-storybook-responsive.mjs";
+import { verifyDashboardHeader } from "./verify-import-export-storybook-responsive.mjs";
 
 function createCurrentTickLocator() {
   return {
@@ -80,7 +79,8 @@ function createRoleLookup({
     if (role === "heading") return heading;
     if (role === "slider") return slider;
     if (role === "navigation") return sessionTabs;
-    if (role === "tab" && options == null) return { count: vi.fn().mockResolvedValue(3) };
+    if (role === "tab" && options == null)
+      return { count: vi.fn().mockResolvedValue(3) };
     if (role === "tab" && options?.name === "root") return rootTab;
     if (options?.name === "Change language") return languageButton;
     if (role === "status") return retiredStreamStatus;
@@ -100,14 +100,18 @@ function createTextLookup(timelineStatus) {
         y: 0,
       });
     }
-    return createDesktopLocator(true, {
-      height: 20,
-      width: 40,
-      x: 380,
-      y: 40,
-    }, {
-      first: vi.fn().mockReturnValue(timelineStatus),
-    });
+    return createDesktopLocator(
+      true,
+      {
+        height: 20,
+        width: 40,
+        x: 380,
+        y: 40,
+      },
+      {
+        first: vi.fn().mockReturnValue(timelineStatus),
+      },
+    );
   });
 }
 
@@ -131,9 +135,10 @@ function createPage({
       press: vi.fn().mockResolvedValue(undefined),
     },
     slider,
-    evaluate: vi
-      .fn()
-      .mockResolvedValue({ clientWidth: isDesktop ? 1440 : 390, scrollWidth: isDesktop ? 1440 : 390 }),
+    evaluate: vi.fn().mockResolvedValue({
+      clientWidth: isDesktop ? 1440 : 390,
+      scrollWidth: isDesktop ? 1440 : 390,
+    }),
     getByRole: createRoleLookup({
       currentButton,
       exportButton,
@@ -200,7 +205,9 @@ describe("verifyDashboardSessionTabs", () => {
       isVisible: vi.fn().mockResolvedValue(true),
     };
     const page = {
-      evaluate: vi.fn().mockResolvedValue({ clientWidth: 768, scrollWidth: 768 }),
+      evaluate: vi
+        .fn()
+        .mockResolvedValue({ clientWidth: 768, scrollWidth: 768 }),
       getByRole: vi.fn((role, options) => {
         if (role === "navigation") {
           return { isVisible: vi.fn().mockResolvedValue(true) };

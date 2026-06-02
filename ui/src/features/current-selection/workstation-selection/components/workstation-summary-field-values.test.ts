@@ -118,7 +118,10 @@ describe("resolveWorkstationSummaryTypeValue", () => {
 
   it("localizes the authoritative workstation type when editable configuration is ready", () => {
     expect(
-      resolveWorkstationSummaryTypeValue(readyEditableConfigurationState, messages),
+      resolveWorkstationSummaryTypeValue(
+        readyEditableConfigurationState,
+        messages,
+      ),
     ).toBe("Model workstation");
   });
 

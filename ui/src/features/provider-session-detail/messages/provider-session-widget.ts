@@ -25,12 +25,14 @@ const providerSessionWidgetMessagesByLocale = {
     title: "공급자 세션",
   },
   "zh-CN": {
-    emptyState:
-      "从工作项或工作站历史中选择一个提供方会话以查看会话详情。",
+    emptyState: "从工作项或工作站历史中选择一个提供方会话以查看会话详情。",
     title: "提供方会话",
   },
 } satisfies LocalizedMessages<ProviderSessionWidgetMessages>;
 
 export function getProviderSessionWidgetMessages(locale?: string | null) {
-  return resolveLocalizedMessages(providerSessionWidgetMessagesByLocale, locale);
+  return resolveLocalizedMessages(
+    providerSessionWidgetMessagesByLocale,
+    locale,
+  );
 }

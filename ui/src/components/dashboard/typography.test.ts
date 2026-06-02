@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   DASHBOARD_RETIRED_TEXT_SIZE_LITERALS,
   DASHBOARD_TYPOGRAPHY_CONTRACT,
@@ -7,7 +7,9 @@ import {
 function getRole(
   role: (typeof DASHBOARD_TYPOGRAPHY_CONTRACT)[number]["role"],
 ): (typeof DASHBOARD_TYPOGRAPHY_CONTRACT)[number] {
-  const entry = DASHBOARD_TYPOGRAPHY_CONTRACT.find((item) => item.role === role);
+  const entry = DASHBOARD_TYPOGRAPHY_CONTRACT.find(
+    (item) => item.role === role,
+  );
   if (!entry) {
     throw new Error(`expected ${role} typography role`);
   }
@@ -27,10 +29,17 @@ describe("dashboard typography contract", () => {
       expect.arrayContaining(["widget title", "detail section heading"]),
     );
     expect(getRole("bodyText").usage).toEqual(
-      expect.arrayContaining(["detail copy", "table body text", "trace metadata"]),
+      expect.arrayContaining([
+        "detail copy",
+        "table body text",
+        "trace metadata",
+      ]),
     );
     expect(getRole("supportingText").usage).toEqual(
-      expect.arrayContaining(["metadata labels", "chart-axis/supporting labels"]),
+      expect.arrayContaining([
+        "metadata labels",
+        "chart-axis/supporting labels",
+      ]),
     );
   });
 

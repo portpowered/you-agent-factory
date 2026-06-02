@@ -104,7 +104,9 @@ describe("readFactoryImportPng", () => {
               buildChunk(
                 "tEXt",
                 concatBytes([
-                  new TextEncoder().encode(PORT_OS_FACTORY_PNG_METADATA_KEYWORD),
+                  new TextEncoder().encode(
+                    PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
+                  ),
                   new Uint8Array([0]),
                   new TextEncoder().encode(
                     JSON.stringify({
@@ -148,7 +150,8 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The you-agent-factory factory metadata does not contain a valid factory payload.",
+        message:
+          "The you-agent-factory factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -173,7 +176,8 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The you-agent-factory factory metadata does not contain a valid factory payload.",
+        message:
+          "The you-agent-factory factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -199,7 +203,8 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The you-agent-factory factory metadata does not contain a valid factory payload.",
+        message:
+          "The you-agent-factory factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -306,16 +311,21 @@ describe("readFactoryImportPng", () => {
       createPreviewImageSrc: () => {
         throw new Error("should not create preview");
       },
-      file: new File([toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))], "plain.png", {
-        type: "image/png",
-      }),
+      file: new File(
+        [toArrayBuffer(fromBase64(ONE_PIXEL_PNG_BASE64))],
+        "plain.png",
+        {
+          type: "image/png",
+        },
+      ),
       validatePreviewImage: async () => {},
     });
 
     expect(result).toEqual({
       error: {
         code: "PNG_METADATA_MISSING",
-        message: "The selected PNG does not contain you-agent-factory factory metadata.",
+        message:
+          "The selected PNG does not contain you-agent-factory factory metadata.",
       },
       ok: false,
     });
@@ -342,7 +352,8 @@ describe("readFactoryImportPng", () => {
         details: {
           schemaVersion: "portos.agent-factory.png.v2",
         },
-        message: "The selected PNG uses an unsupported you-agent-factory factory metadata version.",
+        message:
+          "The selected PNG uses an unsupported you-agent-factory factory metadata version.",
       },
       ok: false,
     });
@@ -394,7 +405,8 @@ describe("readFactoryImportPng", () => {
       error: {
         cause: expect.any(Error),
         code: "PREVIEW_UNAVAILABLE",
-        message: "The browser could not create a preview for the selected image.",
+        message:
+          "The browser could not create a preview for the selected image.",
       },
       ok: false,
     });
@@ -424,7 +436,9 @@ describe("readFactoryImportPng", () => {
       createPreviewImageSrc: () => {
         throw new Error("should not create preview");
       },
-      file: createFactoryPngFileWithMetadataText(JSON.stringify("not-an-object")),
+      file: createFactoryPngFileWithMetadataText(
+        JSON.stringify("not-an-object"),
+      ),
       validatePreviewImage: async () => {},
     });
 
@@ -456,7 +470,8 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The you-agent-factory factory metadata is missing the schema version.",
+        message:
+          "The you-agent-factory factory metadata is missing the schema version.",
       },
       ok: false,
     });
@@ -481,7 +496,8 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "FACTORY_PAYLOAD_INVALID",
-        message: "The you-agent-factory factory metadata does not contain a valid factory payload.",
+        message:
+          "The you-agent-factory factory metadata does not contain a valid factory payload.",
       },
       ok: false,
     });
@@ -616,7 +632,9 @@ describe("readFactoryImportPng", () => {
               buildChunk(
                 "iTXt",
                 concatBytes([
-                  new TextEncoder().encode(PORT_OS_FACTORY_PNG_METADATA_KEYWORD),
+                  new TextEncoder().encode(
+                    PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
+                  ),
                   new Uint8Array([0, 1, 0, 0, 0]),
                   new TextEncoder().encode(
                     JSON.stringify({
@@ -743,7 +761,8 @@ describe("readFactoryImportPng", () => {
     expect(result).toEqual({
       error: {
         code: "PNG_METADATA_INVALID",
-        message: "The you-agent-factory factory metadata is missing the factory name.",
+        message:
+          "The you-agent-factory factory metadata is missing the factory name.",
       },
       ok: false,
     });
@@ -820,7 +839,8 @@ describe("readFactoryImportPng", () => {
       error: {
         cause: expect.any(Error),
         code: "PREVIEW_UNAVAILABLE",
-        message: "The browser could not create a preview for the selected image.",
+        message:
+          "The browser could not create a preview for the selected image.",
       },
       ok: false,
     });
@@ -875,10 +895,18 @@ function createFactoryPngFileWithMetadataText(metadataText: string): File {
   const sourcePng = fromBase64(ONE_PIXEL_PNG_BASE64);
   const pngWithMetadata = injectMetadataChunk(
     sourcePng,
-    buildChunk("iTXt", buildInternationalTextData(PORT_OS_FACTORY_PNG_METADATA_KEYWORD, metadataText)),
+    buildChunk(
+      "iTXt",
+      buildInternationalTextData(
+        PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
+        metadataText,
+      ),
+    ),
   );
 
-  return new File([toArrayBuffer(pngWithMetadata)], "factory.png", { type: "image/png" });
+  return new File([toArrayBuffer(pngWithMetadata)], "factory.png", {
+    type: "image/png",
+  });
 }
 
 function buildInternationalTextData(keyword: string, text: string): Uint8Array {
@@ -890,7 +918,10 @@ function buildInternationalTextData(keyword: string, text: string): Uint8Array {
   ]);
 }
 
-function injectMetadataChunk(pngBytes: Uint8Array, metadataChunk: Uint8Array): Uint8Array {
+function injectMetadataChunk(
+  pngBytes: Uint8Array,
+  metadataChunk: Uint8Array,
+): Uint8Array {
   const chunks: Uint8Array[] = [PNG_SIGNATURE];
   let offset = PNG_SIGNATURE.length;
   let inserted = false;
@@ -910,7 +941,11 @@ function injectMetadataChunk(pngBytes: Uint8Array, metadataChunk: Uint8Array): U
 }
 
 function readChunkAtOffset(pngBytes: Uint8Array, offset: number): ParsedChunk {
-  const view = new DataView(pngBytes.buffer, pngBytes.byteOffset, pngBytes.byteLength);
+  const view = new DataView(
+    pngBytes.buffer,
+    pngBytes.byteOffset,
+    pngBytes.byteLength,
+  );
   const length = view.getUint32(offset);
   const dataOffset = offset + 8;
   const chunkEnd = dataOffset + length + 4;

@@ -599,7 +599,9 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(runnerSelect).toBeTruthy();
     expect(
-      within(configuration).getByText("Effective runner: Gemini (Workstation)."),
+      within(configuration).getByText(
+        "Effective runner: Gemini (Workstation).",
+      ),
     ).toBeTruthy();
     expect(
       within(configuration).queryByText("Runner capability support"),
@@ -2251,7 +2253,9 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(screen.queryByText(/Worker selection unavailable/i)).toBeNull();
     expect(
-      screen.queryByText(/no longer available in the current factory definition/i),
+      screen.queryByText(
+        /no longer available in the current factory definition/i,
+      ),
     ).toBeNull();
   });
 
@@ -2284,13 +2288,19 @@ describe("WorkstationDetailCard editable configuration", () => {
       "expected workstation summary section",
     );
 
-    expect(within(resolvedSummarySection).getByText("Logical move")).toBeTruthy();
-    expect(within(resolvedSummarySection).queryByText("Worker type")).toBeNull();
+    expect(
+      within(resolvedSummarySection).getByText("Logical move"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).queryByText("Worker type"),
+    ).toBeNull();
     expect(
       within(resolvedSummarySection).queryByText("Selected runner"),
     ).toBeNull();
     expect(within(resolvedSummarySection).queryByText("Kind")).toBeNull();
-    expect(within(resolvedSummarySection).queryByText("MODEL_WORKER")).toBeNull();
+    expect(
+      within(resolvedSummarySection).queryByText("MODEL_WORKER"),
+    ).toBeNull();
   });
 
   it("still renders worker-backed summary tiles for model workstations", () => {
@@ -2315,10 +2325,16 @@ describe("WorkstationDetailCard editable configuration", () => {
       "expected workstation summary section",
     );
 
-    expect(within(resolvedSummarySection).getByText("Worker type")).toBeTruthy();
-    expect(within(resolvedSummarySection).getByText("Selected runner")).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Worker type"),
+    ).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Selected runner"),
+    ).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("Kind")).toBeTruthy();
-    expect(within(resolvedSummarySection).getByText("Model workstation")).toBeTruthy();
+    expect(
+      within(resolvedSummarySection).getByText("Model workstation"),
+    ).toBeTruthy();
   });
 
   it("still renders worker-backed configuration fields for model workstations", () => {
