@@ -1,9 +1,9 @@
-import { useMemo } from "react";
+import { render, screen } from "@testing-library/react";
 
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import * as d3 from "d3";
+import { useMemo } from "react";
 import GridLayout from "react-grid-layout";
-import { render, screen } from "@testing-library/react";
 
 import "@xyflow/react/dist/style.css";
 import "react-grid-layout/css/styles.css";
@@ -21,7 +21,10 @@ class TestResizeObserver {
 
 function DependencySmokeDashboard() {
   const chartPath = useMemo(() => {
-    const xScale = d3.scaleLinear().domain([0, chartValues.length - 1]).range([0, 120]);
+    const xScale = d3
+      .scaleLinear()
+      .domain([0, chartValues.length - 1])
+      .range([0, 120]);
     const yScale = d3.scaleLinear().domain([0, 5]).range([40, 0]);
 
     return d3
@@ -51,10 +54,16 @@ function DependencySmokeDashboard() {
           <path d={chartPath ?? ""} fill="none" stroke="currentColor" />
         </svg>
       </article>
-      <article key="flow" aria-label="React Flow dependency smoke" style={{ height: 160 }}>
+      <article
+        key="flow"
+        aria-label="React Flow dependency smoke"
+        style={{ height: 160 }}
+      >
         <ReactFlowProvider>
           <ReactFlow
-            edges={[{ id: "source-target", source: "source", target: "target" }]}
+            edges={[
+              { id: "source-target", source: "source", target: "target" },
+            ]}
             fitView
             nodes={[
               {
@@ -96,4 +105,3 @@ describe("dashboard visualization dependencies", () => {
     expect(screen.getByText("Target")).toBeTruthy();
   });
 });
-

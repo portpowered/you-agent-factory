@@ -82,7 +82,10 @@ function createWorkstationDetailOrderHarness() {
       if (role === "heading" && options?.name === "Run history") {
         return runHistoryHeading;
       }
-      if (role === "button" && options?.name === "Select work item Active Story") {
+      if (
+        role === "button" &&
+        options?.name === "Select work item Active Story"
+      ) {
         return activeWorkButton;
       }
       return createVisibleLocator(`${role}:${options?.name}`);

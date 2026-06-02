@@ -1,6 +1,6 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: React Flow projection keeps node, edge, and handle mapping together for one adapter seam.
 import { type Edge, MarkerType, type Node } from "@xyflow/react";
-
+import { workTypeHasDefaultHandling } from "../../current-factory-definition/lib/work-type-default-handling";
 import { workstationHasZAxisIncompleteForConnections } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import type {
   ActivityGraphNodeHandle,
@@ -28,7 +28,6 @@ import {
   resolveFactoryGraphConnectionAnchorContext,
 } from "./factory-graph-editor-connections";
 import type { FactoryGraphWorkerRuntimeStatus } from "./factory-graph-editor-runtime";
-import { workTypeHasDefaultHandling } from "../../current-factory-definition/lib/work-type-default-handling";
 import {
   workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,

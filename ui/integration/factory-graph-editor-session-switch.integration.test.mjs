@@ -267,7 +267,9 @@ async function expectEditorModeOff(page) {
         const addMenuCount = await toolbar
           .getByRole("button", { name: "Open add entity menu" })
           .count();
-        const unsavedCount = await graphCard.getByText("Unsaved changes").count();
+        const unsavedCount = await graphCard
+          .getByText("Unsaved changes")
+          .count();
         const editorActiveCount = await graphCard
           .getByText("Editor mode active")
           .count();
@@ -320,7 +322,9 @@ async function runSessionSwitchClearsDirtyEditorScenario(preview) {
     await expect
       .poll(
         async () =>
-          await browserPage.page.getByTestId("rf__node-work-type:essay").count(),
+          await browserPage.page
+            .getByTestId("rf__node-work-type:essay")
+            .count(),
         { timeout: uiInteractionTimeoutMs },
       )
       .toBe(1);

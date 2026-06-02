@@ -8,7 +8,9 @@ import {
   workstationNamesReferencingResourceInFactoryDefinition,
 } from "../lib/resource-detail-values";
 
-export function useResourceDetailState(resourceName: string): ResourceDetailState {
+export function useResourceDetailState(
+  resourceName: string,
+): ResourceDetailState {
   const factoryDocument = useCurrentFactoryDocument(true);
 
   return useMemo((): ResourceDetailState => {

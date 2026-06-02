@@ -9,12 +9,14 @@ import {
 import { useFactoryImportActivationTarget } from "./use-factory-import-activation-target";
 
 vi.mock("../../../api/session-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
-    "../../../api/session-factory",
-  );
+  const actual = await vi.importActual<
+    typeof import("../../../api/session-factory")
+  >("../../../api/session-factory");
   return {
     ...actual,
-    discoverSessionNamedFactoryNames: vi.fn(actual.discoverSessionNamedFactoryNames),
+    discoverSessionNamedFactoryNames: vi.fn(
+      actual.discoverSessionNamedFactoryNames,
+    ),
     getSessionFactory: vi.fn(actual.getSessionFactory),
   };
 });
@@ -29,7 +31,9 @@ function createWrapper() {
   });
 
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
   };
 }
 
@@ -64,7 +68,9 @@ describe("useFactoryImportActivationTarget", () => {
         "Review Session Import Factory-2",
       );
     });
-    expect(result.current.currentFactoryName).toBe("Review Session Import Factory");
+    expect(result.current.currentFactoryName).toBe(
+      "Review Session Import Factory",
+    );
     expect(discoverSessionNamedFactoryNames).toHaveBeenCalledWith({
       sessionID: "session-review",
     });

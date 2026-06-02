@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  DEFAULT_FACTORY_SESSION_ID,
-  currentFactoryWorkstationPath,
   currentFactorySessionPath,
+  currentFactoryWorkstationPath,
+  DEFAULT_FACTORY_SESSION_ID,
   factorySessionEventsPath,
   factorySessionScopedPath,
   factorySessionWorkPath,
@@ -19,9 +19,15 @@ describe("factorySessionScopedPath", () => {
   });
 
   it("always returns an explicit default-session scoped path", () => {
-    expect(factorySessionScopedPath("/work", undefined)).toBe("/factory-sessions/~default/work");
-    expect(factorySessionScopedPath("/work", null)).toBe("/factory-sessions/~default/work");
-    expect(factorySessionScopedPath("/work", "")).toBe("/factory-sessions/~default/work");
+    expect(factorySessionScopedPath("/work", undefined)).toBe(
+      "/factory-sessions/~default/work",
+    );
+    expect(factorySessionScopedPath("/work", null)).toBe(
+      "/factory-sessions/~default/work",
+    );
+    expect(factorySessionScopedPath("/work", "")).toBe(
+      "/factory-sessions/~default/work",
+    );
     expect(factorySessionScopedPath("work", DEFAULT_FACTORY_SESSION_ID)).toBe(
       "/factory-sessions/~default/work",
     );
@@ -34,7 +40,9 @@ describe("factorySessionScopedPath", () => {
   });
 
   it("exposes the canonical current-factory session route directly", () => {
-    expect(currentFactorySessionPath(undefined)).toBe("/factory-sessions/~default/factory");
+    expect(currentFactorySessionPath(undefined)).toBe(
+      "/factory-sessions/~default/factory",
+    );
     expect(currentFactorySessionPath("session/beta")).toBe(
       "/factory-sessions/session%2Fbeta/factory",
     );
@@ -53,7 +61,9 @@ describe("factorySessionScopedPath", () => {
   });
 
   it("exposes explicit work and events session routes", () => {
-    expect(factorySessionWorkPath(undefined)).toBe("/factory-sessions/~default/work");
+    expect(factorySessionWorkPath(undefined)).toBe(
+      "/factory-sessions/~default/work",
+    );
     expect(factorySessionEventsPath("session-beta")).toBe(
       "/factory-sessions/session-beta/events",
     );

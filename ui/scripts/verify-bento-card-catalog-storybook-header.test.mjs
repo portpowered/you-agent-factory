@@ -9,7 +9,10 @@ import {
 function createArticleLocator(metrics, { moveButtonCount = 0 } = {}) {
   return {
     locator: (selector) => {
-      if (selector === "header" || selector === 'header[data-bento-drag-handle="true"]') {
+      if (
+        selector === "header" ||
+        selector === 'header[data-bento-drag-handle="true"]'
+      ) {
         return {
           evaluate: async () => metrics,
           waitFor: async () => undefined,

@@ -1,8 +1,8 @@
-import { cn } from "../../../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
+import { cn } from "../../../../lib/cn";
 import type { DetailCardSaveState } from "../hooks/detail-card-save-types";
 import { CURRENT_SELECTION_WARNING_PANEL_CLASS } from "./detail-card-shared";
 
@@ -42,7 +42,12 @@ export function DetailCardFactorySaveFeedback<
         >
           {saveState.message}
         </p>
-        <p className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-af-text-subtle",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
           {messages.staleVersionDetail}
         </p>
       </div>

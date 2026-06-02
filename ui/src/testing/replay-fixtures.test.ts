@@ -4,17 +4,23 @@ import { FACTORY_EVENT_TYPES } from "../api/events";
 import {
   buildReplayFixtureTimelineSnapshot,
   loadReplayFixtureEvents,
-  replayFixtureCatalog,
   REPLAY_FIXTURE_DIRECTORY,
+  replayFixtureCatalog,
 } from "./replay-fixtures";
 
 describe("replay fixture helpers", () => {
   it("loads typed events from the canonical replay fixture catalog", () => {
     const events = loadReplayFixtureEvents("runtimeDetails");
 
-    expect(replayFixtureCatalog.runtimeDetails.fileName).toBe("runtime-details-replay.jsonl");
-    expect(replayFixtureCatalog.failureAnalysis.surfaces).toContain("failure-rendering");
-    expect(replayFixtureCatalog.graphStateSmoke.surfaces).toContain("graph-state");
+    expect(replayFixtureCatalog.runtimeDetails.fileName).toBe(
+      "runtime-details-replay.jsonl",
+    );
+    expect(replayFixtureCatalog.failureAnalysis.surfaces).toContain(
+      "failure-rendering",
+    );
+    expect(replayFixtureCatalog.graphStateSmoke.surfaces).toContain(
+      "graph-state",
+    );
     expect(replayFixtureCatalog.weirdNumberSummary.fileName).toBe(
       "weird-number-summary-replay.jsonl",
     );
@@ -38,7 +44,9 @@ describe("replay fixture helpers", () => {
   });
 
   it("preserves setup-workspace python3 script requests and task handoff evidence", () => {
-    const events = loadReplayFixtureEvents("runtimeConfigInterfaceConsolidation");
+    const events = loadReplayFixtureEvents(
+      "runtimeConfigInterfaceConsolidation",
+    );
 
     const setupWorkspaceScriptRequests = events.filter(
       (event) =>
@@ -83,7 +91,10 @@ describe("replay fixture helpers", () => {
   });
 
   it("replays the weird-number-summary regression through the canonical timeline seam", () => {
-    const snapshot = buildReplayFixtureTimelineSnapshot("weirdNumberSummary", 4);
+    const snapshot = buildReplayFixtureTimelineSnapshot(
+      "weirdNumberSummary",
+      4,
+    );
 
     expect(snapshot.runtime.session.dispatched_count).toBe(1);
     expect(snapshot.runtime.session.completed_count).toBe(0);
@@ -98,4 +109,3 @@ describe("replay fixture helpers", () => {
     ]);
   });
 });
-

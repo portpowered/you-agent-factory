@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDashboardPlaceLabel, getDashboardPlaceLabelParts } from "./place-labels";
+import {
+  formatDashboardPlaceLabel,
+  getDashboardPlaceLabelParts,
+} from "./place-labels";
 
 describe("formatDashboardPlaceLabel", () => {
   it("renders stateful place labels as work-type and state pairs", () => {
@@ -49,4 +52,3 @@ describe("getDashboardPlaceLabelParts", () => {
     });
   });
 });
-

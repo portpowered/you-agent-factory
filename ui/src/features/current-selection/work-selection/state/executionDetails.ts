@@ -22,7 +22,10 @@ export interface SelectedWorkItemExecutionDetails {
 export interface SelectWorkItemExecutionDetailsInput {
   activeExecution?: DashboardActiveExecution;
   dispatchID?: string;
-  inferenceAttemptsByDispatchID?: Record<string, Record<string, DashboardInferenceAttempt>>;
+  inferenceAttemptsByDispatchID?: Record<
+    string,
+    Record<string, DashboardInferenceAttempt>
+  >;
   providerSessions?: DashboardProviderSessionAttempt[];
   selectedNode?: DashboardWorkstationNode;
   trace?: DashboardTrace;
@@ -32,7 +35,6 @@ export interface SelectWorkItemExecutionDetailsInput {
     DashboardRuntimeWorkstationRequest
   >;
 }
-
 
 export function selectWorkItemExecutionDetails({
   activeExecution,
@@ -104,7 +106,9 @@ function selectWorkstationRequest(
   matchingTraceDispatch: DashboardTraceDispatch | undefined,
 ): DashboardRuntimeWorkstationRequest | undefined {
   const requestDispatchID =
-    dispatchID ?? matchingAttempt?.dispatch_id ?? matchingTraceDispatch?.dispatch_id;
+    dispatchID ??
+    matchingAttempt?.dispatch_id ??
+    matchingTraceDispatch?.dispatch_id;
   if (!requestDispatchID) {
     return undefined;
   }
@@ -112,18 +116,24 @@ function selectWorkstationRequest(
 }
 
 function selectInferenceAttempts(
-  attemptsByDispatchID: Record<string, Record<string, DashboardInferenceAttempt>> | undefined,
+  attemptsByDispatchID:
+    | Record<string, Record<string, DashboardInferenceAttempt>>
+    | undefined,
   dispatchID: string | undefined,
 ): DashboardInferenceAttempt[] {
   if (!dispatchID) {
     return [];
   }
-  return Object.values(attemptsByDispatchID?.[dispatchID] ?? {}).sort((left, right) => {
-    if (left.attempt !== right.attempt) {
-      return left.attempt - right.attempt;
-    }
-    return left.inference_request_id.localeCompare(right.inference_request_id);
-  });
+  return Object.values(attemptsByDispatchID?.[dispatchID] ?? {}).sort(
+    (left, right) => {
+      if (left.attempt !== right.attempt) {
+        return left.attempt - right.attempt;
+      }
+      return left.inference_request_id.localeCompare(
+        right.inference_request_id,
+      );
+    },
+  );
 }
 
 function selectMatchingProviderAttempt(
@@ -137,8 +147,11 @@ function selectMatchingProviderAttempt(
   const dispatchAttempts =
     dispatchID === undefined
       ? []
-      : matchingWorkAttempts.filter((attempt) => attempt.dispatch_id === dispatchID);
-  const candidates = dispatchAttempts.length > 0 ? dispatchAttempts : matchingWorkAttempts;
+      : matchingWorkAttempts.filter(
+          (attempt) => attempt.dispatch_id === dispatchID,
+        );
+  const candidates =
+    dispatchAttempts.length > 0 ? dispatchAttempts : matchingWorkAttempts;
   return candidates[candidates.length - 1];
 }
 
@@ -152,7 +165,9 @@ function selectMatchingTraceDispatch(
     dispatchID === undefined
       ? []
       : dispatches.filter((dispatch) => dispatch.dispatch_id === dispatchID);
-  const workMatches = dispatches.filter((dispatch) => dispatch.work_ids?.includes(workID));
+  const workMatches = dispatches.filter((dispatch) =>
+    dispatch.work_ids?.includes(workID),
+  );
   const candidates = dispatchMatches.length > 0 ? dispatchMatches : workMatches;
   return candidates[candidates.length - 1];
 }
@@ -174,5 +189,7 @@ function selectTraceIDs(
 }
 
 function uniqueSorted(values: string[]): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
+  return [
+    ...new Set(values.map((value) => value.trim()).filter(Boolean)),
+  ].sort();
 }

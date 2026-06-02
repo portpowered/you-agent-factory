@@ -11,14 +11,24 @@ describe("Button", () => {
       </>,
     );
 
-    const primaryButton = screen.getByRole("button", { name: "Primary action" });
+    const primaryButton = screen.getByRole("button", {
+      name: "Primary action",
+    });
     const destructiveButton = screen.getByRole("button", { name: "Delete" });
 
-    expect(primaryButton.className.includes("hover:bg-af-accent-hover")).toBe(true);
-    expect(primaryButton.className.includes("hover:border-af-accent-hover")).toBe(true);
+    expect(primaryButton.className.includes("hover:bg-af-accent-hover")).toBe(
+      true,
+    );
+    expect(
+      primaryButton.className.includes("hover:border-af-accent-hover"),
+    ).toBe(true);
     expect(primaryButton.className.includes("brightness-")).toBe(false);
-    expect(destructiveButton.className.includes("hover:bg-af-danger-hover")).toBe(true);
-    expect(destructiveButton.className.includes("hover:border-af-danger-hover")).toBe(true);
+    expect(
+      destructiveButton.className.includes("hover:bg-af-danger-hover"),
+    ).toBe(true);
+    expect(
+      destructiveButton.className.includes("hover:border-af-danger-hover"),
+    ).toBe(true);
     expect(destructiveButton.className.includes("brightness-")).toBe(false);
   });
 

@@ -38,28 +38,40 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
             },
           ],
         }),
-        event("dispatch-request", 2, FACTORY_EVENT_TYPES.dispatchRequest, {
-          inputs: [{ workId: "work-1" }],
-          transitionId: "review",
-        }, {
-          dispatchId: "dispatch-1",
-        }),
-        event("dispatch-response", 3, FACTORY_EVENT_TYPES.dispatchResponse, {
-          durationMillis: 100,
-          outcome: "ACCEPTED",
-          outputWork: [
-            {
-              name: "Story One",
-              state: "done",
-              traceId: "trace-1",
-              workId: "work-1",
-              workTypeName: "story",
-            },
-          ],
-          transitionId: "review",
-        }, {
-          dispatchId: "dispatch-1",
-        }),
+        event(
+          "dispatch-request",
+          2,
+          FACTORY_EVENT_TYPES.dispatchRequest,
+          {
+            inputs: [{ workId: "work-1" }],
+            transitionId: "review",
+          },
+          {
+            dispatchId: "dispatch-1",
+          },
+        ),
+        event(
+          "dispatch-response",
+          3,
+          FACTORY_EVENT_TYPES.dispatchResponse,
+          {
+            durationMillis: 100,
+            outcome: "ACCEPTED",
+            outputWork: [
+              {
+                name: "Story One",
+                state: "done",
+                traceId: "trace-1",
+                workId: "work-1",
+                workTypeName: "story",
+              },
+            ],
+            transitionId: "review",
+          },
+          {
+            dispatchId: "dispatch-1",
+          },
+        ),
         event("work-request-2", 4, FACTORY_EVENT_TYPES.workRequest, {
           type: "FACTORY_REQUEST_BATCH",
           works: [
@@ -71,30 +83,42 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
             },
           ],
         }),
-        event("dispatch-request-2", 5, FACTORY_EVENT_TYPES.dispatchRequest, {
-          inputs: [{ workId: "work-2" }],
-          transitionId: "review",
-        }, {
-          dispatchId: "dispatch-2",
-        }),
-        event("dispatch-response-2", 6, FACTORY_EVENT_TYPES.dispatchResponse, {
-          durationMillis: 100,
-          failureMessage: "Rejected",
-          failureReason: "review failed",
-          outcome: "FAILED",
-          outputWork: [
-            {
-              name: "Story Two",
-              state: "failed",
-              traceId: "trace-2",
-              workId: "work-2",
-              workTypeName: "story",
-            },
-          ],
-          transitionId: "review",
-        }, {
-          dispatchId: "dispatch-2",
-        }),
+        event(
+          "dispatch-request-2",
+          5,
+          FACTORY_EVENT_TYPES.dispatchRequest,
+          {
+            inputs: [{ workId: "work-2" }],
+            transitionId: "review",
+          },
+          {
+            dispatchId: "dispatch-2",
+          },
+        ),
+        event(
+          "dispatch-response-2",
+          6,
+          FACTORY_EVENT_TYPES.dispatchResponse,
+          {
+            durationMillis: 100,
+            failureMessage: "Rejected",
+            failureReason: "review failed",
+            outcome: "FAILED",
+            outputWork: [
+              {
+                name: "Story Two",
+                state: "failed",
+                traceId: "trace-2",
+                workId: "work-2",
+                workTypeName: "story",
+              },
+            ],
+            transitionId: "review",
+          },
+          {
+            dispatchId: "dispatch-2",
+          },
+        ),
       ],
       6,
     );

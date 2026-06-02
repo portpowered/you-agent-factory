@@ -8,16 +8,20 @@ import { PORT_OS_FACTORY_PNG_SCHEMA_VERSION } from "../../import/lib/factory-png
 import { useCurrentActivityImportController } from "./current-activity-import-controller";
 
 vi.mock("../../../api/session-factory", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/session-factory")>(
-    "../../../api/session-factory",
-  );
+  const actual = await vi.importActual<
+    typeof import("../../../api/session-factory")
+  >("../../../api/session-factory");
   return {
     ...actual,
-    activateImportedFactoryForSession: vi.fn(actual.activateImportedFactoryForSession),
+    activateImportedFactoryForSession: vi.fn(
+      actual.activateImportedFactoryForSession,
+    ),
   };
 });
 
-const mockedActivateImportedFactoryForSession = vi.mocked(activateImportedFactoryForSession);
+const mockedActivateImportedFactoryForSession = vi.mocked(
+  activateImportedFactoryForSession,
+);
 
 const canonicalFactory = {
   id: "agent-factory",
@@ -62,7 +66,11 @@ describe("useCurrentActivityImportController", () => {
   });
 });
 
-function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => ReactNode {
+function createQueryClientWrapper(): ({
+  children,
+}: {
+  children: ReactNode;
+}) => ReactNode {
   const queryClient = new QueryClient({
     defaultOptions: {
       mutations: {
@@ -75,7 +83,13 @@ function createQueryClientWrapper(): ({ children }: { children: ReactNode }) => 
     },
   });
 
-  return function QueryClientWrapper({ children }: { children: ReactNode }): ReactNode {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  return function QueryClientWrapper({
+    children,
+  }: {
+    children: ReactNode;
+  }): ReactNode {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
   };
 }

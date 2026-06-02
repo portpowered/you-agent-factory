@@ -28,7 +28,9 @@ describe("workflow topology async cache", () => {
     const cache = createWorkflowTopologyAsyncCache<{ value: string }>();
     const deferred = createDeferred<{ value: string }>();
     const loadLayout = vi.fn(() => deferred.promise);
-    const mapResolvedLayout = vi.fn((layout: { value: string }) => layout.value);
+    const mapResolvedLayout = vi.fn(
+      (layout: { value: string }) => layout.value,
+    );
 
     const first = renderHook(() =>
       useWorkflowTopologyAsyncCache({
@@ -117,11 +119,10 @@ describe("workflow topology async cache", () => {
     const cache = createWorkflowTopologyAsyncCache<{ value: string }>();
     const firstDeferred = createDeferred<{ value: string }>();
     const secondDeferred = createDeferred<{ value: string }>();
-    const loadLayout = vi.fn(
-      ({ topologyKey }: { topologyKey: string }) =>
-        topologyKey === "workflow:a"
-          ? firstDeferred.promise
-          : secondDeferred.promise,
+    const loadLayout = vi.fn(({ topologyKey }: { topologyKey: string }) =>
+      topologyKey === "workflow:a"
+        ? firstDeferred.promise
+        : secondDeferred.promise,
     );
 
     const { result, rerender } = renderHook(

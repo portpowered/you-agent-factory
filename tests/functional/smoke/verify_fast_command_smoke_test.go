@@ -75,6 +75,7 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
 		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
 		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
@@ -93,7 +94,9 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"==> build contracts and static verification [make verify-build-contracts]",
 		"stub:verify-build-contracts",
 		"==> required CI-equivalent test lanes [make verify-tests]",
-		"Running required CI-equivalent test lanes: UI coverage + browser integration + backend verification",
+		"Running required CI-equivalent test lanes: release surface smoke + UI coverage + browser integration + backend verification",
+		"==> Release surface smoke lane [make release-surface-smoke]",
+		"stub:release-surface-smoke",
 		"==> UI Coverage lane [make test-ui-coverage]",
 		"stub:test-ui-coverage",
 		"==> UI Browser Integration lane [make ui-integration-test]",
@@ -104,6 +107,7 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 
 	for _, expected := range []string{
 		"stub:verify-build-contracts",
+		"stub:release-surface-smoke",
 		"stub:test-ui-coverage",
 		"stub:ui-integration-test",
 		"stub:test-backend-verification",
@@ -221,6 +225,7 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
 		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
 		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
@@ -237,6 +242,8 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"==> build contracts and static verification [make verify-build-contracts]",
 		"stub:verify-build-contracts",
 		"==> required CI-equivalent test lanes [make verify-tests]",
+		"==> Release surface smoke lane [make release-surface-smoke]",
+		"stub:release-surface-smoke",
 		"==> UI Coverage lane [make test-ui-coverage]",
 		"stub:test-ui-coverage",
 		"==> UI Browser Integration lane [make ui-integration-test]",
@@ -247,6 +254,7 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 
 	for _, expected := range []string{
 		"stub:verify-build-contracts",
+		"stub:release-surface-smoke",
 		"stub:test-ui-coverage",
 		"stub:ui-integration-test",
 		"stub:test-backend-verification",

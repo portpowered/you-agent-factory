@@ -1,6 +1,4 @@
-import type {
-  DashboardSnapshot,
-} from "../../../api/dashboard/types";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 
 export type ThroughputRangeID = "5m" | "15m" | "session";
@@ -114,7 +112,10 @@ const _TREND_HEIGHT = 120;
 const TREND_PADDING = 14;
 const MAX_RETAINED_SAMPLE_AGE_MILLIS = 60 * 60 * 1000;
 
-export const WORK_CHART_SERIES_DEFINITIONS: readonly Omit<WorkChartSeries, "label" | "points">[] = [
+export const WORK_CHART_SERIES_DEFINITIONS: readonly Omit<
+  WorkChartSeries,
+  "label" | "points"
+>[] = [
   { key: "queued", unit: "count" },
   { key: "inFlight", unit: "count" },
   { key: "completed", unit: "count" },
@@ -167,7 +168,8 @@ export function recordThroughputSample(
   };
   const lastSample = samples[samples.length - 1];
   const retainedSamples = samples.filter(
-    (sample) => observedAt - sample.observedAt <= MAX_RETAINED_SAMPLE_AGE_MILLIS,
+    (sample) =>
+      observedAt - sample.observedAt <= MAX_RETAINED_SAMPLE_AGE_MILLIS,
   );
 
   if (
@@ -178,8 +180,14 @@ export function recordThroughputSample(
     lastSample.inFlightCount === nextSample.inFlightCount &&
     lastSample.queuedCount === nextSample.queuedCount &&
     lastSample.tick === nextSample.tick &&
-    areStringRecordsEqual(lastSample.failedByWorkType, nextSample.failedByWorkType) &&
-    areStringArraysEqual(lastSample.failedWorkLabels, nextSample.failedWorkLabels)
+    areStringRecordsEqual(
+      lastSample.failedByWorkType,
+      nextSample.failedByWorkType,
+    ) &&
+    areStringArraysEqual(
+      lastSample.failedWorkLabels,
+      nextSample.failedWorkLabels,
+    )
   ) {
     return retainedSamples.length === 0 ? [nextSample] : retainedSamples;
   }
@@ -194,7 +202,9 @@ export function buildWorkChartModel(
   locale?: string | null,
 ): WorkChartModel {
   const messages = getWorkOutcomeMessages(locale).chart;
-  const range = THROUGHPUT_RANGE_OPTIONS.find((option) => option.id === rangeID);
+  const range = THROUGHPUT_RANGE_OPTIONS.find(
+    (option) => option.id === rangeID,
+  );
   const visibleSamples = selectVisibleSamples(samples, rangeID, now);
   const chartSamples = visibleSamples
     .map((sample, index) => ({ sample, index }))
@@ -222,10 +232,15 @@ export function buildWorkChartModel(
     label: messages.seriesLabels[definition.key],
     points: orderedPoints.map((point, index) => {
       const value = WORK_CHART_SERIES_VALUE_ACCESSORS[definition.key](
-        orderedSamples[index] ?? (chartSamples[0]?.sample ?? EMPTY_THROUGHPUT_SAMPLE),
+        orderedSamples[index] ??
+          chartSamples[0]?.sample ??
+          EMPTY_THROUGHPUT_SAMPLE,
       );
       return {
-        label: messages.seriesPointLabel(messages.seriesLabels[definition.key], value),
+        label: messages.seriesPointLabel(
+          messages.seriesLabels[definition.key],
+          value,
+        ),
         observedAt: point.observedAt,
         order: point.order,
         value,
@@ -241,8 +256,14 @@ export function buildWorkChartModel(
   };
   const delta: Record<WorkChartSeriesKey, number> = {
     queued: Math.max(0, latestValues.queued - (firstSample?.queuedCount ?? 0)),
-    inFlight: Math.max(0, latestValues.inFlight - (firstSample?.inFlightCount ?? 0)),
-    completed: Math.max(0, latestValues.completed - (firstSample?.completedCount ?? 0)),
+    inFlight: Math.max(
+      0,
+      latestValues.inFlight - (firstSample?.inFlightCount ?? 0),
+    ),
+    completed: Math.max(
+      0,
+      latestValues.completed - (firstSample?.completedCount ?? 0),
+    ),
     failed: Math.max(0, latestValues.failed - (firstSample?.failedCount ?? 0)),
   };
 
@@ -268,8 +289,11 @@ function selectVisibleSamples(
   rangeID: ThroughputRangeID,
   now: number,
 ): ThroughputSample[] {
-  const range = THROUGHPUT_RANGE_OPTIONS.find((option) => option.id === rangeID);
-  const rangeStart = range?.durationMillis === null ? 0 : now - (range?.durationMillis ?? 0);
+  const range = THROUGHPUT_RANGE_OPTIONS.find(
+    (option) => option.id === rangeID,
+  );
+  const rangeStart =
+    range?.durationMillis === null ? 0 : now - (range?.durationMillis ?? 0);
   const visibleSamples =
     range?.durationMillis === null
       ? samples
@@ -283,7 +307,8 @@ function _buildTrendPoints<Value>(
   selectValue: (sample: ThroughputSample, index: number) => Value,
 ): { value: Value; x: number }[] {
   const minObservedAt = samples[0]?.observedAt ?? 0;
-  const maxObservedAt = samples[samples.length - 1]?.observedAt ?? minObservedAt;
+  const maxObservedAt =
+    samples[samples.length - 1]?.observedAt ?? minObservedAt;
   const timeSpan = Math.max(maxObservedAt - minObservedAt, 1);
 
   return samples.map((sample, index) => ({
@@ -347,14 +372,18 @@ function countQueuedWork(snapshot: DashboardSnapshot): number {
   }
 
   return [...initialPlaceIDs].reduce(
-    (total, placeID) => total + (snapshot.runtime.place_token_counts?.[placeID] ?? 0),
+    (total, placeID) =>
+      total + (snapshot.runtime.place_token_counts?.[placeID] ?? 0),
     0,
   );
 }
 
 function _buildPath(points: { x: number; y: number }[]): string {
   return points
-    .map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`)
+    .map(
+      (point, index) =>
+        `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`,
+    )
     .join(" ");
 }
 
@@ -381,5 +410,8 @@ function areStringRecordsEqual(
 }
 
 function areStringArraysEqual(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((value, index) => right[index] === value);
+  return (
+    left.length === right.length &&
+    left.every((value, index) => right[index] === value)
+  );
 }

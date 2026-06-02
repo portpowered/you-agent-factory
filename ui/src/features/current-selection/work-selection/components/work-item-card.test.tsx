@@ -1,16 +1,13 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
+import { dashboardWorkstationRequestFixtures } from "../../../../components/dashboard/fixtures";
 import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../components/ui/formatters";
-import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
-import { dashboardWorkstationRequestFixtures } from "../../../../components/dashboard/fixtures";
 import { providerSessionSelectionKey } from "../../../provider-session-detail/lib/provider-session-ref";
-import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
-import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import {
   DETAIL_CARD_NOW,
@@ -18,6 +15,9 @@ import {
   inferenceAttempt,
   workstationRequest,
 } from "../../base/components/detail-card-test-helpers";
+import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
+import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
 
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {
@@ -1145,7 +1145,9 @@ describe("WorkItemDetailCard relationship graph", () => {
       within(selectedRelationshipNode).getByText("Current selection"),
     ).toBeTruthy();
     expect(selectedRelationshipNode.getAttribute("aria-current")).toBe("true");
-    expect(within(selectedRelationshipNode).getByText("in_progress")).toBeTruthy();
+    expect(
+      within(selectedRelationshipNode).getByText("in_progress"),
+    ).toBeTruthy();
     expect(within(selectedRelationshipNode).getByText("story")).toBeTruthy();
     expect(
       within(selectedRelationshipNode).getByText("trace-active-story"),
@@ -1184,7 +1186,9 @@ describe("WorkItemDetailCard relationship graph", () => {
         }),
       ).getByText("Parent Story"),
     ).toBeTruthy();
-    expect(within(relationshipGraph).getByText("trace-parent-story")).toBeTruthy();
+    expect(
+      within(relationshipGraph).getByText("trace-parent-story"),
+    ).toBeTruthy();
     expect(
       within(relationshipGraph).getByText("Depends on (ready)"),
     ).toBeTruthy();
@@ -1247,8 +1251,9 @@ describe("WorkItemDetailCard relationship graph", () => {
       name: "Open trace",
     });
 
-    expect(within(focusedSummary).getByText("trace-active-story (selected)"))
-      .toBeTruthy();
+    expect(
+      within(focusedSummary).getByText("trace-active-story (selected)"),
+    ).toBeTruthy();
     expect(traceAction.getAttribute("href")).toBe("#trace");
 
     fireEvent.click(traceAction);
@@ -1569,8 +1574,9 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(alert.textContent).toContain(
       "Work relationships could not be loaded for this work item.",
     );
-    expect(within(relationshipSection).getByText(/selected timeline snapshot/i))
-      .toBeTruthy();
+    expect(
+      within(relationshipSection).getByText(/selected timeline snapshot/i),
+    ).toBeTruthy();
     expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
   });
 });

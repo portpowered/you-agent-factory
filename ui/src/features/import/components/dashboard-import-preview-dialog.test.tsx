@@ -1,14 +1,20 @@
-import { useState } from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { axe } from "jest-axe";
+import { useState } from "react";
 
 import { SessionFactoryAPIError } from "../../../api/session-factory";
+import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 import {
   DashboardImportPreviewDialog,
-  FactoryImportPreviewDialog,
   type DashboardImportPreviewDialogProps,
+  FactoryImportPreviewDialog,
 } from "../public";
-import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 
 function createReadyImportPreviewState(): DashboardImportPreviewDialogProps["importPreviewState"] {
   return {
@@ -66,9 +72,15 @@ describe("DashboardImportPreviewDialog", () => {
       />,
     );
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
 
-    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.cancelAction }));
+    fireEvent.click(
+      within(previewDialog).getByRole("button", {
+        name: messages.cancelAction,
+      }),
+    );
 
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
@@ -77,7 +89,9 @@ describe("DashboardImportPreviewDialog", () => {
     const { onCancel } = renderDialog();
     const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
 
     expect(previewDialog.textContent).toContain("Dropped Factory");
     expect(previewDialog.textContent).toContain("factory-import.png");
@@ -92,12 +106,14 @@ describe("DashboardImportPreviewDialog", () => {
         within(previewDialog)
           .getByText(messages.embeddedFactoryLabel)
           .closest("div") as HTMLElement,
-      )
-        .getByText("Dropped Factory")
-        .className,
+      ).getByText("Dropped Factory").className,
     ).toContain("text-af-text");
 
-    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.cancelAction }));
+    fireEvent.click(
+      within(previewDialog).getByRole("button", {
+        name: messages.cancelAction,
+      }),
+    );
 
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
@@ -125,7 +141,9 @@ describe("DashboardImportPreviewDialog", () => {
     const { baseElement } = render(
       <DashboardImportPreviewDialog
         activationState={{
-          error: new SessionFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
+          error: new SessionFactoryAPIError("Network unreachable", {
+            code: "NETWORK_ERROR",
+          }),
           status: "error",
         }}
         currentSessionFactoryName={defaultCurrentSessionFactoryName}
@@ -135,7 +153,9 @@ describe("DashboardImportPreviewDialog", () => {
       />,
     );
     const messages = getImportPreviewDialogMessages("en");
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
 
     const alert = within(previewDialog).getByRole("alert");
     expect(alert).toBeTruthy();
@@ -153,7 +173,9 @@ describe("DashboardImportPreviewDialog", () => {
     });
     const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
     const closeButton = within(previewDialog).getByRole("button", {
       name: messages.closeLabel,
     });
@@ -176,15 +198,17 @@ describe("DashboardImportPreviewDialog", () => {
 
   it("clears activation error and closes the preview when cancel delegates through the dashboard seam", async () => {
     function ImportPreviewCancelHarness() {
-      const [activationState, setActivationState] =
-        useState<DashboardImportPreviewDialogProps["activationState"]>({
-          error: new SessionFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
-          status: "error",
-        });
-      const [importPreviewState, setImportPreviewState] =
-        useState<DashboardImportPreviewDialogProps["importPreviewState"]>(
-          createReadyImportPreviewState(),
-        );
+      const [activationState, setActivationState] = useState<
+        DashboardImportPreviewDialogProps["activationState"]
+      >({
+        error: new SessionFactoryAPIError("Network unreachable", {
+          code: "NETWORK_ERROR",
+        }),
+        status: "error",
+      });
+      const [importPreviewState, setImportPreviewState] = useState<
+        DashboardImportPreviewDialogProps["importPreviewState"]
+      >(createReadyImportPreviewState());
 
       return (
         <DashboardImportPreviewDialog
@@ -203,10 +227,16 @@ describe("DashboardImportPreviewDialog", () => {
     render(<ImportPreviewCancelHarness />);
     const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
     expect(previewDialog.textContent).toContain(messages.activationErrorTitle);
 
-    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.cancelAction }));
+    fireEvent.click(
+      within(previewDialog).getByRole("button", {
+        name: messages.cancelAction,
+      }),
+    );
 
     await waitFor(() => {
       expect(screen.queryByRole("dialog", { name: messages.title })).toBeNull();
@@ -217,7 +247,9 @@ describe("DashboardImportPreviewDialog", () => {
     renderDialog();
     const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
     const saveChoiceGroup = within(previewDialog).getByRole("radiogroup", {
       name: messages.saveChoiceLegend,
     });
@@ -238,7 +270,9 @@ describe("DashboardImportPreviewDialog", () => {
 
     fireEvent.click(replaceOption);
     expect((replaceOption as HTMLInputElement).checked).toBe(true);
-    expect(within(saveChoiceGroup).getByText(defaultCurrentSessionFactoryName)).toBeTruthy();
+    expect(
+      within(saveChoiceGroup).getByText(defaultCurrentSessionFactoryName),
+    ).toBeTruthy();
   });
 
   it("shows a suffixed create path factory name when the embedded name collides", async () => {
@@ -247,7 +281,9 @@ describe("DashboardImportPreviewDialog", () => {
     });
     const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
     const saveChoiceGroup = within(previewDialog).getByRole("radiogroup", {
       name: messages.saveChoiceLegend,
     });
@@ -264,18 +300,28 @@ describe("DashboardImportPreviewDialog", () => {
   it("shows activation failures and delegates confirmation with the ready preview payload", async () => {
     const { onConfirm } = renderDialog({
       activationState: {
-        error: new SessionFactoryAPIError("Network unreachable", { code: "NETWORK_ERROR" }),
+        error: new SessionFactoryAPIError("Network unreachable", {
+          code: "NETWORK_ERROR",
+        }),
         status: "error",
       },
     });
     const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
 
     expect(previewDialog.textContent).toContain(messages.activationErrorTitle);
-    expect(previewDialog.textContent).toContain(messages.errorByCode.NETWORK_ERROR);
+    expect(previewDialog.textContent).toContain(
+      messages.errorByCode.NETWORK_ERROR,
+    );
 
-    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
+    fireEvent.click(
+      within(previewDialog).getByRole("button", {
+        name: messages.activateAction,
+      }),
+    );
 
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledWith({
@@ -320,33 +366,31 @@ describe("DashboardImportPreviewDialog", () => {
       "Activation failed in an unexpected way.",
       "Activation failed in an unexpected way.",
     ],
-  ] as const)(
-    "renders the mapped activation copy for %s errors",
-    async (code, message, expectedCopy) => {
-      renderDialog({
-        activationState: {
-          error: new SessionFactoryAPIError(message, { code }),
-          status: "error",
-        },
-      });
-      const messages = getImportPreviewDialogMessages("en");
+  ] as const)("renders the mapped activation copy for %s errors", async (code, message, expectedCopy) => {
+    renderDialog({
+      activationState: {
+        error: new SessionFactoryAPIError(message, { code }),
+        status: "error",
+      },
+    });
+    const messages = getImportPreviewDialogMessages("en");
 
-      const previewDialog = await screen.findByRole("dialog", { name: messages.title });
-      const alert = within(previewDialog).getByRole("alert");
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
+    const alert = within(previewDialog).getByRole("alert");
 
-      expect(alert.textContent).toContain(messages.activationErrorTitle);
-      expect(alert.textContent).toContain(expectedCopy);
-    },
-  );
+    expect(alert.textContent).toContain(messages.activationErrorTitle);
+    expect(alert.textContent).toContain(expectedCopy);
+  });
 
   it("dismisses the dashboard-owned preview after a successful activation", async () => {
     const activateImport = vi.fn().mockResolvedValue(undefined);
 
     function ImportPreviewSuccessHarness() {
-      const [importPreviewState, setImportPreviewState] =
-        useState<DashboardImportPreviewDialogProps["importPreviewState"]>(
-          createReadyImportPreviewState(),
-        );
+      const [importPreviewState, setImportPreviewState] = useState<
+        DashboardImportPreviewDialogProps["importPreviewState"]
+      >(createReadyImportPreviewState());
 
       return (
         <DashboardImportPreviewDialog
@@ -367,8 +411,14 @@ describe("DashboardImportPreviewDialog", () => {
     render(<ImportPreviewSuccessHarness />);
     const messages = getImportPreviewDialogMessages("en");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
-    fireEvent.click(within(previewDialog).getByRole("button", { name: messages.activateAction }));
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
+    fireEvent.click(
+      within(previewDialog).getByRole("button", {
+        name: messages.activateAction,
+      }),
+    );
 
     await waitFor(() => {
       expect(activateImport).toHaveBeenCalledWith(
@@ -389,15 +439,27 @@ describe("DashboardImportPreviewDialog", () => {
     const { onCancel } = renderDialog({ locale: "zh-CN" });
     const messages = getImportPreviewDialogMessages("zh-CN");
 
-    const previewDialog = await screen.findByRole("dialog", { name: messages.title });
+    const previewDialog = await screen.findByRole("dialog", {
+      name: messages.title,
+    });
     const scope = within(previewDialog);
 
-    expect(scope.getByRole("img", { name: messages.previewImageAlt("Dropped Factory") })).toBeTruthy();
+    expect(
+      scope.getByRole("img", {
+        name: messages.previewImageAlt("Dropped Factory"),
+      }),
+    ).toBeTruthy();
     expect(scope.getByText("factory-import.png")).toBeTruthy();
     expect(scope.getByText(messages.hint)).toBeTruthy();
-    expect(scope.getByRole("button", { name: messages.cancelAction })).toBeTruthy();
-    expect(scope.getByRole("button", { name: messages.activateAction })).toBeTruthy();
-    expect(scope.getByRole("button", { name: messages.closeLabel })).toBeTruthy();
+    expect(
+      scope.getByRole("button", { name: messages.cancelAction }),
+    ).toBeTruthy();
+    expect(
+      scope.getByRole("button", { name: messages.activateAction }),
+    ).toBeTruthy();
+    expect(
+      scope.getByRole("button", { name: messages.closeLabel }),
+    ).toBeTruthy();
 
     fireEvent.click(scope.getByRole("button", { name: messages.cancelAction }));
 

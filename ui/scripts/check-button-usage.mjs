@@ -1,8 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import ts from "typescript";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 import { approvedButtonUsageAllowlist } from "./button-usage-allowlist.mjs";
 
@@ -13,7 +13,13 @@ const sourceDir = process.env.AGENT_FACTORY_UI_SRC_DIR
   : path.join(defaultUiDir, "src");
 const uiDir = path.dirname(sourceDir);
 const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
-const skippedFileSuffixes = [".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".stories.tsx"];
+const skippedFileSuffixes = [
+  ".test.js",
+  ".test.jsx",
+  ".test.ts",
+  ".test.tsx",
+  ".stories.tsx",
+];
 const skippedDirectoryNames = new Set(["generated"]);
 const skippedPathFragments = [
   `${path.sep}api${path.sep}generated${path.sep}`,
@@ -129,7 +135,9 @@ function collectButtonUsage(sourceText, filePath) {
       ts.isIdentifier(node.expression) &&
       node.expression.text === "buttonVariants"
     ) {
-      buttonVariantsCalls.push(indexToPosition(sourceFile, node.expression.getStart(sourceFile)));
+      buttonVariantsCalls.push(
+        indexToPosition(sourceFile, node.expression.getStart(sourceFile)),
+      );
     }
 
     ts.forEachChild(node, visit);
@@ -150,14 +158,19 @@ function buildAllowlistMap(allowlist = approvedButtonUsageAllowlist) {
 function formatPositions(positions) {
   return positions
     .map((position) => {
-      const resolvedPosition = "position" in position ? position.position : position;
+      const resolvedPosition =
+        "position" in position ? position.position : position;
       return `${resolvedPosition.line}:${resolvedPosition.column}`;
     })
     .join(", ");
 }
 
 function getAllowedRawButtonCount(allowlistEntry) {
-  return allowlistEntry?.rawButtonFingerprints?.length ?? allowlistEntry?.rawButtonCount ?? 0;
+  return (
+    allowlistEntry?.rawButtonFingerprints?.length ??
+    allowlistEntry?.rawButtonCount ??
+    0
+  );
 }
 
 function matchApprovedRawButtons(rawButtons, rawButtonFingerprints = []) {
@@ -231,31 +244,31 @@ export async function scanButtonUsage(
       rawButtonFingerprintMatch !== null &&
       (rawButtonFingerprintMatch.unexpectedRawButtons.length > 0 ||
         rawButtonFingerprintMatch.missingFingerprints.length > 0);
-    if (usage.rawButtons.length > allowedRawButtonCount || hasUnexpectedRawButtons) {
+    if (
+      usage.rawButtons.length > allowedRawButtonCount ||
+      hasUnexpectedRawButtons
+    ) {
       violations.push(
         getUsageViolation({
           actualCount: usage.rawButtons.length,
-          details:
-            rawButtonFingerprintMatch?.missingFingerprints.length
-              ? `missing approved raw-button fingerprints: ${rawButtonFingerprintMatch.missingFingerprints.join(" | ")}`
-              : rawButtonFingerprintMatch?.unexpectedRawButtons.length
-                ? `unexpected raw-button openings: ${rawButtonFingerprintMatch.unexpectedRawButtons
-                    .map((rawButton) => rawButton.openingElementText)
-                    .join(" | ")}`
-                : undefined,
+          details: rawButtonFingerprintMatch?.missingFingerprints.length
+            ? `missing approved raw-button fingerprints: ${rawButtonFingerprintMatch.missingFingerprints.join(" | ")}`
+            : rawButtonFingerprintMatch?.unexpectedRawButtons.length
+              ? `unexpected raw-button openings: ${rawButtonFingerprintMatch.unexpectedRawButtons
+                  .map((rawButton) => rawButton.openingElementText)
+                  .join(" | ")}`
+              : undefined,
           filePath: sourceFile,
           kind: "raw-button",
-          positions:
-            rawButtonFingerprintMatch?.unexpectedRawButtons.length
-              ? rawButtonFingerprintMatch.unexpectedRawButtons
-              : usage.rawButtons,
+          positions: rawButtonFingerprintMatch?.unexpectedRawButtons.length
+            ? rawButtonFingerprintMatch.unexpectedRawButtons
+            : usage.rawButtons,
           reason:
             allowlistEntry?.rawButtonReason ??
             "Ordinary production actions must use Button, compact dashboard actions must use DashboardActionButton, and semantic-button exceptions must move behind a dedicated wrapper or an allowlisted narrow exception path.",
-          recommendedFix:
-            allowlistEntry?.rawButtonReason
-              ? "Reduce the raw <button> count back to the approved narrow exception footprint or migrate the extra controls onto Button, DashboardActionButton, or a dedicated semantic wrapper."
-              : "Migrate this control onto Button, DashboardActionButton, or a dedicated semantic wrapper before keeping raw <button> ownership in production ui/src.",
+          recommendedFix: allowlistEntry?.rawButtonReason
+            ? "Reduce the raw <button> count back to the approved narrow exception footprint or migrate the extra controls onto Button, DashboardActionButton, or a dedicated semantic wrapper."
+            : "Migrate this control onto Button, DashboardActionButton, or a dedicated semantic wrapper before keeping raw <button> ownership in production ui/src.",
           relativeFilePath,
         }),
       );
@@ -272,10 +285,9 @@ export async function scanButtonUsage(
           reason:
             allowlistEntry?.buttonVariantsReason ??
             "Direct buttonVariants ownership is reserved for shared primitive owners only.",
-          recommendedFix:
-            allowlistEntry?.buttonVariantsReason
-              ? "Reduce direct buttonVariants ownership back to the approved shared-owner footprint or project the shared Button primitive with asChild."
-              : "Use the shared Button primitive instead of owning buttonVariants(...) directly in production ui/src.",
+          recommendedFix: allowlistEntry?.buttonVariantsReason
+            ? "Reduce direct buttonVariants ownership back to the approved shared-owner footprint or project the shared Button primitive with asChild."
+            : "Use the shared Button primitive instead of owning buttonVariants(...) directly in production ui/src.",
           relativeFilePath,
         }),
       );
@@ -348,11 +360,16 @@ function formatViolation(rootDirectory, violation) {
 async function main() {
   const report = await scanButtonUsage(sourceDir, getConfiguredAllowlist());
 
-  if (report.violations.length === 0 && report.staleAllowlistEntries.length === 0) {
+  if (
+    report.violations.length === 0 &&
+    report.staleAllowlistEntries.length === 0
+  ) {
     return;
   }
 
-  const violations = report.violations.map((violation) => formatViolation(uiDir, violation)).join("\n\n");
+  const violations = report.violations
+    .map((violation) => formatViolation(uiDir, violation))
+    .join("\n\n");
   const staleAllowlistEntries = report.staleAllowlistEntries
     .map((entry) => [entry.relativeFilePath, `  ${entry.reason}`].join("\n"))
     .join("\n\n");

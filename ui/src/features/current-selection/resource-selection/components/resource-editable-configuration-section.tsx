@@ -1,4 +1,3 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: resource editable fields, validation feedback, and runtime context stay colocated in one section.
 import { type ReactNode, useId, useState } from "react";
 
 import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
@@ -50,10 +49,7 @@ export function ResourceEditableConfigurationSection({
 
   return (
     <div className="grid gap-4 [&_h4]:m-0">
-      <section
-        aria-labelledby={headingId}
-        className="grid gap-2.5 [&_h4]:m-0"
-      >
+      <section aria-labelledby={headingId} className="grid gap-2.5 [&_h4]:m-0">
         <CurrentSelectionSectionHeader
           action={
             <ExpandablePanelTrigger
@@ -94,8 +90,7 @@ export function ResourceEditableConfigurationSection({
                 )}
                 role="alert"
               >
-                {messages.editableConfigurationErrorPrefix}{" "}
-                {state.errorMessage}
+                {messages.editableConfigurationErrorPrefix} {state.errorMessage}
               </p>
             ) : null}
             {state?.status === "empty" ? (
@@ -129,7 +124,6 @@ export function ResourceEditableConfigurationSection({
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: resource editable form keeps validation feedback and field wiring colocated.
 function ResourceEditableConfigurationReadyForm({
   messages,
   resourceName,
@@ -165,7 +159,10 @@ function ResourceEditableConfigurationReadyForm({
           {validationErrors.contract}
         </p>
       ) : null}
-      <ResourceEditableConfigurationDraftStatus messages={messages} state={state} />
+      <ResourceEditableConfigurationDraftStatus
+        messages={messages}
+        state={state}
+      />
       <ResourceEditableConfigurationField
         errorMessage={validationErrors.name}
         fieldId="editable-resource-name"
@@ -226,7 +223,9 @@ function ResourceEditableConfigurationReadyForm({
           input={
             <Select
               aria-describedby={
-                validationErrors.type ? "editable-resource-type-error" : undefined
+                validationErrors.type
+                  ? "editable-resource-type-error"
+                  : undefined
               }
               aria-invalid={validationErrors.type ? "true" : undefined}
               aria-label={messages.typeFieldLabel}
@@ -289,7 +288,9 @@ function ResourceTypeSpecificFields({
           input={
             <input
               aria-describedby={
-                validationErrors.model ? "editable-resource-model-error" : undefined
+                validationErrors.model
+                  ? "editable-resource-model-error"
+                  : undefined
               }
               aria-invalid={validationErrors.model ? "true" : undefined}
               className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"

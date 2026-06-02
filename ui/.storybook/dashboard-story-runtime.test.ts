@@ -22,11 +22,7 @@ import { withDashboardStoryRuntime } from "./dashboard-story-runtime";
 function SessionScopeProbe() {
   const { sessionID } = useDashboardSession();
 
-  return createElement(
-    "div",
-    { "data-testid": "story-session-id" },
-    sessionID,
-  );
+  return createElement("div", { "data-testid": "story-session-id" }, sessionID);
 }
 
 function renderStoryRuntime(
@@ -36,15 +32,15 @@ function renderStoryRuntime(
   const decoratedStory = withDashboardStoryRuntime(
     () => createElement(SessionScopeProbe),
     {
-    args: {},
-    globals: {},
-    hooks: {} as never,
-    id: storyId,
-    initialArgs: {},
-    name: storyId,
-    parameters,
-    title: "storybook/runtime",
-    viewMode: "story",
+      args: {},
+      globals: {},
+      hooks: {} as never,
+      id: storyId,
+      initialArgs: {},
+      name: storyId,
+      parameters,
+      title: "storybook/runtime",
+      viewMode: "story",
     },
   );
 

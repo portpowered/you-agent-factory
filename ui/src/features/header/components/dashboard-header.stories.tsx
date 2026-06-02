@@ -1,10 +1,10 @@
 import "../../../styles.css";
 
-import { DashboardHeader } from "./dashboard-header";
 import {
   historicalWorkOutcomeSnapshot,
   liveWorkOutcomeSnapshot,
 } from "../../../stories/dashboardStorySupport";
+import { DashboardHeader } from "./dashboard-header";
 
 export default {
   title: "you-agent-factory/Dashboard/Dashboard Header",

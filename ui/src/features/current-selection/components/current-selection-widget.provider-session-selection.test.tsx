@@ -6,13 +6,13 @@ import {
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { providerSessionSelectionKey } from "../../provider-session-detail/lib/provider-session-ref";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import type { DashboardSelection } from "../state/selection-types";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import {
   createCurrentSelectionWidgetQueryClient,
@@ -20,24 +20,33 @@ import {
   wrapCurrentSelectionWidgetView,
 } from "./current-selection-widget-test-utils";
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../workstation-selection/hooks/use-save-editable-workstation-configuration", () => ({
-  useSaveEditableWorkstationConfiguration: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/use-save-editable-workstation-configuration",
+  () => ({
+    useSaveEditableWorkstationConfiguration: vi.fn(),
+  }),
+);
 
-vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
+  () => ({
+    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+  }),
+);
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -498,4 +507,3 @@ describe("CurrentSelectionWidget provider-session selection", () => {
     ).toBeNull();
   });
 });
-

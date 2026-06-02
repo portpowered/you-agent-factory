@@ -9,7 +9,12 @@ import {
 
 describe("factory graph work state phase styling", () => {
   it.each([
-    ["INITIAL", "border-af-info-border bg-af-info-surface", "queue", "text-af-info"],
+    [
+      "INITIAL",
+      "border-af-info-border bg-af-info-surface",
+      "queue",
+      "text-af-info",
+    ],
     [
       "PROCESSING",
       "border-af-warning-border bg-af-warning-surface",
@@ -28,15 +33,12 @@ describe("factory graph work state phase styling", () => {
       "failed",
       "text-af-danger",
     ],
-  ] as const)(
-    "maps %s to phase surface and icon styling",
-    (type, surfaceClass, iconKind, iconClass) => {
-      expect(workStatePhaseSurfaceClassName(type)).toBe(surfaceClass);
-      expect(workStatePhaseSwatchClassName(type)).toBe(surfaceClass);
-      expect(workStatePhaseSemanticIconKind(type)).toBe(iconKind);
-      expect(workStatePhaseSemanticIconClassName(type)).toBe(iconClass);
-    },
-  );
+  ] as const)("maps %s to phase surface and icon styling", (type, surfaceClass, iconKind, iconClass) => {
+    expect(workStatePhaseSurfaceClassName(type)).toBe(surfaceClass);
+    expect(workStatePhaseSwatchClassName(type)).toBe(surfaceClass);
+    expect(workStatePhaseSemanticIconKind(type)).toBe(iconKind);
+    expect(workStatePhaseSemanticIconClassName(type)).toBe(iconClass);
+  });
 
   it("falls back to neutral styling when workStateType is missing", () => {
     expect(workStatePhaseSurfaceClassName(undefined)).toBe(

@@ -157,7 +157,11 @@ function installElementMeasurementShims() {
     globalThis.ResizeObserver = resizeObserver;
     globalThis.DOMMatrixReadOnly = domMatrixReadOnly;
     if (offsetParentDescriptor) {
-      Object.defineProperty(HTMLElement.prototype, "offsetParent", offsetParentDescriptor);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "offsetParent",
+        offsetParentDescriptor,
+      );
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, "offsetParent");
     }
@@ -169,27 +173,47 @@ function installElementMeasurementShims() {
       );
     }
     if (offsetWidthDescriptor) {
-      Object.defineProperty(HTMLElement.prototype, "offsetWidth", offsetWidthDescriptor);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "offsetWidth",
+        offsetWidthDescriptor,
+      );
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, "offsetWidth");
     }
     if (offsetHeightDescriptor) {
-      Object.defineProperty(HTMLElement.prototype, "offsetHeight", offsetHeightDescriptor);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "offsetHeight",
+        offsetHeightDescriptor,
+      );
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, "offsetHeight");
     }
     if (clientWidthDescriptor) {
-      Object.defineProperty(HTMLElement.prototype, "clientWidth", clientWidthDescriptor);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "clientWidth",
+        clientWidthDescriptor,
+      );
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, "clientWidth");
     }
     if (clientHeightDescriptor) {
-      Object.defineProperty(HTMLElement.prototype, "clientHeight", clientHeightDescriptor);
+      Object.defineProperty(
+        HTMLElement.prototype,
+        "clientHeight",
+        clientHeightDescriptor,
+      );
     } else {
       Reflect.deleteProperty(HTMLElement.prototype, "clientHeight");
     }
     if (svgGetBBoxDescriptor) {
-      Object.defineProperty(SVGElement.prototype, "getBBox", svgGetBBoxDescriptor);
+      Object.defineProperty(
+        SVGElement.prototype,
+        "getBBox",
+        svgGetBBoxDescriptor,
+      );
     } else {
       Reflect.deleteProperty(SVGElement.prototype, "getBBox");
     }

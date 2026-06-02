@@ -1,21 +1,21 @@
+import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import {
   DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../../components/ui/dashboard-typography";
-import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import { cn } from "../../../../lib/cn";
-import type {
-  SelectedWorkRelationshipEdge,
-  SelectedWorkRelationshipGraph,
-  SelectedWorkRelationshipNode,
-} from "../lib/selected-work-relationship-graph";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
-import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
 import {
   CURRENT_SELECTION_ALERT_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
   WORK_SELECTION_BUTTON_CLASS,
 } from "../../base/components/detail-card-shared";
+import type {
+  SelectedWorkRelationshipEdge,
+  SelectedWorkRelationshipGraph,
+  SelectedWorkRelationshipNode,
+} from "../lib/selected-work-relationship-graph";
+import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
 
 interface RelatedWorkItem {
   description: string;
@@ -360,7 +360,9 @@ function RelationshipNodeCard({
           onClick={() => onSelectWorkID(node.workID)}
           type="button"
         >
-          <span className="min-w-0 break-words text-left leading-5">{label}</span>
+          <span className="min-w-0 break-words text-left leading-5">
+            {label}
+          </span>
         </button>
       ) : (
         <code className="min-w-0 break-words text-sm leading-5 text-af-text">
@@ -417,7 +419,10 @@ function relationshipLegendItems(
 ) {
   return [
     {
-      glyph: relationshipDirectionGlyph(messages.relationshipParentLabel, messages),
+      glyph: relationshipDirectionGlyph(
+        messages.relationshipParentLabel,
+        messages,
+      ),
       label: messages.relationshipParentLegend,
       tone: "active" as const,
     },
@@ -438,7 +443,10 @@ function relationshipLegendItems(
       tone: "neutral" as const,
     },
     {
-      glyph: relationshipDirectionGlyph(messages.relationshipChildLabel, messages),
+      glyph: relationshipDirectionGlyph(
+        messages.relationshipChildLabel,
+        messages,
+      ),
       label: messages.relationshipChildLegend,
       tone: "active" as const,
     },

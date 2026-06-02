@@ -85,8 +85,7 @@ export function findDashboardStatePlace(
   const factory = factoryOverride ?? snapshot.factory;
 
   return (
-    topologyStatePlace(snapshot, placeId) ??
-    factoryStatePlace(factory, placeId)
+    topologyStatePlace(snapshot, placeId) ?? factoryStatePlace(factory, placeId)
   );
 }
 

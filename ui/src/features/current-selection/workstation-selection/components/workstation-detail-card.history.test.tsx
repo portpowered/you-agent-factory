@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { vi } from "vitest";
-import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import {
   buildDashboardWorkstationRequestFixture,
   dashboardWorkstationRequestFixtures,
 } from "../../../../components/dashboard/fixtures";
+import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { DETAIL_CARD_NOW } from "../../base/components/detail-card-test-helpers";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
@@ -126,7 +126,6 @@ describe("WorkstationDetailCard run history", () => {
       ),
     ).toBeTruthy();
   });
-
 });
 
 describe("WorkstationDetailCard request history", () => {
@@ -157,9 +156,9 @@ describe("WorkstationDetailCard request history", () => {
     );
 
     const summarySection = requireValue(
-      screen.getByRole("heading", { name: "Workstation summary" }).closest(
-        "section",
-      ),
+      screen
+        .getByRole("heading", { name: "Workstation summary" })
+        .closest("section"),
       "expected workstation summary section",
     );
     expect(
@@ -169,9 +168,9 @@ describe("WorkstationDetailCard request history", () => {
     expect(screen.queryByRole("heading", { name: "Run history" })).toBeNull();
 
     const requestHistorySection = requireValue(
-      screen.getByRole("heading", { name: "Request history" }).closest(
-        "section",
-      ),
+      screen
+        .getByRole("heading", { name: "Request history" })
+        .closest("section"),
       "expected request history section",
     );
     fireEvent.click(
@@ -221,9 +220,9 @@ describe("WorkstationDetailCard request history", () => {
     );
 
     const requestHistorySection = requireValue(
-      screen.getByRole("heading", { name: "Request history" }).closest(
-        "section",
-      ),
+      screen
+        .getByRole("heading", { name: "Request history" })
+        .closest("section"),
       "expected request history section",
     );
     fireEvent.click(
@@ -235,7 +234,6 @@ describe("WorkstationDetailCard request history", () => {
     );
     expect(failedRuntimePill.className).toContain("border-af-danger-border");
   });
-
 });
 
 describe("WorkstationDetailCard history state", () => {
@@ -243,16 +241,18 @@ describe("WorkstationDetailCard history state", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
     const implementNode = snapshot.topology.workstation_nodes_by_id.implement;
-    const reviewProviderSessions = snapshot.runtime.session.provider_sessions?.filter(
-      (attempt) =>
-        attempt.transition_id === reviewNode.transition_id ||
-        attempt.workstation_name === reviewNode.workstation_name,
-    );
-    const implementProviderSessions = snapshot.runtime.session.provider_sessions?.filter(
-      (attempt) =>
-        attempt.transition_id === implementNode.transition_id ||
-        attempt.workstation_name === implementNode.workstation_name,
-    );
+    const reviewProviderSessions =
+      snapshot.runtime.session.provider_sessions?.filter(
+        (attempt) =>
+          attempt.transition_id === reviewNode.transition_id ||
+          attempt.workstation_name === reviewNode.workstation_name,
+      );
+    const implementProviderSessions =
+      snapshot.runtime.session.provider_sessions?.filter(
+        (attempt) =>
+          attempt.transition_id === implementNode.transition_id ||
+          attempt.workstation_name === implementNode.workstation_name,
+      );
 
     const { rerender } = render(
       <WorkstationDetailCard

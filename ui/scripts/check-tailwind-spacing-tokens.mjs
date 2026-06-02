@@ -10,7 +10,13 @@ const sourceDir = process.env.AGENT_FACTORY_UI_SRC_DIR
   : path.join(defaultUiDir, "src");
 const uiDir = path.dirname(sourceDir);
 const sourceExtensions = new Set([".js", ".jsx", ".ts", ".tsx"]);
-const skippedFileSuffixes = [".test.js", ".test.jsx", ".test.ts", ".test.tsx", ".stories.tsx"];
+const skippedFileSuffixes = [
+  ".test.js",
+  ".test.jsx",
+  ".test.ts",
+  ".test.tsx",
+  ".stories.tsx",
+];
 const skippedDirectoryNames = new Set(["generated"]);
 const skippedPathFragments = [`${path.sep}api${path.sep}generated${path.sep}`];
 const intrinsicSizingExceptionMarker = "tailwind-exception: intrinsic-sizing";
@@ -83,12 +89,11 @@ const arbitrarySpacingPattern = new RegExp(
 const customBreakpointVariantPattern = /(?:^|:)(?:max|min)-\[[^\]]+\]:/;
 const customMediaVariantPattern = /(?:^|:)\[@media[^\]]+\]:/;
 const tokenPattern = /[^\s"'`]+/g;
-const arbitrarySizeUtilityPattern = /(?:^|:)-?(?:w|min-w|max-w|h|min-h|max-h)-\[[^\]]+\]$/;
+const arbitrarySizeUtilityPattern =
+  /(?:^|:)-?(?:w|min-w|max-w|h|min-h|max-h)-\[[^\]]+\]$/;
 
 function stripTokenPunctuation(rawToken) {
-  return rawToken
-    .replace(/^[{(<>,;]+/, "")
-    .replace(/[)}>.,;]+$/, "");
+  return rawToken.replace(/^[{(<>,;]+/, "").replace(/[)}>.,;]+$/, "");
 }
 
 function shouldSkipFile(filePath) {
@@ -144,8 +149,13 @@ function indexToPosition(sourceText, index) {
 }
 
 function hasIntrinsicSizingException(sourceLines, lineNumber) {
-  const candidateLines = sourceLines.slice(Math.max(0, lineNumber - 3), lineNumber);
-  return candidateLines.some((line) => line.includes(intrinsicSizingExceptionMarker));
+  const candidateLines = sourceLines.slice(
+    Math.max(0, lineNumber - 3),
+    lineNumber,
+  );
+  return candidateLines.some((line) =>
+    line.includes(intrinsicSizingExceptionMarker),
+  );
 }
 
 function findTailwindTokenViolations(sourceText) {
@@ -160,7 +170,10 @@ function findTailwindTokenViolations(sourceText) {
       continue;
     }
 
-    if (customBreakpointVariantPattern.test(token) || customMediaVariantPattern.test(token)) {
+    if (
+      customBreakpointVariantPattern.test(token) ||
+      customMediaVariantPattern.test(token)
+    ) {
       violations.push({
         kind: "custom-breakpoint",
         message:
@@ -178,7 +191,10 @@ function findTailwindTokenViolations(sourceText) {
 
     if (
       arbitrarySizeUtilityPattern.test(arbitrarySpacingMatch[1]) &&
-      hasIntrinsicSizingException(sourceLines, indexToPosition(sourceText, tokenIndex).line)
+      hasIntrinsicSizingException(
+        sourceLines,
+        indexToPosition(sourceText, tokenIndex).line,
+      )
     ) {
       continue;
     }

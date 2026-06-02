@@ -3,16 +3,16 @@ import { describe, expect, it } from "vitest";
 import type { DashboardWorkItemRef } from "../../api/dashboard/types";
 import {
   formatDurationFromISO,
-  formatLocalTimezoneContext,
-  getLocalDateTimeDisplay,
-  formatLocalDateTime,
   formatDurationMillis,
   formatDurationMillisVerbose,
+  formatList,
+  formatLocalDateTime,
+  formatLocalTimezoneContext,
   formatRelativeTimeFromISO,
   formatTimeOfDay,
   formatTraceOutcome,
-  formatList,
   formatWorkItemLabel,
+  getLocalDateTimeDisplay,
   getProviderSessionLogTarget,
 } from "./formatters";
 
@@ -164,10 +164,7 @@ describe("getLocalDateTimeDisplay", () => {
     expect(
       getLocalDateTimeDisplay(" 2026-04-10T18:16:00.000Z ", "Unavailable"),
     ).toEqual({
-      label: formatLocalDateTime(
-        "2026-04-10T18:16:00.000Z",
-        "Unavailable",
-      ),
+      label: formatLocalDateTime("2026-04-10T18:16:00.000Z", "Unavailable"),
       rawTimestamp: "2026-04-10T18:16:00.000Z",
     });
   });

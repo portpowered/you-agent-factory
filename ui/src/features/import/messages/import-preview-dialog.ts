@@ -1,6 +1,6 @@
 import {
-  sessionFactoryOperatorErrorMessages,
   type SessionFactoryAPIErrorCode,
+  sessionFactoryOperatorErrorMessages,
 } from "../../../api/session-factory";
 import {
   type LocalizedMessages,
@@ -39,7 +39,8 @@ export interface ImportPreviewDialogMessages {
   title: string;
 }
 
-export const IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN = "{{currentFactoryName}}";
+export const IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN =
+  "{{currentFactoryName}}";
 
 const importPreviewDialogMessagesByLocale = {
   en: {
@@ -96,8 +97,7 @@ const importPreviewDialogMessagesByLocale = {
         "現在のファクトリーランタイムはまだ稼働中です。保存または切り替える前にアイドル状態になるまで待ってください。",
       INVALID_FACTORY:
         "セッションファクトリー API がファクトリー定義を拒否しました。",
-      INVALID_FACTORY_NAME:
-        "このセッションでは無効なファクトリー名です。",
+      INVALID_FACTORY_NAME: "このセッションでは無効なファクトリー名です。",
       NETWORK_ERROR:
         "ダッシュボードが有効化 API に接続できませんでした。接続が復旧したら再試行してください。",
       STALE_FACTORY_VERSION:
@@ -130,8 +130,7 @@ const importPreviewDialogMessagesByLocale = {
         "같은 이름의 팩토리가 이미 있습니다. 이 PNG를 가져오기 전에 기존 팩토리의 이름을 바꾸거나 제거하세요.",
       FACTORY_NOT_IDLE:
         "현재 팩토리 런타임이 아직 활성 상태입니다. 저장하거나 전환하기 전에 유휴 상태가 될 때까지 기다리세요.",
-      INVALID_FACTORY:
-        "세션 팩토리 API가 팩토리 정의를 거부했습니다.",
+      INVALID_FACTORY: "세션 팩토리 API가 팩토리 정의를 거부했습니다.",
       INVALID_FACTORY_NAME: "이 세션에 유효하지 않은 팩토리 이름입니다.",
       NETWORK_ERROR:
         "대시보드가 활성화 API에 연결할 수 없습니다. 연결이 복구된 뒤 다시 시도하세요.",
@@ -168,15 +167,13 @@ const importPreviewDialogMessagesByLocale = {
       INVALID_FACTORY: "会话工厂 API 拒绝了该工厂定义。",
       INVALID_FACTORY_NAME: "该工厂名称对当前会话无效。",
       NETWORK_ERROR: "仪表板无法连接到启用 API。请在连接恢复后重试。",
-      STALE_FACTORY_VERSION:
-        "工厂定义已过期。请刷新仪表板后再保存或导入。",
+      STALE_FACTORY_VERSION: "工厂定义已过期。请刷新仪表板后再保存或导入。",
     },
     flowLabel: "变更流程",
     hint: "替换当前工厂会保留会话工厂名称并更新其定义。创建新的命名工厂会以单独名称保存并在本会话中启用。",
     previewImageAlt: (factoryName) => `${factoryName} 预览图`,
     replaceCurrentOption: "替换当前工厂",
-    replaceCurrentOptionDescription:
-      "覆盖此会话中当前的工厂，同时保留其名称。",
+    replaceCurrentOptionDescription: "覆盖此会话中当前的工厂，同时保留其名称。",
     saveChoiceLegend: "导入保存方式",
     title: "检查工厂导入",
   },

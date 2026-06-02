@@ -7,10 +7,10 @@ import {
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { downloadBlobAsFile } from "../lib/browser-download";
-import { ExportFactoryDialog } from "./export-factory-dialog";
 import type { WriteFactoryExportPngResult } from "../lib/factory-png-export";
 import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
+import { ExportFactoryDialog } from "./export-factory-dialog";
 
 vi.mock("../lib/browser-download", () => ({
   downloadBlobAsFile: vi.fn(),
@@ -464,9 +464,13 @@ describe("ExportFactoryDialog", () => {
     const messages = getExportDialogMessages("zh-CN");
     renderDialog({ initialFactoryName: "", locale: "zh-CN" });
 
-    fireEvent.click(screen.getByRole("button", { name: messages.exportAction }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.exportAction }),
+    );
 
-    expect(await screen.findByText(messages.nameRequiredValidation)).toBeTruthy();
+    expect(
+      await screen.findByText(messages.nameRequiredValidation),
+    ).toBeTruthy();
     expect(screen.getByText(messages.imageRequiredValidation)).toBeTruthy();
   });
 
@@ -488,7 +492,9 @@ describe("ExportFactoryDialog", () => {
         files: [new File(["binary"], "cover.png", { type: "image/png" })],
       },
     });
-    fireEvent.click(screen.getByRole("button", { name: messages.exportAction }));
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.exportAction }),
+    );
 
     await waitFor(() => {
       expect(downloadBlobAsFile).toHaveBeenCalledWith({

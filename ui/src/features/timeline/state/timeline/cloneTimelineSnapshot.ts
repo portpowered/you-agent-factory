@@ -37,10 +37,14 @@ export function uniqueSortedWorkRefs(
     itemsByID.set(item.work_id, item);
   }
 
-  return [...itemsByID.values()].sort((left, right) => left.work_id.localeCompare(right.work_id));
+  return [...itemsByID.values()].sort((left, right) =>
+    left.work_id.localeCompare(right.work_id),
+  );
 }
 
-export function cloneWorkItemRef(item: DashboardWorkItemRef): DashboardWorkItemRef {
+export function cloneWorkItemRef(
+  item: DashboardWorkItemRef,
+): DashboardWorkItemRef {
   return {
     ...item,
     content: item.content?.map((part) => ({ ...part })),
@@ -60,7 +64,9 @@ function cloneTraceToken(token: DashboardTraceToken): DashboardTraceToken {
   };
 }
 
-function cloneTraceMutation(mutation: DashboardTraceMutation): DashboardTraceMutation {
+function cloneTraceMutation(
+  mutation: DashboardTraceMutation,
+): DashboardTraceMutation {
   return {
     ...mutation,
     resulting_token: mutation.resulting_token
@@ -69,7 +75,9 @@ function cloneTraceMutation(mutation: DashboardTraceMutation): DashboardTraceMut
   };
 }
 
-function cloneTraceDispatch(dispatch: DashboardTraceDispatch): DashboardTraceDispatch {
+function cloneTraceDispatch(
+  dispatch: DashboardTraceDispatch,
+): DashboardTraceDispatch {
   return {
     ...dispatch,
     consumed_tokens: dispatch.consumed_tokens?.map(cloneTraceToken),
@@ -106,7 +114,10 @@ export function cloneTracesByWorkID(
   tracesByWorkID: Record<string, DashboardTrace>,
 ): Record<string, DashboardTrace> {
   return Object.fromEntries(
-    Object.entries(tracesByWorkID).map(([workID, trace]) => [workID, cloneTrace(trace)]),
+    Object.entries(tracesByWorkID).map(([workID, trace]) => [
+      workID,
+      cloneTrace(trace),
+    ]),
   );
 }
 
@@ -124,7 +135,8 @@ export function cloneProviderSessionAttempts(
                 request_metadata: attempt.diagnostics.provider.request_metadata
                   ? { ...attempt.diagnostics.provider.request_metadata }
                   : undefined,
-                response_metadata: attempt.diagnostics.provider.response_metadata
+                response_metadata: attempt.diagnostics.provider
+                  .response_metadata
                   ? { ...attempt.diagnostics.provider.response_metadata }
                   : undefined,
               }
@@ -149,13 +161,15 @@ export function cloneProviderSessionAttempts(
 export function cloneFailedWorkDetailsByWorkID(
   failedWorkDetailsByWorkID: Record<string, DashboardFailedWorkDetail>,
 ): Record<string, DashboardFailedWorkDetail> | undefined {
-  const entries = Object.entries(failedWorkDetailsByWorkID).map(([workID, detail]) => [
-    workID,
-    {
-      ...detail,
-      work_item: cloneWorkItemRef(detail.work_item),
-    },
-  ]);
+  const entries = Object.entries(failedWorkDetailsByWorkID).map(
+    ([workID, detail]) => [
+      workID,
+      {
+        ...detail,
+        work_item: cloneWorkItemRef(detail.work_item),
+      },
+    ],
+  );
 
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
@@ -181,31 +195,43 @@ export function cloneWorkstationDispatchRequestsByID(
   workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>,
 ): Record<string, DashboardWorkstationRequest> {
   return Object.fromEntries(
-    Object.entries(workstationRequestsByDispatchID).map(([dispatchID, request]) => [
-      dispatchID,
-      {
-        ...request,
-        inference_attempts: request.inference_attempts.map((attempt) => ({ ...attempt })),
-        counts: request.counts ? { ...request.counts } : undefined,
-        request_metadata: request.request_metadata
-          ? { ...request.request_metadata }
-          : undefined,
-        request_view: cloneRuntimeWorkstationRequestRequest(request.request_view),
-        response_metadata: request.response_metadata
-          ? { ...request.response_metadata }
-          : undefined,
-        response_view: cloneRuntimeWorkstationRequestResponse(request.response_view),
-        script_request: request.script_request
-          ? {
-              ...request.script_request,
-              args: request.script_request.args ? [...request.script_request.args] : undefined,
-            }
-          : undefined,
-        script_response: request.script_response ? { ...request.script_response } : undefined,
-        trace_ids: request.trace_ids ? [...request.trace_ids] : undefined,
-        work_items: request.work_items.map(cloneWorkItemRef),
-      },
-    ]),
+    Object.entries(workstationRequestsByDispatchID).map(
+      ([dispatchID, request]) => [
+        dispatchID,
+        {
+          ...request,
+          inference_attempts: request.inference_attempts.map((attempt) => ({
+            ...attempt,
+          })),
+          counts: request.counts ? { ...request.counts } : undefined,
+          request_metadata: request.request_metadata
+            ? { ...request.request_metadata }
+            : undefined,
+          request_view: cloneRuntimeWorkstationRequestRequest(
+            request.request_view,
+          ),
+          response_metadata: request.response_metadata
+            ? { ...request.response_metadata }
+            : undefined,
+          response_view: cloneRuntimeWorkstationRequestResponse(
+            request.response_view,
+          ),
+          script_request: request.script_request
+            ? {
+                ...request.script_request,
+                args: request.script_request.args
+                  ? [...request.script_request.args]
+                  : undefined,
+              }
+            : undefined,
+          script_response: request.script_response
+            ? { ...request.script_response }
+            : undefined,
+          trace_ids: request.trace_ids ? [...request.trace_ids] : undefined,
+          work_items: request.work_items.map(cloneWorkItemRef),
+        },
+      ],
+    ),
   );
 }
 
@@ -223,7 +249,9 @@ function cloneRuntimeWorkstationRequestRequest(
       tags: token.tags ? { ...token.tags } : undefined,
     })),
     inputWorkItems: request.inputWorkItems?.map(cloneWorkItemRef),
-    inputWorkTypeIds: request.inputWorkTypeIds ? [...request.inputWorkTypeIds] : undefined,
+    inputWorkTypeIds: request.inputWorkTypeIds
+      ? [...request.inputWorkTypeIds]
+      : undefined,
     traceIds: request.traceIds ? [...request.traceIds] : undefined,
   };
 }
@@ -253,45 +281,64 @@ function cloneRuntimeWorkstationRequestResponse(
 }
 
 export function cloneInferenceAttemptsByDispatchID(
-  attemptsByDispatchID: Record<string, Record<string, DashboardInferenceAttempt>>,
+  attemptsByDispatchID: Record<
+    string,
+    Record<string, DashboardInferenceAttempt>
+  >,
 ): Record<string, Record<string, DashboardInferenceAttempt>> | undefined {
-  const entries = Object.entries(attemptsByDispatchID).map(([dispatchID, attempts]) => [
-    dispatchID,
-    Object.fromEntries(
-      Object.entries(attempts).map(([requestID, attempt]) => [
-        requestID,
-        {
-          ...attempt,
-          diagnostics: attempt.diagnostics
-            ? {
-                ...attempt.diagnostics,
-                provider: attempt.diagnostics.provider
-                  ? {
-                      ...attempt.diagnostics.provider,
-                      request_metadata: attempt.diagnostics.provider.request_metadata
-                        ? { ...attempt.diagnostics.provider.request_metadata }
-                        : undefined,
-                      response_metadata: attempt.diagnostics.provider.response_metadata
-                        ? { ...attempt.diagnostics.provider.response_metadata }
-                        : undefined,
-                    }
-                  : undefined,
-                rendered_prompt: attempt.diagnostics.rendered_prompt
-                  ? {
-                      ...attempt.diagnostics.rendered_prompt,
-                      variables: attempt.diagnostics.rendered_prompt.variables
-                        ? { ...attempt.diagnostics.rendered_prompt.variables }
-                        : undefined,
-                    }
-                  : undefined,
-              }
-            : undefined,
-          provider_session: attempt.provider_session ? { ...attempt.provider_session } : undefined,
-        },
-      ]),
-    ),
-  ] as const);
+  const entries = Object.entries(attemptsByDispatchID).map(
+    ([dispatchID, attempts]) =>
+      [
+        dispatchID,
+        Object.fromEntries(
+          Object.entries(attempts).map(([requestID, attempt]) => [
+            requestID,
+            {
+              ...attempt,
+              diagnostics: attempt.diagnostics
+                ? {
+                    ...attempt.diagnostics,
+                    provider: attempt.diagnostics.provider
+                      ? {
+                          ...attempt.diagnostics.provider,
+                          request_metadata: attempt.diagnostics.provider
+                            .request_metadata
+                            ? {
+                                ...attempt.diagnostics.provider
+                                  .request_metadata,
+                              }
+                            : undefined,
+                          response_metadata: attempt.diagnostics.provider
+                            .response_metadata
+                            ? {
+                                ...attempt.diagnostics.provider
+                                  .response_metadata,
+                              }
+                            : undefined,
+                        }
+                      : undefined,
+                    rendered_prompt: attempt.diagnostics.rendered_prompt
+                      ? {
+                          ...attempt.diagnostics.rendered_prompt,
+                          variables: attempt.diagnostics.rendered_prompt
+                            .variables
+                            ? {
+                                ...attempt.diagnostics.rendered_prompt
+                                  .variables,
+                              }
+                            : undefined,
+                        }
+                      : undefined,
+                  }
+                : undefined,
+              provider_session: attempt.provider_session
+                ? { ...attempt.provider_session }
+                : undefined,
+            },
+          ]),
+        ),
+      ] as const,
+  );
 
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
-

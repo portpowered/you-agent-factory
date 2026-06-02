@@ -335,7 +335,10 @@ function buildReadyEditableConfigurationState(overrides?: {
   validationErrors?: EditableWorkTypeConfigurationState extends {
     status: "ready";
   }
-    ? Extract<EditableWorkTypeConfigurationState, { status: "ready" }>["validationErrors"]
+    ? Extract<
+        EditableWorkTypeConfigurationState,
+        { status: "ready" }
+      >["validationErrors"]
     : never;
 }): EditableWorkTypeConfigurationState {
   return {

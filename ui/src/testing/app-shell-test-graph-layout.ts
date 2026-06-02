@@ -33,7 +33,8 @@ export function buildDashboardTestGraphLayout(topology: DashboardTopology) {
     .sort((left, right) => left.place_id.localeCompare(right.place_id))
     .map((place, index) => ({
       column: 0,
-      height: place.kind === "resource" ? 86 : place.kind === "constraint" ? 58 : 86,
+      height:
+        place.kind === "resource" ? 86 : place.kind === "constraint" ? 58 : 86,
       nodeId: `place:${place.place_id}`,
       nodeKind:
         place.kind === "resource"
@@ -43,22 +44,29 @@ export function buildDashboardTestGraphLayout(topology: DashboardTopology) {
             : "state_position",
       place,
       row: index,
-      width: place.kind === "resource" ? 168 : place.kind === "constraint" ? 156 : 164,
+      width:
+        place.kind === "resource"
+          ? 168
+          : place.kind === "constraint"
+            ? 156
+            : 164,
       x: 0,
       y: index * 140,
     }));
 
-  const workstationNodes = topology.workstation_node_ids.map((nodeId, index) => ({
-    column: 1,
-    height: 196,
-    nodeId: `workstation:${nodeId}`,
-    nodeKind: "workstation" as const,
-    row: index,
-    width: 156,
-    workstationNodeId: nodeId,
-    x: 280,
-    y: index * 240,
-  }));
+  const workstationNodes = topology.workstation_node_ids.map(
+    (nodeId, index) => ({
+      column: 1,
+      height: 196,
+      nodeId: `workstation:${nodeId}`,
+      nodeKind: "workstation" as const,
+      row: index,
+      width: 156,
+      workstationNodeId: nodeId,
+      x: 280,
+      y: index * 240,
+    }),
+  );
 
   const edges = (topology.edges ?? []).map((edge, index) => ({
     edgeId: `edge:${index}`,

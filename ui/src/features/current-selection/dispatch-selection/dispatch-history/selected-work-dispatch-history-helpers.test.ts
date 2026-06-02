@@ -176,8 +176,12 @@ describe("selected-work-dispatch-history-helpers", () => {
     });
 
     expect(requestTitle(projected, "work-selected")).toBe("Selected Story");
-    expect(requestTitle(runtime, "work-runtime-selected")).toBe("work-runtime-selected");
-    expect(requestTitle(buildProjectedRequest({ work_items: [] }), "work-missing")).toBeUndefined();
+    expect(requestTitle(runtime, "work-runtime-selected")).toBe(
+      "work-runtime-selected",
+    );
+    expect(
+      requestTitle(buildProjectedRequest({ work_items: [] }), "work-missing"),
+    ).toBeUndefined();
   });
 
   it("keeps prompt, provider, model, working directory, worktree, session, and response text on projected requests only", () => {
@@ -289,13 +293,17 @@ describe("selected-work-dispatch-history-helpers", () => {
 
     expect(requestOutcome(projectedFromResponseView)).toBe("FAILED");
     expect(requestOutcome(projectedFromScript)).toBe("TIMED_OUT");
-    expect(requestOutcome(projectedFromTopLevelScript)).toBe("FAILED_EXIT_CODE");
+    expect(requestOutcome(projectedFromTopLevelScript)).toBe(
+      "FAILED_EXIT_CODE",
+    );
     expect(requestOutcome(runtime)).toBe("ACCEPTED");
 
-    expect(requestFailureReason(projectedFromResponseView)).toBe("response_view_failed");
-    expect(
-      requestFailureMessage(projectedFromResponseView),
-    ).toBe("Dispatch failed after response view fallback.");
+    expect(requestFailureReason(projectedFromResponseView)).toBe(
+      "response_view_failed",
+    );
+    expect(requestFailureMessage(projectedFromResponseView)).toBe(
+      "Dispatch failed after response view fallback.",
+    );
     expect(requestFailureReason(runtime)).toBe("runtime_failed");
     expect(requestFailureMessage(runtime)).toBe("Runtime failure message");
 
@@ -324,9 +332,9 @@ describe("selected-work-dispatch-history-helpers", () => {
       "runtime-script-request",
     );
 
-    expect(requestScriptResponse(projectedFromTopLevelScript)?.script_request_id).toBe(
-      "script-response-top-level",
-    );
+    expect(
+      requestScriptResponse(projectedFromTopLevelScript)?.script_request_id,
+    ).toBe("script-response-top-level");
     expect(requestScriptResponse(projectedFromScript)?.script_request_id).toBe(
       "script-response-view",
     );
@@ -356,7 +364,9 @@ describe("selected-work-dispatch-history-helpers", () => {
         scriptRequestId: "legacy-script-id",
       }),
     ).toBe(77);
-    expect(scriptResponseExitCode(projectedFromTopLevelScript.script_response)).toBe(9);
+    expect(
+      scriptResponseExitCode(projectedFromTopLevelScript.script_response),
+    ).toBe(9);
     expect(
       scriptResponseExitCode({
         attempt: 1,
@@ -397,7 +407,9 @@ describe("selected-work-dispatch-history-helpers", () => {
     });
 
     expect(
-      requestInferenceAttempts(projected).map((attempt) => attempt.inference_request_id),
+      requestInferenceAttempts(projected).map(
+        (attempt) => attempt.inference_request_id,
+      ),
     ).toEqual([
       "dispatch-projected/inference-request/a",
       "dispatch-projected/inference-request/b",
@@ -449,15 +461,21 @@ describe("selected-work-dispatch-history-helpers", () => {
       },
     });
 
-    expect(hasResponseDetails(emptyProjected as SelectedWorkRequestHistoryItem)).toBe(false);
     expect(
-      hasResponseDetails(projectedWithResponseText as SelectedWorkRequestHistoryItem),
+      hasResponseDetails(emptyProjected as SelectedWorkRequestHistoryItem),
+    ).toBe(false);
+    expect(
+      hasResponseDetails(
+        projectedWithResponseText as SelectedWorkRequestHistoryItem,
+      ),
     ).toBe(true);
     expect(
-      hasResponseDetails(projectedWithProviderSession as SelectedWorkRequestHistoryItem),
+      hasResponseDetails(
+        projectedWithProviderSession as SelectedWorkRequestHistoryItem,
+      ),
     ).toBe(true);
-    expect(hasResponseDetails(runtimeWithResponse as SelectedWorkRequestHistoryItem)).toBe(
-      true,
-    );
+    expect(
+      hasResponseDetails(runtimeWithResponse as SelectedWorkRequestHistoryItem),
+    ).toBe(true);
   });
 });

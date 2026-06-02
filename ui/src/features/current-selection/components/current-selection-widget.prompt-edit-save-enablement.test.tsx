@@ -14,7 +14,6 @@ import {
   buildDetailCardFactoryDocumentSaveHookReturn,
   buildDetailCardWorkstationNodeSelection,
   DETAIL_CARD_NOW,
-  clickWorkstationSave,
   expandDetailCardWorkstationConfiguration,
   workstationFooterSaveButton,
 } from "../base/components/detail-card-test-helpers";
@@ -95,7 +94,10 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
     vi.mocked(
       validateCurrentFactoryWorkstationPromptTemplate,
     ).mockImplementation(async (_workstationName, prompt) => {
-      if (prompt.includes("{{ if .WorkID }}") && !prompt.includes("{{ end }}")) {
+      if (
+        prompt.includes("{{ if .WorkID }}") &&
+        !prompt.includes("{{ end }}")
+      ) {
         return {
           diagnostics: [
             {

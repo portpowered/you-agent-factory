@@ -3,8 +3,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  buildTimeoutMs,
   browserScenarioTimeoutMs,
+  buildTimeoutMs,
   expectNoBrowserErrors,
   loadReplayLines,
   openBrowserPage,
@@ -151,16 +151,17 @@ describe.sequential("dashboard session tabs browser integration", () => {
         const dialog = browserPage.page.getByRole("dialog", {
           name: "Factory Session",
         });
-        await dialog.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await dialog.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
         await dialog.getByLabel("Factory folder").fill("/workspace/project");
         await dialog.getByRole("button", { name: "Start Factory" }).click();
 
         await dialog
           .getByRole("button", { name: "Review factory" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-        await dialog
-          .getByRole("button", { name: "Review factory" })
-          .click();
+        await dialog.getByRole("button", { name: "Review factory" }).click();
 
         await dialog.waitFor({
           state: "hidden",
@@ -168,7 +169,8 @@ describe.sequential("dashboard session tabs browser integration", () => {
         });
         await expect
           .poll(
-            async () => server.requestedEventSessionIDs.includes("session-review"),
+            async () =>
+              server.requestedEventSessionIDs.includes("session-review"),
             { timeout: uiInteractionTimeoutMs },
           )
           .toBe(true);
@@ -214,7 +216,9 @@ describe.sequential("dashboard session tabs browser integration", () => {
   it(
     "shows outline active session tab styling and moves selection across preloaded tabs",
     async () => {
-      const replayLines = await loadReplayLines("graph-state-smoke-replay.jsonl");
+      const replayLines = await loadReplayLines(
+        "graph-state-smoke-replay.jsonl",
+      );
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: defaultFactoryDefinition,

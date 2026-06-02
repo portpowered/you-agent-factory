@@ -1,16 +1,18 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   DashboardSnapshot,
   DashboardTrace,
   DashboardWorkItemRef,
 } from "./api/dashboard";
-import {
-  dashboardWorkstationRequestFixtures,
-} from "./components/dashboard/fixtures";
-import {
-  DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS,
-} from "./features/bento/hooks/dashboardLayoutSchema";
+import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
+import { DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS } from "./features/bento/hooks/dashboardLayoutSchema";
 import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import {
   activeSnapshot,
@@ -22,9 +24,12 @@ import {
   terminalSnapshot,
 } from "./testing/app-shell-test-utils";
 
-vi.mock("./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
+vi.mock(
+  "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
+  () => ({
+    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+  }),
+);
 
 const activeWorkID = "work-active-story";
 const completedWorkID = "work-complete";
@@ -477,7 +482,9 @@ describe("App current selection", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    await screen.findByRole("button", { name: "Select work item Active Story" });
+    await screen.findByRole("button", {
+      name: "Select work item Active Story",
+    });
     fireEvent.click(getActiveStorySelectionButton());
 
     const currentSelection = await screen.findByRole("article", {
@@ -589,8 +596,14 @@ describe("App current selection", () => {
       "Inference attempts",
     );
     const readyAttemptDetails = expandAttemptDetails(readyInferenceAttempts, 2);
-    const readyRequestBody = expandAttemptBody(readyAttemptDetails, "Request body");
-    const readyResponseBody = expandAttemptBody(readyAttemptDetails, "Response body");
+    const readyRequestBody = expandAttemptBody(
+      readyAttemptDetails,
+      "Request body",
+    );
+    const readyResponseBody = expandAttemptBody(
+      readyAttemptDetails,
+      "Response body",
+    );
     expect(
       within(readyRequestDetails).queryByText(
         "Inference request details are shown under Inference attempts.",
@@ -601,12 +614,28 @@ describe("App current selection", () => {
         "Review the active story and decide whether it is ready.",
       ),
     ).toBeNull();
-    expect(within(readyRequestBody).getByText("Retry the review with the latest context.")).toBeTruthy();
-    expect(within(readyResponseBody).getByText("Ready for the next workstation.")).toBeTruthy();
-    expect(within(readyAttemptDetails).getByText("codex / Session ID / dispatch-review-ready/session/1")).toBeTruthy();
+    expect(
+      within(readyRequestBody).getByText(
+        "Retry the review with the latest context.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(readyResponseBody).getByText("Ready for the next workstation."),
+    ).toBeTruthy();
+    expect(
+      within(readyAttemptDetails).getByText(
+        "codex / Session ID / dispatch-review-ready/session/1",
+      ),
+    ).toBeTruthy();
     expect(within(readyAttemptDetails).getByText("gpt-5.4")).toBeTruthy();
-    expect(within(readyAttemptDetails).getByText("C:\\work\\portos")).toBeTruthy();
-    expect(within(readyAttemptDetails).getByText("C:\\work\\portos\\.worktrees\\active-story")).toBeTruthy();
+    expect(
+      within(readyAttemptDetails).getByText("C:\\work\\portos"),
+    ).toBeTruthy();
+    expect(
+      within(readyAttemptDetails).getByText(
+        "C:\\work\\portos\\.worktrees\\active-story",
+      ),
+    ).toBeTruthy();
     expect(
       within(readyRequestDetails).queryByText("Provider", { selector: "dt" }),
     ).toBeNull();
@@ -635,7 +664,10 @@ describe("App current selection", () => {
       rejectedCard,
       "Inference attempts",
     );
-    const rejectedAttemptDetails = expandAttemptDetails(rejectedInferenceAttempts, 1);
+    const rejectedAttemptDetails = expandAttemptDetails(
+      rejectedInferenceAttempts,
+      1,
+    );
     const rejectedRequestBody = expandAttemptBody(
       rejectedAttemptDetails,
       "Request body",
@@ -666,7 +698,10 @@ describe("App current selection", () => {
       erroredCard,
       "Inference attempts",
     );
-    const erroredAttemptDetails = expandAttemptDetails(erroredInferenceAttempts, 1);
+    const erroredAttemptDetails = expandAttemptDetails(
+      erroredInferenceAttempts,
+      1,
+    );
     expect(
       within(erroredCard).getByText(
         "Provider rate limit exceeded while reviewing the story.",
@@ -689,8 +724,13 @@ describe("App current selection", () => {
       scriptSuccessCard,
       "Script attempts",
     );
-    expect(within(scriptSuccessAttempts).getAllByText("script-tool").length).toBeGreaterThan(0);
-    expect(within(scriptSuccessAttempts).getAllByText("script success stdout").length).toBeGreaterThan(0);
+    expect(
+      within(scriptSuccessAttempts).getAllByText("script-tool").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(scriptSuccessAttempts).getAllByText("script success stdout")
+        .length,
+    ).toBeGreaterThan(0);
     expect(
       within(scriptSuccessCard).getAllByText("Succeeded").length,
     ).toBeGreaterThan(0);
@@ -867,7 +907,9 @@ describe("App current selection", () => {
 
     expect(within(englishSelection).getByText("Current dispatch")).toBeTruthy();
     expect(within(englishSelection).getByText(activeWorkID)).toBeTruthy();
-    expect(within(englishSelection).getByText("dispatch-review-active")).toBeTruthy();
+    expect(
+      within(englishSelection).getByText("dispatch-review-active"),
+    ).toBeTruthy();
     expect(within(englishTrace).getByText("Accepted · 1s")).toBeTruthy();
 
     fireEvent.click(
@@ -886,10 +928,14 @@ describe("App current selection", () => {
 
     expect(within(localizedSelection).getByText("当前分派")).toBeTruthy();
     expect(within(localizedSelection).getByText(activeWorkID)).toBeTruthy();
-    expect(within(localizedSelection).getByText("dispatch-review-active")).toBeTruthy();
+    expect(
+      within(localizedSelection).getByText("dispatch-review-active"),
+    ).toBeTruthy();
     expect(screen.getByRole("heading", { name: "追踪下钻" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "分派关系图" })).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Trace drill-down" })).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Trace drill-down" }),
+    ).toBeNull();
   });
 
   it("keeps workstation and work-item selection usable after React Flow zoom", async () => {
@@ -898,7 +944,9 @@ describe("App current selection", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    await screen.findByRole("button", { name: "Select work item Active Story" });
+    await screen.findByRole("button", {
+      name: "Select work item Active Story",
+    });
 
     const workGraphViewport = screen.getByRole("region", {
       name: "Work graph viewport",
@@ -925,7 +973,9 @@ describe("App current selection", () => {
       traceFixtures: activeStoryTraceFixtures,
     });
 
-    await screen.findByRole("button", { name: "Select work item Active Story" });
+    await screen.findByRole("button", {
+      name: "Select work item Active Story",
+    });
 
     const reviewButton = await screen.findByRole("button", {
       name: "Select Review workstation",
@@ -1171,12 +1221,8 @@ describe("App current selection", () => {
       );
 
       await waitFor(() => {
-        expect(
-          within(currentSelection).getByDisplayValue(worker),
-        ).toBeTruthy();
-        expect(
-          within(currentSelection).getByDisplayValue(prompt),
-        ).toBeTruthy();
+        expect(within(currentSelection).getByDisplayValue(worker)).toBeTruthy();
+        expect(within(currentSelection).getByDisplayValue(prompt)).toBeTruthy();
       });
 
       for (const otherPrompt of [
@@ -1249,7 +1295,9 @@ describe("App current selection", () => {
       isRefetching: false,
       isStale: true,
       isSuccess: true,
-      promise: Promise.resolve(buildEditableFactoryDefinitionForCurrentSelection()),
+      promise: Promise.resolve(
+        buildEditableFactoryDefinitionForCurrentSelection(),
+      ),
       refetch: vi.fn(),
       status: "success",
     } as never);
@@ -1264,7 +1312,9 @@ describe("App current selection", () => {
     const currentSelection = await screen.findByRole("article", {
       name: "当前选择",
     });
-    expect(within(currentSelection).getByRole("heading", { name: "工作站摘要" })).toBeTruthy();
+    expect(
+      within(currentSelection).getByRole("heading", { name: "工作站摘要" }),
+    ).toBeTruthy();
     expect(within(currentSelection).getByText("标准")).toBeTruthy();
 
     const configurationSection = within(currentSelection)
@@ -1381,730 +1431,755 @@ describe("App current selection", () => {
   });
 
   describe("layout", () => {
-  it("keeps selection detail out of the workflow graph inspector layer", async () => {
-    renderApp({
-      snapshot: activeSnapshot,
-      traceFixtures: activeStoryTraceFixtures,
+    it("keeps selection detail out of the workflow graph inspector layer", async () => {
+      renderApp({
+        snapshot: activeSnapshot,
+        traceFixtures: activeStoryTraceFixtures,
+      });
+
+      await screen.findByRole("button", {
+        name: "Select work item Active Story",
+      });
+
+      expect(
+        screen.getByRole("region", { name: "Work graph viewport" }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("complementary", { name: "Workstation Info" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Collapse inspector" }),
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Expand inspector" }),
+      ).toBeNull();
+      expect(
+        screen.getByRole("article", { name: "Current selection" }),
+      ).toBeTruthy();
     });
 
-    await screen.findByRole("button", { name: "Select work item Active Story" });
+    it("renders selected work and traces on the shared dashboard grid", async () => {
+      renderApp({
+        snapshot: activeSnapshot,
+        traceFixtures: activeStoryTraceFixtures,
+      });
 
-    expect(
-      screen.getByRole("region", { name: "Work graph viewport" }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByRole("complementary", { name: "Workstation Info" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Collapse inspector" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Expand inspector" }),
-    ).toBeNull();
-    expect(
-      screen.getByRole("article", { name: "Current selection" }),
-    ).toBeTruthy();
-  });
+      fireEvent.click(getActiveStorySelectionButton());
 
-  it("renders selected work and traces on the shared dashboard grid", async () => {
-    renderApp({
-      snapshot: activeSnapshot,
-      traceFixtures: activeStoryTraceFixtures,
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      const workInfo = await within(dashboardGrid).findByRole("article", {
+        name: "Current selection",
+      });
+      expect(workInfo).toBeTruthy();
+      expect(screen.getByLabelText("Work graph viewport")).toBeTruthy();
+      expect(
+        within(dashboardGrid).getByRole("article", {
+          name: "Completed and failed work",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(dashboardGrid).getByRole("article", {
+          name: "Trace drill-down",
+        }),
+      ).toBeTruthy();
+      expect(within(dashboardGrid).getByText("Trace drill-down")).toBeTruthy();
+      expect(
+        await within(dashboardGrid).findByText("Trace dispatch grid"),
+      ).toBeTruthy();
     });
 
-    fireEvent.click(getActiveStorySelectionButton());
+    it("supports rearranging shared-grid widgets without replacing graph selection", async () => {
+      renderApp({
+        snapshot: activeSnapshot,
+        traceFixtures: activeStoryTraceFixtures,
+      });
 
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    const workInfo = await within(dashboardGrid).findByRole("article", {
-      name: "Current selection",
-    });
-    expect(workInfo).toBeTruthy();
-    expect(screen.getByLabelText("Work graph viewport")).toBeTruthy();
-    expect(
-      within(dashboardGrid).getByRole("article", {
-        name: "Completed and failed work",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(dashboardGrid).getByRole("article", { name: "Trace drill-down" }),
-    ).toBeTruthy();
-    expect(within(dashboardGrid).getByText("Trace drill-down")).toBeTruthy();
-    expect(
-      await within(dashboardGrid).findByText("Trace dispatch grid"),
-    ).toBeTruthy();
-  });
+      fireEvent.click(getActiveStorySelectionButton());
 
-  it("supports rearranging shared-grid widgets without replacing graph selection", async () => {
-    renderApp({
-      snapshot: activeSnapshot,
-      traceFixtures: activeStoryTraceFixtures,
-    });
-
-    fireEvent.click(getActiveStorySelectionButton());
-
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    const traceWidget = await within(dashboardGrid).findByRole("article", {
-      name: "Trace drill-down",
-    });
-    const traceGridItem = traceWidget.closest(
-      ".react-grid-item",
-    ) as HTMLElement;
-    const initialStyle = traceGridItem.getAttribute("style");
-
-    fireEvent.mouseDown(
-      within(traceWidget).getByRole("heading", {
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      const traceWidget = await within(dashboardGrid).findByRole("article", {
         name: "Trace drill-down",
-      }),
-      {
-        button: 0,
+      });
+      const traceGridItem = traceWidget.closest(
+        ".react-grid-item",
+      ) as HTMLElement;
+      const initialStyle = traceGridItem.getAttribute("style");
+
+      fireEvent.mouseDown(
+        within(traceWidget).getByRole("heading", {
+          name: "Trace drill-down",
+        }),
+        {
+          button: 0,
+          buttons: 1,
+          clientX: 120,
+          clientY: 40,
+        },
+      );
+      fireEvent.mouseMove(document, {
         buttons: 1,
-        clientX: 120,
+        clientX: 360,
         clientY: 40,
-      },
-    );
-    fireEvent.mouseMove(document, {
-      buttons: 1,
-      clientX: 360,
-      clientY: 40,
-    });
-    fireEvent.mouseUp(document, {
-      button: 0,
-      clientX: 360,
-      clientY: 40,
-    });
+      });
+      fireEvent.mouseUp(document, {
+        button: 0,
+        clientX: 360,
+        clientY: 40,
+      });
 
-    await waitFor(() => {
-      expect(traceGridItem.getAttribute("style")).not.toBe(initialStyle);
-    });
-    const storedLayout = window.localStorage.getItem(
-      "agent-factory.dashboard.layout.v2",
-    );
-    expect(storedLayout).toContain(
-      `"id":"${DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace}"`,
-    );
+      await waitFor(() => {
+        expect(traceGridItem.getAttribute("style")).not.toBe(initialStyle);
+      });
+      const storedLayout = window.localStorage.getItem(
+        "agent-factory.dashboard.layout.v2",
+      );
+      expect(storedLayout).toContain(
+        `"id":"${DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.trace}"`,
+      );
 
-    const movedStyle = traceGridItem.getAttribute("style");
-    const stream = MockEventSource.instances[0];
-    if (!stream) {
-      throw new Error("expected dashboard stream to be opened");
-    }
+      const movedStyle = traceGridItem.getAttribute("style");
+      const stream = MockEventSource.instances[0];
+      if (!stream) {
+        throw new Error("expected dashboard stream to be opened");
+      }
 
-    act(() => {
-      stream.emit("snapshot", {
-        ...activeSnapshot,
-        tick_count: activeSnapshot.tick_count + 1,
-      } satisfies DashboardSnapshot);
-    });
+      act(() => {
+        stream.emit("snapshot", {
+          ...activeSnapshot,
+          tick_count: activeSnapshot.tick_count + 1,
+        } satisfies DashboardSnapshot);
+      });
 
-    await waitFor(() => {
-      expect(traceGridItem.getAttribute("style")).toBe(movedStyle);
-    });
-    expect(
-      (
-        await screen.findByRole("button", { name: "Select Review workstation" })
-      ).getAttribute("aria-pressed"),
-    ).toBe("false");
-    expect(
-      await within(dashboardGrid).findByText("Trace dispatch grid"),
-    ).toBeTruthy();
-  });
-
-  it("renders queued, in-flight, completed, and failed work in one ranged outcome chart", async () => {
-    renderApp({ snapshot: baselineSnapshot });
-
-    await screen.findByRole("heading", { name: "U" });
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    const trendWidget = await within(dashboardGrid).findByRole("article", {
-      name: "Work outcome chart",
+      await waitFor(() => {
+        expect(traceGridItem.getAttribute("style")).toBe(movedStyle);
+      });
+      expect(
+        (
+          await screen.findByRole("button", {
+            name: "Select Review workstation",
+          })
+        ).getAttribute("aria-pressed"),
+      ).toBe("false");
+      expect(
+        await within(dashboardGrid).findByText("Trace dispatch grid"),
+      ).toBeTruthy();
     });
 
-    expect(
-      within(trendWidget).queryByRole("combobox", { name: "Time range" }),
-    ).toBeNull();
-    expect(
-      within(trendWidget).getByRole("img", {
+    it("renders queued, in-flight, completed, and failed work in one ranged outcome chart", async () => {
+      renderApp({ snapshot: baselineSnapshot });
+
+      await screen.findByRole("heading", { name: "U" });
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      const trendWidget = await within(dashboardGrid).findByRole("article", {
+        name: "Work outcome chart",
+      });
+
+      expect(
+        within(trendWidget).queryByRole("combobox", { name: "Time range" }),
+      ).toBeNull();
+      expect(
+        within(trendWidget).getByRole("img", {
+          name: "Work outcome chart for Session",
+        }),
+      ).toBeTruthy();
+      const chart = within(trendWidget).getByRole("img", {
         name: "Work outcome chart for Session",
-      }),
-    ).toBeTruthy();
-    const chart = within(trendWidget).getByRole("img", {
-      name: "Work outcome chart for Session",
+      });
+      expect(
+        within(trendWidget).queryByRole("list", {
+          name: "Work outcome totals",
+        }),
+      ).toBeNull();
+      expect(within(chart).getByText("Queued")).toBeTruthy();
+      expect(within(chart).getByText("In-flight")).toBeTruthy();
+      expect(within(chart).getByText("Completed")).toBeTruthy();
+      expect(within(chart).getByText("Failed/retried")).toBeTruthy();
+      expect(within(chart).getByText("Ticks")).toBeTruthy();
+      const chartOverlay = chart.querySelector(
+        "[data-work-chart-overlay='true']",
+      );
+      expect(chartOverlay).toBeTruthy();
+      expect(
+        within(chartOverlay as HTMLElement).getByText("Work count"),
+      ).toBeTruthy();
+
+      const stream = MockEventSource.instances[0];
+      if (!stream) {
+        throw new Error("expected dashboard stream to be opened");
+      }
+
+      act(() => {
+        stream.emit("snapshot", {
+          ...baselineSnapshot,
+          tick_count: baselineSnapshot.tick_count + 1,
+          runtime: {
+            ...baselineSnapshot.runtime,
+            in_flight_dispatch_count: 3,
+            place_token_counts: {
+              ...(baselineSnapshot.runtime.place_token_counts ?? {}),
+              "story:init": 5,
+            },
+            session: {
+              ...baselineSnapshot.runtime.session,
+              completed_count: 4,
+              dispatched_count: 7,
+              failed_by_work_type: { story: 2 },
+              failed_count: 2,
+              failed_work_labels: ["Blocked Story", "Rejected Story"],
+            },
+          },
+        } satisfies DashboardSnapshot);
+      });
+
+      await waitFor(() => {
+        expect(
+          within(trendWidget).getByRole("img", {
+            name: "Work outcome chart for Session",
+          }),
+        ).toBeTruthy();
+      });
+
+      expect(
+        within(trendWidget).getByRole("img", {
+          name: "Work outcome chart for Session",
+        }),
+      ).toBeTruthy();
     });
-    expect(
-      within(trendWidget).queryByRole("list", { name: "Work outcome totals" }),
-    ).toBeNull();
-    expect(within(chart).getByText("Queued")).toBeTruthy();
-    expect(within(chart).getByText("In-flight")).toBeTruthy();
-    expect(within(chart).getByText("Completed")).toBeTruthy();
-    expect(within(chart).getByText("Failed/retried")).toBeTruthy();
-    expect(within(chart).getByText("Ticks")).toBeTruthy();
-    const chartOverlay = chart.querySelector("[data-work-chart-overlay='true']");
-    expect(chartOverlay).toBeTruthy();
-    expect(within(chartOverlay as HTMLElement).getByText("Work count")).toBeTruthy();
 
-    const stream = MockEventSource.instances[0];
-    if (!stream) {
-      throw new Error("expected dashboard stream to be opened");
-    }
-
-    act(() => {
-      stream.emit("snapshot", {
+    it("updates work outcome chart values when toggling timeline mode between fixed and live snapshots", async () => {
+      const historicalWorkOutcomeSnapshot = {
         ...baselineSnapshot,
-        tick_count: baselineSnapshot.tick_count + 1,
+        tick_count: 1,
         runtime: {
           ...baselineSnapshot.runtime,
-          in_flight_dispatch_count: 3,
+          in_flight_dispatch_count: 1,
           place_token_counts: {
             ...(baselineSnapshot.runtime.place_token_counts ?? {}),
-            "story:init": 5,
+            "story:init": 2,
           },
           session: {
             ...baselineSnapshot.runtime.session,
-            completed_count: 4,
-            dispatched_count: 7,
-            failed_by_work_type: { story: 2 },
-            failed_count: 2,
-            failed_work_labels: ["Blocked Story", "Rejected Story"],
+            completed_count: 1,
+            completed_work_labels: ["Old Story"],
+            failed_count: 0,
+            dispatched_count: 2,
+            failed_by_work_type: {},
+            failed_work_labels: [],
           },
         },
-      } satisfies DashboardSnapshot);
-    });
-
-    await waitFor(() => {
-      expect(
-        within(trendWidget).getByRole("img", {
-          name: "Work outcome chart for Session",
-        }),
-      ).toBeTruthy();
-    });
-
-    expect(
-      within(trendWidget).getByRole("img", {
-        name: "Work outcome chart for Session",
-      }),
-    ).toBeTruthy();
-  });
-
-  it("updates work outcome chart values when toggling timeline mode between fixed and live snapshots", async () => {
-    const historicalWorkOutcomeSnapshot = {
-      ...baselineSnapshot,
-      tick_count: 1,
-      runtime: {
-        ...baselineSnapshot.runtime,
-        in_flight_dispatch_count: 1,
-        place_token_counts: {
-          ...(baselineSnapshot.runtime.place_token_counts ?? {}),
-          "story:init": 2,
+      };
+      const liveWorkOutcomeSnapshot = {
+        ...historicalWorkOutcomeSnapshot,
+        tick_count: 4,
+        runtime: {
+          ...historicalWorkOutcomeSnapshot.runtime,
+          in_flight_dispatch_count: 2,
+          place_token_counts: {
+            ...(historicalWorkOutcomeSnapshot.runtime.place_token_counts ?? {}),
+            "story:init": 4,
+          },
+          session: {
+            ...historicalWorkOutcomeSnapshot.runtime.session,
+            completed_count: 8,
+            completed_work_labels: ["Old Story", "New Story"],
+            failed_count: 3,
+            dispatched_count: 10,
+            failed_by_work_type: { story: 3 },
+            failed_work_labels: [
+              "Blocked Story",
+              "Rejected Story",
+              "Reworked Story",
+            ],
+          },
         },
-        session: {
-          ...baselineSnapshot.runtime.session,
-          completed_count: 1,
-          completed_work_labels: ["Old Story"],
-          failed_count: 0,
-          dispatched_count: 2,
-          failed_by_work_type: {},
-          failed_work_labels: [],
-        },
-      },
-    };
-    const liveWorkOutcomeSnapshot = {
-      ...historicalWorkOutcomeSnapshot,
-      tick_count: 4,
-      runtime: {
-        ...historicalWorkOutcomeSnapshot.runtime,
-        in_flight_dispatch_count: 2,
-        place_token_counts: {
-          ...(historicalWorkOutcomeSnapshot.runtime.place_token_counts ?? {}),
-          "story:init": 4,
-        },
-        session: {
-          ...historicalWorkOutcomeSnapshot.runtime.session,
-          completed_count: 8,
-          completed_work_labels: ["Old Story", "New Story"],
-          failed_count: 3,
-          dispatched_count: 10,
-          failed_by_work_type: { story: 3 },
-          failed_work_labels: [
-            "Blocked Story",
-            "Rejected Story",
-            "Reworked Story",
-          ],
-        },
-      },
-    };
+      };
 
-    renderApp({
-      snapshot: historicalWorkOutcomeSnapshot,
-      timelineSnapshots: [
-        historicalWorkOutcomeSnapshot,
-        liveWorkOutcomeSnapshot,
-      ],
-    });
+      renderApp({
+        snapshot: historicalWorkOutcomeSnapshot,
+        timelineSnapshots: [
+          historicalWorkOutcomeSnapshot,
+          liveWorkOutcomeSnapshot,
+        ],
+      });
 
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    const trendWidget = await within(dashboardGrid).findByRole("article", {
-      name: "Work outcome chart",
-    });
-    const slider = screen.getByRole<HTMLInputElement>("slider", {
-      name: "Timeline tick",
-    });
-
-    expect(
-      within(trendWidget).getByRole("region", {
-        name: "Work outcome chart region",
-      }),
-    ).toBeTruthy();
-    fireEvent.change(slider, { target: { value: "1" } });
-    await waitFor(() => {
-      expect(
-        within(trendWidget).getByRole("img", {
-          name: "Work outcome chart for Session",
-        }),
-      ).toBeTruthy();
-    });
-
-    fireEvent.change(slider, { target: { value: "4" } });
-    await waitFor(() => {
-      expect(
-        within(trendWidget).getByRole("img", {
-          name: "Work outcome chart for Session",
-        }),
-      ).toBeTruthy();
-    });
-  });
-
-  it("keeps retry, rework, and timing trends hidden when selected trace data is available", async () => {
-    renderApp({
-      snapshot: terminalSnapshot,
-      traceFixtures: activeStoryReworkTraceFixtures,
-    });
-
-    await screen.findByRole("heading", { name: "U" });
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    expect(
-      within(dashboardGrid).queryByRole("article", { name: "Failure trend" }),
-    ).toBeNull();
-
-    fireEvent.click(getActiveStorySelectionButton());
-
-    const workDetail = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    expect(
-      await within(workDetail).findByRole("article", {
-        name: "Current selection",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(workDetail).getByRole("article", { name: "Trace drill-down" }),
-    ).toBeTruthy();
-    expect(
-      within(workDetail).queryByRole("article", {
-        name: "Retry and rework trend",
-      }),
-    ).toBeNull();
-    expect(
-      within(workDetail).queryByRole("article", { name: "Timing trend" }),
-    ).toBeNull();
-    expect(
-      workDetail.querySelector('[data-bento-card-id="rework-trend"]'),
-    ).toBeNull();
-    expect(
-      workDetail.querySelector('[data-bento-card-id="timing-trend"]'),
-    ).toBeNull();
-  });
-
-  it.each([
-    1366, 1024, 640,
-  ])("keeps the widget cards readable at %ipx viewport width", async (viewportWidth) => {
-    resizeDashboardViewport(viewportWidth);
-    renderApp({
-      snapshot: terminalSnapshot,
-      traceFixtures: activeStoryReworkTraceFixtures,
-    });
-
-    fireEvent.click(getActiveStorySelectionButton());
-
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-
-    const widgets = within(dashboardGrid).getAllByRole("article");
-    const widgetNames = widgets.map(
-      (widget) => widget.getAttribute("aria-label") ?? "",
-    );
-
-    expect(widgetNames).toContain("Work outcome chart");
-    expect(widgetNames).toContain("Submit work");
-    expect(widgetNames).not.toContain("Completion trend");
-    expect(widgetNames).not.toContain("Failure trend");
-    expect(widgetNames).not.toContain("Retry and rework trend");
-    expect(widgetNames).not.toContain("Timing trend");
-    expect(widgetNames).toContain("Completed and failed work");
-    expect(widgetNames).toContain("Current selection");
-    expect(widgetNames).toContain("Trace drill-down");
-    const bentoItems = Array.from(
-      dashboardGrid.querySelectorAll<HTMLElement>("[data-bento-card-id]"),
-    );
-    const cardIds = bentoItems.map((item) => item.dataset.bentoCardId);
-    expect(cardIds).toContain("work-outcome-chart");
-    expect(cardIds).toContain("submit-work");
-    expect(cardIds).not.toContain("completion-trend");
-    expect(cardIds).not.toContain("failure-trend");
-    expect(cardIds).not.toContain("rework-trend");
-    expect(cardIds).not.toContain("timing-trend");
-    expect(cardIds).toContain("terminal-work");
-    expect(cardIds).toContain("trace");
-    expect(cardIds).toContain("current-selection");
-
-    expect(
-      within(dashboardGrid).getByRole("img", {
-        name: "Work outcome chart for Session",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(dashboardGrid).queryByRole("img", {
-        name: `Timing trend for ${activeWorkID}`,
-      }),
-    ).toBeNull();
-  });
-
-  it("smoke tests the composed bento dashboard at a narrow viewport", async () => {
-    resizeDashboardViewport(640);
-    renderApp({
-      snapshot: terminalSnapshot,
-      traceFixtures: activeStoryTraceFixtures,
-    });
-
-    await screen.findByRole("heading", { name: "U" });
-    expect(
-      screen.getAllByRole("region", { name: "you-agent-factory bento board" }),
-    ).toHaveLength(1);
-    expect(screen.getByRole("article", { name: "Factory graph" })).toBeTruthy();
-    expect(
-      screen.getByRole("region", { name: "Work graph viewport" }),
-    ).toBeTruthy();
-
-    const activeWorkButton = (
-      await screen.findAllByRole("button", { name: /Active Story/ })
-    )[0];
-    fireEvent.click(activeWorkButton);
-
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    expect(
-      within(dashboardGrid).getByRole("article", {
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      const trendWidget = await within(dashboardGrid).findByRole("article", {
         name: "Work outcome chart",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(dashboardGrid).getByRole("article", { name: "Submit work" }),
-    ).toBeTruthy();
-    expect(
-      within(dashboardGrid).getByRole("img", {
-        name: "Work outcome chart for Session",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(dashboardGrid).getByRole("article", { name: "Trace drill-down" }),
-    ).toBeTruthy();
-    expect(
-      within(dashboardGrid).getByRole("article", {
-        name: "Completed and failed work",
-      }),
-    ).toBeTruthy();
-    expect(
-      await within(dashboardGrid).findByText("Trace dispatch grid"),
-    ).toBeTruthy();
-    await waitFor(() => {
+      });
+      const slider = screen.getByRole<HTMLInputElement>("slider", {
+        name: "Timeline tick",
+      });
+
       expect(
-        screen
-          .getAllByRole("button", { name: /Active Story/ })[0]
-          ?.getAttribute("aria-pressed"),
-      ).toBe("true");
+        within(trendWidget).getByRole("region", {
+          name: "Work outcome chart region",
+        }),
+      ).toBeTruthy();
+      fireEvent.change(slider, { target: { value: "1" } });
+      await waitFor(() => {
+        expect(
+          within(trendWidget).getByRole("img", {
+            name: "Work outcome chart for Session",
+          }),
+        ).toBeTruthy();
+      });
+
+      fireEvent.change(slider, { target: { value: "4" } });
+      await waitFor(() => {
+        expect(
+          within(trendWidget).getByRole("img", {
+            name: "Work outcome chart for Session",
+          }),
+        ).toBeTruthy();
+      });
     });
 
-    const outcomeWidget = within(dashboardGrid).getByRole("article", {
-      name: "Work outcome chart",
-    });
-    const outcomeGridItem = outcomeWidget.closest(
-      ".react-grid-item",
-    ) as HTMLElement;
-    const initialOutcomeStyle = outcomeGridItem.getAttribute("style");
+    it("keeps retry, rework, and timing trends hidden when selected trace data is available", async () => {
+      renderApp({
+        snapshot: terminalSnapshot,
+        traceFixtures: activeStoryReworkTraceFixtures,
+      });
 
-    fireEvent.mouseDown(
-      within(outcomeWidget).getByRole("heading", {
-        name: "Work outcome chart",
-      }),
-      {
-        button: 0,
-        buttons: 1,
-        clientX: 120,
-        clientY: 40,
-      },
-    );
-    fireEvent.mouseMove(document, {
-      buttons: 1,
-      clientX: 360,
-      clientY: 40,
-    });
-    fireEvent.mouseUp(document, {
-      button: 0,
-      clientX: 360,
-      clientY: 40,
+      await screen.findByRole("heading", { name: "U" });
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      expect(
+        within(dashboardGrid).queryByRole("article", { name: "Failure trend" }),
+      ).toBeNull();
+
+      fireEvent.click(getActiveStorySelectionButton());
+
+      const workDetail = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      expect(
+        await within(workDetail).findByRole("article", {
+          name: "Current selection",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(workDetail).getByRole("article", { name: "Trace drill-down" }),
+      ).toBeTruthy();
+      expect(
+        within(workDetail).queryByRole("article", {
+          name: "Retry and rework trend",
+        }),
+      ).toBeNull();
+      expect(
+        within(workDetail).queryByRole("article", { name: "Timing trend" }),
+      ).toBeNull();
+      expect(
+        workDetail.querySelector('[data-bento-card-id="rework-trend"]'),
+      ).toBeNull();
+      expect(
+        workDetail.querySelector('[data-bento-card-id="timing-trend"]'),
+      ).toBeNull();
     });
 
-    expect(outcomeGridItem.getAttribute("style")).toBe(initialOutcomeStyle);
+    it.each([
+      1366, 1024, 640,
+    ])("keeps the widget cards readable at %ipx viewport width", async (viewportWidth) => {
+      resizeDashboardViewport(viewportWidth);
+      renderApp({
+        snapshot: terminalSnapshot,
+        traceFixtures: activeStoryReworkTraceFixtures,
+      });
 
-    const terminalWidget = within(dashboardGrid).getByRole("article", {
-      name: "Completed and failed work",
-    });
-    const completedRow = within(terminalWidget)
-      .getByRole("heading", { name: "Completed" })
-      .closest("section");
-    const failedRow = within(terminalWidget)
-      .getByRole("heading", { name: "Failed" })
-      .closest("section");
+      fireEvent.click(getActiveStorySelectionButton());
 
-    if (
-      !(completedRow instanceof HTMLElement) ||
-      !(failedRow instanceof HTMLElement)
-    ) {
-      throw new Error(
-        "expected completed and failed rows to render as terminal sections",
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+
+      const widgets = within(dashboardGrid).getAllByRole("article");
+      const widgetNames = widgets.map(
+        (widget) => widget.getAttribute("aria-label") ?? "",
       );
-    }
 
-    fireEvent.click(
-      within(completedRow).getByRole("button", { name: "Collapse" }),
-    );
-    fireEvent.click(
-      within(failedRow).getByRole("button", { name: "Collapse" }),
-    );
-    fireEvent.click(
-      within(completedRow).getByRole("button", { name: "Expand" }),
-    );
-    fireEvent.click(within(failedRow).getByRole("button", { name: "Expand" }));
+      expect(widgetNames).toContain("Work outcome chart");
+      expect(widgetNames).toContain("Submit work");
+      expect(widgetNames).not.toContain("Completion trend");
+      expect(widgetNames).not.toContain("Failure trend");
+      expect(widgetNames).not.toContain("Retry and rework trend");
+      expect(widgetNames).not.toContain("Timing trend");
+      expect(widgetNames).toContain("Completed and failed work");
+      expect(widgetNames).toContain("Current selection");
+      expect(widgetNames).toContain("Trace drill-down");
+      const bentoItems = Array.from(
+        dashboardGrid.querySelectorAll<HTMLElement>("[data-bento-card-id]"),
+      );
+      const cardIds = bentoItems.map((item) => item.dataset.bentoCardId);
+      expect(cardIds).toContain("work-outcome-chart");
+      expect(cardIds).toContain("submit-work");
+      expect(cardIds).not.toContain("completion-trend");
+      expect(cardIds).not.toContain("failure-trend");
+      expect(cardIds).not.toContain("rework-trend");
+      expect(cardIds).not.toContain("timing-trend");
+      expect(cardIds).toContain("terminal-work");
+      expect(cardIds).toContain("trace");
+      expect(cardIds).toContain("current-selection");
 
-    expect(
-      within(completedRow).getByRole("button", { name: "Done Story" }),
-    ).toBeTruthy();
-    expect(
-      within(failedRow).getByRole("button", { name: "Failed Story" }),
-    ).toBeTruthy();
-    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
-      window.innerWidth,
-    );
-  });
+      expect(
+        within(dashboardGrid).getByRole("img", {
+          name: "Work outcome chart for Session",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(dashboardGrid).queryByRole("img", {
+          name: `Timing trend for ${activeWorkID}`,
+        }),
+      ).toBeNull();
+    });
+
+    it("smoke tests the composed bento dashboard at a narrow viewport", async () => {
+      resizeDashboardViewport(640);
+      renderApp({
+        snapshot: terminalSnapshot,
+        traceFixtures: activeStoryTraceFixtures,
+      });
+
+      await screen.findByRole("heading", { name: "U" });
+      expect(
+        screen.getAllByRole("region", {
+          name: "you-agent-factory bento board",
+        }),
+      ).toHaveLength(1);
+      expect(
+        screen.getByRole("article", { name: "Factory graph" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("region", { name: "Work graph viewport" }),
+      ).toBeTruthy();
+
+      const activeWorkButton = (
+        await screen.findAllByRole("button", { name: /Active Story/ })
+      )[0];
+      fireEvent.click(activeWorkButton);
+
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      expect(
+        within(dashboardGrid).getByRole("article", {
+          name: "Work outcome chart",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(dashboardGrid).getByRole("article", { name: "Submit work" }),
+      ).toBeTruthy();
+      expect(
+        within(dashboardGrid).getByRole("img", {
+          name: "Work outcome chart for Session",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(dashboardGrid).getByRole("article", {
+          name: "Trace drill-down",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(dashboardGrid).getByRole("article", {
+          name: "Completed and failed work",
+        }),
+      ).toBeTruthy();
+      expect(
+        await within(dashboardGrid).findByText("Trace dispatch grid"),
+      ).toBeTruthy();
+      await waitFor(() => {
+        expect(
+          screen
+            .getAllByRole("button", { name: /Active Story/ })[0]
+            ?.getAttribute("aria-pressed"),
+        ).toBe("true");
+      });
+
+      const outcomeWidget = within(dashboardGrid).getByRole("article", {
+        name: "Work outcome chart",
+      });
+      const outcomeGridItem = outcomeWidget.closest(
+        ".react-grid-item",
+      ) as HTMLElement;
+      const initialOutcomeStyle = outcomeGridItem.getAttribute("style");
+
+      fireEvent.mouseDown(
+        within(outcomeWidget).getByRole("heading", {
+          name: "Work outcome chart",
+        }),
+        {
+          button: 0,
+          buttons: 1,
+          clientX: 120,
+          clientY: 40,
+        },
+      );
+      fireEvent.mouseMove(document, {
+        buttons: 1,
+        clientX: 360,
+        clientY: 40,
+      });
+      fireEvent.mouseUp(document, {
+        button: 0,
+        clientX: 360,
+        clientY: 40,
+      });
+
+      expect(outcomeGridItem.getAttribute("style")).toBe(initialOutcomeStyle);
+
+      const terminalWidget = within(dashboardGrid).getByRole("article", {
+        name: "Completed and failed work",
+      });
+      const completedRow = within(terminalWidget)
+        .getByRole("heading", { name: "Completed" })
+        .closest("section");
+      const failedRow = within(terminalWidget)
+        .getByRole("heading", { name: "Failed" })
+        .closest("section");
+
+      if (
+        !(completedRow instanceof HTMLElement) ||
+        !(failedRow instanceof HTMLElement)
+      ) {
+        throw new Error(
+          "expected completed and failed rows to render as terminal sections",
+        );
+      }
+
+      fireEvent.click(
+        within(completedRow).getByRole("button", { name: "Collapse" }),
+      );
+      fireEvent.click(
+        within(failedRow).getByRole("button", { name: "Collapse" }),
+      );
+      fireEvent.click(
+        within(completedRow).getByRole("button", { name: "Expand" }),
+      );
+      fireEvent.click(
+        within(failedRow).getByRole("button", { name: "Expand" }),
+      );
+
+      expect(
+        within(completedRow).getByRole("button", { name: "Done Story" }),
+      ).toBeTruthy();
+      expect(
+        within(failedRow).getByRole("button", { name: "Failed Story" }),
+      ).toBeTruthy();
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+        window.innerWidth,
+      );
+    });
   });
 
   describe("terminal states", () => {
-  it("opens completed and failed work summaries and updates the trace card", async () => {
-    renderApp({
-      snapshot: terminalSnapshot,
-      traceFixtures: terminalStateTraceFixtures,
-    });
-
-    await screen.findByRole("heading", { name: "U" });
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-    fireEvent.click(
-      within(dashboardGrid).getByRole("button", { name: "Done Story" }),
-    );
-
-    const completedDetail = await screen.findByRole("article", {
-      name: "Current selection",
-    });
-    expect(
-      within(dashboardGrid)
-        .getByRole("button", { name: "Done Story" })
-        .getAttribute("data-selected"),
-    ).toBe("true");
-    expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
-    expect(
-      within(completedDetail).queryByRole("heading", {
-        name: "Execution details",
-      }),
-    ).toBeNull();
-    expect(
-      within(completedDetail).queryByRole("heading", {
-        name: "Request details",
-      }),
-    ).toBeNull();
-    expect(
-      within(completedDetail).queryByRole("heading", {
-        name: "Request counts",
-      }),
-    ).toBeNull();
-    expect(within(completedDetail).queryByText("Failure reason")).toBeNull();
-    expect(completedDetail).toBeTruthy();
-    expect(
-      await within(dashboardGrid).findByText("dispatch-done-story"),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Failed Story" }));
-
-    const failedDetail = await screen.findByRole("article", {
-      name: "Current selection",
-    });
-    expect(
-      within(dashboardGrid)
-        .getByRole("button", { name: "Done Story" })
-        .getAttribute("data-selected"),
-    ).toBe("false");
-    expect(
-      within(dashboardGrid)
-        .getByRole("button", { name: "Failed Story" })
-        .getAttribute("data-selected"),
-    ).toBe("true");
-    expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
-    expect(
-      within(failedDetail).queryByRole("heading", {
-        name: "Execution details",
-      }),
-    ).toBeNull();
-    expect(
-      within(failedDetail).queryByRole("heading", {
-        name: "Request details",
-      }),
-    ).toBeNull();
-    expect(
-      within(failedDetail).queryByRole("heading", {
-        name: "Request counts",
-      }),
-    ).toBeNull();
-    expect(
-      within(failedDetail).getByRole("heading", {
-        name: "Workstation dispatches",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(failedDetail).getAllByText(/FAILED|Failed/).length,
-    ).toBeGreaterThanOrEqual(1);
-    expect(within(failedDetail).queryByText("Failure reason")).toBeNull();
-    expect(within(failedDetail).getByText("Current dispatch")).toBeTruthy();
-    expect(
-      within(failedDetail).getByText("Session log unavailable"),
-    ).toBeTruthy();
-    expect(
-      within(failedDetail).getByText("codex / Session ID / sess-failed-story"),
-    ).toBeTruthy();
-    expect(
-      within(failedDetail).queryByText(
-        "Terminal summaries are reconstructed from retained runtime state.",
-      ),
-    ).toBeNull();
-    expect(
-      await within(dashboardGrid).findByText("dispatch-repair-failed"),
-    ).toBeTruthy();
-  });
-
-  it("shows terminal and failed state occupancy in current-selection details", async () => {
-    renderApp({
-      snapshot: terminalSnapshot,
-      timelineSnapshots: terminalTimelineSnapshots,
-    });
-
-    await screen.findByRole("heading", { name: "U" });
-    const dashboardGrid = screen.getByRole("region", {
-      name: "you-agent-factory bento board",
-    });
-
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Select story:complete state",
-      }),
-    );
-
-    const completedDetail = await within(dashboardGrid).findByRole("article", {
-      name: "Current selection",
-    });
-    expect(within(completedDetail).getByText("Count")).toBeTruthy();
-    expect(within(completedDetail).getByText("Current work")).toBeTruthy();
-    expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
-    expect(within(completedDetail).getByText(completedWorkID)).toBeTruthy();
-    expect(
-      within(completedDetail).queryByText(
-        "No current work is occupying this place.",
-      ),
-    ).toBeNull();
-
-    fireEvent.click(
-      within(completedDetail).getByRole("button", {
-        name: "Select work item Done Story",
-      }),
-    );
-
-    const completedWorkDetail = await within(dashboardGrid).findByRole(
-      "article",
-      {
-        name: "Current selection",
-      },
-    );
-    expect(within(completedWorkDetail).getByText("Done Story")).toBeTruthy();
-    expect(
-      within(completedWorkDetail).queryByRole("heading", {
-        name: "Execution details",
-      }),
-    ).toBeNull();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Select story:blocked state" }),
-    );
-
-    await waitFor(() => {
-      const failedDetail = screen.getByRole("article", {
-        name: "Current selection",
+    it("opens completed and failed work summaries and updates the trace card", async () => {
+      renderApp({
+        snapshot: terminalSnapshot,
+        traceFixtures: terminalStateTraceFixtures,
       });
 
-      expect(within(failedDetail).getByText("Count")).toBeTruthy();
-      expect(within(failedDetail).getByText("Current work")).toBeTruthy();
+      await screen.findByRole("heading", { name: "U" });
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+      fireEvent.click(
+        within(dashboardGrid).getByRole("button", { name: "Done Story" }),
+      );
+
+      const completedDetail = await screen.findByRole("article", {
+        name: "Current selection",
+      });
+      expect(
+        within(dashboardGrid)
+          .getByRole("button", { name: "Done Story" })
+          .getAttribute("data-selected"),
+      ).toBe("true");
+      expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
+      expect(
+        within(completedDetail).queryByRole("heading", {
+          name: "Execution details",
+        }),
+      ).toBeNull();
+      expect(
+        within(completedDetail).queryByRole("heading", {
+          name: "Request details",
+        }),
+      ).toBeNull();
+      expect(
+        within(completedDetail).queryByRole("heading", {
+          name: "Request counts",
+        }),
+      ).toBeNull();
+      expect(within(completedDetail).queryByText("Failure reason")).toBeNull();
+      expect(completedDetail).toBeTruthy();
+      expect(
+        await within(dashboardGrid).findByText("dispatch-done-story"),
+      ).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("button", { name: "Failed Story" }));
+
+      const failedDetail = await screen.findByRole("article", {
+        name: "Current selection",
+      });
+      expect(
+        within(dashboardGrid)
+          .getByRole("button", { name: "Done Story" })
+          .getAttribute("data-selected"),
+      ).toBe("false");
+      expect(
+        within(dashboardGrid)
+          .getByRole("button", { name: "Failed Story" })
+          .getAttribute("data-selected"),
+      ).toBe("true");
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
-      expect(within(failedDetail).getByText(failedWorkID)).toBeTruthy();
       expect(
-        within(failedDetail).getAllByText("Failure reason").length,
-      ).toBeGreaterThan(0);
+        within(failedDetail).queryByRole("heading", {
+          name: "Execution details",
+        }),
+      ).toBeNull();
       expect(
-        within(failedDetail).getAllByText("provider_rate_limit").length,
-      ).toBeGreaterThan(0);
-      expect(within(failedDetail).getByText("Failure message")).toBeTruthy();
+        within(failedDetail).queryByRole("heading", {
+          name: "Request details",
+        }),
+      ).toBeNull();
+      expect(
+        within(failedDetail).queryByRole("heading", {
+          name: "Request counts",
+        }),
+      ).toBeNull();
+      expect(
+        within(failedDetail).getByRole("heading", {
+          name: "Workstation dispatches",
+        }),
+      ).toBeTruthy();
+      expect(
+        within(failedDetail).getAllByText(/FAILED|Failed/).length,
+      ).toBeGreaterThanOrEqual(1);
+      expect(within(failedDetail).queryByText("Failure reason")).toBeNull();
+      expect(within(failedDetail).getByText("Current dispatch")).toBeTruthy();
+      expect(
+        within(failedDetail).getByText("Session log unavailable"),
+      ).toBeTruthy();
       expect(
         within(failedDetail).getByText(
-          "Provider rate limit exceeded while generating the repair.",
+          "codex / Session ID / sess-failed-story",
         ),
       ).toBeTruthy();
       expect(
         within(failedDetail).queryByText(
+          "Terminal summaries are reconstructed from retained runtime state.",
+        ),
+      ).toBeNull();
+      expect(
+        await within(dashboardGrid).findByText("dispatch-repair-failed"),
+      ).toBeTruthy();
+    });
+
+    it("shows terminal and failed state occupancy in current-selection details", async () => {
+      renderApp({
+        snapshot: terminalSnapshot,
+        timelineSnapshots: terminalTimelineSnapshots,
+      });
+
+      await screen.findByRole("heading", { name: "U" });
+      const dashboardGrid = screen.getByRole("region", {
+        name: "you-agent-factory bento board",
+      });
+
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Select story:complete state",
+        }),
+      );
+
+      const completedDetail = await within(dashboardGrid).findByRole(
+        "article",
+        {
+          name: "Current selection",
+        },
+      );
+      expect(within(completedDetail).getByText("Count")).toBeTruthy();
+      expect(within(completedDetail).getByText("Current work")).toBeTruthy();
+      expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
+      expect(within(completedDetail).getByText(completedWorkID)).toBeTruthy();
+      expect(
+        within(completedDetail).queryByText(
           "No current work is occupying this place.",
         ),
       ).toBeNull();
+
+      fireEvent.click(
+        within(completedDetail).getByRole("button", {
+          name: "Select work item Done Story",
+        }),
+      );
+
+      const completedWorkDetail = await within(dashboardGrid).findByRole(
+        "article",
+        {
+          name: "Current selection",
+        },
+      );
+      expect(within(completedWorkDetail).getByText("Done Story")).toBeTruthy();
+      expect(
+        within(completedWorkDetail).queryByRole("heading", {
+          name: "Execution details",
+        }),
+      ).toBeNull();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Select story:blocked state" }),
+      );
+
+      await waitFor(() => {
+        const failedDetail = screen.getByRole("article", {
+          name: "Current selection",
+        });
+
+        expect(within(failedDetail).getByText("Count")).toBeTruthy();
+        expect(within(failedDetail).getByText("Current work")).toBeTruthy();
+        expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
+        expect(within(failedDetail).getByText(failedWorkID)).toBeTruthy();
+        expect(
+          within(failedDetail).getAllByText("Failure reason").length,
+        ).toBeGreaterThan(0);
+        expect(
+          within(failedDetail).getAllByText("provider_rate_limit").length,
+        ).toBeGreaterThan(0);
+        expect(within(failedDetail).getByText("Failure message")).toBeTruthy();
+        expect(
+          within(failedDetail).getByText(
+            "Provider rate limit exceeded while generating the repair.",
+          ),
+        ).toBeTruthy();
+        expect(
+          within(failedDetail).queryByText(
+            "No current work is occupying this place.",
+          ),
+        ).toBeNull();
+      });
     });
-  });
 
-  it("shows an explicit unavailable state when no retained trace history exists", async () => {
-    renderApp({
-      snapshot: activeSnapshot,
+    it("shows an explicit unavailable state when no retained trace history exists", async () => {
+      renderApp({
+        snapshot: activeSnapshot,
+      });
+
+      fireEvent.click(getActiveStorySelectionButton());
+
+      expect(await screen.findByText("Trace history unavailable")).toBeTruthy();
+      expect(
+        screen.getByText(
+          "No retained dispatch history is currently available for this work item.",
+        ),
+      ).toBeTruthy();
     });
-
-    fireEvent.click(getActiveStorySelectionButton());
-
-    expect(await screen.findByText("Trace history unavailable")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "No retained dispatch history is currently available for this work item.",
-      ),
-    ).toBeTruthy();
-  });
   });
 });

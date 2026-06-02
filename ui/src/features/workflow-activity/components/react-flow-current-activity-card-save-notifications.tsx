@@ -1,8 +1,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-
-import { resolveGraphDocumentSaveToastNotification } from "../../factory-graph-editor/lib/graph-document-save-notifications";
 import type { GraphDocumentSaveToastNotification } from "../../factory-graph-editor/lib/graph-document-save-notifications";
+import { resolveGraphDocumentSaveToastNotification } from "../../factory-graph-editor/lib/graph-document-save-notifications";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   buildSaveErrorStableIdentity,

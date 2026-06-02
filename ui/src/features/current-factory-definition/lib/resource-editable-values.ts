@@ -4,7 +4,9 @@ import {
   workstationNamesReferencingResourceInFactoryDefinition,
 } from "../../current-selection/resource-selection/lib/resource-detail-values";
 
-type CanonicalResource = NonNullable<CanonicalFactoryDefinition["resources"]>[number];
+type CanonicalResource = NonNullable<
+  CanonicalFactoryDefinition["resources"]
+>[number];
 type ResourceType = NonNullable<CanonicalResource["type"]>;
 
 export const EDITABLE_RESOURCE_TYPES: ResourceType[] = [
@@ -90,7 +92,10 @@ export function applyEditableResourceDraft(
   }
 
   const trimmedName = draft.name.trim();
-  const nextResource = buildResourceFromDraft(resourceResolution.resource, draft);
+  const nextResource = buildResourceFromDraft(
+    resourceResolution.resource,
+    draft,
+  );
 
   return {
     ...factory,
@@ -116,9 +121,7 @@ export function applyEditableResourceDraft(
   };
 }
 
-export function parseResourceCapacityText(
-  capacityText: string,
-): number | null {
+export function parseResourceCapacityText(capacityText: string): number | null {
   const trimmed = capacityText.trim();
   if (trimmed.length === 0) {
     return null;

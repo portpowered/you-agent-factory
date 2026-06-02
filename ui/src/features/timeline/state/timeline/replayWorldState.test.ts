@@ -170,19 +170,35 @@ describe("reconstructWorldState WORK_STATE_CHANGE", () => {
       initialStructureRequest,
       workRequestEvent(1, workID),
       ...failedDispatchEvents(2, workID),
-      workStateChangeEvent(4, workID, "failed", "review", "task:failed", "task:review", "cli"),
+      workStateChangeEvent(
+        4,
+        workID,
+        "failed",
+        "review",
+        "task:failed",
+        "task:review",
+        "cli",
+      ),
     ];
 
     const failedTick = reconstructWorldState(events, 3);
     expect(failedTick.failedWorkItemsByID[workID]).toBeDefined();
-    expect(failedTick.occupancyByID["task:failed"]?.workItemIDs).toEqual([workID]);
+    expect(failedTick.occupancyByID["task:failed"]?.workItemIDs).toEqual([
+      workID,
+    ]);
 
     const recoveredTick = reconstructWorldState(events, 4);
     expect(recoveredTick.failedWorkItemsByID[workID]).toBeUndefined();
-    expect(recoveredTick.occupancyByID["task:failed"]?.workItemIDs ?? []).toEqual([]);
-    expect(recoveredTick.occupancyByID["task:review"]?.workItemIDs).toEqual([workID]);
+    expect(
+      recoveredTick.occupancyByID["task:failed"]?.workItemIDs ?? [],
+    ).toEqual([]);
+    expect(recoveredTick.occupancyByID["task:review"]?.workItemIDs).toEqual([
+      workID,
+    ]);
     expect(recoveredTick.workItemsByID[workID]?.place_id).toBe("task:review");
-    expect(recoveredTick.failedWorkDetailsByWorkID[workID]?.failure_reason).toBeDefined();
+    expect(
+      recoveredTick.failedWorkDetailsByWorkID[workID]?.failure_reason,
+    ).toBeDefined();
 
     expect(recoveredTick.workStateChangesByWorkID?.[workID]).toEqual([
       expect.objectContaining({
@@ -202,9 +218,9 @@ describe("reconstructWorldState WORK_STATE_CHANGE", () => {
     expect(runtime.current_work_items_by_place_id["task:review"]).toEqual([
       expect.objectContaining({ work_id: workID }),
     ]);
-    expect(runtime.place_occupancy_work_items_by_place_id["task:review"]).toEqual([
-      expect.objectContaining({ work_id: workID }),
-    ]);
+    expect(
+      runtime.place_occupancy_work_items_by_place_id["task:review"],
+    ).toEqual([expect.objectContaining({ work_id: workID })]);
     expect(runtime.work_move_operations_by_work_id?.[workID]).toEqual([
       expect.objectContaining({
         work_id: workID,
@@ -220,7 +236,15 @@ describe("reconstructWorldState WORK_STATE_CHANGE", () => {
     const events: FactoryEvent[] = [
       initialStructureRequest,
       workRequestEvent(1, workID),
-      workStateChangeEvent(2, workID, "init", "review", "task:init", "task:review", "api"),
+      workStateChangeEvent(
+        2,
+        workID,
+        "init",
+        "review",
+        "task:init",
+        "task:review",
+        "api",
+      ),
     ];
 
     const state = reconstructWorldState(events, 2);

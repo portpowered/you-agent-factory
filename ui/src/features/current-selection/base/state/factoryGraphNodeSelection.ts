@@ -58,9 +58,7 @@ export function factoryGraphWorkStateNodeExistsInSnapshot(
     (candidate) => candidate.name === match[1],
   );
 
-  return (
-    workType?.states?.some((state) => state.name === match[2]) ?? false
-  );
+  return workType?.states?.some((state) => state.name === match[2]) ?? false;
 }
 
 export function resolveFactoryGraphNodeSelection(
@@ -69,7 +67,9 @@ export function resolveFactoryGraphNodeSelection(
   factory: DashboardSnapshot["factory"],
 ): DashboardNodeSelection | null {
   if (snapshot.topology.workstation_nodes_by_id[selection.nodeId]) {
-    const workstationName = parseFactoryGraphWorkstationNodeId(selection.nodeId);
+    const workstationName = parseFactoryGraphWorkstationNodeId(
+      selection.nodeId,
+    );
     if (
       workstationName &&
       factory &&

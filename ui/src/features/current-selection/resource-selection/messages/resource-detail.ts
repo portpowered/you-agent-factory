@@ -162,13 +162,15 @@ const resourceDetailMessagesByLocale = {
     editableConfigurationCapacityInvalid:
       "리소스 용량은 1보다 큰 정수여야 합니다.",
     editableConfigurationCollapseActionLabel: "리소스 구성 편집기 접기",
-    editableConfigurationContractInvalidPrefix: "리소스 구성이 유효하지 않습니다.",
+    editableConfigurationContractInvalidPrefix:
+      "리소스 구성이 유효하지 않습니다.",
     editableConfigurationEmpty:
       "실행 중인 팩토리 정의에 편집 가능한 리소스 값이 없습니다.",
     editableConfigurationErrorPrefix: "리소스 구성을 사용할 수 없습니다.",
     editableConfigurationExpandActionLabel: "리소스 구성 편집기 펼치기",
     editableConfigurationHeading: "리소스 구성",
-    editableConfigurationLoading: "편집 가능한 리소스 구성을 불러오는 중입니다.",
+    editableConfigurationLoading:
+      "편집 가능한 리소스 구성을 불러오는 중입니다.",
     editableConfigurationNameDuplicate: (resourceName) =>
       `실행 중인 팩토리 정의에 "${resourceName}"(이)라는 리소스가 이미 있습니다.`,
     editableConfigurationNameRequired:

@@ -28,7 +28,9 @@ describe("session factory import activation create-new-named new names", () => {
         new Response(
           JSON.stringify({
             name: "Imported Factory Name-2",
-            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {
@@ -49,20 +51,27 @@ describe("session factory import activation create-new-named new names", () => {
       activateImportedFactoryForSession(
         {
           name: "Imported Factory Name",
-          workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+          workTypes: [
+            { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+          ],
           workers: [],
           workstations: [],
         },
         {
           choice: "create_new_named",
           createFactoryName: "Imported Factory Name-2",
-          existingFactoryNames: ["Session Current Name", "Imported Factory Name"],
+          existingFactoryNames: [
+            "Session Current Name",
+            "Imported Factory Name",
+          ],
           fetch: fetchMock,
         },
       ),
     ).resolves.toEqual({
       name: "Imported Factory Name-2",
-      workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+      workTypes: [
+        { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+      ],
       workers: [],
       workstations: [],
     });
@@ -76,7 +85,9 @@ describe("session factory import activation create-new-named new names", () => {
           mode: "UPSERT_NAMED_AND_ACTIVATE",
           factory: {
             name: "Imported Factory Name-2",
-            workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
           },
@@ -114,7 +125,9 @@ describe("session factory import activation create-new-named listed existing nam
         new Response(
           JSON.stringify({
             name: "Known Existing Name",
-            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {
@@ -134,7 +147,9 @@ describe("session factory import activation create-new-named listed existing nam
     await activateImportedFactoryForSession(
       {
         name: "Imported Payload",
-        workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+        ],
         workers: [],
         workstations: [],
       },
@@ -154,7 +169,9 @@ describe("session factory import activation create-new-named listed existing nam
           mode: "UPSERT_NAMED_AND_ACTIVATE",
           factory: {
             name: "Known Existing Name",
-            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {
@@ -196,7 +213,9 @@ describe("session factory import activation create-new-named current session nam
         new Response(
           JSON.stringify({
             name: "Session Current Name",
-            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {
@@ -216,7 +235,9 @@ describe("session factory import activation create-new-named current session nam
     await activateImportedFactoryForSession(
       {
         name: "Imported Payload",
-        workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+        ],
         workers: [],
         workstations: [],
       },
@@ -236,7 +257,9 @@ describe("session factory import activation create-new-named current session nam
           mode: "UPSERT_NAMED_AND_ACTIVATE",
           factory: {
             name: "Session Current Name",
-            workTypes: [{ name: "task", states: [{ name: "queued", type: "INITIAL" }] }],
+            workTypes: [
+              { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+            ],
             workers: [],
             workstations: [],
             version: {

@@ -1,10 +1,18 @@
 export const DEFAULT_FACTORY_SESSION_ID = "~default";
 
-export function isDefaultFactorySessionID(sessionID: string | null | undefined): boolean {
-  return sessionID == null || sessionID === "" || sessionID === DEFAULT_FACTORY_SESSION_ID;
+export function isDefaultFactorySessionID(
+  sessionID: string | null | undefined,
+): boolean {
+  return (
+    sessionID == null ||
+    sessionID === "" ||
+    sessionID === DEFAULT_FACTORY_SESSION_ID
+  );
 }
 
-export function currentFactorySessionPath(sessionID: string | null | undefined): string {
+export function currentFactorySessionPath(
+  sessionID: string | null | undefined,
+): string {
   const normalizedSessionID: string = isDefaultFactorySessionID(sessionID)
     ? DEFAULT_FACTORY_SESSION_ID
     : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
@@ -32,10 +40,14 @@ export function factorySessionScopedPath(
   return `/factory-sessions/${encodeURIComponent(normalizedSessionID)}${normalizedPath}`;
 }
 
-export function factorySessionWorkPath(sessionID: string | null | undefined): string {
+export function factorySessionWorkPath(
+  sessionID: string | null | undefined,
+): string {
   return factorySessionScopedPath("/work", sessionID);
 }
 
-export function factorySessionEventsPath(sessionID: string | null | undefined): string {
+export function factorySessionEventsPath(
+  sessionID: string | null | undefined,
+): string {
   return factorySessionScopedPath("/events", sessionID);
 }

@@ -37,11 +37,14 @@ const workTotalsMessagesByLocale = {
       failed: "失败",
       inFlight: "进行中",
     },
-    statValueLabel: (label, value) => `${label}：${formatNumber(value, "zh-CN")}`,
+    statValueLabel: (label, value) =>
+      `${label}：${formatNumber(value, "zh-CN")}`,
   },
 } satisfies LocalizedMessageCatalog<WorkTotalsMessages>;
 
-export function getWorkTotalsMessages(locale?: string | null): WorkTotalsMessages {
+export function getWorkTotalsMessages(
+  locale?: string | null,
+): WorkTotalsMessages {
   return resolveLocalizedMessages(workTotalsMessagesByLocale, locale);
 }
 

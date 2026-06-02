@@ -1,12 +1,12 @@
 import { type Node, Position } from "@xyflow/react";
 
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
-import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,
@@ -16,8 +16,7 @@ export type TraceDispatchFlowNodeData = FactoryGraphReactFlowNode["data"] &
   TraceDispatchNodeOverlay & {
     factoryNodeId: string;
     locale?: string;
-  } &
-  Record<string, unknown>;
+  } & Record<string, unknown>;
 
 export type TraceDispatchFlowNode = Node<
   TraceDispatchFlowNodeData,
@@ -70,10 +69,8 @@ export function buildTraceDispatchFactoryGraphFlow(
 
   const edges = factoryProjection.edges.map((edge) => ({
     ...edge,
-    source:
-      traceProjection.dispatchIdByNodeId.get(edge.source) ?? edge.source,
-    target:
-      traceProjection.dispatchIdByNodeId.get(edge.target) ?? edge.target,
+    source: traceProjection.dispatchIdByNodeId.get(edge.source) ?? edge.source,
+    target: traceProjection.dispatchIdByNodeId.get(edge.target) ?? edge.target,
   }));
 
   return {

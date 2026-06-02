@@ -1,10 +1,6 @@
 import "@xyflow/react/dist/style.css";
 
-import {
-  applyNodeChanges,
-  type NodeChange,
-  ReactFlow,
-} from "@xyflow/react";
+import { applyNodeChanges, type NodeChange, ReactFlow } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import {
@@ -17,8 +13,8 @@ import {
   traceDispatchTopologyLayoutKey,
   useTraceDispatchFactoryGraphLayoutPositions,
 } from "../hooks/use-trace-dispatch-factory-graph-layout";
-import { buildTraceDispatchFactoryGraphFlow } from "../lib/trace-dispatch-factory-graph-flow";
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
+import { buildTraceDispatchFactoryGraphFlow } from "../lib/trace-dispatch-factory-graph-flow";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";

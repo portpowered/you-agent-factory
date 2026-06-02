@@ -1,30 +1,33 @@
 import type {
-  SelectedWorkRequestHistoryItem,
-} from "../lib/detail-card-types";
-import type {
   DashboardInferenceAttempt,
-  DashboardWorkItemRef,
   DashboardScriptRequest,
   DashboardScriptResponse,
+  DashboardWorkItemRef,
 } from "../../../../api/dashboard/types";
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
+import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
 
 export function isProjectedWorkstationRequest(
   request: SelectedWorkRequestHistoryItem,
-): request is Extract<SelectedWorkRequestHistoryItem, { workstation_node_id: string }> {
+): request is Extract<
+  SelectedWorkRequestHistoryItem,
+  { workstation_node_id: string }
+> {
   return "workstation_node_id" in request;
 }
 
 export function requestInputWorkItems(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? request.request_view?.input_work_items ?? []
-    : request.request.input_work_items ?? [];
+    ? (request.request_view?.input_work_items ?? [])
+    : (request.request.input_work_items ?? []);
 }
 
-export function requestOutputWorkItems(request: SelectedWorkRequestHistoryItem) {
+export function requestOutputWorkItems(
+  request: SelectedWorkRequestHistoryItem,
+) {
   return isProjectedWorkstationRequest(request)
-    ? request.response_view?.output_work_items ?? []
-    : request.response?.output_work_items ?? [];
+    ? (request.response_view?.output_work_items ?? [])
+    : (request.response?.output_work_items ?? []);
 }
 
 export function requestTitle(
@@ -74,7 +77,7 @@ export function requestModel(request: SelectedWorkRequestHistoryItem) {
 export function requestTraceIDs(request: SelectedWorkRequestHistoryItem) {
   const traceIDs = isProjectedWorkstationRequest(request)
     ? [...(request.trace_ids ?? []), ...(request.request_view?.trace_ids ?? [])]
-    : request.request.trace_ids ?? [];
+    : (request.request.trace_ids ?? []);
 
   return [...new Set(traceIDs.filter(Boolean))];
 }
@@ -89,14 +92,17 @@ export function requestStartedAt(request: SelectedWorkRequestHistoryItem) {
 
 export function requestDurationMillis(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? request.total_duration_millis ??
+    ? (request.total_duration_millis ??
         request.response_view?.duration_millis ??
         request.script_response?.duration_millis ??
-        request.response_view?.script_response?.duration_millis
-    : request.response?.duration_millis ?? request.response?.script_response?.duration_millis;
+        request.response_view?.script_response?.duration_millis)
+    : (request.response?.duration_millis ??
+        request.response?.script_response?.duration_millis);
 }
 
-export function requestWorkingDirectory(request: SelectedWorkRequestHistoryItem) {
+export function requestWorkingDirectory(
+  request: SelectedWorkRequestHistoryItem,
+) {
   if (isProjectedWorkstationRequest(request)) {
     return request.working_directory;
   }
@@ -114,14 +120,16 @@ export function requestWorktree(request: SelectedWorkRequestHistoryItem) {
 
 export function requestOutcome(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? request.outcome ??
+    ? (request.outcome ??
         request.response_view?.outcome ??
         request.script_response?.outcome ??
-        request.response_view?.script_response?.outcome
-    : request.response?.outcome ?? request.response?.script_response?.outcome;
+        request.response_view?.script_response?.outcome)
+    : (request.response?.outcome ?? request.response?.script_response?.outcome);
 }
 
-export function requestProviderSession(request: SelectedWorkRequestHistoryItem) {
+export function requestProviderSession(
+  request: SelectedWorkRequestHistoryItem,
+) {
   if (isProjectedWorkstationRequest(request)) {
     return request.provider_session;
   }
@@ -138,13 +146,13 @@ export function requestResponseText(request: SelectedWorkRequestHistoryItem) {
 
 export function requestFailureReason(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? request.failure_reason ?? request.response_view?.failure_reason
+    ? (request.failure_reason ?? request.response_view?.failure_reason)
     : request.response?.failure_reason;
 }
 
 export function requestFailureMessage(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? request.failure_message ?? request.response_view?.failure_message
+    ? (request.failure_message ?? request.response_view?.failure_message)
     : request.response?.failure_message;
 }
 
@@ -158,13 +166,13 @@ export function requestErrorClass(request: SelectedWorkRequestHistoryItem) {
 
 export function requestScriptRequest(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? request.script_request ?? request.request_view?.script_request
+    ? (request.script_request ?? request.request_view?.script_request)
     : request.request.script_request;
 }
 
 export function requestScriptResponse(request: SelectedWorkRequestHistoryItem) {
   return isProjectedWorkstationRequest(request)
-    ? request.script_response ?? request.response_view?.script_response
+    ? (request.script_response ?? request.response_view?.script_response)
     : request.response?.script_response;
 }
 
@@ -196,15 +204,21 @@ export function scriptRequestID(
   return script?.script_request_id ?? script?.scriptRequestId;
 }
 
-export function scriptResponseDurationMillis(response: DashboardScriptResponse | undefined) {
+export function scriptResponseDurationMillis(
+  response: DashboardScriptResponse | undefined,
+) {
   return response?.duration_millis ?? response?.durationMillis;
 }
 
-export function scriptResponseExitCode(response: DashboardScriptResponse | undefined) {
+export function scriptResponseExitCode(
+  response: DashboardScriptResponse | undefined,
+) {
   return response?.exit_code ?? response?.exitCode;
 }
 
-export function scriptResponseFailureType(response: DashboardScriptResponse | undefined) {
+export function scriptResponseFailureType(
+  response: DashboardScriptResponse | undefined,
+) {
   return response?.failure_type ?? response?.failureType;
 }
 
@@ -221,11 +235,19 @@ export function hasResponseDetails(request: SelectedWorkRequestHistoryItem) {
   );
 }
 
-export function dedupeWorkItems<TWorkItem extends { work_id: string }>(workItems: TWorkItem[]) {
-  return [...new Map(workItems.map((workItem) => [workItem.work_id, workItem])).values()];
+export function dedupeWorkItems<TWorkItem extends { work_id: string }>(
+  workItems: TWorkItem[],
+) {
+  return [
+    ...new Map(
+      workItems.map((workItem) => [workItem.work_id, workItem]),
+    ).values(),
+  ];
 }
 
-function requestWorkItems(request: SelectedWorkRequestHistoryItem): DashboardWorkItemRef[] {
+function requestWorkItems(
+  request: SelectedWorkRequestHistoryItem,
+): DashboardWorkItemRef[] {
   if (isProjectedWorkstationRequest(request)) {
     return request.work_items;
   }

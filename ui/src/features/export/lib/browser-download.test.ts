@@ -25,7 +25,9 @@ describe("downloadBlobAsFile", () => {
 
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(clickSpy).toHaveBeenCalledTimes(1);
-    expect(document.querySelector("a[download='factory-aurora.png']")).toBeNull();
+    expect(
+      document.querySelector("a[download='factory-aurora.png']"),
+    ).toBeNull();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:factory-download");
   });
 });

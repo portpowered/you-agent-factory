@@ -18,12 +18,14 @@ export function createDefaultDashboardStreamState(
   };
 }
 
-export const useDashboardStreamStore = create<DashboardStreamStoreState>((set) => ({
-  resetStreamState: (locale) => {
-    set({ streamState: createDefaultDashboardStreamState(locale) });
-  },
-  setStreamState: (streamState) => {
-    set({ streamState });
-  },
-  streamState: createDefaultDashboardStreamState(),
-}));
+export const useDashboardStreamStore = create<DashboardStreamStoreState>(
+  (set) => ({
+    resetStreamState: (locale) => {
+      set({ streamState: createDefaultDashboardStreamState(locale) });
+    },
+    setStreamState: (streamState) => {
+      set({ streamState });
+    },
+    streamState: createDefaultDashboardStreamState(),
+  }),
+);

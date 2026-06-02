@@ -4,19 +4,19 @@ import { type FormEvent, useMemo, useState } from "react";
 import {
   closeFactorySession,
   type FactorySessionSummary,
-  type FactorySessionTarget,
   type FactorySessionsAPIError,
+  type FactorySessionTarget,
   listFactorySessions,
   openFactorySession,
 } from "../../../api/factory-sessions";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   classifyFactorySessionFolderValidationError,
-  factorySessionTargetOptionValue,
   type FolderValidationState,
+  factorySessionTargetOptionValue,
   normalizeFactorySessionsError,
+  selectedFactorySessionTarget,
 } from "../lib/dashboard-session-tabs-utils";
-import { selectedFactorySessionTarget } from "../lib/dashboard-session-tabs-utils";
 
 export const FACTORY_SESSIONS_QUERY_KEY = ["factory-sessions"] as const;
 
@@ -38,11 +38,21 @@ export function useDashboardSessionTabsState() {
   const closeSessionMutation = useMutation({
     mutationFn: (sessionID: string) => closeFactorySession(sessionID),
   });
-  const [closeError, setCloseError] = useState<FactorySessionsAPIError | null>(null);
+  const [closeError, setCloseError] = useState<FactorySessionsAPIError | null>(
+    null,
+  );
   const sessions = sessionsQuery.data ?? [];
-  const { activeSession, activeSessionID, pausedSessionIDs, setActiveSessionID, setSessionPaused } =
-    useActiveDashboardSession(sessions);
-  const dialogState = useOpenSessionDialogState({ queryClient, setActiveSessionID });
+  const {
+    activeSession,
+    activeSessionID,
+    pausedSessionIDs,
+    setActiveSessionID,
+    setSessionPaused,
+  } = useActiveDashboardSession(sessions);
+  const dialogState = useOpenSessionDialogState({
+    queryClient,
+    setActiveSessionID,
+  });
 
   async function handleCloseSession(sessionID: string) {
     setCloseError(null);
@@ -56,8 +66,7 @@ export function useDashboardSessionTabsState() {
       );
       const nextSessionID =
         sessionID === activeSessionID
-          ? sessions.find((session) => session.id !== sessionID)?.id ??
-            null
+          ? (sessions.find((session) => session.id !== sessionID)?.id ?? null)
           : activeSessionID;
       setActiveSessionID(nextSessionID);
       await queryClient.invalidateQueries({
@@ -92,14 +101,20 @@ export function useDashboardSessionTabsState() {
 
 function useOpenSessionDialogFormState() {
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogError, setDialogError] = useState<FactorySessionsAPIError | null>(null);
+  const [dialogError, setDialogError] =
+    useState<FactorySessionsAPIError | null>(null);
   const [folderPath, setFolderPath] = useState("");
-  const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(null);
-  const [discoveredTargets, setDiscoveredTargets] = useState<FactorySessionTarget[]>([]);
+  const [validatedFolderPath, setValidatedFolderPath] = useState<string | null>(
+    null,
+  );
+  const [discoveredTargets, setDiscoveredTargets] = useState<
+    FactorySessionTarget[]
+  >([]);
   const [selectedTargetValue, setSelectedTargetValue] = useState<string>("");
-  const [folderValidation, setFolderValidation] = useState<FolderValidationState>({
-    status: "idle",
-  });
+  const [folderValidation, setFolderValidation] =
+    useState<FolderValidationState>({
+      status: "idle",
+    });
 
   function clearFolderInspection() {
     setDialogError(null);
@@ -369,10 +384,10 @@ async function openValidatedTarget({
   });
 }
 
-function validatedTargetValue(
-  targets: FactorySessionTarget[],
-): string {
-  return targets.length === 1 ? factorySessionTargetOptionValue(targets[0]) : "";
+function validatedTargetValue(targets: FactorySessionTarget[]): string {
+  return targets.length === 1
+    ? factorySessionTargetOptionValue(targets[0])
+    : "";
 }
 
 function useActiveDashboardSession(sessions: FactorySessionSummary[]) {

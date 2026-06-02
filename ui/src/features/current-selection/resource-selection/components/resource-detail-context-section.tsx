@@ -1,9 +1,9 @@
-import { formatList } from "../../../../components/ui/formatters";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
+import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import { CurrentSelectionSectionHeader } from "../../base/components/detail-card-shared";
 import type { ResourceDetailState } from "../lib/detail-card-types";
@@ -13,13 +13,7 @@ import {
 } from "../lib/resource-detail-values";
 import type { getResourceDetailMessages } from "../messages/resource-detail";
 
-function SummaryField({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function SummaryField({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-0.5">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
@@ -46,7 +40,10 @@ export function ResourceDetailContextSection({
 
   return (
     <div className="mt-4 grid gap-4 [&_h4]:m-0">
-      <section aria-labelledby="resource-summary-heading" className="grid gap-2.5">
+      <section
+        aria-labelledby="resource-summary-heading"
+        className="grid gap-2.5"
+      >
         <CurrentSelectionSectionHeader
           headingId="resource-summary-heading"
           title={messages.summaryHeading}
@@ -104,7 +101,12 @@ export function ResourceDetailContextSection({
             {formatList(workerNames)}
           </p>
         ) : (
-          <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          <p
+            className={cn(
+              "m-0 text-af-text-muted",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
             {messages.referencingWorkersEmpty}
           </p>
         )}
@@ -123,7 +125,12 @@ export function ResourceDetailContextSection({
             {formatList(workstationNames)}
           </p>
         ) : (
-          <p className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          <p
+            className={cn(
+              "m-0 text-af-text-muted",
+              DASHBOARD_SUPPORTING_TEXT_CLASS,
+            )}
+          >
             {messages.referencingWorkstationsEmpty}
           </p>
         )}

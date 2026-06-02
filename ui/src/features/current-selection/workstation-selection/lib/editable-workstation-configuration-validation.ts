@@ -8,15 +8,15 @@ import type {
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
+import {
+  getWorkstationDetailMessages,
+  type WorkstationDetailMessages,
+} from "../messages/workstation-detail";
 import type {
   EditableWorkstationPromptValidationState,
   EditableWorkstationValidationErrors,
   EditableWorkstationWorkerOptionsState,
 } from "./detail-card-types";
-import {
-  getWorkstationDetailMessages,
-  type WorkstationDetailMessages,
-} from "../messages/workstation-detail";
 import { validateEditableWorkstationGuardDraft } from "./workstation-editable-validation";
 
 export function validateEditableWorkstationDraft(

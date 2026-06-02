@@ -61,7 +61,6 @@ describe("shared locale date and time formatters", () => {
       "Alpha、Beta和Gamma",
     );
   });
-
 });
 
 describe("shared locale duration and relative-time formatters", () => {
@@ -165,7 +164,6 @@ describe("shared locale duration and relative-time formatters", () => {
       }),
     ).toBe("May 18, 2026, 5:30 AM");
   });
-
 });
 
 describe("shared locale fallback behavior", () => {

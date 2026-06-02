@@ -1,18 +1,28 @@
 import { useId, useState } from "react";
 import type { DashboardInferenceAttempt } from "../../../../api/dashboard/types";
-import {
-  formatLocalDateTime,
-  formatDurationMillis,
-  getLocalDateTimeDisplay,
-  getProviderSessionLogTarget,
-} from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
+import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
-import { ExpandablePanelTrigger } from "../../../../components/ui";
+import {
+  formatDurationMillis,
+  formatLocalDateTime,
+  getLocalDateTimeDisplay,
+  getProviderSessionLogTarget,
+} from "../../../../components/ui/formatters";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { cn } from "../../../../lib/cn";
+import {
+  getLoadableProviderSessionRef,
+  providerSessionSelectionKey,
+} from "../../../provider-session-detail/lib/provider-session-ref";
+import {
+  useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
+  useCurrentSelectionOperationalEnumMessages,
+  useCurrentSelectionWorkstationDetailMessages,
+} from "../../base/components/current-selection-locale";
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   EXECUTION_PILL_CLASS,
@@ -21,21 +31,11 @@ import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
   InferenceAttemptTextSection,
+  normalizeDetailText,
   PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
-  normalizeDetailText,
 } from "../../base/components/detail-card-shared";
 import type { InferenceAttemptCardProps } from "../lib/detail-card-types";
-import {
-  useCurrentSelectionDetailMessages,
-  useCurrentSelectionOperationalEnumMessages,
-  useCurrentSelectionLocale,
-  useCurrentSelectionWorkstationDetailMessages,
-} from "../../base/components/current-selection-locale";
-import {
-  getLoadableProviderSessionRef,
-  providerSessionSelectionKey,
-} from "../../../provider-session-detail/lib/provider-session-ref";
 
 export function InferenceAttemptCard({
   attempt,
@@ -47,7 +47,11 @@ export function InferenceAttemptCard({
   const summaryHeadingId = `${attemptPanelId}-heading`;
   const detailMessages = useCurrentSelectionDetailMessages();
   const locale = useCurrentSelectionLocale();
-  const timingSummary = getAttemptTimingSummary(attempt, detailMessages, locale);
+  const timingSummary = getAttemptTimingSummary(
+    attempt,
+    detailMessages,
+    locale,
+  );
 
   return (
     <article
@@ -210,7 +214,8 @@ function AttemptMetadataDetails({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
   const locale = useCurrentSelectionLocale();
   const provider =
-    attempt.diagnostics?.provider?.provider ?? attempt.provider_session?.provider;
+    attempt.diagnostics?.provider?.provider ??
+    attempt.provider_session?.provider;
   const model = attempt.diagnostics?.provider?.model;
   const requestTime = getLocalDateTimeDisplay(
     attempt.request_time,
@@ -235,7 +240,11 @@ function AttemptMetadataDetails({
         label={detailMessages.providerLabel}
         value={provider}
       />
-      <InferenceAttemptDetail code label={detailMessages.modelLabel} value={model} />
+      <InferenceAttemptDetail
+        code
+        label={detailMessages.modelLabel}
+        value={model}
+      />
       <InferenceAttemptDetail
         code
         label={detailMessages.workingDirectoryLabel}
@@ -419,7 +428,9 @@ function useAttemptProviderSessionState({
 
 function formatLocalizedProviderSessionLabel(
   session: DashboardInferenceAttempt["provider_session"],
-  workstationMessages: ReturnType<typeof useCurrentSelectionWorkstationDetailMessages>,
+  workstationMessages: ReturnType<
+    typeof useCurrentSelectionWorkstationDetailMessages
+  >,
 ): string {
   if (!session?.id) {
     return workstationMessages.unavailableValue;
@@ -442,7 +453,9 @@ function formatLocalizedProviderSessionLabel(
 
 function localizeProviderSessionKind(
   kind: string | undefined,
-  workstationMessages: ReturnType<typeof useCurrentSelectionWorkstationDetailMessages>,
+  workstationMessages: ReturnType<
+    typeof useCurrentSelectionWorkstationDetailMessages
+  >,
 ): string | undefined {
   const normalizedKind = kind?.trim();
   if (!normalizedKind) {

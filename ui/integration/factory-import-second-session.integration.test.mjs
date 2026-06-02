@@ -7,10 +7,10 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  buildTimeoutMs,
   browserScenarioTimeoutMs,
-  exportCoverImagePath,
+  buildTimeoutMs,
   expectNoBrowserErrors,
+  exportCoverImagePath,
   loadReplayLines,
   openBrowserPage,
   startBrowserPreview,

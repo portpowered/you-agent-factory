@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DependencyList } from "react";
+import { type DependencyList, useEffect, useRef, useState } from "react";
 
 type WorkflowTopologyAsyncCache<TLayout> = {
   readonly inFlightByTopologyKey: Map<string, Promise<TLayout>>;
@@ -17,7 +17,9 @@ type UseWorkflowTopologyAsyncCacheOptions<TLayout, TResult> = {
   topologyKey: string;
 };
 
-export function createWorkflowTopologyAsyncCache<TLayout>(): WorkflowTopologyAsyncCache<TLayout> {
+export function createWorkflowTopologyAsyncCache<
+  TLayout,
+>(): WorkflowTopologyAsyncCache<TLayout> {
   return {
     inFlightByTopologyKey: new Map<string, Promise<TLayout>>(),
     resolvedByTopologyKey: new Map<string, TLayout>(),

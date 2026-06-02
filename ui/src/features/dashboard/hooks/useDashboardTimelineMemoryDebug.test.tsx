@@ -65,7 +65,9 @@ describe("useDashboardTimelineMemoryDebug", () => {
     );
 
     expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]).toBeUndefined();
-    expect(window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),
+    ).toBeNull();
   });
 
   it("installs debug globals and persists timeline memory summary when memory debug is on", async () => {
@@ -86,7 +88,9 @@ describe("useDashboardTimelineMemoryDebug", () => {
       expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]).toBeDefined();
     });
     expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]?.options).toEqual(DEBUG_ON);
-    expect(window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY)).not.toBeNull();
+    expect(
+      window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),
+    ).not.toBeNull();
   });
 
   it("skips localStorage persistence when memory debug is on but there are no events", () => {
@@ -98,6 +102,8 @@ describe("useDashboardTimelineMemoryDebug", () => {
     );
 
     expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]).toBeDefined();
-    expect(window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY)).toBeNull();
+    expect(
+      window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),
+    ).toBeNull();
   });
 });

@@ -34,10 +34,7 @@ export function DashboardActionRow({
     <div className={cn(DASHBOARD_ACTION_ROW_CLASS, className)} {...props}>
       {hasStatuses ? (
         <div
-          className={cn(
-            DASHBOARD_ACTION_ROW_SECTION_CLASS,
-            statusesClassName,
-          )}
+          className={cn(DASHBOARD_ACTION_ROW_SECTION_CLASS, statusesClassName)}
           data-dashboard-action-row-section="statuses"
         >
           {statuses}

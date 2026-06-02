@@ -3,7 +3,10 @@ import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import { openFactoryEventStream } from "../../../api/events";
-import { DEFAULT_FACTORY_SESSION_ID, isDefaultFactorySessionID } from "../../../api/session-routing";
+import {
+  DEFAULT_FACTORY_SESSION_ID,
+  isDefaultFactorySessionID,
+} from "../../../api/session-routing";
 import {
   compactFactoryEventForTimeline,
   readFactoryTimelineDebugOptions,
@@ -46,7 +49,11 @@ interface DashboardStreamConnectionOptions {
   refreshToken: number;
   scheduleQueuedFlush: () => void;
   sessionID: string | null;
-  setStreamState: (streamState: ReturnType<typeof useDashboardStreamStore.getState>["streamState"]) => void;
+  setStreamState: (
+    streamState: ReturnType<
+      typeof useDashboardStreamStore.getState
+    >["streamState"],
+  ) => void;
   streamSessionID: string;
 }
 
@@ -139,7 +146,9 @@ export function useFactoryEventStream({
   sessionID,
 }: UseFactoryEventStreamOptions) {
   const queryClient = useQueryClient();
-  const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
+  const setStreamState = useDashboardStreamStore(
+    (state) => state.setStreamState,
+  );
   const queuedEventsRef = useRef<FactoryEvent[]>([]);
   const flushHandleRef = useRef<number | null>(null);
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);

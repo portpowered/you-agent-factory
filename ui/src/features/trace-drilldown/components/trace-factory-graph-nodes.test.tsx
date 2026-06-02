@@ -171,7 +171,9 @@ describe("Trace relation factory graph node", () => {
       />,
     );
     expect(
-      screen.getByLabelText("Resource").getAttribute("data-graph-semantic-icon"),
+      screen
+        .getByLabelText("Resource")
+        .getAttribute("data-graph-semantic-icon"),
     ).toBe("resource");
   });
 

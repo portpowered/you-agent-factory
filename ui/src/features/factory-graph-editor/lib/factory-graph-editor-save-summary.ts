@@ -1,5 +1,5 @@
-import type { FactoryGraphDraft } from "./factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+import type { FactoryGraphDraft } from "./factory-graph-draft-types";
 
 export interface FactoryGraphSaveSummary {
   changedEdges: number;

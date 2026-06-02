@@ -1,7 +1,7 @@
 import baselineReplayFixtureText from "../../integration/fixtures/event-stream-replay.jsonl?raw";
+import runtimeConfigReplayFixtureText from "../../integration/fixtures/event-stream-replay-2.jsonl?raw";
 import failureAnalysisReplayFixtureText from "../../integration/fixtures/failure-analysis-replay.jsonl?raw";
 import graphStateReplayFixtureText from "../../integration/fixtures/graph-state-smoke-replay.jsonl?raw";
-import runtimeConfigReplayFixtureText from "../../integration/fixtures/event-stream-replay-2.jsonl?raw";
 import runtimeDetailsReplayFixtureText from "../../integration/fixtures/runtime-details-replay.jsonl?raw";
 import weirdNumberSummaryReplayFixtureText from "../../integration/fixtures/weird-number-summary-replay.jsonl?raw";
 
@@ -12,7 +12,10 @@ import {
 } from "../features/timeline/state/factoryTimelineStore";
 import type { ReplayFixtureID } from "./replay-fixture-catalog";
 
-export { replayFixtureCatalog, type ReplayFixtureID } from "./replay-fixture-catalog";
+export {
+  type ReplayFixtureID,
+  replayFixtureCatalog,
+} from "./replay-fixture-catalog";
 
 export const REPLAY_FIXTURE_DIRECTORY = "integration/fixtures";
 
@@ -33,7 +36,9 @@ export function parseReplayFixtureEvents(fixtureText: string): FactoryEvent[] {
     .map((line) => JSON.parse(line) as FactoryEvent);
 }
 
-export function loadReplayFixtureEvents(fixtureID: ReplayFixtureID): FactoryEvent[] {
+export function loadReplayFixtureEvents(
+  fixtureID: ReplayFixtureID,
+): FactoryEvent[] {
   const fixtureText = replayFixtureTexts[fixtureID];
   if (!fixtureText) {
     throw new Error(`Unknown replay fixture: ${fixtureID}`);
@@ -48,7 +53,11 @@ export function buildReplayFixtureTimelineSnapshot(
 ): WorldState {
   const events = loadReplayFixtureEvents(fixtureID);
   const resolvedTick =
-    selectedTick ?? events.reduce((latestTick, event) => Math.max(latestTick, event.context.tick), 0);
+    selectedTick ??
+    events.reduce(
+      (latestTick, event) => Math.max(latestTick, event.context.tick),
+      0,
+    );
 
   return buildFactoryTimelineSnapshot(events, resolvedTick);
 }

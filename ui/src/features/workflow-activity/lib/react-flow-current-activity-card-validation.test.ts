@@ -167,26 +167,23 @@ describe("validationMessagesForSelectedWorkstation", () => {
 describe("saveErrorNoticeMessages", () => {
   it("returns server message text and target messages from save rejections", () => {
     const messages = saveErrorNoticeMessages(
-      new CurrentFactoryDefinitionError(
-        "The factory definition is invalid.",
-        {
-          code: "INVALID_FACTORY_DEFINITION",
-          status: 400,
-          targets: [
-            {
-              code: "factory.route.danglingPlaceReference",
-              message:
-                'Workstation "process" references missing place "story:missing-state".',
-              severity: "error",
-              subject: {
-                id: "process",
-                location: "OUTPUTS",
-                type: "WORKSTATION",
-              },
+      new CurrentFactoryDefinitionError("The factory definition is invalid.", {
+        code: "INVALID_FACTORY_DEFINITION",
+        status: 400,
+        targets: [
+          {
+            code: "factory.route.danglingPlaceReference",
+            message:
+              'Workstation "process" references missing place "story:missing-state".',
+            severity: "error",
+            subject: {
+              id: "process",
+              location: "OUTPUTS",
+              type: "WORKSTATION",
             },
-          ],
-        },
-      ),
+          },
+        ],
+      }),
     );
 
     expect(messages).toEqual([

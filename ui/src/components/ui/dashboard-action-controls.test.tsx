@@ -1,9 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 
 import { render, screen } from "@testing-library/react";
-
-import { DashboardActionRow } from "./dashboard-action-row";
 import { DashboardActionButton } from "./dashboard-action-button";
+import { DashboardActionRow } from "./dashboard-action-row";
 import { DashboardStatusPill } from "./dashboard-status-pill";
 
 describe("DashboardActionButton", () => {
@@ -22,7 +21,9 @@ describe("DashboardActionButton", () => {
     );
 
     expect(screen.getByRole("button", { name: "Export" }).textContent).toBe("");
-    expect(screen.getByRole("button", { name: "Save" }).textContent).toBe("Save");
+    expect(screen.getByRole("button", { name: "Save" }).textContent).toBe(
+      "Save",
+    );
     expect(screen.getByRole("button", { name: "Discard" }).textContent).toBe(
       "Discard",
     );
@@ -45,7 +46,11 @@ describe("DashboardActionButton", () => {
   it("keeps disabled and pressed semantics available for migrated surfaces", () => {
     render(
       <>
-        <DashboardActionButton aria-pressed={true} tone="secondary" type="button">
+        <DashboardActionButton
+          aria-pressed={true}
+          tone="secondary"
+          type="button"
+        >
           Active
         </DashboardActionButton>
         <DashboardActionButton disabled type="button">
@@ -78,7 +83,9 @@ describe("DashboardStatusPill", () => {
     expect(screen.getByText("Draft changes pending").className).toContain(
       "border-af-warning-border",
     );
-    expect(screen.getByRole("status").textContent).toBe("Draft changes pending");
+    expect(screen.getByRole("status").textContent).toBe(
+      "Draft changes pending",
+    );
   });
 });
 
@@ -100,7 +107,9 @@ describe("DashboardActionRow", () => {
       />,
     );
 
-    const sections = container.querySelectorAll("[data-dashboard-action-row-section]");
+    const sections = container.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
     expect(sections).toHaveLength(2);
     expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
       "statuses",
@@ -108,21 +117,26 @@ describe("DashboardActionRow", () => {
     expect(sections[1]?.getAttribute("data-dashboard-action-row-section")).toBe(
       "actions",
     );
-    expect(screen.getByRole("status").textContent).toBe("Draft changes pending");
-    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
-      "Discard",
-      "Save",
-    ]);
+    expect(screen.getByRole("status").textContent).toBe(
+      "Draft changes pending",
+    );
+    expect(
+      screen.getAllByRole("button").map((button) => button.textContent),
+    ).toEqual(["Discard", "Save"]);
   });
 
   it("omits placeholder sections for button-only and pill-only rows", () => {
     const { container, rerender } = render(
       <DashboardActionRow
-        actions={<DashboardActionButton type="button">Save</DashboardActionButton>}
+        actions={
+          <DashboardActionButton type="button">Save</DashboardActionButton>
+        }
       />,
     );
 
-    let sections = container.querySelectorAll("[data-dashboard-action-row-section]");
+    let sections = container.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
     expect(sections).toHaveLength(1);
     expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
       "actions",
@@ -131,11 +145,15 @@ describe("DashboardActionRow", () => {
 
     rerender(
       <DashboardActionRow
-        statuses={<DashboardStatusPill tone="neutral">Observe mode</DashboardStatusPill>}
+        statuses={
+          <DashboardStatusPill tone="neutral">Observe mode</DashboardStatusPill>
+        }
       />,
     );
 
-    sections = container.querySelectorAll("[data-dashboard-action-row-section]");
+    sections = container.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
     expect(sections).toHaveLength(1);
     expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
       "statuses",

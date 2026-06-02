@@ -13,21 +13,21 @@ export interface DashboardHeaderActionButtonProps
   compact?: boolean;
 }
 
-export const DashboardHeaderActionButton =
-  forwardRef<HTMLButtonElement, DashboardHeaderActionButtonProps>(
-    function DashboardHeaderActionButton(
-      { className, compact = false, iconOnly, tone = "outline", ...props },
-      ref,
-    ) {
-      return (
-        <DashboardActionButton
-          className={cn(DASHBOARD_HEADER_ACTION_BUTTON_CLASS, className)}
-          data-dashboard-header-action="neutral"
-          iconOnly={compact || iconOnly}
-          ref={ref}
-          tone={tone}
-          {...props}
-        />
-      );
-    },
+export const DashboardHeaderActionButton = forwardRef<
+  HTMLButtonElement,
+  DashboardHeaderActionButtonProps
+>(function DashboardHeaderActionButton(
+  { className, compact = false, iconOnly, tone = "outline", ...props },
+  ref,
+) {
+  return (
+    <DashboardActionButton
+      className={cn(DASHBOARD_HEADER_ACTION_BUTTON_CLASS, className)}
+      data-dashboard-header-action="neutral"
+      iconOnly={compact || iconOnly}
+      ref={ref}
+      tone={tone}
+      {...props}
+    />
   );
+});

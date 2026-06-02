@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import type { DashboardTrace } from "./api/dashboard";
 import { describe, expect, it } from "vitest";
+import type { DashboardTrace } from "./api/dashboard";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   activeSnapshot,
   nonPromptTemplateFetchPaths,
@@ -15,7 +16,6 @@ import {
   fanInResultWorkID,
   renderTraceDrilldownHarness,
 } from "./testing/app-shell-trace-follow-up-test-utils";
-import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { expectDashboardWorkItemRef } from "./testing/expectDashboardWorkItemRef";
 
 const traceSnapshot: DashboardTrace = {
@@ -83,9 +83,7 @@ describe("App follow-up trace flows", () => {
       snapshot?.runtime.workstation_requests_by_dispatch_id?.[
         "dispatch-implement"
       ];
-    expect(
-      dispatchRequest?.request?.input_work_items,
-    ).toEqual([
+    expect(dispatchRequest?.request?.input_work_items).toEqual([
       expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-b",
         display_name: "Research Context",
@@ -101,9 +99,7 @@ describe("App follow-up trace flows", () => {
         work_type_id: "story",
       }),
     ]);
-    expect(
-      dispatchRequest?.response?.output_work_items,
-    ).toEqual([
+    expect(dispatchRequest?.response?.output_work_items).toEqual([
       expectDashboardWorkItemRef({
         current_chaining_trace_id: "chain-a",
         display_name: fanInResultLabel,
@@ -117,7 +113,9 @@ describe("App follow-up trace flows", () => {
     const traceCard = await screen.findByRole("article", {
       name: "Trace drill-down",
     });
-    expect(await within(traceCard).findByText("Trace dispatch grid")).toBeTruthy();
+    expect(
+      await within(traceCard).findByText("Trace dispatch grid"),
+    ).toBeTruthy();
     expect(
       await within(traceCard).findByRole("region", {
         name: "Dispatch relationship graph",
@@ -128,9 +126,15 @@ describe("App follow-up trace flows", () => {
       expect(within(traceCard).getByText("dispatch-research")).toBeTruthy();
       expect(within(traceCard).getByText("dispatch-implement")).toBeTruthy();
     });
-    expect(within(traceCard).getAllByText(/Reviewed Story/).length).toBeGreaterThan(0);
-    expect(within(traceCard).getAllByText(/Research Context/).length).toBeGreaterThan(0);
-    expect(within(traceCard).getAllByText(new RegExp(fanInResultLabel)).length).toBeGreaterThan(0);
+    expect(
+      within(traceCard).getAllByText(/Reviewed Story/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(traceCard).getAllByText(/Research Context/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(traceCard).getAllByText(new RegExp(fanInResultLabel)).length,
+    ).toBeGreaterThan(0);
   });
 
   it("smoke tests legacy trace drill-down fallback from streamed events without predecessor metadata", async () => {
@@ -142,15 +146,21 @@ describe("App follow-up trace flows", () => {
     const traceCard = await screen.findByRole("article", {
       name: "Trace drill-down",
     });
-    expect(await within(traceCard).findByText("Trace dispatch grid")).toBeTruthy();
+    expect(
+      await within(traceCard).findByText("Trace dispatch grid"),
+    ).toBeTruthy();
     expect(
       await within(traceCard).findByRole("region", {
         name: "Dispatch relationship graph",
       }),
     ).toBeTruthy();
     await waitFor(() => {
-      expect(within(traceCard).getByText("dispatch-legacy-review")).toBeTruthy();
-      expect(within(traceCard).getByText("dispatch-legacy-complete")).toBeTruthy();
+      expect(
+        within(traceCard).getByText("dispatch-legacy-review"),
+      ).toBeTruthy();
+      expect(
+        within(traceCard).getByText("dispatch-legacy-complete"),
+      ).toBeTruthy();
     });
     expect(within(traceCard).queryByText("dispatch-research")).toBeNull();
   });
@@ -163,7 +173,9 @@ describe("App follow-up trace flows", () => {
       },
     });
 
-    fireEvent.click((await screen.findAllByRole("button", { name: /Active Story/ }))[0]);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /Active Story/ }))[0],
+    );
     await screen.findByText("Trace dispatch grid");
 
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);

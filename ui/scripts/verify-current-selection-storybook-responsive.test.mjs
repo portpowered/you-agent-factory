@@ -179,10 +179,7 @@ function createPromptHintFixture() {
       if (role === "button" && options?.name === "Save changes") {
         return saveButton;
       }
-      if (
-        role === "button" &&
-        options?.name === "Open prompt variable help"
-      ) {
+      if (role === "button" && options?.name === "Open prompt variable help") {
         return expandPromptVariableHelpButton;
       }
       return createVisibleLocator(`${role}:${options?.name}`);

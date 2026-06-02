@@ -2,13 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
-  validateFactoryDefinition,
   type FactoryValidationAPIError,
   type FactoryValidationResult,
+  validateFactoryDefinition,
 } from "../../../api/factory-validation";
 import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
-import { serializeFactoryValidationDefinition } from "../lib/factory-validation-query-key";
 import { projectFactoryValidationTargets } from "../lib/factory-validation-graph-projection";
+import { serializeFactoryValidationDefinition } from "../lib/factory-validation-query-key";
 
 export const FACTORY_VALIDATION_QUERY_KEY_PREFIX = "factory-validation";
 export const FACTORY_VALIDATION_DEBOUNCE_MS = 200;
@@ -64,7 +64,9 @@ export function useFactoryValidation(
     queryKey: factoryValidationQueryKey(serializedDefinition),
     queryFn: async ({ signal }) => {
       if (debouncedDefinition == null || serializedDefinition == null) {
-        throw new Error("factory validation requires a draft-applied definition");
+        throw new Error(
+          "factory validation requires a draft-applied definition",
+        );
       }
 
       const requestedSerializedDefinition = serializedDefinition;
@@ -83,7 +85,8 @@ export function useFactoryValidation(
 
       return result;
     },
-    enabled: enabled && debouncedDefinition != null && serializedDefinition != null,
+    enabled:
+      enabled && debouncedDefinition != null && serializedDefinition != null,
     gcTime: 0,
     refetchOnWindowFocus: false,
     retry: false,

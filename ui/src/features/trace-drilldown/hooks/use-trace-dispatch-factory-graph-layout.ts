@@ -9,9 +9,10 @@ import {
 } from "../lib/trace-factory-graph-layout";
 
 const EMPTY_POSITIONS = new Map<string, TraceFactoryGraphLayoutPosition>();
-const TRACE_DISPATCH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<
-  Map<string, TraceFactoryGraphLayoutPosition>
->();
+const TRACE_DISPATCH_LAYOUT_CACHE =
+  createWorkflowTopologyAsyncCache<
+    Map<string, TraceFactoryGraphLayoutPosition>
+  >();
 
 export function resetTraceDispatchFactoryGraphLayoutCacheForTests() {
   TRACE_DISPATCH_LAYOUT_CACHE.resolvedByTopologyKey.clear();

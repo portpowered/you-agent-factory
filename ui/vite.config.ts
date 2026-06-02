@@ -4,9 +4,11 @@ import { defineConfig } from "vite";
 import monacoEditorPluginModule from "vite-plugin-monaco-editor";
 import { coverageConfigDefaults } from "vitest/config";
 
-const apiOrigin = process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
+const apiOrigin =
+  process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
 const isCoverageRun = process.argv.includes("--coverage");
-const isVitestRun = process.argv.includes("vitest") || process.env.VITEST === "true";
+const isVitestRun =
+  process.argv.includes("vitest") || process.env.VITEST === "true";
 const monacoEditorPlugin =
   typeof monacoEditorPluginModule === "function"
     ? monacoEditorPluginModule

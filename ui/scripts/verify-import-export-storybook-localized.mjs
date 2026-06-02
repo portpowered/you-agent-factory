@@ -8,7 +8,10 @@ export function createLocalizedExportDialogVerifier({
       dialog.getByRole("textbox", { name: "工厂名称" }),
       "Localized factory name input",
     );
-    await expectVisible(dialog.getByLabel("封面图片"), "Localized cover image input");
+    await expectVisible(
+      dialog.getByLabel("封面图片"),
+      "Localized cover image input",
+    );
     await expectVisible(
       dialog.getByRole("button", { name: "取消" }),
       "Localized export cancel button",
@@ -39,7 +42,10 @@ export function createLocalizedImportDialogVerifier({
       dialog.getByRole("img", { name: "Dropped Factory 预览图" }),
       "Localized import preview image",
     );
-    await expectVisible(dialog.getByText("factory-import.png"), "Localized dropped file name");
+    await expectVisible(
+      dialog.getByText("factory-import.png"),
+      "Localized dropped file name",
+    );
     await expectVisible(
       dialog.getByRole("button", { name: "取消导入" }),
       "Localized import cancel button",
@@ -52,7 +58,11 @@ export function createLocalizedImportDialogVerifier({
       dialog.getByRole("button", { name: "关闭导入预览" }),
       "Localized import close button",
     );
-    await expectDialogWithinViewport(dialog, viewport, "Localized import preview");
+    await expectDialogWithinViewport(
+      dialog,
+      viewport,
+      "Localized import preview",
+    );
     await expectNoHorizontalOverflow(
       page,
       `Localized import preview dialog at ${viewport.label}`,

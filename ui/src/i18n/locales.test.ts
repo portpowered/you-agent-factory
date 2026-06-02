@@ -1,8 +1,8 @@
 import {
   DEFAULT_LOCALE,
   getNativeLanguageLabel,
-  NATIVE_LANGUAGE_LABELS,
   isSupportedLocale,
+  NATIVE_LANGUAGE_LABELS,
   resolveSupportedLocale,
   SUPPORTED_LOCALES,
 } from "./locales";
@@ -70,10 +70,7 @@ describe("website locale policy", () => {
     ["ko-KR", "한국어"],
     ["ja-JP", "日本語"],
     ["fr", "English"],
-  ] as const)(
-    "resolves native-language display labels for %s",
-    (locale, expected) => {
-      expect(getNativeLanguageLabel(locale)).toBe(expected);
-    },
-  );
+  ] as const)("resolves native-language display labels for %s", (locale, expected) => {
+    expect(getNativeLanguageLabel(locale)).toBe(expected);
+  });
 });

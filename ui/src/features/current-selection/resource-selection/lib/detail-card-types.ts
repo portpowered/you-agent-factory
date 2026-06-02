@@ -4,12 +4,12 @@ import type {
   CanonicalFactoryDefinition,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { FactoryResource } from "../../../../api/events/types";
 import type {
   EditableResourceDraft,
   EditableResourceValues,
 } from "../../../current-factory-definition/lib/resource-editable-values";
+import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { EditableResourceValidationErrors } from "./resource-editable-validation";
 
 export interface ResourceDetailCardProps {

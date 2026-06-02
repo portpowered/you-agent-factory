@@ -1,13 +1,13 @@
 import type { CurrentSelectionSaveEntityKind } from "../../../notifications/lib/save-notification-delivery-policy";
+import { getResourceDetailMessages } from "../../resource-selection/messages/resource-detail";
+import { getWorkStateDetailMessages } from "../../work-state-selection/messages/work-state-detail";
+import { getWorkTypeDetailMessages } from "../../work-type-selection/messages/work-type-detail";
+import { getWorkerDetailMessages } from "../../worker-selection/messages/worker-detail";
+import { getWorkstationDetailMessages } from "../../workstation-selection/messages/workstation-detail";
 import {
   getCurrentSelectionSaveToastCatalogMessages,
   resolveCurrentSelectionSaveToastTitles,
 } from "../messages/current-selection-save-toast";
-import { getResourceDetailMessages } from "../../resource-selection/messages/resource-detail";
-import { getWorkerDetailMessages } from "../../worker-selection/messages/worker-detail";
-import { getWorkStateDetailMessages } from "../../work-state-selection/messages/work-state-detail";
-import { getWorkTypeDetailMessages } from "../../work-type-selection/messages/work-type-detail";
-import { getWorkstationDetailMessages } from "../../workstation-selection/messages/workstation-detail";
 import type { CurrentSelectionSaveToastMessages } from "./current-selection-save-notifications";
 
 export function buildCurrentSelectionSaveToastMessages({
@@ -31,7 +31,8 @@ export function buildCurrentSelectionSaveToastMessages({
         saveFailedTitle,
         saveSuccessDescription: detailMessages.editableConfigurationSaveSuccess,
         saveSuccessTitle,
-        staleVersionDetail: detailMessages.editableConfigurationSaveStaleVersionDetail,
+        staleVersionDetail:
+          detailMessages.editableConfigurationSaveStaleVersionDetail,
       };
     }
     case "worker": {
@@ -42,7 +43,8 @@ export function buildCurrentSelectionSaveToastMessages({
         saveSuccessDescription:
           detailMessages.editableConfigurationSaveSuccess(entityDisplayName),
         saveSuccessTitle,
-        staleVersionDetail: detailMessages.editableConfigurationSaveStaleVersionDetail,
+        staleVersionDetail:
+          detailMessages.editableConfigurationSaveStaleVersionDetail,
       };
     }
     case "resource": {
@@ -53,7 +55,8 @@ export function buildCurrentSelectionSaveToastMessages({
         saveSuccessDescription:
           detailMessages.editableConfigurationSaveSuccess(entityDisplayName),
         saveSuccessTitle,
-        staleVersionDetail: detailMessages.editableConfigurationSaveStaleVersionDetail,
+        staleVersionDetail:
+          detailMessages.editableConfigurationSaveStaleVersionDetail,
       };
     }
     case "work-type": {
@@ -64,7 +67,8 @@ export function buildCurrentSelectionSaveToastMessages({
         saveSuccessDescription:
           detailMessages.editableConfigurationSaveSuccess(entityDisplayName),
         saveSuccessTitle,
-        staleVersionDetail: detailMessages.editableConfigurationSaveStaleVersionDetail,
+        staleVersionDetail:
+          detailMessages.editableConfigurationSaveStaleVersionDetail,
       };
     }
     case "work-state": {
@@ -75,7 +79,8 @@ export function buildCurrentSelectionSaveToastMessages({
         saveSuccessDescription:
           detailMessages.editableConfigurationSaveSuccess(entityDisplayName),
         saveSuccessTitle,
-        staleVersionDetail: detailMessages.editableConfigurationSaveStaleVersionDetail,
+        staleVersionDetail:
+          detailMessages.editableConfigurationSaveStaleVersionDetail,
       };
     }
   }

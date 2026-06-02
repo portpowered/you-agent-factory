@@ -8,18 +8,16 @@ import {
   useState,
 } from "react";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   createFactoryGraphWorkstationResolver,
+  type FactoryGraphConnectionEndpoint,
   type FactoryGraphConnectionResolver,
+  getFactoryGraphConnectionAnchor,
   resolveFactoryGraphConnectionAnchorContext,
 } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import {
-  type FactoryGraphConnectionEndpoint,
-  getFactoryGraphConnectionAnchor,
-} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 
 type FactoryGraphConnectionCommit = (connection: {
   sourceAnchorId: string;

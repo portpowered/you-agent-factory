@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
+import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
-import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 
 export interface SubmitWorkWidgetProps {
   headerAction?: ReactNode;

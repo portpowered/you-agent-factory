@@ -116,13 +116,19 @@ const hookState = vi.hoisted(() => ({
   saveStateIsStale: false,
 }));
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", () => ({
-  useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  () => ({
+    useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
+  }),
+);
 
-vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: () => hookState.saveEditableDefinition,
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: () => hookState.saveEditableDefinition,
+  }),
+);
 
 vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
   useEditableFactoryGraph: () => ({

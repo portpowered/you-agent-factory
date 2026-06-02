@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 
 import {
   CurrentFactoryDefinitionError,
-  getCurrentFactoryDocument,
   type CurrentFactoryDocument,
+  getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { wrapWithDashboardSessionTest } from "../../../testing";
 import { divergentDocumentPlaneFactoryDocument } from "../../../testing/graph-editor-harness";
@@ -13,7 +13,9 @@ import { useDashboardSessionStore } from "../../dashboard/state/dashboardSession
 import { useCurrentFactoryExport } from "./use-current-factory-export";
 
 vi.mock("../../../api/current-factory-definition/api", async () => {
-  const actual = await vi.importActual("../../../api/current-factory-definition/api");
+  const actual = await vi.importActual(
+    "../../../api/current-factory-definition/api",
+  );
 
   return {
     ...actual,
@@ -163,7 +165,9 @@ describe("useCurrentFactoryExport", () => {
   });
 
   it("includes generic transport error messages in the export preparation failure", async () => {
-    vi.mocked(getCurrentFactoryDocument).mockRejectedValue(new Error("Gateway timeout"));
+    vi.mocked(getCurrentFactoryDocument).mockRejectedValue(
+      new Error("Gateway timeout"),
+    );
     const { result } = renderHook(() => useCurrentFactoryExport(true), {
       wrapper: createQueryClientWrapper(),
     });
@@ -220,7 +224,11 @@ function createQueryClientWrapper(
     },
   });
 
-  return function QueryClientWrapper({ children }: { children: ReactNode }): ReactNode {
+  return function QueryClientWrapper({
+    children,
+  }: {
+    children: ReactNode;
+  }): ReactNode {
     return (
       <QueryClientProvider client={queryClient}>
         {wrapWithDashboardSessionTest(children, { sessionID })}

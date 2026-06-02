@@ -57,9 +57,11 @@ describe("EditableResourceSaveHeaderAction", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Save resource" }).hasAttribute("disabled")).toBe(
-      true,
-    );
+    expect(
+      screen
+        .getByRole("button", { name: "Save resource" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("shows busy label while submitting", () => {
@@ -71,6 +73,8 @@ describe("EditableResourceSaveHeaderAction", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Saving resource..." })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Saving resource..." }),
+    ).toBeTruthy();
   });
 });

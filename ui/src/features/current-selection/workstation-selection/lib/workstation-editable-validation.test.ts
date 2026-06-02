@@ -92,7 +92,8 @@ describe("validateEditableWorkstationGuardDraft workstation-level guards", () =>
         messages,
       ),
     ).toEqual({
-      "guards[0].matchConfig.inputKey": "Enter a field selector for this guard.",
+      "guards[0].matchConfig.inputKey":
+        "Enter a field selector for this guard.",
     });
   });
 });

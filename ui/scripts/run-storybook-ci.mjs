@@ -48,7 +48,11 @@ export function runBun(args) {
         return;
       }
 
-      reject(new Error(`bun ${args.join(" ")} exited with ${formatExit(code, signal)}.`));
+      reject(
+        new Error(
+          `bun ${args.join(" ")} exited with ${formatExit(code, signal)}.`,
+        ),
+      );
     });
   });
 }
@@ -64,7 +68,12 @@ export function assertPortAvailable(host, port) {
     const server = net.createServer();
 
     server.once("error", (error) => {
-      if (error && typeof error === "object" && "code" in error && error.code === "EADDRINUSE") {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "EADDRINUSE"
+      ) {
         reject(createPortInUseError(host, port));
         return;
       }
@@ -85,7 +94,10 @@ export function assertPortAvailable(host, port) {
   });
 }
 
-export function createStorybookIndexTimeoutError(url = STORYBOOK_INDEX_URL, timeoutMs = READY_TIMEOUT_MS) {
+export function createStorybookIndexTimeoutError(
+  url = STORYBOOK_INDEX_URL,
+  timeoutMs = READY_TIMEOUT_MS,
+) {
   return new Error(
     `Timed out waiting for Storybook index at ${url} within ${timeoutMs}ms.`,
   );
@@ -148,7 +160,9 @@ export async function verifyStorybookIframe({
 
       const html = await response.text();
       if (!/id=(["'])storybook-root\1/.test(html)) {
-        throw new Error(`Storybook iframe shell at ${url} did not contain #storybook-root.`);
+        throw new Error(
+          `Storybook iframe shell at ${url} did not contain #storybook-root.`,
+        );
       }
 
       return;
@@ -209,10 +223,14 @@ export async function stopServer(child) {
 
   if (process.platform === "win32") {
     await new Promise((resolve, reject) => {
-      const killer = spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
-        stdio: "ignore",
-        shell: false,
-      });
+      const killer = spawn(
+        "taskkill",
+        ["/pid", String(child.pid), "/t", "/f"],
+        {
+          stdio: "ignore",
+          shell: false,
+        },
+      );
 
       killer.once("error", reject);
       killer.once("exit", () => resolve());
@@ -303,11 +321,20 @@ export async function runStorybookCI({
 
   try {
     await waitForReady({ serverExit });
-    await Promise.race([runCommand(["run", "storybook:test-runner:ci"]), serverExit]);
+    await Promise.race([
+      runCommand(["run", "storybook:test-runner:ci"]),
+      serverExit,
+    ]);
     await settle(POST_TEST_RUNNER_SETTLE_MS);
     await waitForStableIndex();
-    await Promise.race([runCommand(["run", "storybook:responsive-check"]), serverExit]);
-    await Promise.race([runCommand(["run", "storybook:choose-file-check"]), serverExit]);
+    await Promise.race([
+      runCommand(["run", "storybook:responsive-check"]),
+      serverExit,
+    ]);
+    await Promise.race([
+      runCommand(["run", "storybook:choose-file-check"]),
+      serverExit,
+    ]);
   } finally {
     shuttingDown = true;
     await stop(server);

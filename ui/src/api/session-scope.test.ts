@@ -5,7 +5,11 @@ import { buildSessionScope } from "./session-scope";
 
 describe("buildSessionScope", () => {
   it("maps null, empty, and ~default selection to the default session scope", () => {
-    for (const rawSessionID of [null, "", DEFAULT_FACTORY_SESSION_ID] as const) {
+    for (const rawSessionID of [
+      null,
+      "",
+      DEFAULT_FACTORY_SESSION_ID,
+    ] as const) {
       const scope = buildSessionScope(rawSessionID, []);
 
       expect(scope).toEqual({
@@ -33,13 +37,18 @@ describe("buildSessionScope", () => {
   });
 
   it("reflects pause state for the active non-default session", () => {
-    const scope = buildSessionScope("session-beta", ["session-beta", "other-session"]);
+    const scope = buildSessionScope("session-beta", [
+      "session-beta",
+      "other-session",
+    ]);
 
     expect(scope.isPaused).toBe(true);
   });
 
   it("does not mark the default session paused when only other sessions are paused", () => {
-    const scope = buildSessionScope(DEFAULT_FACTORY_SESSION_ID, ["session-beta"]);
+    const scope = buildSessionScope(DEFAULT_FACTORY_SESSION_ID, [
+      "session-beta",
+    ]);
 
     expect(scope.isPaused).toBe(false);
   });

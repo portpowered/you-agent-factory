@@ -3,13 +3,13 @@
 import { act, renderHook } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
+import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import type {
   FactoryGraphDraft,
   FactoryGraphTopology,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 
@@ -499,7 +499,9 @@ describe("current activity graph editor controllers", () => {
       result.current.handleEditorNodeDelete("worker:editor");
     });
 
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("worker:editor");
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
+      "worker:editor",
+    );
     expect(draftState.replaceDraft).not.toHaveBeenCalled();
     expect(draftState.draft).toBe(initialDraft);
     expect(result.current.blockedRemovalReason).toBe(
@@ -616,7 +618,9 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("work-type:story");
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
+      "work-type:story",
+    );
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
@@ -785,7 +789,9 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith("worker:editor");
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
+      "worker:editor",
+    );
     expect(onNodeRemovedFromDraft).toHaveBeenCalledWith("worker:editor");
     expect(result.current.pendingRemovalIntent).toBeNull();
   });

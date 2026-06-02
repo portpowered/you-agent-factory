@@ -1,5 +1,5 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 
 const dialogEventState = {
@@ -8,10 +8,9 @@ const dialogEventState = {
 };
 
 vi.mock("../../../components/ui", () => ({
-  Button: ({
-    children,
-    ...props
-  }: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
+  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button {...props}>{children}</button>
+  ),
   Dialog: ({
     children,
     onOpenChange,
@@ -64,9 +63,15 @@ vi.mock("../../../components/ui", () => ({
       </button>
     </div>
   ),
-  DialogDescription: ({ children }: { children: ReactNode }) => <p>{children}</p>,
-  DialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogHeader: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  DialogDescription: ({ children }: { children: ReactNode }) => (
+    <p>{children}</p>
+  ),
+  DialogFooter: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
+  DialogHeader: ({ children }: { children: ReactNode }) => (
+    <div>{children}</div>
+  ),
   DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 

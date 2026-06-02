@@ -132,7 +132,9 @@ describe("replayWorldStateSupport syncCompletedDispatchAttempt", () => {
       transition_id: "review",
     });
     expect(state.completedDispatches[0]?.diagnostics).toEqual({});
-    expect(state.completedDispatches[1]?.diagnostics).toEqual({ model: "after" });
+    expect(state.completedDispatches[1]?.diagnostics).toEqual({
+      model: "after",
+    });
   });
 });
 

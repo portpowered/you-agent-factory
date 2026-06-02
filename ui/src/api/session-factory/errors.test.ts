@@ -1,8 +1,8 @@
-import { sessionFactoryAPIErrorMessages } from "./messages";
 import {
   normalizeSessionFactoryAPIErrorCode,
   SessionFactoryAPIError,
 } from "./errors";
+import { sessionFactoryAPIErrorMessages } from "./messages";
 import { resolveSessionFactoryAPIErrorMessage } from "./operator-errors";
 
 describe("normalizeSessionFactoryAPIErrorCode", () => {

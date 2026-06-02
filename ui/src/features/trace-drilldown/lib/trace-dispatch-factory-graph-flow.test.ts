@@ -95,8 +95,8 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
     expect(flow.nodes.every((node) => node.type === "factoryEntity")).toBe(
       true,
     );
-    expect(
-      flow.edges.every((edge) => edge.type === "factoryEditorEdge"),
-    ).toBe(true);
+    expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(
+      true,
+    );
   });
 });

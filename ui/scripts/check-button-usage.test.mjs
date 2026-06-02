@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
 import { scanButtonUsage } from "./check-button-usage.mjs";
@@ -52,7 +52,7 @@ test("scanButtonUsage allows approved primitive owners and narrow semantic excep
           relativeFilePath: "src/components/ui/button.tsx",
         },
         {
-          rawButtonFingerprints: ['aria-expanded={expanded}'],
+          rawButtonFingerprints: ["aria-expanded={expanded}"],
           rawButtonReason: "semantic disclosure shell",
           relativeFilePath: "src/features/selection/components/detail.tsx",
         },
@@ -108,7 +108,7 @@ test("scanButtonUsage rejects raw-button drift in an allowlisted file when the c
     await expect(
       scanButtonUsage(srcDir, [
         {
-          rawButtonFingerprints: ['aria-expanded={expanded}'],
+          rawButtonFingerprints: ["aria-expanded={expanded}"],
           rawButtonReason: "semantic disclosure shell",
           relativeFilePath: "src/features/selection/components/detail.tsx",
         },
@@ -116,7 +116,9 @@ test("scanButtonUsage rejects raw-button drift in an allowlisted file when the c
     ).resolves.toEqual({
       staleAllowlistEntries: [
         expect.objectContaining({
-          reason: expect.stringContaining("Allowlisted raw <button> fingerprints are stale"),
+          reason: expect.stringContaining(
+            "Allowlisted raw <button> fingerprints are stale",
+          ),
           relativeFilePath: "src/features/selection/components/detail.tsx",
         }),
       ],

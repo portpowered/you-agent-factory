@@ -1,6 +1,4 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
-
-import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type {
   DashboardActiveExecution,
   DashboardInferenceAttempt,
@@ -11,23 +9,27 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../api/dashboard/types";
 import { buildEmptyDashboardRuntimeFixture } from "../../../components/dashboard/fixtures/runtime";
+import { buildReplayFixtureTimelineSnapshot } from "../../../testing/replay-fixtures";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "../state/selectionHistoryStore";
-import { buildReplayFixtureTimelineSnapshot } from "../../../testing/replay-fixtures";
 import { useCurrentSelection } from "./useCurrentSelection";
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
 const TEST_TOPOLOGY: DashboardSnapshot["topology"] = {
   edges: [],
@@ -82,7 +84,9 @@ function buildRuntimeWorkstationRequest({
     request: {
       input_work_items: inputWorkItems,
       started_at: startedAt,
-      trace_ids: inputWorkItems.flatMap((workItem) => (workItem.trace_id ? [workItem.trace_id] : [])),
+      trace_ids: inputWorkItems.flatMap((workItem) =>
+        workItem.trace_id ? [workItem.trace_id] : [],
+      ),
     },
     response:
       outputWorkItems.length > 0
@@ -91,7 +95,8 @@ function buildRuntimeWorkstationRequest({
           }
         : undefined,
     transition_id: transitionID,
-    workstation_name: TEST_TOPOLOGY.workstation_nodes_by_id[transitionID]?.workstation_name,
+    workstation_name:
+      TEST_TOPOLOGY.workstation_nodes_by_id[transitionID]?.workstation_name,
   } satisfies DashboardRuntimeWorkstationRequest;
 }
 
@@ -121,7 +126,9 @@ function buildProjectedWorkstationRequest({
     request_view: {
       input_work_items: inputWorkItems,
       started_at: startedAt,
-      trace_ids: inputWorkItems.flatMap((workItem) => (workItem.trace_id ? [workItem.trace_id] : [])),
+      trace_ids: inputWorkItems.flatMap((workItem) =>
+        workItem.trace_id ? [workItem.trace_id] : [],
+      ),
     },
     responded_request_count: outputWorkItems.length > 0 ? 1 : 0,
     response_view:
@@ -134,7 +141,8 @@ function buildProjectedWorkstationRequest({
     transition_id: workstationNodeID,
     work_items: outputWorkItems.length > 0 ? outputWorkItems : inputWorkItems,
     workstation_name:
-      TEST_TOPOLOGY.workstation_nodes_by_id[workstationNodeID]?.workstation_name,
+      TEST_TOPOLOGY.workstation_nodes_by_id[workstationNodeID]
+        ?.workstation_name,
     workstation_node_id: workstationNodeID,
   };
 }
@@ -160,7 +168,8 @@ function buildProviderSessionAttempt({
     },
     transition_id: transitionID,
     work_items: workItems,
-    workstation_name: TEST_TOPOLOGY.workstation_nodes_by_id[transitionID]?.workstation_name,
+    workstation_name:
+      TEST_TOPOLOGY.workstation_nodes_by_id[transitionID]?.workstation_name,
   };
 }
 
@@ -196,10 +205,14 @@ function buildActiveExecution(
   return {
     dispatch_id: dispatchID,
     started_at: startedAt,
-    trace_ids: workItems.flatMap((workItem) => (workItem.trace_id ? [workItem.trace_id] : [])),
+    trace_ids: workItems.flatMap((workItem) =>
+      workItem.trace_id ? [workItem.trace_id] : [],
+    ),
     transition_id: workstationNodeID,
     work_items: workItems,
-    workstation_name: TEST_TOPOLOGY.workstation_nodes_by_id[workstationNodeID]?.workstation_name,
+    workstation_name:
+      TEST_TOPOLOGY.workstation_nodes_by_id[workstationNodeID]
+        ?.workstation_name,
     workstation_node_id: workstationNodeID,
     work_type_ids: workItems.flatMap((workItem) =>
       workItem.work_type_id ? [workItem.work_type_id] : [],
@@ -214,9 +227,15 @@ function buildSnapshot({
   runtimeRequestsByDispatchID = {},
 }: {
   activeExecution?: DashboardActiveExecution;
-  inferenceAttemptsByDispatchID?: Record<string, Record<string, DashboardInferenceAttempt>>;
+  inferenceAttemptsByDispatchID?: Record<
+    string,
+    Record<string, DashboardInferenceAttempt>
+  >;
   providerSessions?: DashboardProviderSessionAttempt[];
-  runtimeRequestsByDispatchID?: Record<string, DashboardRuntimeWorkstationRequest>;
+  runtimeRequestsByDispatchID?: Record<
+    string,
+    DashboardRuntimeWorkstationRequest
+  >;
 }): DashboardSnapshot {
   const runtime = buildEmptyDashboardRuntimeFixture();
 
@@ -231,7 +250,9 @@ function buildSnapshot({
       active_executions_by_dispatch_id: activeExecution
         ? { [activeExecution.dispatch_id]: activeExecution }
         : {},
-      active_workstation_node_ids: activeExecution ? [activeExecution.workstation_node_id] : [],
+      active_workstation_node_ids: activeExecution
+        ? [activeExecution.workstation_node_id]
+        : [],
       current_work_items_by_place_id: activeExecution
         ? { "story:review": activeExecution.work_items ?? [] }
         : {},
@@ -245,7 +266,11 @@ function buildSnapshot({
   };
 }
 
-function seedSelectedWork(dispatchID: string, nodeID: string, workItem: DashboardWorkItemRef): void {
+function seedSelectedWork(
+  dispatchID: string,
+  nodeID: string,
+  workItem: DashboardWorkItemRef,
+): void {
   act(() => {
     useSelectionHistoryStore.getState().replacePresent({
       selection: {
@@ -277,13 +302,19 @@ function SelectionHarness({
   return (
     <>
       <div data-testid="dispatch-history">
-        {currentSelection.selectedWorkRequestHistory.map((request) => request.dispatch_id).join(",")}
+        {currentSelection.selectedWorkRequestHistory
+          .map((request) => request.dispatch_id)
+          .join(",")}
       </div>
       <div data-testid="projected-history">
-        {currentSelection.selectedWorkWorkstationRequests.map((request) => request.dispatch_id).join(",")}
+        {currentSelection.selectedWorkWorkstationRequests
+          .map((request) => request.dispatch_id)
+          .join(",")}
       </div>
       <div data-testid="provider-history">
-        {currentSelection.selectedWorkProviderSessions.map((attempt) => attempt.dispatch_id).join(",")}
+        {currentSelection.selectedWorkProviderSessions
+          .map((attempt) => attempt.dispatch_id)
+          .join(",")}
       </div>
       <div data-testid="dispatch-attempts">
         {currentSelection.selectedWorkDispatchAttempts
@@ -294,7 +325,9 @@ function SelectionHarness({
         {currentSelection.selectedWorkRequestHistory
           .flatMap((request) =>
             "inference_attempts" in request
-              ? request.inference_attempts.map((attempt) => attempt.inference_request_id)
+              ? request.inference_attempts.map(
+                  (attempt) => attempt.inference_request_id,
+                )
               : [],
           )
           .join(",")}
@@ -304,16 +337,24 @@ function SelectionHarness({
           .map((attempt) => attempt.provider_session?.id ?? "missing")
           .join(",")}
       </div>
-      <div data-testid="selected-work-id">{currentSelection.selectedWorkID ?? ""}</div>
-      <div data-testid="selected-worker-name">{currentSelection.selectedWorkerName ?? ""}</div>
-      <div data-testid="selected-worker-type">{currentSelection.selectedWorker?.type ?? ""}</div>
+      <div data-testid="selected-work-id">
+        {currentSelection.selectedWorkID ?? ""}
+      </div>
+      <div data-testid="selected-worker-name">
+        {currentSelection.selectedWorkerName ?? ""}
+      </div>
+      <div data-testid="selected-worker-type">
+        {currentSelection.selectedWorker?.type ?? ""}
+      </div>
       <div data-testid="selected-worker-workstations">
         {currentSelection.selectedWorkerWorkstationNames.join(",")}
       </div>
       <div data-testid="selected-resource-name">
         {currentSelection.selectedResourceName ?? ""}
       </div>
-      <div data-testid="selection-kind">{currentSelection.selection?.kind ?? ""}</div>
+      <div data-testid="selection-kind">
+        {currentSelection.selection?.kind ?? ""}
+      </div>
     </>
   );
 }
@@ -375,10 +416,18 @@ describe("useCurrentSelection", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("dispatch-history").textContent).toBe("dispatch-review-active");
-      expect(screen.getByTestId("projected-history").textContent).toBe("dispatch-review-active");
-      expect(screen.getByTestId("provider-history").textContent).toBe("dispatch-review-active");
-      expect(screen.getByTestId("provider-sessions").textContent).toBe("sess-active");
+      expect(screen.getByTestId("dispatch-history").textContent).toBe(
+        "dispatch-review-active",
+      );
+      expect(screen.getByTestId("projected-history").textContent).toBe(
+        "dispatch-review-active",
+      );
+      expect(screen.getByTestId("provider-history").textContent).toBe(
+        "dispatch-review-active",
+      );
+      expect(screen.getByTestId("provider-sessions").textContent).toBe(
+        "sess-active",
+      );
     });
   });
 
@@ -416,15 +465,26 @@ describe("useCurrentSelection", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("dispatch-history").textContent).toBe("dispatch-review-completed");
-      expect(screen.getByTestId("projected-history").textContent).toBe("dispatch-review-completed");
-      expect(screen.getByTestId("provider-history").textContent).toBe("dispatch-review-completed");
-      expect(screen.getByTestId("provider-sessions").textContent).toBe("sess-completed");
+      expect(screen.getByTestId("dispatch-history").textContent).toBe(
+        "dispatch-review-completed",
+      );
+      expect(screen.getByTestId("projected-history").textContent).toBe(
+        "dispatch-review-completed",
+      );
+      expect(screen.getByTestId("provider-history").textContent).toBe(
+        "dispatch-review-completed",
+      );
+      expect(screen.getByTestId("provider-sessions").textContent).toBe(
+        "sess-completed",
+      );
     });
   });
 
   it("falls back to normalized runtime workstation requests when the cached projection map is empty", async () => {
-    const selectedWorkItem = buildWorkItem("work-runtime-fallback", "Runtime Fallback Story");
+    const selectedWorkItem = buildWorkItem(
+      "work-runtime-fallback",
+      "Runtime Fallback Story",
+    );
     const inferenceAttemptsByDispatchID = {
       "dispatch-review-runtime-fallback": {
         "dispatch-review-runtime-fallback/inference/2": buildInferenceAttempt({
@@ -448,7 +508,11 @@ describe("useCurrentSelection", () => {
       }),
     };
 
-    seedSelectedWork("dispatch-review-runtime-fallback", "review", selectedWorkItem);
+    seedSelectedWork(
+      "dispatch-review-runtime-fallback",
+      "review",
+      selectedWorkItem,
+    );
     render(
       <SelectionHarness
         snapshot={buildSnapshot({
@@ -476,7 +540,9 @@ describe("useCurrentSelection", () => {
       expect(screen.getByTestId("provider-history").textContent).toBe(
         "dispatch-review-runtime-fallback",
       );
-      expect(screen.getByTestId("provider-sessions").textContent).toBe("sess-runtime-fallback");
+      expect(screen.getByTestId("provider-sessions").textContent).toBe(
+        "sess-runtime-fallback",
+      );
       expect(screen.getByTestId("history-inference-attempts").textContent).toBe(
         "dispatch-review-runtime-fallback/inference/1,dispatch-review-runtime-fallback/inference/2",
       );
@@ -484,7 +550,10 @@ describe("useCurrentSelection", () => {
   });
 
   it("preserves selected work detail when the same work moves to a later workstation request", async () => {
-    const selectedWorkItem = buildWorkItem("work-reanchored", "Reanchored Story");
+    const selectedWorkItem = buildWorkItem(
+      "work-reanchored",
+      "Reanchored Story",
+    );
     const activeExecution = buildActiveExecution(
       "dispatch-review-active",
       [selectedWorkItem],
@@ -581,7 +650,10 @@ describe("useCurrentSelection", () => {
 
   it("orders mixed selected-work history newest-first and collapses duplicate provider attempts per dispatch", async () => {
     const selectedWorkItem = buildWorkItem("work-shared", "Shared Story");
-    const unrelatedWorkItem = buildWorkItem("work-unrelated", "Unrelated Story");
+    const unrelatedWorkItem = buildWorkItem(
+      "work-unrelated",
+      "Unrelated Story",
+    );
     const activeExecution = buildActiveExecution(
       "dispatch-review-active",
       [selectedWorkItem],
@@ -712,7 +784,9 @@ describe("useCurrentSelection", () => {
     render(
       <SelectionHarness
         snapshot={replaySnapshot}
-        workstationRequestsByDispatchID={replaySnapshot.workstationRequestsByDispatchID}
+        workstationRequestsByDispatchID={
+          replaySnapshot.workstationRequestsByDispatchID
+        }
       />,
     );
 
@@ -754,15 +828,22 @@ describe("useCurrentSelection", () => {
     });
 
     render(
-      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+      <SelectionHarness
+        snapshot={snapshot}
+        workstationRequestsByDispatchID={{}}
+      />,
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("selected-worker-name").textContent).toBe("writer");
-      expect(screen.getByTestId("selected-worker-type").textContent).toBe("MODEL_WORKER");
-      expect(screen.getByTestId("selected-worker-workstations").textContent).toBe(
-        "Review,Plan",
+      expect(screen.getByTestId("selected-worker-name").textContent).toBe(
+        "writer",
       );
+      expect(screen.getByTestId("selected-worker-type").textContent).toBe(
+        "MODEL_WORKER",
+      );
+      expect(
+        screen.getByTestId("selected-worker-workstations").textContent,
+      ).toBe("Review,Plan");
       expect(screen.getByTestId("selection-kind").textContent).toBe("worker");
     });
   });
@@ -787,11 +868,16 @@ describe("useCurrentSelection", () => {
     });
 
     render(
-      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+      <SelectionHarness
+        snapshot={snapshot}
+        workstationRequestsByDispatchID={{}}
+      />,
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("selected-resource-name").textContent).toBe("gpu");
+      expect(screen.getByTestId("selected-resource-name").textContent).toBe(
+        "gpu",
+      );
       expect(screen.getByTestId("selection-kind").textContent).toBe("resource");
     });
   });
@@ -816,7 +902,10 @@ describe("useCurrentSelection", () => {
     });
 
     const { rerender } = render(
-      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+      <SelectionHarness
+        snapshot={snapshot}
+        workstationRequestsByDispatchID={{}}
+      />,
     );
 
     await waitFor(() => {
@@ -835,11 +924,18 @@ describe("useCurrentSelection", () => {
       });
     });
 
-    rerender(<SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />);
+    rerender(
+      <SelectionHarness
+        snapshot={snapshot}
+        workstationRequestsByDispatchID={{}}
+      />,
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("selection-kind").textContent).toBe("resource");
-      expect(screen.getByTestId("selected-resource-name").textContent).toBe("gpu");
+      expect(screen.getByTestId("selected-resource-name").textContent).toBe(
+        "gpu",
+      );
     });
   });
 
@@ -864,7 +960,10 @@ describe("useCurrentSelection", () => {
     });
 
     const { rerender } = render(
-      <SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />,
+      <SelectionHarness
+        snapshot={snapshot}
+        workstationRequestsByDispatchID={{}}
+      />,
     );
 
     await waitFor(() => {
@@ -885,11 +984,18 @@ describe("useCurrentSelection", () => {
       });
     });
 
-    rerender(<SelectionHarness snapshot={snapshot} workstationRequestsByDispatchID={{}} />);
+    rerender(
+      <SelectionHarness
+        snapshot={snapshot}
+        workstationRequestsByDispatchID={{}}
+      />,
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("selection-kind").textContent).toBe("worker");
-      expect(screen.getByTestId("selected-worker-name").textContent).toBe("writer");
+      expect(screen.getByTestId("selected-worker-name").textContent).toBe(
+        "writer",
+      );
     });
   });
 
@@ -912,7 +1018,9 @@ describe("useCurrentSelection", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId("selected-work-id").textContent).toBe("work-active");
+      expect(screen.getByTestId("selected-work-id").textContent).toBe(
+        "work-active",
+      );
     });
 
     rerender(

@@ -230,7 +230,8 @@ verify-build-contracts:
 	$(MAKE) wire-smoke
 
 verify-tests:
-	@printf '%s\n' "Running required CI-equivalent test lanes: UI coverage + browser integration + backend verification"
+	@printf '%s\n' "Running required CI-equivalent test lanes: release surface smoke + UI coverage + browser integration + backend verification"
+	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
 	$(call run_verification_step,test-ui-coverage,UI Coverage lane)
 	$(call run_verification_step,ui-integration-test,UI Browser Integration lane)
 	$(call run_verification_step,test-backend-verification,Backend Verification lane)
@@ -262,12 +263,19 @@ ci-verify-build-contracts: ci-typecheck
 
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
+	$(MAKE) release-surface-smoke
 	$(MAKE) test-ui-coverage
 	$(MAKE) ui-integration-test
 	$(MAKE) test-backend-verification
 
 release:
 	$(GO) run ./cmd/releaseprep -version $(VERSION)
+
+release-surface-smoke:
+	$(MAKE) ui-build
+	$(MAKE) build
+	$(MAKE) ui-install-playwright
+	sh ./scripts/release/smoke-artifact.sh "$(CURDIR)/$(BIN_DIR)/$(BINARY_NAME)" "tests/release/testdata/cli_smoke_factory"
 
 ui-deps:
 	cd ui && $(UI_INSTALL)

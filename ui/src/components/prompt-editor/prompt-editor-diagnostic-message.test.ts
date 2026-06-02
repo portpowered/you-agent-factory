@@ -11,10 +11,14 @@ describe("formatSyntaxDiagnosticMessage", () => {
 
   it("normalizes legacy template parse error prefixes", () => {
     expect(
-      formatSyntaxDiagnosticMessage("template: prompt:4: unexpected right paren"),
+      formatSyntaxDiagnosticMessage(
+        "template: prompt:4: unexpected right paren",
+      ),
     ).toBe("line 4: unexpected right paren");
     expect(
-      formatSyntaxDiagnosticMessage("template: prompt:2:3: function \"bad\" not defined"),
+      formatSyntaxDiagnosticMessage(
+        'template: prompt:2:3: function "bad" not defined',
+      ),
     ).toBe('line 2: function "bad" not defined');
   });
 

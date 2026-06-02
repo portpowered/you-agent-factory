@@ -150,13 +150,9 @@ describe("useCurrentSelection.selection-helpers", () => {
     };
 
     expect(
-      buildTerminalWorkItems(
-        ["Alpha Story"],
-        [attempt],
-        {
-          [workAlpha.work_id]: failureDetail,
-        },
-      ),
+      buildTerminalWorkItems(["Alpha Story"], [attempt], {
+        [workAlpha.work_id]: failureDetail,
+      }),
     ).toEqual([
       {
         attempts: [attempt],
@@ -169,15 +165,19 @@ describe("useCurrentSelection.selection-helpers", () => {
         workstationName: "Review",
       },
     ]);
-    expect(findStatePlace(snapshot, reviewInputPlace.place_id)).toEqual(reviewInputPlace);
+    expect(findStatePlace(snapshot, reviewInputPlace.place_id)).toEqual(
+      reviewInputPlace,
+    );
     expect(findStatePlace(snapshot, "missing-place")).toBeNull();
-    expect(currentWorkItemsForPlace(snapshot, reviewInputPlace.place_id)).toEqual([
-      { ...workAlpha, started_at: "2026-04-08T12:00:00Z" },
-    ]);
-    expect(terminalHistoryItemsForPlace(snapshot, reviewOutputPlace.place_id)).toEqual([
-      { ...workBeta, started_at: "2026-04-08T12:00:06Z" },
-    ]);
-    expect(currentWorkItemsForPlace(null, reviewInputPlace.place_id)).toEqual([]);
+    expect(
+      currentWorkItemsForPlace(snapshot, reviewInputPlace.place_id),
+    ).toEqual([{ ...workAlpha, started_at: "2026-04-08T12:00:00Z" }]);
+    expect(
+      terminalHistoryItemsForPlace(snapshot, reviewOutputPlace.place_id),
+    ).toEqual([{ ...workBeta, started_at: "2026-04-08T12:00:06Z" }]);
+    expect(currentWorkItemsForPlace(null, reviewInputPlace.place_id)).toEqual(
+      [],
+    );
     expect(terminalHistoryItemsForPlace(snapshot, undefined)).toEqual([]);
     expect(placeNodeID(snapshot, reviewInputPlace)).toBe("review");
     expect(placeNodeID(null, reviewInputPlace)).toBeUndefined();
@@ -223,14 +223,22 @@ describe("useCurrentSelection.selection-helpers", () => {
       ),
     ).toEqual([]);
 
-    expect(inferStateWorkTerminalStatus(snapshot, reviewOutputPlace, workAlpha)).toBe("failed");
-    expect(inferStateWorkTerminalStatus(snapshot, reviewOutputPlace, workBeta)).toBe("completed");
-    expect(inferStateWorkTerminalStatus(snapshot, failedPlace, {
-      ...workBeta,
-      display_name: "Gamma Story",
-      work_id: "work-gamma",
-    })).toBe("failed");
-    expect(inferStateWorkTerminalStatus(null, reviewOutputPlace, workAlpha)).toBeNull();
+    expect(
+      inferStateWorkTerminalStatus(snapshot, reviewOutputPlace, workAlpha),
+    ).toBe("failed");
+    expect(
+      inferStateWorkTerminalStatus(snapshot, reviewOutputPlace, workBeta),
+    ).toBe("completed");
+    expect(
+      inferStateWorkTerminalStatus(snapshot, failedPlace, {
+        ...workBeta,
+        display_name: "Gamma Story",
+        work_id: "work-gamma",
+      }),
+    ).toBe("failed");
+    expect(
+      inferStateWorkTerminalStatus(null, reviewOutputPlace, workAlpha),
+    ).toBeNull();
   });
 
   it("resolves work-by-id selection intent to work-item selections across request, active, provider, failed, retained, and fallback paths", () => {
@@ -489,7 +497,11 @@ describe("useCurrentSelection.selection-helpers", () => {
         [{ ...terminalItem, traceWorkID: "other-work", workItem: undefined }],
         workAlpha,
       ),
-    ).toEqual({ ...terminalItem, traceWorkID: "other-work", workItem: undefined });
+    ).toEqual({
+      ...terminalItem,
+      traceWorkID: "other-work",
+      workItem: undefined,
+    });
   });
 
   it("prefers request-history terminal context over latest provider attempt context", () => {
@@ -561,13 +573,12 @@ describe("useCurrentSelection.selection-helpers", () => {
       workstation_name: "Review",
     };
 
-    expect(
-      buildTerminalWorkItems(["Alpha Story"], [completedAttempt]),
-    ).toEqual([
-      expect.objectContaining({
-        workstationName: "Review",
-      }),
-    ]);
+    expect(buildTerminalWorkItems(["Alpha Story"], [completedAttempt])).toEqual(
+      [
+        expect.objectContaining({
+          workstationName: "Review",
+        }),
+      ],
+    );
   });
-
 });

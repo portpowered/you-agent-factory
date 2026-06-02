@@ -1,8 +1,4 @@
-import {
-  isSubmitWorkAPIError,
-  SubmitWorkAPIError,
-  submitWork,
-} from "./api";
+import { isSubmitWorkAPIError, SubmitWorkAPIError, submitWork } from "./api";
 
 describe("submitWork success responses", () => {
   afterEach(() => {

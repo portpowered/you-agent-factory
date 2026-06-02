@@ -660,8 +660,9 @@ describe("WorkerDetailCard", () => {
     );
 
     expectNoInlineSaveOutcomesIn(
-      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
-        document.body,
+      screen
+        .getByRole("heading", { name: "Worker configuration" })
+        .closest("section") ?? document.body,
     );
   });
 
@@ -1055,7 +1056,9 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    expect(screen.queryByText(/Current factory definition is stale/)).toBeNull();
+    expect(
+      screen.queryByText(/Current factory definition is stale/),
+    ).toBeNull();
     expect(
       screen.queryByText(
         "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
@@ -1128,8 +1131,9 @@ describe("WorkerDetailCard", () => {
     );
 
     expectNoInlineSaveOutcomesIn(
-      screen.getByRole("heading", { name: "Worker configuration" }).closest("section") ??
-        document.body,
+      screen
+        .getByRole("heading", { name: "Worker configuration" })
+        .closest("section") ?? document.body,
     );
   });
 

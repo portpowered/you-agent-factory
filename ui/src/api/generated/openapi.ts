@@ -4,3474 +4,3607 @@
  */
 
 export interface paths {
-    "/work": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List work
-         * @description Lists current work tokens from the engine state snapshot.
-         */
-        get: operations["listWork"];
-        put?: never;
-        /**
-         * Submit work
-         * @description Submits one work item to the running factory.
-         */
-        post: operations["submitWork"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+  "/work": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/work/staged-files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stage one submit-work file
-         * @description Accepts one dashboard-authored file payload, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
-         */
-        post: operations["stageSubmitWorkFile"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * List work
+     * @description Lists current work tokens from the engine state snapshot.
+     */
+    get: operations["listWork"];
+    put?: never;
+    /**
+     * Submit work
+     * @description Submits one work item to the running factory.
+     */
+    post: operations["submitWork"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/work/staged-files": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/work": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List work for one session
-         * @description Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session.
-         */
-        get: operations["listWorkBySessionId"];
-        put?: never;
-        /**
-         * Submit work for one session
-         * @description Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-         */
-        post: operations["submitWorkBySessionId"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Stage one submit-work file
+     * @description Accepts one dashboard-authored file payload, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+     */
+    post: operations["stageSubmitWorkFile"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/work": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/work/staged-files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Stage one submit-work file for one session
-         * @description Accepts one dashboard-authored file payload for the selected factory session, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
-         */
-        post: operations["stageSubmitWorkFileBySessionId"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * List work for one session
+     * @description Lists current work tokens from the engine state snapshot owned by the explicitly selected live factory session.
+     */
+    get: operations["listWorkBySessionId"];
+    put?: never;
+    /**
+     * Submit work for one session
+     * @description Submits one work item to the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     */
+    post: operations["submitWorkBySessionId"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/work/staged-files": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/work-requests/{request_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Upsert work request
-         * @description Submits or retries one canonical work request batch. The request identifier in the URL must match the request_id in the JSON body, and repeated request IDs are idempotent.
-         */
-        put: operations["upsertWorkRequest"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Stage one submit-work file for one session
+     * @description Accepts one dashboard-authored file payload for the selected factory session, stores it behind a backend-owned staged reference, and returns the staged reference plus identifying metadata for structured submit-work items.
+     */
+    post: operations["stageSubmitWorkFileBySessionId"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/work-requests/{request_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/work-requests/{request_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Upsert work request for one session
-         * @description Submits or retries one canonical work request batch against the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-         */
-        put: operations["upsertWorkRequestBySessionId"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    /**
+     * Upsert work request
+     * @description Submits or retries one canonical work request batch. The request identifier in the URL must match the request_id in the JSON body, and repeated request IDs are idempotent.
+     */
+    put: operations["upsertWorkRequest"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/work-requests/{request_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/work/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get work
-         * @description Returns one work item by work or token identifier from the current marking.
-         */
-        get: operations["getWork"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    /**
+     * Upsert work request for one session
+     * @description Submits or retries one canonical work request batch against the explicitly selected live factory session. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     */
+    put: operations["upsertWorkRequestBySessionId"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/work/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/work/{id}/move": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Move work to another state
-         * @description Moves an existing work item to a named authored marking state in the default factory session. Rejects moves while the work item is consumed by an active dispatch.
-         */
-        post: operations["moveWork"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get work
+     * @description Returns one work item by work or token identifier from the current marking.
+     */
+    get: operations["getWork"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/work/{id}/move": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/work/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get work for one session
-         * @description Returns one work item by work or token identifier from the current marking owned by the explicitly selected live factory session.
-         */
-        get: operations["getWorkBySessionId"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Move work to another state
+     * @description Moves an existing work item to a named authored marking state in the default factory session. Rejects moves while the work item is consumed by an active dispatch.
+     */
+    post: operations["moveWork"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/work/{id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/work/{id}/move": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Move work to another state for one session
-         * @description Moves an existing work item to a named authored marking state in the selected live factory session. Rejects moves while the work item is consumed by an active dispatch.
-         */
-        post: operations["moveWorkBySessionId"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get work for one session
+     * @description Returns one work item by work or token identifier from the current marking owned by the explicitly selected live factory session.
+     */
+    get: operations["getWorkBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/work/{id}/move": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Stream factory events
-         * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection.
-         */
-        get: operations["getEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Move work to another state for one session
+     * @description Moves an existing work item to a named authored marking state in the selected live factory session. Rejects moves while the work item is consumed by an active dispatch.
+     */
+    post: operations["moveWorkBySessionId"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Stream factory events for one session
-         * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-         */
-        get: operations["getEventsBySessionId"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Stream factory events
+     * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection.
+     */
+    get: operations["getEvents"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get runtime status
-         * @description Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot.
-         */
-        get: operations["getStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Stream factory events for one session
+     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     */
+    get: operations["getEventsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/models": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List discovered models
-         * @description Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
-         */
-        get: operations["listModels"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get runtime status
+     * @description Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot.
+     */
+    get: operations["getStatus"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/models": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/models/{model_name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get one discovered model
-         * @description Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
-         */
-        get: operations["getModel"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * List discovered models
+     * @description Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+     */
+    get: operations["listModels"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/models/{model_name}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/models/{model_name}/invocations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Invoke one discovered model directly
-         * @description Invokes one discovered model through its declared provider-agnostic operation contract using canonical `WorkContent` input and optional slot-binding overrides. Non-streaming clients receive JSON metadata, while audio-producing operations can return a streamed audio body when requested.
-         */
-        post: operations["invokeModel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get one discovered model
+     * @description Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+     */
+    get: operations["getModel"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/models/{model_name}/invocations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/models/{model_name}/pull": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Pull local model assets into the managed cache
-         * @description Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
-         */
-        post: operations["pullModel"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Invoke one discovered model directly
+     * @description Invokes one discovered model through its declared provider-agnostic operation contract using canonical `WorkContent` input and optional slot-binding overrides. Non-streaming clients receive JSON metadata, while audio-producing operations can return a streamed audio body when requested.
+     */
+    post: operations["invokeModel"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/models/{model_name}/pull": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get runtime status for one session
-         * @description Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot owned by the explicitly selected live factory session.
-         */
-        get: operations["getStatusBySessionId"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Pull local model assets into the managed cache
+     * @description Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+     */
+    post: operations["pullModel"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/status": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/provider-sessions/detail": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get provider session details
-         * @description Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
-         */
-        get: operations["getProviderSessionDetails"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get runtime status for one session
+     * @description Returns the current factory lifecycle status, token category counts, and resource availability from the aggregate engine snapshot owned by the explicitly selected live factory session.
+     */
+    get: operations["getStatusBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/provider-sessions/detail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-validations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Validate factory definition
-         * @description Validates a submitted complete factory definition and returns canonical validation targets without persisting or activating the factory.
-         */
-        post: operations["validateFactory"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get provider session details
+     * @description Returns parsed provider-session details using a provider-neutral response schema. The browser supplies provider, kind, and identifier query parameters; the server resolves the matching session file under the configured provider sessions root and never accepts a raw filesystem path. Only Codex (`codex`) sessions are currently loadable for this endpoint.
+     */
+    get: operations["getProviderSessionDetails"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-validations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List live factory sessions
-         * @description Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
-         */
-        get: operations["listFactorySessions"];
-        put?: never;
-        /**
-         * Open another live factory session
-         * @description Opens another live factory session from a folder path and optional target selection. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
-         */
-        post: operations["openFactorySession"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Validate factory definition
+     * @description Validates a submitted complete factory definition and returns canonical validation targets without persisting or activating the factory.
+     */
+    post: operations["validateFactory"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Close one live factory session
-         * @description Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
-         */
-        delete: operations["closeFactorySession"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * List live factory sessions
+     * @description Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
+     */
+    get: operations["listFactorySessions"];
+    put?: never;
+    /**
+     * Open another live factory session
+     * @description Opens another live factory session from a folder path and optional target selection. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+     */
+    post: operations["openFactorySession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/factory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get current factory for one session
-         * @description Returns the current factory definition owned by the explicitly selected live session together with server-managed version metadata for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-         */
-        get: operations["getCurrentFactoryBySessionId"];
-        /**
-         * Save factory for one session
-         * @description Submits one complete factory definition to the explicitly selected live session using an explicit save mode. Omitted `mode` defaults to `REPLACE_CURRENT`, which replaces the factory already current in the session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory root using `factory.name`, updates the session current-factory pointer, and activates that runtime when idle. Clients should echo the server-managed `factory.version` field from the latest current-factory read for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
-         */
-        put: operations["saveCurrentFactoryBySessionId"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    post?: never;
+    /**
+     * Close one live factory session
+     * @description Stops the selected live factory session, removes it from the workspace session list, and leaves all remaining sessions running unchanged.
+     */
+    delete: operations["closeFactorySession"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/factory": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get workstation prompt-template contract
-         * @description Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
-         */
-        get: operations["getCurrentFactoryWorkstationPromptTemplateContractBySessionId"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get current factory for one session
+     * @description Returns the current factory definition owned by the explicitly selected live session together with server-managed version metadata for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     */
+    get: operations["getCurrentFactoryBySessionId"];
+    /**
+     * Save factory for one session
+     * @description Submits one complete factory definition to the explicitly selected live session using an explicit save mode. Omitted `mode` defaults to `REPLACE_CURRENT`, which replaces the factory already current in the session. `UPSERT_NAMED_AND_ACTIVATE` persists under the session factory root using `factory.name`, updates the session current-factory pointer, and activates that runtime when idle. Clients should echo the server-managed `factory.version` field from the latest current-factory read for replacement saves. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     */
+    put: operations["saveCurrentFactoryBySessionId"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Validate workstation prompt template
-         * @description Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
-         */
-        post: operations["validateCurrentFactoryWorkstationPromptTemplateBySessionId"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Get workstation prompt-template contract
+     * @description Returns the authoritative prompt-variable reference and unavailable-access patterns for the selected current-factory workstation editing context.
+     */
+    get: operations["getCurrentFactoryWorkstationPromptTemplateContractBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
+    get?: never;
+    put?: never;
+    /**
+     * Validate workstation prompt template
+     * @description Validates a prompt draft against the authoritative current-factory workstation prompt contract and returns typed syntax or variable diagnostics.
+     */
+    post: operations["validateCurrentFactoryWorkstationPromptTemplateBySessionId"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: {
-        SubmitWorkRequest: {
-            /** @description Required authored name for this single-work submission. */
-            name: string;
-            /** @description Configured work type name from factory.json to submit to. */
-            workTypeName: string;
-            /** @description Explicit chaining-trace identifier for the submitted work. */
-            currentChainingTraceId?: string;
-            /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
-            traceId?: string;
-            /** @description Ordered submit-work items authored by the dashboard for structured multimodal submission. */
-            items?: components["schemas"]["SubmitWorkItemList"];
-            /** @description Optional canonical ordered work content parts for this submission. */
-            content?: components["schemas"]["WorkContent"];
-            /** @description Opaque work payload forwarded as raw JSON. */
-            payload?: unknown;
-            tags?: components["schemas"]["StringMap"];
-            /** @description Optional token-level runtime relations preserved on the submitted work item. */
-            relations?: components["schemas"]["SubmitRelation"][];
-        };
-        SubmitRelation: {
-            type: components["schemas"]["RelationType"];
-            /** @description Target runtime work identifier for the relation. */
-            targetWorkId: string;
-            /** @description Required target state before the dependency can proceed. */
-            requiredState?: string;
-        };
-        SubmitWorkResponse: {
-            /** @description Trace identifier for the submitted work request batch. */
-            traceId: string;
-            /** @description Stable request identifier assigned during normalization. */
-            requestId: string;
-            /** @description False when the same requestId was already accepted (idempotent replay). */
-            accepted: boolean;
-            /** @description Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted). */
-            workId?: string;
-            /** @description Submitted work display name. */
-            name?: string;
-            /** @description Configured work type name for the submitted work. */
-            workTypeName?: string;
-            /** @description Factory session that accepted the submit (~default for POST /work). */
-            sessionId?: string;
-        };
-        /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
-        SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
-        /** @description One ordered dashboard-authored submit-work item. */
-        SubmitWorkItem: components["schemas"]["SubmitWorkTextItem"] | components["schemas"]["SubmitWorkImageItem"] | components["schemas"]["SubmitWorkVideoItem"] | components["schemas"]["SubmitWorkAudioItem"] | components["schemas"]["SubmitWorkDocumentItem"];
-        /**
-         * @description Supported dashboard submit-work item types for multimodal submission.
-         * @enum {string}
-         */
-        SubmitWorkItemType: "text" | "image" | "video" | "audio" | "document";
-        SubmitWorkFileItemCommonFields: {
-            url: components["schemas"]["SubmitWorkContentURLProperty"];
-            /** @description Backend-owned staged file reference preserved for later dispatch. */
-            stagedFileRef?: string;
-            /** @description Browser-authored filename preserved for inline identification and validation. */
-            fileName?: string;
-            /** @description Browser-authored MIME type preserved for validation and dispatch decisions. */
-            mediaType?: string;
-        };
-        /** @description Ordered inline text submission item. */
-        SubmitWorkTextItem: {
-            /** @enum {unknown} */
-            type: "text";
-            /** @description Authored inline text preserved in item order. */
-            text: string;
-        };
-        /** @description Ordered image submission item backed by one staged file reference. */
-        SubmitWorkImageItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
-            /** @enum {unknown} */
-            type: "image";
-        };
-        /** @description Ordered video submission item backed by one staged file reference. */
-        SubmitWorkVideoItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
-            /** @enum {unknown} */
-            type: "video";
-        };
-        /** @description Ordered audio submission item backed by one staged file reference. */
-        SubmitWorkAudioItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
-            /** @enum {unknown} */
-            type: "audio";
-        };
-        /** @description Ordered document submission item backed by one staged file reference. */
-        SubmitWorkDocumentItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
-            /** @enum {unknown} */
-            type: "document";
-        };
-        StageSubmitWorkFileRequest: {
-            /** @description Structured submit-work item kind this file will back. Text is not allowed. */
-            itemType: components["schemas"]["SubmitWorkItemType"];
-            /** @description Browser-authored filename preserved for inline identification and staging. */
-            fileName: string;
-            /** @description Browser-authored MIME type preserved for validation and dispatch decisions. */
-            mediaType: string;
-            /** @description Base64-encoded file payload to stage behind a backend-owned reference. */
-            contentBase64: string;
-        };
-        StageSubmitWorkFileResponse: {
-            /** @description Canonical file:// URL for the staged bytes on the factory host. */
-            url: components["schemas"]["SubmitWorkContentURLProperty"];
-            /** @description Backend-owned staged file reference returned for later structured submit-work items. */
-            stagedFileRef: string;
-            /** @description Browser-authored filename preserved for inline identification after staging. */
-            fileName: string;
-            /** @description Browser-authored MIME type preserved for inline identification after staging. */
-            mediaType: string;
-        };
-        UpsertWorkRequestSubmittedWork: {
-            name: string;
-            workTypeName: string;
-            workId: string;
-        };
-        UpsertWorkRequestResponse: {
-            requestId: string;
-            traceId: string;
-            works: components["schemas"]["UpsertWorkRequestSubmittedWork"][];
-        };
-        /** @description Operator request to move one work item to another authored marking state. */
-        MoveWorkRequest: {
-            /** @description Authored marking state name to move the work item into. */
-            stateName: string;
-            /** @description Optional client idempotency key. Repeating the same requestId for an already-applied operator move returns 409 Conflict without a second mutation. */
-            requestId?: string;
-        };
-        ListWorkResponse: {
-            results: components["schemas"]["Work"][];
-            paginationContext?: components["schemas"]["PaginationContext"];
-        };
-        PaginationContext: {
-            maxResults: number;
-            nextToken?: string;
-        };
-        TokenResponse: {
-            id: string;
-            placeId: string;
-            name?: string;
-            workId: string;
-            workType: string;
-            chainingTraceDepth?: number;
-            currentChainingTraceId?: string;
-            previousChainingTraceIds?: string[];
-            traceId: string;
-            /** @description Ordered canonical content parts preserved on this work token. */
-            content?: components["schemas"]["WorkContent"];
-            tags?: components["schemas"]["StringMap"];
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            enteredAt: string;
-            history?: components["schemas"]["TokenHistory"];
-        };
-        TokenHistory: {
-            totalVisits?: components["schemas"]["IntegerMap"];
-            consecutiveFailures?: components["schemas"]["IntegerMap"];
-            placeVisits?: components["schemas"]["IntegerMap"];
-            lastError?: string;
-        };
-        ResourceUsage: {
-            name: string;
-            available: number;
-            total: number;
-        };
-        ResourceRequirement: {
-            name: string;
-            capacity: number;
-        };
-        StatusCategories: {
-            initial: number;
-            processing: number;
-            terminal: number;
-            failed: number;
-        };
-        StatusResponse: {
-            categories: components["schemas"]["StatusCategories"];
-            factoryState: string;
-            runtimeStatus: string;
-            totalTokens: number;
-            resources?: components["schemas"]["ResourceUsage"][];
-        };
-        ListModelsResponse: {
-            /** @description Discovered models exposed by the currently loaded runtime configuration. */
-            results: components["schemas"]["ModelSummary"][];
-        };
-        ModelSummary: {
-            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
-            name: string;
-            providerLocality: components["schemas"]["WorkerModelLocality"];
-            status: components["schemas"]["ModelStatus"];
-            loadState: components["schemas"]["ModelLoadState"];
-            /** @description Provider-agnostic operations supported by the discovered model. */
-            operations: components["schemas"]["ModelOperation"][];
-            /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
-            modalities: components["schemas"]["ModelOperationContentType"][];
-            /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
-            resources: components["schemas"]["ModelResourceSummary"][];
-        };
-        ModelDetail: {
-            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
-            name: string;
-            providerLocality: components["schemas"]["WorkerModelLocality"];
-            status: components["schemas"]["ModelStatus"];
-            loadState: components["schemas"]["ModelLoadState"];
-            /** @description Union of provider-agnostic operations supported by workers for this model. */
-            operations: components["schemas"]["ModelOperation"][];
-            /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
-            modalities: components["schemas"]["ModelOperationContentType"][];
-            /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
-            resources: components["schemas"]["ModelResourceSummary"][];
-            /** @description Worker-scoped capability declarations that contribute to this discovered model. */
-            capabilities: components["schemas"]["ModelCapability"][];
-            diagnostics: components["schemas"]["StringMap"];
-        };
-        ModelInvocationRequest: {
-            /** @description Uppercase provider-agnostic operation to invoke, such as `TTS`. */
-            operation: string;
-            /** @description Ordered invocation input content resolved through optional slot bindings. */
-            content?: components["schemas"]["WorkContent"];
-            /** @description Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings. */
-            bindings?: components["schemas"]["WorkstationOperationBinding"][];
-            options?: components["schemas"]["ModelInvocationOptions"];
-        };
-        /** @description Optional direct-invocation controls for response shaping and transport. */
-        ModelInvocationOptions: {
-            responseMode?: components["schemas"]["ModelInvocationResponseMode"];
-        };
-        /**
-         * @description Requested direct-invocation response mode.
-         * @enum {string}
-         */
-        ModelInvocationResponseMode: "METADATA" | "AUDIO_STREAM";
-        ModelInvocationResponse: {
-            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
-            modelName: string;
-            /** @description Worker selected to satisfy this invocation. */
-            worker: string;
-            /** @description Uppercase provider-agnostic operation that was invoked. */
-            operation: string;
-            providerLocality: components["schemas"]["WorkerModelLocality"];
-            /** @description Returned model output as canonical `WorkContent`. */
-            content: components["schemas"]["WorkContent"];
-            /** @description Deterministically resolved slot bindings used for the invocation. */
-            bindings: components["schemas"]["ResolvedModelOperationBinding"][];
-        };
-        ModelPullDownloadedFile: {
-            /** @description Relative file path written under the managed model cache directory. */
-            path: string;
-            /**
-             * Format: int64
-             * @description Downloaded file size in bytes.
-             */
-            bytes: number;
-            /** @description Lowercase SHA-256 checksum for the cached file when known. */
-            sha256?: string;
-        };
-        /**
-         * @description Outcome of a managed local-model asset pull request.
-         * @enum {string}
-         */
-        ModelPullOutcome: "PULLED" | "ALREADY_PRESENT";
-        ModelPullResponse: {
-            /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
-            modelName: string;
-            providerLocality: components["schemas"]["WorkerModelLocality"];
-            outcome: components["schemas"]["ModelPullOutcome"];
-            /** @description Final managed cache directory that now contains the pulled model assets. */
-            cachePath: string;
-            /** @description Pulled source revision identifier, such as an upstream repository commit SHA. */
-            revision: string;
-            /** @description Files that were downloaded or verified as already present for the managed cache entry. */
-            downloadedFiles: components["schemas"]["ModelPullDownloadedFile"][];
-        };
-        ResolvedModelOperationBinding: {
-            /** @description Stable input slot name declared by the worker capability. */
-            slot: string;
-            source: components["schemas"]["ResolvedModelOperationBindingSource"];
-            /** @description Resolved content bound to the slot. */
-            content: components["schemas"]["WorkContent"];
-        };
-        /**
-         * @description Source used to resolve one invocation slot binding.
-         * @enum {string}
-         */
-        ResolvedModelOperationBindingSource: "INPUT" | "CONFIG" | "DEFAULT" | "OMITTED";
-        ModelCapability: {
-            /** @description Customer-authored worker name that exposes this capability declaration. */
-            worker: string;
-            modelProvider?: components["schemas"]["WorkerModelProvider"];
-            providerLocality: components["schemas"]["WorkerModelLocality"];
-            /** @description Operations declared by this worker for the selected model. */
-            operations: components["schemas"]["ModelOperation"][];
-            /** @description Factory resource names referenced by the worker declaration. */
-            resourceNames: string[];
-        };
-        ModelResourceSummary: {
-            /** @description Factory-authored resource name. */
-            name: string;
-            type: components["schemas"]["ResourceType"];
-            /** @description Declared factory capacity for this resource. */
-            capacity: number;
-            /** @description Concrete model identifier when the resource is model-specific. */
-            model?: string;
-            /** @description Local runtime backend identifier for model resources. */
-            backend?: string;
-            /** @description Local load-policy metadata for model resources. */
-            loadPolicy?: string;
-            /** @description Cloud provider identity when the resource models quota or routing. */
-            provider?: string;
-        };
-        /**
-         * @description Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
-         * @enum {string}
-         */
-        ModelStatus: "READY" | "UNAVAILABLE";
-        /**
-         * @description Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
-         * @enum {string}
-         */
-        ModelLoadState: "UNLOADED" | "NOT_APPLICABLE";
-        /**
-         * @description Stable machine-readable error family for broader client grouping.
-         * @enum {string}
-         */
-        ErrorFamily: "BAD_REQUEST" | "CONFLICT" | "NOT_FOUND" | "INTERNAL_SERVER_ERROR";
-        ErrorResponse: {
-            message: string;
-            family: components["schemas"]["ErrorFamily"];
-            /**
-             * @description Stable machine-readable error code.
-             * @enum {string}
-             */
-            code: "BAD_REQUEST" | "INVALID_FACTORY_NAME" | "FACTORY_ALREADY_EXISTS" | "INVALID_FACTORY" | "FACTORY_NOT_IDLE" | "STALE_FACTORY_VERSION" | "MOVE_WORK_REQUEST_ALREADY_APPLIED" | "NOT_FOUND" | "INTERNAL_ERROR";
-            /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
-            targets?: components["schemas"]["FactoryValidationTarget"][];
-        };
-        ErrorTarget: {
-            /** @description Client-visible target category such as form, node, edge, field, or save. */
-            kind: string;
-            /** @description Optional graph entity, relationship, or save condition identifier. */
-            id?: string;
-            /** @description Optional request or form field path associated with the error. */
-            field?: string;
-        };
-        HybridLogicalTimestamp: {
-            /**
-             * Format: int64
-             * @description Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
-             */
-            logical: string;
-            /**
-             * Format: date-time
-             * @description UTC physical timestamp component for the persisted factory definition version.
-             */
-            physical: string;
-        };
-        ProviderSessionDetailResponse: {
-            providerSession: components["schemas"]["LoadableProviderSessionRef"];
-            source: components["schemas"]["ProviderSessionSourceMetadata"];
-            parse: components["schemas"]["ProviderSessionParseSummary"];
-            /** @description Ordered transcript entries extracted from the provider-session stream. */
-            transcript: components["schemas"]["ProviderSessionTranscriptEntry"][];
-        };
-        FactorySessionTargetRef: {
-            /** @enum {string} */
-            kind: "default" | "named";
-            name?: string;
-        };
-        FactorySessionTarget: {
-            ref: components["schemas"]["FactorySessionTargetRef"];
-            label: string;
-            folderPath: string;
-            factoryDir: string;
-            project: string;
-        };
-        FactorySessionSummary: {
-            id: string;
-            target: components["schemas"]["FactorySessionTargetRef"];
-            folderPath: string;
-            factoryDir: string;
-            project: string;
-            isDefault: boolean;
-        };
-        ListFactorySessionsResponse: {
-            sessions: components["schemas"]["FactorySessionSummary"][];
-        };
-        OpenFactorySessionRequest: {
-            folderPath: string;
-            target?: components["schemas"]["FactorySessionTargetRef"];
-            /** @description When true, validate the folder and optional target selection without creating a live session. */
-            validateOnly?: boolean;
-            /** @description When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly. */
-            initNewFactory?: boolean;
-        };
-        OpenFactorySessionResponse: {
-            session?: components["schemas"]["FactorySessionSummary"];
-            targets?: components["schemas"]["FactorySessionTarget"][];
-            /** @description When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath. */
-            initsNewFactory?: boolean;
-            /** @description Absolute resolved session folder path when initsNewFactory is true. */
-            folderPath?: string;
-        };
-        LoadableProviderSessionRef: {
-            provider: components["schemas"]["LoadableProviderSessionProvider"];
-            kind: components["schemas"]["LoadableProviderSessionKind"];
-            /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
-            id: string;
-        };
-        /**
-         * @description Canonical provider value for provider-session detail requests that can be loaded by the API.
-         * @enum {string}
-         */
-        LoadableProviderSessionProvider: "codex";
-        /**
-         * @description Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
-         * @enum {string}
-         */
-        LoadableProviderSessionKind: "session_id";
-        ProviderSessionSourceMetadata: {
-            /** @description Path to the loaded session file relative to the configured provider sessions root. */
-            relativePath: string;
-            /**
-             * Format: int64
-             * @description Size of the loaded session file in bytes.
-             */
-            sizeBytes: number;
-            /**
-             * Format: date-time
-             * @description Filesystem modification time when available.
-             */
-            modifiedAt?: string;
-        };
-        ProviderSessionParseSummary: {
-            /** @description Number of JSON event records parsed from the session stream. */
-            eventCount: number;
-            /** @description Number of non-empty event-stream lines inspected. */
-            lineCount: number;
-            /** @description Number of non-empty lines that could not be parsed as JSON objects. */
-            malformedLineCount: number;
-            /** @description Number of parsed JSON events without a recognized type field. */
-            unknownEventCount: number;
-            /** @description Chronological execution turns inferred from turn boundaries and response activity. */
-            turns: components["schemas"]["ProviderSessionTurnSummary"][];
-            /** @description Function and tool calls observed in chronological order. */
-            functionCalls: components["schemas"]["ProviderSessionFunctionCallSummary"][];
-            /** @description Reasoning entries or summaries observed in chronological order. */
-            reasoning: components["schemas"]["ProviderSessionReasoningSummary"][];
-            tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
-            /** @description Line-level parse errors for malformed event-stream records. */
-            parseErrors: components["schemas"]["ProviderSessionLineError"][];
-            /** @description Compact list of events with unknown or unsupported type fields. */
-            unknownEvents: components["schemas"]["ProviderSessionUnknownEvent"][];
-        };
-        ProviderSessionTurnSummary: {
-            /** @description One-based chronological execution turn index. */
-            index: number;
-            /** @description Number of parsed events associated with the turn. */
-            eventCount: number;
-            /** @description Number of response_item records associated with the turn. */
-            responseItemCount: number;
-            /** @description Number of function or tool calls associated with the turn. */
-            functionCallCount: number;
-            /** @description Number of reasoning entries associated with the turn. */
-            reasoningCount: number;
-            /**
-             * Format: date-time
-             * @description First event timestamp associated with the turn when present.
-             */
-            startedAt?: string;
-        };
-        ProviderSessionFunctionCallSummary: {
-            /** @description Chronological order of the function or tool call in the session stream. */
-            order: number;
-            /** @description One-based execution turn index associated with the call when inferable. */
-            turnIndex?: number;
-            /** @description Provider call identifier when present in the session stream. */
-            callId?: string;
-            /** @description Raw response item type for the call, such as function_call or custom_tool_call. */
-            type: string;
-            /** @description Function or tool name when present. */
-            name?: string;
-            /** @description Compact argument payload when present. */
-            arguments?: string;
-            /** @description Compact output payload when present. */
-            output?: string;
-            /** @description Result status inferred from the call output or explicit status fields. */
-            status?: string;
-        };
-        ProviderSessionReasoningSummary: {
-            /** @description Chronological order of the reasoning entry in the session stream. */
-            order: number;
-            /** @description One-based execution turn index associated with the reasoning entry when inferable. */
-            turnIndex?: number;
-            /** @description Event or response item type that carried the reasoning entry. */
-            sourceType: string;
-            /** @description Reasoning text when plaintext content is present. */
-            text?: string;
-            /** @description Compact reasoning summary when present. */
-            summary?: string;
-            /** @description Whether the reasoning entry only exposed encrypted content. */
-            encrypted?: boolean;
-            /** @description Compact encrypted reasoning payload when the provider exposes it. */
-            encryptedContent?: string;
-        };
-        ProviderSessionTokenUsage: {
-            inputTokens?: number;
-            cachedInputTokens?: number;
-            outputTokens?: number;
-            reasoningOutputTokens?: number;
-            totalTokens?: number;
-        };
-        ProviderSessionLineError: {
-            /** @description One-based line number of the malformed event-stream record. */
-            lineNumber: number;
-            /** @description Client-safe parse error message for the malformed line. */
-            message: string;
-        };
-        ProviderSessionUnknownEvent: {
-            /** @description One-based line number of the unknown event. */
-            lineNumber: number;
-            /** @description Raw top-level event type when present. */
-            type?: string;
-            /** @description Raw nested payload type when present. */
-            payloadType?: string;
-        };
-        /**
-         * @description Canonical transcript entry type used by the dashboard transcript view.
-         * @enum {string}
-         */
-        ProviderSessionTranscriptEntryType: "user_message" | "assistant_message" | "reasoning" | "tool_call" | "tool_output" | "system_event";
-        ProviderSessionTranscriptEntry: {
-            /** @description Stable chronological order of the transcript entry in the session stream. */
-            order: number;
-            type: components["schemas"]["ProviderSessionTranscriptEntryType"];
-            /** @description One-based inferred turn index when the session parser can associate the entry with a turn. */
-            turnIndex?: number;
-            /**
-             * Format: date-time
-             * @description Provider event timestamp when present in the source session stream.
-             */
-            timestamp?: string;
-            /** @description One-based JSONL line number that produced this transcript entry when applicable. */
-            lineNumber?: number;
-            /** @description Raw provider event or item type that produced this transcript entry. */
-            sourceType?: string;
-            /** @description Provider tool-call identifier when present. */
-            callId?: string;
-            /** @description Tool or function name when present. */
-            name?: string;
-            /** @description Provider or inferred status value when present. */
-            status?: string;
-            /** @description Plaintext transcript body when present. */
-            text?: string;
-            /** @description Compact summary text when the provider emits a separate summary channel. */
-            summary?: string;
-            /** @description Compact tool-call arguments when present. */
-            arguments?: string;
-            /** @description Compact tool output when present. */
-            output?: string;
-            /** @description Whether the entry only exposed encrypted content instead of plaintext. */
-            encrypted?: boolean;
-            /** @description Compact encrypted reasoning payload when the provider exposes it. */
-            encryptedContent?: string;
-        };
-        StringMap: {
-            [key: string]: string;
-        };
-        IntegerMap: {
-            [key: string]: number;
-        };
-        /**
-         * @description Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
-         * @example customer-support-triage
-         */
-        FactoryName: string;
-        /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
-        FactoryWorldWorkstationRequestProjectionSlice: {
-            workstationRequestsByDispatchId?: {
-                [key: string]: components["schemas"]["FactoryWorldWorkstationRequestView"];
-            };
-        };
-        /** @description Additive dashboard read-model contract slice that publishes per-work move operations derived from canonical WORK_STATE_CHANGE events without reintroducing removed `/dashboard` endpoints. */
-        FactoryWorldWorkMoveOperationProjectionSlice: {
-            workMoveOperationsByWorkId?: {
-                [key: string]: components["schemas"]["FactoryWorldWorkMoveOperationView"][];
-            };
-        };
-        FactoryWorldWorkMoveOperationView: {
-            workId: string;
-            workTypeName?: string;
-            fromState: string;
-            toState: string;
-            fromPlaceId: string;
-            toPlaceId: string;
-            source: components["schemas"]["WorkStateChangeSource"];
-            requestId?: string;
-            tick: number;
-            sequence: number;
-            /** Format: date-time */
-            eventTime?: string;
-        };
-        FactoryWorldRenderedPromptDiagnostic: {
-            systemPromptHash?: string;
-            userMessageHash?: string;
-            variables?: components["schemas"]["StringMap"];
-        };
-        FactoryWorldProviderDiagnostic: {
-            provider?: string;
-            model?: string;
-            requestMetadata?: components["schemas"]["StringMap"];
-            responseMetadata?: components["schemas"]["StringMap"];
-        };
-        FactoryWorldWorkDiagnostics: {
-            renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
-            provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
-        };
-        FactoryWorldWorkItemRef: {
-            workId: string;
-            workTypeId?: string;
-            state?: string;
-            displayName?: string;
-            chainingTraceDepth?: number;
-            currentChainingTraceId?: string;
-            previousChainingTraceIds?: string[];
-            traceId?: string;
-            content?: components["schemas"]["WorkContent"];
-            /** @enum {string} */
-            payloadStatus?: "RESOLVED" | "UNAVAILABLE" | "LOADING" | "ERROR";
-            payloadUnavailableReason?: string;
-            lineageLogicalWorkId?: string;
-            /** @enum {string} */
-            lineageSourceKind?: "WORK_REQUEST" | "DISPATCH_RESPONSE_OUTPUT";
-            /** @enum {string} */
-            lineageContinuity?: "INITIAL_SUBMISSION" | "SAME_WORK_ID_CONTINUATION" | "NEW_DOWNSTREAM_WORK";
-            lineageParentWorkIds?: string[];
-        };
-        FactoryWorldTokenView: {
-            tokenId: string;
-            placeId: string;
-            name?: string;
-            workId?: string;
-            workTypeId?: string;
-            chainingTraceDepth?: number;
-            currentChainingTraceId?: string;
-            previousChainingTraceIds?: string[];
-            traceId?: string;
-            tags?: components["schemas"]["StringMap"];
-        };
-        FactoryWorldMutationView: {
-            type: string;
-            tokenId: string;
-            fromPlace?: string;
-            toPlace?: string;
-            reason?: string;
-            token?: components["schemas"]["FactoryWorldTokenView"];
-        };
-        FactoryWorldScriptRequestView: {
-            scriptRequestId?: string;
-            attempt?: number;
-            command?: string;
-            args?: string[];
-        };
-        FactoryWorldScriptResponseView: {
-            scriptRequestId?: string;
-            attempt?: number;
-            outcome?: string;
-            stdout?: string;
-            stderr?: string;
-            /** Format: int64 */
-            durationMillis?: number;
-            exitCode?: number;
-            failureType?: string;
-        };
-        FactoryWorldSelectedRunnerView: {
-            runnerId?: components["schemas"]["RunnerID"];
-            displayName?: string;
-            selectionSource?: components["schemas"]["RunnerSelectionSource"];
-            capabilities?: components["schemas"]["FactoryWorldRunnerCapabilitiesView"];
-        };
-        /** @enum {string} */
-        FactoryWorldRunnerBaselineCapability: "prompt_submission" | "tool_execution";
-        /** @enum {string} */
-        FactoryWorldRunnerOptionalCapability: "image_input" | "session_resume" | "structured_output" | "working_directory" | "worktree";
-        /** @enum {string} */
-        FactoryWorldRunnerOptionalCapabilityStatus: "supported" | "unsupported";
-        FactoryWorldRunnerOptionalCapabilitySupportView: {
-            capability: components["schemas"]["FactoryWorldRunnerOptionalCapability"];
-            status: components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
-            detail?: string;
-        };
-        FactoryWorldRunnerCapabilitiesView: {
-            baselineCapabilities: components["schemas"]["FactoryWorldRunnerBaselineCapability"][];
-            optionalCapabilities: components["schemas"]["FactoryWorldRunnerOptionalCapabilitySupportView"][];
-        };
-        FactoryWorldWorkstationRequestCountView: {
-            dispatchedCount: number;
-            respondedCount: number;
-            erroredCount: number;
-        };
-        FactoryWorldWorkstationRequestRequestView: {
-            runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
-            /** Format: date-time */
-            startedAt?: string;
-            inputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
-            inputWorkTypeIds?: string[];
-            currentChainingTraceId?: string;
-            previousChainingTraceIds?: string[];
-            traceIds?: string[];
-            consumedTokens?: components["schemas"]["FactoryWorldTokenView"][];
-            scriptRequest?: components["schemas"]["FactoryWorldScriptRequestView"];
-        };
-        FactoryWorldWorkstationRequestResponseView: {
-            runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
-            outcome?: string;
-            feedback?: string;
-            selectedClassificationLabel?: string;
-            failureReason?: string;
-            failureMessage?: string;
-            scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
-            /** Format: date-time */
-            endTime?: string;
-            /** Format: int64 */
-            durationMillis?: number;
-            outputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
-            outputMutations?: components["schemas"]["FactoryWorldMutationView"][];
-        };
-        FactoryWorldWorkstationRequestView: {
-            dispatchId: string;
-            transitionId: string;
-            workstationName?: string;
-            counts: components["schemas"]["FactoryWorldWorkstationRequestCountView"];
-            request: components["schemas"]["FactoryWorldWorkstationRequestRequestView"];
-            response?: components["schemas"]["FactoryWorldWorkstationRequestResponseView"];
-        };
-        /** @description Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields. */
-        FactoryEvent: {
-            /**
-             * @description Version of the factory event envelope schema.
-             * @enum {string}
-             */
-            schemaVersion: "agent-factory.event.v1";
-            /** @description Stable event identifier. Record/replay artifacts must preserve this value. */
-            id: string;
-            type: components["schemas"]["FactoryEventType"];
-            context: components["schemas"]["FactoryEventContext"];
-            payload: components["schemas"]["RunRequestEventPayload"] | components["schemas"]["InitialStructureRequestEventPayload"] | components["schemas"]["FactoryChangeEventPayload"] | components["schemas"]["WorkRequestEventPayload"] | components["schemas"]["RelationshipChangeRequestEventPayload"] | components["schemas"]["DispatchRequestEventPayload"] | components["schemas"]["ModelRequestEventPayload"] | components["schemas"]["ModelResponseEventPayload"] | components["schemas"]["InferenceRequestEventPayload"] | components["schemas"]["InferenceResponseEventPayload"] | components["schemas"]["ScriptRequestEventPayload"] | components["schemas"]["ScriptResponseEventPayload"] | components["schemas"]["DispatchResponseEventPayload"] | components["schemas"]["WorkStateChangeEventPayload"] | components["schemas"]["FactoryStateResponseEventPayload"] | components["schemas"]["RunResponseEventPayload"];
-        };
-        /**
-         * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
-         * @enum {string}
-         */
-        FactoryEventType: "RUN_REQUEST" | "INITIAL_STRUCTURE_REQUEST" | "FACTORY_CHANGE" | "WORK_REQUEST" | "RELATIONSHIP_CHANGE_REQUEST" | "DISPATCH_REQUEST" | "MODEL_REQUEST" | "MODEL_RESPONSE" | "INFERENCE_REQUEST" | "INFERENCE_RESPONSE" | "SCRIPT_REQUEST" | "SCRIPT_RESPONSE" | "DISPATCH_RESPONSE" | "WORK_STATE_CHANGE" | "FACTORY_STATE_RESPONSE" | "RUN_RESPONSE";
-        FactoryEventContext: {
-            /** @description Append-only event-log sequence number. */
-            sequence: number;
-            /** @description Logical engine tick observed by the runtime. */
-            tick: number;
-            /**
-             * Format: date-time
-             * @description Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.
-             */
-            eventTime: string;
-            /** @description Canonical request identity for all request-scoped events; payload metadata must not restate it. */
-            requestId?: string;
-            /** @description Canonical trace identifiers that contributed to this event; payloads must not restate them. */
-            traceIds?: string[];
-            /** @description Canonical work identities correlated to this event; payloads must not restate them. */
-            workIds?: string[];
-            /** @description Canonical dispatch identity for dispatch and inference events; payloads must not restate it. */
-            dispatchId?: string;
-            /** @description Canonical chaining-trace identifier for the dispatch currently represented by this event context. */
-            currentChainingTraceId?: string;
-            /** @description Canonical predecessor chaining traces consumed by the dispatch in deterministic order. */
-            previousChainingTraceIds?: string[];
-            /** @description Human-readable source such as api, filewatcher, replay, cron, or worker. */
-            source?: string;
-        };
-        /**
-         * @description Origin of a WORK_STATE_CHANGE event.
-         * @enum {string}
-         */
-        WorkStateChangeSource: "api" | "cli" | "cascading-failure";
-        /** @description Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context. */
-        DispatchConsumedWorkRef: {
-            /** @description Canonical work identity for one consumed dispatch input. */
-            workId: string;
-        };
-        /** @description Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here. */
-        DispatchRequestEventMetadata: {
-            /** @description Stable replay correlation key for recorded dispatch reconstruction. */
-            replayKey?: string;
-            runnerId?: components["schemas"]["RunnerID"];
-            runnerSelectionSource?: components["schemas"]["RunnerSelectionSource"];
-        };
-        RunRequestEventPayload: {
-            /** Format: date-time */
-            recordedAt: string;
-            factory: components["schemas"]["Factory"];
-            wallClock?: components["schemas"]["WallClock"];
-            diagnostics?: components["schemas"]["Diagnostics"];
-        };
-        /** @description Runtime topology snapshot before work moves. */
-        InitialStructureRequestEventPayload: {
-            factory: components["schemas"]["Factory"];
-            sourceDirectory?: string;
-            metadata?: components["schemas"]["StringMap"];
-        };
-        /** @description Runtime topology snapshot after a live factory definition change replaces the running factory. */
-        FactoryChangeEventPayload: {
-            factory: components["schemas"]["Factory"];
-            sourceDirectory?: string;
-            metadata?: components["schemas"]["StringMap"];
-        };
-        /** @description Normalized work request entering the factory. Single-work submissions accepted by POST /work are converted into this one-work request shape before an event is emitted. */
-        WorkRequestEventPayload: {
-            type: components["schemas"]["WorkRequestType"];
-            works?: components["schemas"]["Work"][];
-            relations?: components["schemas"]["Relation"][];
-            source?: string;
-            parentLineage?: string[];
-        };
-        RelationshipChangeRequestEventPayload: {
-            relation: components["schemas"]["Relation"];
-        };
-        /** @description Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history. */
-        DispatchRequestEventPayload: {
-            transitionId: string;
-            /**
-             * @deprecated
-             * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
-             */
-            currentChainingTraceId?: string;
-            /**
-             * @deprecated
-             * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
-             */
-            previousChainingTraceIds?: string[];
-            inputs: components["schemas"]["DispatchConsumedWorkRef"][];
-            resources?: components["schemas"]["Resource"][];
-            metadata?: components["schemas"]["DispatchRequestEventMetadata"];
-        };
-        /** @description Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. */
-        ModelRequestEventPayload: {
-            /** @description Stable identifier correlating this model execution request with its response. */
-            modelRequestId: string;
-            /** @description One-based model execution attempt number for this dispatch. */
-            attempt: number;
-            /** @description Uppercase model operation requested by the workstation, such as TTS. */
-            operation: string;
-            /** @description Runtime worker name selected for the invocation. */
-            worker: string;
-            /** @description Concrete model identity resolved for this invocation. */
-            model: string;
-            /** @description Worker-declared model locality, such as LOCAL or CLOUD. */
-            providerLocality: string;
-            /** @description Concrete resources attached to the model worker execution path. */
-            resources?: components["schemas"]["ModelResourceSummary"][];
-            /** @description Deterministically resolved operation-slot bindings used for invocation. */
-            bindings?: components["schemas"]["ResolvedModelOperationBinding"][];
-            /** @description Working directory resolved for the model execution when present. */
-            workingDirectory?: string;
-            /** @description Worktree path resolved for the model execution when present. */
-            worktree?: string;
-        };
-        /** @description Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads. */
-        ModelResponseEventPayload: {
-            /** @description Identifier from the matching model request event. */
-            modelRequestId: string;
-            /** @description One-based model execution attempt number for this dispatch. */
-            attempt: number;
-            /** @description Uppercase model operation requested by the workstation, such as TTS. */
-            operation: string;
-            /** @description Runtime worker name selected for the invocation. */
-            worker: string;
-            /** @description Concrete model identity resolved for this invocation. */
-            model: string;
-            /** @description Worker-declared model locality, such as LOCAL or CLOUD. */
-            providerLocality: string;
-            outcome: components["schemas"]["InferenceOutcome"];
-            /**
-             * Format: int64
-             * @description End-to-end model invocation duration in milliseconds.
-             */
-            durationMillis: number;
-            /** @description Concrete resources attached to the model worker execution path. */
-            resources?: components["schemas"]["ModelResourceSummary"][];
-            /** @description Deterministically resolved operation-slot bindings used for invocation. */
-            bindings?: components["schemas"]["ResolvedModelOperationBinding"][];
-            /**
-             * Format: int64
-             * @description Time spent waiting for local model resources before acquisition.
-             */
-            resourceWaitMillis?: number;
-            /** @description Whether the invocation acquired the required local model resources. */
-            resourceAcquired?: boolean;
-            /** @description Whether this invocation asked the managed local-model runtime to load a handle. */
-            loadRequested?: boolean;
-            /** @description Whether an already-loaded local model handle was reused instead of loading again. */
-            loadReused?: boolean;
-            /**
-             * Format: int64
-             * @description Duration of the managed local-model load call when one occurred.
-             */
-            loadDurationMillis?: number;
-            /** @description Bounded output preview for non-binary model responses when present. */
-            outputPreview?: string;
-            outputContent?: components["schemas"]["WorkContent"];
-            diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
-            /** @description Stable failure classification when available. */
-            errorClass?: string;
-        };
-        /** @description Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics. */
-        InferenceRequestEventPayload: {
-            /** @description Stable identifier correlating this provider request with its response. */
-            inferenceRequestId: string;
-            /** @description One-based provider attempt number for this dispatch. */
-            attempt: number;
-            /** @description Working directory resolved for the provider attempt. */
-            workingDirectory: string;
-            /** @description Worktree path resolved for the provider attempt. */
-            worktree: string;
-            /** @description Rendered prompt sent to the provider. */
-            prompt: string;
-        };
-        /** @description Response details captured after a model-worker provider attempt returns, including success and failure outcomes correlated to the request event. FactoryEvent.context owns dispatch identity, and the matching dispatch request owns the transition identifier for this provider attempt. Safe provider diagnostics and provider-session identifiers stay on this provider-boundary event instead of being copied onto DispatchResponse. */
-        InferenceResponseEventPayload: {
-            /** @description Identifier from the matching inference request event. */
-            inferenceRequestId: string;
-            /** @description One-based provider attempt number for this dispatch. */
-            attempt: number;
-            outcome: components["schemas"]["InferenceOutcome"];
-            /** @description Provider response text when present. */
-            response?: string;
-            /**
-             * Format: int64
-             * @description Provider call duration in milliseconds.
-             */
-            durationMillis: number;
-            providerSession?: components["schemas"]["ProviderSessionMetadata"];
-            diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
-            /** @description Process exit code when the provider failure exposes one. */
-            exitCode?: number;
-            /** @description Stable failure classification when available. */
-            errorClass?: string;
-        };
-        /** @description Request details captured immediately before a script-backed worker invokes a concrete command. Raw environment values and raw stdin content are intentionally excluded from the public script event contract. */
-        ScriptRequestEventPayload: {
-            /** @description Stable identifier correlating this script request with its response. */
-            scriptRequestId: string;
-            dispatchId: string;
-            transitionId: string;
-            /** @description One-based script attempt number for this dispatch. */
-            attempt: number;
-            /** @description Concrete command name executed for this script attempt. */
-            command: string;
-            /** @description Fully resolved command arguments passed to the script command runner. */
-            args: string[];
-        };
-        /** @description Response details captured after a script-backed worker command returns or fails before a normal exit code. Raw environment values and raw stdin content are intentionally excluded from the public script event contract. */
-        ScriptResponseEventPayload: {
-            /** @description Identifier from the matching script request event. */
-            scriptRequestId: string;
-            dispatchId: string;
-            transitionId: string;
-            /** @description One-based script attempt number for this dispatch. */
-            attempt: number;
-            outcome: components["schemas"]["ScriptExecutionOutcome"];
-            /** @description Captured stdout text from the script execution boundary. */
-            stdout: string;
-            /** @description Captured stderr text from the script execution boundary. */
-            stderr: string;
-            /**
-             * Format: int64
-             * @description Script execution duration in milliseconds.
-             */
-            durationMillis: number;
-            /** @description Process exit code when the command returned one. */
-            exitCode?: number;
-            failureType?: components["schemas"]["ScriptFailureType"];
-        };
-        /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
-        DispatchResponseEventPayload: {
-            completionId?: string;
-            transitionId: string;
-            /**
-             * @deprecated
-             * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
-             */
-            currentChainingTraceId?: string;
-            /**
-             * @deprecated
-             * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
-             */
-            previousChainingTraceIds?: string[];
-            outcome: components["schemas"]["WorkOutcome"];
-            output?: string;
-            error?: string;
-            feedback?: string;
-            selectedClassificationLabel?: string;
-            failureReason?: string;
-            failureMessage?: string;
-            providerFailure?: components["schemas"]["ProviderFailureMetadata"];
-            metrics?: components["schemas"]["WorkMetrics"];
-            /** Format: int64 */
-            durationMillis?: number;
-            outputWork?: components["schemas"]["Work"][];
-            outputResources?: components["schemas"]["Resource"][];
-            metadata?: components["schemas"]["StringMap"];
-        };
-        /** @description Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
-        WorkStateChangeEventPayload: {
-            workId: string;
-            workTypeName: string;
-            /** @description Authored state name before the move. */
-            fromState: string;
-            /** @description Authored state name after the move. */
-            toState: string;
-            /** @description Marking place identifier before the move. */
-            fromPlaceId: string;
-            /** @description Marking place identifier after the move. */
-            toPlaceId: string;
-            source: components["schemas"]["WorkStateChangeSource"];
-            /** @description Optional work identifier that triggered a cascade move. */
-            triggerWorkId?: string;
-            /** @description Optional human-readable reason for the move. */
-            reason?: string;
-        };
-        FactoryStateResponseEventPayload: {
-            previousState?: components["schemas"]["FactoryState"];
-            state: components["schemas"]["FactoryState"];
-            reason?: string;
-        };
-        RunResponseEventPayload: {
-            state?: components["schemas"]["FactoryState"];
-            reason?: string;
-            wallClock?: components["schemas"]["WallClock"];
-            diagnostics?: components["schemas"]["Diagnostics"];
-        };
-        /**
-         * @description Result category returned by a provider inference attempt.
-         * @enum {string}
-         */
-        InferenceOutcome: "SUCCEEDED" | "FAILED";
-        /**
-         * @description Result category returned by one public script execution boundary.
-         * @enum {string}
-         */
-        ScriptExecutionOutcome: "SUCCEEDED" | "FAILED_EXIT_CODE" | "TIMED_OUT" | "PROCESS_ERROR";
-        /**
-         * @description Stable failure classification for script responses without a normal process exit code.
-         * @enum {string}
-         */
-        ScriptFailureType: "TIMEOUT" | "PROCESS_ERROR";
-        /**
-         * @description Lifecycle state of the running factory.
-         * @enum {string}
-         */
-        FactoryState: "IDLE" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED";
-        /**
-         * @description Result category returned by a workstation execution.
-         * @enum {string}
-         */
-        WorkOutcome: "ACCEPTED" | "CONTINUE" | "REJECTED" | "FAILED";
-        /**
-         * @description Stable machine-readable failure family used to decide retry and routing behavior for failed work.
-         * @enum {string}
-         */
-        WorkFailureFamily: "terminal" | "retryable" | "throttle";
-        /**
-         * @description Stable machine-readable failure type used to classify failed work across providers and runtimes.
-         * @enum {string}
-         */
-        WorkFailureType: "auth_failure" | "permanent_bad_request" | "throttled" | "internal_server_error" | "timeout" | "unknown" | "misconfigured";
-        ProviderFailureMetadata: {
-            family?: components["schemas"]["WorkFailureFamily"];
-            type?: components["schemas"]["WorkFailureType"];
-        };
-        ProviderSessionMetadata: {
-            provider?: string;
-            kind?: string;
-            id?: string;
-        };
-        WorkMetrics: {
-            /** Format: int64 */
-            durationMillis?: number;
-            /** Format: double */
-            cost?: number;
-            retryCount?: number;
-        };
-        WorkDiagnostics: {
-            renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
-            provider?: components["schemas"]["ProviderDiagnostic"];
-            command?: components["schemas"]["CommandDiagnostic"];
-            panic?: components["schemas"]["PanicDiagnostic"];
-            metadata?: components["schemas"]["StringMap"];
-        };
-        RenderedPromptDiagnostic: {
-            systemPromptHash?: string;
-            userMessageHash?: string;
-            variables?: components["schemas"]["StringMap"];
-        };
-        ProviderDiagnostic: {
-            provider?: string;
-            model?: string;
-            requestMetadata?: components["schemas"]["StringMap"];
-            responseMetadata?: components["schemas"]["StringMap"];
-        };
-        CommandDiagnostic: {
-            command?: string;
-            args?: string[];
-            stdin?: string;
-            env?: components["schemas"]["StringMap"];
-            stdout?: string;
-            stderr?: string;
-            exitCode?: number;
-            timedOut?: boolean;
-            /** Format: int64 */
-            durationNanos?: number;
-            workingDir?: string;
-        };
-        PanicDiagnostic: {
-            message?: string;
-            stack?: string;
-        };
-        Diagnostics: {
-            notes?: string[];
-            workers?: {
-                [key: string]: components["schemas"]["SafeWorkDiagnostics"];
-            };
-        };
-        /** @description Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values. */
-        SafeWorkDiagnostics: {
-            renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
-            provider?: components["schemas"]["ProviderDiagnostic"];
-        };
-        WallClock: {
-            /** Format: date-time */
-            startedAt?: string;
-            /** Format: date-time */
-            finishedAt?: string;
-        };
-        /**
-         * @description Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
-         * @default REPLACE_CURRENT
-         * @enum {string}
-         */
-        FactorySaveMode: "REPLACE_CURRENT" | "UPSERT_NAMED_AND_ACTIVATE";
-        /**
-         * @description Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
-         * @example {
-         *       "mode": "REPLACE_CURRENT",
-         *       "factory": {
-         *         "name": "alpha",
-         *         "version": {
-         *           "logical": "2",
-         *           "physical": "2026-05-30T12:00:00.000000000Z"
-         *         },
-         *         "workTypes": [
-         *           {
-         *             "name": "task",
-         *             "states": [
-         *               {
-         *                 "name": "init",
-         *                 "type": "INITIAL"
-         *               },
-         *               {
-         *                 "name": "done",
-         *                 "type": "TERMINAL"
-         *               }
-         *             ]
-         *           }
-         *         ],
-         *         "workers": [
-         *           {
-         *             "name": "planner",
-         *             "type": "MODEL_WORKER",
-         *             "modelProvider": "CLAUDE",
-         *             "executorProvider": "SCRIPT_WRAP",
-         *             "model": "claude-sonnet-4-20250514"
-         *           }
-         *         ],
-         *         "workstations": [
-         *           {
-         *             "name": "plan-task",
-         *             "behavior": "STANDARD",
-         *             "type": "MODEL_WORKSTATION",
-         *             "worker": "planner",
-         *             "inputs": [
-         *               {
-         *                 "workType": "task",
-         *                 "state": "init"
-         *               }
-         *             ],
-         *             "outputs": [
-         *               {
-         *                 "workType": "task",
-         *                 "state": "done"
-         *               }
-         *             ]
-         *           }
-         *         ]
-         *       }
-         *     }
-         */
-        SaveFactoryForSessionRequest: {
-            /** @default REPLACE_CURRENT */
-            mode: components["schemas"]["FactorySaveMode"];
-            factory: components["schemas"]["Factory"];
-        };
-        /**
-         * @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-         * @example {
-         *       "name": "customer-support-triage",
-         *       "inputTypes": [
-         *         {
-         *           "name": "brief",
-         *           "type": "DEFAULT"
-         *         }
-         *       ],
-         *       "guards": [
-         *         {
-         *           "type": "INFERENCE_THROTTLE_GUARD",
-         *           "modelProvider": "CLAUDE",
-         *           "model": "claude-sonnet-4-20250514",
-         *           "refreshWindow": "15m"
-         *         }
-         *       ],
-         *       "workTypes": [
-         *         {
-         *           "name": "story",
-         *           "states": [
-         *             {
-         *               "name": "init",
-         *               "type": "INITIAL"
-         *             },
-         *             {
-         *               "name": "inReview",
-         *               "type": "PROCESSING"
-         *             },
-         *             {
-         *               "name": "failed",
-         *               "type": "FAILED"
-         *             },
-         *             {
-         *               "name": "complete",
-         *               "type": "TERMINAL"
-         *             }
-         *           ]
-         *         }
-         *       ],
-         *       "supportingFiles": {
-         *         "requiredTools": [
-         *           {
-         *             "name": "python",
-         *             "command": "python3",
-         *             "purpose": "Runs bundled translation scripts",
-         *             "versionArgs": [
-         *               "--version"
-         *             ]
-         *           }
-         *         ],
-         *         "bundledFiles": [
-         *           {
-         *             "type": "ROOT_HELPER",
-         *             "targetPath": "Makefile",
-         *             "content": {
-         *               "encoding": "utf-8",
-         *               "inline": "test:\n\tgo test ./...\n"
-         *             }
-         *           },
-         *           {
-         *             "type": "SCRIPT",
-         *             "targetPath": "factory/scripts/setup-workspace.py",
-         *             "content": {
-         *               "encoding": "utf-8",
-         *               "inline": "print(\"portable\")\n"
-         *             }
-         *           },
-         *           {
-         *             "type": "DOC",
-         *             "targetPath": "factory/docs/usage.md",
-         *             "content": {
-         *               "encoding": "utf-8",
-         *               "inline": "# Usage\n"
-         *             }
-         *           },
-         *           {
-         *             "type": "INPUT",
-         *             "targetPath": "factory/inputs/story/default/seed.md",
-         *             "content": {
-         *               "encoding": "utf-8",
-         *               "inline": "Shared starter work\n"
-         *             }
-         *           }
-         *         ]
-         *       },
-         *       "workers": [
-         *         {
-         *           "name": "reviewer",
-         *           "type": "MODEL_WORKER",
-         *           "executorProvider": "SCRIPT_WRAP",
-         *           "modelProvider": "CLAUDE",
-         *           "model": "claude-sonnet-4-20250514"
-         *         },
-         *         {
-         *           "name": "review-loop-breaker",
-         *           "type": "MODEL_WORKER",
-         *           "executorProvider": "SCRIPT_WRAP",
-         *           "modelProvider": "CLAUDE",
-         *           "model": "claude-sonnet-4-20250514"
-         *         }
-         *       ],
-         *       "workstations": [
-         *         {
-         *           "name": "review-story",
-         *           "behavior": "REPEATER",
-         *           "type": "MODEL_WORKSTATION",
-         *           "worker": "reviewer",
-         *           "inputs": [
-         *             {
-         *               "workType": "story",
-         *               "state": "init"
-         *             }
-         *           ],
-         *           "outputs": [
-         *             {
-         *               "workType": "story",
-         *               "state": "inReview"
-         *             }
-         *           ],
-         *           "onRejection": [
-         *             {
-         *               "workType": "story",
-         *               "state": "init"
-         *             }
-         *           ],
-         *           "onFailure": [
-         *             {
-         *               "workType": "story",
-         *               "state": "failed"
-         *             }
-         *           ]
-         *         },
-         *         {
-         *           "name": "review-loop-breaker",
-         *           "worker": "review-loop-breaker",
-         *           "type": "LOGICAL_MOVE",
-         *           "guards": [
-         *             {
-         *               "type": "VISIT_COUNT",
-         *               "workstation": "review-story",
-         *               "maxVisits": 3
-         *             }
-         *           ],
-         *           "inputs": [
-         *             {
-         *               "workType": "story",
-         *               "state": "init"
-         *             }
-         *           ],
-         *           "outputs": [
-         *             {
-         *               "workType": "story",
-         *               "state": "failed"
-         *             }
-         *           ]
-         *         }
-         *       ]
-         *     }
-         */
-        Factory: {
-            name: components["schemas"]["FactoryName"];
-            /** @description Factory identifier used as the factory-level template context fallback. */
-            id?: string;
-            /** @description Default runner selection for the factory when a workstation does not declare its own runner override. */
-            runner?: components["schemas"]["RunnerID"];
-            /** @description Directory that contained the factory.json used for this serialized runtime config. */
-            factoryDirectory?: string;
-            /** @description Original source directory for record/replay and drift diagnostics. */
-            sourceDirectory?: string;
-            /** @description Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology. */
-            version?: components["schemas"]["HybridLogicalTimestamp"];
-            /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
-            metadata?: components["schemas"]["StringMap"];
-            /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
-            inputTypes?: components["schemas"]["InputType"][];
-            /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
-            guards?: components["schemas"]["FactoryGuard"][];
-            /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
-            workTypes?: components["schemas"]["WorkType"][];
-            /** @description Shared capacity pools that workers or workstations can consume while work is executing. */
-            resources?: components["schemas"]["Resource"][];
-            /** @description Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources. */
-            supportingFiles?: components["schemas"]["ResourceManifest"];
-            /** @description Reusable worker definitions that workstations reference by name when dispatching work. */
-            workers?: components["schemas"]["Worker"][];
-            /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
-            workstations?: components["schemas"]["Workstation"][];
-        };
-        /** @description Factory-level guard attached at the root factory definition. */
-        FactoryGuard: {
-            /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
-            type: components["schemas"]["GuardType"];
-            /** @description Provider whose inference-throttle history controls this factory-level guard. */
-            modelProvider: components["schemas"]["WorkerModelProvider"];
-            /** @description Optional model name to scope throttling more narrowly than the provider-level window. */
-            model?: string;
-            /** @description Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again. */
-            refreshWindow: string;
-        };
-        /** @description Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary. */
-        ResourceManifest: {
-            /** @description Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed. */
-            requiredTools?: components["schemas"]["RequiredTool"][];
-            /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies. */
-            bundledFiles?: components["schemas"]["BundledFile"][];
-        };
-        /** @description One declarative external tool dependency for a portable factory. */
-        RequiredTool: {
-            /** @description Human-readable tool name used in manifests and validation output. */
-            name: string;
-            /** @description Executable lookup token that must resolve on PATH. */
-            command: string;
-            /** @description Optional explanation of why the portable factory requires this tool. */
-            purpose?: string;
-            /** @description Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token. */
-            versionArgs?: string[];
-        };
-        /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work. */
-        BundledFile: {
-            /**
-             * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
-             * @enum {string}
-             */
-            type: "SCRIPT" | "DOC" | "INPUT" | "ROOT_HELPER";
-            /** @description Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected. */
-            targetPath: string;
-            content: components["schemas"]["BundledFileContent"];
-        };
-        /** @description Inline content payload for a portable bundled file. */
-        BundledFileContent: {
-            /**
-             * @description Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
-             * @enum {string}
-             */
-            encoding: "utf-8";
-            /** @description Inline bundled file content carried in the manifest. Files under factory/scripts/, factory/docs/, and supported root helper paths are only bundled when they appear in bundledFiles. */
-            inline: string;
-        };
-        /** @description Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure. */
-        InputType: {
-            /** @description Input type name. The reserved name "default" is implicit. */
-            name: string;
-            type: components["schemas"]["InputKind"];
-        };
-        /**
-         * @description Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
-         * @enum {string}
-         */
-        InputKind: "DEFAULT";
-        /** @description A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy. */
-        WorkType: {
-            /** @description Customer-authored work type name referenced by workstation inputs, outputs, and submitted work. */
-            name: string;
-            /** @description Lifecycle states available for work items of this type. */
-            states: components["schemas"]["WorkState"][];
-            /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
-            handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
-        };
-        /** @description A lifecycle state that a work item can occupy inside one work type. */
-        WorkState: {
-            /** @description Customer-authored state name referenced by workstation inputs and outputs. */
-            name: string;
-            /** @description Lifecycle category for this state, such as initial, processing, terminal, or failed. */
-            type: components["schemas"]["WorkStateType"];
-        };
-        /**
-         * @description Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
-         * @enum {string}
-         */
-        WorkStateType: "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
-        /** @description Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas. */
-        Resource: {
-            /** @description Resource name referenced from worker requirements and workstation resourceUsage entries. */
-            name: string;
-            /** @description Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`. */
-            type?: components["schemas"]["ResourceType"];
-            /** @description Total units of this resource available to the factory at one time. */
-            capacity: number;
-            /** @description Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`. */
-            model?: string;
-            /** @description Backend identifier for local model resources, such as a managed runtime or embedded inference backend. */
-            backend?: string;
-            /** @description Load policy for local model resources, such as `ON_DEMAND` or `EAGER`. */
-            loadPolicy?: string;
-            /** @description Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources. */
-            provider?: string;
-        };
-        /**
-         * @description Uppercase resource families supported by the public factory-config contract.
-         * @enum {string}
-         */
-        ResourceType: "MODEL" | "PROVIDER_QUOTA" | "INVOCATION_SLOT";
-        /** @description A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script. */
-        Worker: {
-            /** @description Worker name referenced by Workstation.worker. */
-            name: string;
-            /** @description Worker implementation family to instantiate for this definition. */
-            type?: components["schemas"]["WorkerType"];
-            /** @description Built-in hosted provider identity when this worker uses repository-owned hosted execution. */
-            provider?: components["schemas"]["HostedWorkerProvider"];
-            /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
-            model?: string;
-            /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
-            modelProvider?: components["schemas"]["WorkerModelProvider"];
-            /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
-            modelLocality?: components["schemas"]["WorkerModelLocality"];
-            /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`. */
-            executorProvider?: components["schemas"]["WorkerProvider"];
-            /** @description Provider-agnostic model operations that this worker can execute, including named input and output slots. */
-            operations?: components["schemas"]["ModelOperation"][];
-            /** @description Command to execute when this worker runs through a command or script provider. */
-            command?: string;
-            /** @description Additional command arguments passed to the configured command. */
-            args?: string[];
-            /** @description Resource capacity this worker requires before it can be dispatched. */
-            resources?: components["schemas"]["ResourceRequirement"][];
-            /** @description Optional Go duration that caps one worker execution attempt. */
-            timeout?: string;
-            /** @description Marker that tells model-oriented workers where to stop generated output when the provider supports it. */
-            stopToken?: string;
-            /** @description When true, bypasses permission checks for providers that support permission gating. */
-            skipPermissions?: boolean;
-            /** @description Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
-            openCodeAgent?: string;
-            /** @description Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef. */
-            auth?: components["schemas"]["HostedWorkerAuth"];
-            /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
-            linear?: components["schemas"]["HostedLinearWorkerConfig"];
-            /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
-            body?: string;
-        };
-        /**
-         * @description Worker implementation families supported by the public factory-config contract.
-         * @enum {string}
-         */
-        WorkerType: "MODEL_WORKER" | "SCRIPT_WORKER" | "HOSTED_WORKER";
-        /**
-         * @description Canonical model-provider identifiers supported by model workers in factory config.
-         * @enum {string}
-         */
-        WorkerModelProvider: "CLAUDE" | "CODEX" | "CURSOR" | "GEMINI" | "KIRO" | "OPENCODE";
-        /**
-         * @description Provider locality for a model worker capability declaration.
-         * @enum {string}
-         */
-        WorkerModelLocality: "LOCAL" | "CLOUD";
-        /**
-         * @description Concrete worker-provider wrappers supported by the public factory-config contract.
-         * @enum {string}
-         */
-        WorkerProvider: "SCRIPT_WRAP";
-        /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
-        ModelOperation: {
-            name: components["schemas"]["ModelOperationName"];
-            /** @description Named operation input slots this worker can consume. */
-            inputs?: components["schemas"]["ModelOperationSlot"][];
-            /** @description Named operation output slots this worker can produce. */
-            outputs?: components["schemas"]["ModelOperationSlot"][];
-        };
-        /** @description One named capability slot declared by a model operation. */
-        ModelOperationSlot: {
-            /** @description Stable slot name used by workstation-side bindings and diagnostics. */
-            name: string;
-            /** @description Uppercase content types accepted or produced by this slot. */
-            contentTypes: components["schemas"]["ModelOperationContentType"][];
-            /** @description Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed. */
-            required?: boolean;
-        };
-        /**
-         * @description Uppercase content-part categories supported by worker model-operation capability slots.
-         * @enum {string}
-         */
-        ModelOperationContentType: "TEXT" | "IMAGE" | "AUDIO" | "JSON" | "BINARY";
-        /**
-         * @description Stable built-in runner identifiers supported by factory and workstation runner selection.
-         * @enum {string}
-         */
-        RunnerID: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode";
-        /**
-         * @description Configuration layer that supplied the resolved built-in runner selection for a dispatch.
-         * @enum {string}
-         */
-        RunnerSelectionSource: "workstation" | "factory" | "legacy_provider" | "default";
-        /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
-        Workstation: {
-            /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */
-            id?: string;
-            /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
-            name: string;
-            /** @description Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution. */
-            behavior?: components["schemas"]["WorkstationKind"];
-            /** @description Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type. */
-            type?: components["schemas"]["WorkstationType"];
-            /** @description Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`. */
-            operation?: components["schemas"]["ModelOperationName"];
-            /** @description Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content. */
-            operationBindings?: components["schemas"]["WorkstationOperationBinding"][];
-            /** @description Name of a worker declared in the workers list. */
-            worker: string;
-            /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
-            runner?: components["schemas"]["RunnerID"];
-            /** @description Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
-            openCodeAgent?: string;
-            /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
-            promptFile?: string;
-            /** @description JSON schema string used to validate or parse structured model output when configured. */
-            outputSchema?: string;
-            /** @description Retry and execution ceilings applied to this workstation. */
-            limits?: components["schemas"]["WorkstationLimits"];
-            /** @description Inline workstation instructions or script body when authored directly in factory config. */
-            body?: string;
-            /** @description Cron trigger configuration for workstations whose behavior is CRON. */
-            cron?: components["schemas"]["WorkstationCron"];
-            /** @description Work states this workstation can consume before it dispatches. */
-            inputs: components["schemas"]["WorkstationIO"][];
-            /** @description Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs. */
-            outputs?: components["schemas"]["WorkstationIO"][];
-            /** @description Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs. */
-            classificationRoutes?: components["schemas"]["ClassificationRoute"][];
-            /** @description Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue. */
-            onContinue?: components["schemas"]["WorkstationIO"][];
-            /** @description Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection. */
-            onRejection?: components["schemas"]["WorkstationIO"][];
-            /** @description Optional destination emitted when the workstation fails permanently. */
-            onFailure?: components["schemas"]["WorkstationIO"][];
-            /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
-            resources?: components["schemas"]["ResourceRequirement"][];
-            /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
-            copyReferencedScripts?: boolean;
-            /** @description Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules. */
-            guards?: components["schemas"]["Guard"][];
-            /** @description Stop words authored on the topology entry for model-oriented dispatches. */
-            stopWords?: string[];
-            /** @description Go template resolved from token tags at dispatch time. */
-            workingDirectory?: string;
-            /** @description Go template resolved and passed as the worktree path to CLI dispatchers. */
-            worktree?: string;
-            /** @description Environment variables added to the workstation execution context. */
-            env?: components["schemas"]["StringMap"];
-        };
-        ClassificationRoute: {
-            /** @description Case-sensitive classifier label that must match the trimmed classifier output exactly. */
-            label: string;
-            /** @description One or more authored destinations emitted when this classifier label is selected. */
-            outputs: components["schemas"]["WorkstationIO"][];
-        };
-        /** @description Retry and execution ceilings applied to one workstation definition. */
-        WorkstationLimits: {
-            /** @description Maximum number of retry attempts after a failed dispatch before the workstation gives up. */
-            maxRetries?: number;
-            /** @description Go duration limit for one dispatch attempt before it times out. */
-            maxExecutionTime?: string;
-        };
-        /**
-         * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
-         * @default STANDARD
-         * @enum {string}
-         */
-        WorkstationKind: "STANDARD" | "REPEATER" | "CRON" | "POLLER";
-        /**
-         * @description Runtime workstation implementation types supported by the public factory-config contract.
-         * @enum {string}
-         */
-        WorkstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE" | "CLASSIFIER_WORKSTATION";
-        /** @description Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported. */
-        WorkstationCron: {
-            /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */
-            schedule: string;
-            /**
-             * @description When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
-             * @default false
-             */
-            triggerAtStart: boolean;
-            /** @description Non-negative Go duration used as the maximum deterministic delay added to scheduled time tokens. Defaults to "0s". */
-            jitter?: string;
-            /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
-            expiryWindow?: string;
-        };
-        /**
-         * @description Guard condition attached to a workstation or one of its specific inputs.
-         * @enum {string}
-         */
-        GuardType: "VISIT_COUNT" | "MATCHES_FIELDS" | "ALL_CHILDREN_COMPLETE" | "ANY_CHILD_FAILED" | "SAME_NAME" | "SAME_TRACE_ID" | "INFERENCE_THROTTLE_GUARD";
-        /** @description Shared guard attached either to a workstation as a whole or to one specific workstation input. */
-        Guard: {
-            /** @description Guard condition to evaluate for this workstation-level or input-level attachment. */
-            type: components["schemas"]["GuardType"];
-            /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
-            workstation?: string;
-            /** @description For `VISIT_COUNT` guards, the visit threshold. */
-            maxVisits?: number;
-            /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
-            matchConfig?: components["schemas"]["GuardMatchConfig"];
-            /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
-            parentInput?: string;
-            /** @description For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation. */
-            matchInput?: string;
-            /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
-            spawnedBy?: string;
-        };
-        GuardMatchConfig: {
-            /** @description Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`. */
-            inputKey: string;
-        };
-        /** @description One authored work-state reference consumed or emitted by a workstation. */
-        WorkstationIO: {
-            /** @description Name of the work type consumed or emitted at this edge of the workstation. */
-            workType: string;
-            /** @description Name of the work state consumed or emitted for the referenced work type. */
-            state: string;
-            /** @description Per-input guards that must pass before this specific input can be used. */
-            guards?: components["schemas"]["Guard"][];
-        };
-        Transition: {
-            /** @description Source workstation name. */
-            from: string;
-            /** @description Destination workstation name. */
-            to: string;
-        };
-        PromptTemplateContract: {
-            /** @description Available prompt-template variables for the selected workstation editing context. */
-            availableVariables: components["schemas"]["PromptTemplateVariableReference"][];
-            /** @description Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access. */
-            inputCount: number;
-            /** @description Unsupported or unavailable variable access patterns for the selected workstation editing context. */
-            unavailableAccessPatterns: components["schemas"]["PromptTemplateUnavailableAccessPattern"][];
-        };
-        PromptTemplateVariableReference: {
-            /**
-             * @description High-level grouping for the variable reference.
-             * @enum {string}
-             */
-            category: "ROOT" | "INPUT" | "HISTORY" | "CONTEXT" | "MAP_ACCESS";
-            /** @description User-readable description of what the variable resolves to. */
-            description: string;
-            /** @description Go template snippet that shows how to reference the variable. */
-            example: string;
-            /** @description Canonical variable path summary used in diagnostics and help surfaces. */
-            path: string;
-        };
-        PromptTemplateUnavailableAccessPattern: {
-            /** @description Representative unsupported template snippet for this access pattern. */
-            example: string;
-            /** @description Unsupported or unavailable variable path pattern. */
-            path: string;
-            /** @description Why the access pattern is unavailable or unsupported in the selected workstation context. */
-            reason: string;
-        };
-        PromptTemplateValidationRequest: {
-            /** @description Prompt draft to validate against the selected current-factory workstation contract. */
-            prompt: string;
-        };
-        PromptTemplateValidationResult: {
-            /** @description Typed validation diagnostics for the submitted prompt draft. */
-            diagnostics: components["schemas"]["PromptTemplateDiagnostic"][];
-            /** @description True when the prompt contains no syntax or variable diagnostics. */
-            valid: boolean;
-        };
-        PromptTemplateDiagnostic: {
-            /** @description Inclusive 1-based byte offset where the diagnostic source span ends when available. */
-            endOffset: number;
-            /**
-             * @description Diagnostic classification for prompt-template validation.
-             * @enum {string}
-             */
-            kind: "SYNTAX_ERROR" | "INVALID_VARIABLE" | "UNAVAILABLE_VARIABLE";
-            /** @description User-readable explanation of the validation failure. */
-            message: string;
-            /** @description Canonical variable path or access pattern involved in the diagnostic when available. */
-            path: string;
-            /** @description Source variable or access expression that triggered the diagnostic when available. */
-            sourceText: string;
-            /** @description Inclusive 1-based byte offset where the diagnostic source span starts when available. */
-            startOffset: number;
-        };
-        /**
-         * @description Validation severity for one factory validation target.
-         * @enum {string}
-         */
-        FactoryValidationSeverity: "error" | "warning" | "hint";
-        /**
-         * @description Factory-domain component type referenced by one validation target subject.
-         * @enum {string}
-         */
-        FactoryValidationSubjectType: "FACTORY" | "WORKSTATION" | "WORK_TYPE" | "WORK_STATE" | "WORKER" | "RESOURCE" | "ROUTE";
-        /**
-         * @description Factory-domain location within the subject component referenced by one validation target.
-         * @enum {string}
-         */
-        FactoryValidationSubjectLocation: "ON_REJECTION" | "ON_FAILURE" | "OUTPUTS" | "INPUTS" | "STATES" | "TERMINAL" | "REFERENCE" | "DEFINITION";
-        FactoryValidationSubject: {
-            type: components["schemas"]["FactoryValidationSubjectType"];
-            /** @description Stable component identifier or name for the affected factory component. */
-            id: string;
-            location: components["schemas"]["FactoryValidationSubjectLocation"];
-        };
-        FactoryValidationTarget: {
-            /** @description Stable machine-readable validation rule identifier. */
-            code: string;
-            severity: components["schemas"]["FactoryValidationSeverity"];
-            /** @description Human-readable explanation suitable for dialogs and summaries. */
-            message: string;
-            subject: components["schemas"]["FactoryValidationSubject"];
-        };
-        /**
-         * @example {
-         *       "targets": [
-         *         {
-         *           "code": "factory.workstation.missingRejectionRoute",
-         *           "severity": "error",
-         *           "message": "Workstation repeater must define a reject route.",
-         *           "subject": {
-         *             "type": "WORKSTATION",
-         *             "id": "repeater",
-         *             "location": "ON_REJECTION"
-         *           }
-         *         },
-         *         {
-         *           "code": "factory.workType.missingCompletionState",
-         *           "severity": "error",
-         *           "message": "Work type task must declare a completion state.",
-         *           "subject": {
-         *             "type": "WORK_TYPE",
-         *             "id": "task",
-         *             "location": "STATES"
-         *           }
-         *         }
-         *       ]
-         *     }
-         */
-        FactoryValidationResult: {
-            /** @description Canonical validation targets for the submitted factory definition. */
-            targets: components["schemas"]["FactoryValidationTarget"][];
-        };
-        WorkRequest: {
-            /** @description Stable client-provided request identifier used for idempotent batch submission. */
-            requestId: string;
-            /** @description Optional default chaining-trace identifier applied to submitted work items that omit it. */
-            currentChainingTraceId?: string;
-            type: components["schemas"]["WorkRequestType"];
-            /** @description A batch of work items to be submitted together. */
-            works?: components["schemas"]["Work"][];
-            /** @description Relationships between various work items. */
-            relations?: components["schemas"]["Relation"][];
-        };
-        /**
-         * @description Kind of work request accepted by the factory.
-         * @enum {string}
-         */
-        WorkRequestType: "FACTORY_REQUEST_BATCH";
-        /** @description A piece of work. */
-        Work: {
-            /** @description A human readable name for the work, not unique */
-            name: string;
-            /** @description Unique identifier for the work */
-            workId?: string;
-            /** @description Identifier for the original request that created this work, if applicable */
-            requestId?: string;
-            /** @description Configured work type name from factory.json for this submitted work item. */
-            workTypeName?: string;
-            /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
-            state?: components["schemas"]["WorkState"];
-            /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
-            chainingTraceDepth?: number;
-            /** @description Explicit chaining-trace identifier for this submitted work item. */
-            currentChainingTraceId?: string;
-            /** @description Explicit predecessor chaining traces that directly caused this work item. */
-            previousChainingTraceIds?: string[];
-            /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
-            traceId?: string;
-            /** @description Optional canonical ordered work content parts for this work item. */
-            content?: components["schemas"]["WorkContent"];
-            /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
-            payload?: unknown;
-            /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
-            tags?: components["schemas"]["StringMap"];
-            /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
-            relations?: components["schemas"]["Relation"][];
-        };
-        /** @description Ordered canonical content parts for one work item. */
-        WorkContent: components["schemas"]["WorkContentPart"][];
-        /** @description One ordered canonical content part on a work item. */
-        WorkContentPart: components["schemas"]["WorkTextContentPart"] | components["schemas"]["WorkImageContentPart"] | components["schemas"]["WorkAudioContentPart"] | components["schemas"]["WorkJsonContentPart"] | components["schemas"]["WorkBinaryContentPart"];
-        /**
-         * @description Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
-         * @enum {string}
-         */
-        WorkContentPartType: "text" | "image" | "TEXT" | "IMAGE" | "AUDIO" | "JSON" | "BINARY";
-        /** @description Optional metadata attached to one work content part. */
-        WorkContentMetadata: {
-            [key: string]: unknown;
-        };
-        WorkContentCommonFields: {
-            /** @description Optional slot name used by model-operation binding selectors and diagnostics. */
-            slot?: string;
-            /** @description Optional caller-defined label for slot binding or diagnostics. */
-            label?: string;
-            /** @description Optional semantic role for model-operation authoring. */
-            role?: string;
-            /** @description Optional MIME content type for file-backed or structured parts. */
-            contentType?: string;
-            /** @description Optional artifact identifier for externally materialized content. */
-            artifactId?: string;
-            metadata?: components["schemas"]["WorkContentMetadata"];
-        };
-        /** @description Ordered inline text content for one work item. */
-        WorkTextContentPart: components["schemas"]["WorkContentCommonFields"] & {
-            /** @enum {unknown} */
-            type: "text" | "TEXT";
-            /** @description Inline text content preserved in canonical part order. */
-            text: string;
-        };
-        /** @description Ordered image content for one work item. */
-        WorkImageContentPart: components["schemas"]["WorkContentCommonFields"] & {
-            /** @enum {unknown} */
-            type: "image" | "IMAGE";
-            url: components["schemas"]["WorkContentURLProperty"];
-            file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
-        };
-        /** @description Ordered audio content for one work item. */
-        WorkAudioContentPart: components["schemas"]["WorkContentCommonFields"] & {
-            /** @enum {unknown} */
-            type: "AUDIO";
-            url: components["schemas"]["WorkContentURLProperty"];
-            file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
-        };
-        /** @description Ordered JSON content for one work item. */
-        WorkJsonContentPart: components["schemas"]["WorkContentCommonFields"] & {
-            /** @enum {unknown} */
-            type: "JSON";
-            /** @description Arbitrary JSON value preserved in canonical part order. */
-            json: unknown;
-        };
-        /** @description Ordered binary content for one work item. */
-        WorkBinaryContentPart: components["schemas"]["WorkContentCommonFields"] & {
-            /** @enum {unknown} */
-            type: "BINARY";
-            url: components["schemas"]["WorkContentURLProperty"];
-            file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
-        };
-        Relation: {
-            type: components["schemas"]["RelationType"];
-            targetWorkId?: string;
-            targetWorkName: string;
-            sourceWorkName: string;
-            requiredState?: string;
-        };
-        /**
-         * @description Relationship category between two pieces of work.
-         * @enum {string}
-         */
-        RelationType: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
-        /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:. */
-        WorkContentURLProperty: string;
-        /**
-         * @deprecated
-         * @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-         */
-        WorkContentDeprecatedFileProperty: string;
-        /** @description Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:. */
-        SubmitWorkContentURLProperty: string;
-        /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
-        ModelOperationName: string;
-        /** @description Selector fields used to resolve one content part from ordered runtime input. */
-        WorkstationOperationBindingSelector: {
-            /** @description Match a content part by its authored slot field. */
-            slot?: string;
-            /** @description Match a content part by its label field. */
-            label?: string;
-            /** @description Match a content part by its uppercase public type. */
-            type?: components["schemas"]["ModelOperationContentType"];
-            /** @description Match a content part by its role field. */
-            role?: string;
-        };
-        /** @description One workstation-authored binding for a provider-agnostic model-operation input slot. */
-        WorkstationOperationBinding: {
-            /** @description Stable input slot name declared by the worker operation. */
-            slot: string;
-            /** @description Ordered runtime-input selector used before falling back to config or default content. */
-            selector?: components["schemas"]["WorkstationOperationBindingSelector"];
-            /** @description Static authored content bound directly or used as the first fallback when runtime input does not match. */
-            config?: components["schemas"]["WorkContent"];
-            /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
-            defaultContent?: components["schemas"]["WorkContent"];
-        };
-        /**
-         * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
-         * @enum {string}
-         */
-        WorkTypeHandlingBehavior: "DEFAULT";
-        /**
-         * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.
-         * @enum {string}
-         */
-        HostedWorkerProvider: "LINEAR";
-        /** @description Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields. */
-        HostedWorkerAuth: {
-            /** @description Referenced secret name that resolves the hosted provider API key at runtime. */
-            secretRef?: string;
-        };
-        /** @description Deterministic issue-to-work mapping fields owned by a hosted Linear worker. */
-        HostedLinearWorkerMapping: {
-            /** @description Canonical submitted work type emitted for matched Linear issues. */
-            workType?: string;
-            /** @description Canonical submitted work state emitted for matched Linear issues. */
-            state?: string;
-        };
-        /** @description Optional claim-related configuration that v1 hosted Linear workers explicitly allow. */
-        HostedLinearWorkerClaim: {
-            /** @description Linear issue field name to use when deriving optional assignee claim metadata. */
-            assigneeField?: string;
-        };
-        /** @description Provider-specific poller configuration for the built-in hosted Linear worker. */
-        HostedLinearWorkerConfig: {
-            /** @description Optional Go duration that controls how often the hosted Linear worker polls for updates. */
-            pollInterval?: string;
-            /** @description Optional Linear team identifiers that bound the poll source. */
-            teamIds?: string[];
-            /** @description Optional Linear issue-state identifiers that bound the poll source. */
-            stateIds?: string[];
-            /** @description Deterministic mapping fields for canonical work submission generation. */
-            mapping?: components["schemas"]["HostedLinearWorkerMapping"];
-            /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
-            claim?: components["schemas"]["HostedLinearWorkerClaim"];
-        };
+  schemas: {
+    SubmitWorkRequest: {
+      /** @description Required authored name for this single-work submission. */
+      name: string;
+      /** @description Configured work type name from factory.json to submit to. */
+      workTypeName: string;
+      /** @description Explicit chaining-trace identifier for the submitted work. */
+      currentChainingTraceId?: string;
+      /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
+      traceId?: string;
+      /** @description Ordered submit-work items authored by the dashboard for structured multimodal submission. */
+      items?: components["schemas"]["SubmitWorkItemList"];
+      /** @description Optional canonical ordered work content parts for this submission. */
+      content?: components["schemas"]["WorkContent"];
+      /** @description Opaque work payload forwarded as raw JSON. */
+      payload?: unknown;
+      tags?: components["schemas"]["StringMap"];
+      /** @description Optional token-level runtime relations preserved on the submitted work item. */
+      relations?: components["schemas"]["SubmitRelation"][];
     };
-    responses: {
-        /** @description Request payload or parameter was invalid. */
-        BadRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Named factory name or payload was invalid. */
-        CreateFactoryBadRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Named factory could not be activated because the name already exists or the current runtime is not idle. */
-        CreateFactoryConflict: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Requested resource was not found. */
-        NotFound: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Current named factory was not found. */
-        CurrentFactoryNotFound: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Current factory save request failed validation. */
-        SaveCurrentFactoryBadRequest: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Current factory could not be saved because the runtime or submitted version is not safe to replace. */
-        SaveCurrentFactoryConflict: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Operator move request was already applied for the supplied requestId. */
-        MoveWorkConflict: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
-        /** @description Server failed while reading or building runtime state. */
-        InternalError: {
-            headers: {
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["ErrorResponse"];
-            };
-        };
+    SubmitRelation: {
+      type: components["schemas"]["RelationType"];
+      /** @description Target runtime work identifier for the relation. */
+      targetWorkId: string;
+      /** @description Required target state before the dependency can proceed. */
+      requiredState?: string;
     };
-    parameters: {
-        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-        SessionID: string;
-        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
-        MaxResults: number;
-        /** @description Optional base64-encoded token ID cursor. */
-        NextToken: string;
-        /** @description Optional current work state name filter. */
-        StateName: string;
-        /** @description Optional current work state type filter. */
-        StateType: components["schemas"]["WorkStateType"];
-        /** @description Optional list-work sort field. Use state.type to order by current work state type. */
-        SortBy: "state.type";
-        /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
-        WorkListName: string;
-        /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
-        WorkListWorkTypeName: string;
-        /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
-        WorkListTraceId: string;
-        /** @description Work or token identifier, depending on route. */
-        WorkOrTokenID: string;
+    SubmitWorkResponse: {
+      /** @description Trace identifier for the submitted work request batch. */
+      traceId: string;
+      /** @description Stable request identifier assigned during normalization. */
+      requestId: string;
+      /** @description False when the same requestId was already accepted (idempotent replay). */
+      accepted: boolean;
+      /** @description Primary work identifier for single-work submits (batch-<requestId>-<name> when omitted). */
+      workId?: string;
+      /** @description Submitted work display name. */
+      name?: string;
+      /** @description Configured work type name for the submitted work. */
+      workTypeName?: string;
+      /** @description Factory session that accepted the submit (~default for POST /work). */
+      sessionId?: string;
     };
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+    /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
+    SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
+    /** @description One ordered dashboard-authored submit-work item. */
+    SubmitWorkItem:
+      | components["schemas"]["SubmitWorkTextItem"]
+      | components["schemas"]["SubmitWorkImageItem"]
+      | components["schemas"]["SubmitWorkVideoItem"]
+      | components["schemas"]["SubmitWorkAudioItem"]
+      | components["schemas"]["SubmitWorkDocumentItem"];
+    /**
+     * @description Supported dashboard submit-work item types for multimodal submission.
+     * @enum {string}
+     */
+    SubmitWorkItemType: "text" | "image" | "video" | "audio" | "document";
+    SubmitWorkFileItemCommonFields: {
+      url: components["schemas"]["SubmitWorkContentURLProperty"];
+      /** @description Backend-owned staged file reference preserved for later dispatch. */
+      stagedFileRef?: string;
+      /** @description Browser-authored filename preserved for inline identification and validation. */
+      fileName?: string;
+      /** @description Browser-authored MIME type preserved for validation and dispatch decisions. */
+      mediaType?: string;
+    };
+    /** @description Ordered inline text submission item. */
+    SubmitWorkTextItem: {
+      /** @enum {unknown} */
+      type: "text";
+      /** @description Authored inline text preserved in item order. */
+      text: string;
+    };
+    /** @description Ordered image submission item backed by one staged file reference. */
+    SubmitWorkImageItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+      /** @enum {unknown} */
+      type: "image";
+    };
+    /** @description Ordered video submission item backed by one staged file reference. */
+    SubmitWorkVideoItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+      /** @enum {unknown} */
+      type: "video";
+    };
+    /** @description Ordered audio submission item backed by one staged file reference. */
+    SubmitWorkAudioItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+      /** @enum {unknown} */
+      type: "audio";
+    };
+    /** @description Ordered document submission item backed by one staged file reference. */
+    SubmitWorkDocumentItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
+      /** @enum {unknown} */
+      type: "document";
+    };
+    StageSubmitWorkFileRequest: {
+      /** @description Structured submit-work item kind this file will back. Text is not allowed. */
+      itemType: components["schemas"]["SubmitWorkItemType"];
+      /** @description Browser-authored filename preserved for inline identification and staging. */
+      fileName: string;
+      /** @description Browser-authored MIME type preserved for validation and dispatch decisions. */
+      mediaType: string;
+      /** @description Base64-encoded file payload to stage behind a backend-owned reference. */
+      contentBase64: string;
+    };
+    StageSubmitWorkFileResponse: {
+      /** @description Canonical file:// URL for the staged bytes on the factory host. */
+      url: components["schemas"]["SubmitWorkContentURLProperty"];
+      /** @description Backend-owned staged file reference returned for later structured submit-work items. */
+      stagedFileRef: string;
+      /** @description Browser-authored filename preserved for inline identification after staging. */
+      fileName: string;
+      /** @description Browser-authored MIME type preserved for inline identification after staging. */
+      mediaType: string;
+    };
+    UpsertWorkRequestSubmittedWork: {
+      name: string;
+      workTypeName: string;
+      workId: string;
+    };
+    UpsertWorkRequestResponse: {
+      requestId: string;
+      traceId: string;
+      works: components["schemas"]["UpsertWorkRequestSubmittedWork"][];
+    };
+    /** @description Operator request to move one work item to another authored marking state. */
+    MoveWorkRequest: {
+      /** @description Authored marking state name to move the work item into. */
+      stateName: string;
+      /** @description Optional client idempotency key. Repeating the same requestId for an already-applied operator move returns 409 Conflict without a second mutation. */
+      requestId?: string;
+    };
+    ListWorkResponse: {
+      results: components["schemas"]["Work"][];
+      paginationContext?: components["schemas"]["PaginationContext"];
+    };
+    PaginationContext: {
+      maxResults: number;
+      nextToken?: string;
+    };
+    TokenResponse: {
+      id: string;
+      placeId: string;
+      name?: string;
+      workId: string;
+      workType: string;
+      chainingTraceDepth?: number;
+      currentChainingTraceId?: string;
+      previousChainingTraceIds?: string[];
+      traceId: string;
+      /** @description Ordered canonical content parts preserved on this work token. */
+      content?: components["schemas"]["WorkContent"];
+      tags?: components["schemas"]["StringMap"];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      enteredAt: string;
+      history?: components["schemas"]["TokenHistory"];
+    };
+    TokenHistory: {
+      totalVisits?: components["schemas"]["IntegerMap"];
+      consecutiveFailures?: components["schemas"]["IntegerMap"];
+      placeVisits?: components["schemas"]["IntegerMap"];
+      lastError?: string;
+    };
+    ResourceUsage: {
+      name: string;
+      available: number;
+      total: number;
+    };
+    ResourceRequirement: {
+      name: string;
+      capacity: number;
+    };
+    StatusCategories: {
+      initial: number;
+      processing: number;
+      terminal: number;
+      failed: number;
+    };
+    StatusResponse: {
+      categories: components["schemas"]["StatusCategories"];
+      factoryState: string;
+      runtimeStatus: string;
+      totalTokens: number;
+      resources?: components["schemas"]["ResourceUsage"][];
+    };
+    ListModelsResponse: {
+      /** @description Discovered models exposed by the currently loaded runtime configuration. */
+      results: components["schemas"]["ModelSummary"][];
+    };
+    ModelSummary: {
+      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      name: string;
+      providerLocality: components["schemas"]["WorkerModelLocality"];
+      status: components["schemas"]["ModelStatus"];
+      loadState: components["schemas"]["ModelLoadState"];
+      /** @description Provider-agnostic operations supported by the discovered model. */
+      operations: components["schemas"]["ModelOperation"][];
+      /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
+      modalities: components["schemas"]["ModelOperationContentType"][];
+      /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
+      resources: components["schemas"]["ModelResourceSummary"][];
+    };
+    ModelDetail: {
+      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      name: string;
+      providerLocality: components["schemas"]["WorkerModelLocality"];
+      status: components["schemas"]["ModelStatus"];
+      loadState: components["schemas"]["ModelLoadState"];
+      /** @description Union of provider-agnostic operations supported by workers for this model. */
+      operations: components["schemas"]["ModelOperation"][];
+      /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
+      modalities: components["schemas"]["ModelOperationContentType"][];
+      /** @description Factory resource summaries associated with this model's workers or explicit model metadata. */
+      resources: components["schemas"]["ModelResourceSummary"][];
+      /** @description Worker-scoped capability declarations that contribute to this discovered model. */
+      capabilities: components["schemas"]["ModelCapability"][];
+      diagnostics: components["schemas"]["StringMap"];
+    };
+    ModelInvocationRequest: {
+      /** @description Uppercase provider-agnostic operation to invoke, such as `TTS`. */
+      operation: string;
+      /** @description Ordered invocation input content resolved through optional slot bindings. */
+      content?: components["schemas"]["WorkContent"];
+      /** @description Optional per-request slot bindings that follow the same contract as `MODEL_INVOKE` workstation bindings. */
+      bindings?: components["schemas"]["WorkstationOperationBinding"][];
+      options?: components["schemas"]["ModelInvocationOptions"];
+    };
+    /** @description Optional direct-invocation controls for response shaping and transport. */
+    ModelInvocationOptions: {
+      responseMode?: components["schemas"]["ModelInvocationResponseMode"];
+    };
+    /**
+     * @description Requested direct-invocation response mode.
+     * @enum {string}
+     */
+    ModelInvocationResponseMode: "METADATA" | "AUDIO_STREAM";
+    ModelInvocationResponse: {
+      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      modelName: string;
+      /** @description Worker selected to satisfy this invocation. */
+      worker: string;
+      /** @description Uppercase provider-agnostic operation that was invoked. */
+      operation: string;
+      providerLocality: components["schemas"]["WorkerModelLocality"];
+      /** @description Returned model output as canonical `WorkContent`. */
+      content: components["schemas"]["WorkContent"];
+      /** @description Deterministically resolved slot bindings used for the invocation. */
+      bindings: components["schemas"]["ResolvedModelOperationBinding"][];
+    };
+    ModelPullDownloadedFile: {
+      /** @description Relative file path written under the managed model cache directory. */
+      path: string;
+      /**
+       * Format: int64
+       * @description Downloaded file size in bytes.
+       */
+      bytes: number;
+      /** @description Lowercase SHA-256 checksum for the cached file when known. */
+      sha256?: string;
+    };
+    /**
+     * @description Outcome of a managed local-model asset pull request.
+     * @enum {string}
+     */
+    ModelPullOutcome: "PULLED" | "ALREADY_PRESENT";
+    ModelPullResponse: {
+      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      modelName: string;
+      providerLocality: components["schemas"]["WorkerModelLocality"];
+      outcome: components["schemas"]["ModelPullOutcome"];
+      /** @description Final managed cache directory that now contains the pulled model assets. */
+      cachePath: string;
+      /** @description Pulled source revision identifier, such as an upstream repository commit SHA. */
+      revision: string;
+      /** @description Files that were downloaded or verified as already present for the managed cache entry. */
+      downloadedFiles: components["schemas"]["ModelPullDownloadedFile"][];
+    };
+    ResolvedModelOperationBinding: {
+      /** @description Stable input slot name declared by the worker capability. */
+      slot: string;
+      source: components["schemas"]["ResolvedModelOperationBindingSource"];
+      /** @description Resolved content bound to the slot. */
+      content: components["schemas"]["WorkContent"];
+    };
+    /**
+     * @description Source used to resolve one invocation slot binding.
+     * @enum {string}
+     */
+    ResolvedModelOperationBindingSource:
+      | "INPUT"
+      | "CONFIG"
+      | "DEFAULT"
+      | "OMITTED";
+    ModelCapability: {
+      /** @description Customer-authored worker name that exposes this capability declaration. */
+      worker: string;
+      modelProvider?: components["schemas"]["WorkerModelProvider"];
+      providerLocality: components["schemas"]["WorkerModelLocality"];
+      /** @description Operations declared by this worker for the selected model. */
+      operations: components["schemas"]["ModelOperation"][];
+      /** @description Factory resource names referenced by the worker declaration. */
+      resourceNames: string[];
+    };
+    ModelResourceSummary: {
+      /** @description Factory-authored resource name. */
+      name: string;
+      type: components["schemas"]["ResourceType"];
+      /** @description Declared factory capacity for this resource. */
+      capacity: number;
+      /** @description Concrete model identifier when the resource is model-specific. */
+      model?: string;
+      /** @description Local runtime backend identifier for model resources. */
+      backend?: string;
+      /** @description Local load-policy metadata for model resources. */
+      loadPolicy?: string;
+      /** @description Cloud provider identity when the resource models quota or routing. */
+      provider?: string;
+    };
+    /**
+     * @description Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+     * @enum {string}
+     */
+    ModelStatus: "READY" | "UNAVAILABLE";
+    /**
+     * @description Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+     * @enum {string}
+     */
+    ModelLoadState: "UNLOADED" | "NOT_APPLICABLE";
+    /**
+     * @description Stable machine-readable error family for broader client grouping.
+     * @enum {string}
+     */
+    ErrorFamily:
+      | "BAD_REQUEST"
+      | "CONFLICT"
+      | "NOT_FOUND"
+      | "INTERNAL_SERVER_ERROR";
+    ErrorResponse: {
+      message: string;
+      family: components["schemas"]["ErrorFamily"];
+      /**
+       * @description Stable machine-readable error code.
+       * @enum {string}
+       */
+      code:
+        | "BAD_REQUEST"
+        | "INVALID_FACTORY_NAME"
+        | "FACTORY_ALREADY_EXISTS"
+        | "INVALID_FACTORY"
+        | "FACTORY_NOT_IDLE"
+        | "STALE_FACTORY_VERSION"
+        | "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+        | "NOT_FOUND"
+        | "INTERNAL_ERROR";
+      /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
+      targets?: components["schemas"]["FactoryValidationTarget"][];
+    };
+    ErrorTarget: {
+      /** @description Client-visible target category such as form, node, edge, field, or save. */
+      kind: string;
+      /** @description Optional graph entity, relationship, or save condition identifier. */
+      id?: string;
+      /** @description Optional request or form field path associated with the error. */
+      field?: string;
+    };
+    HybridLogicalTimestamp: {
+      /**
+       * Format: int64
+       * @description Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
+       */
+      logical: string;
+      /**
+       * Format: date-time
+       * @description UTC physical timestamp component for the persisted factory definition version.
+       */
+      physical: string;
+    };
+    ProviderSessionDetailResponse: {
+      providerSession: components["schemas"]["LoadableProviderSessionRef"];
+      source: components["schemas"]["ProviderSessionSourceMetadata"];
+      parse: components["schemas"]["ProviderSessionParseSummary"];
+      /** @description Ordered transcript entries extracted from the provider-session stream. */
+      transcript: components["schemas"]["ProviderSessionTranscriptEntry"][];
+    };
+    FactorySessionTargetRef: {
+      /** @enum {string} */
+      kind: "default" | "named";
+      name?: string;
+    };
+    FactorySessionTarget: {
+      ref: components["schemas"]["FactorySessionTargetRef"];
+      label: string;
+      folderPath: string;
+      factoryDir: string;
+      project: string;
+    };
+    FactorySessionSummary: {
+      id: string;
+      target: components["schemas"]["FactorySessionTargetRef"];
+      folderPath: string;
+      factoryDir: string;
+      project: string;
+      isDefault: boolean;
+    };
+    ListFactorySessionsResponse: {
+      sessions: components["schemas"]["FactorySessionSummary"][];
+    };
+    OpenFactorySessionRequest: {
+      folderPath: string;
+      target?: components["schemas"]["FactorySessionTargetRef"];
+      /** @description When true, validate the folder and optional target selection without creating a live session. */
+      validateOnly?: boolean;
+      /** @description When true, write the default init scaffold at folderPath and open a live session. Mutually exclusive with validateOnly. */
+      initNewFactory?: boolean;
+    };
+    OpenFactorySessionResponse: {
+      session?: components["schemas"]["FactorySessionSummary"];
+      targets?: components["schemas"]["FactorySessionTarget"][];
+      /** @description When true, validate-only inspection found a readable folder with no runnable factory targets; the client may offer to create the default init scaffold at folderPath. */
+      initsNewFactory?: boolean;
+      /** @description Absolute resolved session folder path when initsNewFactory is true. */
+      folderPath?: string;
+    };
+    LoadableProviderSessionRef: {
+      provider: components["schemas"]["LoadableProviderSessionProvider"];
+      kind: components["schemas"]["LoadableProviderSessionKind"];
+      /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
+      id: string;
+    };
+    /**
+     * @description Canonical provider value for provider-session detail requests that can be loaded by the API.
+     * @enum {string}
+     */
+    LoadableProviderSessionProvider: "codex";
+    /**
+     * @description Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
+     * @enum {string}
+     */
+    LoadableProviderSessionKind: "session_id";
+    ProviderSessionSourceMetadata: {
+      /** @description Path to the loaded session file relative to the configured provider sessions root. */
+      relativePath: string;
+      /**
+       * Format: int64
+       * @description Size of the loaded session file in bytes.
+       */
+      sizeBytes: number;
+      /**
+       * Format: date-time
+       * @description Filesystem modification time when available.
+       */
+      modifiedAt?: string;
+    };
+    ProviderSessionParseSummary: {
+      /** @description Number of JSON event records parsed from the session stream. */
+      eventCount: number;
+      /** @description Number of non-empty event-stream lines inspected. */
+      lineCount: number;
+      /** @description Number of non-empty lines that could not be parsed as JSON objects. */
+      malformedLineCount: number;
+      /** @description Number of parsed JSON events without a recognized type field. */
+      unknownEventCount: number;
+      /** @description Chronological execution turns inferred from turn boundaries and response activity. */
+      turns: components["schemas"]["ProviderSessionTurnSummary"][];
+      /** @description Function and tool calls observed in chronological order. */
+      functionCalls: components["schemas"]["ProviderSessionFunctionCallSummary"][];
+      /** @description Reasoning entries or summaries observed in chronological order. */
+      reasoning: components["schemas"]["ProviderSessionReasoningSummary"][];
+      tokenUsage?: components["schemas"]["ProviderSessionTokenUsage"];
+      /** @description Line-level parse errors for malformed event-stream records. */
+      parseErrors: components["schemas"]["ProviderSessionLineError"][];
+      /** @description Compact list of events with unknown or unsupported type fields. */
+      unknownEvents: components["schemas"]["ProviderSessionUnknownEvent"][];
+    };
+    ProviderSessionTurnSummary: {
+      /** @description One-based chronological execution turn index. */
+      index: number;
+      /** @description Number of parsed events associated with the turn. */
+      eventCount: number;
+      /** @description Number of response_item records associated with the turn. */
+      responseItemCount: number;
+      /** @description Number of function or tool calls associated with the turn. */
+      functionCallCount: number;
+      /** @description Number of reasoning entries associated with the turn. */
+      reasoningCount: number;
+      /**
+       * Format: date-time
+       * @description First event timestamp associated with the turn when present.
+       */
+      startedAt?: string;
+    };
+    ProviderSessionFunctionCallSummary: {
+      /** @description Chronological order of the function or tool call in the session stream. */
+      order: number;
+      /** @description One-based execution turn index associated with the call when inferable. */
+      turnIndex?: number;
+      /** @description Provider call identifier when present in the session stream. */
+      callId?: string;
+      /** @description Raw response item type for the call, such as function_call or custom_tool_call. */
+      type: string;
+      /** @description Function or tool name when present. */
+      name?: string;
+      /** @description Compact argument payload when present. */
+      arguments?: string;
+      /** @description Compact output payload when present. */
+      output?: string;
+      /** @description Result status inferred from the call output or explicit status fields. */
+      status?: string;
+    };
+    ProviderSessionReasoningSummary: {
+      /** @description Chronological order of the reasoning entry in the session stream. */
+      order: number;
+      /** @description One-based execution turn index associated with the reasoning entry when inferable. */
+      turnIndex?: number;
+      /** @description Event or response item type that carried the reasoning entry. */
+      sourceType: string;
+      /** @description Reasoning text when plaintext content is present. */
+      text?: string;
+      /** @description Compact reasoning summary when present. */
+      summary?: string;
+      /** @description Whether the reasoning entry only exposed encrypted content. */
+      encrypted?: boolean;
+      /** @description Compact encrypted reasoning payload when the provider exposes it. */
+      encryptedContent?: string;
+    };
+    ProviderSessionTokenUsage: {
+      inputTokens?: number;
+      cachedInputTokens?: number;
+      outputTokens?: number;
+      reasoningOutputTokens?: number;
+      totalTokens?: number;
+    };
+    ProviderSessionLineError: {
+      /** @description One-based line number of the malformed event-stream record. */
+      lineNumber: number;
+      /** @description Client-safe parse error message for the malformed line. */
+      message: string;
+    };
+    ProviderSessionUnknownEvent: {
+      /** @description One-based line number of the unknown event. */
+      lineNumber: number;
+      /** @description Raw top-level event type when present. */
+      type?: string;
+      /** @description Raw nested payload type when present. */
+      payloadType?: string;
+    };
+    /**
+     * @description Canonical transcript entry type used by the dashboard transcript view.
+     * @enum {string}
+     */
+    ProviderSessionTranscriptEntryType:
+      | "user_message"
+      | "assistant_message"
+      | "reasoning"
+      | "tool_call"
+      | "tool_output"
+      | "system_event";
+    ProviderSessionTranscriptEntry: {
+      /** @description Stable chronological order of the transcript entry in the session stream. */
+      order: number;
+      type: components["schemas"]["ProviderSessionTranscriptEntryType"];
+      /** @description One-based inferred turn index when the session parser can associate the entry with a turn. */
+      turnIndex?: number;
+      /**
+       * Format: date-time
+       * @description Provider event timestamp when present in the source session stream.
+       */
+      timestamp?: string;
+      /** @description One-based JSONL line number that produced this transcript entry when applicable. */
+      lineNumber?: number;
+      /** @description Raw provider event or item type that produced this transcript entry. */
+      sourceType?: string;
+      /** @description Provider tool-call identifier when present. */
+      callId?: string;
+      /** @description Tool or function name when present. */
+      name?: string;
+      /** @description Provider or inferred status value when present. */
+      status?: string;
+      /** @description Plaintext transcript body when present. */
+      text?: string;
+      /** @description Compact summary text when the provider emits a separate summary channel. */
+      summary?: string;
+      /** @description Compact tool-call arguments when present. */
+      arguments?: string;
+      /** @description Compact tool output when present. */
+      output?: string;
+      /** @description Whether the entry only exposed encrypted content instead of plaintext. */
+      encrypted?: boolean;
+      /** @description Compact encrypted reasoning payload when the provider exposes it. */
+      encryptedContent?: string;
+    };
+    StringMap: {
+      [key: string]: string;
+    };
+    IntegerMap: {
+      [key: string]: number;
+    };
+    /**
+     * @description Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
+     * @example customer-support-triage
+     */
+    FactoryName: string;
+    /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
+    FactoryWorldWorkstationRequestProjectionSlice: {
+      workstationRequestsByDispatchId?: {
+        [
+          key: string
+        ]: components["schemas"]["FactoryWorldWorkstationRequestView"];
+      };
+    };
+    /** @description Additive dashboard read-model contract slice that publishes per-work move operations derived from canonical WORK_STATE_CHANGE events without reintroducing removed `/dashboard` endpoints. */
+    FactoryWorldWorkMoveOperationProjectionSlice: {
+      workMoveOperationsByWorkId?: {
+        [
+          key: string
+        ]: components["schemas"]["FactoryWorldWorkMoveOperationView"][];
+      };
+    };
+    FactoryWorldWorkMoveOperationView: {
+      workId: string;
+      workTypeName?: string;
+      fromState: string;
+      toState: string;
+      fromPlaceId: string;
+      toPlaceId: string;
+      source: components["schemas"]["WorkStateChangeSource"];
+      requestId?: string;
+      tick: number;
+      sequence: number;
+      /** Format: date-time */
+      eventTime?: string;
+    };
+    FactoryWorldRenderedPromptDiagnostic: {
+      systemPromptHash?: string;
+      userMessageHash?: string;
+      variables?: components["schemas"]["StringMap"];
+    };
+    FactoryWorldProviderDiagnostic: {
+      provider?: string;
+      model?: string;
+      requestMetadata?: components["schemas"]["StringMap"];
+      responseMetadata?: components["schemas"]["StringMap"];
+    };
+    FactoryWorldWorkDiagnostics: {
+      renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
+      provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
+    };
+    FactoryWorldWorkItemRef: {
+      workId: string;
+      workTypeId?: string;
+      state?: string;
+      displayName?: string;
+      chainingTraceDepth?: number;
+      currentChainingTraceId?: string;
+      previousChainingTraceIds?: string[];
+      traceId?: string;
+      content?: components["schemas"]["WorkContent"];
+      /** @enum {string} */
+      payloadStatus?: "RESOLVED" | "UNAVAILABLE" | "LOADING" | "ERROR";
+      payloadUnavailableReason?: string;
+      lineageLogicalWorkId?: string;
+      /** @enum {string} */
+      lineageSourceKind?: "WORK_REQUEST" | "DISPATCH_RESPONSE_OUTPUT";
+      /** @enum {string} */
+      lineageContinuity?:
+        | "INITIAL_SUBMISSION"
+        | "SAME_WORK_ID_CONTINUATION"
+        | "NEW_DOWNSTREAM_WORK";
+      lineageParentWorkIds?: string[];
+    };
+    FactoryWorldTokenView: {
+      tokenId: string;
+      placeId: string;
+      name?: string;
+      workId?: string;
+      workTypeId?: string;
+      chainingTraceDepth?: number;
+      currentChainingTraceId?: string;
+      previousChainingTraceIds?: string[];
+      traceId?: string;
+      tags?: components["schemas"]["StringMap"];
+    };
+    FactoryWorldMutationView: {
+      type: string;
+      tokenId: string;
+      fromPlace?: string;
+      toPlace?: string;
+      reason?: string;
+      token?: components["schemas"]["FactoryWorldTokenView"];
+    };
+    FactoryWorldScriptRequestView: {
+      scriptRequestId?: string;
+      attempt?: number;
+      command?: string;
+      args?: string[];
+    };
+    FactoryWorldScriptResponseView: {
+      scriptRequestId?: string;
+      attempt?: number;
+      outcome?: string;
+      stdout?: string;
+      stderr?: string;
+      /** Format: int64 */
+      durationMillis?: number;
+      exitCode?: number;
+      failureType?: string;
+    };
+    FactoryWorldSelectedRunnerView: {
+      runnerId?: components["schemas"]["RunnerID"];
+      displayName?: string;
+      selectionSource?: components["schemas"]["RunnerSelectionSource"];
+      capabilities?: components["schemas"]["FactoryWorldRunnerCapabilitiesView"];
+    };
+    /** @enum {string} */
+    FactoryWorldRunnerBaselineCapability:
+      | "prompt_submission"
+      | "tool_execution";
+    /** @enum {string} */
+    FactoryWorldRunnerOptionalCapability:
+      | "image_input"
+      | "session_resume"
+      | "structured_output"
+      | "working_directory"
+      | "worktree";
+    /** @enum {string} */
+    FactoryWorldRunnerOptionalCapabilityStatus: "supported" | "unsupported";
+    FactoryWorldRunnerOptionalCapabilitySupportView: {
+      capability: components["schemas"]["FactoryWorldRunnerOptionalCapability"];
+      status: components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
+      detail?: string;
+    };
+    FactoryWorldRunnerCapabilitiesView: {
+      baselineCapabilities: components["schemas"]["FactoryWorldRunnerBaselineCapability"][];
+      optionalCapabilities: components["schemas"]["FactoryWorldRunnerOptionalCapabilitySupportView"][];
+    };
+    FactoryWorldWorkstationRequestCountView: {
+      dispatchedCount: number;
+      respondedCount: number;
+      erroredCount: number;
+    };
+    FactoryWorldWorkstationRequestRequestView: {
+      runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
+      /** Format: date-time */
+      startedAt?: string;
+      inputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
+      inputWorkTypeIds?: string[];
+      currentChainingTraceId?: string;
+      previousChainingTraceIds?: string[];
+      traceIds?: string[];
+      consumedTokens?: components["schemas"]["FactoryWorldTokenView"][];
+      scriptRequest?: components["schemas"]["FactoryWorldScriptRequestView"];
+    };
+    FactoryWorldWorkstationRequestResponseView: {
+      runner?: components["schemas"]["FactoryWorldSelectedRunnerView"];
+      outcome?: string;
+      feedback?: string;
+      selectedClassificationLabel?: string;
+      failureReason?: string;
+      failureMessage?: string;
+      scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
+      /** Format: date-time */
+      endTime?: string;
+      /** Format: int64 */
+      durationMillis?: number;
+      outputWorkItems?: components["schemas"]["FactoryWorldWorkItemRef"][];
+      outputMutations?: components["schemas"]["FactoryWorldMutationView"][];
+    };
+    FactoryWorldWorkstationRequestView: {
+      dispatchId: string;
+      transitionId: string;
+      workstationName?: string;
+      counts: components["schemas"]["FactoryWorldWorkstationRequestCountView"];
+      request: components["schemas"]["FactoryWorldWorkstationRequestRequestView"];
+      response?: components["schemas"]["FactoryWorldWorkstationRequestResponseView"];
+    };
+    /** @description Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields. */
+    FactoryEvent: {
+      /**
+       * @description Version of the factory event envelope schema.
+       * @enum {string}
+       */
+      schemaVersion: "agent-factory.event.v1";
+      /** @description Stable event identifier. Record/replay artifacts must preserve this value. */
+      id: string;
+      type: components["schemas"]["FactoryEventType"];
+      context: components["schemas"]["FactoryEventContext"];
+      payload:
+        | components["schemas"]["RunRequestEventPayload"]
+        | components["schemas"]["InitialStructureRequestEventPayload"]
+        | components["schemas"]["FactoryChangeEventPayload"]
+        | components["schemas"]["WorkRequestEventPayload"]
+        | components["schemas"]["RelationshipChangeRequestEventPayload"]
+        | components["schemas"]["DispatchRequestEventPayload"]
+        | components["schemas"]["ModelRequestEventPayload"]
+        | components["schemas"]["ModelResponseEventPayload"]
+        | components["schemas"]["InferenceRequestEventPayload"]
+        | components["schemas"]["InferenceResponseEventPayload"]
+        | components["schemas"]["ScriptRequestEventPayload"]
+        | components["schemas"]["ScriptResponseEventPayload"]
+        | components["schemas"]["DispatchResponseEventPayload"]
+        | components["schemas"]["WorkStateChangeEventPayload"]
+        | components["schemas"]["FactoryStateResponseEventPayload"]
+        | components["schemas"]["RunResponseEventPayload"];
+    };
+    /**
+     * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
+     * @enum {string}
+     */
+    FactoryEventType:
+      | "RUN_REQUEST"
+      | "INITIAL_STRUCTURE_REQUEST"
+      | "FACTORY_CHANGE"
+      | "WORK_REQUEST"
+      | "RELATIONSHIP_CHANGE_REQUEST"
+      | "DISPATCH_REQUEST"
+      | "MODEL_REQUEST"
+      | "MODEL_RESPONSE"
+      | "INFERENCE_REQUEST"
+      | "INFERENCE_RESPONSE"
+      | "SCRIPT_REQUEST"
+      | "SCRIPT_RESPONSE"
+      | "DISPATCH_RESPONSE"
+      | "WORK_STATE_CHANGE"
+      | "FACTORY_STATE_RESPONSE"
+      | "RUN_RESPONSE";
+    FactoryEventContext: {
+      /** @description Append-only event-log sequence number. */
+      sequence: number;
+      /** @description Logical engine tick observed by the runtime. */
+      tick: number;
+      /**
+       * Format: date-time
+       * @description Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.
+       */
+      eventTime: string;
+      /** @description Canonical request identity for all request-scoped events; payload metadata must not restate it. */
+      requestId?: string;
+      /** @description Canonical trace identifiers that contributed to this event; payloads must not restate them. */
+      traceIds?: string[];
+      /** @description Canonical work identities correlated to this event; payloads must not restate them. */
+      workIds?: string[];
+      /** @description Canonical dispatch identity for dispatch and inference events; payloads must not restate it. */
+      dispatchId?: string;
+      /** @description Canonical chaining-trace identifier for the dispatch currently represented by this event context. */
+      currentChainingTraceId?: string;
+      /** @description Canonical predecessor chaining traces consumed by the dispatch in deterministic order. */
+      previousChainingTraceIds?: string[];
+      /** @description Human-readable source such as api, filewatcher, replay, cron, or worker. */
+      source?: string;
+    };
+    /**
+     * @description Origin of a WORK_STATE_CHANGE event.
+     * @enum {string}
+     */
+    WorkStateChangeSource: "api" | "cli" | "cascading-failure";
+    /** @description Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context. */
+    DispatchConsumedWorkRef: {
+      /** @description Canonical work identity for one consumed dispatch input. */
+      workId: string;
+    };
+    /** @description Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here. */
+    DispatchRequestEventMetadata: {
+      /** @description Stable replay correlation key for recorded dispatch reconstruction. */
+      replayKey?: string;
+      runnerId?: components["schemas"]["RunnerID"];
+      runnerSelectionSource?: components["schemas"]["RunnerSelectionSource"];
+    };
+    RunRequestEventPayload: {
+      /** Format: date-time */
+      recordedAt: string;
+      factory: components["schemas"]["Factory"];
+      wallClock?: components["schemas"]["WallClock"];
+      diagnostics?: components["schemas"]["Diagnostics"];
+    };
+    /** @description Runtime topology snapshot before work moves. */
+    InitialStructureRequestEventPayload: {
+      factory: components["schemas"]["Factory"];
+      sourceDirectory?: string;
+      metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Runtime topology snapshot after a live factory definition change replaces the running factory. */
+    FactoryChangeEventPayload: {
+      factory: components["schemas"]["Factory"];
+      sourceDirectory?: string;
+      metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Normalized work request entering the factory. Single-work submissions accepted by POST /work are converted into this one-work request shape before an event is emitted. */
+    WorkRequestEventPayload: {
+      type: components["schemas"]["WorkRequestType"];
+      works?: components["schemas"]["Work"][];
+      relations?: components["schemas"]["Relation"][];
+      source?: string;
+      parentLineage?: string[];
+    };
+    RelationshipChangeRequestEventPayload: {
+      relation: components["schemas"]["Relation"];
+    };
+    /** @description Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history. */
+    DispatchRequestEventPayload: {
+      transitionId: string;
+      /**
+       * @deprecated
+       * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+       */
+      currentChainingTraceId?: string;
+      /**
+       * @deprecated
+       * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+       */
+      previousChainingTraceIds?: string[];
+      inputs: components["schemas"]["DispatchConsumedWorkRef"][];
+      resources?: components["schemas"]["Resource"][];
+      metadata?: components["schemas"]["DispatchRequestEventMetadata"];
+    };
+    /** @description Request details captured immediately before a model-backed worker invocation enters resource, load, and execution boundaries. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. */
+    ModelRequestEventPayload: {
+      /** @description Stable identifier correlating this model execution request with its response. */
+      modelRequestId: string;
+      /** @description One-based model execution attempt number for this dispatch. */
+      attempt: number;
+      /** @description Uppercase model operation requested by the workstation, such as TTS. */
+      operation: string;
+      /** @description Runtime worker name selected for the invocation. */
+      worker: string;
+      /** @description Concrete model identity resolved for this invocation. */
+      model: string;
+      /** @description Worker-declared model locality, such as LOCAL or CLOUD. */
+      providerLocality: string;
+      /** @description Concrete resources attached to the model worker execution path. */
+      resources?: components["schemas"]["ModelResourceSummary"][];
+      /** @description Deterministically resolved operation-slot bindings used for invocation. */
+      bindings?: components["schemas"]["ResolvedModelOperationBinding"][];
+      /** @description Working directory resolved for the model execution when present. */
+      workingDirectory?: string;
+      /** @description Worktree path resolved for the model execution when present. */
+      worktree?: string;
+    };
+    /** @description Response details captured after a model-backed worker invocation returns, including resource wait, local load, binding-resolution, output, and failure evidence correlated to the matching model request event. Large binary audio must remain represented through content references or bounded previews instead of unbounded inline payloads. */
+    ModelResponseEventPayload: {
+      /** @description Identifier from the matching model request event. */
+      modelRequestId: string;
+      /** @description One-based model execution attempt number for this dispatch. */
+      attempt: number;
+      /** @description Uppercase model operation requested by the workstation, such as TTS. */
+      operation: string;
+      /** @description Runtime worker name selected for the invocation. */
+      worker: string;
+      /** @description Concrete model identity resolved for this invocation. */
+      model: string;
+      /** @description Worker-declared model locality, such as LOCAL or CLOUD. */
+      providerLocality: string;
+      outcome: components["schemas"]["InferenceOutcome"];
+      /**
+       * Format: int64
+       * @description End-to-end model invocation duration in milliseconds.
+       */
+      durationMillis: number;
+      /** @description Concrete resources attached to the model worker execution path. */
+      resources?: components["schemas"]["ModelResourceSummary"][];
+      /** @description Deterministically resolved operation-slot bindings used for invocation. */
+      bindings?: components["schemas"]["ResolvedModelOperationBinding"][];
+      /**
+       * Format: int64
+       * @description Time spent waiting for local model resources before acquisition.
+       */
+      resourceWaitMillis?: number;
+      /** @description Whether the invocation acquired the required local model resources. */
+      resourceAcquired?: boolean;
+      /** @description Whether this invocation asked the managed local-model runtime to load a handle. */
+      loadRequested?: boolean;
+      /** @description Whether an already-loaded local model handle was reused instead of loading again. */
+      loadReused?: boolean;
+      /**
+       * Format: int64
+       * @description Duration of the managed local-model load call when one occurred.
+       */
+      loadDurationMillis?: number;
+      /** @description Bounded output preview for non-binary model responses when present. */
+      outputPreview?: string;
+      outputContent?: components["schemas"]["WorkContent"];
+      diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+      /** @description Stable failure classification when available. */
+      errorClass?: string;
+    };
+    /** @description Request details captured immediately before a model-worker provider attempt is invoked. FactoryEvent.context owns dispatch, request, trace, and work identity, and the matching dispatch-request event owns the transition identifier. Prompt content is intentionally present and should be treated as sensitive in recordings and diagnostics. */
+    InferenceRequestEventPayload: {
+      /** @description Stable identifier correlating this provider request with its response. */
+      inferenceRequestId: string;
+      /** @description One-based provider attempt number for this dispatch. */
+      attempt: number;
+      /** @description Working directory resolved for the provider attempt. */
+      workingDirectory: string;
+      /** @description Worktree path resolved for the provider attempt. */
+      worktree: string;
+      /** @description Rendered prompt sent to the provider. */
+      prompt: string;
+    };
+    /** @description Response details captured after a model-worker provider attempt returns, including success and failure outcomes correlated to the request event. FactoryEvent.context owns dispatch identity, and the matching dispatch request owns the transition identifier for this provider attempt. Safe provider diagnostics and provider-session identifiers stay on this provider-boundary event instead of being copied onto DispatchResponse. */
+    InferenceResponseEventPayload: {
+      /** @description Identifier from the matching inference request event. */
+      inferenceRequestId: string;
+      /** @description One-based provider attempt number for this dispatch. */
+      attempt: number;
+      outcome: components["schemas"]["InferenceOutcome"];
+      /** @description Provider response text when present. */
+      response?: string;
+      /**
+       * Format: int64
+       * @description Provider call duration in milliseconds.
+       */
+      durationMillis: number;
+      providerSession?: components["schemas"]["ProviderSessionMetadata"];
+      diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+      /** @description Process exit code when the provider failure exposes one. */
+      exitCode?: number;
+      /** @description Stable failure classification when available. */
+      errorClass?: string;
+    };
+    /** @description Request details captured immediately before a script-backed worker invokes a concrete command. Raw environment values and raw stdin content are intentionally excluded from the public script event contract. */
+    ScriptRequestEventPayload: {
+      /** @description Stable identifier correlating this script request with its response. */
+      scriptRequestId: string;
+      dispatchId: string;
+      transitionId: string;
+      /** @description One-based script attempt number for this dispatch. */
+      attempt: number;
+      /** @description Concrete command name executed for this script attempt. */
+      command: string;
+      /** @description Fully resolved command arguments passed to the script command runner. */
+      args: string[];
+    };
+    /** @description Response details captured after a script-backed worker command returns or fails before a normal exit code. Raw environment values and raw stdin content are intentionally excluded from the public script event contract. */
+    ScriptResponseEventPayload: {
+      /** @description Identifier from the matching script request event. */
+      scriptRequestId: string;
+      dispatchId: string;
+      transitionId: string;
+      /** @description One-based script attempt number for this dispatch. */
+      attempt: number;
+      outcome: components["schemas"]["ScriptExecutionOutcome"];
+      /** @description Captured stdout text from the script execution boundary. */
+      stdout: string;
+      /** @description Captured stderr text from the script execution boundary. */
+      stderr: string;
+      /**
+       * Format: int64
+       * @description Script execution duration in milliseconds.
+       */
+      durationMillis: number;
+      /** @description Process exit code when the command returned one. */
+      exitCode?: number;
+      failureType?: components["schemas"]["ScriptFailureType"];
+    };
+    /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
+    DispatchResponseEventPayload: {
+      completionId?: string;
+      transitionId: string;
+      /**
+       * @deprecated
+       * @description Deprecated compatibility copy of the dispatch chaining-trace identifier; prefer FactoryEvent.context.currentChainingTraceId.
+       */
+      currentChainingTraceId?: string;
+      /**
+       * @deprecated
+       * @description Deprecated compatibility copy of predecessor chaining traces; prefer FactoryEvent.context.previousChainingTraceIds.
+       */
+      previousChainingTraceIds?: string[];
+      outcome: components["schemas"]["WorkOutcome"];
+      output?: string;
+      error?: string;
+      feedback?: string;
+      selectedClassificationLabel?: string;
+      failureReason?: string;
+      failureMessage?: string;
+      providerFailure?: components["schemas"]["ProviderFailureMetadata"];
+      metrics?: components["schemas"]["WorkMetrics"];
+      /** Format: int64 */
+      durationMillis?: number;
+      outputWork?: components["schemas"]["Work"][];
+      outputResources?: components["schemas"]["Resource"][];
+      metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
+    WorkStateChangeEventPayload: {
+      workId: string;
+      workTypeName: string;
+      /** @description Authored state name before the move. */
+      fromState: string;
+      /** @description Authored state name after the move. */
+      toState: string;
+      /** @description Marking place identifier before the move. */
+      fromPlaceId: string;
+      /** @description Marking place identifier after the move. */
+      toPlaceId: string;
+      source: components["schemas"]["WorkStateChangeSource"];
+      /** @description Optional work identifier that triggered a cascade move. */
+      triggerWorkId?: string;
+      /** @description Optional human-readable reason for the move. */
+      reason?: string;
+    };
+    FactoryStateResponseEventPayload: {
+      previousState?: components["schemas"]["FactoryState"];
+      state: components["schemas"]["FactoryState"];
+      reason?: string;
+    };
+    RunResponseEventPayload: {
+      state?: components["schemas"]["FactoryState"];
+      reason?: string;
+      wallClock?: components["schemas"]["WallClock"];
+      diagnostics?: components["schemas"]["Diagnostics"];
+    };
+    /**
+     * @description Result category returned by a provider inference attempt.
+     * @enum {string}
+     */
+    InferenceOutcome: "SUCCEEDED" | "FAILED";
+    /**
+     * @description Result category returned by one public script execution boundary.
+     * @enum {string}
+     */
+    ScriptExecutionOutcome:
+      | "SUCCEEDED"
+      | "FAILED_EXIT_CODE"
+      | "TIMED_OUT"
+      | "PROCESS_ERROR";
+    /**
+     * @description Stable failure classification for script responses without a normal process exit code.
+     * @enum {string}
+     */
+    ScriptFailureType: "TIMEOUT" | "PROCESS_ERROR";
+    /**
+     * @description Lifecycle state of the running factory.
+     * @enum {string}
+     */
+    FactoryState: "IDLE" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED";
+    /**
+     * @description Result category returned by a workstation execution.
+     * @enum {string}
+     */
+    WorkOutcome: "ACCEPTED" | "CONTINUE" | "REJECTED" | "FAILED";
+    /**
+     * @description Stable machine-readable failure family used to decide retry and routing behavior for failed work.
+     * @enum {string}
+     */
+    WorkFailureFamily: "terminal" | "retryable" | "throttle";
+    /**
+     * @description Stable machine-readable failure type used to classify failed work across providers and runtimes.
+     * @enum {string}
+     */
+    WorkFailureType:
+      | "auth_failure"
+      | "permanent_bad_request"
+      | "throttled"
+      | "internal_server_error"
+      | "timeout"
+      | "unknown"
+      | "misconfigured";
+    ProviderFailureMetadata: {
+      family?: components["schemas"]["WorkFailureFamily"];
+      type?: components["schemas"]["WorkFailureType"];
+    };
+    ProviderSessionMetadata: {
+      provider?: string;
+      kind?: string;
+      id?: string;
+    };
+    WorkMetrics: {
+      /** Format: int64 */
+      durationMillis?: number;
+      /** Format: double */
+      cost?: number;
+      retryCount?: number;
+    };
+    WorkDiagnostics: {
+      renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
+      provider?: components["schemas"]["ProviderDiagnostic"];
+      command?: components["schemas"]["CommandDiagnostic"];
+      panic?: components["schemas"]["PanicDiagnostic"];
+      metadata?: components["schemas"]["StringMap"];
+    };
+    RenderedPromptDiagnostic: {
+      systemPromptHash?: string;
+      userMessageHash?: string;
+      variables?: components["schemas"]["StringMap"];
+    };
+    ProviderDiagnostic: {
+      provider?: string;
+      model?: string;
+      requestMetadata?: components["schemas"]["StringMap"];
+      responseMetadata?: components["schemas"]["StringMap"];
+    };
+    CommandDiagnostic: {
+      command?: string;
+      args?: string[];
+      stdin?: string;
+      env?: components["schemas"]["StringMap"];
+      stdout?: string;
+      stderr?: string;
+      exitCode?: number;
+      timedOut?: boolean;
+      /** Format: int64 */
+      durationNanos?: number;
+      workingDir?: string;
+    };
+    PanicDiagnostic: {
+      message?: string;
+      stack?: string;
+    };
+    Diagnostics: {
+      notes?: string[];
+      workers?: {
+        [key: string]: components["schemas"]["SafeWorkDiagnostics"];
+      };
+    };
+    /** @description Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values. */
+    SafeWorkDiagnostics: {
+      renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
+      provider?: components["schemas"]["ProviderDiagnostic"];
+    };
+    WallClock: {
+      /** Format: date-time */
+      startedAt?: string;
+      /** Format: date-time */
+      finishedAt?: string;
+    };
+    /**
+     * @description Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
+     * @default REPLACE_CURRENT
+     * @enum {string}
+     */
+    FactorySaveMode: "REPLACE_CURRENT" | "UPSERT_NAMED_AND_ACTIVATE";
+    /**
+     * @description Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
+     * @example {
+     *       "mode": "REPLACE_CURRENT",
+     *       "factory": {
+     *         "name": "alpha",
+     *         "version": {
+     *           "logical": "2",
+     *           "physical": "2026-05-30T12:00:00.000000000Z"
+     *         },
+     *         "workTypes": [
+     *           {
+     *             "name": "task",
+     *             "states": [
+     *               {
+     *                 "name": "init",
+     *                 "type": "INITIAL"
+     *               },
+     *               {
+     *                 "name": "done",
+     *                 "type": "TERMINAL"
+     *               }
+     *             ]
+     *           }
+     *         ],
+     *         "workers": [
+     *           {
+     *             "name": "planner",
+     *             "type": "MODEL_WORKER",
+     *             "modelProvider": "CLAUDE",
+     *             "executorProvider": "SCRIPT_WRAP",
+     *             "model": "claude-sonnet-4-20250514"
+     *           }
+     *         ],
+     *         "workstations": [
+     *           {
+     *             "name": "plan-task",
+     *             "behavior": "STANDARD",
+     *             "type": "MODEL_WORKSTATION",
+     *             "worker": "planner",
+     *             "inputs": [
+     *               {
+     *                 "workType": "task",
+     *                 "state": "init"
+     *               }
+     *             ],
+     *             "outputs": [
+     *               {
+     *                 "workType": "task",
+     *                 "state": "done"
+     *               }
+     *             ]
+     *           }
+     *         ]
+     *       }
+     *     }
+     */
+    SaveFactoryForSessionRequest: {
+      /** @default REPLACE_CURRENT */
+      mode: components["schemas"]["FactorySaveMode"];
+      factory: components["schemas"]["Factory"];
+    };
+    /**
+     * @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+     * @example {
+     *       "name": "customer-support-triage",
+     *       "inputTypes": [
+     *         {
+     *           "name": "brief",
+     *           "type": "DEFAULT"
+     *         }
+     *       ],
+     *       "guards": [
+     *         {
+     *           "type": "INFERENCE_THROTTLE_GUARD",
+     *           "modelProvider": "CLAUDE",
+     *           "model": "claude-sonnet-4-20250514",
+     *           "refreshWindow": "15m"
+     *         }
+     *       ],
+     *       "workTypes": [
+     *         {
+     *           "name": "story",
+     *           "states": [
+     *             {
+     *               "name": "init",
+     *               "type": "INITIAL"
+     *             },
+     *             {
+     *               "name": "inReview",
+     *               "type": "PROCESSING"
+     *             },
+     *             {
+     *               "name": "failed",
+     *               "type": "FAILED"
+     *             },
+     *             {
+     *               "name": "complete",
+     *               "type": "TERMINAL"
+     *             }
+     *           ]
+     *         }
+     *       ],
+     *       "supportingFiles": {
+     *         "requiredTools": [
+     *           {
+     *             "name": "python",
+     *             "command": "python3",
+     *             "purpose": "Runs bundled translation scripts",
+     *             "versionArgs": [
+     *               "--version"
+     *             ]
+     *           }
+     *         ],
+     *         "bundledFiles": [
+     *           {
+     *             "type": "ROOT_HELPER",
+     *             "targetPath": "Makefile",
+     *             "content": {
+     *               "encoding": "utf-8",
+     *               "inline": "test:\n\tgo test ./...\n"
+     *             }
+     *           },
+     *           {
+     *             "type": "SCRIPT",
+     *             "targetPath": "factory/scripts/setup-workspace.py",
+     *             "content": {
+     *               "encoding": "utf-8",
+     *               "inline": "print(\"portable\")\n"
+     *             }
+     *           },
+     *           {
+     *             "type": "DOC",
+     *             "targetPath": "factory/docs/usage.md",
+     *             "content": {
+     *               "encoding": "utf-8",
+     *               "inline": "# Usage\n"
+     *             }
+     *           },
+     *           {
+     *             "type": "INPUT",
+     *             "targetPath": "factory/inputs/story/default/seed.md",
+     *             "content": {
+     *               "encoding": "utf-8",
+     *               "inline": "Shared starter work\n"
+     *             }
+     *           }
+     *         ]
+     *       },
+     *       "workers": [
+     *         {
+     *           "name": "reviewer",
+     *           "type": "MODEL_WORKER",
+     *           "executorProvider": "SCRIPT_WRAP",
+     *           "modelProvider": "CLAUDE",
+     *           "model": "claude-sonnet-4-20250514"
+     *         },
+     *         {
+     *           "name": "review-loop-breaker",
+     *           "type": "MODEL_WORKER",
+     *           "executorProvider": "SCRIPT_WRAP",
+     *           "modelProvider": "CLAUDE",
+     *           "model": "claude-sonnet-4-20250514"
+     *         }
+     *       ],
+     *       "workstations": [
+     *         {
+     *           "name": "review-story",
+     *           "behavior": "REPEATER",
+     *           "type": "MODEL_WORKSTATION",
+     *           "worker": "reviewer",
+     *           "inputs": [
+     *             {
+     *               "workType": "story",
+     *               "state": "init"
+     *             }
+     *           ],
+     *           "outputs": [
+     *             {
+     *               "workType": "story",
+     *               "state": "inReview"
+     *             }
+     *           ],
+     *           "onRejection": [
+     *             {
+     *               "workType": "story",
+     *               "state": "init"
+     *             }
+     *           ],
+     *           "onFailure": [
+     *             {
+     *               "workType": "story",
+     *               "state": "failed"
+     *             }
+     *           ]
+     *         },
+     *         {
+     *           "name": "review-loop-breaker",
+     *           "worker": "review-loop-breaker",
+     *           "type": "LOGICAL_MOVE",
+     *           "guards": [
+     *             {
+     *               "type": "VISIT_COUNT",
+     *               "workstation": "review-story",
+     *               "maxVisits": 3
+     *             }
+     *           ],
+     *           "inputs": [
+     *             {
+     *               "workType": "story",
+     *               "state": "init"
+     *             }
+     *           ],
+     *           "outputs": [
+     *             {
+     *               "workType": "story",
+     *               "state": "failed"
+     *             }
+     *           ]
+     *         }
+     *       ]
+     *     }
+     */
+    Factory: {
+      name: components["schemas"]["FactoryName"];
+      /** @description Factory identifier used as the factory-level template context fallback. */
+      id?: string;
+      /** @description Default runner selection for the factory when a workstation does not declare its own runner override. */
+      runner?: components["schemas"]["RunnerID"];
+      /** @description Directory that contained the factory.json used for this serialized runtime config. */
+      factoryDirectory?: string;
+      /** @description Original source directory for record/replay and drift diagnostics. */
+      sourceDirectory?: string;
+      /** @description Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology. */
+      version?: components["schemas"]["HybridLogicalTimestamp"];
+      /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
+      metadata?: components["schemas"]["StringMap"];
+      /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
+      inputTypes?: components["schemas"]["InputType"][];
+      /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
+      guards?: components["schemas"]["FactoryGuard"][];
+      /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
+      workTypes?: components["schemas"]["WorkType"][];
+      /** @description Shared capacity pools that workers or workstations can consume while work is executing. */
+      resources?: components["schemas"]["Resource"][];
+      /** @description Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources. */
+      supportingFiles?: components["schemas"]["ResourceManifest"];
+      /** @description Reusable worker definitions that workstations reference by name when dispatching work. */
+      workers?: components["schemas"]["Worker"][];
+      /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
+      workstations?: components["schemas"]["Workstation"][];
+    };
+    /** @description Factory-level guard attached at the root factory definition. */
+    FactoryGuard: {
+      /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
+      type: components["schemas"]["GuardType"];
+      /** @description Provider whose inference-throttle history controls this factory-level guard. */
+      modelProvider: components["schemas"]["WorkerModelProvider"];
+      /** @description Optional model name to scope throttling more narrowly than the provider-level window. */
+      model?: string;
+      /** @description Duration string that controls how long the factory should keep re-checking throttle history before allowing the lane again. */
+      refreshWindow: string;
+    };
+    /** @description Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary. */
+    ResourceManifest: {
+      /** @description Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed. */
+      requiredTools?: components["schemas"]["RequiredTool"][];
+      /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies. */
+      bundledFiles?: components["schemas"]["BundledFile"][];
+    };
+    /** @description One declarative external tool dependency for a portable factory. */
+    RequiredTool: {
+      /** @description Human-readable tool name used in manifests and validation output. */
+      name: string;
+      /** @description Executable lookup token that must resolve on PATH. */
+      command: string;
+      /** @description Optional explanation of why the portable factory requires this tool. */
+      purpose?: string;
+      /** @description Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token. */
+      versionArgs?: string[];
+    };
+    /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work. */
+    BundledFile: {
+      /**
+       * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
+       * @enum {string}
+       */
+      type: "SCRIPT" | "DOC" | "INPUT" | "ROOT_HELPER";
+      /** @description Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected. */
+      targetPath: string;
+      content: components["schemas"]["BundledFileContent"];
+    };
+    /** @description Inline content payload for a portable bundled file. */
+    BundledFileContent: {
+      /**
+       * @description Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
+       * @enum {string}
+       */
+      encoding: "utf-8";
+      /** @description Inline bundled file content carried in the manifest. Files under factory/scripts/, factory/docs/, and supported root helper paths are only bundled when they appear in bundledFiles. */
+      inline: string;
+    };
+    /** @description Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure. */
+    InputType: {
+      /** @description Input type name. The reserved name "default" is implicit. */
+      name: string;
+      type: components["schemas"]["InputKind"];
+    };
+    /**
+     * @description Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
+     * @enum {string}
+     */
+    InputKind: "DEFAULT";
+    /** @description A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy. */
+    WorkType: {
+      /** @description Customer-authored work type name referenced by workstation inputs, outputs, and submitted work. */
+      name: string;
+      /** @description Lifecycle states available for work items of this type. */
+      states: components["schemas"]["WorkState"][];
+      /** @description Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type. */
+      handlingBehavior?: components["schemas"]["WorkTypeHandlingBehavior"][];
+    };
+    /** @description A lifecycle state that a work item can occupy inside one work type. */
+    WorkState: {
+      /** @description Customer-authored state name referenced by workstation inputs and outputs. */
+      name: string;
+      /** @description Lifecycle category for this state, such as initial, processing, terminal, or failed. */
+      type: components["schemas"]["WorkStateType"];
+    };
+    /**
+     * @description Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
+     * @enum {string}
+     */
+    WorkStateType: "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
+    /** @description Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas. */
+    Resource: {
+      /** @description Resource name referenced from worker requirements and workstation resourceUsage entries. */
+      name: string;
+      /** @description Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`. */
+      type?: components["schemas"]["ResourceType"];
+      /** @description Total units of this resource available to the factory at one time. */
+      capacity: number;
+      /** @description Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`. */
+      model?: string;
+      /** @description Backend identifier for local model resources, such as a managed runtime or embedded inference backend. */
+      backend?: string;
+      /** @description Load policy for local model resources, such as `ON_DEMAND` or `EAGER`. */
+      loadPolicy?: string;
+      /** @description Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources. */
+      provider?: string;
+    };
+    /**
+     * @description Uppercase resource families supported by the public factory-config contract.
+     * @enum {string}
+     */
+    ResourceType: "MODEL" | "PROVIDER_QUOTA" | "INVOCATION_SLOT";
+    /** @description A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script. */
+    Worker: {
+      /** @description Worker name referenced by Workstation.worker. */
+      name: string;
+      /** @description Worker implementation family to instantiate for this definition. */
+      type?: components["schemas"]["WorkerType"];
+      /** @description Built-in hosted provider identity when this worker uses repository-owned hosted execution. */
+      provider?: components["schemas"]["HostedWorkerProvider"];
+      /** @description Model identifier to request from the configured model provider when this worker uses model execution. */
+      model?: string;
+      /** @description Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs. */
+      modelProvider?: components["schemas"]["WorkerModelProvider"];
+      /** @description Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution. */
+      modelLocality?: components["schemas"]["WorkerModelLocality"];
+      /** @description Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`. */
+      executorProvider?: components["schemas"]["WorkerProvider"];
+      /** @description Provider-agnostic model operations that this worker can execute, including named input and output slots. */
+      operations?: components["schemas"]["ModelOperation"][];
+      /** @description Command to execute when this worker runs through a command or script provider. */
+      command?: string;
+      /** @description Additional command arguments passed to the configured command. */
+      args?: string[];
+      /** @description Resource capacity this worker requires before it can be dispatched. */
+      resources?: components["schemas"]["ResourceRequirement"][];
+      /** @description Optional Go duration that caps one worker execution attempt. */
+      timeout?: string;
+      /** @description Marker that tells model-oriented workers where to stop generated output when the provider supports it. */
+      stopToken?: string;
+      /** @description When true, bypasses permission checks for providers that support permission gating. */
+      skipPermissions?: boolean;
+      /** @description Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
+      openCodeAgent?: string;
+      /** @description Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef. */
+      auth?: components["schemas"]["HostedWorkerAuth"];
+      /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
+      linear?: components["schemas"]["HostedLinearWorkerConfig"];
+      /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
+      body?: string;
+    };
+    /**
+     * @description Worker implementation families supported by the public factory-config contract.
+     * @enum {string}
+     */
+    WorkerType: "MODEL_WORKER" | "SCRIPT_WORKER" | "HOSTED_WORKER";
+    /**
+     * @description Canonical model-provider identifiers supported by model workers in factory config.
+     * @enum {string}
+     */
+    WorkerModelProvider:
+      | "CLAUDE"
+      | "CODEX"
+      | "CURSOR"
+      | "GEMINI"
+      | "KIRO"
+      | "OPENCODE";
+    /**
+     * @description Provider locality for a model worker capability declaration.
+     * @enum {string}
+     */
+    WorkerModelLocality: "LOCAL" | "CLOUD";
+    /**
+     * @description Concrete worker-provider wrappers supported by the public factory-config contract.
+     * @enum {string}
+     */
+    WorkerProvider: "SCRIPT_WRAP";
+    /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
+    ModelOperation: {
+      name: components["schemas"]["ModelOperationName"];
+      /** @description Named operation input slots this worker can consume. */
+      inputs?: components["schemas"]["ModelOperationSlot"][];
+      /** @description Named operation output slots this worker can produce. */
+      outputs?: components["schemas"]["ModelOperationSlot"][];
+    };
+    /** @description One named capability slot declared by a model operation. */
+    ModelOperationSlot: {
+      /** @description Stable slot name used by workstation-side bindings and diagnostics. */
+      name: string;
+      /** @description Uppercase content types accepted or produced by this slot. */
+      contentTypes: components["schemas"]["ModelOperationContentType"][];
+      /** @description Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed. */
+      required?: boolean;
+    };
+    /**
+     * @description Uppercase content-part categories supported by worker model-operation capability slots.
+     * @enum {string}
+     */
+    ModelOperationContentType: "TEXT" | "IMAGE" | "AUDIO" | "JSON" | "BINARY";
+    /**
+     * @description Stable built-in runner identifiers supported by factory and workstation runner selection.
+     * @enum {string}
+     */
+    RunnerID: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode";
+    /**
+     * @description Configuration layer that supplied the resolved built-in runner selection for a dispatch.
+     * @enum {string}
+     */
+    RunnerSelectionSource:
+      | "workstation"
+      | "factory"
+      | "legacy_provider"
+      | "default";
+    /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
+    Workstation: {
+      /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */
+      id?: string;
+      /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
+      name: string;
+      /** @description Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution. */
+      behavior?: components["schemas"]["WorkstationKind"];
+      /** @description Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type. */
+      type?: components["schemas"]["WorkstationType"];
+      /** @description Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`. */
+      operation?: components["schemas"]["ModelOperationName"];
+      /** @description Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content. */
+      operationBindings?: components["schemas"]["WorkstationOperationBinding"][];
+      /** @description Name of a worker declared in the workers list. */
+      worker: string;
+      /** @description Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then legacy worker modelProvider compatibility, then the default codex runner. */
+      runner?: components["schemas"]["RunnerID"];
+      /** @description Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/). */
+      openCodeAgent?: string;
+      /** @description Path to a prompt template file loaded for model-oriented workstation execution. */
+      promptFile?: string;
+      /** @description JSON schema string used to validate or parse structured model output when configured. */
+      outputSchema?: string;
+      /** @description Retry and execution ceilings applied to this workstation. */
+      limits?: components["schemas"]["WorkstationLimits"];
+      /** @description Inline workstation instructions or script body when authored directly in factory config. */
+      body?: string;
+      /** @description Cron trigger configuration for workstations whose behavior is CRON. */
+      cron?: components["schemas"]["WorkstationCron"];
+      /** @description Work states this workstation can consume before it dispatches. */
+      inputs: components["schemas"]["WorkstationIO"][];
+      /** @description Work states emitted after a non-classifier workstation succeeds. Classifier workstations must use classificationRoutes instead of normal success outputs. */
+      outputs?: components["schemas"]["WorkstationIO"][];
+      /** @description Explicit label-to-destination routing used only by CLASSIFIER_WORKSTATION definitions. Each route must declare a unique non-empty label and one or more outputs. */
+      classificationRoutes?: components["schemas"]["ClassificationRoute"][];
+      /** @description Optional destination emitted when the workstation makes partial progress and should continue iterating. Classifier workstations must not declare onContinue. */
+      onContinue?: components["schemas"]["WorkstationIO"][];
+      /** @description Optional destination emitted when the worker rejects the current work without a hard failure. Classifier workstations must not declare onRejection. */
+      onRejection?: components["schemas"]["WorkstationIO"][];
+      /** @description Optional destination emitted when the workstation fails permanently. */
+      onFailure?: components["schemas"]["WorkstationIO"][];
+      /** @description Resource capacity this workstation consumes while one dispatch is in flight. */
+      resources?: components["schemas"]["ResourceRequirement"][];
+      /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
+      copyReferencedScripts?: boolean;
+      /** @description Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules. */
+      guards?: components["schemas"]["Guard"][];
+      /** @description Stop words authored on the topology entry for model-oriented dispatches. */
+      stopWords?: string[];
+      /** @description Go template resolved from token tags at dispatch time. */
+      workingDirectory?: string;
+      /** @description Go template resolved and passed as the worktree path to CLI dispatchers. */
+      worktree?: string;
+      /** @description Environment variables added to the workstation execution context. */
+      env?: components["schemas"]["StringMap"];
+    };
+    ClassificationRoute: {
+      /** @description Case-sensitive classifier label that must match the trimmed classifier output exactly. */
+      label: string;
+      /** @description One or more authored destinations emitted when this classifier label is selected. */
+      outputs: components["schemas"]["WorkstationIO"][];
+    };
+    /** @description Retry and execution ceilings applied to one workstation definition. */
+    WorkstationLimits: {
+      /** @description Maximum number of retry attempts after a failed dispatch before the workstation gives up. */
+      maxRetries?: number;
+      /** @description Go duration limit for one dispatch attempt before it times out. */
+      maxExecutionTime?: string;
+    };
+    /**
+     * @description Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
+     * @default STANDARD
+     * @enum {string}
+     */
+    WorkstationKind: "STANDARD" | "REPEATER" | "CRON" | "POLLER";
+    /**
+     * @description Runtime workstation implementation types supported by the public factory-config contract.
+     * @enum {string}
+     */
+    WorkstationType:
+      | "MODEL_WORKSTATION"
+      | "MODEL_INVOKE"
+      | "LOGICAL_MOVE"
+      | "CLASSIFIER_WORKSTATION";
+    /** @description Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported. */
+    WorkstationCron: {
+      /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */
+      schedule: string;
+      /**
+       * @description When true, service startup submits one immediate internal time work item before waiting for the next scheduled cron fire.
+       * @default false
+       */
+      triggerAtStart: boolean;
+      /** @description Non-negative Go duration used as the maximum deterministic delay added to scheduled time tokens. Defaults to "0s". */
+      jitter?: string;
+      /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
+      expiryWindow?: string;
+    };
+    /**
+     * @description Guard condition attached to a workstation or one of its specific inputs.
+     * @enum {string}
+     */
+    GuardType:
+      | "VISIT_COUNT"
+      | "MATCHES_FIELDS"
+      | "ALL_CHILDREN_COMPLETE"
+      | "ANY_CHILD_FAILED"
+      | "SAME_NAME"
+      | "SAME_TRACE_ID"
+      | "INFERENCE_THROTTLE_GUARD";
+    /** @description Shared guard attached either to a workstation as a whole or to one specific workstation input. */
+    Guard: {
+      /** @description Guard condition to evaluate for this workstation-level or input-level attachment. */
+      type: components["schemas"]["GuardType"];
+      /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
+      workstation?: string;
+      /** @description For `VISIT_COUNT` guards, the visit threshold. */
+      maxVisits?: number;
+      /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
+      matchConfig?: components["schemas"]["GuardMatchConfig"];
+      /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
+      parentInput?: string;
+      /** @description For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation. */
+      matchInput?: string;
+      /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
+      spawnedBy?: string;
+    };
+    GuardMatchConfig: {
+      /** @description Field selector resolved against each candidate input, such as `.Name` or `.Tags["_last_output"]`. */
+      inputKey: string;
+    };
+    /** @description One authored work-state reference consumed or emitted by a workstation. */
+    WorkstationIO: {
+      /** @description Name of the work type consumed or emitted at this edge of the workstation. */
+      workType: string;
+      /** @description Name of the work state consumed or emitted for the referenced work type. */
+      state: string;
+      /** @description Per-input guards that must pass before this specific input can be used. */
+      guards?: components["schemas"]["Guard"][];
+    };
+    Transition: {
+      /** @description Source workstation name. */
+      from: string;
+      /** @description Destination workstation name. */
+      to: string;
+    };
+    PromptTemplateContract: {
+      /** @description Available prompt-template variables for the selected workstation editing context. */
+      availableVariables: components["schemas"]["PromptTemplateVariableReference"][];
+      /** @description Number of authored inputs on the selected workstation, which controls valid `.Inputs[N]` access. */
+      inputCount: number;
+      /** @description Unsupported or unavailable variable access patterns for the selected workstation editing context. */
+      unavailableAccessPatterns: components["schemas"]["PromptTemplateUnavailableAccessPattern"][];
+    };
+    PromptTemplateVariableReference: {
+      /**
+       * @description High-level grouping for the variable reference.
+       * @enum {string}
+       */
+      category: "ROOT" | "INPUT" | "HISTORY" | "CONTEXT" | "MAP_ACCESS";
+      /** @description User-readable description of what the variable resolves to. */
+      description: string;
+      /** @description Go template snippet that shows how to reference the variable. */
+      example: string;
+      /** @description Canonical variable path summary used in diagnostics and help surfaces. */
+      path: string;
+    };
+    PromptTemplateUnavailableAccessPattern: {
+      /** @description Representative unsupported template snippet for this access pattern. */
+      example: string;
+      /** @description Unsupported or unavailable variable path pattern. */
+      path: string;
+      /** @description Why the access pattern is unavailable or unsupported in the selected workstation context. */
+      reason: string;
+    };
+    PromptTemplateValidationRequest: {
+      /** @description Prompt draft to validate against the selected current-factory workstation contract. */
+      prompt: string;
+    };
+    PromptTemplateValidationResult: {
+      /** @description Typed validation diagnostics for the submitted prompt draft. */
+      diagnostics: components["schemas"]["PromptTemplateDiagnostic"][];
+      /** @description True when the prompt contains no syntax or variable diagnostics. */
+      valid: boolean;
+    };
+    PromptTemplateDiagnostic: {
+      /** @description Inclusive 1-based byte offset where the diagnostic source span ends when available. */
+      endOffset: number;
+      /**
+       * @description Diagnostic classification for prompt-template validation.
+       * @enum {string}
+       */
+      kind: "SYNTAX_ERROR" | "INVALID_VARIABLE" | "UNAVAILABLE_VARIABLE";
+      /** @description User-readable explanation of the validation failure. */
+      message: string;
+      /** @description Canonical variable path or access pattern involved in the diagnostic when available. */
+      path: string;
+      /** @description Source variable or access expression that triggered the diagnostic when available. */
+      sourceText: string;
+      /** @description Inclusive 1-based byte offset where the diagnostic source span starts when available. */
+      startOffset: number;
+    };
+    /**
+     * @description Validation severity for one factory validation target.
+     * @enum {string}
+     */
+    FactoryValidationSeverity: "error" | "warning" | "hint";
+    /**
+     * @description Factory-domain component type referenced by one validation target subject.
+     * @enum {string}
+     */
+    FactoryValidationSubjectType:
+      | "FACTORY"
+      | "WORKSTATION"
+      | "WORK_TYPE"
+      | "WORK_STATE"
+      | "WORKER"
+      | "RESOURCE"
+      | "ROUTE";
+    /**
+     * @description Factory-domain location within the subject component referenced by one validation target.
+     * @enum {string}
+     */
+    FactoryValidationSubjectLocation:
+      | "ON_REJECTION"
+      | "ON_FAILURE"
+      | "OUTPUTS"
+      | "INPUTS"
+      | "STATES"
+      | "TERMINAL"
+      | "REFERENCE"
+      | "DEFINITION";
+    FactoryValidationSubject: {
+      type: components["schemas"]["FactoryValidationSubjectType"];
+      /** @description Stable component identifier or name for the affected factory component. */
+      id: string;
+      location: components["schemas"]["FactoryValidationSubjectLocation"];
+    };
+    FactoryValidationTarget: {
+      /** @description Stable machine-readable validation rule identifier. */
+      code: string;
+      severity: components["schemas"]["FactoryValidationSeverity"];
+      /** @description Human-readable explanation suitable for dialogs and summaries. */
+      message: string;
+      subject: components["schemas"]["FactoryValidationSubject"];
+    };
+    /**
+     * @example {
+     *       "targets": [
+     *         {
+     *           "code": "factory.workstation.missingRejectionRoute",
+     *           "severity": "error",
+     *           "message": "Workstation repeater must define a reject route.",
+     *           "subject": {
+     *             "type": "WORKSTATION",
+     *             "id": "repeater",
+     *             "location": "ON_REJECTION"
+     *           }
+     *         },
+     *         {
+     *           "code": "factory.workType.missingCompletionState",
+     *           "severity": "error",
+     *           "message": "Work type task must declare a completion state.",
+     *           "subject": {
+     *             "type": "WORK_TYPE",
+     *             "id": "task",
+     *             "location": "STATES"
+     *           }
+     *         }
+     *       ]
+     *     }
+     */
+    FactoryValidationResult: {
+      /** @description Canonical validation targets for the submitted factory definition. */
+      targets: components["schemas"]["FactoryValidationTarget"][];
+    };
+    WorkRequest: {
+      /** @description Stable client-provided request identifier used for idempotent batch submission. */
+      requestId: string;
+      /** @description Optional default chaining-trace identifier applied to submitted work items that omit it. */
+      currentChainingTraceId?: string;
+      type: components["schemas"]["WorkRequestType"];
+      /** @description A batch of work items to be submitted together. */
+      works?: components["schemas"]["Work"][];
+      /** @description Relationships between various work items. */
+      relations?: components["schemas"]["Relation"][];
+    };
+    /**
+     * @description Kind of work request accepted by the factory.
+     * @enum {string}
+     */
+    WorkRequestType: "FACTORY_REQUEST_BATCH";
+    /** @description A piece of work. */
+    Work: {
+      /** @description A human readable name for the work, not unique */
+      name: string;
+      /** @description Unique identifier for the work */
+      workId?: string;
+      /** @description Identifier for the original request that created this work, if applicable */
+      requestId?: string;
+      /** @description Configured work type name from factory.json for this submitted work item. */
+      workTypeName?: string;
+      /** @description Current lifecycle state for this work item when returned by read APIs. Submit requests use the state's name when an explicit initial state is provided. */
+      state?: components["schemas"]["WorkState"];
+      /** @description Current chaining depth for this work item when the runtime already knows its upstream lineage. */
+      chainingTraceDepth?: number;
+      /** @description Explicit chaining-trace identifier for this submitted work item. */
+      currentChainingTraceId?: string;
+      /** @description Explicit predecessor chaining traces that directly caused this work item. */
+      previousChainingTraceIds?: string[];
+      /** @description Legacy trace identifier retained for compatibility; prefer currentChainingTraceId. */
+      traceId?: string;
+      /** @description Optional canonical ordered work content parts for this work item. */
+      content?: components["schemas"]["WorkContent"];
+      /** @description Opaque work payload forwarded as raw JSON, or a binary data, or whatever else. */
+      payload?: unknown;
+      /** @description Key-value pairs for storing arbitrary metadata about the work. Both keys and values are strings. */
+      tags?: components["schemas"]["StringMap"];
+      /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
+      relations?: components["schemas"]["Relation"][];
+    };
+    /** @description Ordered canonical content parts for one work item. */
+    WorkContent: components["schemas"]["WorkContentPart"][];
+    /** @description One ordered canonical content part on a work item. */
+    WorkContentPart:
+      | components["schemas"]["WorkTextContentPart"]
+      | components["schemas"]["WorkImageContentPart"]
+      | components["schemas"]["WorkAudioContentPart"]
+      | components["schemas"]["WorkJsonContentPart"]
+      | components["schemas"]["WorkBinaryContentPart"];
+    /**
+     * @description Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
+     * @enum {string}
+     */
+    WorkContentPartType:
+      | "text"
+      | "image"
+      | "TEXT"
+      | "IMAGE"
+      | "AUDIO"
+      | "JSON"
+      | "BINARY";
+    /** @description Optional metadata attached to one work content part. */
+    WorkContentMetadata: {
+      [key: string]: unknown;
+    };
+    WorkContentCommonFields: {
+      /** @description Optional slot name used by model-operation binding selectors and diagnostics. */
+      slot?: string;
+      /** @description Optional caller-defined label for slot binding or diagnostics. */
+      label?: string;
+      /** @description Optional semantic role for model-operation authoring. */
+      role?: string;
+      /** @description Optional MIME content type for file-backed or structured parts. */
+      contentType?: string;
+      /** @description Optional artifact identifier for externally materialized content. */
+      artifactId?: string;
+      metadata?: components["schemas"]["WorkContentMetadata"];
+    };
+    /** @description Ordered inline text content for one work item. */
+    WorkTextContentPart: components["schemas"]["WorkContentCommonFields"] & {
+      /** @enum {unknown} */
+      type: "text" | "TEXT";
+      /** @description Inline text content preserved in canonical part order. */
+      text: string;
+    };
+    /** @description Ordered image content for one work item. */
+    WorkImageContentPart: components["schemas"]["WorkContentCommonFields"] & {
+      /** @enum {unknown} */
+      type: "image" | "IMAGE";
+      url: components["schemas"]["WorkContentURLProperty"];
+      file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
+    };
+    /** @description Ordered audio content for one work item. */
+    WorkAudioContentPart: components["schemas"]["WorkContentCommonFields"] & {
+      /** @enum {unknown} */
+      type: "AUDIO";
+      url: components["schemas"]["WorkContentURLProperty"];
+      file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
+    };
+    /** @description Ordered JSON content for one work item. */
+    WorkJsonContentPart: components["schemas"]["WorkContentCommonFields"] & {
+      /** @enum {unknown} */
+      type: "JSON";
+      /** @description Arbitrary JSON value preserved in canonical part order. */
+      json: unknown;
+    };
+    /** @description Ordered binary content for one work item. */
+    WorkBinaryContentPart: components["schemas"]["WorkContentCommonFields"] & {
+      /** @enum {unknown} */
+      type: "BINARY";
+      url: components["schemas"]["WorkContentURLProperty"];
+      file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
+    };
+    Relation: {
+      type: components["schemas"]["RelationType"];
+      targetWorkId?: string;
+      targetWorkName: string;
+      sourceWorkName: string;
+      requiredState?: string;
+    };
+    /**
+     * @description Relationship category between two pieces of work.
+     * @enum {string}
+     */
+    RelationType: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
+    /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:. */
+    WorkContentURLProperty: string;
+    /**
+     * @deprecated
+     * @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
+     */
+    WorkContentDeprecatedFileProperty: string;
+    /** @description Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:. */
+    SubmitWorkContentURLProperty: string;
+    /** @description Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`. */
+    ModelOperationName: string;
+    /** @description Selector fields used to resolve one content part from ordered runtime input. */
+    WorkstationOperationBindingSelector: {
+      /** @description Match a content part by its authored slot field. */
+      slot?: string;
+      /** @description Match a content part by its label field. */
+      label?: string;
+      /** @description Match a content part by its uppercase public type. */
+      type?: components["schemas"]["ModelOperationContentType"];
+      /** @description Match a content part by its role field. */
+      role?: string;
+    };
+    /** @description One workstation-authored binding for a provider-agnostic model-operation input slot. */
+    WorkstationOperationBinding: {
+      /** @description Stable input slot name declared by the worker operation. */
+      slot: string;
+      /** @description Ordered runtime-input selector used before falling back to config or default content. */
+      selector?: components["schemas"]["WorkstationOperationBindingSelector"];
+      /** @description Static authored content bound directly or used as the first fallback when runtime input does not match. */
+      config?: components["schemas"]["WorkContent"];
+      /** @description Optional final fallback content when neither runtime input nor config content resolves the slot. */
+      defaultContent?: components["schemas"]["WorkContent"];
+    };
+    /**
+     * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
+     * @enum {string}
+     */
+    WorkTypeHandlingBehavior: "DEFAULT";
+    /**
+     * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+     * @enum {string}
+     */
+    HostedWorkerProvider: "LINEAR";
+    /** @description Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields. */
+    HostedWorkerAuth: {
+      /** @description Referenced secret name that resolves the hosted provider API key at runtime. */
+      secretRef?: string;
+    };
+    /** @description Deterministic issue-to-work mapping fields owned by a hosted Linear worker. */
+    HostedLinearWorkerMapping: {
+      /** @description Canonical submitted work type emitted for matched Linear issues. */
+      workType?: string;
+      /** @description Canonical submitted work state emitted for matched Linear issues. */
+      state?: string;
+    };
+    /** @description Optional claim-related configuration that v1 hosted Linear workers explicitly allow. */
+    HostedLinearWorkerClaim: {
+      /** @description Linear issue field name to use when deriving optional assignee claim metadata. */
+      assigneeField?: string;
+    };
+    /** @description Provider-specific poller configuration for the built-in hosted Linear worker. */
+    HostedLinearWorkerConfig: {
+      /** @description Optional Go duration that controls how often the hosted Linear worker polls for updates. */
+      pollInterval?: string;
+      /** @description Optional Linear team identifiers that bound the poll source. */
+      teamIds?: string[];
+      /** @description Optional Linear issue-state identifiers that bound the poll source. */
+      stateIds?: string[];
+      /** @description Deterministic mapping fields for canonical work submission generation. */
+      mapping?: components["schemas"]["HostedLinearWorkerMapping"];
+      /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
+      claim?: components["schemas"]["HostedLinearWorkerClaim"];
+    };
+  };
+  responses: {
+    /** @description Request payload or parameter was invalid. */
+    BadRequest: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Named factory name or payload was invalid. */
+    CreateFactoryBadRequest: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Named factory could not be activated because the name already exists or the current runtime is not idle. */
+    CreateFactoryConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Requested resource was not found. */
+    NotFound: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Current named factory was not found. */
+    CurrentFactoryNotFound: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Current factory save request failed validation. */
+    SaveCurrentFactoryBadRequest: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Current factory could not be saved because the runtime or submitted version is not safe to replace. */
+    SaveCurrentFactoryConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Operator move request was already applied for the supplied requestId. */
+    MoveWorkConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description Server failed while reading or building runtime state. */
+    InternalError: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+  };
+  parameters: {
+    /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+    SessionID: string;
+    /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
+    MaxResults: number;
+    /** @description Optional base64-encoded token ID cursor. */
+    NextToken: string;
+    /** @description Optional current work state name filter. */
+    StateName: string;
+    /** @description Optional current work state type filter. */
+    StateType: components["schemas"]["WorkStateType"];
+    /** @description Optional list-work sort field. Use state.type to order by current work state type. */
+    SortBy: "state.type";
+    /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+    WorkListName: string;
+    /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+    WorkListWorkTypeName: string;
+    /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+    WorkListTraceId: string;
+    /** @description Work or token identifier, depending on route. */
+    WorkOrTokenID: string;
+  };
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    listWork: {
-        parameters: {
-            query?: {
-                /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
-                maxResults?: components["parameters"]["MaxResults"];
-                /** @description Optional base64-encoded token ID cursor. */
-                nextToken?: components["parameters"]["NextToken"];
-                /** @description Optional current work state name filter. */
-                "state.name"?: components["parameters"]["StateName"];
-                /** @description Optional current work state type filter. */
-                "state.type"?: components["parameters"]["StateType"];
-                /** @description Optional list-work sort field. Use state.type to order by current work state type. */
-                sortBy?: components["parameters"]["SortBy"];
-                /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
-                name?: components["parameters"]["WorkListName"];
-                /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
-                workTypeName?: components["parameters"]["WorkListWorkTypeName"];
-                /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
-                traceId?: components["parameters"]["WorkListTraceId"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current work tokens. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListWorkResponse"];
-                };
-            };
-            500: components["responses"]["InternalError"];
-        };
+  listWork: {
+    parameters: {
+      query?: {
+        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
+        maxResults?: components["parameters"]["MaxResults"];
+        /** @description Optional base64-encoded token ID cursor. */
+        nextToken?: components["parameters"]["NextToken"];
+        /** @description Optional current work state name filter. */
+        "state.name"?: components["parameters"]["StateName"];
+        /** @description Optional current work state type filter. */
+        "state.type"?: components["parameters"]["StateType"];
+        /** @description Optional list-work sort field. Use state.type to order by current work state type. */
+        sortBy?: components["parameters"]["SortBy"];
+        /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+        name?: components["parameters"]["WorkListName"];
+        /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+        workTypeName?: components["parameters"]["WorkListWorkTypeName"];
+        /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+        traceId?: components["parameters"]["WorkListTraceId"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    submitWork: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Current work tokens. */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SubmitWorkRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["ListWorkResponse"];
         };
-        responses: {
-            /** @description Work was accepted for processing. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SubmitWorkResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      500: components["responses"]["InternalError"];
     };
-    stageSubmitWorkFile: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StageSubmitWorkFileRequest"];
-            };
-        };
-        responses: {
-            /** @description File payload staged successfully for later submit-work use. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StageSubmitWorkFileResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  submitWork: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    listWorkBySessionId: {
-        parameters: {
-            query?: {
-                /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
-                maxResults?: components["parameters"]["MaxResults"];
-                /** @description Optional base64-encoded token ID cursor. */
-                nextToken?: components["parameters"]["NextToken"];
-                /** @description Optional current work state name filter. */
-                "state.name"?: components["parameters"]["StateName"];
-                /** @description Optional current work state type filter. */
-                "state.type"?: components["parameters"]["StateType"];
-                /** @description Optional list-work sort field. Use state.type to order by current work state type. */
-                sortBy?: components["parameters"]["SortBy"];
-                /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
-                name?: components["parameters"]["WorkListName"];
-                /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
-                workTypeName?: components["parameters"]["WorkListWorkTypeName"];
-                /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
-                traceId?: components["parameters"]["WorkListTraceId"];
-            };
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current work tokens for the targeted session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListWorkResponse"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SubmitWorkRequest"];
+      };
     };
-    submitWorkBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
+    responses: {
+      /** @description Work was accepted for processing. */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SubmitWorkRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["SubmitWorkResponse"];
         };
-        responses: {
-            /** @description Work was accepted for processing by the targeted session. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SubmitWorkResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
     };
-    stageSubmitWorkFileBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StageSubmitWorkFileRequest"];
-            };
-        };
-        responses: {
-            /** @description File payload staged successfully for later session-scoped submit-work use. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StageSubmitWorkFileResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  stageSubmitWorkFile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    upsertWorkRequest: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable request identifier used for idempotent submission. */
-                request_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkRequest"];
-            };
-        };
-        responses: {
-            /** @description Work request was accepted or had already been accepted. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UpsertWorkRequestResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            500: components["responses"]["InternalError"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StageSubmitWorkFileRequest"];
+      };
     };
-    upsertWorkRequestBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-                /** @description Stable request identifier used for idempotent submission. */
-                request_id: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description File payload staged successfully for later submit-work use. */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["StageSubmitWorkFileResponse"];
         };
-        responses: {
-            /** @description Work request was accepted or had already been accepted by the targeted session. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UpsertWorkRequestResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
     };
-    getWork: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Work or token identifier, depending on route. */
-                id: components["parameters"]["WorkOrTokenID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One work item from the current marking. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Work"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  listWorkBySessionId: {
+    parameters: {
+      query?: {
+        /** @description Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding. */
+        maxResults?: components["parameters"]["MaxResults"];
+        /** @description Optional base64-encoded token ID cursor. */
+        nextToken?: components["parameters"]["NextToken"];
+        /** @description Optional current work state name filter. */
+        "state.name"?: components["parameters"]["StateName"];
+        /** @description Optional current work state type filter. */
+        "state.type"?: components["parameters"]["StateType"];
+        /** @description Optional list-work sort field. Use state.type to order by current work state type. */
+        sortBy?: components["parameters"]["SortBy"];
+        /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
+        name?: components["parameters"]["WorkListName"];
+        /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
+        workTypeName?: components["parameters"]["WorkListWorkTypeName"];
+        /** @description Optional trace filter. Matches when traceId or currentChainingTraceId equals this value exactly. */
+        traceId?: components["parameters"]["WorkListTraceId"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
     };
-    moveWork: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Work or token identifier, depending on route. */
-                id: components["parameters"]["WorkOrTokenID"];
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Current work tokens for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MoveWorkRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["ListWorkResponse"];
         };
-        responses: {
-            /** @description Work item at the new marking position. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Work"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["MoveWorkConflict"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
     };
-    getWorkBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-                /** @description Work or token identifier, depending on route. */
-                id: components["parameters"]["WorkOrTokenID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description One work item for the targeted session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Work"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  submitWorkBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
     };
-    moveWorkBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-                /** @description Work or token identifier, depending on route. */
-                id: components["parameters"]["WorkOrTokenID"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MoveWorkRequest"];
-            };
-        };
-        responses: {
-            /** @description Work item at the new marking position for the targeted session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Work"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["MoveWorkConflict"];
-            500: components["responses"]["InternalError"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SubmitWorkRequest"];
+      };
     };
-    getEvents: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Work was accepted for processing by the targeted session. */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Factory event stream. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            500: components["responses"]["InternalError"];
+        content: {
+          "application/json": components["schemas"]["SubmitWorkResponse"];
         };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
     };
-    getEventsBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Factory event stream for the targeted session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  stageSubmitWorkFileBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
     };
-    getStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current runtime status summary. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StatusResponse"];
-                };
-            };
-            500: components["responses"]["InternalError"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StageSubmitWorkFileRequest"];
+      };
     };
-    listModels: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description File payload staged successfully for later session-scoped submit-work use. */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Discovered models for the current runtime. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListModelsResponse"];
-                };
-            };
-            500: components["responses"]["InternalError"];
+        content: {
+          "application/json": components["schemas"]["StageSubmitWorkFileResponse"];
         };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
     };
-    getModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
-                model_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Discovered model detail. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ModelDetail"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  upsertWorkRequest: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable request identifier used for idempotent submission. */
+        request_id: string;
+      };
+      cookie?: never;
     };
-    invokeModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
-                model_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ModelInvocationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful model invocation result. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ModelInvocationResponse"];
-                    "application/octet-stream": string;
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkRequest"];
+      };
     };
-    pullModel: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
-                model_name: string;
-            };
-            cookie?: never;
+    responses: {
+      /** @description Work request was accepted or had already been accepted. */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Successful local-model asset pull or confirmation that the managed cache already contained the required revision. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ModelPullResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
+        content: {
+          "application/json": components["schemas"]["UpsertWorkRequestResponse"];
         };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
     };
-    getStatusBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current runtime status summary for the targeted session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StatusResponse"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  upsertWorkRequestBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable request identifier used for idempotent submission. */
+        request_id: string;
+      };
+      cookie?: never;
     };
-    getProviderSessionDetails: {
-        parameters: {
-            query: {
-                /** @description Provider that emitted the session identifier. Only codex sessions are currently loadable. */
-                provider: components["schemas"]["LoadableProviderSessionProvider"];
-                /** @description Provider-session identifier kind. Only session_id is currently loadable. */
-                kind: components["schemas"]["LoadableProviderSessionKind"];
-                /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
-                id: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Parsed provider-session details. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderSessionDetailResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkRequest"];
+      };
     };
-    validateFactory: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Work request was accepted or had already been accepted by the targeted session. */
+      201: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Factory"];
-            };
+        content: {
+          "application/json": components["schemas"]["UpsertWorkRequestResponse"];
         };
-        responses: {
-            /** @description Validation result for the submitted factory definition. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FactoryValidationResult"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
     };
-    listFactorySessions: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Live factory sessions that can be rendered as workspace tabs. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ListFactorySessionsResponse"];
-                };
-            };
-            500: components["responses"]["InternalError"];
-        };
+  };
+  getWork: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Work or token identifier, depending on route. */
+        id: components["parameters"]["WorkOrTokenID"];
+      };
+      cookie?: never;
     };
-    openFactorySession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description One work item from the current marking. */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["OpenFactorySessionRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["Work"];
         };
-        responses: {
-            /** @description Session was opened or the caller needs to choose one of the returned runnable targets. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OpenFactorySessionResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
     };
-    closeFactorySession: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly. */
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Session was stopped and removed from the live workspace. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  moveWork: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Work or token identifier, depending on route. */
+        id: components["parameters"]["WorkOrTokenID"];
+      };
+      cookie?: never;
     };
-    getCurrentFactoryBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current active factory definition and version metadata for the targeted session, or the active default root runtime when the default session has no durable current-factory pointer yet. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Factory"];
-                };
-            };
-            404: components["responses"]["NotFound"];
-            500: components["responses"]["InternalError"];
-        };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MoveWorkRequest"];
+      };
     };
-    saveCurrentFactoryBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-            };
-            cookie?: never;
+    responses: {
+      /** @description Work item at the new marking position. */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SaveFactoryForSessionRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["Work"];
         };
-        responses: {
-            /** @description Saved current factory definition and new version metadata for the targeted session. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Factory"];
-                };
-            };
-            400: components["responses"]["SaveCurrentFactoryBadRequest"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["SaveCurrentFactoryConflict"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["MoveWorkConflict"];
+      500: components["responses"]["InternalError"];
     };
-    getCurrentFactoryWorkstationPromptTemplateContractBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-                /** @description Customer-authored workstation name to inspect in the current factory. */
-                workstation_name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Prompt-template contract for the selected workstation editing context. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PromptTemplateContract"];
-                };
-            };
-            404: components["responses"]["CurrentFactoryNotFound"];
-            500: components["responses"]["InternalError"];
-        };
+  };
+  getWorkBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Work or token identifier, depending on route. */
+        id: components["parameters"]["WorkOrTokenID"];
+      };
+      cookie?: never;
     };
-    validateCurrentFactoryWorkstationPromptTemplateBySessionId: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
-                session_id: components["parameters"]["SessionID"];
-                /** @description Customer-authored workstation name to validate against in the current factory. */
-                workstation_name: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description One work item for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PromptTemplateValidationRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["Work"];
         };
-        responses: {
-            /** @description Prompt validation result for the selected workstation editing context. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PromptTemplateValidationResult"];
-                };
-            };
-            404: components["responses"]["CurrentFactoryNotFound"];
-            500: components["responses"]["InternalError"];
-        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
     };
+  };
+  moveWorkBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Work or token identifier, depending on route. */
+        id: components["parameters"]["WorkOrTokenID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["MoveWorkRequest"];
+      };
+    };
+    responses: {
+      /** @description Work item at the new marking position for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Work"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["MoveWorkConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getEvents: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Factory event stream. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getEventsBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Factory event stream for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current runtime status summary. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StatusResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listModels: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Discovered models for the current runtime. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListModelsResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+        model_name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Discovered model detail. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelDetail"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  invokeModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+        model_name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ModelInvocationRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful model invocation result. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelInvocationResponse"];
+          "application/octet-stream": string;
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  pullModel: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+        model_name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful local-model asset pull or confirmation that the managed cache already contained the required revision. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ModelPullResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getStatusBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current runtime status summary for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StatusResponse"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getProviderSessionDetails: {
+    parameters: {
+      query: {
+        /** @description Provider that emitted the session identifier. Only codex sessions are currently loadable. */
+        provider: components["schemas"]["LoadableProviderSessionProvider"];
+        /** @description Provider-session identifier kind. Only session_id is currently loadable. */
+        kind: components["schemas"]["LoadableProviderSessionKind"];
+        /** @description Provider-session identifier to resolve. This is an identifier, not a filesystem path. */
+        id: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Parsed provider-session details. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ProviderSessionDetailResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  validateFactory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["Factory"];
+      };
+    };
+    responses: {
+      /** @description Validation result for the submitted factory definition. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactoryValidationResult"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listFactorySessions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Live factory sessions that can be rendered as workspace tabs. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListFactorySessionsResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
+  openFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OpenFactorySessionRequest"];
+      };
+    };
+    responses: {
+      /** @description Session was opened or the caller needs to choose one of the returned runnable targets. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OpenFactorySessionResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  closeFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to close the default compatibility session explicitly. */
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Session was stopped and removed from the live workspace. */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getCurrentFactoryBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current active factory definition and version metadata for the targeted session, or the active default root runtime when the default session has no durable current-factory pointer yet. Default-runtime responses use the reserved `UNDEFINED` identifier in `Factory.name`. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Factory"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  saveCurrentFactoryBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SaveFactoryForSessionRequest"];
+      };
+    };
+    responses: {
+      /** @description Saved current factory definition and new version metadata for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["Factory"];
+        };
+      };
+      400: components["responses"]["SaveCurrentFactoryBadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["SaveCurrentFactoryConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getCurrentFactoryWorkstationPromptTemplateContractBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Customer-authored workstation name to inspect in the current factory. */
+        workstation_name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Prompt-template contract for the selected workstation editing context. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PromptTemplateContract"];
+        };
+      };
+      404: components["responses"]["CurrentFactoryNotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  validateCurrentFactoryWorkstationPromptTemplateBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Customer-authored workstation name to validate against in the current factory. */
+        workstation_name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PromptTemplateValidationRequest"];
+      };
+    };
+    responses: {
+      /** @description Prompt validation result for the selected workstation editing context. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PromptTemplateValidationResult"];
+        };
+      };
+      404: components["responses"]["CurrentFactoryNotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
 }

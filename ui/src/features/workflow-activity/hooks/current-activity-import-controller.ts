@@ -1,8 +1,6 @@
 import { useCallback } from "react";
 
 import type { ImportFactoryValue } from "../../../api/session-factory";
-import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
-import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import {
   type FactoryImportActivationState,
   useFactoryImportActivation,
@@ -16,6 +14,8 @@ import {
   type ReadFactoryImportFile,
   useFactoryPngDrop,
 } from "../../import/hooks/use-factory-png-drop";
+import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
+import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 
 export interface CurrentActivityImportController {
   activateImport: (input: FactoryImportConfirmInput) => Promise<void>;
@@ -32,7 +32,9 @@ export interface CurrentActivityImportController {
 }
 
 export interface UseCurrentActivityImportControllerOptions {
-  activateFactory?: (input: FactoryImportConfirmInput) => Promise<ImportFactoryValue>;
+  activateFactory?: (
+    input: FactoryImportConfirmInput,
+  ) => Promise<ImportFactoryValue>;
   locale?: string | null;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
@@ -59,19 +61,19 @@ export function useCurrentActivityImportController({
     closeImportPreview();
     onFactoryActivated?.();
   }, [closeImportPreview, onFactoryActivated]);
-  const {
-    activateImport,
-    activationState,
-    clearActivationError,
-  } = useFactoryImportActivation({
-    activateFactory,
-    onActivated: handleFactoryActivated,
-    sessionID,
-  });
-  const handleImportPreviewReady = useCallback((value: FactoryPngImportValue, file: File) => {
-    clearActivationError();
-    openPreview(value, file);
-  }, [clearActivationError, openPreview]);
+  const { activateImport, activationState, clearActivationError } =
+    useFactoryImportActivation({
+      activateFactory,
+      onActivated: handleFactoryActivated,
+      sessionID,
+    });
+  const handleImportPreviewReady = useCallback(
+    (value: FactoryPngImportValue, file: File) => {
+      clearActivationError();
+      openPreview(value, file);
+    },
+    [clearActivationError, openPreview],
+  );
   const drop = useFactoryPngDrop({
     locale,
     onImportReady: handleImportPreviewReady,

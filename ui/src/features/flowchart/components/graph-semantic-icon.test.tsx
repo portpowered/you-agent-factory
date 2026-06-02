@@ -17,13 +17,17 @@ describe("GraphSemanticIcon", () => {
     );
 
     for (const kind of GRAPH_SEMANTIC_ICON_KINDS) {
-      const icon = screen.getByRole("img", { name: graphSemanticIconLabel(kind) });
+      const icon = screen.getByRole("img", {
+        name: graphSemanticIconLabel(kind),
+      });
 
       expect(icon.tagName.toLowerCase()).toBe("svg");
       expect(icon.getAttribute("data-graph-semantic-icon")).toBe(kind);
       expect(icon.getAttribute("stroke")).toBe("currentColor");
       expect(icon.getAttribute("class")).toContain("text-af-text-muted");
-      expect(icon.querySelectorAll("path, rect, circle, ellipse").length).toBeGreaterThan(0);
+      expect(
+        icon.querySelectorAll("path, rect, circle, ellipse").length,
+      ).toBeGreaterThan(0);
     }
   });
 

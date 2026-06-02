@@ -3,8 +3,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  buildTimeoutMs,
   browserScenarioTimeoutMs,
+  buildTimeoutMs,
   expectNoBrowserErrors,
   openBrowserPage,
   startBrowserPreview,
@@ -142,11 +142,16 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
           .locator("[data-worker-label-zone]")
           .evaluateAll((elements) =>
             elements
-              .map((element) => element.getAttribute("aria-label")?.trim() ?? "")
+              .map(
+                (element) => element.getAttribute("aria-label")?.trim() ?? "",
+              )
               .filter((label) => label.length > 0),
           );
         expect(workerNodeLabels).toEqual(
-          expect.arrayContaining(["worker:processor", "worker:workspace-setup"]),
+          expect.arrayContaining([
+            "worker:processor",
+            "worker:workspace-setup",
+          ]),
         );
         expect(workerNodeLabels).not.toContain("worker:");
         expect(
@@ -157,21 +162,30 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
 
         await processorWorkerButton.click({ force: true });
         await expect
-          .poll(async () => processorWorkerButton.getAttribute("aria-pressed"), {
-            timeout: uiInteractionTimeoutMs,
-          })
+          .poll(
+            async () => processorWorkerButton.getAttribute("aria-pressed"),
+            {
+              timeout: uiInteractionTimeoutMs,
+            },
+          )
           .toBe("true");
 
         await workspaceSetupWorkerButton.click({ force: true });
         await expect
-          .poll(async () => workspaceSetupWorkerButton.getAttribute("aria-pressed"), {
-            timeout: uiInteractionTimeoutMs,
-          })
+          .poll(
+            async () => workspaceSetupWorkerButton.getAttribute("aria-pressed"),
+            {
+              timeout: uiInteractionTimeoutMs,
+            },
+          )
           .toBe("true");
         await expect
-          .poll(async () => processorWorkerButton.getAttribute("aria-pressed"), {
-            timeout: uiInteractionTimeoutMs,
-          })
+          .poll(
+            async () => processorWorkerButton.getAttribute("aria-pressed"),
+            {
+              timeout: uiInteractionTimeoutMs,
+            },
+          )
           .toBe("false");
 
         expectNoBrowserErrors(

@@ -7,7 +7,10 @@ import { DashboardStatusPill } from "./dashboard-status-pill";
 function DashboardActionControlsShowcase() {
   return (
     <div className="grid gap-6 p-6">
-      <section aria-labelledby="dashboard-action-button-variants" className="grid gap-3">
+      <section
+        aria-labelledby="dashboard-action-button-variants"
+        className="grid gap-3"
+      >
         <h2
           className="text-sm font-semibold text-af-text"
           id="dashboard-action-button-variants"
@@ -15,7 +18,11 @@ function DashboardActionControlsShowcase() {
           Dashboard action button variants
         </h2>
         <div className="flex flex-wrap items-center gap-3">
-          <DashboardActionButton aria-label="Export factory" iconOnly type="button">
+          <DashboardActionButton
+            aria-label="Export factory"
+            iconOnly
+            type="button"
+          >
             <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
               <path
                 d="M8 2v8m0 0 3-3m-3 3L5 7M3 12.5h10"
@@ -26,7 +33,9 @@ function DashboardActionControlsShowcase() {
               />
             </svg>
           </DashboardActionButton>
-          <DashboardActionButton type="button">Save changes</DashboardActionButton>
+          <DashboardActionButton type="button">
+            Save changes
+          </DashboardActionButton>
           <DashboardActionButton type="button">
             <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
               <path
@@ -42,7 +51,10 @@ function DashboardActionControlsShowcase() {
         </div>
       </section>
 
-      <section aria-labelledby="dashboard-action-button-states" className="grid gap-3">
+      <section
+        aria-labelledby="dashboard-action-button-states"
+        className="grid gap-3"
+      >
         <h2
           className="text-sm font-semibold text-af-text"
           id="dashboard-action-button-states"
@@ -53,7 +65,11 @@ function DashboardActionControlsShowcase() {
           <DashboardActionButton tone="destructive" type="button">
             Remove widget
           </DashboardActionButton>
-          <DashboardActionButton aria-pressed={true} tone="secondary" type="button">
+          <DashboardActionButton
+            aria-pressed={true}
+            tone="secondary"
+            type="button"
+          >
             Connect
           </DashboardActionButton>
           <DashboardActionButton disabled type="button">
@@ -65,7 +81,10 @@ function DashboardActionControlsShowcase() {
         </div>
       </section>
 
-      <section aria-labelledby="dashboard-status-pill-states" className="grid gap-3">
+      <section
+        aria-labelledby="dashboard-status-pill-states"
+        className="grid gap-3"
+      >
         <h2
           className="text-sm font-semibold text-af-text"
           id="dashboard-status-pill-states"
@@ -77,12 +96,19 @@ function DashboardActionControlsShowcase() {
           <DashboardStatusPill role="status" tone="active">
             Active stream
           </DashboardStatusPill>
-          <DashboardStatusPill tone="warning">Draft changes pending</DashboardStatusPill>
-          <DashboardStatusPill tone="danger">Editor unavailable</DashboardStatusPill>
+          <DashboardStatusPill tone="warning">
+            Draft changes pending
+          </DashboardStatusPill>
+          <DashboardStatusPill tone="danger">
+            Editor unavailable
+          </DashboardStatusPill>
         </div>
       </section>
 
-      <section aria-labelledby="dashboard-action-row-example" className="grid gap-3">
+      <section
+        aria-labelledby="dashboard-action-row-example"
+        className="grid gap-3"
+      >
         <h2
           className="text-sm font-semibold text-af-text"
           id="dashboard-action-row-example"
@@ -92,7 +118,9 @@ function DashboardActionControlsShowcase() {
         <DashboardActionRow
           actions={
             <>
-              <DashboardActionButton type="button">Discard</DashboardActionButton>
+              <DashboardActionButton type="button">
+                Discard
+              </DashboardActionButton>
               <DashboardActionButton executing type="button">
                 Saving draft
               </DashboardActionButton>
@@ -119,7 +147,9 @@ export const SharedDashboardActionControls = {
   render: () => <DashboardActionControlsShowcase />,
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
-    const actionRow = canvas.getByLabelText("Shared dashboard action row example");
+    const actionRow = canvas.getByLabelText(
+      "Shared dashboard action row example",
+    );
     const sections = actionRow.querySelectorAll(
       "[data-dashboard-action-row-section]",
     );

@@ -2,16 +2,16 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryWorkItem } from "../../../../api/events";
 import {
-  emptyWorkPayloadLineageProjection,
-  recordConsumedInputSnapshot,
-  recordWorkRequestSnapshot,
-} from "./workPayloadLineage";
-import {
   selectedWorkItemRefForID,
   workItemRef,
   workItemRefWithConsumedPayload,
   workItemRefWithSelectedPayload,
 } from "./workItemRef";
+import {
+  emptyWorkPayloadLineageProjection,
+  recordConsumedInputSnapshot,
+  recordWorkRequestSnapshot,
+} from "./workPayloadLineage";
 
 function workItem(id: string, text: string): FactoryWorkItem {
   return {
@@ -65,7 +65,11 @@ describe("workItemRef lineage projection", () => {
     recordConsumedInputSnapshot(lineage, "dispatch-1", initial);
     recordWorkRequestSnapshot(lineage, 2, "request/work-1-v2", resubmit);
 
-    const consumed = workItemRefWithConsumedPayload(lineage, "dispatch-1", resubmit);
+    const consumed = workItemRefWithConsumedPayload(
+      lineage,
+      "dispatch-1",
+      resubmit,
+    );
     const selected = workItemRefWithSelectedPayload(lineage, resubmit);
 
     expect(consumed.content).toEqual([{ type: "text", text: "draft-v1" }]);

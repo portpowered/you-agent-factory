@@ -632,9 +632,7 @@ describe("ResourceDetailCard", () => {
         "Changes stay local to this edit session until you save the running factory.",
       ),
     ).toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Save resource" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save resource" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Discard local changes" }),
     ).toBeTruthy();

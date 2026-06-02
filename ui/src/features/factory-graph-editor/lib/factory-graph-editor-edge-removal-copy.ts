@@ -1,8 +1,8 @@
+import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type {
   FactoryGraphEdge,
   FactoryGraphNodeKey,
 } from "./factory-graph-draft-types";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 
 export function buildEdgeRemovalDescription(
   edge: FactoryGraphEdge,

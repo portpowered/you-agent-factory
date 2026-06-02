@@ -1,12 +1,12 @@
-import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import { buildCurrentActivityGraphLayoutFromFactory } from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
-import { buildCurrentActivityGraphLayoutFromFactory } from "./current-activity-factory-graph-layout";
 
 const workstationChainFactory = {
   name: "work-state-bypass-activity-fixture",
@@ -226,9 +226,9 @@ describe("buildCurrentActivityGraphLayoutFromFactory non-bypass visibility", () 
     expect(hiddenWorkerLayout.nodes.map((node) => node.nodeId)).not.toContain(
       "worker:reviewer",
     );
-    expect(
-      hiddenResourceLayout.nodes.map((node) => node.nodeId),
-    ).not.toContain("resource:gpu");
+    expect(hiddenResourceLayout.nodes.map((node) => node.nodeId)).not.toContain(
+      "resource:gpu",
+    );
     expect(
       hiddenWorkerLayout.edges.some((edge) =>
         edge.edgeId.startsWith("work-state-visibility-bypass:"),

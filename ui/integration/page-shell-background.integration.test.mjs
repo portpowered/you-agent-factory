@@ -3,8 +3,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
-  buildTimeoutMs,
   browserScenarioTimeoutMs,
+  buildTimeoutMs,
   expectNoBrowserErrors,
   openBrowserPage,
   startBrowserPreview,
@@ -51,9 +51,9 @@ describe.sequential("page-shell background browser integration", () => {
           };
         });
 
-        expect(shell.backgroundImage === "none" || shell.backgroundImage === "").toBe(
-          true,
-        );
+        expect(
+          shell.backgroundImage === "none" || shell.backgroundImage === "",
+        ).toBe(true);
         expect(shell.backgroundColor).toBe("rgb(10, 17, 23)");
         expectNoBrowserErrors(
           browserPage.pageErrors,

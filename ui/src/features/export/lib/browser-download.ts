@@ -8,7 +8,9 @@ export function downloadBlobAsFile({
   filename,
 }: DownloadBlobAsFileOptions): void {
   if (typeof document === "undefined") {
-    throw new Error("Browser download is unavailable outside the document context.");
+    throw new Error(
+      "Browser download is unavailable outside the document context.",
+    );
   }
 
   const downloadUrl = URL.createObjectURL(blob);
@@ -27,4 +29,3 @@ export function downloadBlobAsFile({
     URL.revokeObjectURL(downloadUrl);
   }
 }
-

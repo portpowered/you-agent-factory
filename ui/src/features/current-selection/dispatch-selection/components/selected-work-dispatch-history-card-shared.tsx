@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import { cn } from "../../../../lib/cn";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
@@ -81,7 +80,13 @@ export function DispatchDetailSection({
 export function DispatchDetailList({
   entries,
 }: {
-  entries: Array<{ code?: boolean; href?: string; label: string; title?: string; value?: string }>;
+  entries: Array<{
+    code?: boolean;
+    href?: string;
+    label: string;
+    title?: string;
+    value?: string;
+  }>;
 }) {
   const populatedEntries = entries.filter((entry) => entry.value);
   if (populatedEntries.length === 0) {

@@ -92,7 +92,9 @@ describe("SubmitWorkWidget form behavior", () => {
           workTypeName: "",
         }}
         headerAction={
-          <button type="button">Remove Submit work widget from dashboard</button>
+          <button type="button">
+            Remove Submit work widget from dashboard
+          </button>
         }
         onAddItem={() => {}}
         onItemTextChange={() => {}}
@@ -329,7 +331,9 @@ describe("SubmitWorkWidget form behavior", () => {
       name: "Text item 1",
     });
 
-    expect(within(fallbackSubmissionItems).getAllByRole("listitem")).toHaveLength(1);
+    expect(
+      within(fallbackSubmissionItems).getAllByRole("listitem"),
+    ).toHaveLength(1);
     expect(fallbackTextItem.value).toBe("");
   });
 });
@@ -349,7 +353,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     const view = render(
       <SubmitWorkCard
         draft={{
-          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          items: [
+            { id: "submission-item-2", stagingStatus: "idle", type: "image" },
+          ],
           requestName: "Image review",
           workTypeName: "story",
         }}
@@ -360,7 +366,10 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         onStageFileItems={() => {}}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
-        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        status={{
+          kind: "guidance",
+          message: "Stage each file-backed item before submitting.",
+        }}
         submitWorkTypeNames={["story"]}
       />,
     );
@@ -449,7 +458,10 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         onStageFileItems={() => {}}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
-        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        status={{
+          kind: "guidance",
+          message: "Stage each file-backed item before submitting.",
+        }}
         submitWorkTypeNames={["story"]}
       />,
     );
@@ -458,7 +470,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       screen.getByText("mediaType must start with image/ for image items"),
     ).toBeTruthy();
     expect(
-      screen.getByText("Retry staging this image file or choose a different file."),
+      screen.getByText(
+        "Retry staging this image file or choose a different file.",
+      ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Submit work" }).disabled).toBe(
       true,
@@ -471,7 +485,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     render(
       <SubmitWorkCard
         draft={{
-          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          items: [
+            { id: "submission-item-2", stagingStatus: "idle", type: "image" },
+          ],
           requestName: "Image review",
           workTypeName: "story",
         }}
@@ -482,7 +498,10 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         onStageFileItems={onStageFileItems}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
-        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        status={{
+          kind: "guidance",
+          message: "Stage each file-backed item before submitting.",
+        }}
         submitWorkTypeNames={["story"]}
       />,
     );
@@ -500,7 +519,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       },
     });
     expect(
-      screen.getByText("Drop or choose one image file to stage it for this submission."),
+      screen.getByText(
+        "Drop or choose one image file to stage it for this submission.",
+      ),
     ).toBeTruthy();
     fireEvent.dragEnter(dropzone, {
       dataTransfer: {
@@ -545,7 +566,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       relatedTarget: document.body,
     });
     expect(
-      screen.getByText("Drop or choose one image file to stage it for this submission."),
+      screen.getByText(
+        "Drop or choose one image file to stage it for this submission.",
+      ),
     ).toBeTruthy();
     expect(onStageFileItems).not.toHaveBeenCalled();
   });
@@ -556,7 +579,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     render(
       <SubmitWorkCard
         draft={{
-          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          items: [
+            { id: "submission-item-2", stagingStatus: "idle", type: "image" },
+          ],
           requestName: "Image review",
           workTypeName: "story",
         }}
@@ -613,7 +638,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     render(
       <SubmitWorkCard
         draft={{
-          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          items: [
+            { id: "submission-item-2", stagingStatus: "idle", type: "image" },
+          ],
           requestName: "Image review",
           workTypeName: "story",
         }}
@@ -624,7 +651,10 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         onStageFileItems={onStageFileItems}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
-        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        status={{
+          kind: "guidance",
+          message: "Stage each file-backed item before submitting.",
+        }}
         submitWorkTypeNames={["story"]}
       />,
     );
@@ -636,10 +666,16 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
 
     fireEvent.dragEnter(fileInput.closest("label") ?? fileInput);
     expect(
-      screen.getByText("Drop or choose one image file to stage it for this submission."),
+      screen.getByText(
+        "Drop or choose one image file to stage it for this submission.",
+      ),
     ).toBeTruthy();
 
-    const selectedFile = createStageableFile("selected", "selected.png", "image/png");
+    const selectedFile = createStageableFile(
+      "selected",
+      "selected.png",
+      "image/png",
+    );
     fireEvent.change(fileInput, {
       target: {
         files: [],
@@ -652,7 +688,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         files: [selectedFile],
       },
     });
-    expect(onStageFileItems).toHaveBeenCalledWith("submission-item-2", [selectedFile]);
+    expect(onStageFileItems).toHaveBeenCalledWith("submission-item-2", [
+      selectedFile,
+    ]);
 
     const dropzoneLabel = screen.getByText("Image file");
     const dropzone = dropzoneLabel.closest("label");
@@ -660,7 +698,11 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       throw new Error("expected image upload dropzone label");
     }
 
-    const droppedFile = createStageableFile("dropped", "dropped.png", "image/png");
+    const droppedFile = createStageableFile(
+      "dropped",
+      "dropped.png",
+      "image/png",
+    );
     fireEvent.dragOver(dropzone, {
       dataTransfer: {
         dropEffect: "copy",
@@ -690,9 +732,13 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       },
     });
 
-    expect(onStageFileItems).toHaveBeenLastCalledWith("submission-item-2", [droppedFile]);
+    expect(onStageFileItems).toHaveBeenLastCalledWith("submission-item-2", [
+      droppedFile,
+    ]);
     expect(
-      screen.getByText("Drop or choose one image file to stage it for this submission."),
+      screen.getByText(
+        "Drop or choose one image file to stage it for this submission.",
+      ),
     ).toBeTruthy();
   });
 
@@ -702,7 +748,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     render(
       <SubmitWorkCard
         draft={{
-          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          items: [
+            { id: "submission-item-2", stagingStatus: "idle", type: "image" },
+          ],
           requestName: "Image review",
           workTypeName: "story",
         }}
@@ -713,7 +761,10 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         onStageFileItems={onStageFileItems}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
-        status={{ kind: "guidance", message: "Stage each file-backed item before submitting." }}
+        status={{
+          kind: "guidance",
+          message: "Stage each file-backed item before submitting.",
+        }}
         submitWorkTypeNames={["story"]}
       />,
     );
@@ -731,7 +782,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     fireEvent.drop(dropzone);
 
     expect(
-      screen.getByText("Drop or choose one image file to stage it for this submission."),
+      screen.getByText(
+        "Drop or choose one image file to stage it for this submission.",
+      ),
     ).toBeTruthy();
     expect(onStageFileItems).not.toHaveBeenCalled();
   });
@@ -750,7 +803,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     const view = render(
       <SubmitWorkCard
         draft={{
-          items: [{ id: "submission-item-2", stagingStatus: "idle", type: "image" }],
+          items: [
+            { id: "submission-item-2", stagingStatus: "idle", type: "image" },
+          ],
           requestName: "中文请求",
           workTypeName: "story",
         }}
@@ -842,7 +897,10 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         onStageFileItems={() => {}}
         onSubmit={() => {}}
         onWorkTypeNameChange={() => {}}
-        status={{ kind: "success", message: "你的请求已提交。追踪 ID：trace-zh-submit。" }}
+        status={{
+          kind: "success",
+          message: "你的请求已提交。追踪 ID：trace-zh-submit。",
+        }}
         submitWorkTypeNames={["story"]}
       />,
     );
@@ -877,7 +935,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
         submitWorkTypeNames={["story"]}
       />,
     );
-    expect(screen.getByText("重新暂存这个图像文件，或改选另一个文件。")).toBeTruthy();
+    expect(
+      screen.getByText("重新暂存这个图像文件，或改选另一个文件。"),
+    ).toBeTruthy();
 
     view.unmount();
     renderSubmitWorkWidget(
@@ -909,7 +969,9 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     render(
       <SubmitWorkCard
         draft={{
-          items: [{ id: "submission-item-1", text: "Keep this item", type: "text" }],
+          items: [
+            { id: "submission-item-1", text: "Keep this item", type: "text" },
+          ],
           requestName: "Driver review",
           workTypeName: "story",
         }}
@@ -1038,8 +1100,8 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       ]);
     });
     expect(
-      fetchMock.mock.calls.map((call) =>
-        JSON.parse(String((call[1] as RequestInit).body)).fileName,
+      fetchMock.mock.calls.map(
+        (call) => JSON.parse(String((call[1] as RequestInit).body)).fileName,
       ),
     ).toEqual(["first.png", "second.png"]);
 
@@ -1415,19 +1477,28 @@ describe("SubmitWorkWidget submission behavior", () => {
       { sessionID: "session-beta" },
     );
 
-    fireEvent.change(screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Work type",
-    }), { target: { value: "story" } });
-    fireEvent.change(screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
-    }), {
-      target: { value: "Beta submission" },
-    });
-    fireEvent.change(screen.getByRole<HTMLTextAreaElement>("textbox", {
-      name: "Text item 1",
-    }), {
-      target: { value: "Submit the beta session request." },
-    });
+    fireEvent.change(
+      screen.getByRole<HTMLSelectElement>("combobox", {
+        name: "Work type",
+      }),
+      { target: { value: "story" } },
+    );
+    fireEvent.change(
+      screen.getByRole<HTMLInputElement>("textbox", {
+        name: "Request name",
+      }),
+      {
+        target: { value: "Beta submission" },
+      },
+    );
+    fireEvent.change(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: "Text item 1",
+      }),
+      {
+        target: { value: "Submit the beta session request." },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
     await waitFor(() => {
@@ -1543,7 +1614,9 @@ describe("SubmitWorkWidget submission behavior", () => {
       within(card).getByRole("textbox", { name: "请求名称" }),
     ).toBeTruthy();
     expect(within(card).getByRole("list", { name: "提交项" })).toBeTruthy();
-    expect(within(card).getByRole("textbox", { name: "文本项 1" })).toBeTruthy();
+    expect(
+      within(card).getByRole("textbox", { name: "文本项 1" }),
+    ).toBeTruthy();
     expect(
       within(card).queryByText("先选择工作类型并填写请求名称，然后即可继续。"),
     ).toBeNull();

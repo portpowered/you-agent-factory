@@ -120,7 +120,9 @@ describe("resolveDraftForBehaviorChange", () => {
 describe("updateEditableWorkstationCronDraft", () => {
   it("returns the draft unchanged for non-CRON behavior", () => {
     expect(
-      updateEditableWorkstationCronDraft(baseDraft, { schedule: "*/5 * * * *" }),
+      updateEditableWorkstationCronDraft(baseDraft, {
+        schedule: "*/5 * * * *",
+      }),
     ).toBe(baseDraft);
   });
 

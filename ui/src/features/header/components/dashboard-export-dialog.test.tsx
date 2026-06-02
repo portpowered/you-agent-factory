@@ -1,8 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-
-import type { ImportImportFactoryValue } from "../../../api/session-factory";
-import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import type { useCurrentFactoryExport } from "../../export/hooks/use-current-factory-export";
+import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { DashboardExportDialog } from "./dashboard-export-dialog";
 
 const closeExportDialog = vi.fn();

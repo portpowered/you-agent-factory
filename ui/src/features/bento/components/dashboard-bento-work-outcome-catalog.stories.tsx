@@ -1,12 +1,12 @@
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
-import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-story-contract";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
 } from "../../work-outcome/lib/work-chart-legend-story-contract";
+import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-story-contract";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {

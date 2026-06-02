@@ -24,7 +24,9 @@ describe("allocateImportCreateFactoryName", () => {
 
   it("trims embedded and existing names before comparing", () => {
     expect(
-      allocateImportCreateFactoryName("  Dropped Factory  ", ["  Dropped Factory  "]),
+      allocateImportCreateFactoryName("  Dropped Factory  ", [
+        "  Dropped Factory  ",
+      ]),
     ).toBe("Dropped Factory-2");
   });
 

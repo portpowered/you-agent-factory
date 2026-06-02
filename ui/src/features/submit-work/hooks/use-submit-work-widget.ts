@@ -3,21 +3,25 @@ import { useEffect, useRef, useState } from "react";
 
 import type { DashboardSubmitWorkType } from "../../../api/dashboard/types";
 import { stageSubmitWorkFile, submitWork } from "../../../api/work";
+import type {
+  SubmitWorkDraft,
+  SubmitWorkDraftFileItem,
+  SubmitWorkDraftItemType,
+} from "../components/submit-work-card";
 import type { SubmitWorkMessages } from "../messages/submit-work";
-import type { SubmitWorkDraft, SubmitWorkDraftFileItem, SubmitWorkDraftItemType } from "../components/submit-work-card";
 import {
   buildStatus,
   buildStructuredSubmitItems,
   createDefaultDraft,
-  createDraftItem,
   createDefaultTextItem,
+  createDraftItem,
   fileToBase64,
+  hasValidationErrors,
   normalizeMediaType,
   resetDraftPreservingWorkType,
   resetSubmitMutation,
   stageSubmitWorkErrorMessage,
   validateDraft,
-  hasValidationErrors,
 } from "./use-submit-work-widget-helpers";
 
 const EMPTY_DRAFT: SubmitWorkDraft = createDefaultDraft();
@@ -181,11 +185,16 @@ export function useSubmitWorkWidget(
       resetSubmitMutation(mutation);
       delete fileStageRequestIDsRef.current[itemId];
       setDraft((currentDraft) => {
-        const remainingItems = currentDraft.items.filter((item) => item.id !== itemId);
+        const remainingItems = currentDraft.items.filter(
+          (item) => item.id !== itemId,
+        );
 
         return {
           ...currentDraft,
-          items: remainingItems.length > 0 ? remainingItems : [createDefaultTextItem()],
+          items:
+            remainingItems.length > 0
+              ? remainingItems
+              : [createDefaultTextItem()],
         };
       });
     },
@@ -217,7 +226,9 @@ export function useSubmitWorkWidget(
 
       if (additionalItems.length > 0) {
         setDraft((currentDraft) => {
-          const targetIndex = currentDraft.items.findIndex((item) => item.id === itemId);
+          const targetIndex = currentDraft.items.findIndex(
+            (item) => item.id === itemId,
+          );
           if (targetIndex < 0) {
             return currentDraft;
           }

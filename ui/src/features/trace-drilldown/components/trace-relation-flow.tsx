@@ -1,10 +1,6 @@
 import "@xyflow/react/dist/style.css";
 
-import {
-  applyNodeChanges,
-  type NodeChange,
-  ReactFlow,
-} from "@xyflow/react";
+import { applyNodeChanges, type NodeChange, ReactFlow } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import {
@@ -17,9 +13,9 @@ import {
   traceRelationTopologyLayoutKey,
   useTraceRelationFactoryGraphLayoutPositions,
 } from "../hooks/use-trace-relation-factory-graph-layout";
-import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
-import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
+import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
+import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "./trace-relation-factory-graph-node";

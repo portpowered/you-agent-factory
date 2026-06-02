@@ -23,9 +23,14 @@ function isProjectedWorkstationRequest(
 
 export function resolveProjectedWorkstationRequestsByDispatchID(
   snapshot: DashboardSnapshot | null | undefined,
-  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined,
+  workstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined,
 ): Record<string, DashboardWorkstationRequest> | undefined {
-  if (workstationRequestsByDispatchID && Object.keys(workstationRequestsByDispatchID).length > 0) {
+  if (
+    workstationRequestsByDispatchID &&
+    Object.keys(workstationRequestsByDispatchID).length > 0
+  ) {
     return workstationRequestsByDispatchID;
   }
 
@@ -55,7 +60,8 @@ export function filterProviderSessionAttempts(
   }
 
   return attempts.filter(
-    (attempt) => attempt.provider_session?.id !== undefined && predicate(attempt),
+    (attempt) =>
+      attempt.provider_session?.id !== undefined && predicate(attempt),
   );
 }
 
@@ -77,7 +83,9 @@ export function buildSelectedWorkDispatchAttempts({
 }): DashboardProviderSessionAttempt[] {
   const matchingAttempts = filterDispatchAttempts(
     attempts,
-    (attempt) => attempt.work_items?.some((workItem) => workItem.work_id === workID) ?? false,
+    (attempt) =>
+      attempt.work_items?.some((workItem) => workItem.work_id === workID) ??
+      false,
   );
   const requests = sortDispatchRequests(
     Object.values(workstationRequestsByDispatchID ?? {}).filter((request) =>
@@ -89,17 +97,24 @@ export function buildSelectedWorkDispatchAttempts({
     return matchingAttempts;
   }
 
-  const attemptsByDispatchID = new Map<string, DashboardProviderSessionAttempt>();
+  const attemptsByDispatchID = new Map<
+    string,
+    DashboardProviderSessionAttempt
+  >();
   for (const attempt of matchingAttempts) {
     attemptsByDispatchID.set(attempt.dispatch_id, attempt);
   }
 
   for (const request of requests) {
     const dispatchAttempt = dispatchAttemptFromRequest(request);
-    const existingAttempt = attemptsByDispatchID.get(dispatchAttempt.dispatch_id);
+    const existingAttempt = attemptsByDispatchID.get(
+      dispatchAttempt.dispatch_id,
+    );
     attemptsByDispatchID.set(
       dispatchAttempt.dispatch_id,
-      existingAttempt ? mergeDispatchAttempts(existingAttempt, dispatchAttempt) : dispatchAttempt,
+      existingAttempt
+        ? mergeDispatchAttempts(existingAttempt, dispatchAttempt)
+        : dispatchAttempt,
     );
   }
 
@@ -110,12 +125,15 @@ export function buildSelectedWorkDispatchAttempts({
 
   return [...new Set(orderedDispatchIDs)]
     .map((dispatchID) => attemptsByDispatchID.get(dispatchID))
-    .filter((attempt): attempt is DashboardProviderSessionAttempt => attempt !== undefined);
+    .filter(
+      (attempt): attempt is DashboardProviderSessionAttempt =>
+        attempt !== undefined,
+    );
 }
 
-export function sortWorkstationRequests<TRequest extends WorkstationRequestLike>(
-  requests: TRequest[],
-): TRequest[] {
+export function sortWorkstationRequests<
+  TRequest extends WorkstationRequestLike,
+>(requests: TRequest[]): TRequest[] {
   return [...requests].sort((left, right) => {
     const leftStartedAt = requestStartedAt(left);
     const rightStartedAt = requestStartedAt(right);
@@ -126,7 +144,9 @@ export function sortWorkstationRequests<TRequest extends WorkstationRequestLike>
   });
 }
 
-export function selectWorkstationRequestsForWork<TRequest extends WorkstationRequestLike>(
+export function selectWorkstationRequestsForWork<
+  TRequest extends WorkstationRequestLike,
+>(
   workstationRequestsByDispatchID: Record<string, TRequest> | undefined,
   workID: string,
 ): TRequest[] {
@@ -145,7 +165,10 @@ export function selectLatestProviderSessionAttemptsByDispatch(
     return [];
   }
 
-  const latestAttemptsByDispatchID = new Map<string, DashboardProviderSessionAttempt>();
+  const latestAttemptsByDispatchID = new Map<
+    string,
+    DashboardProviderSessionAttempt
+  >();
   for (const attempt of attempts) {
     if (!attempt.provider_session?.id) {
       continue;
@@ -154,12 +177,16 @@ export function selectLatestProviderSessionAttemptsByDispatch(
   }
 
   return requests.flatMap((request) => {
-    const matchingAttempt = latestAttemptsByDispatchID.get(requestDispatchID(request));
+    const matchingAttempt = latestAttemptsByDispatchID.get(
+      requestDispatchID(request),
+    );
     return matchingAttempt ? [matchingAttempt] : [];
   });
 }
 
-export function requestWorkItems(request: DispatchWorkstationRequest): DashboardWorkItemRef[] {
+export function requestWorkItems(
+  request: DispatchWorkstationRequest,
+): DashboardWorkItemRef[] {
   return isProjectedWorkstationRequest(request)
     ? request.work_items
     : [...requestInputWorkItems(request), ...requestOutputWorkItems(request)];
@@ -170,7 +197,7 @@ export function requestDispatchID(
 ): string {
   return isProjectedWorkstationRequest(request)
     ? request.dispatch_id
-    : request.dispatchId ?? request.dispatch_id ?? "";
+    : (request.dispatchId ?? request.dispatch_id ?? "");
 }
 
 export function requestWorkstationNodeID(
@@ -178,7 +205,7 @@ export function requestWorkstationNodeID(
 ): string {
   return isProjectedWorkstationRequest(request)
     ? request.workstation_node_id
-    : request.transitionId ?? request.transition_id ?? "";
+    : (request.transitionId ?? request.transition_id ?? "");
 }
 
 export function toDashboardWorkstationRequest(
@@ -191,27 +218,35 @@ export function toDashboardWorkstationRequest(
 
   return {
     dispatch_id: request.dispatchId ?? request.dispatch_id ?? "",
-    dispatched_request_count: request.counts.dispatchedCount ?? request.counts.dispatched_count ?? 0,
-    errored_request_count: request.counts.erroredCount ?? request.counts.errored_count ?? 0,
-    failure_message: request.response?.failureMessage ?? request.response?.failure_message,
-    failure_reason: request.response?.failureReason ?? request.response?.failure_reason,
+    dispatched_request_count:
+      request.counts.dispatchedCount ?? request.counts.dispatched_count ?? 0,
+    errored_request_count:
+      request.counts.erroredCount ?? request.counts.errored_count ?? 0,
+    failure_message:
+      request.response?.failureMessage ?? request.response?.failure_message,
+    failure_reason:
+      request.response?.failureReason ?? request.response?.failure_reason,
     inference_attempts: sortInferenceAttempts(inferenceAttemptsByRequestID),
     outcome: request.response?.outcome,
     request_view: {
       ...request.request,
       runner: request.request.runner,
     },
-    responded_request_count: request.counts.respondedCount ?? request.counts.responded_count ?? 0,
+    responded_request_count:
+      request.counts.respondedCount ?? request.counts.responded_count ?? 0,
     response_view: request.response
       ? {
           ...request.response,
           runner: request.response.runner,
         }
       : undefined,
-    script_request: request.request.scriptRequest ?? request.request.script_request,
-    script_response: request.response?.scriptResponse ?? request.response?.script_response,
+    script_request:
+      request.request.scriptRequest ?? request.request.script_request,
+    script_response:
+      request.response?.scriptResponse ?? request.response?.script_response,
     started_at: request.request.startedAt ?? request.request.started_at,
-    total_duration_millis: request.response?.durationMillis ?? request.response?.duration_millis,
+    total_duration_millis:
+      request.response?.durationMillis ?? request.response?.duration_millis,
     trace_ids: request.request.traceIds ?? request.request.trace_ids,
     transition_id: request.transitionId ?? request.transition_id ?? "",
     work_items: requestWorkItems(request),
@@ -221,7 +256,9 @@ export function toDashboardWorkstationRequest(
 }
 
 function sortInferenceAttempts(
-  inferenceAttemptsByRequestID: Record<string, DashboardInferenceAttempt> | undefined,
+  inferenceAttemptsByRequestID:
+    | Record<string, DashboardInferenceAttempt>
+    | undefined,
 ): DashboardInferenceAttempt[] {
   if (!inferenceAttemptsByRequestID) {
     return [];
@@ -236,7 +273,9 @@ function sortInferenceAttempts(
   });
 }
 
-function sortDispatchRequests(requests: DispatchWorkstationRequest[]): DispatchWorkstationRequest[] {
+function sortDispatchRequests(
+  requests: DispatchWorkstationRequest[],
+): DispatchWorkstationRequest[] {
   return [...requests].sort((left, right) => {
     if (requestStartedAt(left) !== requestStartedAt(right)) {
       return requestStartedAt(right).localeCompare(requestStartedAt(left));
@@ -269,12 +308,16 @@ function mergeDispatchAttempts(
     ...derivedAttempt,
     ...existingAttempt,
     diagnostics: existingAttempt.diagnostics ?? derivedAttempt.diagnostics,
-    failure_message: existingAttempt.failure_message ?? derivedAttempt.failure_message,
-    failure_reason: existingAttempt.failure_reason ?? derivedAttempt.failure_reason,
+    failure_message:
+      existingAttempt.failure_message ?? derivedAttempt.failure_message,
+    failure_reason:
+      existingAttempt.failure_reason ?? derivedAttempt.failure_reason,
     outcome: existingAttempt.outcome || derivedAttempt.outcome,
-    provider_session: existingAttempt.provider_session ?? derivedAttempt.provider_session,
+    provider_session:
+      existingAttempt.provider_session ?? derivedAttempt.provider_session,
     work_items: existingAttempt.work_items ?? derivedAttempt.work_items,
-    workstation_name: existingAttempt.workstation_name ?? derivedAttempt.workstation_name,
+    workstation_name:
+      existingAttempt.workstation_name ?? derivedAttempt.workstation_name,
   };
 }
 
@@ -282,8 +325,8 @@ export function requestStartedAt(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
 ): string {
   return isProjectedWorkstationRequest(request)
-    ? request.started_at ?? ""
-    : request.request.startedAt ?? request.request.started_at ?? "";
+    ? (request.started_at ?? "")
+    : (request.request.startedAt ?? request.request.started_at ?? "");
 }
 
 export function requestTransitionID(
@@ -291,7 +334,7 @@ export function requestTransitionID(
 ): string {
   return isProjectedWorkstationRequest(request)
     ? request.transition_id
-    : request.transitionId ?? request.transition_id ?? "";
+    : (request.transitionId ?? request.transition_id ?? "");
 }
 
 export function requestWorkstationName(
@@ -299,14 +342,16 @@ export function requestWorkstationName(
 ): string | undefined {
   return isProjectedWorkstationRequest(request)
     ? request.workstation_name
-    : request.workstationName ?? request.workstation_name;
+    : (request.workstationName ?? request.workstation_name);
 }
 
 function requestReferencesWorkItem(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
   workID: string,
 ): boolean {
-  return requestRelatedWorkItems(request).some((workItem) => workItem.work_id === workID);
+  return requestRelatedWorkItems(request).some(
+    (workItem) => workItem.work_id === workID,
+  );
 }
 
 function requestRelatedWorkItems(
@@ -319,7 +364,9 @@ function requestRelatedWorkItems(
   ]);
 }
 
-function dedupeWorkItems(workItems: DashboardWorkItemRef[]): DashboardWorkItemRef[] {
+function dedupeWorkItems(
+  workItems: DashboardWorkItemRef[],
+): DashboardWorkItemRef[] {
   const workItemsByID = new Map<string, DashboardWorkItemRef>();
   for (const workItem of workItems) {
     workItemsByID.set(workItem.work_id, workItem);
@@ -331,16 +378,20 @@ function requestInputWorkItems(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
 ): DashboardWorkItemRef[] {
   return isProjectedWorkstationRequest(request)
-    ? request.request_view?.input_work_items ?? []
-    : request.request.inputWorkItems ?? request.request.input_work_items ?? [];
+    ? (request.request_view?.input_work_items ?? [])
+    : (request.request.inputWorkItems ??
+        request.request.input_work_items ??
+        []);
 }
 
 function requestOutputWorkItems(
   request: DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest,
 ): DashboardWorkItemRef[] {
   return isProjectedWorkstationRequest(request)
-    ? request.response_view?.output_work_items ?? []
-    : request.response?.outputWorkItems ?? request.response?.output_work_items ?? [];
+    ? (request.response_view?.output_work_items ?? [])
+    : (request.response?.outputWorkItems ??
+        request.response?.output_work_items ??
+        []);
 }
 
 function requestProviderSession(request: DispatchWorkstationRequest) {
@@ -348,18 +399,24 @@ function requestProviderSession(request: DispatchWorkstationRequest) {
 }
 
 export function requestOutcome(request: DispatchWorkstationRequest): string {
-  return "request" in request ? request.response?.outcome ?? "PENDING" : request.outcome ?? "PENDING";
+  return "request" in request
+    ? (request.response?.outcome ?? "PENDING")
+    : (request.outcome ?? "PENDING");
 }
 
-function requestFailureReason(request: DispatchWorkstationRequest): string | undefined {
+function requestFailureReason(
+  request: DispatchWorkstationRequest,
+): string | undefined {
   return "request" in request
-    ? request.response?.failureReason ?? request.response?.failure_reason
+    ? (request.response?.failureReason ?? request.response?.failure_reason)
     : request.failure_reason;
 }
 
-function requestFailureMessage(request: DispatchWorkstationRequest): string | undefined {
+function requestFailureMessage(
+  request: DispatchWorkstationRequest,
+): string | undefined {
   return "request" in request
-    ? request.response?.failureMessage ?? request.response?.failure_message
+    ? (request.response?.failureMessage ?? request.response?.failure_message)
     : request.failure_message;
 }
 

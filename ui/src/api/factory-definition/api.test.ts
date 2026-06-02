@@ -741,7 +741,9 @@ describe("normalizeFactoryDefinition", () => {
     expect(() =>
       normalizeFactoryDefinition({
         name: "legacy-factory",
-        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+        ],
         workers: [{ name: "writer" }],
         workstations: [
           {
@@ -801,7 +803,9 @@ describe("normalizeFactoryDefinition", () => {
       normalizeFactoryDefinition({
         name: "agent-factory",
         workers: [{ name: "writer" }],
-        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+        ],
         workstations: [
           {
             inputs: [
@@ -840,7 +844,9 @@ describe("normalizeFactoryDefinition", () => {
             name: "writer",
           },
         ],
-        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+        ],
         workstations: [
           {
             definition: {
@@ -882,7 +888,9 @@ describe("normalizeFactoryDefinition", () => {
         name: "legacy-factory",
         workstations: "Draft",
       }),
-    ).toThrowError(new FactoryDefinitionAPIError("factory.workstations must be an array."));
+    ).toThrowError(
+      new FactoryDefinitionAPIError("factory.workstations must be an array."),
+    );
 
     expect(() =>
       normalizeFactoryDefinition({
@@ -894,7 +902,11 @@ describe("normalizeFactoryDefinition", () => {
           },
         ],
       }),
-    ).toThrowError(new FactoryDefinitionAPIError("factory.workers[0].args[1] must be a string."));
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.workers[0].args[1] must be a string.",
+      ),
+    );
 
     expect(() =>
       normalizeFactoryDefinition({
@@ -912,7 +924,9 @@ describe("normalizeFactoryDefinition", () => {
     expect(() =>
       normalizeFactoryDefinition({
         name: "legacy-factory",
-        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+        ],
         workers: [{ name: "writer" }],
         workstations: [
           {
@@ -933,7 +947,9 @@ describe("normalizeFactoryDefinition", () => {
     expect(() =>
       normalizeFactoryDefinition({
         name: "legacy-factory",
-        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+        ],
         workers: [{ name: "writer" }],
         workstations: [
           {
@@ -954,7 +970,9 @@ describe("normalizeFactoryDefinition", () => {
     expect(() =>
       normalizeFactoryDefinition({
         name: "legacy-factory",
-        workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+        workTypes: [
+          { name: "story", states: [{ name: "new", type: "INITIAL" }] },
+        ],
         workers: [{ name: "writer" }],
         workstations: [
           {
@@ -983,14 +1001,20 @@ describe("normalizeFactoryDefinition", () => {
           },
         ],
       }),
-    ).toThrowError(new FactoryDefinitionAPIError("factory.workTypes[0].name is required."));
+    ).toThrowError(
+      new FactoryDefinitionAPIError("factory.workTypes[0].name is required."),
+    );
 
     expect(() =>
       normalizeFactoryDefinition({
         name: "legacy-factory",
         resources: [{ name: "gpu" }],
       }),
-    ).toThrowError(new FactoryDefinitionAPIError("factory.resources[0].capacity is required."));
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.resources[0].capacity is required.",
+      ),
+    );
   });
 });
 
@@ -1004,44 +1028,42 @@ const SUPPORTED_WORKER_MODEL_PROVIDERS = [
 ] as const;
 
 describe("worker modelProvider validation", () => {
-  it.each(SUPPORTED_WORKER_MODEL_PROVIDERS)(
-    "parses and round-trips MODEL_WORKER modelProvider %s",
-    (modelProvider) => {
-      const input = {
-        name: "provider-factory",
-        workers: [
-          {
-            modelProvider,
-            name: "writer",
-            type: "MODEL_WORKER",
-          },
-        ],
-      };
-      const normalized = normalizeFactoryDefinition(input);
-      expect(normalized.workers?.[0]?.modelProvider).toBe(modelProvider);
-      expect(normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized)))).toEqual(
-        normalized,
-      );
-    },
-  );
+  it.each(
+    SUPPORTED_WORKER_MODEL_PROVIDERS,
+  )("parses and round-trips MODEL_WORKER modelProvider %s", (modelProvider) => {
+    const input = {
+      name: "provider-factory",
+      workers: [
+        {
+          modelProvider,
+          name: "writer",
+          type: "MODEL_WORKER",
+        },
+      ],
+    };
+    const normalized = normalizeFactoryDefinition(input);
+    expect(normalized.workers?.[0]?.modelProvider).toBe(modelProvider);
+    expect(
+      normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized))),
+    ).toEqual(normalized);
+  });
 
-  it.each(SUPPORTED_WORKER_MODEL_PROVIDERS)(
-    "parses factory-level throttle guard modelProvider %s",
-    (modelProvider) => {
-      const normalized = normalizeFactoryDefinition({
-        name: "provider-factory",
-        guards: [
-          {
-            modelProvider,
-            model: "example-model",
-            refreshWindow: "15m",
-            type: "INFERENCE_THROTTLE_GUARD",
-          },
-        ],
-      });
-      expect(normalized.guards?.[0]?.modelProvider).toBe(modelProvider);
-    },
-  );
+  it.each(
+    SUPPORTED_WORKER_MODEL_PROVIDERS,
+  )("parses factory-level throttle guard modelProvider %s", (modelProvider) => {
+    const normalized = normalizeFactoryDefinition({
+      name: "provider-factory",
+      guards: [
+        {
+          modelProvider,
+          model: "example-model",
+          refreshWindow: "15m",
+          type: "INFERENCE_THROTTLE_GUARD",
+        },
+      ],
+    });
+    expect(normalized.guards?.[0]?.modelProvider).toBe(modelProvider);
+  });
 });
 
 describe("normalizeFactoryDefinition work type handlingBehavior", () => {
@@ -1064,9 +1086,9 @@ describe("normalizeFactoryDefinition work type handlingBehavior", () => {
     const normalized = normalizeFactoryDefinition(input);
     expect(normalized.workTypes?.[0]?.handlingBehavior).toEqual(["DEFAULT"]);
     expect(normalized.workTypes?.[1]?.handlingBehavior).toBeUndefined();
-    expect(normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized)))).toEqual(
-      normalized,
-    );
+    expect(
+      normalizeFactoryDefinition(JSON.parse(JSON.stringify(normalized))),
+    ).toEqual(normalized);
   });
 
   it("rejects invalid handlingBehavior tokens with a handlingBehavior path", () => {
@@ -1138,7 +1160,9 @@ describe("normalizeFactoryDefinition openCodeAgent", () => {
             ],
           },
         ],
-        workers: [{ name: "executor", type: "MODEL_WORKER", openCodeAgent: "   " }],
+        workers: [
+          { name: "executor", type: "MODEL_WORKER", openCodeAgent: "   " },
+        ],
         workstations: [
           {
             name: "execute-story",

@@ -1,8 +1,4 @@
-import { SessionFactoryAPIError } from "./errors";
-import {
-  activateImportedFactoryForSession,
-  discoverSessionNamedFactoryNames,
-} from "./import-activation";
+import { activateImportedFactoryForSession } from "./import-activation";
 import { defaultSessionFactoryVersion } from "./import-activation.test-helpers";
 
 describe("session factory import activation errors — preserves non-timestamp version physical values when upserting the current factory name", () => {

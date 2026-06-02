@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-
-import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
+import {
+  createEditableFactoryGraphHookWrapper,
+  renderEditableFactoryGraphHook,
+  setupEditableFactoryGraphSaveTestEnvironment,
+} from "../../../testing/editable-factory-graph-hook-test-helpers";
 import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
   createHookTestGraphEditorDraftState,
@@ -8,11 +11,7 @@ import {
   draftWorkstationFactoryDocument,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
-import {
-  createEditableFactoryGraphHookWrapper,
-  renderEditableFactoryGraphHook,
-  setupEditableFactoryGraphSaveTestEnvironment,
-} from "../../../testing/editable-factory-graph-hook-test-helpers";
+import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const hookState = vi.hoisted(() => ({
@@ -99,8 +98,7 @@ describe("useEditableFactoryGraph", () => {
     };
 
     const { result } = renderEditableFactoryGraphHook({
-      currentFactoryDocument:
-        hookState.draftState.latestDocument ?? undefined,
+      currentFactoryDocument: hookState.draftState.latestDocument ?? undefined,
     });
 
     expect(result.current.saveState.isStale).toBe(true);
@@ -200,8 +198,9 @@ describe("useEditableFactoryGraph", () => {
           factoryDocumentScopeKey: null,
         }),
       {
-        wrapper: createEditableFactoryGraphHookWrapper()
-          .EditableFactoryGraphHookWrapper,
+        wrapper:
+          createEditableFactoryGraphHookWrapper()
+            .EditableFactoryGraphHookWrapper,
       },
     );
 

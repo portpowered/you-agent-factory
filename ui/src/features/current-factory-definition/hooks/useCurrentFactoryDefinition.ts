@@ -1,19 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
-
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
-  getCurrentFactoryDefinition,
-  getCurrentFactoryDocument,
   type CanonicalFactoryDefinition,
   type CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
+  getCurrentFactoryDefinition,
+  getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 
 export const CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX =
   "current-factory-definition";
 
-function normalizeSessionQueryKey(sessionID: string | null | undefined): string {
+function normalizeSessionQueryKey(
+  sessionID: string | null | undefined,
+): string {
   return sessionID ?? DEFAULT_FACTORY_SESSION_ID;
 }
 
@@ -45,10 +46,7 @@ export function useCurrentFactoryDefinition(isEnabled = true) {
 export function currentFactoryDocumentQueryKey(
   sessionID: string | null | undefined,
 ) {
-  return [
-    ...currentFactoryDefinitionQueryKey(sessionID),
-    "document",
-  ] as const;
+  return [...currentFactoryDefinitionQueryKey(sessionID), "document"] as const;
 }
 
 export const CURRENT_FACTORY_DOCUMENT_QUERY_KEY =
@@ -57,10 +55,7 @@ export const CURRENT_FACTORY_DOCUMENT_QUERY_KEY =
 export function useCurrentFactoryDocument(isEnabled = true) {
   const { sessionID } = useDashboardSession();
 
-  return useQuery<
-    CurrentFactoryDocument,
-    CurrentFactoryDefinitionError
-  >({
+  return useQuery<CurrentFactoryDocument, CurrentFactoryDefinitionError>({
     queryKey: currentFactoryDocumentQueryKey(sessionID),
     queryFn: () => getCurrentFactoryDocument({ sessionID }),
     enabled: isEnabled,

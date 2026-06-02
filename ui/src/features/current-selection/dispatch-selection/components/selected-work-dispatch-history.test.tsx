@@ -19,7 +19,9 @@ describe("SelectedWorkDispatchHistorySection", () => {
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "Work operations" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Work operations" }),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         "No move or workstation operations have been recorded yet for this work item.",

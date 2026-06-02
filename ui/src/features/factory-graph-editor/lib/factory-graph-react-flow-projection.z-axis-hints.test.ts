@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
 import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";

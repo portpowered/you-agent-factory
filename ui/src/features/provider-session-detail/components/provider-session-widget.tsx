@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 
-import { DashboardWidgetFrame, DETAIL_COPY_CLASS } from "../../../components/ui";
+import {
+  DashboardWidgetFrame,
+  DETAIL_COPY_CLASS,
+} from "../../../components/ui";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
-import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 import { getProviderSessionWidgetMessages } from "../messages/provider-session-widget";
+import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 export interface ProviderSessionWidgetProps {
   headerAction?: ReactNode;

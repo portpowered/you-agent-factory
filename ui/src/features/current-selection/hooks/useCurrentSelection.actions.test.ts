@@ -99,7 +99,9 @@ describe("useCurrentSelectionActions", () => {
       workItem: resolvedSelection.workItem,
     };
 
-    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(resolvedSelection);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(
+      resolvedSelection,
+    );
 
     const actions = useCurrentSelectionActions({
       commitSelectionState,
@@ -143,7 +145,9 @@ describe("useCurrentSelectionActions", () => {
       nodeId: "plan",
     };
 
-    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(resolvedSelection);
+    helperMocks.resolveWorkItemSelectionByWorkID.mockReturnValueOnce(
+      resolvedSelection,
+    );
 
     const terminalWorkDetail = {
       label: "Alpha Story",
@@ -210,7 +214,8 @@ describe("useCurrentSelectionActions", () => {
             failed_work_details_by_work_id: {
               [workItem.work_id]: {
                 dispatch_id: "dispatch-blocked-analysis",
-                failure_message: "Provider rate limit exceeded while generating the analysis.",
+                failure_message:
+                  "Provider rate limit exceeded while generating the analysis.",
                 failure_reason: "provider_rate_limit",
                 transition_id: "review",
                 work_item: workItem,
@@ -228,7 +233,8 @@ describe("useCurrentSelectionActions", () => {
     expect(commitSelectionState).toHaveBeenCalledWith({
       selection: null,
       terminalWorkDetail: {
-        failureMessage: "Provider rate limit exceeded while generating the analysis.",
+        failureMessage:
+          "Provider rate limit exceeded while generating the analysis.",
         failureReason: "provider_rate_limit",
         label: "Blocked Analysis Story",
         status: "failed",

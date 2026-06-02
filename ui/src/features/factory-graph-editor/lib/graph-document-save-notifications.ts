@@ -96,7 +96,10 @@ function shouldShowGraphStaleSaveWarningToast(
 
 function resolveGraphStaleSaveWarningMessage(
   documentSave: FactoryDocumentSaveState,
-  saveMutationError: Pick<CurrentFactoryDefinitionError, "code" | "message"> | null,
+  saveMutationError: Pick<
+    CurrentFactoryDefinitionError,
+    "code" | "message"
+  > | null,
 ): string {
   if (saveMutationError?.code === "STALE_FACTORY_VERSION") {
     return saveMutationError.message;

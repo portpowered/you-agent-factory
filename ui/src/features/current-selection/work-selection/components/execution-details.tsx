@@ -1,13 +1,13 @@
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
 import {
-  formatLocalDateTime,
   formatDurationFromISO,
   formatDurationMillis,
+  formatLocalDateTime,
 } from "../../../../components/ui/formatters";
+import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import {
-  useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionLocale,
+  useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionShellMessages,
 } from "../../base/components/current-selection-locale";
 import {
@@ -195,10 +195,7 @@ function WorkstationRequestProjectionSection({
           label="erroredCount"
           value={counts.erroredCount ?? counts.errored_count}
         />
-        <InferenceAttemptDetail
-          label="startedAt"
-          value={startedAt}
-        />
+        <InferenceAttemptDetail label="startedAt" value={startedAt} />
         <InferenceAttemptDetail
           code
           label="outcome"

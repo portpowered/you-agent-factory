@@ -53,7 +53,8 @@ export function validateEditableWorkerDraft(
     trimmedName !== context.originalWorkerName &&
     context.workerNames.includes(trimmedName)
   ) {
-    validationErrors.name = messages.editableConfigurationNameDuplicate(trimmedName);
+    validationErrors.name =
+      messages.editableConfigurationNameDuplicate(trimmedName);
   }
 
   if (draft.type === "MODEL_WORKER" && !draft.modelProvider) {

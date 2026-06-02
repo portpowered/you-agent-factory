@@ -7,17 +7,25 @@ describe("DashboardMutationDialog", () => {
   it("assigns unique accessible title and description ids per dialog instance", () => {
     render(
       <>
-        <DashboardMutationDialog description="Export the current factory." title="Export factory">
+        <DashboardMutationDialog
+          description="Export the current factory."
+          title="Export factory"
+        >
           <p>Export body</p>
         </DashboardMutationDialog>
-        <DashboardMutationDialog description="Review the dropped factory." title="Review factory import">
+        <DashboardMutationDialog
+          description="Review the dropped factory."
+          title="Review factory import"
+        >
           <p>Import body</p>
         </DashboardMutationDialog>
       </>,
     );
 
     const exportDialog = screen.getByRole("dialog", { name: "Export factory" });
-    const importDialog = screen.getByRole("dialog", { name: "Review factory import" });
+    const importDialog = screen.getByRole("dialog", {
+      name: "Review factory import",
+    });
 
     const exportTitleId = exportDialog.getAttribute("aria-labelledby");
     const importTitleId = importDialog.getAttribute("aria-labelledby");
@@ -34,13 +42,19 @@ describe("DashboardMutationDialog", () => {
       within(exportDialog).getByText("Export factory").getAttribute("id"),
     ).toBe(exportTitleId);
     expect(
-      within(importDialog).getByText("Review factory import").getAttribute("id"),
+      within(importDialog)
+        .getByText("Review factory import")
+        .getAttribute("id"),
     ).toBe(importTitleId);
     expect(
-      within(exportDialog).getByText("Export the current factory.").getAttribute("id"),
+      within(exportDialog)
+        .getByText("Export the current factory.")
+        .getAttribute("id"),
     ).toBe(exportDescriptionId);
     expect(
-      within(importDialog).getByText("Review the dropped factory.").getAttribute("id"),
+      within(importDialog)
+        .getByText("Review the dropped factory.")
+        .getAttribute("id"),
     ).toBe(importDescriptionId);
   });
 
@@ -60,7 +74,9 @@ describe("DashboardMutationDialog", () => {
 
     expect(screen.getByText(japaneseMessages.dialogFlowLabel)).toBeTruthy();
     expect(
-      screen.getAllByRole("button", { name: japaneseMessages.dialogCloseLabel }),
+      screen.getAllByRole("button", {
+        name: japaneseMessages.dialogCloseLabel,
+      }),
     ).toHaveLength(2);
 
     rerender(
@@ -78,14 +94,19 @@ describe("DashboardMutationDialog", () => {
     expect(
       screen.getAllByRole("button", { name: englishMessages.dialogCloseLabel }),
     ).toHaveLength(2);
-    const importDialog = screen.getByRole("dialog", { name: "Review factory import" });
+    const importDialog = screen.getByRole("dialog", {
+      name: "Review factory import",
+    });
     expect(importDialog.className).toContain("border-af-border");
     expect(importDialog.className).toContain("bg-af-surface-raised");
   });
 
   it("retains panel surface classes on the dialog section", () => {
     render(
-      <DashboardMutationDialog description="Export the current factory." title="Export factory">
+      <DashboardMutationDialog
+        description="Export the current factory."
+        title="Export factory"
+      >
         <p>Export body</p>
       </DashboardMutationDialog>,
     );
@@ -109,7 +130,9 @@ describe("DashboardMutationDialog", () => {
       </DashboardMutationDialog>,
     );
 
-    const dialog = screen.getByRole("dialog", { name: "Review factory import" });
+    const dialog = screen.getByRole("dialog", {
+      name: "Review factory import",
+    });
     const headerClose = within(dialog).getByRole("button", {
       name: messages.dialogCloseLabel,
     });

@@ -54,7 +54,12 @@ function emptyTimelineSnapshot(): WorldState {
 
 export function emptyTimelineState(): Pick<
   FactoryTimelineState,
-  "events" | "latestTick" | "mode" | "receivedEventIDs" | "selectedTick" | "worldViewCache"
+  | "events"
+  | "latestTick"
+  | "mode"
+  | "receivedEventIDs"
+  | "selectedTick"
+  | "worldViewCache"
 > {
   return {
     events: [],
@@ -93,10 +98,17 @@ export function appendTimelineEvents(
   deps: TimelineStoreStateDeps,
 ): Pick<
   FactoryTimelineState,
-  "events" | "latestTick" | "mode" | "receivedEventIDs" | "selectedTick" | "worldViewCache"
+  | "events"
+  | "latestTick"
+  | "mode"
+  | "receivedEventIDs"
+  | "selectedTick"
+  | "worldViewCache"
 > {
   const receivedEventIDs = new Set(current.receivedEventIDs);
-  const nextEvents = incomingEvents.filter((event) => !receivedEventIDs.has(event.id));
+  const nextEvents = incomingEvents.filter(
+    (event) => !receivedEventIDs.has(event.id),
+  );
 
   if (nextEvents.length === 0) {
     return {
@@ -114,13 +126,17 @@ export function appendTimelineEvents(
     (maxTick, event) => Math.max(maxTick, event.context.tick),
     current.latestTick,
   );
-  const selectedTick = current.mode === "current" ? latestTick : current.selectedTick;
+  const selectedTick =
+    current.mode === "current" ? latestTick : current.selectedTick;
 
   return {
     events,
     latestTick,
     mode: current.mode,
-    receivedEventIDs: [...current.receivedEventIDs, ...nextEvents.map((event) => event.id)],
+    receivedEventIDs: [
+      ...current.receivedEventIDs,
+      ...nextEvents.map((event) => event.id),
+    ],
     selectedTick,
     worldViewCache: cacheWithSnapshot(events, {}, selectedTick, deps),
   };
@@ -131,7 +147,12 @@ export function replaceTimelineEvents(
   deps: TimelineStoreStateDeps,
 ): Pick<
   FactoryTimelineState,
-  "events" | "latestTick" | "mode" | "receivedEventIDs" | "selectedTick" | "worldViewCache"
+  | "events"
+  | "latestTick"
+  | "mode"
+  | "receivedEventIDs"
+  | "selectedTick"
+  | "worldViewCache"
 > {
   const ordered = deps.orderedEvents(events);
   const latestTick = Math.max(0, ...ordered.map((event) => event.context.tick));
@@ -157,7 +178,12 @@ export function selectTimelineTick(
   return {
     mode: "fixed",
     selectedTick: tick,
-    worldViewCache: cacheWithSnapshot(current.events, current.worldViewCache, tick, deps),
+    worldViewCache: cacheWithSnapshot(
+      current.events,
+      current.worldViewCache,
+      tick,
+      deps,
+    ),
   };
 }
 
@@ -179,5 +205,3 @@ export function setTimelineCurrentMode(
     ),
   };
 }
-
-

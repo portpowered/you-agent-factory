@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import {
   failureAnalysisTimelineEvents,
   graphStateSmokeTimelineEvents,
@@ -13,10 +14,9 @@ import {
   resourceCountBackendWorldViewCountsByTick,
   resourceCountTimelineEvents,
 } from "./components/dashboard/fixtures";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import {
-  MockEventSource,
   baselineSnapshot,
+  MockEventSource,
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
   renderApp,
@@ -110,7 +110,9 @@ describe("App streamed replay rendering flows", () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
     const stream = requireEventStream();
-    expect(stream.url).toBe(`/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`);
+    expect(stream.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
 
     act(() => {
       for (const event of selectedTickTimelineEvents) {

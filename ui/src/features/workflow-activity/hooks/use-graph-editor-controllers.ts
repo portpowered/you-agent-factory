@@ -1,6 +1,8 @@
-import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
+import type {
+  EditableFactoryGraphSaveMutation,
+  EditableFactoryGraphViewModel,
+} from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,

@@ -14,8 +14,10 @@ type FactorySchemas = components["schemas"];
 type FactoryRootGuard = FactorySchemas["FactoryGuard"];
 type FactoryGuard = FactorySchemas["Guard"];
 type FactoryHostedLinearWorkerClaim = FactorySchemas["HostedLinearWorkerClaim"];
-type FactoryHostedLinearWorkerConfig = FactorySchemas["HostedLinearWorkerConfig"];
-type FactoryHostedLinearWorkerMapping = FactorySchemas["HostedLinearWorkerMapping"];
+type FactoryHostedLinearWorkerConfig =
+  FactorySchemas["HostedLinearWorkerConfig"];
+type FactoryHostedLinearWorkerMapping =
+  FactorySchemas["HostedLinearWorkerMapping"];
 type FactoryHostedWorkerAuth = FactorySchemas["HostedWorkerAuth"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
@@ -30,7 +32,8 @@ type FactoryWorkstationCron = FactorySchemas["WorkstationCron"];
 type FactoryWorkstationIO = FactorySchemas["WorkstationIO"];
 type FactoryWorkstationLimits = FactorySchemas["WorkstationLimits"];
 type FactoryWorkType = FactorySchemas["WorkType"];
-type FactoryWorkTypeHandlingBehavior = FactorySchemas["WorkTypeHandlingBehavior"];
+type FactoryWorkTypeHandlingBehavior =
+  FactorySchemas["WorkTypeHandlingBehavior"];
 const FACTORY_KEYS = new Set([
   "factoryDirectory",
   "guards",
@@ -47,12 +50,16 @@ const FACTORY_KEYS = new Set([
   "workTypes",
   "workstations",
 ]);
-const FACTORY_GUARD_KEYS = new Set(["model", "modelProvider", "refreshWindow", "type"]);
+const FACTORY_GUARD_KEYS = new Set([
+  "model",
+  "modelProvider",
+  "refreshWindow",
+  "type",
+]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set(["handlingBehavior", "name", "states"]);
-const WORK_TYPE_HANDLING_BEHAVIOR_VALUES = new Set<FactoryWorkTypeHandlingBehavior>([
-  "DEFAULT",
-]);
+const WORK_TYPE_HANDLING_BEHAVIOR_VALUES =
+  new Set<FactoryWorkTypeHandlingBehavior>(["DEFAULT"]);
 const WORK_STATE_KEYS = new Set(["name", "type"]);
 const RESOURCE_KEYS = new Set(["capacity", "name"]);
 const WORKER_KEYS = new Set([
@@ -142,23 +149,18 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
   "MODEL_WORKER",
   "SCRIPT_WORKER",
 ]);
-const WORKER_MODEL_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["modelProvider"]>>([
-  "CLAUDE",
-  "CODEX",
-  "CURSOR",
-  "GEMINI",
-  "KIRO",
-  "OPENCODE",
-]);
-const WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["executorProvider"]>>([
-  "SCRIPT_WRAP",
-]);
+const WORKER_MODEL_PROVIDER_VALUES = new Set<
+  NonNullable<FactoryWorker["modelProvider"]>
+>(["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"]);
+const WORKER_PROVIDER_VALUES = new Set<
+  NonNullable<FactoryWorker["executorProvider"]>
+>(["SCRIPT_WRAP"]);
 const WORKER_MODEL_LOCALITY_VALUES = new Set<
   NonNullable<FactoryWorker["modelLocality"]>
 >(["LOCAL", "CLOUD"]);
-const HOSTED_WORKER_PROVIDER_VALUES = new Set<NonNullable<FactoryWorker["provider"]>>([
-  "LINEAR",
-]);
+const HOSTED_WORKER_PROVIDER_VALUES = new Set<
+  NonNullable<FactoryWorker["provider"]>
+>(["LINEAR"]);
 const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
   "codex",
   "gemini",
@@ -168,17 +170,10 @@ const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
 ]);
 const WORKSTATION_BEHAVIOR_VALUES = new Set<
   NonNullable<FactoryWorkstation["behavior"]>
->([
-  "CRON",
-  "POLLER",
-  "REPEATER",
-  "STANDARD",
-]);
-const WORKSTATION_TYPE_VALUES = new Set<NonNullable<FactoryWorkstation["type"]>>([
-  "CLASSIFIER_WORKSTATION",
-  "LOGICAL_MOVE",
-  "MODEL_WORKSTATION",
-]);
+>(["CRON", "POLLER", "REPEATER", "STANDARD"]);
+const WORKSTATION_TYPE_VALUES = new Set<
+  NonNullable<FactoryWorkstation["type"]>
+>(["CLASSIFIER_WORKSTATION", "LOGICAL_MOVE", "MODEL_WORKSTATION"]);
 const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
   "INFERENCE_THROTTLE_GUARD",
 ]);
@@ -201,11 +196,15 @@ export class FactoryDefinitionAPIError extends Error {
   }
 }
 
-export function normalizeFactoryDefinition(factoryPayload: unknown): CanonicalFactoryDefinition {
+export function normalizeFactoryDefinition(
+  factoryPayload: unknown,
+): CanonicalFactoryDefinition {
   return decodeFactoryDefinition(asRecord(factoryPayload), "factory");
 }
 
-export function isCanonicalFactoryDefinition(value: unknown): value is CanonicalFactoryDefinition {
+export function isCanonicalFactoryDefinition(
+  value: unknown,
+): value is CanonicalFactoryDefinition {
   try {
     normalizeFactoryDefinition(value);
     return true;
@@ -235,15 +234,30 @@ function decodeFactoryDefinition(
   const factoryDirectory = readOptionalString(value, "factoryDirectory", path);
   const sourceDirectory = readOptionalString(value, "sourceDirectory", path);
   const metadata = readOptionalStringMap(value, "metadata", path);
-  const inputTypes = readOptionalArray(value, "inputTypes", path, decodeInputType);
+  const inputTypes = readOptionalArray(
+    value,
+    "inputTypes",
+    path,
+    decodeInputType,
+  );
   const guards = readOptionalArray(value, "guards", path, decodeFactoryGuard);
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
   const runner = readOptionalEnum(value, "runner", path, RUNNER_ID_VALUES);
-  const supportingFiles = readOptionalObject(value, "supportingFiles", path, expectObject);
+  const supportingFiles = readOptionalObject(
+    value,
+    "supportingFiles",
+    path,
+    expectObject,
+  );
   const version = readOptionalFactoryVersion(value, "version", path);
   const workers = readOptionalArray(value, "workers", path, decodeWorker);
-  const workstations = readOptionalArray(value, "workstations", path, decodeWorkstation);
+  const workstations = readOptionalArray(
+    value,
+    "workstations",
+    path,
+    decodeWorkstation,
+  );
 
   if (id !== undefined) {
     factory.id = id;
@@ -255,7 +269,8 @@ function decodeFactoryDefinition(
     factory.sourceDirectory = sourceDirectory;
   }
   if (supportingFiles !== undefined) {
-    factory.supportingFiles = supportingFiles as CanonicalFactoryDefinition["supportingFiles"];
+    factory.supportingFiles =
+      supportingFiles as CanonicalFactoryDefinition["supportingFiles"];
   }
   if (version !== undefined) {
     factory.version = version;
@@ -347,14 +362,24 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   };
   const type = readOptionalEnum(record, "type", path, WORKER_TYPE_VALUES);
   const model = readOptionalString(record, "model", path);
-  const modelProvider = readOptionalEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES);
+  const modelProvider = readOptionalEnum(
+    record,
+    "modelProvider",
+    path,
+    WORKER_MODEL_PROVIDER_VALUES,
+  );
   const modelLocality = readOptionalEnum(
     record,
     "modelLocality",
     path,
     WORKER_MODEL_LOCALITY_VALUES,
   );
-  const provider = readOptionalEnum(record, "provider", path, HOSTED_WORKER_PROVIDER_VALUES);
+  const provider = readOptionalEnum(
+    record,
+    "provider",
+    path,
+    HOSTED_WORKER_PROVIDER_VALUES,
+  );
   const executorProvider = readOptionalEnum(
     record,
     "executorProvider",
@@ -363,13 +388,27 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   );
   const command = readOptionalString(record, "command", path);
   const args = readOptionalStringArray(record, "args", path);
-  const resources = readOptionalArray(record, "resources", path, decodeResourceRequirement);
+  const resources = readOptionalArray(
+    record,
+    "resources",
+    path,
+    decodeResourceRequirement,
+  );
   const timeout = readOptionalString(record, "timeout", path);
   const stopToken = readOptionalString(record, "stopToken", path);
   const skipPermissions = readOptionalBoolean(record, "skipPermissions", path);
-  const openCodeAgent = readOptionalNonEmptyString(record, "openCodeAgent", path);
+  const openCodeAgent = readOptionalNonEmptyString(
+    record,
+    "openCodeAgent",
+    path,
+  );
   const auth = readOptionalObject(record, "auth", path, decodeHostedWorkerAuth);
-  const linear = readOptionalObject(record, "linear", path, decodeHostedLinearWorkerConfig);
+  const linear = readOptionalObject(
+    record,
+    "linear",
+    path,
+    decodeHostedLinearWorkerConfig,
+  );
   const body = readOptionalString(record, "body", path);
 
   if (type !== undefined) {
@@ -424,7 +463,10 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   return worker;
 }
 
-function decodeHostedWorkerAuth(value: unknown, path: string): FactoryHostedWorkerAuth {
+function decodeHostedWorkerAuth(
+  value: unknown,
+  path: string,
+): FactoryHostedWorkerAuth {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, HOSTED_WORKER_AUTH_KEYS, path);
 
@@ -447,8 +489,18 @@ function decodeHostedLinearWorkerConfig(
   const pollInterval = readOptionalString(record, "pollInterval", path);
   const teamIds = readOptionalStringArray(record, "teamIds", path);
   const stateIds = readOptionalStringArray(record, "stateIds", path);
-  const mapping = readOptionalObject(record, "mapping", path, decodeHostedLinearWorkerMapping);
-  const claim = readOptionalObject(record, "claim", path, decodeHostedLinearWorkerClaim);
+  const mapping = readOptionalObject(
+    record,
+    "mapping",
+    path,
+    decodeHostedLinearWorkerMapping,
+  );
+  const claim = readOptionalObject(
+    record,
+    "claim",
+    path,
+    decodeHostedLinearWorkerClaim,
+  );
 
   if (pollInterval !== undefined) {
     config.pollInterval = pollInterval;
@@ -512,32 +564,80 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
     worker: readRequiredString(record, "worker", path),
   };
   const id = readOptionalString(record, "id", path);
-  const behavior = readOptionalEnum(record, "behavior", path, WORKSTATION_BEHAVIOR_VALUES);
+  const behavior = readOptionalEnum(
+    record,
+    "behavior",
+    path,
+    WORKSTATION_BEHAVIOR_VALUES,
+  );
   const type = readOptionalEnum(record, "type", path, WORKSTATION_TYPE_VALUES);
   const promptFile = readOptionalString(record, "promptFile", path);
   const outputSchema = readOptionalString(record, "outputSchema", path);
-  const limits = readOptionalObject(record, "limits", path, decodeWorkstationLimits);
+  const limits = readOptionalObject(
+    record,
+    "limits",
+    path,
+    decodeWorkstationLimits,
+  );
   const body = readOptionalString(record, "body", path);
   const cron = readOptionalObject(record, "cron", path, decodeWorkstationCron);
-  const outputs = readOptionalArray(record, "outputs", path, decodeWorkstationIO);
+  const outputs = readOptionalArray(
+    record,
+    "outputs",
+    path,
+    decodeWorkstationIO,
+  );
   const classificationRoutes = readOptionalArray(
     record,
     "classificationRoutes",
     path,
     decodeClassificationRoute,
   );
-  const onContinue = readOptionalArray(record, "onContinue", path, decodeWorkstationIO);
-  const onRejection = readOptionalArray(record, "onRejection", path, decodeWorkstationIO);
-  const onFailure = readOptionalArray(record, "onFailure", path, decodeWorkstationIO);
-  const resources = readOptionalArray(record, "resources", path, decodeResourceRequirement);
-  const copyReferencedScripts = readOptionalBoolean(record, "copyReferencedScripts", path);
-  const guards = readOptionalArray(record, "guards", path, decodeWorkstationGuard);
+  const onContinue = readOptionalArray(
+    record,
+    "onContinue",
+    path,
+    decodeWorkstationIO,
+  );
+  const onRejection = readOptionalArray(
+    record,
+    "onRejection",
+    path,
+    decodeWorkstationIO,
+  );
+  const onFailure = readOptionalArray(
+    record,
+    "onFailure",
+    path,
+    decodeWorkstationIO,
+  );
+  const resources = readOptionalArray(
+    record,
+    "resources",
+    path,
+    decodeResourceRequirement,
+  );
+  const copyReferencedScripts = readOptionalBoolean(
+    record,
+    "copyReferencedScripts",
+    path,
+  );
+  const guards = readOptionalArray(
+    record,
+    "guards",
+    path,
+    decodeWorkstationGuard,
+  );
   const stopWords = readOptionalStringArray(record, "stopWords", path);
   const workingDirectory = readOptionalString(record, "workingDirectory", path);
   const worktree = readOptionalString(record, "worktree", path);
   const env = readOptionalStringMap(record, "env", path);
   const runner = readOptionalEnum(record, "runner", path, RUNNER_ID_VALUES);
-  const openCodeAgent = readOptionalNonEmptyString(record, "openCodeAgent", path);
+  const openCodeAgent = readOptionalNonEmptyString(
+    record,
+    "openCodeAgent",
+    path,
+  );
 
   if (id !== undefined) {
     workstation.id = id;
@@ -609,7 +709,10 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   return workstation;
 }
 
-function decodeClassificationRoute(value: unknown, path: string): FactoryClassificationRoute {
+function decodeClassificationRoute(
+  value: unknown,
+  path: string,
+): FactoryClassificationRoute {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, CLASSIFICATION_ROUTE_KEYS, path);
 
@@ -619,7 +722,10 @@ function decodeClassificationRoute(value: unknown, path: string): FactoryClassif
   };
 }
 
-function decodeWorkstationIO(value: unknown, path: string): FactoryWorkstationIO {
+function decodeWorkstationIO(
+  value: unknown,
+  path: string,
+): FactoryWorkstationIO {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, WORKSTATION_IO_KEYS, path);
 
@@ -639,8 +745,18 @@ function decodeFactoryGuard(value: unknown, path: string): FactoryRootGuard {
   rejectUnknownKeys(record, FACTORY_GUARD_KEYS, path);
 
   const guard: FactoryRootGuard = {
-    type: readRequiredEnum(record, "type", path, FACTORY_ROOT_GUARD_TYPE_VALUES),
-    modelProvider: readRequiredEnum(record, "modelProvider", path, WORKER_MODEL_PROVIDER_VALUES),
+    type: readRequiredEnum(
+      record,
+      "type",
+      path,
+      FACTORY_ROOT_GUARD_TYPE_VALUES,
+    ),
+    modelProvider: readRequiredEnum(
+      record,
+      "modelProvider",
+      path,
+      WORKER_MODEL_PROVIDER_VALUES,
+    ),
     refreshWindow: readRequiredString(record, "refreshWindow", path),
   };
   const model = readOptionalString(record, "model", path);
@@ -710,7 +826,10 @@ function readOptionalGuardMatchConfig(
   };
 }
 
-function decodeWorkstationLimits(value: unknown, path: string): FactoryWorkstationLimits {
+function decodeWorkstationLimits(
+  value: unknown,
+  path: string,
+): FactoryWorkstationLimits {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, WORKSTATION_LIMITS_KEYS, path);
 
@@ -726,13 +845,17 @@ function decodeWorkstationLimits(value: unknown, path: string): FactoryWorkstati
   return limits;
 }
 
-function decodeWorkstationCron(value: unknown, path: string): FactoryWorkstationCron {
+function decodeWorkstationCron(
+  value: unknown,
+  path: string,
+): FactoryWorkstationCron {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, WORKSTATION_CRON_KEYS, path);
 
   const cron: FactoryWorkstationCron = {
     schedule: readRequiredString(record, "schedule", path),
-    triggerAtStart: readOptionalBoolean(record, "triggerAtStart", path) ?? false,
+    triggerAtStart:
+      readOptionalBoolean(record, "triggerAtStart", path) ?? false,
   };
   const jitter = readOptionalString(record, "jitter", path);
   const expiryWindow = readOptionalString(record, "expiryWindow", path);
@@ -745,7 +868,10 @@ function decodeWorkstationCron(value: unknown, path: string): FactoryWorkstation
   return cron;
 }
 
-function decodeResourceRequirement(value: unknown, path: string): FactoryResourceRequirement {
+function decodeResourceRequirement(
+  value: unknown,
+  path: string,
+): FactoryResourceRequirement {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, RESOURCE_REQUIREMENT_KEYS, path);
 
@@ -821,12 +947,18 @@ function readOptionalNonEmptyString(
     return undefined;
   }
   if (item.trim() === "") {
-    throw new FactoryDefinitionAPIError(`${path}.${key} must be a non-empty string.`);
+    throw new FactoryDefinitionAPIError(
+      `${path}.${key} must be a non-empty string.`,
+    );
   }
   return item;
 }
 
-function readRequiredString(value: Record<string, unknown>, key: string, path: string): string {
+function readRequiredString(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): string {
   const item = readOptionalString(value, key, path);
   if (item === undefined) {
     throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
@@ -864,7 +996,11 @@ function readOptionalInteger(
   return item;
 }
 
-function readRequiredInteger(value: Record<string, unknown>, key: string, path: string): number {
+function readRequiredInteger(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): number {
   const item = readOptionalInteger(value, key, path);
   if (item === undefined) {
     throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
@@ -909,11 +1045,15 @@ function readOptionalStringArray(
     return undefined;
   }
   if (!Array.isArray(item)) {
-    throw new FactoryDefinitionAPIError(`${path}.${key} must be an array of strings.`);
+    throw new FactoryDefinitionAPIError(
+      `${path}.${key} must be an array of strings.`,
+    );
   }
   return item.map((entry, index) => {
     if (typeof entry !== "string") {
-      throw new FactoryDefinitionAPIError(`${path}.${key}[${index}] must be a string.`);
+      throw new FactoryDefinitionAPIError(
+        `${path}.${key}[${index}] must be a string.`,
+      );
     }
     return entry;
   });
@@ -933,7 +1073,9 @@ function readOptionalStringMap(
   const stringMap: Record<string, string> = {};
   for (const [mapKey, mapValue] of Object.entries(record)) {
     if (typeof mapValue !== "string") {
-      throw new FactoryDefinitionAPIError(`${path}.${key}.${mapKey} must be a string.`);
+      throw new FactoryDefinitionAPIError(
+        `${path}.${key}.${mapKey} must be a string.`,
+      );
     }
     stringMap[mapKey] = mapValue;
   }
@@ -976,7 +1118,9 @@ function readOptionalFactoryVersion(
     );
   }
   if (typeof physical !== "string") {
-    throw new FactoryDefinitionAPIError(`${path}.${key}.physical must be a string.`);
+    throw new FactoryDefinitionAPIError(
+      `${path}.${key}.physical must be a string.`,
+    );
   }
   return {
     logical: String(logical),
@@ -984,7 +1128,9 @@ function readOptionalFactoryVersion(
   };
 }
 
-function isFactoryVersionLogicalValue(value: unknown): value is number | string {
+function isFactoryVersionLogicalValue(
+  value: unknown,
+): value is number | string {
   if (typeof value === "string") {
     return /^[0-9]+$/.test(value);
   }

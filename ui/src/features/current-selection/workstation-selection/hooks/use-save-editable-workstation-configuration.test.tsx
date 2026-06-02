@@ -590,9 +590,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     initialValues: {
       behavior,
       behaviorOptions:
-        behavior === "CRON"
-          ? ["CRON"]
-          : ["STANDARD", "REPEATER", "POLLER"],
+        behavior === "CRON" ? ["CRON"] : ["STANDARD", "REPEATER", "POLLER"],
       cron,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,

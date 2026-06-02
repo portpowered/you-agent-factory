@@ -3,9 +3,9 @@ import type { Node, NodeProps } from "@xyflow/react";
 import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
-import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { getActivityGraphMessages } from "../messages/activity-graph";
+import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
@@ -47,7 +47,8 @@ export function WorkTypeNodeView({
   const shellMessages = getWorkflowActivityShellMessages(data.locale);
   const name = workTypeName(data.place);
   const label = `work-type:${name}`;
-  const workTypeLabel = activityGraphMessages.graphSemanticIconLabel("work-type");
+  const workTypeLabel =
+    activityGraphMessages.graphSemanticIconLabel("work-type");
   const selectable = data.onSelectWorkType !== undefined;
 
   const content = (

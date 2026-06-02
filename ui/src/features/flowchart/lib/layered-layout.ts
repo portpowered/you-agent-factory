@@ -1,5 +1,9 @@
+import type {
+  ElkExtendedEdge,
+  ElkNode,
+  LayoutOptions,
+} from "elkjs/lib/elk.bundled.js";
 import ELK from "elkjs/lib/elk.bundled.js";
-import type { ElkExtendedEdge, ElkNode, LayoutOptions } from "elkjs/lib/elk.bundled.js";
 
 export interface LayeredGraphLayoutNode<TNodeKind extends string = string> {
   column: number;
@@ -12,7 +16,8 @@ export interface LayeredGraphLayoutNode<TNodeKind extends string = string> {
   y: number;
 }
 
-interface LayeredGraphSeedNode<TNodeKind extends string = string> extends ElkNode {
+interface LayeredGraphSeedNode<TNodeKind extends string = string>
+  extends ElkNode {
   height: number;
   id: string;
   nodeId: string;
@@ -100,8 +105,12 @@ export async function buildLayeredGraphLayout<
       y: (node.y ?? 0) - minY + PADDING_Y,
     }))
     .sort((left, right) => left.column - right.column || left.row - right.row);
-  const rightmostX = Math.max(...positionedNodes.map((node) => node.x + node.width));
-  const bottomY = Math.max(...positionedNodes.map((node) => node.y + node.height));
+  const rightmostX = Math.max(
+    ...positionedNodes.map((node) => node.x + node.width),
+  );
+  const bottomY = Math.max(
+    ...positionedNodes.map((node) => node.y + node.height),
+  );
 
   return {
     edges: ((layoutedGraph.edges ?? []) as TEdge[]).map((edge) => ({

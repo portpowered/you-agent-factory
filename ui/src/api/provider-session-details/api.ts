@@ -174,14 +174,18 @@ function isProviderSessionDetailResponse(
   );
 }
 
-function normalizeProviderSessionID(value: string | null | undefined): string | null {
+function normalizeProviderSessionID(
+  value: string | null | undefined,
+): string | null {
   const trimmed = value?.trim();
   return trimmed && LOADABLE_PROVIDER_SESSION_ID_PATTERN.test(trimmed)
     ? trimmed
     : null;
 }
 
-function normalizeProviderSessionPart(value: string | null | undefined): string | null {
+function normalizeProviderSessionPart(
+  value: string | null | undefined,
+): string | null {
   const trimmed = value?.trim().toLowerCase();
   return trimmed && trimmed.length > 0 ? trimmed : null;
 }

@@ -52,9 +52,7 @@ describe("getHeaderControlsMessages", () => {
     "ja",
     "ko",
     "zh-CN",
-  ] as const)(
-    "keeps compact tick-status templates and stream labels available for %s",
-    (locale) => {
+  ] as const)("keeps compact tick-status templates and stream labels available for %s", (locale) => {
     const messages = getHeaderControlsMessages(locale);
 
     expect(messages.currentTickStatusTemplate).toContain(
@@ -67,13 +65,16 @@ describe("getHeaderControlsMessages", () => {
     expect(messages.streamStatusLiveLabel).toBeTruthy();
     expect(messages.streamStatusConnectingLabel).toBeTruthy();
     expect(messages.streamStatusOfflineLabel).toBeTruthy();
-    expect(messages.pauseSessionStreamLabelTemplate).toContain("{{sessionLabel}}");
-    expect(messages.resumeSessionStreamLabelTemplate).toContain("{{sessionLabel}}");
+    expect(messages.pauseSessionStreamLabelTemplate).toContain(
+      "{{sessionLabel}}",
+    );
+    expect(messages.resumeSessionStreamLabelTemplate).toContain(
+      "{{sessionLabel}}",
+    );
     expect(messages.returnToCurrentTickLabel).toBeTruthy();
     expect(messages.waitingForMoreTicks).toBeTruthy();
     expect(messages.globalHeaderActionsLabel).toBeTruthy();
     expect(messages.languageLabel).toBeTruthy();
     expect(messages.languageMenuButtonLabel).toBeTruthy();
-    },
-  );
+  });
 });

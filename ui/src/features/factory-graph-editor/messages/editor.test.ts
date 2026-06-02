@@ -164,7 +164,9 @@ describe("getFactoryGraphEditorMessages", () => {
     expect(messages.kindLabel("workstation")).toBe("工作站");
     expect(messages.kindLabel("work-type")).toBe("工作类型");
     expect(messages.kindLabel("work-state")).toBe("工作状态");
-    expect(messages.toolbarOpenHideShowMenuLabel).toBe("打开隐藏或显示节点类别菜单");
+    expect(messages.toolbarOpenHideShowMenuLabel).toBe(
+      "打开隐藏或显示节点类别菜单",
+    );
     expect(messages.nodeClassVisibilityDescription("work-state")).toBe(
       "在图上显示工作状态节点。",
     );

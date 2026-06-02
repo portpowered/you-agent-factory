@@ -1,16 +1,9 @@
-import type { FactoryWorkItem } from "../../../../api/events";
 import type {
   DashboardInferenceAttempt,
   DashboardRuntimeWorkstationRequest,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard";
-import {
-  type TimelineScriptRequest,
-  type TimelineScriptResponse,
-  type TimelineWorkstationRequest,
-  type TimelineWorkstationRequestCounts,
-  toDashboardRuntimeWorkstationRequest,
-} from "./workstationRequestModel";
+import type { FactoryWorkItem } from "../../../../api/events";
 import {
   attemptHasError,
   attemptHasResponse,
@@ -22,9 +15,7 @@ import {
   scriptResponseErrored,
   workstationScriptRequestForProjection,
 } from "./projectWorkstationRequestHelpers";
-import { consumedWorkItemRefsForDispatch } from "./workItemRef";
 import { uniqueSorted } from "./shared";
-import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
 import type {
   TimelineWorkRequestPayload,
   WorldCompletion,
@@ -32,6 +23,15 @@ import type {
   WorldScriptRequest,
   WorldScriptResponse,
 } from "./types";
+import { consumedWorkItemRefsForDispatch } from "./workItemRef";
+import type { WorkPayloadLineageProjection } from "./workPayloadLineage";
+import {
+  type TimelineScriptRequest,
+  type TimelineScriptResponse,
+  type TimelineWorkstationRequest,
+  type TimelineWorkstationRequestCounts,
+  toDashboardRuntimeWorkstationRequest,
+} from "./workstationRequestModel";
 
 export function projectRuntimeWorkstationRequests({
   activeDispatches,
@@ -43,11 +43,20 @@ export function projectRuntimeWorkstationRequests({
   workItemsByID,
 }: {
   activeDispatches: WorldDispatch[];
-  attemptsByDispatchID: Record<string, Record<string, DashboardInferenceAttempt>>;
+  attemptsByDispatchID: Record<
+    string,
+    Record<string, DashboardInferenceAttempt>
+  >;
   completedDispatches: WorldCompletion[];
   payloadLineage: WorkPayloadLineageProjection;
-  scriptRequestsByDispatchID: Record<string, Record<string, WorldScriptRequest>>;
-  scriptResponsesByDispatchID: Record<string, Record<string, WorldScriptResponse>>;
+  scriptRequestsByDispatchID: Record<
+    string,
+    Record<string, WorldScriptRequest>
+  >;
+  scriptResponsesByDispatchID: Record<
+    string,
+    Record<string, WorldScriptResponse>
+  >;
   workItemsByID: Record<string, FactoryWorkItem>;
 }): Record<string, DashboardRuntimeWorkstationRequest> | undefined {
   const requests: Record<string, TimelineWorkstationRequest> = {};
@@ -119,10 +128,22 @@ export function projectWorkstationDispatchRequestsByID({
 }: {
   activeDispatches: Record<string, WorldDispatch>;
   completedDispatches: WorldCompletion[];
-  inferenceAttemptsByDispatchID: Record<string, Record<string, DashboardInferenceAttempt>>;
-  runtimeRequestsByDispatchID: Record<string, DashboardRuntimeWorkstationRequest>;
-  scriptRequestsByDispatchID: Record<string, Record<string, WorldScriptRequest>>;
-  scriptResponsesByDispatchID: Record<string, Record<string, WorldScriptResponse>>;
+  inferenceAttemptsByDispatchID: Record<
+    string,
+    Record<string, DashboardInferenceAttempt>
+  >;
+  runtimeRequestsByDispatchID: Record<
+    string,
+    DashboardRuntimeWorkstationRequest
+  >;
+  scriptRequestsByDispatchID: Record<
+    string,
+    Record<string, WorldScriptRequest>
+  >;
+  scriptResponsesByDispatchID: Record<
+    string,
+    Record<string, WorldScriptResponse>
+  >;
   workRequestsByID: Record<string, TimelineWorkRequestPayload>;
 }): Record<string, DashboardWorkstationRequest> {
   const requestIDsByWorkID = requestIDsByWorkItemID(workRequestsByID);
@@ -169,7 +190,9 @@ export function projectWorkstationDispatchRequestsByID({
   }
 
   return Object.fromEntries(
-    [...dispatchRequests.entries()].sort(([left], [right]) => left.localeCompare(right)),
+    [...dispatchRequests.entries()].sort(([left], [right]) =>
+      left.localeCompare(right),
+    ),
   );
 }
 
@@ -193,7 +216,9 @@ function workstationRequestFromActiveDispatch(
       consumedTokens: dispatch.consumedTokens,
       currentChainingTraceId: dispatch.currentChainingTraceID,
       inputWorkItems,
-      inputWorkTypeIds: uniqueSorted(inputWorkItems.map((item) => item.work_type_id ?? "")),
+      inputWorkTypeIds: uniqueSorted(
+        inputWorkItems.map((item) => item.work_type_id ?? ""),
+      ),
       previousChainingTraceIds: dispatch.previousChainingTraceIDs
         ? [...dispatch.previousChainingTraceIDs]
         : undefined,
@@ -227,7 +252,9 @@ function workstationRequestFromCompletion(
       consumedTokens: completion.consumedTokens,
       currentChainingTraceId: completion.currentChainingTraceID,
       inputWorkItems,
-      inputWorkTypeIds: uniqueSorted(inputWorkItems.map((item) => item.work_type_id ?? "")),
+      inputWorkTypeIds: uniqueSorted(
+        inputWorkItems.map((item) => item.work_type_id ?? ""),
+      ),
       previousChainingTraceIds: completion.previousChainingTraceIDs
         ? [...completion.previousChainingTraceIDs]
         : undefined,

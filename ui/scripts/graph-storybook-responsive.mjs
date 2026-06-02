@@ -28,16 +28,13 @@ function storyUrl(storyId) {
 }
 
 async function readComputedStyle(locator, keys) {
-  return locator.evaluate(
-    (element, selectedKeys) => {
-      const computedStyle = window.getComputedStyle(element);
+  return locator.evaluate((element, selectedKeys) => {
+    const computedStyle = window.getComputedStyle(element);
 
-      return Object.fromEntries(
-        selectedKeys.map((key) => [key, computedStyle[key]]),
-      );
-    },
-    keys,
-  );
+    return Object.fromEntries(
+      selectedKeys.map((key) => [key, computedStyle[key]]),
+    );
+  }, keys);
 }
 
 export async function expectMatchingDashboardGraphStyles(
@@ -86,7 +83,9 @@ export async function verifyTraceFactoryGraphVisualConsistency({
   await expectNoHorizontalOverflow(page, `Factory graph at ${viewport.label}`);
 
   await page.goto(
-    storyUrl("agent-factory-dashboard-trace-graph-surfaces--visual-consistency"),
+    storyUrl(
+      "agent-factory-dashboard-trace-graph-surfaces--visual-consistency",
+    ),
     { waitUntil: "domcontentloaded" },
   );
   await waitForStoryRender(page);

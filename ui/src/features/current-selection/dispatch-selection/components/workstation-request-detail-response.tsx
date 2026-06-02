@@ -1,7 +1,6 @@
-import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
+import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
@@ -13,6 +12,7 @@ import {
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
 } from "../../base/components/detail-card-shared";
+import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
 import type { WorkstationRequestDetailView } from "./workstation-request-detail-view";
 
 export function ResponseDetailsSection({
@@ -29,7 +29,9 @@ export function ResponseDetailsSection({
       aria-label={messages.responseDetailsTitle}
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.responseDetailsTitle}</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.responseDetailsTitle}
+      </h4>
       {view.isScriptBackedRequest ? (
         <ScriptResponseDetails request={request} view={view} />
       ) : (
@@ -55,7 +57,9 @@ export function ErrorDetailsSection({
       aria-label={messages.errorDetailsTitle}
       className={RUNTIME_DETAILS_SECTION_CLASS}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{messages.errorDetailsTitle}</h4>
+      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        {messages.errorDetailsTitle}
+      </h4>
       <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
         <div>
           <dt>{messages.failureReasonLabel}</dt>
@@ -66,7 +70,8 @@ export function ErrorDetailsSection({
         <div>
           <dt>{messages.failureMessageLabel}</dt>
           <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.normalizedFailureMessage ?? messages.failureMessageUnavailable}
+            {view.normalizedFailureMessage ??
+              messages.failureMessageUnavailable}
           </dd>
         </div>
       </dl>

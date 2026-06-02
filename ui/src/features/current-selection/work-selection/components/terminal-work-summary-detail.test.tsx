@@ -85,9 +85,7 @@ describe("TerminalWorkSummaryCard", () => {
     expect(screen.getByText("失败原因")).toBeTruthy();
     expect(screen.getByText("暂无失败原因")).toBeTruthy();
     expect(screen.getByText("失败消息")).toBeTruthy();
-    expect(
-      screen.getByText("这个失败的工作项暂时没有失败详情。"),
-    ).toBeTruthy();
+    expect(screen.getByText("这个失败的工作项暂时没有失败详情。")).toBeTruthy();
   });
 
   it("renders execution details for selected terminal work when diagnostics are retained", () => {

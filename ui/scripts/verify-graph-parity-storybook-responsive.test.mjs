@@ -73,7 +73,9 @@ describe("verifyEditorGraphParity", () => {
       "Editor workstation node",
     );
     expect(workflowPreset.click).toHaveBeenCalledTimes(1);
-    expect(reviewWorkstationNode.waitFor).toHaveBeenCalledWith({ state: "visible" });
+    expect(reviewWorkstationNode.waitFor).toHaveBeenCalledWith({
+      state: "visible",
+    });
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Editor graph parity at desktop",

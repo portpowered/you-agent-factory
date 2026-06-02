@@ -74,11 +74,15 @@ describe("writeFactoryExportPng", () => {
     const exportedBytes = await blobToUint8Array(result.blob);
     const exportedChunks = parsePngChunks(exportedBytes);
     const metadataChunk = exportedChunks.find((chunk) => chunk.type === "iTXt");
-    const sourceIDAT = parsePngChunks(sourcePng).find((chunk) => chunk.type === "IDAT");
+    const sourceIDAT = parsePngChunks(sourcePng).find(
+      (chunk) => chunk.type === "IDAT",
+    );
     const exportedIDAT = exportedChunks.find((chunk) => chunk.type === "IDAT");
 
     expect(metadataChunk).toBeDefined();
-    expect(readInternationalTextChunk(metadataChunk?.data ?? new Uint8Array())).toEqual({
+    expect(
+      readInternationalTextChunk(metadataChunk?.data ?? new Uint8Array()),
+    ).toEqual({
       keyword: PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
       text: JSON.stringify({
         ...canonicalFactory,
@@ -211,7 +215,9 @@ describe("writeFactoryExportPng", () => {
     });
 
     if (!result.ok) {
-      throw result.error.cause instanceof Error ? result.error.cause : new Error(result.error.message);
+      throw result.error.cause instanceof Error
+        ? result.error.cause
+        : new Error(result.error.message);
     }
     expect(result.ok).toBe(true);
     expect(drawImage).toHaveBeenCalledTimes(1);
@@ -254,7 +260,9 @@ describe("writeFactoryExportPng", () => {
         }
       },
     );
-    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
       if (tagName === "canvas") {
         return {
           getContext,
@@ -273,7 +281,9 @@ describe("writeFactoryExportPng", () => {
     });
 
     if (!result.ok) {
-      throw result.error.cause instanceof Error ? result.error.cause : new Error(result.error.message);
+      throw result.error.cause instanceof Error
+        ? result.error.cause
+        : new Error(result.error.message);
     }
     expect(result.ok).toBe(true);
     expect(createObjectURL).toHaveBeenCalledTimes(1);
@@ -413,7 +423,9 @@ describe("writeFactoryExportPng", () => {
         }
       },
     );
-    vi.spyOn(document, "createElement").mockImplementation(((tagName: string) => {
+    vi.spyOn(document, "createElement").mockImplementation(((
+      tagName: string,
+    ) => {
       if (tagName === "canvas") {
         return {
           getContext: () => ({
@@ -467,7 +479,8 @@ describe("writeFactoryExportPng", () => {
         name: "Factory Export Updated",
       },
       image: firstExport.blob,
-      rasterizeImageToPngBytes: async () => await blobToUint8Array(firstExport.blob),
+      rasterizeImageToPngBytes: async () =>
+        await blobToUint8Array(firstExport.blob),
     });
 
     expect(secondExport.ok).toBe(true);
@@ -475,12 +488,14 @@ describe("writeFactoryExportPng", () => {
       throw new Error("expected replacement export to succeed");
     }
 
-    const metadataChunks = parsePngChunks(await blobToUint8Array(secondExport.blob)).filter(
-      (chunk) => chunk.type === "iTXt",
-    );
+    const metadataChunks = parsePngChunks(
+      await blobToUint8Array(secondExport.blob),
+    ).filter((chunk) => chunk.type === "iTXt");
 
     expect(metadataChunks).toHaveLength(1);
-    expect(readInternationalTextChunk(metadataChunks[0]?.data ?? new Uint8Array())).toEqual({
+    expect(
+      readInternationalTextChunk(metadataChunks[0]?.data ?? new Uint8Array()),
+    ).toEqual({
       keyword: PORT_OS_FACTORY_PNG_METADATA_KEYWORD,
       text: JSON.stringify({
         ...canonicalFactory,
@@ -523,11 +538,17 @@ async function blobToUint8Array(blob: Blob): Promise<Uint8Array> {
 function parsePngChunks(pngBytes: Uint8Array): ParsedChunk[] {
   const chunks: ParsedChunk[] = [];
   let offset = 8;
-  const view = new DataView(pngBytes.buffer, pngBytes.byteOffset, pngBytes.byteLength);
+  const view = new DataView(
+    pngBytes.buffer,
+    pngBytes.byteOffset,
+    pngBytes.byteLength,
+  );
 
   while (offset < pngBytes.byteLength) {
     const length = view.getUint32(offset);
-    const type = String.fromCharCode(...pngBytes.subarray(offset + 4, offset + 8));
+    const type = String.fromCharCode(
+      ...pngBytes.subarray(offset + 4, offset + 8),
+    );
     const dataStart = offset + 8;
     const dataEnd = dataStart + length;
 
@@ -547,7 +568,10 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
-function readInternationalTextChunk(data: Uint8Array): { keyword: string; text: string } {
+function readInternationalTextChunk(data: Uint8Array): {
+  keyword: string;
+  text: string;
+} {
   const keywordEnd = data.indexOf(0);
   const keyword = String.fromCharCode(...data.subarray(0, keywordEnd));
   const textStart = keywordEnd + 5;

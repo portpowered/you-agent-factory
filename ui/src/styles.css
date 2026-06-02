@@ -31,29 +31,68 @@
   --color-af-foundation-worker-ink: #dfccff;
   --color-af-background: var(--color-af-foundation-background);
   --color-af-surface: var(--color-af-foundation-surface);
-  --color-af-surface-subtle: rgb(from var(--color-af-foundation-overlay) r g b / 0.04);
-  --color-af-surface-subtle-muted: rgb(from var(--color-af-foundation-overlay) r g b / 0.028);
-  --color-af-surface-raised: rgb(from var(--color-af-foundation-surface) r g b / 0.94);
+  --color-af-surface-subtle: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.04
+  );
+  --color-af-surface-subtle-muted: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.028
+  );
+  --color-af-surface-raised: rgb(
+    from var(--color-af-foundation-surface) r g b /
+    0.94
+  );
   --color-af-border: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
-  --color-af-border-strong: rgb(from var(--color-af-foundation-overlay) r g b / 0.18);
+  --color-af-border-strong: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.18
+  );
   --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
-  --color-af-overlay-subtle: rgb(from var(--color-af-foundation-overlay) r g b / 0.04);
-  --color-af-overlay-focus: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
-  --color-af-overlay-strong: rgb(from var(--color-af-foundation-background) r g b / 0.78);
-  --color-af-focus-ring: rgb(from var(--color-af-foundation-accent) r g b / 0.25);
+  --color-af-overlay-subtle: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.04
+  );
+  --color-af-overlay-focus: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.1
+  );
+  --color-af-overlay-strong: rgb(
+    from var(--color-af-foundation-background) r g b /
+    0.78
+  );
+  --color-af-focus-ring: rgb(
+    from var(--color-af-foundation-accent) r g b /
+    0.25
+  );
   --color-af-text: var(--color-af-foundation-ink);
   --color-af-text-muted: rgb(from var(--color-af-foundation-ink) r g b / 0.78);
   --color-af-text-subtle: rgb(from var(--color-af-foundation-ink) r g b / 0.58);
-  --color-af-text-disabled: rgb(from var(--color-af-foundation-ink) r g b / 0.42);
+  --color-af-text-disabled: rgb(
+    from var(--color-af-foundation-ink) r g b /
+    0.42
+  );
   --color-af-text-inverse: var(--color-af-foundation-canvas);
   --color-af-accent: var(--color-af-foundation-accent);
   --color-af-accent-hover: var(--color-af-foundation-accent-strong);
-  --color-af-accent-surface: rgb(from var(--color-af-foundation-accent) r g b / 0.18);
-  --color-af-accent-border: rgb(from var(--color-af-foundation-accent) r g b / 0.28);
+  --color-af-accent-surface: rgb(
+    from var(--color-af-foundation-accent) r g b /
+    0.18
+  );
+  --color-af-accent-border: rgb(
+    from var(--color-af-foundation-accent) r g b /
+    0.28
+  );
   --color-af-on-accent: var(--color-af-text-inverse);
   --color-af-success: var(--color-af-foundation-success);
-  --color-af-success-surface: rgb(from var(--color-af-foundation-success) r g b / 0.12);
-  --color-af-success-border: rgb(from var(--color-af-foundation-success) r g b / 0.28);
+  --color-af-success-surface: rgb(
+    from var(--color-af-foundation-success) r g b /
+    0.12
+  );
+  --color-af-success-border: rgb(
+    from var(--color-af-foundation-success) r g b /
+    0.28
+  );
   --color-af-success-text: var(--color-af-foundation-success-ink);
   --color-af-session-live-ping: radial-gradient(
     circle,
@@ -64,24 +103,48 @@
   );
   --color-af-on-success: var(--color-af-text-inverse);
   --color-af-warning: var(--color-af-foundation-warning);
-  --color-af-warning-surface: rgb(from var(--color-af-foundation-warning) r g b / 0.14);
-  --color-af-warning-border: rgb(from var(--color-af-foundation-warning) r g b / 0.3);
+  --color-af-warning-surface: rgb(
+    from var(--color-af-foundation-warning) r g b /
+    0.14
+  );
+  --color-af-warning-border: rgb(
+    from var(--color-af-foundation-warning) r g b /
+    0.3
+  );
   --color-af-warning-text: var(--color-af-foundation-warning-ink);
   --color-af-on-warning: var(--color-af-text-inverse);
   --color-af-danger: var(--color-af-foundation-danger);
   --color-af-danger-hover: var(--color-af-foundation-danger-bright);
-  --color-af-danger-surface: rgb(from var(--color-af-foundation-danger) r g b / 0.18);
-  --color-af-danger-border: rgb(from var(--color-af-foundation-danger) r g b / 0.3);
+  --color-af-danger-surface: rgb(
+    from var(--color-af-foundation-danger) r g b /
+    0.18
+  );
+  --color-af-danger-border: rgb(
+    from var(--color-af-foundation-danger) r g b /
+    0.3
+  );
   --color-af-danger-text: var(--color-af-foundation-danger-ink);
   --color-af-on-danger: var(--color-af-text-inverse);
   --color-af-info: var(--color-af-foundation-info);
-  --color-af-info-surface: rgb(from var(--color-af-foundation-info) r g b / 0.12);
-  --color-af-info-border: rgb(from var(--color-af-foundation-info) r g b / 0.28);
+  --color-af-info-surface: rgb(
+    from var(--color-af-foundation-info) r g b /
+    0.12
+  );
+  --color-af-info-border: rgb(
+    from var(--color-af-foundation-info) r g b /
+    0.28
+  );
   --color-af-info-text: var(--color-af-foundation-info-ink);
   --color-af-on-info: var(--color-af-text-inverse);
   --color-af-worker: var(--color-af-foundation-worker);
-  --color-af-worker-surface: rgb(from var(--color-af-foundation-worker) r g b / 0.13);
-  --color-af-worker-border: rgb(from var(--color-af-foundation-worker) r g b / 0.3);
+  --color-af-worker-surface: rgb(
+    from var(--color-af-foundation-worker) r g b /
+    0.13
+  );
+  --color-af-worker-border: rgb(
+    from var(--color-af-foundation-worker) r g b /
+    0.3
+  );
   --color-af-worker-text: var(--color-af-foundation-worker-ink);
   --color-af-bg: var(--color-af-foundation-background);
   --color-af-bg-start: var(--color-af-foundation-background-start);
@@ -95,7 +158,10 @@
   --color-af-success-ink: var(--color-af-foundation-success-ink);
   --color-af-danger-bright: var(--color-af-foundation-danger-bright);
   --color-af-danger-ink: var(--color-af-foundation-danger-ink);
-  --color-af-chart-grid-line: rgb(from var(--color-af-foundation-overlay) r g b / 0.032);
+  --color-af-chart-grid-line: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.032
+  );
   --color-af-chart-queued: var(--color-af-accent-glow);
   --color-af-chart-in-flight: var(--color-af-info-ink);
   --color-af-chart-completed: var(--color-af-success-ink);
@@ -122,7 +188,8 @@
   --shadow-af-card: 0 12px 28px rgb(from var(--color-af-shadow) r g b / 0.2);
   --shadow-af-panel: 0 18px 48px rgb(from var(--color-af-shadow) r g b / 0.24);
   --shadow-af-info-active: 0 0 0 1px rgb(from var(--color-af-info) r g b / 0.2);
-  --shadow-af-success-chip: 0 0 0 2px rgb(from var(--color-af-success) r g b / 0.18);
+  --shadow-af-success-chip: 0 0 0 2px
+    rgb(from var(--color-af-success) r g b / 0.18);
   --shadow-af-accent-selected:
     0 0 0 1px rgb(from var(--color-af-accent) r g b / 0.28),
     0 0 0 4px rgb(from var(--color-af-accent) r g b / 0.08);
@@ -130,7 +197,8 @@
     0 0 0 1px rgb(from var(--color-af-info) r g b / 0.3),
     0 0 0 4px rgb(from var(--color-af-info) r g b / 0.08);
   --shadow-af-info-chip: 0 0 0 2px rgb(from var(--color-af-info) r g b / 0.12);
-  --shadow-af-accent-chip: 0 0 0 2px rgb(from var(--color-af-accent) r g b / 0.18);
+  --shadow-af-accent-chip: 0 0 0 2px
+    rgb(from var(--color-af-accent) r g b / 0.18);
 }
 
 @layer base {
@@ -204,7 +272,11 @@
   .af-chart-grid-surface {
     background-image:
       linear-gradient(var(--color-af-chart-grid-line) 1px, transparent 1px),
-      linear-gradient(90deg, var(--color-af-chart-grid-line) 1px, transparent 1px);
+      linear-gradient(
+        90deg,
+        var(--color-af-chart-grid-line) 1px,
+        transparent 1px
+      );
     background-size: 48px 32px;
   }
 
@@ -221,14 +293,8 @@
 
   .af-provider-session-sans {
     font-family:
-      "Inter",
-      "Noto Sans",
-      "Noto Sans SC",
-      "Noto Sans TC",
-      "Noto Sans JP",
-      "Noto Sans KR",
-      "Segoe UI",
-      sans-serif;
+      "Inter", "Noto Sans", "Noto Sans SC", "Noto Sans TC", "Noto Sans JP",
+      "Noto Sans KR", "Segoe UI", sans-serif;
   }
 
   :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow {
@@ -241,23 +307,29 @@
     --xy-controls-button-color-hover: var(--color-af-text);
   }
 
-  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame])
+    .react-flow__controls {
     @apply overflow-hidden rounded-lg border border-af-border bg-af-surface-raised shadow-none;
   }
 
-  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame])
+    .react-flow__controls-button {
     @apply border-b border-af-border bg-af-surface-raised text-af-text-muted transition-colors;
   }
 
-  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button:hover {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame])
+    .react-flow__controls-button:hover {
     @apply bg-af-overlay text-af-text;
   }
 
-  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button:disabled {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame])
+    .react-flow__controls-button:disabled {
     @apply text-af-text-disabled;
   }
 
-  :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow__controls-button svg {
+  :is([data-current-activity-flow], [data-dashboard-graph-frame])
+    .react-flow__controls-button
+    svg {
     @apply fill-current;
   }
 
@@ -269,25 +341,37 @@
     @apply fill-af-text-subtle text-xs;
   }
 
-  [data-current-activity-flow] .react-flow__edge.agent-flow-edge--active .react-flow__edge-path {
+  [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--active
+    .react-flow__edge-path {
     animation: agent-flow-dash 1.15s linear infinite;
     filter: drop-shadow(0 0 5px rgb(from var(--color-af-success) r g b / 0.42));
   }
 
-  [data-current-activity-flow] .react-flow__edge.agent-flow-edge--active .react-flow__edge-text {
+  [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--active
+    .react-flow__edge-text {
     @apply fill-af-success-text font-bold;
   }
 
-  [data-current-activity-flow] .react-flow__edge.agent-flow-edge--semantic .react-flow__edge-text {
+  [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--semantic
+    .react-flow__edge-text {
     @apply fill-af-danger-text font-bold;
   }
 
-  [data-current-activity-flow] .react-flow__edge.agent-flow-edge--muted .react-flow__edge-text {
+  [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--muted
+    .react-flow__edge-text {
     @apply fill-af-text-disabled;
   }
 
-  [data-current-activity-flow] .agent-factory-editor-edge:focus-visible .react-flow__edge-path,
-  [data-current-activity-flow] .agent-factory-editor-edge:hover .react-flow__edge-path {
+  [data-current-activity-flow]
+    .agent-factory-editor-edge:focus-visible
+    .react-flow__edge-path,
+  [data-current-activity-flow]
+    .agent-factory-editor-edge:hover
+    .react-flow__edge-path {
     filter: drop-shadow(0 0 4px rgb(from var(--color-af-accent) r g b / 0.2));
   }
 
@@ -299,7 +383,9 @@
   [data-current-activity-flow]
     .agent-factory-editor-edge[data-label-visible="true"]
     .agent-factory-editor-edge-label,
-  [data-current-activity-flow] .react-flow__edge:hover .agent-factory-editor-edge-label,
+  [data-current-activity-flow]
+    .react-flow__edge:hover
+    .agent-factory-editor-edge-label,
   [data-current-activity-flow]
     .react-flow__edge:focus-visible
     .agent-factory-editor-edge-label {

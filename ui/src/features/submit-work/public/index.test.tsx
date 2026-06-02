@@ -2,9 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
-import {
-  resetDashboardSessionStore,
-} from "../../dashboard/state/dashboardSessionStore";
+import { resetDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { SubmitWorkWidget } from "./index";
 
 describe("submit-work public barrel", () => {

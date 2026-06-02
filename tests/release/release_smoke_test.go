@@ -29,11 +29,11 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 			renderedDashboardURL = dashboardURL
 			return releasesmoke.DashboardRenderEvidence{
 				AssetRequestPaths: []string{"/dashboard/ui/assets/index.js"},
-				LiveRequestPaths:  []string{"/events"},
+				LiveRequestPaths:  []string{"/factory-sessions/~default/events"},
 				PageTitle:         "You Agent Factory Dashboard",
 				MetaDescription:   "Standalone live dashboard shell for You Agent Factory.",
-				StreamStatusName:  "You Agent Factory event stream live",
-				VisibleTexts:      []string{"You Agent Factory", "Work totals", "step-one", "step-two"},
+				StreamStatusName:  "/factory-sessions/~default/events",
+				VisibleTexts:      []string{"Work totals", "step-one", "step-two"},
 			}, nil
 		},
 	})
@@ -59,13 +59,13 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 	if result.DashboardRenderEvidence.MetaDescription != "Standalone live dashboard shell for You Agent Factory." {
 		t.Fatalf("meta description = %q, want renamed dashboard description", result.DashboardRenderEvidence.MetaDescription)
 	}
-	if result.DashboardRenderEvidence.StreamStatusName != "You Agent Factory event stream live" {
-		t.Fatalf("stream status name = %q, want live status evidence", result.DashboardRenderEvidence.StreamStatusName)
+	if !strings.HasSuffix(result.DashboardRenderEvidence.StreamStatusName, "/events") {
+		t.Fatalf("stream status evidence = %q, want event stream request path", result.DashboardRenderEvidence.StreamStatusName)
 	}
 	if len(result.DashboardRenderEvidence.AssetRequestPaths) == 0 || len(result.DashboardRenderEvidence.LiveRequestPaths) == 0 {
 		t.Fatalf("dashboard render evidence = %#v, want asset and live request paths", result.DashboardRenderEvidence)
 	}
-	for _, want := range []string{"You Agent Factory", "Work totals", "step-one", "step-two"} {
+	for _, want := range []string{"Work totals", "step-one", "step-two"} {
 		if !containsString(result.DashboardRenderEvidence.VisibleTexts, want) {
 			t.Fatalf("visible texts = %#v, want %q", result.DashboardRenderEvidence.VisibleTexts, want)
 		}

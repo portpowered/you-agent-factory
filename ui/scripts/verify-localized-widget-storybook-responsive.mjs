@@ -47,10 +47,7 @@ export async function verifyLocalizedTraceGrid({
     card.getByText("分派流"),
     "Localized dispatch flow label",
   );
-  await expectVisible(
-    card.getByText("追踪 ID"),
-    "Localized trace id label",
-  );
+  await expectVisible(card.getByText("追踪 ID"), "Localized trace id label");
   await expectVisible(
     card.getByText("工作站"),
     "Localized workstation column label",

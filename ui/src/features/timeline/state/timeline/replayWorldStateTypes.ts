@@ -1,8 +1,8 @@
 import type {
   DispatchRequestPayload,
   DispatchResponsePayload,
-  FactoryEvent,
   FactoryChangePayload,
+  FactoryEvent,
   FactoryStateResponsePayload,
   InferenceRequestPayload,
   InferenceResponsePayload,
@@ -15,16 +15,19 @@ import type {
   WorkStateChangeEventPayload,
 } from "../../../../api/events";
 
-export type InitialStructureRequestEvent = FactoryEvent<InitialStructureRequestPayload>;
+export type InitialStructureRequestEvent =
+  FactoryEvent<InitialStructureRequestPayload>;
 export type FactoryChangeEvent = FactoryEvent<FactoryChangePayload>;
 export type RunRequestEvent = FactoryEvent<RunRequestPayload>;
 export type WorkRequestEvent = FactoryEvent<WorkRequestPayload>;
-export type RelationshipChangeRequestEvent = FactoryEvent<RelationshipChangeRequestPayload>;
+export type RelationshipChangeRequestEvent =
+  FactoryEvent<RelationshipChangeRequestPayload>;
 export type DispatchRequestEvent = FactoryEvent<DispatchRequestPayload>;
 export type InferenceRequestEvent = FactoryEvent<InferenceRequestPayload>;
 export type InferenceResponseEvent = FactoryEvent<InferenceResponsePayload>;
 export type ScriptRequestEvent = FactoryEvent<ScriptRequestPayload>;
 export type ScriptResponseEvent = FactoryEvent<ScriptResponsePayload>;
 export type DispatchResponseEvent = FactoryEvent<DispatchResponsePayload>;
-export type FactoryStateResponseEvent = FactoryEvent<FactoryStateResponsePayload>;
+export type FactoryStateResponseEvent =
+  FactoryEvent<FactoryStateResponsePayload>;
 export type WorkStateChangeEvent = FactoryEvent<WorkStateChangeEventPayload>;

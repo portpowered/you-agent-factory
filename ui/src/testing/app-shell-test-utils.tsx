@@ -71,9 +71,10 @@ const currentFactoryDocumentMock = vi.hoisted(() => ({
 vi.mock(
   "../features/current-factory-definition/hooks/useCurrentFactoryDefinition",
   async (importOriginal) => {
-    const actual = await importOriginal<
-      typeof import("../features/current-factory-definition/hooks/useCurrentFactoryDefinition")
-    >();
+    const actual =
+      await importOriginal<
+        typeof import("../features/current-factory-definition/hooks/useCurrentFactoryDefinition")
+      >();
     currentFactoryDocumentMock.actual = actual.useCurrentFactoryDocument;
 
     return {
@@ -233,27 +234,29 @@ export function renderApp({
 
   const fetchMock: FetchMock = vi
     .fn()
-    .mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = fetchRequestPath(input);
-      const method = (init?.method ?? "GET").toUpperCase();
+    .mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = fetchRequestPath(input);
+        const method = (init?.method ?? "GET").toUpperCase();
 
-      if (path === "/factory-sessions") {
-        return jsonResponse({
-          sessions: factorySessions ?? [defaultFactorySessionSummary],
-        });
-      }
+        if (path === "/factory-sessions") {
+          return jsonResponse({
+            sessions: factorySessions ?? [defaultFactorySessionSummary],
+          });
+        }
 
-      if (
-        method === "GET" &&
-        isSessionFactoryRequest(path, method, sessionID ?? undefined)
-      ) {
-        return mockGetSessionFactory({
-          document: sessionFactoryDocumentFromSnapshot(snapshot),
-        });
-      }
+        if (
+          method === "GET" &&
+          isSessionFactoryRequest(path, method, sessionID ?? undefined)
+        ) {
+          return mockGetSessionFactory({
+            document: sessionFactoryDocumentFromSnapshot(snapshot),
+          });
+        }
 
-      throw new Error(`unexpected fetch for ${path}`);
-    });
+        throw new Error(`unexpected fetch for ${path}`);
+      },
+    );
 
   if (fetchOverride) {
     chainRenderAppFetchMock(fetchMock, fetchOverride);

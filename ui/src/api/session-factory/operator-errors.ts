@@ -9,9 +9,7 @@ export const sessionFactoryOperatorErrorMessages = {
   INVALID_FACTORY_NAME: "The factory name is not valid for this session.",
   STALE_FACTORY_VERSION:
     "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
-} as const satisfies Partial<
-  Record<SessionFactoryAPIErrorCode, string>
->;
+} as const satisfies Partial<Record<SessionFactoryAPIErrorCode, string>>;
 
 export interface ResolveSessionFactoryAPIErrorMessageInput {
   apiMessage?: string;

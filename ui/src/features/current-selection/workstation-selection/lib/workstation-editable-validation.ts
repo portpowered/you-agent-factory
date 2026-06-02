@@ -7,17 +7,25 @@ export interface ValidateEditableWorkstationGuardDraftContext {
 }
 
 export interface WorkstationGuardValidationMessages {
-  editableConfigurationInputGuardMatchInputInvalid: (workType: string) => string;
+  editableConfigurationInputGuardMatchInputInvalid: (
+    workType: string,
+  ) => string;
   editableConfigurationInputGuardMatchInputRequired: string;
   editableConfigurationInputGuardMatchInputSelfReference: string;
   editableConfigurationInputGuardMultipleGuards: string;
-  editableConfigurationInputGuardParentInputInvalid: (workType: string) => string;
+  editableConfigurationInputGuardParentInputInvalid: (
+    workType: string,
+  ) => string;
   editableConfigurationInputGuardParentInputRequired: string;
   editableConfigurationInputGuardParentInputSelfReference: string;
-  editableConfigurationInputGuardSpawnedByInvalid: (workstation: string) => string;
+  editableConfigurationInputGuardSpawnedByInvalid: (
+    workstation: string,
+  ) => string;
   editableConfigurationMatchesFieldsInputKeyRequired: string;
   editableConfigurationVisitCountMaxVisitsInvalid: string;
-  editableConfigurationVisitCountWorkstationInvalid: (workstation: string) => string;
+  editableConfigurationVisitCountWorkstationInvalid: (
+    workstation: string,
+  ) => string;
   editableConfigurationVisitCountWorkstationRequired: string;
 }
 
@@ -36,7 +44,9 @@ export function validateEditableWorkstationGuardDraft(
           messages.editableConfigurationVisitCountWorkstationRequired;
       } else if (!context.workstationOptions.includes(workstation)) {
         validationErrors[`guards[${guardIndex}].workstation`] =
-          messages.editableConfigurationVisitCountWorkstationInvalid(workstation);
+          messages.editableConfigurationVisitCountWorkstationInvalid(
+            workstation,
+          );
       }
 
       if (
@@ -100,7 +110,9 @@ export function validateEditableWorkstationGuardDraft(
           messages.editableConfigurationInputGuardParentInputSelfReference;
       } else if (!peerWorkTypeSet.has(parentInput)) {
         validationErrors[`inputs[${slotIndex}].guard.parentInput`] =
-          messages.editableConfigurationInputGuardParentInputInvalid(parentInput);
+          messages.editableConfigurationInputGuardParentInputInvalid(
+            parentInput,
+          );
       }
 
       const spawnedBy = guard.spawnedBy?.trim() ?? "";

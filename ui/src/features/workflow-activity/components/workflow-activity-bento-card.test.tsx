@@ -1,46 +1,55 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { baseFactoryDefinitionDocument } from "../../../testing/graph-editor-harness";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { DashboardSelection } from "../../current-selection/public";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { WorkflowActivityBentoCard } from "./workflow-activity-bento-card";
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../../current-factory-definition/hooks/useFactoryDocumentSave", () => ({
-  useFactoryDocumentSave: vi.fn(),
-}));
+vi.mock(
+  "../../current-factory-definition/hooks/useFactoryDocumentSave",
+  () => ({
+    useFactoryDocumentSave: vi.fn(),
+  }),
+);
 
-vi.mock("../../factory-graph-editor/hooks/factory-graph-draft-hook", async () => {
-  const actual = await vi.importActual(
-    "../../factory-graph-editor/hooks/factory-graph-draft-hook",
-  );
+vi.mock(
+  "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+  async () => {
+    const actual = await vi.importActual(
+      "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+    );
 
-  return {
-    ...actual,
-    useFactoryGraphDraftState: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useFactoryGraphDraftState: vi.fn(),
+    };
+  },
+);
 
 const defaultDraftState = {
   baseDocument: null,
@@ -128,21 +137,21 @@ function renderWorkflowActivityBentoCard({
   render(
     <QueryClientProvider client={queryClient}>
       <DashboardSessionTestProvider>
-      <WorkflowActivityBentoCard
-        headerAction={headerAction}
-        importController={createImportController()}
-        locale={locale}
-        now={Date.parse("2026-04-08T12:00:04Z")}
-        selection={selection}
-        snapshot={snapshot}
-        widgetInstanceID={widgetInstanceID}
-        onSelectWorkID={vi.fn()}
-        onSelectStateNode={vi.fn()}
-        onSelectResource={vi.fn()}
-        onSelectWorker={vi.fn()}
-        onSelectWorkType={vi.fn()}
-        onSelectWorkstation={vi.fn()}
-      />
+        <WorkflowActivityBentoCard
+          headerAction={headerAction}
+          importController={createImportController()}
+          locale={locale}
+          now={Date.parse("2026-04-08T12:00:04Z")}
+          selection={selection}
+          snapshot={snapshot}
+          widgetInstanceID={widgetInstanceID}
+          onSelectWorkID={vi.fn()}
+          onSelectStateNode={vi.fn()}
+          onSelectResource={vi.fn()}
+          onSelectWorker={vi.fn()}
+          onSelectWorkType={vi.fn()}
+          onSelectWorkstation={vi.fn()}
+        />
       </DashboardSessionTestProvider>
     </QueryClientProvider>,
   );
@@ -160,36 +169,36 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
   return render(
     <QueryClientProvider client={queryClient}>
       <DashboardSessionTestProvider>
-      <div>
-        <WorkflowActivityBentoCard
-          importController={createImportController()}
-          locale={locale}
-          now={Date.parse("2026-04-08T12:00:04Z")}
-          selection={selection}
-          snapshot={snapshot}
-          widgetInstanceID="work-graph::primary"
-          onSelectWorkID={vi.fn()}
-          onSelectStateNode={vi.fn()}
-          onSelectResource={vi.fn()}
-          onSelectWorker={vi.fn()}
-          onSelectWorkType={vi.fn()}
-        onSelectWorkstation={vi.fn()}
-        />
-        <WorkflowActivityBentoCard
-          importController={createImportController()}
-          locale={locale}
-          now={Date.parse("2026-04-08T12:00:04Z")}
-          selection={selection}
-          snapshot={snapshot}
-          widgetInstanceID="work-graph::instance-1"
-          onSelectWorkID={vi.fn()}
-          onSelectStateNode={vi.fn()}
-          onSelectResource={vi.fn()}
-          onSelectWorker={vi.fn()}
-          onSelectWorkType={vi.fn()}
-        onSelectWorkstation={vi.fn()}
-        />
-      </div>
+        <div>
+          <WorkflowActivityBentoCard
+            importController={createImportController()}
+            locale={locale}
+            now={Date.parse("2026-04-08T12:00:04Z")}
+            selection={selection}
+            snapshot={snapshot}
+            widgetInstanceID="work-graph::primary"
+            onSelectWorkID={vi.fn()}
+            onSelectStateNode={vi.fn()}
+            onSelectResource={vi.fn()}
+            onSelectWorker={vi.fn()}
+            onSelectWorkType={vi.fn()}
+            onSelectWorkstation={vi.fn()}
+          />
+          <WorkflowActivityBentoCard
+            importController={createImportController()}
+            locale={locale}
+            now={Date.parse("2026-04-08T12:00:04Z")}
+            selection={selection}
+            snapshot={snapshot}
+            widgetInstanceID="work-graph::instance-1"
+            onSelectWorkID={vi.fn()}
+            onSelectStateNode={vi.fn()}
+            onSelectResource={vi.fn()}
+            onSelectWorker={vi.fn()}
+            onSelectWorkType={vi.fn()}
+            onSelectWorkstation={vi.fn()}
+          />
+        </div>
       </DashboardSessionTestProvider>
     </QueryClientProvider>,
   );

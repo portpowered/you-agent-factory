@@ -11,7 +11,11 @@ describe("buildStructuredSubmitItems", () => {
   it("uses canonical url from staged file items instead of synthesizing staged paths", () => {
     const draft: SubmitWorkDraft = {
       items: [
-        { id: "submission-item-1", text: "Review the screenshot.", type: "text" },
+        {
+          id: "submission-item-1",
+          text: "Review the screenshot.",
+          type: "text",
+        },
         {
           fileName: "ui.png",
           id: "submission-item-2",

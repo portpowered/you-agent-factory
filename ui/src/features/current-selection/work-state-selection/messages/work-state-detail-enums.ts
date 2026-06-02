@@ -1,8 +1,8 @@
-import type { EditableWorkStateDraft } from "../../../current-factory-definition/lib/work-state-editable-values";
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,
 } from "../../../../i18n";
+import type { EditableWorkStateDraft } from "../../../current-factory-definition/lib/work-state-editable-values";
 
 type WorkStateType = EditableWorkStateDraft["type"];
 

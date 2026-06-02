@@ -90,7 +90,9 @@ export async function writeFactoryExportPng({
   }
 }
 
-async function rasterizeImageToPngBytesInBrowser(image: Blob): Promise<Uint8Array> {
+async function rasterizeImageToPngBytesInBrowser(
+  image: Blob,
+): Promise<Uint8Array> {
   const bitmapFactory = globalThis.createImageBitmap;
   if (typeof bitmapFactory === "function") {
     const bitmap = await bitmapFactory(image);
@@ -138,7 +140,12 @@ async function drawRasterToPngBytes(
   width: number,
   height: number,
 ): Promise<Uint8Array> {
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
     throw new Error("Decoded image dimensions are invalid.");
   }
 
@@ -181,7 +188,10 @@ async function drawRasterToPngBytes(
   return new Uint8Array(await blob.arrayBuffer());
 }
 
-function injectMetadataChunk(pngBytes: Uint8Array, metadataChunk: Uint8Array): Uint8Array {
+function injectMetadataChunk(
+  pngBytes: Uint8Array,
+  metadataChunk: Uint8Array,
+): Uint8Array {
   if (!hasPngSignature(pngBytes)) {
     throw new Error("Decoded image is not a PNG.");
   }
@@ -206,8 +216,10 @@ function injectMetadataChunk(pngBytes: Uint8Array, metadataChunk: Uint8Array): U
     }
 
     if (
-      (chunk.type === PNG_TEXT_CHUNK || chunk.type === PNG_INTERNATIONAL_TEXT_CHUNK) &&
-      readChunkKeyword(chunk.type, chunk.data) === PORT_OS_FACTORY_PNG_METADATA_KEYWORD
+      (chunk.type === PNG_TEXT_CHUNK ||
+        chunk.type === PNG_INTERNATIONAL_TEXT_CHUNK) &&
+      readChunkKeyword(chunk.type, chunk.data) ===
+        PORT_OS_FACTORY_PNG_METADATA_KEYWORD
     ) {
       continue;
     }
@@ -227,7 +239,11 @@ function readChunkAtOffset(pngBytes: Uint8Array, offset: number): ParsedChunk {
     throw new Error("PNG chunk header is truncated.");
   }
 
-  const view = new DataView(pngBytes.buffer, pngBytes.byteOffset, pngBytes.byteLength);
+  const view = new DataView(
+    pngBytes.buffer,
+    pngBytes.byteOffset,
+    pngBytes.byteLength,
+  );
   const length = view.getUint32(offset);
   const dataOffset = offset + 8;
   const dataEnd = dataOffset + length;
@@ -245,7 +261,10 @@ function readChunkAtOffset(pngBytes: Uint8Array, offset: number): ParsedChunk {
   };
 }
 
-function buildInternationalTextChunk(keyword: string, text: string): Uint8Array {
+function buildInternationalTextChunk(
+  keyword: string,
+  text: string,
+): Uint8Array {
   const encoder = new TextEncoder();
   const keywordBytes = encoder.encode(keyword);
   const textBytes = encoder.encode(text);

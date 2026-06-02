@@ -13,8 +13,8 @@ import type {
   CurrentFactoryDefinitionError,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
-import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../../factory-graph-editor/lib/factory-graph-topology-impact";
 import { useFactoryDocumentSave } from "../../../current-factory-definition/public";
+import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../../factory-graph-editor/lib/factory-graph-topology-impact";
 import type { FactoryDocumentSaveState } from "./factory-document-save-types";
 
 export interface ScopedFactoryDocumentSaveRequest {

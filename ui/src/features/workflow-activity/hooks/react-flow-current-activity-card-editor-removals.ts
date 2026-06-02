@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-
-import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type {
+  EditableFactoryGraphSaveMutation,
+  EditableFactoryGraphViewModel,
+} from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,

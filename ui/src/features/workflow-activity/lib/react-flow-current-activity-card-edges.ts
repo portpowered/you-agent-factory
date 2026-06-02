@@ -9,8 +9,8 @@ import type {
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
   type ActiveGraphHighlights,
-  type HandleAssignments,
   filterGraphEdgesForRenderedHandles,
+  type HandleAssignments,
 } from "./react-flow-current-activity-card-graph";
 
 const EDGE_STROKE_MUTED = "var(--color-af-edge-muted)";

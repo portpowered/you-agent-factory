@@ -85,7 +85,9 @@ export function mergeEditableResourceContractValidationErrors(
   }
 
   try {
-    normalizeFactoryDefinition(buildResourceContractValidationFactory(resource));
+    normalizeFactoryDefinition(
+      buildResourceContractValidationFactory(resource),
+    );
     return validationErrors;
   } catch (error) {
     const contractMessage = resolveEditableResourceContractErrorMessage(

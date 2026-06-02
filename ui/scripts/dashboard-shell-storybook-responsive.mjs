@@ -88,10 +88,7 @@ export async function verifyDashboardShellConsolidation(
   viewport,
 ) {
   const toolbar = await waitForStoryRegion(page, "dashboard summary");
-  const board = await waitForStoryRegion(
-    page,
-    "you-agent-factory bento board",
-  );
+  const board = await waitForStoryRegion(page, "you-agent-factory bento board");
   const workTotalsCard = board.getByRole("article", { name: "Work totals" });
   const headerExportButton = toolbar.getByRole("button", {
     name: "Export PNG",
@@ -113,17 +110,18 @@ export async function verifyDashboardShellConsolidation(
   await expectVisible(timelineSlider, "Timeline slider");
   await expectVisible(timelineStatus, "Timeline status");
   await expectVisible(sessionStreamToggle, "Dashboard session stream toggle");
-  await expectVisible(
-    workTotalsDragHeader,
-    "Work totals header drag surface",
-  );
-  if ((await toolbar.getByRole("status", { name: /Event stream/i }).count()) > 0) {
+  await expectVisible(workTotalsDragHeader, "Work totals header drag surface");
+  if (
+    (await toolbar.getByRole("status", { name: /Event stream/i }).count()) > 0
+  ) {
     throw new Error(
       "Dashboard shell header still rendered the retired event-stream status pill.",
     );
   }
   if (
-    await toolbar.getByRole("button", { name: "Return to current tick" }).isVisible()
+    await toolbar
+      .getByRole("button", { name: "Return to current tick" })
+      .isVisible()
   ) {
     throw new Error(
       "Dashboard shell header still rendered the retired return-to-current button.",

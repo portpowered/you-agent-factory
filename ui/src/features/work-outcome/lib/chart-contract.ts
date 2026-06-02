@@ -1,5 +1,5 @@
-import { cn } from "../../../lib/cn";
 import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
+import { cn } from "../../../lib/cn";
 
 export type DashboardChartSemanticRole =
   | "queued"
@@ -38,7 +38,8 @@ const DASHBOARD_CHART_LINE_WEIGHT_CLASS = "[stroke-width:2.25]";
 const DASHBOARD_CHART_POINT_WEIGHT_CLASS = "[stroke-width:1.5]";
 const DASHBOARD_CHART_DEFAULT_POINT_RADIUS = 3.25;
 
-export const DASHBOARD_CHART_AXIS_CLASS = "stroke-af-border-strong [stroke-width:1]";
+export const DASHBOARD_CHART_AXIS_CLASS =
+  "stroke-af-border-strong [stroke-width:1]";
 export const DASHBOARD_CHART_AXIS_LABEL_CLASS = cn(
   "fill-af-text-subtle [letter-spacing:0.16em]",
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -85,19 +86,28 @@ const DASHBOARD_CHART_SEMANTIC_STYLES: Record<
   failureTrend: {
     color: "var(--color-af-chart-failure-trend)",
     lineClassName: DASHBOARD_CHART_LINE_CLASS,
-    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-failure-trend"),
+    pointClassName: cn(
+      DASHBOARD_CHART_POINT_CLASS,
+      "fill-af-chart-failure-trend",
+    ),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   reworkTrend: {
     color: "var(--color-af-chart-rework-trend)",
     lineClassName: DASHBOARD_CHART_LINE_CLASS,
-    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-rework-trend"),
+    pointClassName: cn(
+      DASHBOARD_CHART_POINT_CLASS,
+      "fill-af-chart-rework-trend",
+    ),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
   timingTrend: {
     color: "var(--color-af-chart-timing-trend)",
     lineClassName: DASHBOARD_CHART_LINE_CLASS,
-    pointClassName: cn(DASHBOARD_CHART_POINT_CLASS, "fill-af-chart-timing-trend"),
+    pointClassName: cn(
+      DASHBOARD_CHART_POINT_CLASS,
+      "fill-af-chart-timing-trend",
+    ),
     pointRadius: DASHBOARD_CHART_DEFAULT_POINT_RADIUS,
   },
 };

@@ -63,7 +63,9 @@ export type DashboardSelection =
   | DashboardResourceSelection
   | DashboardWorkTypeSelection;
 
-export function selectDefaultSelection(snapshot: DashboardSnapshot): DashboardSelection | null {
+export function selectDefaultSelection(
+  snapshot: DashboardSnapshot,
+): DashboardSelection | null {
   const firstActiveNodeId = snapshot.runtime.active_workstation_node_ids?.[0];
   if (firstActiveNodeId) {
     return { kind: "node", nodeId: firstActiveNodeId };
@@ -148,7 +150,9 @@ function resolveWorkItemSelection(
   const currentExecution =
     selection.dispatchId === undefined
       ? undefined
-      : snapshot.runtime.active_executions_by_dispatch_id?.[selection.dispatchId];
+      : snapshot.runtime.active_executions_by_dispatch_id?.[
+          selection.dispatchId
+        ];
   const currentWorkItem = findWorkItemReference(snapshot, currentWorkID);
   const resolvedSelection =
     selectionFromExecution(currentExecution, currentWorkID) ??
@@ -221,10 +225,7 @@ function findRetainedRequestSelection(
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>,
 ): DashboardWorkItemSelection | null {
   const retainedRequest =
-    findWorkstationRequestForWork(
-      workstationRequestsByDispatchID,
-      workID,
-    ) ??
+    findWorkstationRequestForWork(workstationRequestsByDispatchID, workID) ??
     findWorkstationRequestForWork(
       snapshot.runtime.workstation_requests_by_dispatch_id,
       workID,
@@ -295,8 +296,9 @@ function findProviderWorkSelection(
   snapshot: DashboardSnapshot,
   workID: string,
 ): DashboardWorkItemSelection | null {
-  const providerAttempt = snapshot.runtime.session.provider_sessions?.find((attempt) =>
-    attempt.work_items?.some((workItem) => workItem.work_id === workID),
+  const providerAttempt = snapshot.runtime.session.provider_sessions?.find(
+    (attempt) =>
+      attempt.work_items?.some((workItem) => workItem.work_id === workID),
   );
   const nodeID = providerAttempt
     ? resolveTransitionNodeID(
@@ -323,14 +325,21 @@ function findProviderWorkSelection(
 function resolveWorkstationRequestSelection(
   snapshot: DashboardSnapshot,
   selection: DashboardWorkstationRequestSelection,
-  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest> | undefined,
+  workstationRequestsByDispatchID:
+    | Record<string, DashboardWorkstationRequest>
+    | undefined,
 ): DashboardSelection | null {
-  const currentRequest = workstationRequestsByDispatchID?.[selection.dispatchId];
+  const currentRequest =
+    workstationRequestsByDispatchID?.[selection.dispatchId];
   if (!currentRequest) {
     return selectDefaultSelection(snapshot);
   }
 
-  if (!snapshot.topology.workstation_nodes_by_id[currentRequest.workstation_node_id]) {
+  if (
+    !snapshot.topology.workstation_nodes_by_id[
+      currentRequest.workstation_node_id
+    ]
+  ) {
     return selectDefaultSelection(snapshot);
   }
 
@@ -346,21 +355,27 @@ export function findWorkItemReference(
   snapshot: DashboardSnapshot,
   workID: string,
 ): DashboardWorkItemRef | undefined {
-  const activeWorkItem = Object.values(snapshot.runtime.active_executions_by_dispatch_id ?? {})
+  const activeWorkItem = Object.values(
+    snapshot.runtime.active_executions_by_dispatch_id ?? {},
+  )
     .flatMap((execution) => execution.work_items ?? [])
     .find((workItem) => workItem.work_id === workID);
   if (activeWorkItem) {
     return activeWorkItem;
   }
 
-  const currentWorkItem = Object.values(snapshot.runtime.current_work_items_by_place_id ?? {})
+  const currentWorkItem = Object.values(
+    snapshot.runtime.current_work_items_by_place_id ?? {},
+  )
     .flat()
     .find((workItem) => workItem.work_id === workID);
   if (currentWorkItem) {
     return currentWorkItem;
   }
 
-  const retainedWorkItem = Object.values(snapshot.runtime.place_occupancy_work_items_by_place_id ?? {})
+  const retainedWorkItem = Object.values(
+    snapshot.runtime.place_occupancy_work_items_by_place_id ?? {},
+  )
     .flat()
     .find((workItem) => workItem.work_id === workID);
   if (retainedWorkItem) {
@@ -391,8 +406,10 @@ export function findWorkstationNodeIDForPlace(
       continue;
     }
 
-    const matchingPlace = [...(workstation.input_places ?? []), ...(workstation.output_places ?? [])]
-      .some((place) => place.place_id === placeID);
+    const matchingPlace = [
+      ...(workstation.input_places ?? []),
+      ...(workstation.output_places ?? []),
+    ].some((place) => place.place_id === placeID);
     if (matchingPlace) {
       return nodeID;
     }
@@ -409,10 +426,12 @@ function workItemsFromRetainedRequest(
     "response" in request && typeof request.response === "object"
       ? request.response
       : undefined;
-  const projectedRequestView = "request_view" in request ? request.request_view : undefined;
+  const projectedRequestView =
+    "request_view" in request ? request.request_view : undefined;
   const projectedResponseView =
     "response_view" in request ? request.response_view : undefined;
-  const projectedWorkItems = "work_items" in request ? request.work_items : undefined;
+  const projectedWorkItems =
+    "work_items" in request ? request.work_items : undefined;
 
   return [
     ...(runtimeRequest?.input_work_items ?? []),
@@ -452,7 +471,10 @@ function findWorkstationRequestForWork(
     | Record<string, DashboardWorkstationRequest>
     | undefined,
   workID: string,
-): DashboardRuntimeWorkstationRequest | DashboardWorkstationRequest | undefined {
+):
+  | DashboardRuntimeWorkstationRequest
+  | DashboardWorkstationRequest
+  | undefined {
   return Object.values(workstationRequestsByDispatchID ?? {}).find((request) =>
     workItemsFromRetainedRequest(request).some(
       (workItem) => workItem.work_id === workID,
@@ -495,14 +517,18 @@ export function findFactoryResourceInSnapshot(
   snapshot: DashboardSnapshot,
   resourceName: string,
 ): FactoryResource | undefined {
-  return snapshot.factory?.resources?.find((resource) => resource.name === resourceName);
+  return snapshot.factory?.resources?.find(
+    (resource) => resource.name === resourceName,
+  );
 }
 
 export function findFactoryWorkerInSnapshot(
   snapshot: DashboardSnapshot,
   workerName: string,
 ): FactoryWorker | undefined {
-  return snapshot.factory?.workers?.find((worker) => worker.name === workerName);
+  return snapshot.factory?.workers?.find(
+    (worker) => worker.name === workerName,
+  );
 }
 
 function workTypeExistsInSnapshotFactory(

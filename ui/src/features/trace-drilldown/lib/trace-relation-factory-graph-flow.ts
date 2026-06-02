@@ -8,10 +8,10 @@ import {
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
 import {
+  type ProjectTraceRelationsToFactoryGraphOptions,
   projectTraceRelationsToFactoryGraph,
   type TraceRelationEdgeOverlay,
   type TraceRelationNodeOverlay,
-  type ProjectTraceRelationsToFactoryGraphOptions,
 } from "./trace-relation-factory-graph";
 
 export type TraceRelationFlowNodeData = FactoryGraphReactFlowNode["data"] &
@@ -20,8 +20,7 @@ export type TraceRelationFlowNodeData = FactoryGraphReactFlowNode["data"] &
     locale?: string;
     onSelectWorkID?: (workID: string) => void;
     selectable: boolean;
-  } &
-  Record<string, unknown>;
+  } & Record<string, unknown>;
 
 export type TraceRelationFlowNode = Node<
   TraceRelationFlowNodeData,

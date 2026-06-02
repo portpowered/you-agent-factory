@@ -1,17 +1,15 @@
-import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
-  filterValidationHandleErrorsForWorkstation,
-  projectFactoryValidationTargets,
   type FactoryValidationGraphProjection,
-  validationTargetIsRenderedForWorkstation,
-} from "../../factory-graph-editor/lib/factory-validation-graph-projection";
-import {
   factoryGraphNodeIdForWorkState,
   factoryGraphNodeIdForWorkstation,
   factoryGraphNodeIdForWorkType,
+  filterValidationHandleErrorsForWorkstation,
+  projectFactoryValidationTargets,
+  validationTargetIsRenderedForWorkstation,
 } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 
@@ -69,10 +67,7 @@ function collectMessagesForNodeIds(
 }
 
 function collectWorkstationMessagesForSelection(
-  messagesByNodeId: ReadonlyMap<
-    string,
-    readonly FactoryValidationTarget[]
-  >,
+  messagesByNodeId: ReadonlyMap<string, readonly FactoryValidationTarget[]>,
   nodeIds: ReadonlySet<string>,
   workstation: WorkstationProgressOutcomeRouteContext | undefined,
 ): string[] {

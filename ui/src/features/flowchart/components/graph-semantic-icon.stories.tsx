@@ -22,11 +22,16 @@ export const Vocabulary = {
           key={kind}
         >
           <GraphSemanticIcon className="h-5 w-5 text-af-info" kind={kind} />
-          <span className="text-sm font-bold">{graphSemanticIconLabel(kind)}</span>
+          <span className="text-sm font-bold">
+            {graphSemanticIconLabel(kind)}
+          </span>
         </div>
       ))}
       <div className="flex items-center gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3">
-        <GraphSemanticIcon className="h-5 w-5 text-af-accent" kind="future-node-kind" />
+        <GraphSemanticIcon
+          className="h-5 w-5 text-af-accent"
+          kind="future-node-kind"
+        />
         <span className="text-sm font-bold">Fallback</span>
       </div>
     </div>
@@ -35,8 +40,12 @@ export const Vocabulary = {
     const canvas = within(canvasElement);
 
     for (const kind of GRAPH_SEMANTIC_ICON_KINDS) {
-      await expect(canvas.getByRole("img", { name: graphSemanticIconLabel(kind) })).toBeVisible();
+      await expect(
+        canvas.getByRole("img", { name: graphSemanticIconLabel(kind) }),
+      ).toBeVisible();
     }
-    await expect(canvas.getByRole("img", { name: "Unknown graph semantic" })).toBeVisible();
+    await expect(
+      canvas.getByRole("img", { name: "Unknown graph semantic" }),
+    ).toBeVisible();
   },
 };

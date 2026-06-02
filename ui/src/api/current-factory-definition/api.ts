@@ -1,17 +1,17 @@
-import type { components } from "../generated/openapi";
 import type { CanonicalFactoryDefinition } from "../factory-definition";
+import type { components } from "../generated/openapi";
+import {
+  getSessionFactory,
+  SessionFactoryAPIError,
+  type SessionFactoryAPIErrorCode,
+  type SessionFactoryDocument,
+  saveSessionFactory,
+} from "../session-factory";
+import { sessionFactoryAPIErrorMessages } from "../session-factory/messages";
 import {
   DEFAULT_FACTORY_SESSION_ID,
   isDefaultFactorySessionID,
 } from "../session-routing";
-import {
-  getSessionFactory,
-  saveSessionFactory,
-  SessionFactoryAPIError,
-  type SessionFactoryAPIErrorCode,
-  type SessionFactoryDocument,
-} from "../session-factory";
-import { sessionFactoryAPIErrorMessages } from "../session-factory/messages";
 import { currentFactoryDefinitionAPIErrorMessages } from "./messages";
 
 export type { CanonicalFactoryDefinition } from "../factory-definition";
@@ -150,7 +150,9 @@ function resolveSessionID(sessionID: string | null | undefined): string {
     : (sessionID ?? DEFAULT_FACTORY_SESSION_ID);
 }
 
-function toCurrentFactoryDefinitionError(error: unknown): CurrentFactoryDefinitionError {
+function toCurrentFactoryDefinitionError(
+  error: unknown,
+): CurrentFactoryDefinitionError {
   if (error instanceof CurrentFactoryDefinitionError) {
     return error;
   }

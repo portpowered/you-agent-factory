@@ -1,5 +1,5 @@
-import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type { FactoryEvent } from "../../../api/events";
+import { FACTORY_EVENT_TYPES } from "../../../api/events";
 
 function factoryEvent(
   id: string,
@@ -20,46 +20,57 @@ function factoryEvent(
 }
 
 export const failureAnalysisTimelineEvents: FactoryEvent[] = [
-  factoryEvent("failure-analysis-1", 1, FACTORY_EVENT_TYPES.initialStructureRequest, {
-    factory: {
-      workTypes: [{
-        name: "story",
-        states: [
-          { name: "new", type: "INITIAL" },
-          { name: "review", type: "PROCESSING" },
-          { name: "done", type: "TERMINAL" },
-          { name: "failed", type: "FAILED" },
+  factoryEvent(
+    "failure-analysis-1",
+    1,
+    FACTORY_EVENT_TYPES.initialStructureRequest,
+    {
+      factory: {
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "new", type: "INITIAL" },
+              { name: "review", type: "PROCESSING" },
+              { name: "done", type: "TERMINAL" },
+              { name: "failed", type: "FAILED" },
+            ],
+          },
         ],
-      }],
-      workstations: [
-        {
-          id: "review",
-          inputs: [{ state: "new", workType: "story" }],
-          name: "Review",
-          onFailure: [{ state: "failed", workType: "story" }],
-          outputs: [{ state: "review", workType: "story" }],
-          worker: "reviewer",
-        },
-      ],
+        workstations: [
+          {
+            id: "review",
+            inputs: [{ state: "new", workType: "story" }],
+            name: "Review",
+            onFailure: [{ state: "failed", workType: "story" }],
+            outputs: [{ state: "review", workType: "story" }],
+            worker: "reviewer",
+          },
+        ],
+      },
     },
-  }),
+  ),
   factoryEvent("failure-analysis-2", 2, FACTORY_EVENT_TYPES.workRequest, {
     type: "FACTORY_REQUEST_BATCH",
-    works: [{
-      name: "Queued Analysis Story",
-      trace_id: "trace-queued-analysis",
-      work_id: "work-queued-analysis",
-      work_type_name: "story",
-    }],
+    works: [
+      {
+        name: "Queued Analysis Story",
+        trace_id: "trace-queued-analysis",
+        work_id: "work-queued-analysis",
+        work_type_name: "story",
+      },
+    ],
   }),
   factoryEvent("failure-analysis-3", 2, FACTORY_EVENT_TYPES.workRequest, {
     type: "FACTORY_REQUEST_BATCH",
-    works: [{
-      name: "Blocked Analysis Story",
-      trace_id: "trace-blocked-analysis",
-      work_id: "work-blocked-analysis",
-      work_type_name: "story",
-    }],
+    works: [
+      {
+        name: "Blocked Analysis Story",
+        trace_id: "trace-blocked-analysis",
+        work_id: "work-blocked-analysis",
+        work_type_name: "story",
+      },
+    ],
   }),
   factoryEvent("failure-analysis-4", 3, FACTORY_EVENT_TYPES.dispatchRequest, {
     dispatchId: "dispatch-blocked-analysis",
@@ -84,15 +95,18 @@ export const failureAnalysisTimelineEvents: FactoryEvent[] = [
   factoryEvent("failure-analysis-5", 4, FACTORY_EVENT_TYPES.dispatchResponse, {
     dispatchId: "dispatch-blocked-analysis",
     durationMillis: 900,
-    failureMessage: "Provider rate limit exceeded while generating the analysis.",
+    failureMessage:
+      "Provider rate limit exceeded while generating the analysis.",
     failureReason: "provider_rate_limit",
     outcome: "FAILED",
-    outputWork: [{
-      name: "Blocked Analysis Story",
-      trace_id: "trace-blocked-analysis",
-      work_id: "work-blocked-analysis",
-      work_type_name: "story",
-    }],
+    outputWork: [
+      {
+        name: "Blocked Analysis Story",
+        trace_id: "trace-blocked-analysis",
+        work_id: "work-blocked-analysis",
+        work_type_name: "story",
+      },
+    ],
     providerSession: {
       id: "sess-blocked-analysis",
       kind: "session_id",
@@ -116,9 +130,11 @@ failureAnalysisTimelineEvents[1].context.workIds = ["work-queued-analysis"];
 failureAnalysisTimelineEvents[2].context.requestId = "request-blocked-analysis";
 failureAnalysisTimelineEvents[2].context.traceIds = ["trace-blocked-analysis"];
 failureAnalysisTimelineEvents[2].context.workIds = ["work-blocked-analysis"];
-failureAnalysisTimelineEvents[3].context.dispatchId = "dispatch-blocked-analysis";
+failureAnalysisTimelineEvents[3].context.dispatchId =
+  "dispatch-blocked-analysis";
 failureAnalysisTimelineEvents[3].context.traceIds = ["trace-blocked-analysis"];
 failureAnalysisTimelineEvents[3].context.workIds = ["work-blocked-analysis"];
-failureAnalysisTimelineEvents[4].context.dispatchId = "dispatch-blocked-analysis";
+failureAnalysisTimelineEvents[4].context.dispatchId =
+  "dispatch-blocked-analysis";
 failureAnalysisTimelineEvents[4].context.traceIds = ["trace-blocked-analysis"];
 failureAnalysisTimelineEvents[4].context.workIds = ["work-blocked-analysis"];

@@ -22,4 +22,3 @@ export function getDashboardPlaceLabelParts(
     workType: place.type_id ?? "work",
   };
 }
-

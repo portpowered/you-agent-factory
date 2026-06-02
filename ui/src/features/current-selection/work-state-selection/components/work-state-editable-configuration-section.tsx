@@ -6,9 +6,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
-import {
-  mergeDetailCardSaveFieldErrors,
-} from "../../base/components/detail-card-factory-save-feedback";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
@@ -34,14 +32,19 @@ export function WorkStateEditableConfigurationSection({
   const headingId = "editable-work-state-configuration-heading";
 
   return (
-    <section aria-labelledby={headingId} className="mt-0 grid gap-2.5 [&_h4]:m-0">
+    <section
+      aria-labelledby={headingId}
+      className="mt-0 grid gap-2.5 [&_h4]:m-0"
+    >
       <CurrentSelectionSectionHeader
         headingId={headingId}
         title={messages.editableConfigurationHeading}
       />
       <div className="grid gap-2.5">
         {state?.status === "loading" ? (
-          <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p
+            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+          >
             {messages.editableConfigurationLoading}
           </p>
         ) : null}
@@ -54,7 +57,9 @@ export function WorkStateEditableConfigurationSection({
           </p>
         ) : null}
         {state?.status === "empty" ? (
-          <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p
+            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+          >
             {state.message || messages.editableConfigurationEmpty}
           </p>
         ) : null}
@@ -94,7 +99,10 @@ function WorkStateEditableConfigurationReadyForm({
           {validationErrors.contract}
         </p>
       ) : null}
-      <WorkStateEditableConfigurationDraftStatus messages={messages} state={state} />
+      <WorkStateEditableConfigurationDraftStatus
+        messages={messages}
+        state={state}
+      />
       <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
         <WorkStateEditableConfigurationField
           errorMessage={validationErrors.name}
@@ -102,7 +110,9 @@ function WorkStateEditableConfigurationReadyForm({
           input={
             <input
               aria-describedby={
-                validationErrors.name ? "editable-work-state-name-error" : undefined
+                validationErrors.name
+                  ? "editable-work-state-name-error"
+                  : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
               className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"

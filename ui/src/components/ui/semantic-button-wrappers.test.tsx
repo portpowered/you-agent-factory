@@ -13,14 +13,14 @@ describe("semantic button wrappers", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Toggle details" }).getAttribute(
-        "aria-controls",
-      ),
+      screen
+        .getByRole("button", { name: "Toggle details" })
+        .getAttribute("aria-controls"),
     ).toBe("details-panel");
     expect(
-      screen.getByRole("button", { name: "Toggle details" }).getAttribute(
-        "aria-expanded",
-      ),
+      screen
+        .getByRole("button", { name: "Toggle details" })
+        .getAttribute("aria-expanded"),
     ).toBe("true");
   });
 
@@ -32,9 +32,9 @@ describe("semantic button wrappers", () => {
     );
 
     expect(
-      screen.getByRole("button", { name: "Selected row" }).getAttribute(
-        "aria-pressed",
-      ),
+      screen
+        .getByRole("button", { name: "Selected row" })
+        .getAttribute("aria-pressed"),
     ).toBe("true");
   });
 

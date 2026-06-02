@@ -75,7 +75,9 @@ describe("DashboardSessionProvider", () => {
       </DashboardSessionProvider>,
     );
 
-    expect(screen.getByTestId("session-scope-probe").textContent).toContain("|true");
+    expect(screen.getByTestId("session-scope-probe").textContent).toContain(
+      "|true",
+    );
   });
 
   it("throws when useDashboardSession is called outside the provider", () => {

@@ -1,14 +1,14 @@
 import type {
-  DashboardSelectedRunner,
   DashboardRuntimeWorkstationRequest,
   DashboardRuntimeWorkstationRequestCounts,
   DashboardRuntimeWorkstationRequestRequest,
   DashboardRuntimeWorkstationRequestResponse,
   DashboardScriptRequest,
   DashboardScriptResponse,
+  DashboardSelectedRunner,
+  DashboardTraceMutation,
   DashboardTraceToken,
   DashboardWorkItemRef,
-  DashboardTraceMutation,
 } from "../../../../api/dashboard";
 
 export interface TimelineScriptRequest {

@@ -37,7 +37,9 @@ describe("dispatch-selection/public detail components", () => {
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.getByRole("heading", { name: "Workstation dispatches" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Workstation dispatches" }),
+    ).toBeTruthy();
     expect(
       screen.getByText(
         "No workstation dispatch has been recorded yet for this work item.",

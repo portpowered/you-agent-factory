@@ -54,7 +54,8 @@ export async function collectCardHeaderMetrics(article) {
         header.className.includes("min-h-11") &&
         header.className.includes("flex-wrap"),
       hasGrabCursor: header.className.includes("cursor-grab"),
-      hasHeaderDragHandle: header.getAttribute("data-bento-drag-handle") === "true",
+      hasHeaderDragHandle:
+        header.getAttribute("data-bento-drag-handle") === "true",
       headerRect: {
         height: headerRect.height,
         width: headerRect.width,
@@ -88,7 +89,9 @@ export function assertCardHeaderMetrics(cardName, metrics, { compactChrome }) {
   }
 
   if (metrics.titleTag !== "H3") {
-    throw new Error(`${cardName}: expected an h3 title, found ${metrics.titleTag}.`);
+    throw new Error(
+      `${cardName}: expected an h3 title, found ${metrics.titleTag}.`,
+    );
   }
 
   if (!rectIsVisible(metrics.titleRect)) {
@@ -104,7 +107,9 @@ export function assertCardHeaderMetrics(cardName, metrics, { compactChrome }) {
   }
 
   if (!metrics.hasGrabCursor) {
-    throw new Error(`${cardName}: header was missing the grab cursor affordance.`);
+    throw new Error(
+      `${cardName}: header was missing the grab cursor affordance.`,
+    );
   }
 
   for (const actionRect of metrics.primaryActionRects) {

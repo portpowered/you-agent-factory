@@ -315,10 +315,7 @@ function edgeLabelForFactoryGraphEdge(
   edge: FactoryGraphEdge,
   targetNode: FactoryGraphNode | undefined,
 ) {
-  if (
-    edge.kind === "work-state-visibility-bypass" &&
-    edge.outcomeRouteKind
-  ) {
+  if (edge.kind === "work-state-visibility-bypass" && edge.outcomeRouteKind) {
     return getFactoryGraphEditorMessages().edgeKindLabel(edge.outcomeRouteKind);
   }
 
@@ -438,7 +435,9 @@ function seedEdgeFromFactoryGraphEdge(
     edgeId,
     fromNodeId,
     id: edgeId,
-    label: targetResourceName ? "" : edgeLabelForFactoryGraphEdge(edge, targetNode),
+    label: targetResourceName
+      ? ""
+      : edgeLabelForFactoryGraphEdge(edge, targetNode),
     outcomeKind: edgeOutcomeKind(edge),
     sourcePlaceKind: sourceResourceName
       ? "resource"

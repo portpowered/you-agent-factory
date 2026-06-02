@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import {
-  currentFactoryDocumentQueryKey,
   currentFactoryDefinitionQueryKey,
+  currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   clearQueuedFlush,
@@ -44,7 +44,9 @@ describe("clearQueuedFlush", () => {
 
 describe("prepareDashboardStreamSession", () => {
   it("clears queued events and declines to open when session is deselected", () => {
-    const queuedEventsRef = { current: [{ id: "event-1" }] as { id: string }[] };
+    const queuedEventsRef = {
+      current: [{ id: "event-1" }] as { id: string }[],
+    };
     const hasOpenedStreamRef = { current: true };
     expect(
       prepareDashboardStreamSession({
@@ -77,7 +79,9 @@ describe("prepareDashboardStreamSession", () => {
   });
 
   it("clears queued events when the session key or refresh token changes", () => {
-    const queuedEventsRef = { current: [{ id: "event-1" }] as { id: string }[] };
+    const queuedEventsRef = {
+      current: [{ id: "event-1" }] as { id: string }[],
+    };
     const hasOpenedStreamRef = { current: false };
     expect(
       prepareDashboardStreamSession({
@@ -131,36 +135,48 @@ describe("syncCurrentFactoryDefinition", () => {
   it("ignores non-factory-change events", () => {
     const queryClient = new QueryClient();
     const setQueryData = vi.spyOn(queryClient, "setQueryData");
-    syncCurrentFactoryDefinition(queryClient, {
-      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
-      id: "event-1",
-      payload: {},
-      type: FACTORY_EVENT_TYPES.workCreated,
-    }, sessionID);
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+        id: "event-1",
+        payload: {},
+        type: FACTORY_EVENT_TYPES.workCreated,
+      },
+      sessionID,
+    );
     expect(setQueryData).not.toHaveBeenCalled();
   });
 
   it("ignores factory-change events without a factory payload", () => {
     const queryClient = new QueryClient();
     const setQueryData = vi.spyOn(queryClient, "setQueryData");
-    syncCurrentFactoryDefinition(queryClient, {
-      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
-      id: "event-1",
-      payload: {},
-      type: FACTORY_EVENT_TYPES.factoryChange,
-    }, sessionID);
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+        id: "event-1",
+        payload: {},
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      },
+      sessionID,
+    );
     expect(setQueryData).not.toHaveBeenCalled();
   });
 
   it("updates definition cache and invalidates the document query when version is absent", async () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
-    syncCurrentFactoryDefinition(queryClient, {
-      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
-      id: "event-1",
-      payload: { factory: validFactory },
-      type: FACTORY_EVENT_TYPES.factoryChange,
-    }, sessionID);
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+        id: "event-1",
+        payload: { factory: validFactory },
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      },
+      sessionID,
+    );
     expect(
       queryClient.getQueryData(currentFactoryDefinitionQueryKey(sessionID)),
     ).toMatchObject({
@@ -173,20 +189,24 @@ describe("syncCurrentFactoryDefinition", () => {
 
   it("coerces numeric logical versions into document cache entries", () => {
     const queryClient = new QueryClient();
-    syncCurrentFactoryDefinition(queryClient, {
-      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
-      id: "event-1",
-      payload: {
-        factory: {
-          ...validFactory,
-          version: {
-            logical: 9,
-            physical: "2026-05-31T12:00:00Z",
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+        id: "event-1",
+        payload: {
+          factory: {
+            ...validFactory,
+            version: {
+              logical: 9,
+              physical: "2026-05-31T12:00:00Z",
+            },
           },
         },
+        type: FACTORY_EVENT_TYPES.factoryChange,
       },
-      type: FACTORY_EVENT_TYPES.factoryChange,
-    }, sessionID);
+      sessionID,
+    );
 
     expect(
       queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
@@ -201,20 +221,24 @@ describe("syncCurrentFactoryDefinition", () => {
   it("updates both definition and document caches when FACTORY_CHANGE includes version", () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
-    syncCurrentFactoryDefinition(queryClient, {
-      context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
-      id: "event-1",
-      payload: {
-        factory: {
-          ...validFactory,
-          version: {
-            logical: "9",
-            physical: "2026-05-31T12:00:00Z",
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+        id: "event-1",
+        payload: {
+          factory: {
+            ...validFactory,
+            version: {
+              logical: "9",
+              physical: "2026-05-31T12:00:00Z",
+            },
           },
         },
+        type: FACTORY_EVENT_TYPES.factoryChange,
       },
-      type: FACTORY_EVENT_TYPES.factoryChange,
-    }, sessionID);
+      sessionID,
+    );
     expect(invalidateQueries).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
@@ -230,12 +254,16 @@ describe("syncCurrentFactoryDefinition", () => {
   it("swallows invalid factory payloads without throwing", () => {
     const queryClient = new QueryClient();
     expect(() => {
-      syncCurrentFactoryDefinition(queryClient, {
-        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
-        id: "event-1",
-        payload: { factory: { name: 123 } },
-        type: FACTORY_EVENT_TYPES.factoryChange,
-      }, sessionID);
+      syncCurrentFactoryDefinition(
+        queryClient,
+        {
+          context: { eventTime: "2026-04-25T20:00:01Z", sequence: 1, tick: 1 },
+          id: "event-1",
+          payload: { factory: { name: 123 } },
+          type: FACTORY_EVENT_TYPES.factoryChange,
+        },
+        sessionID,
+      );
     }).not.toThrow();
   });
 });

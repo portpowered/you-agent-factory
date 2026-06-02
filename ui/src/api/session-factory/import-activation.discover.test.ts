@@ -68,6 +68,8 @@ describe("discoverSessionNamedFactoryNames", () => {
       targets: [{ ref: { kind: "named", name: "alpha" } }],
     });
 
-    await expect(discoverSessionNamedFactoryNames()).resolves.toEqual(["alpha"]);
+    await expect(discoverSessionNamedFactoryNames()).resolves.toEqual([
+      "alpha",
+    ]);
   });
 });

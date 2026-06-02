@@ -175,7 +175,9 @@ function ExhaustionRuleNodeButton({
     return (
       <div
         className="flex h-full min-w-0 w-full items-center gap-2 overflow-hidden"
-        data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
+        data-selected-workstation={
+          data.selectedWorkstation ? "true" : undefined
+        }
         data-workstation-kind={semanticIconMetadata.semanticKind}
         title={workstationTitle}
       >

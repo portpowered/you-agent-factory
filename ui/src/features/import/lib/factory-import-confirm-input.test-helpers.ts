@@ -9,7 +9,8 @@ export function createFactoryImportConfirmInput(
 
   return {
     choice: "replace_current",
-    createFactoryName: embeddedName.length > 0 ? `${embeddedName}-2` : embeddedName,
+    createFactoryName:
+      embeddedName.length > 0 ? `${embeddedName}-2` : embeddedName,
     existingFactoryNames: ["alpha", embeddedName],
     value,
     ...overrides,

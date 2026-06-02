@@ -9,17 +9,25 @@ import { uniqueSorted } from "./shared";
 import { isSystemTimeWorkType } from "./systemTime";
 import type { ProjectedInitialStructure } from "./types";
 
-type FactoryWorkstationShape = NonNullable<ProjectedInitialStructure["workstations"]>[number];
+type FactoryWorkstationShape = NonNullable<
+  ProjectedInitialStructure["workstations"]
+>[number];
 
-export function projectTopology(topology: ProjectedInitialStructure): DashboardSnapshot["topology"] {
+export function projectTopology(
+  topology: ProjectedInitialStructure,
+): DashboardSnapshot["topology"] {
   const workstations = [...(topology.workstations ?? [])].sort((left, right) =>
     left.id.localeCompare(right.id),
   );
   const placesByID = Object.fromEntries(
     (topology.places ?? []).map((place) => [place.id, place]),
   );
-  const workTypeIDs = new Set((topology.work_types ?? []).map((workType) => workType.id));
-  const resourceIDs = new Set((topology.resources ?? []).map((resource) => resource.id));
+  const workTypeIDs = new Set(
+    (topology.work_types ?? []).map((workType) => workType.id),
+  );
+  const resourceIDs = new Set(
+    (topology.resources ?? []).map((resource) => resource.id),
+  );
 
   return {
     edges: buildTopologyEdges(workstations, placesByID, workTypeIDs),
@@ -40,12 +48,16 @@ export function projectSubmitWorkTypes(
   return uniqueSorted(
     (topology.work_types ?? [])
       .filter(isSubmitEligibleWorkType)
-      .map((workType) => resolveConfiguredWorkTypeName(workType.id, workType.name)),
-  )
-    .map((workTypeName) => ({ work_type_name: workTypeName }));
+      .map((workType) =>
+        resolveConfiguredWorkTypeName(workType.id, workType.name),
+      ),
+  ).map((workTypeName) => ({ work_type_name: workTypeName }));
 }
 
-export function resolveConfiguredWorkTypeName(id: string, name?: string): string {
+export function resolveConfiguredWorkTypeName(
+  id: string,
+  name?: string,
+): string {
   return name || id;
 }
 
@@ -186,7 +198,12 @@ function projectWorkstation(
     ),
     node_id: workstation.id,
     output_place_ids: outputPlaceIDs,
-    output_places: placeRefs(outputPlaceIDs, placesByID, workTypeIDs, resourceIDs),
+    output_places: placeRefs(
+      outputPlaceIDs,
+      placesByID,
+      workTypeIDs,
+      resourceIDs,
+    ),
     output_work_type_ids: workTypeIDsForPlaces(
       outputPlaceIDs,
       placesByID,
@@ -204,7 +221,9 @@ function placeRefs(
   placesByID: Record<string, FactoryPlace>,
   workTypeIDs: Set<string>,
   resourceIDs: Set<string>,
-): NonNullable<DashboardSnapshot["topology"]["workstation_nodes_by_id"][string]["input_places"]> {
+): NonNullable<
+  DashboardSnapshot["topology"]["workstation_nodes_by_id"][string]["input_places"]
+> {
   return uniqueSorted(ids).flatMap((id) => {
     const place = placesByID[id];
     if (!place) {
@@ -240,4 +259,3 @@ function workTypeIDsForPlaces(
       .filter((id) => workTypeIDs.has(id)),
   );
 }
-

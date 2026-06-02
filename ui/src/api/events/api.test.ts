@@ -47,10 +47,16 @@ describe("factory events API", () => {
 
     expect(stream).toBeInstanceOf(MockEventSource);
     expect(stream?.url).toBe("/factory-sessions/~default/events");
-    expect(onStatusChange).toHaveBeenCalledWith("connecting", "Connecting to factory events...");
+    expect(onStatusChange).toHaveBeenCalledWith(
+      "connecting",
+      "Connecting to factory events...",
+    );
 
     stream?.onopen?.(new Event("open"));
-    expect(onStatusChange).toHaveBeenCalledWith("live", "Factory event stream connected.");
+    expect(onStatusChange).toHaveBeenCalledWith(
+      "live",
+      "Factory event stream connected.",
+    );
 
     const messageListener = stream?.listeners.get("message");
     const eventPayload = {
@@ -80,7 +86,11 @@ describe("factory events API", () => {
     const onStatusChange = vi.fn();
     vi.stubGlobal("EventSource", MockEventSource);
 
-    const stream = openFactoryEventStream(onEvent, onStatusChange, "session-beta");
+    const stream = openFactoryEventStream(
+      onEvent,
+      onStatusChange,
+      "session-beta",
+    );
 
     expect(stream).toBeInstanceOf(MockEventSource);
     expect(stream?.url).toBe("/factory-sessions/session-beta/events");

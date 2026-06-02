@@ -1,12 +1,12 @@
 import { chromium } from "playwright";
-import { verifyCurrentSelectionSaveFlow } from "./verify-current-selection-storybook-responsive.mjs";
+import { ensureStorybookServer } from "./run-storybook-responsive-check.mjs";
 import {
   expectNoHorizontalOverflow,
   expectVisible,
   storyUrl,
   waitForStoryRender,
 } from "./storybook-responsive-helpers.mjs";
-import { ensureStorybookServer } from "./run-storybook-responsive-check.mjs";
+import { verifyCurrentSelectionSaveFlow } from "./verify-current-selection-storybook-responsive.mjs";
 
 const host = process.env.AGENT_FACTORY_STORYBOOK_HOST ?? "127.0.0.1";
 const port = process.env.AGENT_FACTORY_STORYBOOK_PORT ?? "6008";
@@ -32,7 +32,9 @@ try {
     page,
     viewport: { height: 900, label: "desktop", width: 1440 },
   });
-  console.log("Current selection save notification browser verification passed.");
+  console.log(
+    "Current selection save notification browser verification passed.",
+  );
   await browser.close();
 } finally {
   await server.stop();

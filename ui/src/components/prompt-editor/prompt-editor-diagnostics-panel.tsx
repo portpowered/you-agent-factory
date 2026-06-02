@@ -43,7 +43,10 @@ export function PromptEditorDiagnosticsPanel({
   if (validationState.status === "loading") {
     return (
       <p
-        className={cn("m-0 text-af-text-muted", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-af-text-muted",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
       >
         {labels.validationLoading}
       </p>

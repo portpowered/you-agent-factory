@@ -1,9 +1,9 @@
 import { useEffect } from "react";
 
 import {
+  type FactoryTimelineDebugOptions,
   installFactoryTimelineDebugGlobal,
   persistFactoryTimelineMemorySummary,
-  type FactoryTimelineDebugOptions,
   summarizeFactoryTimelineMemory,
 } from "../../timeline/state/factoryTimelineDebug";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
@@ -28,7 +28,11 @@ export function useDashboardTimelineMemoryDebug({
   }, [debugOptions]);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !debugOptions.memoryDebug || eventCount === 0) {
+    if (
+      typeof window === "undefined" ||
+      !debugOptions.memoryDebug ||
+      eventCount === 0
+    ) {
       return;
     }
 

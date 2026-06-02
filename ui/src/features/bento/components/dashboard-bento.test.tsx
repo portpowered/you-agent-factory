@@ -84,21 +84,22 @@ vi.mock("../../current-selection/hooks/useCurrentSelectionDetails", () => ({
 vi.mock(
   "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",
   async () => {
-  const React = await vi.importActual<typeof import("react")>("react");
+    const React = await vi.importActual<typeof import("react")>("react");
 
-  return {
-    useSelectedProviderSessionState: () => {
-      const [selectedProviderSession, setSelectedProviderSession] =
-        React.useState<LoadableProviderSessionRef | null>(null);
+    return {
+      useSelectedProviderSessionState: () => {
+        const [selectedProviderSession, setSelectedProviderSession] =
+          React.useState<LoadableProviderSessionRef | null>(null);
 
-      return {
-        selectedProviderSession,
-        selectedProviderSessionKey: selectedProviderSession?.id ?? null,
-        setSelectedProviderSession,
-      };
-    },
-  };
-});
+        return {
+          selectedProviderSession,
+          selectedProviderSessionKey: selectedProviderSession?.id ?? null,
+          setSelectedProviderSession,
+        };
+      },
+    };
+  },
+);
 
 vi.mock("../../provider-session-detail/public", () => ({
   ProviderSessionWidget: ({

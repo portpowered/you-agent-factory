@@ -1,21 +1,23 @@
-import { describe, expect, test, vi } from "vitest";
 import { EventEmitter } from "node:events";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   createStorybookIndexTimeoutError,
   runStorybookCI,
   verifyStorybookIframe,
-  waitForStorybookReady,
   waitForStableStorybookIframe,
+  waitForStorybookReady,
 } from "./run-storybook-ci.mjs";
 
 describe("verifyStorybookIframe", () => {
   test("accepts a ready iframe shell that contains the storybook root", async () => {
     const fetchFn = vi.fn().mockResolvedValue({
       ok: true,
-      text: vi.fn().mockResolvedValue(
-        '<!doctype html><html><body><div id="storybook-root"></div></body></html>',
-      ),
+      text: vi
+        .fn()
+        .mockResolvedValue(
+          '<!doctype html><html><body><div id="storybook-root"></div></body></html>',
+        ),
     });
 
     await expect(verifyStorybookIframe({ fetchFn })).resolves.toBeUndefined();
@@ -40,12 +42,16 @@ describe("verifyStorybookIframe", () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        text: vi.fn().mockResolvedValue(
-          '<!doctype html><html><body><div id="storybook-root"></div></body></html>',
-        ),
+        text: vi
+          .fn()
+          .mockResolvedValue(
+            '<!doctype html><html><body><div id="storybook-root"></div></body></html>',
+          ),
       });
 
-    await expect(verifyStorybookIframe({ delayFn, fetchFn })).resolves.toBeUndefined();
+    await expect(
+      verifyStorybookIframe({ delayFn, fetchFn }),
+    ).resolves.toBeUndefined();
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(delayFn).toHaveBeenCalledWith(250);
   });
@@ -54,7 +60,9 @@ describe("verifyStorybookIframe", () => {
     const delayFn = vi.fn().mockResolvedValue(undefined);
     const fetchFn = vi.fn().mockResolvedValue({
       ok: true,
-      text: vi.fn().mockResolvedValue("<html><body>still booting</body></html>"),
+      text: vi
+        .fn()
+        .mockResolvedValue("<html><body>still booting</body></html>"),
     });
 
     await expect(
@@ -145,10 +153,16 @@ describe("runStorybookCI", () => {
     expect(spawnServer).toHaveBeenCalledTimes(1);
     expect(waitForReady).toHaveBeenCalledTimes(1);
     expect(waitForReady.mock.calls[0]?.[0]?.serverExit).toBeInstanceOf(Promise);
-    expect(runCommand).toHaveBeenNthCalledWith(1, ["run", "storybook:test-runner:ci"]);
+    expect(runCommand).toHaveBeenNthCalledWith(1, [
+      "run",
+      "storybook:test-runner:ci",
+    ]);
     expect(settle).toHaveBeenCalledWith(1000);
     expect(waitForStableIndex).toHaveBeenCalledTimes(1);
-    expect(runCommand).toHaveBeenNthCalledWith(2, ["run", "storybook:responsive-check"]);
+    expect(runCommand).toHaveBeenNthCalledWith(2, [
+      "run",
+      "storybook:responsive-check",
+    ]);
     expect(stop).toHaveBeenCalledWith(server);
   });
 

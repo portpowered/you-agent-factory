@@ -4,11 +4,11 @@ import {
   currentSelectionDispatchHistoryMessagesByLocale,
   currentSelectionShellMessagesByLocale,
 } from "../features/current-selection/base/public";
-import { providerSessionDetailMessagesByLocale } from "../features/provider-session-detail/messages/provider-session-detail";
 import { workstationDetailMessagesByLocale } from "../features/current-selection/workstation-selection/public";
 import { exportDialogMessagesByLocale } from "../features/export/messages/export-dialog";
 import { headerControlsMessagesByLocale } from "../features/header/messages/header-controls";
 import { importPreviewDialogMessagesByLocale } from "../features/import/messages/import-preview-dialog";
+import { providerSessionDetailMessagesByLocale } from "../features/provider-session-detail/messages/provider-session-detail";
 import { terminalWorkMessagesByLocale } from "../features/terminal-work/messages/terminal-work";
 import { dashboardFlowAxisLegendMessagesByLocale } from "../features/workflow-activity/messages/dashboard-flow-axis-legend";
 import { workflowActivityGraphImportMessagesByLocale } from "../features/workflow-activity/messages/graph-import";

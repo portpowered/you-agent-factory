@@ -49,8 +49,7 @@ const factoryPngImportMessagesByLocale = {
     factoryMetadataMissingName: "you-agent-factory 工厂元数据缺少工厂名称。",
     factoryMetadataMissingSchemaVersion:
       "you-agent-factory 工厂元数据缺少架构版本。",
-    factoryMetadataMustBeObject:
-      "you-agent-factory 工厂元数据必须是一个对象。",
+    factoryMetadataMustBeObject: "you-agent-factory 工厂元数据必须是一个对象。",
     fileReadFailed: "无法读取所选图片。",
     imageDecodeFailed: "无法解码所选图片以生成预览。",
     notPngFile: "所选文件不是 PNG 图片。",

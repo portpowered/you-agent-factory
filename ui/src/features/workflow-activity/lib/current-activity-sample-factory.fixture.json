@@ -108,8 +108,8 @@
       ],
       "outputs": [
         {
-            "state": "to-complete",
-            "workType": "task"
+          "state": "to-complete",
+          "workType": "task"
         }
       ],
       "resources": [

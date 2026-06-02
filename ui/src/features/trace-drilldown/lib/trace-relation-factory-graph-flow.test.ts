@@ -75,9 +75,9 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
     expect(flow.nodes.every((node) => node.type === "factoryEntity")).toBe(
       true,
     );
-    expect(
-      flow.edges.every((edge) => edge.type === "factoryEditorEdge"),
-    ).toBe(true);
+    expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(
+      true,
+    );
   });
 
   it("styles relations without required state from relation type defaults", () => {
@@ -145,7 +145,6 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
       "var(--color-af-danger-text)",
     );
   });
-
 });
 
 describe("buildTraceRelationFactoryGraphFlow selection", () => {
@@ -159,7 +158,8 @@ describe("buildTraceRelationFactoryGraphFlow selection", () => {
       flow.nodes.find((node) => node.id === "work-implement")?.data.selectable,
     ).toBe(true);
     expect(
-      flow.nodes.find((node) => node.id === "work-implement")?.data.onSelectWorkID,
+      flow.nodes.find((node) => node.id === "work-implement")?.data
+        .onSelectWorkID,
     ).toBe(onSelectWorkID);
   });
 });

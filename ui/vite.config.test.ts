@@ -7,7 +7,9 @@ const config = viteConfig as UserConfig;
 
 describe("dashboard Vite config", () => {
   it("proxies factory events from preview to the local factory API", () => {
-    expect(config.preview?.proxy?.["/events"]).toEqual(config.server?.proxy?.["/events"]);
+    expect(config.preview?.proxy?.["/events"]).toEqual(
+      config.server?.proxy?.["/events"],
+    );
   });
 
   it("keeps preview and dev proxy coverage aligned for all OpenAPI-backed API paths", () => {

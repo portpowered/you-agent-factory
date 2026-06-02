@@ -49,10 +49,7 @@ export async function verifyEditorGraphParity(
   );
   await expectVisible(allPreset, "All visibility preset");
   await expectVisible(workflowPreset, "Workflow visibility preset");
-  await expectVisible(
-    infrastructurePreset,
-    "Infrastructure visibility preset",
-  );
+  await expectVisible(infrastructurePreset, "Infrastructure visibility preset");
   await expectVisible(reviewWorkstationNode, "Editor workstation node");
 
   await infrastructurePreset.click();

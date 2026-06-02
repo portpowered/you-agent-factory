@@ -13,4 +13,3 @@ export function GripVerticalIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-

@@ -10,21 +10,19 @@ import { staleFactoryVersionTarget } from "../../../testing/factory-validation-t
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import {
-  buildDetailCardMultiResourceFactoryDocument,
-  expandDetailCardResourceConfiguration,
-} from "../base/components/detail-card-save-test-helpers";
-import {
   currentSelectionConfigurationSection,
   expectNoInlineSaveOutcomesIn,
   expectNoSaveToastDelivery,
-  expectResourceSaveFailedToast,
-  expectResourceSaveSuccessToast,
+  expectWorkerSaveSuccessToast,
   expectWorkStateSaveSuccessToast,
   expectWorkstationSaveFailedToast,
   expectWorkstationSaveSuccessToast,
   expectWorkstationStaleSaveWarningToast,
-  expectWorkerSaveSuccessToast,
 } from "../base/components/current-selection-save-toast-test-helpers";
+import {
+  buildDetailCardMultiResourceFactoryDocument,
+  expandDetailCardResourceConfiguration,
+} from "../base/components/detail-card-save-test-helpers";
 import {
   buildDetailCardCurrentSelection,
   buildDetailCardEditableFactoryDocument,
@@ -33,10 +31,10 @@ import {
   buildDetailCardMultiWorkstationFactoryDocument,
   buildDetailCardSharedWorkerFactoryDocument,
   buildDetailCardWorkStateFactoryDocument,
+  clickWorkstationSave,
   createDetailCardDeferredFactoryDocumentSave,
   DETAIL_CARD_NOW,
   DETAIL_CARD_SAVE_FACTORY_VERSION,
-  clickWorkstationSave,
   expandDetailCardWorkstationConfiguration,
   workstationFooterSaveButton,
 } from "../base/components/detail-card-test-helpers";
@@ -88,7 +86,6 @@ vi.mock(
   }),
 );
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused current-selection save regressions share one render harness and mocked save seam.
 describe("CurrentSelectionWidget workstation save flow", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
@@ -173,9 +170,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     await waitFor(() => {
-      expect(
-        workstationFooterSaveButton().getAttribute("disabled"),
-      ).toBeNull();
+      expect(workstationFooterSaveButton().getAttribute("disabled")).toBeNull();
     });
     await waitFor(() => {
       expect(screen.queryByText("Prompt diagnostics")).toBeNull();
@@ -231,9 +226,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
 
     await waitFor(() => {
-      expect(
-        workstationFooterSaveButton().getAttribute("disabled"),
-      ).toBeNull();
+      expect(workstationFooterSaveButton().getAttribute("disabled")).toBeNull();
     });
 
     clickWorkstationSave();
@@ -330,9 +323,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft while the save fails.",
     );
-    expect(
-      workstationFooterSaveButton().getAttribute("disabled"),
-    ).toBeNull();
+    expect(workstationFooterSaveButton().getAttribute("disabled")).toBeNull();
   });
 
   it("shows generic save failures without discarding the dirty draft", async () => {
@@ -387,9 +378,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep this draft through a stale write.",
     );
-    expect(
-      workstationFooterSaveButton().getAttribute("disabled"),
-    ).toBeNull();
+    expect(workstationFooterSaveButton().getAttribute("disabled")).toBeNull();
   });
 
   it("maps targeted save validation failures onto the affected workstation field", async () => {
@@ -1412,7 +1401,9 @@ describe("CurrentSelectionWidget work state save flow", () => {
     });
 
     await waitFor(() => {
-      const saveButtons = screen.getAllByRole("button", { name: "Save work state" });
+      const saveButtons = screen.getAllByRole("button", {
+        name: "Save work state",
+      });
       expect(saveButtons).toHaveLength(1);
       expect(saveButtons[0]?.getAttribute("disabled")).not.toBeNull();
     });
@@ -1473,7 +1464,10 @@ describe("CurrentSelectionWidget work state save flow", () => {
               expect.objectContaining({
                 name: "story",
                 states: expect.arrayContaining([
-                  expect.objectContaining({ name: "ready", type: "PROCESSING" }),
+                  expect.objectContaining({
+                    name: "ready",
+                    type: "PROCESSING",
+                  }),
                 ]),
               }),
             ],
@@ -1528,7 +1522,9 @@ describe("CurrentSelectionWidget worker save flow", () => {
     const saveWorkerButtons = screen.getAllByRole("button", {
       name: "Save worker",
     });
-    fireEvent.click(saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0]);
+    fireEvent.click(
+      saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0],
+    );
 
     expect(
       screen.queryByRole("heading", {

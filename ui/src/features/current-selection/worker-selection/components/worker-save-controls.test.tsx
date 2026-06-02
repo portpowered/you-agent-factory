@@ -59,9 +59,9 @@ describe("EditableWorkerSaveHeaderAction", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Save worker" }).className).not.toContain(
-      "border-af-warning-border",
-    );
+    expect(
+      screen.getByRole("button", { name: "Save worker" }).className,
+    ).not.toContain("border-af-warning-border");
   });
 
   it("does not use warning styling while save is submitting", () => {

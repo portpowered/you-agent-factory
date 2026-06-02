@@ -1,8 +1,15 @@
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
 
@@ -13,7 +20,9 @@ const scriptPath = path.resolve(
 );
 
 test("normalize-dist-output prunes empty dist directories before generating Go embeds", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "normalize-dist-output-"));
+  const tempRoot = await mkdtemp(
+    path.join(os.tmpdir(), "normalize-dist-output-"),
+  );
   const uiDir = path.join(tempRoot, "ui");
   const distDir = path.join(uiDir, "dist");
   const assetsDir = path.join(distDir, "assets");
@@ -22,9 +31,15 @@ test("normalize-dist-output prunes empty dist directories before generating Go e
   try {
     await mkdir(assetsDir, { recursive: true });
     await mkdir(emptyDashboardDir, { recursive: true });
-    await writeFile(path.join(assetsDir, "index-abc123.js"), "console.log('ok');\n");
+    await writeFile(
+      path.join(assetsDir, "index-abc123.js"),
+      "console.log('ok');\n",
+    );
     await writeFile(path.join(assetsDir, "index-def456.css"), "body{}\n");
-    await writeFile(path.join(assetsDir, "editor.worker.js"), "self.onmessage = () => {};\n");
+    await writeFile(
+      path.join(assetsDir, "editor.worker.js"),
+      "self.onmessage = () => {};\n",
+    );
     await writeFile(path.join(assetsDir, "editor.css"), ".monaco-editor{}\n");
     await writeFile(
       path.join(distDir, "index.html"),
@@ -36,18 +51,23 @@ test("normalize-dist-output prunes empty dist directories before generating Go e
       env: { ...process.env, AGENT_FACTORY_UI_DIR: uiDir },
     });
 
-    await expect(readFile(path.join(assetsDir, "index.js"), "utf8")).resolves.toBe(
-      "console.log('ok');\n",
-    );
-    await expect(readFile(path.join(assetsDir, "index.css"), "utf8")).resolves.toBe("body{}\n");
-    await expect(readFile(path.join(assetsDir, "editor.worker.js"), "utf8")).resolves.toBe(
-      "self.onmessage = () => {};\n",
-    );
-    await expect(readFile(path.join(assetsDir, "editor.css"), "utf8")).resolves.toBe(
-      ".monaco-editor{}\n",
-    );
+    await expect(
+      readFile(path.join(assetsDir, "index.js"), "utf8"),
+    ).resolves.toBe("console.log('ok');\n");
+    await expect(
+      readFile(path.join(assetsDir, "index.css"), "utf8"),
+    ).resolves.toBe("body{}\n");
+    await expect(
+      readFile(path.join(assetsDir, "editor.worker.js"), "utf8"),
+    ).resolves.toBe("self.onmessage = () => {};\n");
+    await expect(
+      readFile(path.join(assetsDir, "editor.css"), "utf8"),
+    ).resolves.toBe(".monaco-editor{}\n");
 
-    const normalizedHtml = await readFile(path.join(distDir, "index.html"), "utf8");
+    const normalizedHtml = await readFile(
+      path.join(distDir, "index.html"),
+      "utf8",
+    );
     expect(normalizedHtml).toMatch(/\/dashboard\/ui\/assets\/index\.js/);
     expect(normalizedHtml).toMatch(/\/dashboard\/ui\/assets\/index\.css/);
     expect(normalizedHtml).not.toMatch(/index-abc123\.js|index-def456\.css/);
@@ -55,7 +75,10 @@ test("normalize-dist-output prunes empty dist directories before generating Go e
     await expect(stat(emptyDashboardDir)).rejects.toThrow();
     await expect(stat(path.join(uiDir, "dist_stamp.go"))).rejects.toThrow();
 
-    const generatedEmbed = await readFile(path.join(uiDir, "dist_embed_generated.go"), "utf8");
+    const generatedEmbed = await readFile(
+      path.join(uiDir, "dist_embed_generated.go"),
+      "utf8",
+    );
     expect(generatedEmbed).toMatch(/\/\/go:embed dist dist\/\*/);
   } finally {
     await rm(tempRoot, { recursive: true, force: true });

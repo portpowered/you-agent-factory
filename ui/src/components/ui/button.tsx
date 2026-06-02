@@ -1,5 +1,5 @@
 import { Slot } from "@radix-ui/react-slot";
-import { forwardRef, type ButtonHTMLAttributes } from "react";
+import { type ButtonHTMLAttributes, forwardRef } from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -16,7 +16,8 @@ const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
     "border-af-accent bg-af-accent text-af-on-accent hover:border-af-accent-hover hover:bg-af-accent-hover",
   destructive:
     "border-af-danger bg-af-danger text-af-on-danger hover:border-af-danger-hover hover:bg-af-danger-hover",
-  ghost: "border-transparent bg-transparent text-af-text-muted hover:bg-af-overlay hover:text-af-text",
+  ghost:
+    "border-transparent bg-transparent text-af-text-muted hover:bg-af-overlay hover:text-af-text",
   outline:
     "border-af-border bg-af-surface-raised text-af-text hover:border-af-border-strong hover:bg-af-overlay",
   secondary:
@@ -34,19 +35,33 @@ export const buttonVariants = ({
   size = "default",
   tone = "default",
 }: Pick<ButtonProps, "className" | "size" | "tone">) =>
-  cn(BUTTON_BASE_CLASS, BUTTON_TONE_CLASS[tone], BUTTON_SIZE_CLASS[size], className);
-
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { asChild = false, className, size = "default", tone = "default", type = "button", ...props },
-  ref,
-) {
-  const Component = asChild ? Slot : "button";
-  return (
-    <Component
-      className={buttonVariants({ className, size, tone })}
-      ref={ref}
-      {...(!asChild ? { type } : undefined)}
-      {...props}
-    />
+  cn(
+    BUTTON_BASE_CLASS,
+    BUTTON_TONE_CLASS[tone],
+    BUTTON_SIZE_CLASS[size],
+    className,
   );
-});
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    {
+      asChild = false,
+      className,
+      size = "default",
+      tone = "default",
+      type = "button",
+      ...props
+    },
+    ref,
+  ) {
+    const Component = asChild ? Slot : "button";
+    return (
+      <Component
+        className={buttonVariants({ className, size, tone })}
+        ref={ref}
+        {...(!asChild ? { type } : undefined)}
+        {...props}
+      />
+    );
+  },
+);

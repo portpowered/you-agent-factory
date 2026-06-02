@@ -21,4 +21,3 @@ export const useDashboardBentoStore = create<DashboardBentoState>((set) => ({
     set({ selectedTraceID: traceID });
   },
 }));
-

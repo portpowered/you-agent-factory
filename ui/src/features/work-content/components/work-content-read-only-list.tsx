@@ -45,7 +45,9 @@ export function WorkContentReadOnlyList({
   return (
     <section aria-label={resolvedAriaLabel} className="grid gap-2">
       {showHeading ? (
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{messages.heading}</span>
+        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+          {messages.heading}
+        </span>
       ) : null}
       {body}
     </section>

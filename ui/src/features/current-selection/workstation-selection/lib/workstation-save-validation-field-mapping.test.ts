@@ -105,10 +105,10 @@ describe("mapWorkstationSaveErrorToFieldErrors", () => {
           "workstations[0](daily-refresh).cron.schedule",
           "cron workstation requires non-empty 'schedule'",
         ),
-        workstationCronFieldValidationTarget("cron.jitter", 'jitter invalid'),
+        workstationCronFieldValidationTarget("cron.jitter", "jitter invalid"),
         workstationCronFieldValidationTarget(
           "cron.expiryWindow",
-          'expiry_window invalid',
+          "expiry_window invalid",
         ),
         workstationCronFieldValidationTarget(
           "cron.triggerAtStart",

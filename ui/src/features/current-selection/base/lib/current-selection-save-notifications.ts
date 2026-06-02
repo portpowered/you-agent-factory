@@ -1,7 +1,5 @@
 import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
-import {
-  buildGraphSaveErrorToastDescription,
-} from "../../../factory-graph-editor/lib/graph-document-save-notifications";
+import { buildGraphSaveErrorToastDescription } from "../../../factory-graph-editor/lib/graph-document-save-notifications";
 import type { CurrentSelectionSaveEntityKind } from "../../../notifications/lib/save-notification-delivery-policy";
 import type { FactoryDocumentSaveState } from "../hooks/factory-document-save-types";
 
@@ -51,7 +49,12 @@ export function resolveCurrentSelectionSaveToastNotification({
     };
   }
 
-  if (shouldShowCurrentSelectionStaleSaveWarningToast(documentSave, saveMutationError)) {
+  if (
+    shouldShowCurrentSelectionStaleSaveWarningToast(
+      documentSave,
+      saveMutationError,
+    )
+  ) {
     const warningMessage = resolveCurrentSelectionStaleSaveWarningMessage(
       documentSave,
       saveMutationError,
@@ -101,7 +104,10 @@ function shouldShowCurrentSelectionStaleSaveWarningToast(
 
 function resolveCurrentSelectionStaleSaveWarningMessage(
   documentSave: FactoryDocumentSaveState,
-  saveMutationError: Pick<CurrentFactoryDefinitionError, "code" | "message"> | null,
+  saveMutationError: Pick<
+    CurrentFactoryDefinitionError,
+    "code" | "message"
+  > | null,
 ): string {
   if (saveMutationError?.code === "STALE_FACTORY_VERSION") {
     return saveMutationError.message;

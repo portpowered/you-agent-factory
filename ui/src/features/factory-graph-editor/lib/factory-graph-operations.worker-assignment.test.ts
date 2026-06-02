@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-
+import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
   addFactoryGraphNode,
@@ -7,7 +7,6 @@ import {
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
 } from "./factory-graph-operations";
-import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 
 describe("factory graph operations worker assignment", () => {
   it("accepts worker-assignment replacement while the draft is temporarily save-invalid", () => {
@@ -28,7 +27,9 @@ describe("factory graph operations worker assignment", () => {
 
     const disconnected = disconnectFactoryGraphEdge({
       baseFactoryDefinition,
-      draft: withReviewer.ok ? withReviewer.value : createEmptyFactoryGraphDraft(),
+      draft: withReviewer.ok
+        ? withReviewer.value
+        : createEmptyFactoryGraphDraft(),
       edgeId: "worker-assignment:worker:writer->workstation:draft",
     });
     expect(disconnected).toMatchObject({ ok: true });

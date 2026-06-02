@@ -72,7 +72,10 @@ describe("WorkContentReadOnlyList", () => {
     ).toBeTruthy();
 
     rerender(
-      <WorkContentReadOnlyList payloadStatus="ERROR" reason="projection failed" />,
+      <WorkContentReadOnlyList
+        payloadStatus="ERROR"
+        reason="projection failed"
+      />,
     );
     expect(
       screen.getByText("Work content could not be loaded. projection failed"),

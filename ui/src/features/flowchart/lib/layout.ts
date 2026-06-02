@@ -1,6 +1,4 @@
 import type { ElkExtendedEdge, ElkNode } from "elkjs/lib/elk.bundled.js";
-
-import { formatDashboardPlaceLabel } from "../../../components/ui/place-labels";
 import type {
   DashboardEdgeOutcomeKind,
   DashboardPlaceKind,
@@ -9,12 +7,15 @@ import type {
   DashboardWorkstationNode,
   StateCategory,
 } from "../../../api/dashboard/types";
-import {
-  buildLayeredGraphLayout,
-} from "./layered-layout";
+import { formatDashboardPlaceLabel } from "../../../components/ui/place-labels";
+import { buildLayeredGraphLayout } from "./layered-layout";
 import { isExhaustionWorkstation } from "./workstation-semantics";
 
-export type PositionedNodeKind = "constraint" | "state_position" | "resource" | "workstation";
+export type PositionedNodeKind =
+  | "constraint"
+  | "state_position"
+  | "resource"
+  | "workstation";
 
 export interface PositionedBaseNode {
   column: number;
@@ -116,7 +117,9 @@ function edgeLabel(workTypeID?: string, stateValue?: string): string {
   return workTypeID ?? "";
 }
 
-function placeNodeKind(place: DashboardPlaceRef): PositionedPlaceNode["nodeKind"] {
+function placeNodeKind(
+  place: DashboardPlaceRef,
+): PositionedPlaceNode["nodeKind"] {
   if (place.kind === "work_state") {
     return "state_position";
   }
@@ -126,7 +129,10 @@ function placeNodeKind(place: DashboardPlaceRef): PositionedPlaceNode["nodeKind"
   return "constraint";
 }
 
-function placeNodeDimensions(place: DashboardPlaceRef): { height: number; width: number } {
+function placeNodeDimensions(place: DashboardPlaceRef): {
+  height: number;
+  width: number;
+} {
   if (place.kind === "work_state") {
     return { height: STATE_NODE_HEIGHT, width: STATE_NODE_WIDTH };
   }
@@ -153,7 +159,9 @@ function fallbackPlaceRef(placeId: string): DashboardPlaceRef {
   };
 }
 
-function collectPlacesById(topology: DashboardTopology): Map<string, DashboardPlaceRef> {
+function collectPlacesById(
+  topology: DashboardTopology,
+): Map<string, DashboardPlaceRef> {
   const placesById = new Map<string, DashboardPlaceRef>();
 
   for (const nodeId of topology.workstation_node_ids) {
@@ -185,7 +193,9 @@ function collectPlacesById(topology: DashboardTopology): Map<string, DashboardPl
   return placesById;
 }
 
-function buildOutputEdgeMetadata(topology: DashboardTopology): Map<string, GraphSeedEdge> {
+function buildOutputEdgeMetadata(
+  topology: DashboardTopology,
+): Map<string, GraphSeedEdge> {
   const metadataByOutput = new Map<string, GraphSeedEdge>();
 
   for (const edge of topology.edges ?? []) {
@@ -230,7 +240,9 @@ function buildGraphSeeds(topology: DashboardTopology): GraphSeeds {
         };
       }),
     ...topology.workstation_node_ids.map((nodeId) => {
-      const dimensions = workstationNodeDimensions(topology.workstation_nodes_by_id[nodeId]);
+      const dimensions = workstationNodeDimensions(
+        topology.workstation_nodes_by_id[nodeId],
+      );
 
       return {
         height: dimensions.height,
@@ -270,7 +282,8 @@ function buildGraphSeeds(topology: DashboardTopology): GraphSeeds {
     }
 
     for (const outputPlaceId of workstation.output_place_ids ?? []) {
-      const place = placesById.get(outputPlaceId) ?? fallbackPlaceRef(outputPlaceId);
+      const place =
+        placesById.get(outputPlaceId) ?? fallbackPlaceRef(outputPlaceId);
       const metadata = outputEdgeMetadata.get(`${nodeId}:${outputPlaceId}`);
       const fromNodeId = workstationGraphNodeId(nodeId);
       const toNodeId = placeGraphNodeId(outputPlaceId);
@@ -343,7 +356,10 @@ function buildEdgePath(points: { x: number; y: number }[]): string {
   ].join(" ");
 }
 
-function edgePoints(edge: GraphSeedEdge, nodesById: Map<string, PositionedNode>) {
+function edgePoints(
+  edge: GraphSeedEdge,
+  nodesById: Map<string, PositionedNode>,
+) {
   const section = edge.sections?.[0];
   if (section) {
     return [
@@ -408,7 +424,9 @@ export async function buildGraphLayout(
   const positionedNodes = layeredLayout.nodes.map((node) =>
     toPositionedNode(node, node.column, node.row, node.x, node.y),
   );
-  const positionedNodesById = new Map(positionedNodes.map((node) => [node.nodeId, node]));
+  const positionedNodesById = new Map(
+    positionedNodes.map((node) => [node.nodeId, node]),
+  );
 
   return {
     edges: toPositionedEdges(layeredLayout.edges, positionedNodesById),

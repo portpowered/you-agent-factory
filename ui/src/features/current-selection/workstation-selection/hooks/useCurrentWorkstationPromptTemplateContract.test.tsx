@@ -59,7 +59,9 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    expect(getCurrentFactoryWorkstationPromptTemplateContract).not.toHaveBeenCalled();
+    expect(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
       data: undefined,
       error: null,
@@ -82,9 +84,9 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
   });
 
   it("loads the prompt-template contract for the selected workstation", async () => {
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockResolvedValue(
-      promptTemplateContract,
-    );
+    vi.mocked(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).mockResolvedValue(promptTemplateContract);
 
     const { result } = renderHook(
       () => useCurrentWorkstationPromptTemplateContract("Review"),
@@ -100,17 +102,16 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       });
     });
 
-    expect(getCurrentFactoryWorkstationPromptTemplateContract).toHaveBeenCalledWith(
-      "Review",
-      { sessionID: "~default" },
-    );
+    expect(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).toHaveBeenCalledWith("Review", { sessionID: "~default" });
   });
 
   it("loads prompt-template contract data through the selected session", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-beta" });
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockResolvedValue(
-      promptTemplateContract,
-    );
+    vi.mocked(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).mockResolvedValue(promptTemplateContract);
 
     const { result } = renderHook(
       () => useCurrentWorkstationPromptTemplateContract("Review"),
@@ -121,21 +122,20 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
       expect(result.current.status).toBe("success");
     });
 
-    expect(getCurrentFactoryWorkstationPromptTemplateContract).toHaveBeenCalledWith(
-      "Review",
-      { sessionID: "session-beta" },
-    );
+    expect(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).toHaveBeenCalledWith("Review", { sessionID: "session-beta" });
     expect(result.current.data).toBe(promptTemplateContract);
   });
 
   it("surfaces typed API failures from the prompt-template contract query", async () => {
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockRejectedValue(
-      {
-        code: "NOT_FOUND",
-        message: "Current factory workstation not found.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    vi.mocked(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).mockRejectedValue({
+      code: "NOT_FOUND",
+      message: "Current factory workstation not found.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () => useCurrentWorkstationPromptTemplateContract("Review"),
@@ -156,14 +156,14 @@ describe("useCurrentWorkstationPromptTemplateContract", () => {
   });
 
   it("surfaces network failures from the prompt-template contract query", async () => {
-    vi.mocked(getCurrentFactoryWorkstationPromptTemplateContract).mockRejectedValue(
-      {
-        code: "NETWORK_ERROR",
-        message:
-          "The dashboard could not reach the current factory prompt-template contract API.",
-        name: "CurrentFactoryPromptTemplateAPIError",
-      },
-    );
+    vi.mocked(
+      getCurrentFactoryWorkstationPromptTemplateContract,
+    ).mockRejectedValue({
+      code: "NETWORK_ERROR",
+      message:
+        "The dashboard could not reach the current factory prompt-template contract API.",
+      name: "CurrentFactoryPromptTemplateAPIError",
+    });
 
     const { result } = renderHook(
       () => useCurrentWorkstationPromptTemplateContract("Review"),

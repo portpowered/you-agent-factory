@@ -1,41 +1,51 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type {
-  CurrentFactoryDocument,
-} from "../../../api/current-factory-definition";
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import {
   buildDashboardInferenceAttemptFixture,
   buildDashboardWorkstationRequestFixture,
 } from "../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
+import { selectWorkItemExecutionDetails } from "../state/executionDetails";
+import type {
+  DashboardSelection,
+  TerminalWorkDetail,
+} from "../state/selection-types";
+import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
+import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
+import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import { CurrentSelectionWidget } from "./current-selection-widget";
 import { renderWithQueryClient } from "./current-selection-widget-test-utils";
-import { selectWorkItemExecutionDetails } from "../state/executionDetails";
-import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
-import type { DashboardSelection, TerminalWorkDetail } from "../state/selection-types";
-import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
-import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
-import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 
-vi.mock("../../current-factory-definition/hooks/useCurrentFactoryDefinition", async () => {
-  const actual = await vi.importActual(
-    "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  );
+vi.mock(
+  "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+  async () => {
+    const actual = await vi.importActual(
+      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+    );
 
-  return {
-    ...actual,
-    useCurrentFactoryDocument: vi.fn(),
-  };
-});
+    return {
+      ...actual,
+      useCurrentFactoryDocument: vi.fn(),
+    };
+  },
+);
 
-vi.mock("../workstation-selection/hooks/use-save-editable-workstation-configuration", () => ({
-  useSaveEditableWorkstationConfiguration: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/use-save-editable-workstation-configuration",
+  () => ({
+    useSaveEditableWorkstationConfiguration: vi.fn(),
+  }),
+);
 
-vi.mock("../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation", () => ({
-  useCurrentWorkstationPromptTemplateValidation: vi.fn(),
-}));
+vi.mock(
+  "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation",
+  () => ({
+    useCurrentWorkstationPromptTemplateValidation: vi.fn(),
+  }),
+);
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
@@ -684,9 +694,7 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
-      true,
-    );
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
     expect(
       within(currentSelection).getByRole("heading", { name: "Active work" }),
     ).toBeTruthy();
@@ -704,9 +712,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
-      false,
-    );
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(false);
   });
 
   it("renders the worker detail card for worker selections", () => {
@@ -751,9 +757,7 @@ describe("CurrentSelectionWidget", () => {
     expect(
       screen.getByRole("heading", { name: "Worker configuration" }),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("heading", { name: "Configuration" }),
-    ).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Configuration" })).toBeNull();
     expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 
@@ -805,7 +809,9 @@ describe("CurrentSelectionWidget", () => {
         "Select a workstation, work item, or state node to inspect live details.",
       ),
     ).toBeNull();
-    expect(screen.getByRole("heading", { name: "Resource configuration" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Resource configuration" }),
+    ).toBeTruthy();
     expect(screen.getByLabelText("Name")).toBeTruthy();
     expect(screen.getByLabelText("Capacity")).toBeTruthy();
     expect(screen.getByText("Available tokens")).toBeTruthy();
@@ -831,9 +837,9 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect((screen.getByLabelText("Model provider") as HTMLSelectElement).value).toBe(
-      "CURSOR",
-    );
+    expect(
+      (screen.getByLabelText("Model provider") as HTMLSelectElement).value,
+    ).toBe("CURSOR");
     expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
       "gpt-5.5",
     );
@@ -842,9 +848,9 @@ describe("CurrentSelectionWidget", () => {
       target: { value: "CODEX" },
     });
 
-    expect((screen.getByLabelText("Model provider") as HTMLSelectElement).value).toBe(
-      "CODEX",
-    );
+    expect(
+      (screen.getByLabelText("Model provider") as HTMLSelectElement).value,
+    ).toBe("CODEX");
   });
 
   it("enables editable workstation loading after a workstation becomes selected", () => {
@@ -890,9 +896,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(
-      true,
-    );
+    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
 
     expandEditableConfiguration();
 
@@ -1074,7 +1078,9 @@ describe("CurrentSelectionWidget", () => {
       }),
     ).toBeTruthy();
     const inferenceAttempts = within(
-      within(currentSelection).getByRole("region", { name: "Inference attempts" }),
+      within(currentSelection).getByRole("region", {
+        name: "Inference attempts",
+      }),
     );
     fireEvent.click(
       inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
@@ -1094,9 +1100,7 @@ describe("CurrentSelectionWidget", () => {
     ).toBeTruthy();
     expect(requestBody.getByRole("list")).toBeTruthy();
     expect(requestBody.getByText("Check the latest diff")).toBeTruthy();
-    expect(
-      requestBody.queryByText("## Review checklist"),
-    ).toBeNull();
+    expect(requestBody.queryByText("## Review checklist")).toBeNull();
     expect(requestBody.queryByText("```text")).toBeNull();
     expect(requestBody.getAllByText(/bun test/)).toHaveLength(2);
     expect(
