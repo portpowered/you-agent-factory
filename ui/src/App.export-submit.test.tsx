@@ -1,3 +1,6 @@
+import "./testing/app-shell-work-outcome-stub";
+import "./testing/app-shell-workflow-activity-stub";
+
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ImportFactoryValue } from "./api/session-factory";

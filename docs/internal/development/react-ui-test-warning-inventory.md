@@ -146,6 +146,21 @@ VITEST_WARNING_INVENTORY_APPEND=1 bunx vitest run --config vite.config.warning-i
 node scripts/summarize-warning-inventory.mjs
 ```
 
+## App shell cleanup (story 002)
+
+**Status (UTC 2026-06-03):** All `src/App.*.test.tsx` suites pass the warning-inventory capture with **zero** hooked `console.error` / `console.warn` lines.
+
+**Harness approach:**
+
+| Concern | Mitigation |
+| --- | --- |
+| Recharts `act` noise in export/stream suites | Opt-in `ui/src/testing/app-shell-work-outcome-stub.tsx` (mocks `useWorkOutcomeChart` + `WorkOutcomeWidget`) |
+| React Flow `act` noise in export/stream suites | Opt-in `ui/src/testing/app-shell-workflow-activity-stub.tsx` |
+| Suites that assert on real charts or graph | Do **not** import the stubs; use `waitForAppShellWorkGraphReady()` when waiting on React Flow nodes |
+| Session stream loading shell | Call `resetTimelineForInitialStreamLoad()` **before** `renderApp({ seedTimelineFromSnapshot: false })`; use `emitTimelineMessagesAct()` for EventSource emits |
+
+Stub imports today: `App.export-submit`, `App.export-dialog`, `App.follow-up-trace`, `App.session-stream`.
+
 ## PRD story mapping
 
 | Story | Primary inventory targets |

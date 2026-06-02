@@ -1,3 +1,6 @@
+import "./testing/app-shell-work-outcome-stub";
+import "./testing/app-shell-workflow-activity-stub";
+
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { DashboardTrace } from "./api/dashboard";

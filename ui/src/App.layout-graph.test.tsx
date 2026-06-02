@@ -12,6 +12,7 @@ import {
   registerAppDashboardTestLifecycle,
   renderApp,
   renderAppWithDashboardShell,
+  waitForAppShellWorkGraphReady,
   waitForDashboardShell,
 } from "./testing/app-shell-test-utils";
 
@@ -315,6 +316,7 @@ describe("App layout and graph behavior", () => {
   it("renders a 20-node workflow through React Flow", async () => {
     renderApp({ snapshot: twentyNodeSnapshot });
     await waitForDashboardShell();
+    await waitForAppShellWorkGraphReady();
 
     const workGraphViewport = screen.getByRole("region", {
       name: "Work graph viewport",

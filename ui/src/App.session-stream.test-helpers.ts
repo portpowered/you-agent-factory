@@ -1,3 +1,5 @@
+import { act } from "@testing-library/react";
+
 import type { DashboardSnapshot } from "./api/dashboard";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import {
@@ -41,6 +43,16 @@ export function emitTimelineMessages(
   for (const event of events) {
     stream.emit("message", event);
   }
+}
+
+export async function emitTimelineMessagesAct(
+  stream: MockEventSource,
+  events = selectedTickTimelineEvents,
+): Promise<void> {
+  await act(async () => {
+    emitTimelineMessages(stream, events);
+    await Promise.resolve();
+  });
 }
 
 export function buildBetaSessionSnapshot(): DashboardSnapshot {
