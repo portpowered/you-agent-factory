@@ -256,6 +256,8 @@ const invokeWorkstationDetail = (
     case "editableConfigurationSaveConflictConfirmationDescription":
     case "runnerInheritanceFactoryLabel":
       return [formatter("prompt" as never)];
+    case "editableConfigurationNameDuplicate":
+      return [formatter("duplicate-workstation" as never)];
     case "editableConfigurationSharedWorkerScopeHint":
       return [formatter("Worker A" as never, "Review, Implement" as never)];
     case "localizeWorkstationBehavior":

@@ -103,6 +103,12 @@ export function useEditableWorkstationConfigurationState(
     selectedEditableValues,
     promptValidationState,
     messages,
+    {
+      originalWorkstationName: selectedEditableValues.workstationName,
+      workstationNames: (editableDefinition.data.workstations ?? []).map(
+        (workstation) => workstation.name,
+      ),
+    },
   );
 
   return buildReadyEditableWorkstationConfigurationState({

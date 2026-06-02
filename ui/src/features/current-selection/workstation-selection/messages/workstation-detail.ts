@@ -34,6 +34,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "Configuration",
     editableConfigurationModelSharedWorkerHint:
       "Model edits are disabled here because this workstation shares its worker with other workstations.",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `A workstation named "${workstationName}" already exists in the running factory definition.`,
+    editableConfigurationNameRequired:
+      "Enter a workstation name before saving this workstation.",
     editableConfigurationResetAction: "Reset to latest",
     editableConfigurationServerFieldChangedHint:
       "The running factory changed this field while you were editing. Reset to latest to discard the local draft value.",
@@ -275,6 +279,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "構成",
     editableConfigurationModelSharedWorkerHint:
       "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `ワークステーション名 "${workstationName}" は、実行中のファクトリー定義にすでに存在します。`,
+    editableConfigurationNameRequired:
+      "このワークステーションを保存する前にワークステーション名を入力してください。",
     editableConfigurationResetAction: "最新へ戻す",
     editableConfigurationServerFieldChangedHint:
       "編集中に実行中ファクトリーのこの項目が更新されました。最新へ戻すと、この下書きのローカル値を破棄します。",
@@ -518,6 +526,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "구성",
     editableConfigurationModelSharedWorkerHint:
       "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `워크스테이션 이름 "${workstationName}" 은(는) 실행 중인 팩토리 정의에 이미 있습니다.`,
+    editableConfigurationNameRequired:
+      "이 워크스테이션을 저장하기 전에 워크스테이션 이름을 입력하세요.",
     editableConfigurationResetAction: "최신값으로 재설정",
     editableConfigurationServerFieldChangedHint:
       "편집하는 동안 실행 중인 팩토리에서 이 필드가 변경되었습니다. 최신값으로 재설정하면 로컬 초안 값이 버려집니다.",
@@ -756,6 +768,9 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "配置",
     editableConfigurationModelSharedWorkerHint:
       "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `工作站名称 "${workstationName}" 在运行中的工厂定义中已存在。`,
+    editableConfigurationNameRequired: "保存此工作站前请输入工作站名称。",
     editableConfigurationResetAction: "重置为最新值",
     editableConfigurationServerFieldChangedHint:
       "你编辑期间，运行中的工厂已更新此字段。重置为最新值会丢弃当前本地草稿值。",

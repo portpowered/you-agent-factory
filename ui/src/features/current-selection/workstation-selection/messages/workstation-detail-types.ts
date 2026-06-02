@@ -10,6 +10,8 @@ export interface WorkstationDetailMessages {
   editableConfigurationHeading: string;
   editableConfigurationLoading: string;
   editableConfigurationModelSharedWorkerHint: string;
+  editableConfigurationNameDuplicate: (workstationName: string) => string;
+  editableConfigurationNameRequired: string;
   editableConfigurationResetAction: string;
   editableConfigurationServerFieldChangedHint: string;
   editableConfigurationOverwriteWarning: (fields: string) => string;
