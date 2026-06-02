@@ -193,6 +193,7 @@ function buildReadyEditableConfigurationState(overrides?: {
       cron,
       guards: [],
       inputs: [],
+      name: overrides?.initialValuesWorkstationName ?? "Review",
       prompt:
         overrides?.prompt ?? "Review the latest story changes before approval.",
       runnerName: "gemini",
@@ -264,6 +265,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     onCronJitterChange: vi.fn(),
     onCronScheduleChange: vi.fn(),
     onCronTriggerAtStartChange: vi.fn(),
+    onNameChange: vi.fn(),
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onGuardsChange: vi.fn(),

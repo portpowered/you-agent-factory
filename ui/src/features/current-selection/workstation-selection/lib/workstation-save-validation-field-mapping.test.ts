@@ -66,6 +66,34 @@ describe("resolveWorkstationSaveValidationFieldName", () => {
     ).toBeNull();
   });
 
+  it("maps workstation name validation targets onto the name field", () => {
+    expect(
+      resolveWorkstationSaveValidationFieldName({
+        code: "factory.duplicateIdentifier",
+        message: 'duplicate workstation name "Plan".',
+        severity: "error",
+        subject: {
+          id: "Plan",
+          location: "DEFINITION",
+          type: "WORKSTATION",
+        },
+      }),
+    ).toBe("name");
+
+    expect(
+      resolveWorkstationSaveValidationFieldName({
+        code: "factory.workstation.name",
+        message: "workstation name must be non-empty.",
+        severity: "error",
+        subject: {
+          id: "name",
+          location: "DEFINITION",
+          type: "WORKSTATION",
+        },
+      }),
+    ).toBe("name");
+  });
+
   it("maps guard validation target codes onto guard field errors", () => {
     expect(
       resolveWorkstationSaveValidationFieldName({
@@ -122,6 +150,22 @@ describe("mapWorkstationSaveErrorToFieldErrors", () => {
       cronJitter: "Save failed.",
       cronSchedule: "Save failed.",
       cronTriggerAtStart: "Save failed.",
+    });
+  });
+
+  it("maps factory.workstations name paths onto the name field", () => {
+    expect(
+      mapWorkstationSaveErrorToFieldErrors(
+        new CurrentFactoryDefinitionError(
+          "factory.workstations[1].name must be non-empty.",
+          {
+            code: "BAD_REQUEST",
+            status: 400,
+          },
+        ),
+      ),
+    ).toEqual({
+      name: "factory.workstations[1].name must be non-empty.",
     });
   });
 

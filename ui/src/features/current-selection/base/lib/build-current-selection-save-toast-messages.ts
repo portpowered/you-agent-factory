@@ -29,7 +29,8 @@ export function buildCurrentSelectionSaveToastMessages({
       return {
         saveFailedAffectedSummary: toastCatalog.saveFailedAffectedSummary,
         saveFailedTitle,
-        saveSuccessDescription: detailMessages.editableConfigurationSaveSuccess,
+        saveSuccessDescription:
+          detailMessages.editableConfigurationSaveSuccess(entityDisplayName),
         saveSuccessTitle,
         staleVersionDetail:
           detailMessages.editableConfigurationSaveStaleVersionDetail,

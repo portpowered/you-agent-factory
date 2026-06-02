@@ -58,6 +58,7 @@ function buildCurrentSelectionStub(): CurrentSelectionState {
   return {
     selectResource: vi.fn(),
     selectStateNode: vi.fn(),
+    selectWorkstation: vi.fn(),
     selectWorkType: vi.fn(),
     selectWorker: vi.fn(),
   } as never;
@@ -99,6 +100,38 @@ describe("useCurrentSelectionDetailSave", () => {
     );
     vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue(
       buildIdleSaveHookReturn(),
+    );
+  });
+
+  it("scopes workstation saves to the selected node and wires rename selection refresh", () => {
+    const selectWorkstation = vi.fn();
+    const selection: DashboardSelection = {
+      kind: "node",
+      nodeId: "review",
+    };
+
+    renderHook(() =>
+      useCurrentSelectionDetailSave(
+        buildHookArgs({
+          currentSelection: {
+            ...buildCurrentSelectionStub(),
+            selectWorkstation,
+          },
+          selectedNode: {
+            node_id: "review",
+            transition_id: "transition",
+            workstation_name: "Review",
+          } as never,
+          selection,
+        }),
+      ),
+    );
+
+    expect(useSaveEditableWorkstationConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onWorkstationRenamed: selectWorkstation,
+        scopeKey: "review:transition:Review",
+      }),
     );
   });
 

@@ -7,12 +7,11 @@ import {
   PERSISTENT_TOAST_DURATION_MS,
 } from "../../../notifications/public";
 import { getCurrentSelectionGraphDraftConflictMessages } from "../messages/current-selection-graph-draft-conflict";
+import { getWorkstationDetailMessages } from "../../workstation-selection/messages/workstation-detail";
 
 const graphDraftConflictMessages =
   getCurrentSelectionGraphDraftConflictMessages("en");
-
-export const WORKSTATION_SAVE_SUCCESS_DESCRIPTION =
-  "Running factory saved. The editable workstation values were refreshed to the saved definition.";
+const workstationDetailMessages = getWorkstationDetailMessages("en");
 
 export const WORKSTATION_STALE_VERSION_DETAIL =
   "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.";
@@ -58,12 +57,17 @@ export async function expectNoSaveToastDelivery() {
   });
 }
 
-export async function expectWorkstationSaveSuccessToast() {
+export async function expectWorkstationSaveSuccessToast(
+  workstationName = "Review",
+) {
   await waitFor(() => {
     expect(toast.success).toHaveBeenCalledWith(
       "Workstation saved",
       expect.objectContaining({
-        description: WORKSTATION_SAVE_SUCCESS_DESCRIPTION,
+        description:
+          workstationDetailMessages.editableConfigurationSaveSuccess(
+            workstationName,
+          ),
       }),
     );
   });

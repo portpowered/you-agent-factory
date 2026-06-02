@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import type { EditableWorkstationDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
-import { validateEditableWorkstationGuardDraft } from "./workstation-editable-validation";
+import {
+  validateEditableWorkstationGuardDraft,
+  validateEditableWorkstationNameDraft,
+} from "./workstation-editable-validation";
+
+const nameMessages = {
+  editableConfigurationNameDuplicate: (workstationName: string) =>
+    `A workstation named "${workstationName}" already exists in the running factory definition.`,
+  editableConfigurationNameRequired:
+    "Enter a workstation name before saving this workstation.",
+};
 
 const messages = {
   editableConfigurationInputGuardMatchInputInvalid: (workType: string) =>
@@ -39,14 +49,57 @@ function buildDraft(
 ): EditableWorkstationDraft {
   return {
     behavior: "STANDARD",
+    cron: null,
     guards: [],
     inputs: [],
+    name: "Review",
     prompt: "Review the story.",
     runnerName: null,
     workerName: "reviewer",
     ...overrides,
   };
 }
+
+describe("validateEditableWorkstationNameDraft", () => {
+  const nameContext = {
+    originalWorkstationName: "Review",
+    workstationNames: ["Plan", "Review"],
+  };
+
+  it("requires a non-empty trimmed workstation name", () => {
+    expect(
+      validateEditableWorkstationNameDraft(
+        buildDraft({ name: "   " }),
+        nameMessages,
+        nameContext,
+      ),
+    ).toEqual({
+      name: nameMessages.editableConfigurationNameRequired,
+    });
+  });
+
+  it("rejects duplicate workstation names", () => {
+    expect(
+      validateEditableWorkstationNameDraft(
+        buildDraft({ name: "Plan" }),
+        nameMessages,
+        nameContext,
+      ),
+    ).toEqual({
+      name: nameMessages.editableConfigurationNameDuplicate("Plan"),
+    });
+  });
+
+  it("treats a trimmed unchanged name as valid", () => {
+    expect(
+      validateEditableWorkstationNameDraft(
+        buildDraft({ name: "  Review  " }),
+        nameMessages,
+        nameContext,
+      ),
+    ).toEqual({});
+  });
+});
 
 describe("validateEditableWorkstationGuardDraft workstation-level guards", () => {
   it("requires VISIT_COUNT workstation and positive maxVisits", () => {

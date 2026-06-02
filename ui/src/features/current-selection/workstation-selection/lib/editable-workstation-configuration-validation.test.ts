@@ -9,7 +9,16 @@ import {
   validateEditableWorkstationDraft,
 } from "./editable-workstation-configuration-validation";
 
+const nameValidationContext = {
+  originalWorkstationName: "Review",
+  workstationNames: ["Plan", "Review"],
+};
+
 const messages = {
+  editableConfigurationNameDuplicate: (workstationName: string) =>
+    `A workstation named "${workstationName}" already exists in the running factory definition.`,
+  editableConfigurationNameRequired:
+    "Enter a workstation name before saving this workstation.",
   editableConfigurationBehaviorPollerWorkerUnsupported:
     "Poller workstations must use a script or hosted worker before saving this workstation.",
   editableConfigurationEmpty: "No editable workstation values are available.",
@@ -87,10 +96,45 @@ const baseDraft: EditableWorkstationDraft = {
   behavior: "STANDARD",
   guards: [],
   inputs: [],
+  name: "Review",
   prompt: "",
   runnerName: "gemini",
   workerName: "",
 };
+
+describe("validateEditableWorkstationDraft workstation name", () => {
+  it("blocks empty, duplicate, and unchanged-after-trim names", () => {
+    expect(
+      validateEditableWorkstationDraft(
+        { ...baseDraft, name: "   " },
+        modelWorkstationValues,
+        { status: "idle" },
+        messages,
+        nameValidationContext,
+      ).name,
+    ).toBe(messages.editableConfigurationNameRequired);
+
+    expect(
+      validateEditableWorkstationDraft(
+        { ...baseDraft, name: "Plan" },
+        modelWorkstationValues,
+        { status: "idle" },
+        messages,
+        nameValidationContext,
+      ).name,
+    ).toBe(messages.editableConfigurationNameDuplicate("Plan"));
+
+    expect(
+      validateEditableWorkstationDraft(
+        { ...baseDraft, name: "  Review  " },
+        modelWorkstationValues,
+        { status: "idle" },
+        messages,
+        nameValidationContext,
+      ).name,
+    ).toBeUndefined();
+  });
+});
 
 describe("validateEditableWorkstationDraft logical move", () => {
   it("skips worker and prompt requirements for LOGICAL_MOVE workstations", () => {

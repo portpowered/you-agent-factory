@@ -7,12 +7,14 @@ import type {
   EditableWorkstationSaveState,
   EditableWorkstationSaveValidationErrors,
 } from "../lib/detail-card-types";
+import { parseWorkstationSaveScopeKey } from "../lib/workstation-save-scope-key";
 import { mapWorkstationSaveErrorToFieldErrors } from "../lib/workstation-save-validation-field-mapping";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 interface UseSaveEditableWorkstationConfigurationOptions {
   editableConfigurationState?: EditableWorkstationConfigurationState;
   locale?: string | null;
+  onWorkstationRenamed?: (nodeId: string) => void;
   scopeKey: string | null;
 }
 
@@ -30,6 +32,7 @@ export interface UseSaveEditableWorkstationConfigurationResult {
 export function useSaveEditableWorkstationConfiguration({
   editableConfigurationState,
   locale,
+  onWorkstationRenamed,
   scopeKey,
 }: UseSaveEditableWorkstationConfigurationOptions): UseSaveEditableWorkstationConfigurationResult {
   const messages = getWorkstationDetailMessages(locale);
@@ -80,11 +83,29 @@ export function useSaveEditableWorkstationConfiguration({
     await confirmScopedSave({
       baseVersion: editableConfigurationState.baseVersion,
       factory: editableConfigurationState.pendingFactoryDefinition,
-      onSaved: editableConfigurationState.markChangesSaved,
+      onSaved: () => {
+        editableConfigurationState.markChangesSaved();
+        const savedWorkstationName =
+          editableConfigurationState.draft.name.trim();
+        const parsedScopeKey =
+          scopeKey == null ? null : parseWorkstationSaveScopeKey(scopeKey);
+        if (
+          parsedScopeKey != null &&
+          savedWorkstationName.length > 0 &&
+          savedWorkstationName !== parsedScopeKey.workstationName
+        ) {
+          onWorkstationRenamed?.(parsedScopeKey.nodeId);
+        }
+      },
       previousFactory: editableConfigurationState.savedFactoryDefinition,
       scopeKey,
     });
-  }, [confirmScopedSave, editableConfigurationState, scopeKey]);
+  }, [
+    confirmScopedSave,
+    editableConfigurationState,
+    onWorkstationRenamed,
+    scopeKey,
+  ]);
 
   return useMemo(
     () => ({

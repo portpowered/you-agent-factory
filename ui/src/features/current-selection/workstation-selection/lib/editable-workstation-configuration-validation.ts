@@ -17,7 +17,11 @@ import type {
   EditableWorkstationValidationErrors,
   EditableWorkstationWorkerOptionsState,
 } from "./detail-card-types";
-import { validateEditableWorkstationGuardDraft } from "./workstation-editable-validation";
+import {
+  type ValidateEditableWorkstationNameDraftContext,
+  validateEditableWorkstationGuardDraft,
+  validateEditableWorkstationNameDraft,
+} from "./workstation-editable-validation";
 
 export function validateEditableWorkstationDraft(
   draft: EditableWorkstationDraft,
@@ -27,6 +31,8 @@ export function validateEditableWorkstationDraft(
   },
   messages: Pick<
     WorkstationDetailMessages,
+    | "editableConfigurationNameDuplicate"
+    | "editableConfigurationNameRequired"
     | "editableConfigurationPromptRequired"
     | "editableConfigurationPromptValidationLoading"
     | "editableConfigurationPromptValidationErrorPrefix"
@@ -51,8 +57,15 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationCronScheduleInvalid"
     | "editableConfigurationCronScheduleRequired"
   > = getWorkstationDetailMessages(undefined),
+  nameValidationContext?: ValidateEditableWorkstationNameDraftContext,
 ): EditableWorkstationValidationErrors {
-  const validationErrors: EditableWorkstationValidationErrors = {};
+  const validationErrors: EditableWorkstationValidationErrors = {
+    ...validateEditableWorkstationNameDraft(
+      draft,
+      messages,
+      nameValidationContext,
+    ),
+  };
   const requiresWorkerAssignment =
     selectedEditableValues == null ||
     workstationRequiresWorkerAssignment({

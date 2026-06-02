@@ -34,6 +34,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "Configuration",
     editableConfigurationModelSharedWorkerHint:
       "Model edits are disabled here because this workstation shares its worker with other workstations.",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `A workstation named "${workstationName}" already exists in the running factory definition.`,
+    editableConfigurationNameRequired:
+      "Enter a workstation name before saving this workstation.",
     editableConfigurationResetAction: "Reset to latest",
     editableConfigurationServerFieldChangedHint:
       "The running factory changed this field while you were editing. Reset to latest to discard the local draft value.",
@@ -54,8 +58,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "Saving failed.",
     editableConfigurationSaveStaleVersionDetail:
       "Reload the latest running-factory values or keep this draft and retry after the editor refreshes.",
-    editableConfigurationSaveSuccess:
-      "Running factory saved. The editable workstation values were refreshed to the saved definition.",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `Running factory saved. ${workstationName} was updated in the running factory definition.`,
     editableConfigurationLoading:
       "Loading the current factory definition for this workstation.",
     editableConfigurationValidationStatus:
@@ -153,6 +157,7 @@ const workstationDetailMessagesByLocale = {
     promptFieldLabel: "Prompt",
     templateFieldLabel: "Template",
     workerFieldLabel: "Worker",
+    workstationNameFieldLabel: "Workstation name",
     workstationGuardsHeading: "Workstation guards",
     workstationGuardsEmpty: "No workstation guards are configured.",
     workstationGuardsAddLabel: "Add guard",
@@ -274,6 +279,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "構成",
     editableConfigurationModelSharedWorkerHint:
       "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `ワークステーション名 "${workstationName}" は、実行中のファクトリー定義にすでに存在します。`,
+    editableConfigurationNameRequired:
+      "このワークステーションを保存する前にワークステーション名を入力してください。",
     editableConfigurationResetAction: "最新へ戻す",
     editableConfigurationServerFieldChangedHint:
       "編集中に実行中ファクトリーのこの項目が更新されました。最新へ戻すと、この下書きのローカル値を破棄します。",
@@ -294,8 +303,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "保存に失敗しました。",
     editableConfigurationSaveStaleVersionDetail:
       "最新の実行中ファクトリー値を再読み込みするか、この下書きを保持したままエディターの更新後に再試行してください。",
-    editableConfigurationSaveSuccess:
-      "実行中ファクトリーを保存しました。編集可能なワークステーション値は保存済み定義へ更新されました。",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `実行中ファクトリーを保存しました。${workstationName} は実行中ファクトリー定義で更新されました。`,
     editableConfigurationLoading:
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationValidationStatus:
@@ -395,6 +404,7 @@ const workstationDetailMessagesByLocale = {
     promptFieldLabel: "プロンプト",
     templateFieldLabel: "テンプレート",
     workerFieldLabel: "ワーカー",
+    workstationNameFieldLabel: "ワークステーション名",
     workstationGuardsHeading: "ワークステーションガード",
     workstationGuardsEmpty: "ワークステーションガードは設定されていません。",
     workstationGuardsAddLabel: "ガードを追加",
@@ -516,6 +526,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "구성",
     editableConfigurationModelSharedWorkerHint:
       "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `워크스테이션 이름 "${workstationName}" 은(는) 실행 중인 팩토리 정의에 이미 있습니다.`,
+    editableConfigurationNameRequired:
+      "이 워크스테이션을 저장하기 전에 워크스테이션 이름을 입력하세요.",
     editableConfigurationResetAction: "최신값으로 재설정",
     editableConfigurationServerFieldChangedHint:
       "편집하는 동안 실행 중인 팩토리에서 이 필드가 변경되었습니다. 최신값으로 재설정하면 로컬 초안 값이 버려집니다.",
@@ -536,8 +550,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "저장에 실패했습니다.",
     editableConfigurationSaveStaleVersionDetail:
       "최신 실행 중 팩토리 값을 다시 불러오거나, 이 초안을 유지한 채 편집기가 새로고침된 뒤 다시 시도하세요.",
-    editableConfigurationSaveSuccess:
-      "실행 중인 팩토리를 저장했습니다. 편집 가능한 워크스테이션 값이 저장된 정의로 새로 고쳐졌습니다.",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `실행 중인 팩토리를 저장했습니다. ${workstationName} 은(는) 실행 중 팩토리 정의에서 업데이트되었습니다.`,
     editableConfigurationLoading:
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationValidationStatus:
@@ -635,6 +649,7 @@ const workstationDetailMessagesByLocale = {
     promptFieldLabel: "프롬프트",
     templateFieldLabel: "템플릿",
     workerFieldLabel: "워커",
+    workstationNameFieldLabel: "워크스테이션 이름",
     workstationGuardsHeading: "워크스테이션 가드",
     workstationGuardsEmpty: "구성된 워크스테이션 가드가 없습니다.",
     workstationGuardsAddLabel: "가드 추가",
@@ -753,6 +768,9 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationHeading: "配置",
     editableConfigurationModelSharedWorkerHint:
       "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
+    editableConfigurationNameDuplicate: (workstationName) =>
+      `工作站名称 "${workstationName}" 在运行中的工厂定义中已存在。`,
+    editableConfigurationNameRequired: "保存此工作站前请输入工作站名称。",
     editableConfigurationResetAction: "重置为最新值",
     editableConfigurationServerFieldChangedHint:
       "你编辑期间，运行中的工厂已更新此字段。重置为最新值会丢弃当前本地草稿值。",
@@ -772,8 +790,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSaveErrorPrefix: "保存失败。",
     editableConfigurationSaveStaleVersionDetail:
       "请重新加载最新的运行中工厂值，或保留此草稿并在编辑器刷新后重试。",
-    editableConfigurationSaveSuccess:
-      "运行中的工厂已保存。可编辑的工作站值已刷新为保存后的定义。",
+    editableConfigurationSaveSuccess: (workstationName) =>
+      `运行中的工厂已保存。${workstationName} 已在运行中的工厂定义中更新。`,
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
     editableConfigurationBehaviorPollerWorkerUnsupported:
@@ -859,6 +877,7 @@ const workstationDetailMessagesByLocale = {
     promptFieldLabel: "提示词",
     templateFieldLabel: "模板",
     workerFieldLabel: "工作器",
+    workstationNameFieldLabel: "工作站名称",
     workstationGuardsHeading: "工作站守卫",
     workstationGuardsEmpty: "未配置工作站守卫。",
     workstationGuardsAddLabel: "添加守卫",

@@ -179,12 +179,131 @@ function editableWorkstationCronDraftsEqualOrNull(
   );
 }
 
+export function editableWorkstationDraftNamesEqual(
+  left: EditableWorkstationDraft,
+  right: EditableWorkstationDraft,
+): boolean {
+  return left.name.trim() === right.name.trim();
+}
+
+type VisitCountWorkstationReferenceGuard = {
+  type: string;
+  workstation?: string;
+};
+
+export function rewriteVisitCountWorkstationReference<
+  T extends VisitCountWorkstationReferenceGuard,
+>(
+  guard: T,
+  previousWorkstationName: string,
+  nextWorkstationName: string,
+): T {
+  if (
+    guard.type !== "VISIT_COUNT" ||
+    guard.workstation !== previousWorkstationName
+  ) {
+    return guard;
+  }
+
+  return {
+    ...guard,
+    workstation: nextWorkstationName,
+  };
+}
+
+function rewriteVisitCountWorkstationReferences<
+  T extends VisitCountWorkstationReferenceGuard,
+>(
+  guards: T[],
+  previousWorkstationName: string,
+  nextWorkstationName: string,
+): T[] {
+  return guards.map((guard) =>
+    rewriteVisitCountWorkstationReference(
+      guard,
+      previousWorkstationName,
+      nextWorkstationName,
+    ),
+  );
+}
+
+export function rewriteWorkstationVisitCountReferences<
+  T extends {
+    guards?: WorkstationGuard[] | null;
+    inputs?: Array<{
+      guards?: VisitCountWorkstationReferenceGuard[] | null;
+    }> | null;
+  },
+>(
+  workstation: T,
+  previousWorkstationName: string,
+  nextWorkstationName: string,
+): T {
+  if (previousWorkstationName === nextWorkstationName) {
+    return workstation;
+  }
+
+  let nextWorkstation = workstation;
+
+  if (workstation.guards && workstation.guards.length > 0) {
+    const guards = rewriteVisitCountWorkstationReferences(
+      workstation.guards,
+      previousWorkstationName,
+      nextWorkstationName,
+    );
+
+    if (!guards.every((guard, index) => guard === workstation.guards?.[index])) {
+      nextWorkstation = {
+        ...nextWorkstation,
+        guards,
+      };
+    }
+  }
+
+  if (!workstation.inputs || workstation.inputs.length === 0) {
+    return nextWorkstation;
+  }
+
+  let inputsChanged = false;
+  const inputs = workstation.inputs.map((input) => {
+    if (!input.guards || input.guards.length === 0) {
+      return input;
+    }
+
+    const guards = rewriteVisitCountWorkstationReferences(
+      input.guards,
+      previousWorkstationName,
+      nextWorkstationName,
+    );
+
+    if (guards.every((guard, index) => guard === input.guards?.[index])) {
+      return input;
+    }
+
+    inputsChanged = true;
+    return {
+      ...input,
+      guards,
+    };
+  });
+
+  if (!inputsChanged) {
+    return nextWorkstation;
+  }
+
+  return {
+    ...nextWorkstation,
+    inputs,
+  };
+}
+
 export function editableWorkstationDraftsEqual(
   left: EditableWorkstationDraft,
   right: EditableWorkstationDraft,
 ): boolean {
   return (
     left.behavior === right.behavior &&
+    editableWorkstationDraftNamesEqual(left, right) &&
     left.prompt === right.prompt &&
     left.runnerName === right.runnerName &&
     left.workerName === right.workerName &&

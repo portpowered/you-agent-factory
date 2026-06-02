@@ -15,6 +15,24 @@ export type EditableWorkstationSessionDraftState = {
   sessionStartDraft: EditableWorkstationDraft;
 };
 
+function updateEditableWorkstationDraft<
+  TSessionState extends EditableWorkstationSessionDraftState,
+>(
+  setSessionState: (
+    updater: (currentState: TSessionState | null) => TSessionState | null,
+  ) => void,
+  updater: (draft: EditableWorkstationDraft) => EditableWorkstationDraft,
+) {
+  setSessionState((currentState) =>
+    currentState
+      ? {
+          ...currentState,
+          draft: updater(currentState.draft),
+        }
+      : currentState,
+  );
+}
+
 export function buildEditableWorkstationConfigurationMutators<
   TSessionState extends EditableWorkstationSessionDraftState,
 >({
@@ -26,6 +44,10 @@ export function buildEditableWorkstationConfigurationMutators<
     updater: (currentState: TSessionState | null) => TSessionState | null,
   ) => void;
 }) {
+  const updateDraft = (
+    updater: (draft: EditableWorkstationDraft) => EditableWorkstationDraft,
+  ) => updateEditableWorkstationDraft(setSessionState, updater);
+
   return {
     markChangesSaved: () => {
       setSessionState((currentState) =>
@@ -100,18 +122,11 @@ export function buildEditableWorkstationConfigurationMutators<
           : currentState,
       );
     },
+    onNameChange: (value: string) => {
+      updateDraft((draft) => ({ ...draft, name: value }));
+    },
     onPromptChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                prompt: value,
-              },
-            }
-          : currentState,
-      );
+      updateDraft((draft) => ({ ...draft, prompt: value }));
     },
     onResetToLatest: () => {
       setSessionState((currentState) =>
@@ -125,30 +140,10 @@ export function buildEditableWorkstationConfigurationMutators<
       );
     },
     onRunnerChange: (value: RunnerID | null) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                runnerName: value,
-              },
-            }
-          : currentState,
-      );
+      updateDraft((draft) => ({ ...draft, runnerName: value }));
     },
     onWorkerChange: (value: string) => {
-      setSessionState((currentState) =>
-        currentState
-          ? {
-              ...currentState,
-              draft: {
-                ...currentState.draft,
-                workerName: value,
-              },
-            }
-          : currentState,
-      );
+      updateDraft((draft) => ({ ...draft, workerName: value }));
     },
   };
 }

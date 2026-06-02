@@ -156,6 +156,123 @@ describe("EditableConfigurationSection worker options", () => {
   });
 });
 
+describe("EditableConfigurationSection workstation name field", () => {
+  it("renders the workstation name input prefilled from the draft", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildEditableConfigurationSectionReadyState({
+          draft: { name: "Review" },
+        })}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    expect(screen.getByLabelText("Workstation name")).toHaveValue("Review");
+  });
+
+  it("calls onNameChange when the workstation name input changes", async () => {
+    const user = userEvent.setup();
+    const onNameChange = vi.fn();
+
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={{
+          ...buildEditableConfigurationSectionReadyState(),
+          onNameChange,
+        }}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    await user.clear(screen.getByLabelText("Workstation name"));
+    await user.type(screen.getByLabelText("Workstation name"), "Plan");
+    expect(onNameChange).toHaveBeenCalled();
+  });
+
+  it("shows name validation errors on the name field", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        state={buildEditableConfigurationSectionReadyState({
+          hasValidationErrors: true,
+          isDirty: true,
+          validationErrors: {
+            name: 'A workstation named "Plan" already exists in the running factory definition.',
+          },
+        })}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    expect(screen.getByLabelText("Workstation name")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    expect(
+      screen.getByText(
+        'A workstation named "Plan" already exists in the running factory definition.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  });
+
+  it("enables save when only the name is dirty and validation passes", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        onSaveConfiguration={() => undefined}
+        state={buildEditableConfigurationSectionReadyState({
+          draft: { name: "Renamed" },
+          isDirty: true,
+        })}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  });
+
+  it("shows server-changed hint for overwritten name field", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildEditableConfigurationSectionReadyState({
+          overwriteFieldNames: ["name"],
+        })}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    expect(
+      screen.getByText(messages.editableConfigurationServerFieldChangedHint),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the workstation name field for logical move workstations", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildEditableConfigurationSectionReadyState({
+          workstationType: "LOGICAL_MOVE",
+        })}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    expect(screen.getByLabelText("Workstation name")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Worker")).not.toBeInTheDocument();
+  });
+});
+
 describe("EditableConfigurationSection logical move workstations", () => {
   it("shows guard fields without worker assignment controls", () => {
     render(
@@ -287,7 +404,7 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
         onSaveConfiguration={() => undefined}
         saveState={{
           status: "success",
-          message: messages.editableConfigurationSaveSuccess,
+          message: messages.editableConfigurationSaveSuccess("Review"),
         }}
         state={buildEditableConfigurationSectionReadyState({
           isDirty: false,

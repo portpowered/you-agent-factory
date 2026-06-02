@@ -2,6 +2,41 @@ import type { EditableWorkstationDraft } from "../../../current-factory-definiti
 import { resolvePeerInputWorkTypes } from "../../../current-factory-definition/lib/workstation-guards";
 import type { EditableWorkstationValidationErrors } from "./detail-card-types";
 
+export interface ValidateEditableWorkstationNameDraftContext {
+  originalWorkstationName: string;
+  workstationNames: string[];
+}
+
+export interface WorkstationNameValidationMessages {
+  editableConfigurationNameDuplicate: (workstationName: string) => string;
+  editableConfigurationNameRequired: string;
+}
+
+export function validateEditableWorkstationNameDraft(
+  draft: EditableWorkstationDraft,
+  messages: WorkstationNameValidationMessages,
+  context?: ValidateEditableWorkstationNameDraftContext,
+): Pick<EditableWorkstationValidationErrors, "name"> {
+  const validationErrors: Pick<EditableWorkstationValidationErrors, "name"> =
+    {};
+  const trimmedName = (draft.name ?? "").trim();
+
+  if (trimmedName.length === 0) {
+    validationErrors.name = messages.editableConfigurationNameRequired;
+  } else if (
+    context &&
+    trimmedName !== context.originalWorkstationName.trim() &&
+    context.workstationNames.some(
+      (workstationName) => workstationName.trim() === trimmedName,
+    )
+  ) {
+    validationErrors.name =
+      messages.editableConfigurationNameDuplicate(trimmedName);
+  }
+
+  return validationErrors;
+}
+
 export interface ValidateEditableWorkstationGuardDraftContext {
   workstationOptions: string[];
 }

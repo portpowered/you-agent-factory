@@ -10,6 +10,8 @@ export interface WorkstationDetailMessages {
   editableConfigurationHeading: string;
   editableConfigurationLoading: string;
   editableConfigurationModelSharedWorkerHint: string;
+  editableConfigurationNameDuplicate: (workstationName: string) => string;
+  editableConfigurationNameRequired: string;
   editableConfigurationResetAction: string;
   editableConfigurationServerFieldChangedHint: string;
   editableConfigurationOverwriteWarning: (fields: string) => string;
@@ -25,7 +27,7 @@ export interface WorkstationDetailMessages {
   editableConfigurationSaveConfirmationTitle: string;
   editableConfigurationSaveErrorPrefix: string;
   editableConfigurationSaveStaleVersionDetail: string;
-  editableConfigurationSaveSuccess: string;
+  editableConfigurationSaveSuccess: (workstationName: string) => string;
   editableConfigurationValidationStatus: string;
   editableConfigurationBehaviorPollerWorkerUnsupported: string;
   editableConfigurationPromptRequired: string;
@@ -105,6 +107,7 @@ export interface WorkstationDetailMessages {
   promptFieldLabel: string;
   templateFieldLabel: string;
   workerFieldLabel: string;
+  workstationNameFieldLabel: string;
   currentDispatchLabel: string;
   dispatchLabel: string;
   elapsedLabel: string;

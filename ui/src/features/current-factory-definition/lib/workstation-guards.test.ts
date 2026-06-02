@@ -9,10 +9,12 @@ import {
   guardsDraftEqual,
   normalizeEditableInputGuards,
   resolvePeerInputWorkTypes,
+  rewriteVisitCountWorkstationReference,
+  rewriteWorkstationVisitCountReferences,
   setEditableInputSlotGuard,
 } from "./workstation-guards";
 
-describe("workstation-guards", () => {
+describe("workstation-guards formatting and defaults", () => {
   it("formats VISIT_COUNT and MATCHES_FIELDS summaries", () => {
     expect(
       formatWorkstationGuardSummary({
@@ -103,7 +105,9 @@ describe("workstation-guards", () => {
       workType: "story",
     });
   });
+});
 
+describe("workstation-guards draft equality and rename", () => {
   it("compares guard and full draft equality", () => {
     const left = {
       behavior: "STANDARD" as const,
@@ -112,6 +116,7 @@ describe("workstation-guards", () => {
         { maxVisits: 1, type: "VISIT_COUNT" as const, workstation: "A" },
       ],
       inputs: [],
+      name: "Alpha",
       prompt: "",
       runnerName: null,
       workerName: "w",
@@ -132,5 +137,64 @@ describe("workstation-guards", () => {
     expect(guardsDraftEqual(left.guards, right.guards)).toBe(true);
     expect(editableWorkstationDraftsEqual(left, right)).toBe(true);
     expect(editableWorkstationDraftsEqual(left, changed)).toBe(false);
+    expect(
+      editableWorkstationDraftsEqual(left, { ...left, name: "  Alpha  " }),
+    ).toBe(true);
+    expect(
+      editableWorkstationDraftsEqual(left, { ...left, name: "Beta" }),
+    ).toBe(false);
+  });
+
+  it("rewrites VISIT_COUNT workstation references on workstation and input guards", () => {
+    expect(
+      rewriteVisitCountWorkstationReference(
+        { maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" },
+        "Plan",
+        "Planning",
+      ),
+    ).toEqual({
+      maxVisits: 2,
+      type: "VISIT_COUNT",
+      workstation: "Planning",
+    });
+    expect(
+      rewriteVisitCountWorkstationReference(
+        { maxVisits: 2, type: "VISIT_COUNT", workstation: "Review" },
+        "Plan",
+        "Planning",
+      ),
+    ).toEqual({
+      maxVisits: 2,
+      type: "VISIT_COUNT",
+      workstation: "Review",
+    });
+
+    expect(
+      rewriteWorkstationVisitCountReferences(
+        {
+          guards: [{ maxVisits: 1, type: "VISIT_COUNT", workstation: "Plan" }],
+          inputs: [
+            {
+              guards: [
+                { maxVisits: 3, type: "VISIT_COUNT", workstation: "Plan" },
+              ],
+            },
+          ],
+        },
+        "Plan",
+        "Planning",
+      ),
+    ).toEqual({
+      guards: [
+        { maxVisits: 1, type: "VISIT_COUNT", workstation: "Planning" },
+      ],
+      inputs: [
+        {
+          guards: [
+            { maxVisits: 3, type: "VISIT_COUNT", workstation: "Planning" },
+          ],
+        },
+      ],
+    });
   });
 });

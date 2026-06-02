@@ -20,8 +20,10 @@ const WORKSTATION_GUARD_TARGET_FIELD_BY_CODE: Record<string, string> = {
 
 const FACTORY_WORKSTATION_GUARD_PATH =
   /factory\.workstations\[\d+\]\.guards\[(\d+)\]\.([a-zA-Z.]+)/;
+const FACTORY_WORKSTATION_NAME_PATH = /factory\.workstations\[\d+\]\.name/;
 const FACTORY_INPUT_GUARD_PATH =
   /factory\.workstations\[\d+\]\.inputs\[(\d+)\]\.guards\[\d+\]\.([a-zA-Z]+)/;
+const WORKSTATION_DUPLICATE_IDENTIFIER_CODE = "factory.duplicateIdentifier";
 
 export function resolveWorkstationSaveValidationFieldName(
   target: FactoryValidationTargetLike,
@@ -37,9 +39,18 @@ export function resolveWorkstationSaveValidationFieldName(
     return "workerName";
   }
   if (
+    target.code === WORKSTATION_DUPLICATE_IDENTIFIER_CODE &&
+    subjectType === "WORKSTATION"
+  ) {
+    return "name";
+  }
+  if (
     subjectType === "WORKSTATION" &&
     (subjectLocation === "REFERENCE" || subjectLocation === "DEFINITION")
   ) {
+    if (subjectID === "name" || subjectID.endsWith(".name")) {
+      return "name";
+    }
     if (subjectID.endsWith("worker") || subjectID === "worker") {
       return "workerName";
     }
@@ -142,6 +153,12 @@ function resolveWorkstationGuardSaveValidationFieldName(
 function mapWorkstationSaveErrorMessageToFieldErrors(
   message: string,
 ): Record<string, string> {
+  if (FACTORY_WORKSTATION_NAME_PATH.test(message)) {
+    return {
+      name: message,
+    };
+  }
+
   const workstationGuardMatch = message.match(FACTORY_WORKSTATION_GUARD_PATH);
   if (workstationGuardMatch) {
     const [, guardIndex, fieldName] = workstationGuardMatch;

@@ -13,6 +13,9 @@ import {
 const baseDraft: EditableWorkstationDraft = {
   behavior: "STANDARD",
   cron: null,
+  guards: [],
+  inputs: [],
+  name: "review",
   prompt: "Review the story.",
   runnerName: null,
   workerName: "reviewer",

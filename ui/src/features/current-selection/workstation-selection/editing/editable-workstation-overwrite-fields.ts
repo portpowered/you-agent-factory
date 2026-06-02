@@ -3,6 +3,7 @@ import type {
   EditableWorkstationCronDraft,
   EditableWorkstationDraft,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import { editableWorkstationDraftNamesEqual } from "../../../current-factory-definition/lib/workstation-guards";
 import type { EditableWorkstationOverwriteField } from "../lib/detail-card-types";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
@@ -13,6 +14,15 @@ export function resolveEditableWorkstationOverwriteFields(
 ): EditableWorkstationOverwriteField[] {
   const fields: EditableWorkstationOverwriteField[] = [];
 
+  if (
+    !editableWorkstationDraftNamesEqual(
+      sessionStartDraft,
+      latestDefinitionDraft,
+    ) &&
+    !editableWorkstationDraftNamesEqual(draft, latestDefinitionDraft)
+  ) {
+    fields.push("name");
+  }
   if (
     sessionStartDraft.behavior !== latestDefinitionDraft.behavior &&
     draft.behavior !== latestDefinitionDraft.behavior
@@ -133,6 +143,7 @@ export function formatEditableOverwriteFieldLabels(
     | "promptFieldLabel"
     | "runnerFieldLabel"
     | "workerFieldLabel"
+    | "workstationNameFieldLabel"
   >,
 ) {
   return formatList(
@@ -152,9 +163,12 @@ function fieldLabel(
     | "promptFieldLabel"
     | "runnerFieldLabel"
     | "workerFieldLabel"
+    | "workstationNameFieldLabel"
   >,
 ) {
   switch (field) {
+    case "name":
+      return messages.workstationNameFieldLabel.toLowerCase();
     case "behavior":
       return messages.kindLabel.toLowerCase();
     case "prompt":

@@ -98,6 +98,43 @@ describe("useEditableWorkstationConfigurationState", () => {
     ).toBeNull();
   });
 
+  it("blocks save when the workstation name duplicates another workstation", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(
+        buildMultiWorkstationEditableFactoryDefinition(),
+      ),
+    );
+
+    const { result } = renderHook(() =>
+      useEditableWorkstationConfigurationState(selection, selectedNode),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("expected editable configuration to be ready");
+      }
+      result.current.onNameChange("Plan");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        name: expect.stringContaining("Plan"),
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition
+        : undefined,
+    ).toBeNull();
+  });
+
   it("returns editable empty and validation messages for the selected locale", async () => {
     const { rerender, result } = renderHook(
       ({ locale }: { locale: string }) =>
@@ -641,6 +678,7 @@ describe("useEditableWorkstationConfigurationState", () => {
           cron: null,
           guards: [],
           inputs: [],
+          name: "Review",
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
@@ -659,6 +697,7 @@ describe("useEditableWorkstationConfigurationState", () => {
           cron: null,
           guards: [],
           inputs: [],
+          name: "Review",
           prompt: "Review the story.",
           runnerName: null,
           workerName: "reviewer",
@@ -673,6 +712,20 @@ describe("useEditableWorkstationConfigurationState", () => {
       prompt:
         "Prompt validation unavailable. Prompt validation API unavailable.",
     });
+  });
+});
+
+describe("useEditableWorkstationConfigurationState guards and cron", () => {
+  beforeEach(() => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(buildEditableFactoryDefinition()),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateContract).mockReturnValue(
+      buildPromptTemplateContractResult(),
+    );
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue(
+      buildPromptTemplateValidationResult(),
+    );
   });
 
   it("blocks poller behavior when the selected worker is not poller-capable", async () => {
@@ -857,6 +910,7 @@ describe("useEditableWorkstationConfigurationState", () => {
           cron: null,
           guards: [],
           inputs: [],
+          name: "Route",
           prompt: "",
           runnerName: null,
           workerName: "",
@@ -872,6 +926,7 @@ describe("useEditableWorkstationConfigurationState", () => {
           cron: null,
           guards: [],
           inputs: [],
+          name: "Route",
           prompt: "",
           runnerName: null,
           workerName: "legacy-missing-worker",
@@ -971,6 +1026,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       },
       guards: [],
       inputs: [],
+      name: "Cron Tick",
       prompt: "",
       runnerName: null,
       workerName: "reviewer",
@@ -989,6 +1045,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       cron: null,
       guards: [],
       inputs: [],
+      name: "Review",
       prompt: "Review the story.",
       runnerName: null,
       workerName: "reviewer",

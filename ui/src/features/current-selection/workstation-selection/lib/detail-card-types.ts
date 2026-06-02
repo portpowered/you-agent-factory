@@ -49,6 +49,7 @@ export type EditableWorkstationValidationErrors = {
   cronJitter?: string;
   cronSchedule?: string;
   cronTriggerAtStart?: string;
+  name?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
@@ -60,6 +61,7 @@ export type EditableWorkstationSaveValidationErrors = {
   cronJitter?: string;
   cronSchedule?: string;
   cronTriggerAtStart?: string;
+  name?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
@@ -96,6 +98,7 @@ export type EditableWorkstationOverwriteField =
   | "cronJitter"
   | "cronSchedule"
   | "cronTriggerAtStart"
+  | "name"
   | "prompt"
   | "runner"
   | "worker";
@@ -126,6 +129,7 @@ export type EditableWorkstationConfigurationState =
       onCronJitterChange: (value: string) => void;
       onCronScheduleChange: (value: string) => void;
       onCronTriggerAtStartChange: (value: boolean) => void;
+      onNameChange: (value: string) => void;
       onPromptChange: (value: string) => void;
       onResetToLatest: () => void;
       onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;

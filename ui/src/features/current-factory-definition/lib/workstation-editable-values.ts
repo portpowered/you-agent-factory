@@ -19,6 +19,7 @@ import {
 import {
   normalizeEditableInputGuards,
   resolveFactoryWorkstationNameOptions,
+  rewriteWorkstationVisitCountReferences,
 } from "./workstation-guards";
 import {
   type EditableWorkstationType,
@@ -85,6 +86,7 @@ export interface EditableWorkstationDraft {
   cron: EditableWorkstationCronDraft | null;
   guards: CanonicalWorkstationGuard[];
   inputs: EditableWorkstationInputDraft[];
+  name: string;
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
@@ -157,6 +159,7 @@ export function editableWorkstationDraftFromValues(
       state: input.state,
       workType: input.workType,
     })),
+    name: values.workstationName,
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
@@ -177,15 +180,17 @@ export function applyEditableWorkstationDraft(
   }
 
   const { workstation, workstationIndex } = workstationResolution;
+  const trimmedName = draft.name.trim();
+  const previousWorkstationName = workstation.name;
 
   if (!workstationRequiresWorkerAssignment(workstation)) {
-    return {
-      ...factory,
-      workers: factory.workers,
-      workstations: factory.workstations.map((entry, index) =>
-        index === workstationIndex ? workstation : entry,
-      ),
-    };
+    return applyWorkstationNameChangeToFactory(
+      factory,
+      workstationIndex,
+      trimmedName,
+      previousWorkstationName,
+      (entry) => ({ ...entry, name: trimmedName }),
+    );
   }
 
   if (!factory.workers) {
@@ -208,6 +213,7 @@ export function applyEditableWorkstationDraft(
     ...workstationWithoutCronRunner,
     body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
+    name: trimmedName,
     worker: draft.workerName,
     ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
     ...(draft.runnerName ? { runner: draft.runnerName } : {}),
@@ -220,11 +226,46 @@ export function applyEditableWorkstationDraft(
       : {}),
   };
 
-  return {
+  return applyWorkstationNameChangeToFactory(
+    factory,
+    workstationIndex,
+    trimmedName,
+    previousWorkstationName,
+    () => nextWorkstation,
+  );
+}
+
+function applyWorkstationNameChangeToFactory(
+  factory: CanonicalFactoryDefinition,
+  workstationIndex: number,
+  trimmedName: string,
+  previousWorkstationName: string,
+  buildUpdatedWorkstation: (
+    workstation: CanonicalWorkstation,
+  ) => CanonicalWorkstation,
+): CanonicalFactoryDefinition {
+  const workstations = factory.workstations ?? [];
+  const updatedWorkstations = workstations.map((entry, index) =>
+    index === workstationIndex ? buildUpdatedWorkstation(entry) : entry,
+  );
+  const nextFactory: CanonicalFactoryDefinition = {
     ...factory,
     workers: factory.workers,
-    workstations: factory.workstations.map((entry, index) =>
-      index === workstationIndex ? nextWorkstation : entry,
+    workstations: updatedWorkstations,
+  };
+
+  if (previousWorkstationName === trimmedName) {
+    return nextFactory;
+  }
+
+  return {
+    ...nextFactory,
+    workstations: (nextFactory.workstations ?? []).map((entry) =>
+      rewriteWorkstationVisitCountReferences(
+        entry,
+        previousWorkstationName,
+        trimmedName,
+      ),
     ),
   };
 }
