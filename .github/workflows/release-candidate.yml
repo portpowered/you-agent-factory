@@ -115,10 +115,7 @@ jobs:
             runner: windows-latest
             archive_glob: you_*_windows_amd64.zip
             binary_name: you.exe
-          - asset_id: windows-arm64
-            runner: windows-11-arm
-            archive_glob: you_*_windows_arm64.zip
-            binary_name: you.exe
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
