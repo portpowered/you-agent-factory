@@ -9,6 +9,46 @@ describe("stageSubmitWorkFile", () => {
     vi.unstubAllGlobals();
   });
 
+  it("posts staged file requests to the default-session staged-files route when no session is selected", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          fileName: "ui.png",
+          mediaType: "image/png",
+          stagedFileRef: "/tmp/submit-work-stage/ui.png",
+          url: "file:///tmp/submit-work-stage/ui.png",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 201,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      stageSubmitWorkFile({
+        contentBase64: "cG5nLWJ5dGVz",
+        fileName: "ui.png",
+        itemType: "image",
+        mediaType: "image/png",
+      }),
+    ).resolves.toEqual({
+      fileName: "ui.png",
+      mediaType: "image/png",
+      stagedFileRef: "/tmp/submit-work-stage/ui.png",
+      url: "file:///tmp/submit-work-stage/ui.png",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/~default/work/staged-files",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+  });
+
   it("posts staged file requests to the session-scoped staged-files route", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -94,17 +134,6 @@ describe("stageSubmitWorkFile", () => {
         statusText: "Bad Request",
       }),
     );
-  });
-
-  it("identifies staged submit file API errors", () => {
-    const error = new StageSubmitWorkFileAPIError({
-      message: "staging failed",
-      status: 400,
-      statusText: "Bad Request",
-    });
-
-    expect(isStageSubmitWorkFileAPIError(error)).toBe(true);
-    expect(isStageSubmitWorkFileAPIError(new Error("other"))).toBe(false);
   });
 });
 

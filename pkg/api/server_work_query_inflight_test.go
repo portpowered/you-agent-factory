@@ -40,7 +40,7 @@ func TestGetWork_IncludesDispatchOnlyWorkWithProcessingState(t *testing.T) {
 		},
 	})
 
-	for _, path := range []string{"/work/work-in-flight", "/work/tok-in-flight"} {
+	for _, path := range []string{"/factory-sessions/~default/work/work-in-flight", "/factory-sessions/~default/work/tok-in-flight"} {
 		t.Run(path, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			rec := httptest.NewRecorder()
@@ -71,7 +71,7 @@ func TestGetWork_NotFoundWhenAbsentFromMarkingAndDispatches(t *testing.T) {
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/work/work-missing", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work/work-missing", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
@@ -104,7 +104,7 @@ func TestListWork_IncludesDispatchOnlyWorkWithProcessingState(t *testing.T) {
 		},
 	})
 
-	resp := decodeListWorkPage(t, srv, "/work")
+	resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work")
 	if len(resp.Results) != 1 {
 		t.Fatalf("results = %d, want 1: %#v", len(resp.Results), resp.Results)
 	}
@@ -150,7 +150,7 @@ func TestListWork_FiltersApplyToDispatchOnlyWork(t *testing.T) {
 		{name: "trace id on current chaining trace", query: "traceId=trace-chain-1", wantWorkIDs: []string{"work-bug"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := decodeListWorkPage(t, srv, "/work?"+tc.query)
+			resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?"+tc.query)
 			if len(resp.Results) != len(tc.wantWorkIDs) {
 				t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(tc.wantWorkIDs), resp.Results)
 			}
@@ -180,11 +180,11 @@ func TestListWork_PaginationCursorUsesDispatchTokenID(t *testing.T) {
 		},
 	})
 
-	firstResp := decodeListWorkPage(t, srv, "/work?maxResults=2")
+	firstResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2")
 	if len(firstResp.Results) != 2 || firstResp.PaginationContext == nil || stringValue(firstResp.PaginationContext.NextToken) == "" {
 		t.Fatalf("first page = %#v, want paginated response", firstResp)
 	}
-	secondResp := decodeListWorkPage(t, srv, "/work?maxResults=2&nextToken="+stringValue(firstResp.PaginationContext.NextToken))
+	secondResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2&nextToken="+stringValue(firstResp.PaginationContext.NextToken))
 	if len(secondResp.Results) != 1 {
 		t.Fatalf("second page = %#v, want one remaining work item", secondResp)
 	}
@@ -194,7 +194,7 @@ func TestListWork_PaginationCursorUsesDispatchTokenID(t *testing.T) {
 	if secondResp.Results[0].State == nil || secondResp.Results[0].State.Type != factoryapi.WorkStateTypePROCESSING {
 		t.Fatalf("second page state = %#v, want PROCESSING for dispatch-only work", secondResp.Results[0].State)
 	}
-	trailingResp := decodeListWorkPage(t, srv, "/work?maxResults=2&nextToken="+encodeNextToken("tok-dispatch-1"))
+	trailingResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2&nextToken="+encodeNextToken("tok-dispatch-1"))
 	if len(trailingResp.Results) != 0 {
 		t.Fatalf("trailing page = %#v, want empty page after dispatch token cursor", trailingResp)
 	}

@@ -60,7 +60,7 @@ func runBoundaryBatchSmokeThroughHTTP(t *testing.T, batchJSON []byte, requestID 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
 
-	req, err := http.NewRequest(http.MethodPut, server.URL()+"/work-requests/"+requestID, bytes.NewReader(batchJSON))
+	req, err := http.NewRequest(http.MethodPut, support.DefaultSessionWorkURL(server.URL(), "/work-requests/"+requestID), bytes.NewReader(batchJSON))
 	if err != nil {
 		t.Fatalf("build PUT /work-requests: %v", err)
 	}

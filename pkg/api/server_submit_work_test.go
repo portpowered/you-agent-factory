@@ -306,6 +306,12 @@ func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
 }
 
+func TestSubmitWork_RejectsStructuredItemsCombinedWithContent(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	rec := submitWorkRequest(t, srv, `{"name":"conflicting-items-content","workTypeName":"prd","items":[{"type":"text","text":"structured"}],"content":[{"type":"text","text":"canonical"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with content")
+}
+
 func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 	// Dashboard submit-work sends name, workTypeName, and items: [] when optional text
 	// inputs are blank. Header/type-only submissions carry no structured content.
@@ -401,7 +407,7 @@ func stageSubmitWorkTestFile(
 ) factoryapi.StageSubmitWorkFileResponse {
 	t.Helper()
 
-	rec := submitWorkStageFileRequest(t, srv, "/work/staged-files", `{
+	rec := submitWorkStageFileRequest(t, srv, "/factory-sessions/~default/work/staged-files", `{
 		"itemType":"`+itemType+`",
 		"fileName":"`+fileName+`",
 		"mediaType":"`+mediaType+`",
@@ -416,7 +422,7 @@ func stageSubmitWorkTestFile(
 func TestStageSubmitWorkFile_RejectsTextItemType(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
 
-	rec := submitWorkStageFileRequest(t, srv, "/work/staged-files", `{
+	rec := submitWorkStageFileRequest(t, srv, "/factory-sessions/~default/work/staged-files", `{
 		"itemType":"text",
 		"fileName":"notes.txt",
 		"mediaType":"text/plain",
@@ -579,7 +585,7 @@ func TestSubmitWorkMissingWorkType(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString(`{"name":"missing-work-type","traceId":"test-trace-1"}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"name":"missing-work-type","traceId":"test-trace-1"}`))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "workTypeName is required")
@@ -589,7 +595,7 @@ func TestSubmitWorkMissingName(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString(`{"workTypeName":"task","traceId":"test-trace-1","payload":{"title":"unnamed"}}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"workTypeName":"task","traceId":"test-trace-1","payload":{"title":"unnamed"}}`))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -603,7 +609,7 @@ func TestSubmitWorkBlankName(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString("{\"name\":\"   \\t\\n \",\"workTypeName\":\"task\",\"traceId\":\"test-trace-1\",\"payload\":{\"title\":\"blank\"}}"))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString("{\"name\":\"   \\t\\n \",\"workTypeName\":\"task\",\"traceId\":\"test-trace-1\",\"payload\":{\"title\":\"blank\"}}"))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -636,7 +642,7 @@ func TestSubmitWorkInvalidPayload_ReturnsDocumentedBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString(`{"workTypeName":`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"workTypeName":`))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "invalid request payload")
@@ -719,7 +725,7 @@ func TestSubmitWorkAutoTraceID(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString(`{"name":"auto-trace","workTypeName":"prd"}`))
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"name":"auto-trace","workTypeName":"prd"}`))
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
@@ -787,7 +793,7 @@ func newSubmitSurfaceSmokeFactory(t *testing.T, eventTime time.Time, liveEvents 
 func assertSubmitSurfaceSmokeSubmitAndList(t *testing.T, serverURL string, mf *testutil.MockFactory) {
 	t.Helper()
 
-	submitResp, err := http.Post(serverURL+"/work", "application/json", bytes.NewBufferString(`{"name":"api-surface-smoke","workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
+	submitResp, err := http.Post(serverURL+"/factory-sessions/~default/work", "application/json", bytes.NewBufferString(`{"name":"api-surface-smoke","workTypeName":"task","traceId":"trace-api-surface-smoke","payload":{"title":"API surface smoke"}}`))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}
@@ -808,7 +814,7 @@ func assertSubmitSurfaceSmokeSubmitAndList(t *testing.T, serverURL string, mf *t
 		t.Fatalf("submitted work requests = %d, want 1", len(mf.WorkRequests))
 	}
 
-	listResp, err := http.Get(serverURL + "/work")
+	listResp, err := http.Get(serverURL + "/factory-sessions/~default/work")
 	if err != nil {
 		t.Fatalf("GET /work: %v", err)
 	}

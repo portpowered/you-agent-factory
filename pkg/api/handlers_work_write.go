@@ -11,7 +11,6 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -287,25 +286,6 @@ func submitWorkResponseFromResult(result interfaces.WorkRequestSubmitResult, ses
 	return resp
 }
 
-func (s *Server) SubmitWork(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeSubmitWorkRequestBody(r.Body)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-
-	if req.WorkTypeName == "" {
-		s.writeError(w, http.StatusBadRequest, "workTypeName is required", "BAD_REQUEST")
-		return
-	}
-
-	s.submitWorkCore(w, r, req, factorysessions.DefaultSessionID, s.runtime.SubmitWorkRequest)
-}
-
 func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
@@ -332,7 +312,7 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 	})
 }
 
-func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkJSONRequestBody) (interfaces.WorkRequest, error) {
+func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkBySessionIdJSONRequestBody) (interfaces.WorkRequest, error) {
 	payload, err := generatedPayloadToRawMessage(req.Payload)
 	if err != nil {
 		return interfaces.WorkRequest{}, err
@@ -358,7 +338,7 @@ func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkJSONRequestBody) (int
 func (s *Server) submitWorkCore(
 	w http.ResponseWriter,
 	r *http.Request,
-	req factoryapi.SubmitWorkJSONRequestBody,
+	req factoryapi.SubmitWorkBySessionIdJSONRequestBody,
 	sessionID string,
 	submit func(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error),
 ) {
@@ -392,33 +372,6 @@ func (s *Server) submitWorkCore(
 	}
 
 	s.writeJSON(w, http.StatusCreated, submitWorkResponseFromResult(result, sessionID))
-}
-
-func (s *Server) UpsertWorkRequest(w http.ResponseWriter, r *http.Request, requestID string) {
-	req, err := decodeWorkRequestBody(r.Body)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
-		return
-	}
-
-	if requestID == "" {
-		s.writeError(w, http.StatusBadRequest, "request_id is required", "BAD_REQUEST")
-		return
-	}
-	if req.RequestId == "" {
-		s.writeError(w, http.StatusBadRequest, "requestId is required", "BAD_REQUEST")
-		return
-	}
-	if req.RequestId != requestID {
-		s.writeError(w, http.StatusBadRequest, "request_id path and requestId body must match", "BAD_REQUEST")
-		return
-	}
-
-	s.upsertWorkRequestCore(w, r, req, "", s.runtime.SubmitWorkRequest)
 }
 
 func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, requestID string) {
@@ -458,7 +411,7 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 func (s *Server) upsertWorkRequestCore(
 	w http.ResponseWriter,
 	r *http.Request,
-	req factoryapi.UpsertWorkRequestJSONRequestBody,
+	req factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody,
 	sessionID string,
 	submit func(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error),
 ) {
@@ -590,48 +543,48 @@ func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPa
 	return nil
 }
 
-func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkJSONRequestBody, error) {
+func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkBySessionIdJSONRequestBody, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
 	}
 
-	var req factoryapi.SubmitWorkJSONRequestBody
+	var req factoryapi.SubmitWorkBySessionIdJSONRequestBody
 	if err := json.Unmarshal(data, &req); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
 	}
 	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
 	}
 
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
 	}
 	if err := validateSubmitWorkStructuredInputFields(fields); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
 	}
 	if err := validateWorkContentField(fields, ""); err != nil {
-		return factoryapi.SubmitWorkJSONRequestBody{}, err
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
 	}
 	if strings.TrimSpace(req.Name) == "" {
-		return factoryapi.SubmitWorkJSONRequestBody{}, requestFieldValidationError{message: "name is required"}
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, requestFieldValidationError{message: "name is required"}
 	}
 	return req, nil
 }
 
-func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequestBody, error) {
+func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
+		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
 	}
 
-	var req factoryapi.UpsertWorkRequestJSONRequestBody
+	var req factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody
 	if err := json.Unmarshal(data, &req); err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
+		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
 	}
 	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
+		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
 	}
 
 	if req.Works == nil || len(*req.Works) == 0 {
@@ -642,7 +595,7 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 		Works []map[string]json.RawMessage `json:"works"`
 	}
 	if err := json.Unmarshal(data, &rawRequest); err != nil {
-		return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
+		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
 	}
 
 	for i := range *req.Works {
@@ -650,7 +603,7 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestJSONRequ
 			return req, nil
 		}
 		if err := validateWorkContentField(rawRequest.Works[i], fmt.Sprintf("works[%d].", i)); err != nil {
-			return factoryapi.UpsertWorkRequestJSONRequestBody{}, err
+			return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
 		}
 	}
 	return req, nil
@@ -723,25 +676,6 @@ func submitWorkTypeNameMessage(message string) string {
 		return message
 	}
 	return strings.ReplaceAll(message, "work type", "work type name")
-}
-
-func (s *Server) MoveWork(w http.ResponseWriter, r *http.Request, id factoryapi.WorkOrTokenID) {
-	workMover, ok := s.runtime.(factory.WorkMover)
-	if !ok {
-		s.writeError(w, http.StatusInternalServerError, "work move is unavailable", "INTERNAL_ERROR")
-		return
-	}
-	s.handleMoveWork(
-		w,
-		r,
-		string(id),
-		func(ctx context.Context, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
-			return workMover.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
-		},
-		func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-			return s.runtime.GetEngineStateSnapshot(ctx)
-		},
-	)
 }
 
 func (s *Server) MoveWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, id factoryapi.WorkOrTokenID) {

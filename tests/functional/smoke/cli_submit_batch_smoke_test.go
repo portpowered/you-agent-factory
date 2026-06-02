@@ -150,7 +150,7 @@ func waitForSmokeServerReady(ctx context.Context, baseURL string, timeout time.D
 		default:
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/work", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
 		if err != nil {
 			return err
 		}
@@ -184,7 +184,7 @@ func waitForSubmitBatchSmokeWorkAccepted(ctx context.Context, baseURL string, ti
 		default:
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/work", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
 		if err != nil {
 			return err
 		}

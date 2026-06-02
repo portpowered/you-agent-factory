@@ -27,7 +27,7 @@ concept owners below when you need the complete customer-facing contract.
 | `config` | `factory.json` topology, split layout, and portability | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
-| `work` | Submitted work: `POST /work`, tags, and batch cross-links | [Submitted work](work.md) |
+| `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
@@ -69,8 +69,8 @@ around that invocation.
 
 - [Config](config.md) owns work types, work states, top-level `factory.json`,
   routing behavior, runtime resources, and portability fields.
-- [Submitted work](work.md) owns `POST /work`, submitted-work tags, and batch
-  cross-links.
+- [Submitted work](work.md) owns `POST /factory-sessions/{session_id}/work`,
+  submitted-work tags, and batch cross-links.
 - [Sessions](sessions.md) owns live session discovery, factory query, status API
   fields, dashboard URL, and `--server` / `--session` routing for HTTP client
   commands.

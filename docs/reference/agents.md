@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-01
+last-modified: 2026-06-03
 doc-id: agent-factory/guides/agents
 ---
 
@@ -34,7 +34,8 @@ setup, run `you docs authoring-factories`.
 work item, `you submit batch` for a `FACTORY_REQUEST_BATCH` against a running factory,
 and `you run --work <path>` **only** when starting a local factory run with batch JSON
 (for example `you run --dir <factory> --work batch.json`). Do not treat watched inbox
-files, dashboard submit, `POST /work`, or `PUT /work-requests/{id}` as parallel agent
+files, dashboard submit, `POST /factory-sessions/{session_id}/work`, or
+`PUT /factory-sessions/{session_id}/work-requests/{requestId}` as parallel agent
 control paths.
 
 | Command | When autonomous agents use it |
@@ -43,8 +44,10 @@ control paths.
 | `you submit batch` | Upsert batch JSON to a **running** factory session |
 | `you run --work <path>` | Submit batch JSON as part of **local startup** only—not steady-state ingress while a factory is already running |
 
-Operators who use watched `factory/inputs/**`, dashboard HTTP submit, `POST /work`, or
-`PUT /work-requests/{id}` should read `you docs batch-inputs` and `you docs work` for inbox
+Operators who use watched `factory/inputs/**`, dashboard HTTP submit,
+`POST /factory-sessions/{session_id}/work`, or
+`PUT /factory-sessions/{session_id}/work-requests/{requestId}` should read
+`you docs batch-inputs` and `you docs work` for inbox
 layout, HTTP contracts, and operator workflows.
 
 ## Pre-submit checklist
@@ -62,7 +65,7 @@ layout, HTTP contracts, and operator workflows.
 When a factory is already running, upsert multi-item work with `you submit batch`. The
 JSON body must set `"type": "FACTORY_REQUEST_BATCH"` and a **stable, non-empty `requestId`**.
 The CLI validates locally, then issues `PUT` to
-`/factory-sessions/{session}/work-requests/{requestId}`. For `DEPENDS_ON`, `PARENT_CHILD`,
+`/factory-sessions/{session_id}/work-requests/{requestId}`. For `DEPENDS_ON`, `PARENT_CHILD`,
 relation field names, and full batch shape, read `you docs batch-inputs`.
 
 ```json
@@ -98,11 +101,12 @@ The factory does **not** automatically deduplicate arbitrary retries:
 | `you submit batch` with a **new** `requestId` | No — new batch submission |
 | `you submit` (unary), repeated with the same flags and payload | No — each call enqueues **new** work |
 | New inbox file under `factory/inputs/**` | No — new file, not CLI batch retry |
-| `POST /work` or dashboard submit | No — new work |
+| `POST /factory-sessions/{session_id}/work` or dashboard submit | No — new work |
 
 **Autonomous agents:** Reuse the same stable `requestId` on `you submit batch` when you mean
 to refresh one batch without creating duplicate batches. Change `requestId` or call unary
-`you submit` only when you want additional work. Do not use inbox or `POST /work` expecting
+`you submit` only when you want additional work. Do not use inbox or
+`POST /factory-sessions/{session_id}/work` expecting
 `you submit batch` idempotency.
 
 ## Is the factory running?
@@ -143,7 +147,7 @@ payload file your factory expects.
 | `you run --work <batch.json>` | Submit batch JSON as part of **local startup** | No when combined with `--dir` startup |
 | `you submit` | Submit one work item (autonomous agent path) | Yes |
 | `you submit batch` | Upsert batch JSON to a running session (autonomous agent path) | Yes |
-| Dashboard / `POST /work` | **Operator-only** API or UI submission | Yes (`you docs work`) |
+| Dashboard / `POST /factory-sessions/{session_id}/work` | **Operator-only** API or UI submission | Yes (`you docs work`) |
 | `you docs <topic>` | Print packaged reference markdown | No |
 
 Use `you docs mock-workers` and `you docs record-replay` for deterministic runs without live
@@ -172,7 +176,7 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 | Record and replay CLI modes | `you docs record-replay` |
 | Guards and loop breakers | `you docs guards` |
 | Batch relations (`DEPENDS_ON`, `PARENT_CHILD`, `SPAWNED_BY`) | `you docs relationships` |
-| Submitted work (`POST /work`, tags, tokens) | `you docs work` |
+| Submitted work (`POST /factory-sessions/{session_id}/work`, tags, tokens) | `you docs work` |
 | Sessions, factory query, status API, dashboard | `you docs sessions` |
 | Workstation routing and runtime fields | `you docs workstations` |
 | Worker types and providers | `you docs workers` |

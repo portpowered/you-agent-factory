@@ -380,7 +380,11 @@ func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"# Submitted Work",
 		"## Single-Work API Submission",
-		"POST /work",
+		"## Submission contract shapes",
+		"SubmitWorkRequest",
+		"WorkRequest",
+		"`items` cannot be combined with `content` or `payload` on",
+		"POST /factory-sessions/{session_id}/work",
 		"workTypeName",
 		"## CLI `you submit` success and verify loop",
 		"Submitted: <name> (<workTypeName>)",
@@ -430,6 +434,8 @@ func TestMarkdown_BatchInputsAndCompatibilityAliasReturnRawAuthoredMarkdown(t *t
 	for _, want := range []string{
 		"# Batch Inputs",
 		"## Batch ingress comparison",
+		"`WorkRequest`",
+		"works[].content",
 		"`you submit batch`",
 		"`you submit`",
 		"`you run --work <path>`",

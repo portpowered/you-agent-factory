@@ -44,7 +44,7 @@ These are the fixed topic names accepted by `you docs <topic>`.
   `you docs relationships` for `DEPENDS_ON`, `PARENT_CHILD`, and runtime
   `SPAWNED_BY` semantics.
 - `work` is the packaged submitted-work reference. Run `you docs work` for
-  `POST /work`, tags, batch cross-links, and submission-oriented runtime flow.
+  session-scoped work routes, tags, batch cross-links, and submission-oriented runtime flow.
 - `workstations` is the packaged workstation reference. `workstation` remains
   accepted as a compatibility alias for the same raw markdown. Run `you docs
   workstations` for the canonical workstation guide.
@@ -69,8 +69,8 @@ These are the fixed topic names accepted by `you docs <topic>`.
 - Canonical concept guides:
   - `you docs config` owns work types, work states, top-level `factory.json`,
     routing behavior, runtime resources, and portability fields.
-  - `you docs work` owns `POST /work`, submitted-work tags, and batch
-    cross-links.
+  - `you docs work` owns `POST /factory-sessions/{session_id}/work`,
+    submitted-work tags, and batch cross-links.
   - `you docs workstations` owns workstation kinds, route fields, runtime step
     behavior, and workstation-scoped execution settings.
   - `you docs workers` owns worker types, worker-scoped runtime fields, and split

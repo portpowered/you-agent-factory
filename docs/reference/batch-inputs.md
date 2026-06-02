@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-30
+last-modified: 2026-06-03
 doc-id: agent-factory/guides/batch-inputs
 ---
 
@@ -18,7 +18,8 @@ print identical markdown.
 parent-aware input guards such as `ALL_CHILDREN_COMPLETE`.
 
 This guide covers the public batch input shape used by watched input files,
-`you run --work`, `you submit batch`, and `PUT /work-requests/{request_id}`.
+`you run --work`, `you submit batch`, and
+`PUT /factory-sessions/{session_id}/work-requests/{request_id}`.
 
 ## Batch ingress comparison
 
@@ -32,10 +33,19 @@ the whole submission with no partial work.
 | `you submit batch` | Upsert a batch JSON document to a **running** factory session without restarting it. |
 | `you run --work <path>` | Submit a batch file as part of **startup** before or while starting a local factory run. |
 | `factory/inputs/BATCH/default/<request_id>.json` | Steady-state **watched-folder** ingress while the factory is already running. |
-| `PUT /work-requests/{request_id}` | HTTP upsert with the same JSON body (session-scoped routes use `/factory-sessions/{session}/work-requests/{request_id}`). |
+| `PUT /factory-sessions/{session_id}/work-requests/{request_id}` | HTTP upsert with the same JSON body (`~default` when targeting the default session). |
 
 For single-work CLI or dashboard submission, see `you docs work`. For
 relation semantics, see `you docs relationships`.
+
+`WorkRequest` is the canonical batch body for
+`PUT /factory-sessions/{session_id}/work-requests/{request_id}`. Each
+`works[]` entry accepts the same input fields as a single submit—`payload` for
+opaque JSON, or `content` for ordered canonical parts. Structured dashboard
+`items` and staged-file staging apply only to
+`POST /factory-sessions/{session_id}/work` (`SubmitWorkRequest`); batch callers
+use `works[].content` instead. See `you docs work` for the full submission-shape
+comparison and mutual-exclusivity rules.
 
 ## Quick reference
 
@@ -171,7 +181,7 @@ state name expected by the parent input in your `factory.json` topology.
 Use the same request body for API submission:
 
 ```bash
-curl -X PUT "http://localhost:7437/work-requests/release-story-set" \
+curl -X PUT "http://localhost:7437/factory-sessions/~default/work-requests/release-story-set" \
   -H "Content-Type: application/json" \
   --data @factory/inputs/BATCH/default/release-story-set.json
 ```
@@ -183,7 +193,7 @@ The path `{request_id}` and body `requestId` must match.
 When a factory is already running, upsert the same JSON body with
 `you submit batch` instead of writing to a watched inbox or calling `curl`.
 The command validates locally, then issues `PUT` to
-`/factory-sessions/{session}/work-requests/{requestId}` (default session
+`/factory-sessions/{session_id}/work-requests/{requestId}` (default session
 `~default` when `--session` is omitted).
 
 File path (primary form):

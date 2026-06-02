@@ -20,6 +20,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 )
 
 const (
@@ -205,7 +206,8 @@ func (s *harnessSession) RunChecks(ctx context.Context, cfg Config) (Result, err
 		return Result{}, err
 	}
 
-	workCount, err := waitForCompletedWork(ctx, s.client, s.baseURL+"/work", s.waiter)
+	workListURL := strings.TrimSuffix(s.baseURL, "/") + "/factory-sessions/" + factorysessions.DefaultSessionID + "/work"
+	workCount, err := waitForCompletedWork(ctx, s.client, workListURL, s.waiter)
 	if err != nil {
 		return Result{}, s.failure(observedEvents, "verify_completed_work", err)
 	}

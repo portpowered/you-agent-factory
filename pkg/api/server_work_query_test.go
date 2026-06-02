@@ -91,7 +91,7 @@ func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.Moc
 		WorkTypes: map[string]*state.WorkType{"task": {ID: "task", States: []state.StateDefinition{{Value: "init", Category: state.StateCategoryInitial}}}},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -145,7 +145,7 @@ func TestGetWork(t *testing.T) {
 		}},
 	})
 
-	req := httptest.NewRequest("GET", "/work/tok-prd-1", nil)
+	req := httptest.NewRequest("GET", "/factory-sessions/~default/work/tok-prd-1", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -183,7 +183,7 @@ func TestGetWork_ByWorkID(t *testing.T) {
 		}},
 	})
 
-	req := httptest.NewRequest("GET", "/work/work-prd-1", nil)
+	req := httptest.NewRequest("GET", "/factory-sessions/~default/work/work-prd-1", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -214,7 +214,7 @@ func TestGetWork_OmitsEmptyOptionalCollections(t *testing.T) {
 		}},
 	})
 
-	req := httptest.NewRequest("GET", "/work/tok-prd-2", nil)
+	req := httptest.NewRequest("GET", "/factory-sessions/~default/work/tok-prd-2", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -280,7 +280,7 @@ func TestTokenToResponse_CopiesOptionalPreviousChainingTraceIDs(t *testing.T) {
 
 func TestGetWorkNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
-	req := httptest.NewRequest("GET", "/work/nonexistent", nil)
+	req := httptest.NewRequest("GET", "/factory-sessions/~default/work/nonexistent", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
@@ -342,7 +342,7 @@ func TestListWork_HidesInternalTimeWorkTokens(t *testing.T) {
 		"tok-time":  {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: interfaces.TokenColor{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time", Tags: map[string]string{interfaces.TimeWorkTagKeyCronWorkstation: "daily-refresh"}}, CreatedAt: now, EnteredAt: now},
 	}}})
 
-	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -366,7 +366,7 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 		"tok-filter-4": {ID: "tok-filter-4", PlaceID: "story:init", Color: interfaces.TokenColor{WorkID: "work-filter-4", WorkTypeID: "story", TraceID: "trace-filter-4"}, CreatedAt: now, EnteredAt: now},
 	}}})
 
-	firstResp := decodeListWorkPage(t, srv, "/work?maxResults=2")
+	firstResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2")
 	if len(firstResp.Results) != 2 || stringValue(firstResp.Results[0].WorkId) != "work-filter-1" || stringValue(firstResp.Results[1].WorkId) != "work-filter-3" || firstResp.PaginationContext == nil {
 		t.Fatalf("first page = %#v, want public work before pagination", firstResp)
 	}
@@ -375,7 +375,7 @@ func TestListWork_FiltersInternalTokensBeforePagination(t *testing.T) {
 		t.Fatal("expected first page nextToken")
 	}
 
-	secondResp := decodeListWorkPage(t, srv, "/work?maxResults=2&nextToken="+nextToken)
+	secondResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2&nextToken="+nextToken)
 	if len(secondResp.Results) != 1 || stringValue(secondResp.Results[0].WorkId) != "work-filter-4" {
 		t.Fatalf("second page listed work = %#v, want remaining public work", secondResp.Results)
 	}
@@ -389,7 +389,7 @@ func TestGetWork_HidesInternalTimeWorkToken(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
 		"tok-time": {ID: "tok-time", PlaceID: interfaces.SystemTimePendingPlaceID, Color: interfaces.TokenColor{WorkID: "time-daily-refresh", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time"}, CreatedAt: now, EnteredAt: now},
 	}}})
-	req := httptest.NewRequest(http.MethodGet, "/work/tok-time", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work/tok-time", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
@@ -402,7 +402,7 @@ func TestListWork_HidesResourceTokens(t *testing.T) {
 		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
 	}}})
 
-	req := httptest.NewRequest(http.MethodGet, "/work", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
@@ -420,7 +420,7 @@ func TestGetWork_HidesResourceToken(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
 		"agent-slot:resource": {ID: "agent-slot:resource", PlaceID: "agent-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource, WorkID: "resource-work", WorkTypeID: "agent-slot"}, CreatedAt: now, EnteredAt: now},
 	}}})
-	req := httptest.NewRequest(http.MethodGet, "/work/agent-slot:resource", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work/agent-slot:resource", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "work not found")
@@ -429,7 +429,7 @@ func TestGetWork_HidesResourceToken(t *testing.T) {
 func TestListWork(t *testing.T) {
 	tokens := makeListWorkTokens("prd", 3, time.Now())
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: tokens}})
-	resp := decodeListWorkPage(t, srv, "/work?maxResults=2")
+	resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2")
 	if len(resp.Results) != 2 || resp.PaginationContext == nil || stringValue(resp.PaginationContext.NextToken) == "" {
 		t.Fatalf("list work response = %#v, want paginated first page", resp)
 	}
@@ -453,7 +453,7 @@ func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.
 	tokens["tok-5"].Color.Name = "origin"
 
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: tokens}, Net: listWorkFilterTopology()})
-	resp := decodeListWorkPage(t, srv, "/work?state.name=init")
+	resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?state.name=init")
 	review := listedWorkByID(t, resp.Results, "work-review")
 	if review.Relations == nil || len(*review.Relations) != 3 {
 		t.Fatalf("review relations = %#v, want runtime relations", review.Relations)
@@ -492,7 +492,7 @@ func TestListWork_FiltersByWorkTypeNameNameSubstringAndTraceId(t *testing.T) {
 		{name: "trace id on trace id", query: "traceId=trace-plan", wantWorkIDs: []string{"work-plan"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := decodeListWorkPage(t, srv, "/work?"+tc.query)
+			resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?"+tc.query)
 			if len(resp.Results) != len(tc.wantWorkIDs) {
 				t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(tc.wantWorkIDs), resp.Results)
 			}
@@ -517,7 +517,7 @@ func TestListWork_FiltersByNameBeforePagination(t *testing.T) {
 		"tok-3": listWorkTokenWithTraces("tok-3", "work-gamma", "Alpha two", "task:init", "task", "", "", now),
 	}
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: tokens}, Net: listWorkFilterTopology()})
-	resp := decodeListWorkPage(t, srv, "/work?name=alpha&maxResults=2")
+	resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?name=alpha&maxResults=2")
 	assertListedWorkIDs(t, resp.Results, []string{"work-alpha", "work-gamma"})
 	if resp.PaginationContext == nil || stringValue(resp.PaginationContext.NextToken) != "" {
 		t.Fatalf("pagination = %#v, want terminal page after name filter", resp.PaginationContext)
@@ -543,7 +543,7 @@ func TestListWork_FiltersByStateNameAndType(t *testing.T) {
 		{name: "combined mismatch", query: "state.name=review&state.type=FAILED", wantWorkIDs: nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			resp := decodeListWorkPage(t, srv, "/work?"+tc.query)
+			resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?"+tc.query)
 			if len(resp.Results) != len(tc.wantWorkIDs) {
 				t.Fatalf("results = %d, want %d: %#v", len(resp.Results), len(tc.wantWorkIDs), resp.Results)
 			}
@@ -563,7 +563,7 @@ func TestListWork_DefaultOrderingSurfacesActiveWorkBeforeTerminalWork(t *testing
 		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", time.Now()),
 		"tok-4": listWorkToken("tok-4", "work-init", "task:init", "task", time.Now()),
 	}}, Net: listWorkFilterTopology()})
-	resp := decodeListWorkPage(t, srv, "/work")
+	resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work")
 	assertListedWorkIDs(t, resp.Results, []string{"work-init", "work-review", "work-failed", "work-complete"})
 }
 
@@ -574,13 +574,13 @@ func TestListWork_SortsByStateType(t *testing.T) {
 		"tok-3": listWorkToken("tok-3", "work-review", "task:review", "task", time.Now()),
 		"tok-4": listWorkToken("tok-4", "work-init", "task:init", "task", time.Now()),
 	}}, Net: listWorkFilterTopology()})
-	resp := decodeListWorkPage(t, srv, "/work?sortBy=state.type")
+	resp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?sortBy=state.type")
 	assertListedWorkIDs(t, resp.Results, []string{"work-failed", "work-init", "work-review", "work-complete"})
 }
 
 func TestListWork_InvalidStateTypeReturnsBadRequest(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodGet, "/work?state.type=UNKNOWN", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work?state.type=UNKNOWN", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED")
@@ -588,7 +588,7 @@ func TestListWork_InvalidStateTypeReturnsBadRequest(t *testing.T) {
 
 func TestListWork_InvalidSortByReturnsBadRequest(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	req := httptest.NewRequest(http.MethodGet, "/work?sortBy=name", nil)
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/work?sortBy=name", nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "sortBy must be state.type")
@@ -596,7 +596,7 @@ func TestListWork_InvalidSortByReturnsBadRequest(t *testing.T) {
 
 func TestListWork_InvalidMaxResultsUsesGeneratedBadRequest(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	for _, tc := range []struct{ name, path string }{{"empty", "/work?maxResults="}, {"invalid", "/work?maxResults=abc"}} {
+	for _, tc := range []struct{ name, path string }{{"empty", "/factory-sessions/~default/work?maxResults="}, {"invalid", "/factory-sessions/~default/work?maxResults=abc"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rec := httptest.NewRecorder()
@@ -609,7 +609,7 @@ func TestListWork_InvalidMaxResultsUsesGeneratedBadRequest(t *testing.T) {
 func TestListWork_NonPositiveMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 	tokens := makeListWorkTokens("legacy", 3, time.Now())
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: tokens}})
-	for _, tc := range []struct{ name, path string }{{"absent", "/work"}, {"non_positive", "/work?maxResults=0"}} {
+	for _, tc := range []struct{ name, path string }{{"absent", "/factory-sessions/~default/work"}, {"non_positive", "/factory-sessions/~default/work?maxResults=0"}} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := decodeListWorkPage(t, srv, tc.path)
 			if len(resp.Results) != len(tokens) {
@@ -624,7 +624,7 @@ func TestListWork_NonPositiveMaxResultsDefaultsToCurrentBehavior(t *testing.T) {
 
 func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: makeListWorkTokens("cursor", 3, time.Now())}})
-	firstResp := decodeListWorkPage(t, srv, "/work?maxResults=2")
+	firstResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2")
 	if len(firstResp.Results) != 2 || firstResp.PaginationContext == nil {
 		t.Fatalf("first page = %#v, want paginated response", firstResp)
 	}
@@ -632,14 +632,14 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	if nextToken == "" {
 		t.Fatal("expected first page nextToken")
 	}
-	secondResp := decodeListWorkPage(t, srv, "/work?maxResults=2&nextToken="+nextToken)
+	secondResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2&nextToken="+nextToken)
 	if len(secondResp.Results) != 1 || secondResp.PaginationContext == nil || secondResp.PaginationContext.MaxResults != 2 || stringValue(secondResp.PaginationContext.NextToken) != "" {
 		t.Fatalf("second page = %#v, want one result and terminal pagination context", secondResp)
 	}
 	if stringValue(firstResp.Results[0].WorkId) != "work-cursor-1" || stringValue(firstResp.Results[1].WorkId) != "work-cursor-2" || stringValue(secondResp.Results[0].WorkId) != "work-cursor-3" {
 		t.Fatalf("unexpected continued page results: first=%#v second=%#v", firstResp.Results, secondResp.Results)
 	}
-	trailingResp := decodeListWorkPage(t, srv, "/work?maxResults=2&nextToken="+encodeNextToken("tok-cursor-3"))
+	trailingResp := decodeListWorkPage(t, srv, "/factory-sessions/~default/work?maxResults=2&nextToken="+encodeNextToken("tok-cursor-3"))
 	if len(trailingResp.Results) != 0 || trailingResp.PaginationContext == nil || trailingResp.PaginationContext.MaxResults != 2 || stringValue(trailingResp.PaginationContext.NextToken) != "" {
 		t.Fatalf("trailing page = %#v, want empty final page", trailingResp)
 	}
@@ -649,7 +649,7 @@ func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-1", `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","payload":"legacy text"}]}`)
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-1", `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","payload":"legacy text"}]}`)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
@@ -661,7 +661,7 @@ func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *
 func TestUpsertWorkRequest_RejectsInvalidContentPartShape(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-1", `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","file":"wrong"}]}]}`)
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-1", `{"requestId":"request-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","file":"wrong"}]}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].content[0].file is not supported")
 	if len(mf.Submitted) != 0 || len(mf.WorkRequests) != 0 {
 		t.Fatalf("submissions = workRequests:%d submitted:%d, want 0/0", len(mf.WorkRequests), len(mf.Submitted))
@@ -672,7 +672,7 @@ func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-canonical", `{
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-canonical", `{
 		"requestId":"request-canonical",
 		"type":"FACTORY_REQUEST_BATCH",
 		"works":[{"name":"draft","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://fixtures/ui.png"}]}]
@@ -698,7 +698,7 @@ func TestUpsertWorkRequest_AcceptsUppercaseAndExtendedContent(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-model-content", `{
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-model-content", `{
 		"requestId":"request-model-content",
 		"type":"FACTORY_REQUEST_BATCH",
 		"works":[{
@@ -744,7 +744,7 @@ func TestUpsertWorkRequest_FirstSubmitAndRepeatedRequestID(t *testing.T) {
 		`{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","traceId":"trace-original","payload":{"title":"Draft"}}]}`,
 		`{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"changed-draft","workTypeName":"task","traceId":"trace-retry","payload":{"title":"Changed retry"}}]}`,
 	} {
-		rec := upsertWorkRequest(t, srv, "/work-requests/request-api-1", body)
+		rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-1", body)
 		if rec.Code != http.StatusCreated {
 			t.Fatalf("PUT /work-requests status = %d, want 201: %s", rec.Code, rec.Body.String())
 		}
@@ -772,7 +772,7 @@ func TestUpsertWorkRequest_MapsWorkTypeNameAndRelationsToRuntime(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-batch", `{
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-batch", `{
 		"requestId":"request-api-batch",
 		"currentChainingTraceId":"chain-request-batch",
 		"type":"FACTORY_REQUEST_BATCH",
@@ -812,7 +812,7 @@ func TestUpsertWorkRequest_ReturnsPerWorkIdentifiers(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-batch", `{
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-batch", `{
 		"requestId":"request-api-batch",
 		"type":"FACTORY_REQUEST_BATCH",
 		"works":[
@@ -846,7 +846,7 @@ func TestUpsertWorkRequest_AcceptsParentChildRelationsByWorkName(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-parent-child", `{
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-parent-child", `{
 		"requestId":"request-api-parent-child",
 		"type":"FACTORY_REQUEST_BATCH",
 		"works":[
@@ -909,7 +909,7 @@ func TestUpsertWorkRequest_WorkTypeIDReturnsBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-legacy", `{"requestId":"request-api-legacy","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","work_type_id":"legacy-task","payload":{"title":"Draft"}}]}`)
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-legacy", `{"requestId":"request-api-legacy","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","work_type_id":"legacy-task","payload":{"title":"Draft"}}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].work_type_id is not supported; use workTypeName")
 }
 
@@ -917,7 +917,7 @@ func TestUpsertWorkRequest_TargetStateReturnsBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-state-alias", `{"requestId":"request-api-state-alias","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","target_state":"queued","payload":{"title":"Draft"}}]}`)
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-state-alias", `{"requestId":"request-api-state-alias","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","target_state":"queued","payload":{"title":"Draft"}}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].target_state is not supported; use state")
 }
 
@@ -925,7 +925,7 @@ func TestUpsertWorkRequest_ConflictingCurrentChainingTraceIDReturnsBadRequest(t 
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-chaining-conflict", `{"requestId":"request-api-chaining-conflict","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","currentChainingTraceId":"chain-a","traceId":"trace-b","payload":{"title":"Draft"}}]}`)
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-chaining-conflict", `{"requestId":"request-api-chaining-conflict","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","currentChainingTraceId":"chain-a","traceId":"trace-b","payload":{"title":"Draft"}}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "works[0].currentChainingTraceId and traceId must match when both are provided")
 }
 
@@ -938,28 +938,28 @@ func TestUpsertWorkRequest_InvalidExplicitStateReturnsBadRequest(t *testing.T) {
 	}
 	srv := newTestServer(mf)
 
-	rec := upsertWorkRequest(t, srv, "/work-requests/request-api-invalid-state", `{"requestId":"request-api-invalid-state","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","state":"queued","payload":{"title":"Draft"}}]}`)
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-api-invalid-state", `{"requestId":"request-api-invalid-state","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","state":"queued","payload":{"title":"Draft"}}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("draft") references unknown state "queued" for work type name "task"`)
 }
 
 func TestUpsertWorkRequestValidationFailures(t *testing.T) {
 	runUpsertValidationFailureCases(t, []upsertValidationFailureCase{
-		{name: "invalid_json", path: "/work-requests/request-api-1", body: `{"requestId":`, wantMsg: "invalid request payload"},
-		{name: "missing_required_request_id", path: "/work-requests/request-api-1", body: `{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task"}]}`, wantMsg: "requestId is required"},
-		{name: "path_body_mismatch", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-2","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task"}]}`, wantMsg: "request_id path and requestId body must match"},
-		{name: "cycle_error", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"a","workTypeName":"task"},{"name":"b","workTypeName":"task"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"a","targetWorkName":"b"},{"type":"DEPENDS_ON","sourceWorkName":"b","targetWorkName":"a"}]}`, wantMsg: `work_request: dependency cycle detected involving "a"`},
-		{name: "malformed_relation", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"a","workTypeName":"task"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"a","targetWorkName":"missing"}]}`, wantMsg: `work_request: relations[0] references unknown targetWorkName "missing"`},
-		{name: "self_parenting_relation", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"a","workTypeName":"task"}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":"a","targetWorkName":"a"}]}`, wantMsg: `work_request: relations[0] has self-parenting on "a"`},
+		{name: "invalid_json", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":`, wantMsg: "invalid request payload"},
+		{name: "missing_required_request_id", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task"}]}`, wantMsg: "requestId is required"},
+		{name: "path_body_mismatch", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-2","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task"}]}`, wantMsg: "request_id path and requestId body must match"},
+		{name: "cycle_error", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"a","workTypeName":"task"},{"name":"b","workTypeName":"task"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"a","targetWorkName":"b"},{"type":"DEPENDS_ON","sourceWorkName":"b","targetWorkName":"a"}]}`, wantMsg: `work_request: dependency cycle detected involving "a"`},
+		{name: "malformed_relation", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"a","workTypeName":"task"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"a","targetWorkName":"missing"}]}`, wantMsg: `work_request: relations[0] references unknown targetWorkName "missing"`},
+		{name: "self_parenting_relation", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"a","workTypeName":"task"}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":"a","targetWorkName":"a"}]}`, wantMsg: `work_request: relations[0] has self-parenting on "a"`},
 	})
 
 	runUpsertValidationFailureCases(t, []upsertValidationFailureCase{
-		{name: "duplicate_parent_child_relation", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"parent","workTypeName":"task"},{"name":"child","workTypeName":"task"}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":"child","targetWorkName":"parent"},{"type":"PARENT_CHILD","sourceWorkName":"child","targetWorkName":"parent"}]}`, wantMsg: `work_request: relations[1] duplicates relations[0] ("PARENT_CHILD" "child" -> "parent")`},
-		{name: "missing_work_type_name", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft"}]}`, wantMsg: `work_request: works[0] ("draft") is missing workTypeName`},
-		{name: "work_type_id_not_supported", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","work_type_id":"legacy-task"}]}`, wantMsg: `works[0].work_type_id is not supported; use workTypeName`},
-		{name: "unknown_work_type", path: "/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"unknown"}]}`, factory: &testutil.MockFactory{SubmitWorkRequestErr: errors.New(`work_request: works[0] ("draft") references unknown work type "unknown"`)}, wantMsg: `work_request: works[0] ("draft") references unknown work type name "unknown"`},
+		{name: "duplicate_parent_child_relation", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"parent","workTypeName":"task"},{"name":"child","workTypeName":"task"}],"relations":[{"type":"PARENT_CHILD","sourceWorkName":"child","targetWorkName":"parent"},{"type":"PARENT_CHILD","sourceWorkName":"child","targetWorkName":"parent"}]}`, wantMsg: `work_request: relations[1] duplicates relations[0] ("PARENT_CHILD" "child" -> "parent")`},
+		{name: "missing_work_type_name", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft"}]}`, wantMsg: `work_request: works[0] ("draft") is missing workTypeName`},
+		{name: "work_type_id_not_supported", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task","work_type_id":"legacy-task"}]}`, wantMsg: `works[0].work_type_id is not supported; use workTypeName`},
+		{name: "unknown_work_type", path: "/factory-sessions/~default/work-requests/request-api-1", body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"unknown"}]}`, factory: &testutil.MockFactory{SubmitWorkRequestErr: errors.New(`work_request: works[0] ("draft") references unknown work type "unknown"`)}, wantMsg: `work_request: works[0] ("draft") references unknown work type name "unknown"`},
 		{
 			name: "invalid_dependency_required_state",
-			path: "/work-requests/request-api-1",
+			path: "/factory-sessions/~default/work-requests/request-api-1",
 			body: `{"requestId":"request-api-1","type":"FACTORY_REQUEST_BATCH","works":[{"name":"draft","workTypeName":"task"},{"name":"review","workTypeName":"task"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"review","targetWorkName":"draft","requiredState":"queued"}]}`,
 			factory: &testutil.MockFactory{
 				Net: &state.Net{

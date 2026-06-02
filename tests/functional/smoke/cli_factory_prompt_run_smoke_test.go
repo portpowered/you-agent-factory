@@ -234,7 +234,7 @@ func waitForFactoryPromptWorkComplete(
 		default:
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/work", nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.DefaultSessionWorkURL(baseURL, "/work"), nil)
 		if err != nil {
 			return factoryapi.Work{}, err
 		}

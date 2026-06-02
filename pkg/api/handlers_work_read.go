@@ -37,32 +37,12 @@ const (
 
 var submitWorkStagedFileRefSecret = mustReadSubmitWorkStagedFileRefSecret()
 
-func (s *Server) ListWork(w http.ResponseWriter, r *http.Request, params factoryapi.ListWorkParams) {
-	s.listWork(w, r, params, s.runtime.GetEngineStateSnapshot)
-}
-
 func (s *Server) ListWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.ListWorkBySessionIdParams) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
 	}
-	legacyParams := factoryapi.ListWorkParams{
-		MaxResults:   params.MaxResults,
-		NextToken:    params.NextToken,
-		StateName:    params.StateName,
-		Name:         params.Name,
-		WorkTypeName: params.WorkTypeName,
-		TraceId:      params.TraceId,
-	}
-	if params.StateType != nil {
-		stateType := factoryapi.WorkStateType(*params.StateType)
-		legacyParams.StateType = &stateType
-	}
-	if params.SortBy != nil {
-		sortBy := factoryapi.ListWorkParamsSortBy(*params.SortBy)
-		legacyParams.SortBy = &sortBy
-	}
-	s.listWork(w, r, legacyParams, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	s.listWork(w, r, params, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(sessionID))
 	})
 }
@@ -70,14 +50,14 @@ func (s *Server) ListWorkBySessionId(w http.ResponseWriter, r *http.Request, ses
 func (s *Server) listWork(
 	w http.ResponseWriter,
 	r *http.Request,
-	params factoryapi.ListWorkParams,
+	params factoryapi.ListWorkBySessionIdParams,
 	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
 ) {
 	if params.StateType != nil && !workquery.ValidWorkStateType(factoryapi.WorkStateType(*params.StateType)) {
 		s.writeError(w, http.StatusBadRequest, "state.type must be one of INITIAL, PROCESSING, TERMINAL, or FAILED", "BAD_REQUEST")
 		return
 	}
-	if params.SortBy != nil && *params.SortBy != factoryapi.ListWorkParamsSortByStateType {
+	if params.SortBy != nil && *params.SortBy != factoryapi.ListWorkBySessionIdParamsSortByStateType {
 		s.writeError(w, http.StatusBadRequest, "sortBy must be state.type", "BAD_REQUEST")
 		return
 	}
@@ -154,8 +134,8 @@ const (
 	listWorkSortStateType
 )
 
-func listWorkSortMode(sortBy *factoryapi.ListWorkParamsSortBy) listWorkSortModeValue {
-	if sortBy != nil && *sortBy == factoryapi.ListWorkParamsSortByStateType {
+func listWorkSortMode(sortBy *factoryapi.ListWorkBySessionIdParamsSortBy) listWorkSortModeValue {
+	if sortBy != nil && *sortBy == factoryapi.ListWorkBySessionIdParamsSortByStateType {
 		return listWorkSortStateType
 	}
 	return listWorkSortDefault
@@ -236,14 +216,14 @@ func listWorkResults(items []listWorkItem) []factoryapi.Work {
 	return results
 }
 
-func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+func workMatchesListFilters(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
 	return workMatchesStateListFilters(work, params) &&
 		workMatchesNameListFilter(work, params) &&
 		workMatchesWorkTypeNameListFilter(work, params) &&
 		workMatchesTraceIDListFilter(work, params)
 }
 
-func workMatchesStateListFilters(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+func workMatchesStateListFilters(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
 	if params.StateName != nil {
 		if work.State == nil || work.State.Name != *params.StateName {
 			return false
@@ -257,30 +237,26 @@ func workMatchesStateListFilters(work factoryapi.Work, params factoryapi.ListWor
 	return true
 }
 
-func workMatchesNameListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+func workMatchesNameListFilter(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
 	if params.Name == nil || *params.Name == "" {
 		return true
 	}
 	return strings.Contains(strings.ToLower(work.Name), strings.ToLower(string(*params.Name)))
 }
 
-func workMatchesWorkTypeNameListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+func workMatchesWorkTypeNameListFilter(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
 	if params.WorkTypeName == nil || *params.WorkTypeName == "" {
 		return true
 	}
 	return stringValue(work.WorkTypeName) == string(*params.WorkTypeName)
 }
 
-func workMatchesTraceIDListFilter(work factoryapi.Work, params factoryapi.ListWorkParams) bool {
+func workMatchesTraceIDListFilter(work factoryapi.Work, params factoryapi.ListWorkBySessionIdParams) bool {
 	if params.TraceId == nil || *params.TraceId == "" {
 		return true
 	}
 	traceID := string(*params.TraceId)
 	return stringValue(work.TraceId) == traceID || stringValue(work.CurrentChainingTraceId) == traceID
-}
-
-func (s *Server) GetWork(w http.ResponseWriter, r *http.Request, id factoryapi.WorkOrTokenID) {
-	s.getWork(w, r, id, s.runtime.GetEngineStateSnapshot)
 }
 
 func (s *Server) GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, id factoryapi.WorkOrTokenID) {
@@ -448,21 +424,6 @@ func publicWorkToken(token *interfaces.Token) bool {
 }
 func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
 	return workcontent.GeneratedPtrFromParts(parts)
-}
-
-func (s *Server) StageSubmitWorkFile(w http.ResponseWriter, r *http.Request) {
-	response, err := stageSubmitWorkFileRequest(r)
-	if err != nil {
-		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
-			return
-		}
-		s.logger.Error("stage submit-work file failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to stage submit-work file", "INTERNAL_ERROR")
-		return
-	}
-
-	s.writeJSON(w, http.StatusCreated, response)
 }
 
 func (s *Server) StageSubmitWorkFileBySessionId(

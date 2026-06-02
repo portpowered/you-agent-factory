@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-05-31
+last-modified: 2026-06-03
 doc-id: agent-factory/guides/sessions
 ---
 
@@ -19,7 +19,7 @@ see `you docs config`.
 
 | Need | Use |
 |------|-----|
-| Confirm anything is listening before `you submit` or `POST /work` | [Session list](#session-list) |
+| Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
 | Open the operator dashboard in a browser | [Dashboard](#dashboard) |
@@ -196,7 +196,7 @@ See `you docs work` for submit success output and verification with
 Choose how you start the factory based on whether later submissions need a
 still-running service:
 
-| How you start | Stays running for later `you submit` / `POST /work`? |
+| How you start | Stays running for later `you submit` / `POST /factory-sessions/{session_id}/work`? |
 |---------------|------------------------------------------------------|
 | `you` (no args) | Yes — continuous mode; watches default inputs and keeps the service up. |
 | `you run --continuously` | Yes — processes work until you stop the process. |
@@ -209,6 +209,6 @@ pre-submit checklist.
 ## Related Topics
 
 - `you docs agents` — agent orientation, operator loop, and topic router
-- `you docs work` — `you submit`, `POST /work`, and verification commands
+- `you docs work` — `you submit`, `POST /factory-sessions/{session_id}/work`, and verification commands
 - `you docs config` — `factory.json` topology and portability
 - `you docs batch-inputs` — batch ingress when the factory is already running

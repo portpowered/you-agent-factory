@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
 
@@ -152,7 +153,7 @@ func submitWorkAndExpectStatus(
 	if err != nil {
 		t.Fatalf("marshal submit request: %v", err)
 	}
-	resp, err := http.Post(serverURL+"/work", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(support.DefaultSessionWorkURL(serverURL, "/work"), "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST /work: %v", err)
 	}

@@ -22,11 +22,35 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 )
 
+const defaultSessionWorkAPIPrefix = "/factory-sessions/" + factorysessions.DefaultSessionID
+
+func scopeDefaultSessionWorkPath(path string) string {
+	if path == "/work" || strings.HasPrefix(path, "/work?") || strings.HasPrefix(path, "/work/") {
+		return defaultSessionWorkAPIPrefix + path
+	}
+	if strings.HasPrefix(path, "/work-requests/") {
+		return defaultSessionWorkAPIPrefix + path
+	}
+	return path
+}
+
 func newTestServer(f *testutil.MockFactory) *Server {
+	if f != nil {
+		ensureMockFactoryCurrentFactory(f)
+	}
 	logger, _ := zap.NewDevelopment()
 	return NewServer(f, 8080, logger)
+}
+
+func ensureMockFactoryCurrentFactory(f *testutil.MockFactory) {
+	if f.CurrentFactoryErr != nil || f.CurrentFactory != nil {
+		return
+	}
+	f.CurrentFactory = &factoryapi.Factory{Name: "test-factory"}
 }
 
 func newTestServerWithCodexRoot(root string) *Server {
@@ -442,7 +466,7 @@ func assertSubmittedChildRelations(t *testing.T, relations []interfaces.Relation
 func submitWorkRequest(t *testing.T, srv *Server, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, "/work", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, scopeDefaultSessionWorkPath("/work"), bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -457,7 +481,7 @@ func submitWorkStageFileRequest(
 ) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPost, path, bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPost, scopeDefaultSessionWorkPath(path), bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -467,7 +491,7 @@ func submitWorkStageFileRequest(
 func upsertWorkRequest(t *testing.T, srv *Server, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodPut, path, bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, scopeDefaultSessionWorkPath(path), bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
@@ -491,7 +515,7 @@ func encodeNextToken(token string) string {
 func decodeListWorkPage(t *testing.T, srv *Server, path string) factoryapi.ListWorkResponse {
 	t.Helper()
 
-	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req := httptest.NewRequest(http.MethodGet, scopeDefaultSessionWorkPath(path), nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {

@@ -1,13 +1,16 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-01
+last-modified: 2026-06-03
 doc-id: agent-factory/work
 ---
 
 # Submitted Work
 
-Use this guide when accepting work into a running factory: `POST /work`,
-watched `inputs/`, and how submitted payloads become tokens in the workflow.
+Use this guide when accepting work into a running factory:
+`POST /factory-sessions/{session_id}/work`, watched `inputs/`, and how submitted
+payloads become tokens in the workflow. Use `~default` as `{session_id}` when
+targeting the default compatibility session (the same label the CLI uses when
+`--session` is omitted).
 
 For `factory.json` topology—work types, states, workers, workstations,
 resources, routing, and portability—see `you docs config`.
@@ -29,7 +32,7 @@ submission-oriented runtime flow here. Keep `factory.json` topology in
 |------|-----|
 | Define `factory.json`, work types, states, routing, or portability fields | `you docs config` |
 | Confirm the factory is running, choose run modes, or route `--server` / `--session` | `you docs sessions` |
-| Submit one work item with `POST /work` or understand required API fields | This guide |
+| Submit one work item with `POST /factory-sessions/{session_id}/work` or understand required API fields | This guide |
 | Place batch request files under `inputs/`, define `FACTORY_REQUEST_BATCH`, or choose `DEPENDS_ON` versus `PARENT_CHILD` | `you docs batch-inputs` |
 | Walk through a full factory setup with example files and commands | `you docs authoring-factories` |
 
@@ -61,9 +64,11 @@ examples.
 
 ## Single-Work API Submission
 
-`POST /work` accepts one submitted work item at a time. Unlike watched-folder
-batch inputs, it does not infer or synthesize a request name for accepted work.
-Send an explicit authored `name` on every single-work submission.
+`POST /factory-sessions/{session_id}/work` accepts one submitted work item at a
+time. Unlike watched-folder batch inputs, it does not infer or synthesize a
+request name for accepted work. Send an explicit authored `name` on every
+single-work submission. Replace `{session_id}` with a live session id from
+`you session list` (often `~default` on single-session hosts).
 
 ```json
 {
@@ -78,17 +83,49 @@ Send an explicit authored `name` on every single-work submission.
 }
 ```
 
-Required fields for `POST /work`:
+Required fields for `POST /factory-sessions/{session_id}/work`:
 
 - `name`
 - `workTypeName`
 
 `name` is required for single-work API submission and remains independently
-required as `works[].name` for batch requests. Both `POST /work` (`SubmitWorkRequest`)
-and batch `WorkRequest` payloads use the OpenAPI camelCase fields from
+required as `works[].name` for batch requests. Both
+`POST /factory-sessions/{session_id}/work` (`SubmitWorkRequest`) and batch
+`WorkRequest` payloads use the OpenAPI camelCase fields from
 `api/openapi.yaml`, such as `workTypeName` and `traceId` on submitted work items.
 See `you docs batch-inputs` for the full `FACTORY_REQUEST_BATCH` contract,
 including `requestId`, relation fields, and optional `currentChainingTraceId`.
+
+## Submission contract shapes
+
+Two public request bodies cover work ingress. Both normalize into the same
+runtime `FACTORY_REQUEST_BATCH` shape before dispatch.
+
+| Shape | Route | When to use |
+|-------|-------|-------------|
+| `SubmitWorkRequest` | `POST /factory-sessions/{session_id}/work` | One-work convenience body for CLI `you submit`, the dashboard submit widget, and single-item HTTP callers |
+| `WorkRequest` | `PUT /factory-sessions/{session_id}/work-requests/{request_id}` | Canonical idempotent batch body for `FACTORY_REQUEST_BATCH` upserts (`you submit batch`, watched `inputs/`, pollers) |
+
+Each submitted work item carries input through one of three payload fields.
+Use only the field that matches your client; do not combine them on the same
+request.
+
+| Field | Surfaces | Purpose |
+|-------|----------|---------|
+| `payload` | `SubmitWorkRequest`, batch `works[]` | Opaque JSON (or legacy string) work input for templates and worker dispatch |
+| `content` | `SubmitWorkRequest`, batch `works[]` | Ordered canonical multimedia/model parts (`text`, `image`, `audio`, and related types) |
+| `items` | `SubmitWorkRequest` only | Dashboard-authored structured submit items that reference staged files |
+
+**Staged files:** `POST /factory-sessions/{session_id}/work/staged-files` uploads
+dashboard-authored file bytes. The stage response returns a backend-owned `url`
+and `stagedFileRef` that structured `items[]` entries must cite. Staging exists
+only for dashboard-authored file payloads used by structured submit items—not for
+direct `content[]` submissions that already carry their own `url`.
+
+**Mutual exclusivity:** `items` cannot be combined with `content` or `payload` on
+the same submit request. Explicit `content` and `payload` on the same work item
+are also rejected when they conflict. Batch upserts that need ordered parts set
+`works[].content` per work item instead of `items` (which is single-submit only).
 
 ## Multimedia content URLs
 
@@ -112,10 +149,10 @@ and `url` plus `file` on the same part.
 
 ### Stage then submit (dashboard or API)
 
-1. `POST /work/staged-files` with `itemType`, `fileName`, `mediaType`, and
-   `contentBase64`.
+1. `POST /factory-sessions/{session_id}/work/staged-files` with `itemType`,
+   `fileName`, `mediaType`, and `contentBase64`.
 2. Use the returned `url` (and `stagedFileRef` when needed) on structured
-   `POST /work` items.
+   `POST /factory-sessions/{session_id}/work` items.
 
 ```json
 {
@@ -183,8 +220,9 @@ materialized temporary paths.
 
 ## CLI `you submit` success and verify loop
 
-`you submit` posts one work item to a running factory session (`POST /work` or
-`POST /factory-sessions/{sessionId}/work`). On HTTP `201`, stdout is shaped for
+`you submit` posts one work item to a running factory session via
+`POST /factory-sessions/{session_id}/work` (CLI default session `~default` when
+`--session` is omitted). On HTTP `201`, stdout is shaped for
 operators and scripts; failures never print the success confirmation.
 
 Use the same `--server` base URI and `--session` target as `you work list` and

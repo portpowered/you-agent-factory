@@ -598,7 +598,7 @@ func (fs *functionalAPIServer) GetDashboard(t *testing.T) DashboardResponse {
 
 func (fs *functionalAPIServer) ListWork(t *testing.T) factoryapi.ListWorkResponse {
 	t.Helper()
-	return getGeneratedJSON[factoryapi.ListWorkResponse](t, fs.URL()+"/work")
+	return getGeneratedJSON[factoryapi.ListWorkResponse](t, support.DefaultSessionWorkURL(fs.URL(), "/work"))
 }
 
 func dashboardResponseFromWorldView(worldView interfaces.FactoryWorldView) DashboardResponse {
