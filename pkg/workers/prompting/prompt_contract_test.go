@@ -39,11 +39,42 @@ func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePa
 			t.Fatalf("available variables missing %q from %#v", want, contract.AvailableVariables)
 		}
 	}
-	if !hasVariablePath(contract.AvailableVariables, ".Context.Project") {
-		t.Fatalf("available variables = %#v, want .Context.Project", contract.AvailableVariables)
+	for _, wantContext := range []string{".Context.Project", ".Context.SessionID"} {
+		if !hasVariablePath(contract.AvailableVariables, wantContext) {
+			t.Fatalf("available variables missing %q from %#v", wantContext, contract.AvailableVariables)
+		}
 	}
 	if !hasUnavailablePattern(contract.UnavailableAccessPatterns, ".Inputs[N]") {
 		t.Fatalf("unavailable patterns = %#v, want .Inputs[N]", contract.UnavailableAccessPatterns)
+	}
+}
+
+func TestValidatePromptTemplate_AcceptsContextSessionID(t *testing.T) {
+	result := ValidatePromptTemplate(`you submit --session {{ .Context.SessionID }} --work follow-up`, 1)
+
+	if !result.Valid {
+		t.Fatalf("Valid = false, diagnostics = %#v", result.Diagnostics)
+	}
+	if len(result.Diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want none", result.Diagnostics)
+	}
+}
+
+func TestBuildPromptTemplateContract_ListsContextSessionIDMetadata(t *testing.T) {
+	contract := BuildPromptTemplateContract(0)
+
+	reference, ok := findVariableReference(contract.AvailableVariables, ".Context.SessionID")
+	if !ok {
+		t.Fatalf("available variables = %#v, want .Context.SessionID", contract.AvailableVariables)
+	}
+	if reference.Category != PromptTemplateVariableCategoryContext {
+		t.Fatalf("category = %q, want %q", reference.Category, PromptTemplateVariableCategoryContext)
+	}
+	if reference.Example != "{{ .Context.SessionID }}" {
+		t.Fatalf("example = %q, want {{ .Context.SessionID }}", reference.Example)
+	}
+	if reference.Description == "" {
+		t.Fatal("description is empty, want non-empty guidance for session-scoped CLI usage")
 	}
 }
 
@@ -242,12 +273,17 @@ func containsText(have, want string) bool {
 }
 
 func hasVariablePath(references []PromptTemplateVariableReference, want string) bool {
+	_, ok := findVariableReference(references, want)
+	return ok
+}
+
+func findVariableReference(references []PromptTemplateVariableReference, want string) (PromptTemplateVariableReference, bool) {
 	for _, reference := range references {
 		if reference.Path == want {
-			return true
+			return reference, true
 		}
 	}
-	return false
+	return PromptTemplateVariableReference{}, false
 }
 
 func hasUnavailablePattern(patterns []PromptTemplateUnavailableAccessPattern, want string) bool {
