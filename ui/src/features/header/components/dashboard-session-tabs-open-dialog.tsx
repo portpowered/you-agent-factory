@@ -23,8 +23,6 @@ import {
 } from "../lib/dashboard-session-tabs-utils";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
-const SESSION_SECTION_LABEL_CLASS =
-  "text-xs uppercase tracking-[0.18em] text-af-text-subtle";
 const SESSION_DIALOG_ERROR_CLASS =
   "rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text";
 const SESSION_DIALOG_STATUS_CLASS =
@@ -94,7 +92,7 @@ export function OpenSessionDialog({
       <form className="grid gap-4" onSubmit={onInspectFolder}>
         <div className="grid gap-2">
           <label
-            className={SESSION_SECTION_LABEL_CLASS}
+            className="text-xs uppercase tracking-[0.18em] text-af-text-subtle"
             htmlFor={folderFieldID}
           >
             {messages.sessionFolderFieldLabel}

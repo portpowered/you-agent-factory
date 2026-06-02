@@ -12,6 +12,46 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestPortableBundledFiles_FlattenOmitsGitkeepFromExportPayload(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, "scripts", ".gitkeep"), "")
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, "inputs", "task", "default", ".gitkeep"), "")
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, "inputs", "BATCH", "default", ".gitkeep"), "")
+
+	flattened, err := factoryconfig.FlattenFactoryConfig(sourceDir)
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(flattened)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.ResourceManifest == nil {
+		t.Fatal("expected flattened config to include resourceManifest")
+	}
+	if len(cfg.ResourceManifest.BundledFiles) != 4 {
+		t.Fatalf("expected 4 bundled files (gitkeep omitted), got %#v", cfg.ResourceManifest.BundledFiles)
+	}
+	assertPortableBundledFilesExcludeGitkeep(t, cfg.ResourceManifest.BundledFiles)
+
+	portableDir := t.TempDir()
+	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(portablePath, flattened, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", portablePath, err)
+	}
+	copyPortableBundledDiskBackedExport(t, projectDir, sourceDir, portableDir)
+
+	loaded, err := factoryconfig.LoadRuntimeConfig(portableDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(standalone portable config): %v", err)
+	}
+	if loaded.FactoryConfig() == nil || loaded.FactoryConfig().ResourceManifest == nil {
+		t.Fatal("expected loaded config to include resourceManifest")
+	}
+	assertPortableBundledFilesExcludeGitkeep(t, loaded.FactoryConfig().ResourceManifest.BundledFiles)
+}
+
 func TestPortableBundledFiles_RoundTripAcrossFlattenAndExpand(t *testing.T) {
 	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
 
@@ -453,6 +493,17 @@ func assertPortableBundledRoundTripScriptExecutable(t *testing.T, path string) {
 	}
 	if info.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("%s mode = %#o, want executable bit set", path, info.Mode().Perm())
+	}
+}
+
+func assertPortableBundledFilesExcludeGitkeep(t *testing.T, bundledFiles []interfaces.BundledFileConfig) {
+	t.Helper()
+
+	for _, bundledFile := range bundledFiles {
+		if strings.HasSuffix(bundledFile.TargetPath, ".gitkeep") ||
+			strings.Contains(bundledFile.TargetPath, "/.gitkeep") {
+			t.Fatalf("bundled file targetPath must not include .gitkeep: %#v", bundledFile)
+		}
 	}
 }
 
