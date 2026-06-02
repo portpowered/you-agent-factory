@@ -53,15 +53,6 @@ interface TimingTrendCardProps {
   widgetId?: string;
 }
 
-const TREND_TOOLBAR_CLASS =
-  "mb-4 flex flex-col items-start justify-between gap-3 md:flex-row";
-const TREND_RANGE_LABEL_CLASS =
-  "grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36";
-const TREND_RANGE_TEXT_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const TREND_RANGE_SELECT_CLASS = cn(
-  "rounded-lg border border-af-accent-border bg-af-surface-raised px-2 py-2 text-af-text",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
 const TREND_SUMMARY_CLASS = cn(
   "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-af-border [&_div]:bg-af-surface-subtle [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
@@ -69,17 +60,6 @@ const TREND_SUMMARY_CLASS = cn(
 const TREND_CHART_CLASS = cn(
   DASHBOARD_CHART_SURFACE_CLASS,
   "min-h-44 border border-af-border",
-);
-const TREND_CAUSE_LIST_CLASS = "mt-4 grid list-none gap-2 p-0";
-const TREND_CAUSE_ITEM_CLASS =
-  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2.5";
-const TREND_CAUSE_LABEL_CLASS = cn(
-  "min-w-0 text-af-text-muted [overflow-wrap:anywhere]",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
-const TIMING_RANGE_SUMMARY_CLASS = cn(
-  TREND_SUMMARY_CLASS,
-  "mt-3 md:grid-cols-2",
 );
 const TREND_SUMMARY_TERM_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const TREND_SUMMARY_VALUE_CLASS = WIDGET_SUBTITLE_CLASS;
@@ -109,13 +89,18 @@ export function FailureTrendCard({
       title={messages.failureTitle}
       widgetId={widgetId}
     >
-      <div className={TREND_TOOLBAR_CLASS}>
+      <div className="mb-4 flex flex-col items-start justify-between gap-3 md:flex-row">
         <p className={WIDGET_SUBTITLE_CLASS}>{messages.failureSummary}</p>
-        <label className={TREND_RANGE_LABEL_CLASS}>
-          <span className={TREND_RANGE_TEXT_CLASS}>{messages.rangeLabel}</span>
+        <label className="grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36">
+          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            {messages.rangeLabel}
+          </span>
           <select
             aria-label={messages.rangeLabel}
-            className={TREND_RANGE_SELECT_CLASS}
+            className={cn(
+              "rounded-lg border border-af-accent-border bg-af-surface-raised px-2 py-2 text-af-text",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
             value={rangeID}
             onChange={(event) => changeRange(event.target.value)}
           >
@@ -185,12 +170,22 @@ export function FailureTrendCard({
 
       {model.groups.length > 0 ? (
         <ul
-          className={TREND_CAUSE_LIST_CLASS}
+          className="mt-4 grid list-none gap-2 p-0"
           aria-label={messages.causeGroupsRegionLabel}
         >
           {model.groups.map((group) => (
-            <li className={TREND_CAUSE_ITEM_CLASS} key={group.label}>
-              <span className={TREND_CAUSE_LABEL_CLASS}>{group.label}</span>
+            <li
+              className="flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2.5"
+              key={group.label}
+            >
+              <span
+                className={cn(
+                  "min-w-0 text-af-text-muted [overflow-wrap:anywhere]",
+                  DASHBOARD_BODY_TEXT_CLASS,
+                )}
+              >
+                {group.label}
+              </span>
               <strong className="shrink-0 text-af-danger-text">
                 {group.count}
               </strong>
@@ -364,7 +359,7 @@ export function TimingTrendCard({
             ))}
           </svg>
           <dl
-            className={TIMING_RANGE_SUMMARY_CLASS}
+            className={cn(TREND_SUMMARY_CLASS, "mt-3 md:grid-cols-2")}
             aria-label={messages.timingRangeLabel}
           >
             <div>

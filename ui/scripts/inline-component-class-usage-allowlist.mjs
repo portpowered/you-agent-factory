@@ -35,13 +35,5 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/trace-drilldown/components/trace-grid-card.tsx#TRACE_WORK_ITEM_BUTTON_CLASS",
   "src/features/trace-drilldown/components/trace-relation-flow.tsx#GRAPH_SHELL_CLASS",
   "src/features/trace-drilldown/components/trace-workstation-path.tsx#GRAPH_SHELL_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TREND_TOOLBAR_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TREND_RANGE_LABEL_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TREND_RANGE_TEXT_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TREND_RANGE_SELECT_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TREND_CAUSE_LIST_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TREND_CAUSE_ITEM_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TREND_CAUSE_LABEL_CLASS",
-  "src/features/work-outcome/components/trend-cards.tsx#TIMING_RANGE_SUMMARY_CLASS",
   "src/features/work-outcome/components/work-chart.tsx#WORK_CHART_TOOLBAR_CLASS",
 ];
