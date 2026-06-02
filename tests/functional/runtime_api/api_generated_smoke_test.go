@@ -185,6 +185,121 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptOrderedTextSubmission
 	}
 }
 
+func TestGeneratedAPIIntegrationSmoke_SubmitWorkContentAcceptsCanonicalParts(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	req := map[string]any{
+		"name":         "generated-api-content-text",
+		"workTypeName": "task",
+		"content": []map[string]any{
+			{"type": "text", "text": "Alpha "},
+			{"type": "text", "text": "Beta"},
+		},
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal generated submit request: %v", err)
+	}
+	resp, err := http.Post(support.DefaultSessionWorkURL(server.URL(), "/work"), "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /work: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("POST /work status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var submitted factoryapi.SubmitWorkResponse
+	if err := json.NewDecoder(resp.Body).Decode(&submitted); err != nil {
+		t.Fatalf("decode submit response: %v", err)
+	}
+
+	work := waitForGeneratedWorkComplete(t, server.URL(), submitted.TraceId, 10*time.Second)
+	item := requireGeneratedWorkByTrace(t, work, submitted.TraceId)
+	content := item.Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want two ordered canonical content parts", content)
+	}
+	firstPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode first projected text content: %v", err)
+	}
+	secondPart, err := (*content)[1].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode second projected text content: %v", err)
+	}
+	if firstPart.Text != "Alpha " || secondPart.Text != "Beta" {
+		t.Fatalf("GET /work content parts = %#v, want ordered text content Alpha / Beta", content)
+	}
+}
+
+func TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	server := startFunctionalServer(t, dir, true, factory.WithServiceMode())
+
+	workID := "work-generated-api-batch-content"
+	requestID := "request-generated-api-batch-content"
+	body, err := json.Marshal(map[string]any{
+		"requestId": requestID,
+		"type":      "FACTORY_REQUEST_BATCH",
+		"works": []map[string]any{{
+			"name":         "content-batch-work",
+			"workId":       workID,
+			"workTypeName": "task",
+			"content": []map[string]any{
+				{"type": "text", "text": "Batch canonical content."},
+				{"type": "text", "text": "Second batch part."},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal generated batch request: %v", err)
+	}
+	endpoint := support.DefaultSessionWorkURL(server.URL(), "/work-requests/"+url.PathEscape(requestID))
+	httpReq, err := http.NewRequest(http.MethodPut, endpoint, bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("build PUT /work-requests request: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		t.Fatalf("PUT /work-requests: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("PUT /work-requests status = %d, want 201: %s", resp.StatusCode, string(payload))
+	}
+	var upserted factoryapi.UpsertWorkRequestResponse
+	if err := json.NewDecoder(resp.Body).Decode(&upserted); err != nil {
+		t.Fatalf("decode generated work request response: %v", err)
+	}
+	if upserted.RequestId != requestID || upserted.TraceId == "" {
+		t.Fatalf("PUT /work-requests response = %#v, want request id and trace id", upserted)
+	}
+	if len(upserted.Works) != 1 || upserted.Works[0].WorkId != workID {
+		t.Fatalf("PUT /work-requests works = %#v, want one accepted work with id %q", upserted.Works, workID)
+	}
+
+	items := waitForGeneratedWorkIDsComplete(t, server.URL(), []string{workID}, 10*time.Second)
+	content := items[0].Content
+	if content == nil || len(*content) != 2 {
+		t.Fatalf("GET /work content = %#v, want two ordered batch content parts", content)
+	}
+	firstPart, err := (*content)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode first batch content part: %v", err)
+	}
+	secondPart, err := (*content)[1].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("decode second batch content part: %v", err)
+	}
+	if firstPart.Text != "Batch canonical content." || secondPart.Text != "Second batch part." {
+		t.Fatalf("GET /work batch content = %#v, want ordered batch text parts", content)
+	}
+}
+
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))

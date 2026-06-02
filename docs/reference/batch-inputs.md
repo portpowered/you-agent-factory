@@ -38,6 +38,15 @@ the whole submission with no partial work.
 For single-work CLI or dashboard submission, see `you docs work`. For
 relation semantics, see `you docs relationships`.
 
+`WorkRequest` is the canonical batch body for
+`PUT /factory-sessions/{session_id}/work-requests/{request_id}`. Each
+`works[]` entry accepts the same input fields as a single submit—`payload` for
+opaque JSON, or `content` for ordered canonical parts. Structured dashboard
+`items` and staged-file staging apply only to
+`POST /factory-sessions/{session_id}/work` (`SubmitWorkRequest`); batch callers
+use `works[].content` instead. See `you docs work` for the full submission-shape
+comparison and mutual-exclusivity rules.
+
 ## Quick reference
 
 - Use `FACTORY_REQUEST_BATCH` when one submission should create multiple work

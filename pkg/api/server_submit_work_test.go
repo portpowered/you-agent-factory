@@ -306,6 +306,12 @@ func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
 }
 
+func TestSubmitWork_RejectsStructuredItemsCombinedWithContent(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	rec := submitWorkRequest(t, srv, `{"name":"conflicting-items-content","workTypeName":"prd","items":[{"type":"text","text":"structured"}],"content":[{"type":"text","text":"canonical"}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with content")
+}
+
 func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 	// Dashboard submit-work sends name, workTypeName, and items: [] when optional text
 	// inputs are blank. Header/type-only submissions carry no structured content.

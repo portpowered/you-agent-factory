@@ -96,6 +96,37 @@ required as `works[].name` for batch requests. Both
 See `you docs batch-inputs` for the full `FACTORY_REQUEST_BATCH` contract,
 including `requestId`, relation fields, and optional `currentChainingTraceId`.
 
+## Submission contract shapes
+
+Two public request bodies cover work ingress. Both normalize into the same
+runtime `FACTORY_REQUEST_BATCH` shape before dispatch.
+
+| Shape | Route | When to use |
+|-------|-------|-------------|
+| `SubmitWorkRequest` | `POST /factory-sessions/{session_id}/work` | One-work convenience body for CLI `you submit`, the dashboard submit widget, and single-item HTTP callers |
+| `WorkRequest` | `PUT /factory-sessions/{session_id}/work-requests/{request_id}` | Canonical idempotent batch body for `FACTORY_REQUEST_BATCH` upserts (`you submit batch`, watched `inputs/`, pollers) |
+
+Each submitted work item carries input through one of three payload fields.
+Use only the field that matches your client; do not combine them on the same
+request.
+
+| Field | Surfaces | Purpose |
+|-------|----------|---------|
+| `payload` | `SubmitWorkRequest`, batch `works[]` | Opaque JSON (or legacy string) work input for templates and worker dispatch |
+| `content` | `SubmitWorkRequest`, batch `works[]` | Ordered canonical multimedia/model parts (`text`, `image`, `audio`, and related types) |
+| `items` | `SubmitWorkRequest` only | Dashboard-authored structured submit items that reference staged files |
+
+**Staged files:** `POST /factory-sessions/{session_id}/work/staged-files` uploads
+dashboard-authored file bytes. The stage response returns a backend-owned `url`
+and `stagedFileRef` that structured `items[]` entries must cite. Staging exists
+only for dashboard-authored file payloads used by structured submit items—not for
+direct `content[]` submissions that already carry their own `url`.
+
+**Mutual exclusivity:** `items` cannot be combined with `content` or `payload` on
+the same submit request. Explicit `content` and `payload` on the same work item
+are also rejected when they conflict. Batch upserts that need ordered parts set
+`works[].content` per work item instead of `items` (which is single-submit only).
+
 ## Multimedia content URLs
 
 File-backed work content (images, audio, video, and binary parts) is addressed
