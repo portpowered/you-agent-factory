@@ -9,6 +9,7 @@ export const defaultMainCoveredMaxWorkers = "2";
 export const defaultShardMainCoveredMaxWorkers = "1";
 export const defaultSlowFileSummaryLimit = 15;
 export const defaultUiCoverageShardTotal = 10;
+export const defaultCapturedStdoutMaxBuffer = 128 * 1024 * 1024;
 
 const vitestFileDurationLinePattern =
   /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+\([^)]+\)\s+(\d+(?:\.\d+)?)ms(?:\s+\d+ MB heap used)?/gm;
@@ -287,11 +288,15 @@ export function cleanCoverageArtifacts() {
 
 export function runTimedPhase(phase, spawn = spawnSync, options = {}) {
   const captureStdout = options.captureStdout === true;
+  const maxBuffer =
+    options.maxBuffer ??
+    (captureStdout ? defaultCapturedStdoutMaxBuffer : undefined);
   const startedAt = performance.now();
   const result = spawn(phase.command, phase.args, {
     shell: process.platform === "win32",
     stdio: captureStdout ? ["inherit", "pipe", "inherit"] : "inherit",
     encoding: captureStdout ? "utf8" : undefined,
+    ...(maxBuffer === undefined ? {} : { maxBuffer }),
   });
   const elapsedMs = performance.now() - startedAt;
 

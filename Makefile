@@ -96,6 +96,7 @@ generate-go-client-api:
 
 generate-ui-api:
 	cd ui && node ./node_modules/openapi-typescript/bin/cli.js ../api/openapi.yaml -o src/api/generated/openapi.ts
+	cd ui && $(UI_EXEC) biome format --write src/api/generated/openapi.ts
 
 generate-wire:
 	$(GO) generate ./cmd/factory/compose/...

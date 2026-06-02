@@ -71,6 +71,7 @@ export function useFactoryGraphAddEntityController({
     }
 
     placeAddedNode?.(addEntityDraft);
+    setActiveTool(null);
     setAddEntityDraft(null);
     setAddEntityErrors({});
   }, [
@@ -78,6 +79,7 @@ export function useFactoryGraphAddEntityController({
     currentFactoryDefinition,
     editableGraph.actions,
     placeAddedNode,
+    setActiveTool,
   ]);
 
   const reset = useCallback(() => {

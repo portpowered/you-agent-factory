@@ -8,6 +8,7 @@ import {
   buildMainCoveredShardPhase,
   buildUiCoverageMergePhases,
   buildUiCoveragePhases,
+  defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
   defaultShardMainCoveredMaxWorkers,
   defaultUiCoverageShardTotal,
@@ -340,6 +341,29 @@ test("emits elapsed output before returning a failing phase status", () => {
   expect(log).toHaveBeenCalledWith(
     expect.stringContaining("Failing covered pass elapsed:"),
   );
+
+  log.mockRestore();
+});
+
+test("uses a larger buffer when capturing noisy Vitest output", () => {
+  const spawn = vi.fn(() => ({ status: 0, stdout: fixtureLogSnippet }));
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  runTimedPhase(
+    {
+      args: ["--coverage"],
+      command: "vitest",
+      name: "Main covered Vitest pass",
+    },
+    spawn,
+    { captureStdout: true },
+  );
+
+  expect(spawn.mock.calls[0][2]).toMatchObject({
+    encoding: "utf8",
+    maxBuffer: defaultCapturedStdoutMaxBuffer,
+    stdio: ["inherit", "pipe", "inherit"],
+  });
 
   log.mockRestore();
 });

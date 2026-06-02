@@ -71,5 +71,6 @@ describe("useFactoryGraphAddEntityController placement", () => {
       modelProvider: "CURSOR",
       name: "reviewer",
     });
+    expect(setActiveTool).toHaveBeenCalledWith(null);
   });
 });
