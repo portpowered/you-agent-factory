@@ -13,6 +13,7 @@ import {
   traceDispatchTopologyLayoutKey,
   useTraceDispatchFactoryGraphLayoutPositions,
 } from "../hooks/use-trace-dispatch-factory-graph-layout";
+import { applyTraceFactoryGraphLayoutToNode } from "../lib/trace-factory-graph-layout";
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
 import { buildTraceDispatchFactoryGraphFlow } from "../lib/trace-dispatch-factory-graph-flow";
 import { failOnTraceReactFlowError } from "../lib/trace-react-flow-error";
@@ -53,10 +54,9 @@ export function TraceWorkstationPath({
     topologyKey,
   );
   const baseNodes = useMemo(() => {
-    return graph.nodes.map((node) => ({
-      ...node,
-      position: positionsByTraceNodeId.get(node.id) ?? node.position,
-    }));
+    return graph.nodes.map((node) =>
+      applyTraceFactoryGraphLayoutToNode(node, positionsByTraceNodeId),
+    );
   }, [graph.nodes, positionsByTraceNodeId]);
   const [nodes, setNodes] = useState<TraceDispatchFlowNode[]>([]);
   const draggedNodeIdsRef = useRef(new Set<string>());

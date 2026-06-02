@@ -288,8 +288,11 @@ describe("TraceRelationFlow layout", () => {
 
     await waitFor(() => {
       const renderedPositions = renderedNodePositionsById();
-      for (const [nodeId, position] of expectedPositions) {
-        expect(renderedPositions.get(nodeId)).toEqual(position);
+      for (const [nodeId, layout] of expectedPositions) {
+        expect(renderedPositions.get(nodeId)).toEqual({
+          x: layout.x,
+          y: layout.y,
+        });
       }
     });
   });

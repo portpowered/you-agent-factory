@@ -13,10 +13,16 @@ const { mockBuildTraceFactoryGraphLayoutPositions } = vi.hoisted(() => ({
   mockBuildTraceFactoryGraphLayoutPositions: vi.fn(async () => new Map()),
 }));
 
-vi.mock("../lib/trace-factory-graph-layout", () => ({
-  buildTraceFactoryGraphLayoutPositions:
-    mockBuildTraceFactoryGraphLayoutPositions,
-}));
+vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../lib/trace-factory-graph-layout")
+  >();
+  return {
+    ...actual,
+    buildTraceFactoryGraphLayoutPositions:
+      mockBuildTraceFactoryGraphLayoutPositions,
+  };
+});
 
 vi.mock("@xyflow/react", async () => {
   return {
@@ -400,8 +406,8 @@ describe("TraceWorkstationPath layout", () => {
   it("applies async factory layout positions after layout resolves", async () => {
     mockBuildTraceFactoryGraphLayoutPositions.mockResolvedValue(
       new Map([
-        ["dispatch-plan", { x: 420, y: 80 }],
-        ["dispatch-implement", { x: 860, y: 160 }],
+        ["dispatch-plan", { x: 420, y: 80, width: 156, height: 196 }],
+        ["dispatch-implement", { x: 860, y: 160, width: 156, height: 196 }],
       ]),
     );
 

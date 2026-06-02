@@ -8,6 +8,29 @@ export type TraceFactoryGraphLayoutPosition = {
   height: number;
 };
 
+/** Applies ELK layout bounds to a trace React Flow node (work-graph node shell contract). */
+export function applyTraceFactoryGraphLayoutToNode<
+  TNode extends { id: string; position: { x: number; y: number } },
+>(
+  node: TNode,
+  layoutByNodeId: ReadonlyMap<string, TraceFactoryGraphLayoutPosition>,
+): TNode {
+  const layout = layoutByNodeId.get(node.id);
+  if (!layout) {
+    return node;
+  }
+
+  return {
+    ...node,
+    position: { x: layout.x, y: layout.y },
+    width: layout.width,
+    height: layout.height,
+    initialWidth: layout.width,
+    initialHeight: layout.height,
+    measured: { width: layout.width, height: layout.height },
+  };
+}
+
 /**
  * Positions trace React Flow nodes using the shared factory graph editor layout.
  * Layout runs on factory topology node ids and remaps coordinates through
