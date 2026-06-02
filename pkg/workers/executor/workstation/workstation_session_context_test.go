@@ -1,4 +1,4 @@
-package executor
+package workstation_test
 
 import (
 	"context"
@@ -6,7 +6,18 @@ import (
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
+
+type sessionCapturingExecutor struct {
+	dispatch interfaces.WorkstationExecutionRequest
+}
+
+func (m *sessionCapturingExecutor) Execute(_ context.Context, d interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+	m.dispatch = d
+	return interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}, nil
+}
 
 func TestWorkstationExecutor_PromptRendersFactorySessionID(t *testing.T) {
 	t.Parallel()
@@ -24,9 +35,9 @@ func TestWorkstationExecutor_PromptRendersFactorySessionID(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}}
-			we := newTestWorkstationExecutor(
-				staticRuntimeConfig{
+			mock := &sessionCapturingExecutor{}
+			we := &executor.WorkstationExecutor{
+				RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 					Workers: map[string]*interfaces.WorkerConfig{
 						"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
 					},
@@ -37,16 +48,17 @@ func TestWorkstationExecutor_PromptRendersFactorySessionID(t *testing.T) {
 						},
 					},
 				},
-				mock,
-			)
-			we.WorkflowContext = &factory_context.FactoryContext{SessionID: tc.sessionID}
+				WorkflowContext: &factory_context.FactoryContext{SessionID: tc.sessionID},
+				Executor:        mock,
+				Renderer:        &executor.DefaultPromptRenderer{},
+			}
 
 			_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
 				DispatchID:      "d-session",
 				TransitionID:    "t-session",
 				WorkerType:      "worker-a",
 				WorkstationName: "standard",
-				InputTokens: InputTokens(interfaces.Token{
+				InputTokens: executor.InputTokens(interfaces.Token{
 					ID:    "tok-1",
 					Color: interfaces.TokenColor{WorkID: "work-1"},
 				}),
