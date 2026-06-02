@@ -483,7 +483,7 @@ function WorkstationActiveWorkList({
               return (
                 <li
                   className={cn(
-                    "grid min-w-0 gap-2 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2",
+                    "grid min-w-0 gap-2 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
                   key={`${execution.dispatch_id}-${workIdentifier}`}

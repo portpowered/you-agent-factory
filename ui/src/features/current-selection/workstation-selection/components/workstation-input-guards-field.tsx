@@ -102,7 +102,7 @@ function WorkstationInputSlotGuardRow({
   return (
     <article
       aria-labelledby={`${rowId}-heading`}
-      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-subtle p-3"
+      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
     >
       <div className="grid min-w-0 gap-1">
         <h6 className="m-0 text-sm text-af-text" id={`${rowId}-heading`}>
