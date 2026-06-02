@@ -44,8 +44,10 @@ describe("factory graph editor additions", () => {
       createFactoryGraphAddEntityDraft("workstation", baseFactoryDefinition),
     ).toMatchObject({
       behavior: "STANDARD",
+      cron: null,
       kind: "workstation",
       workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
     });
     expect(
       createFactoryGraphAddEntityDraft("work-state", baseFactoryDefinition),
@@ -190,9 +192,11 @@ describe("factory graph editor additions", () => {
         {
           behavior: "POLLER",
           body: "",
+          cron: null,
           kind: "workstation",
           name: "linear-poller",
           workerName: "writer",
+          workstationType: "MODEL_WORKSTATION",
         },
         baseFactoryDefinition,
       ),
@@ -205,9 +209,11 @@ describe("factory graph editor additions", () => {
         {
           behavior: "POLLER",
           body: "",
+          cron: null,
           kind: "workstation",
           name: "linear-poller",
           workerName: "poller-runner",
+          workstationType: "MODEL_WORKSTATION",
         },
         {
           ...baseFactoryDefinition,
@@ -243,9 +249,11 @@ describe("factory graph editor additions", () => {
       {
         behavior: "POLLER",
         body: "Review the story output.",
+        cron: null,
         kind: "workstation",
         name: "review",
         workerName: "writer",
+        workstationType: "MODEL_WORKSTATION",
       },
     );
 
@@ -354,9 +362,11 @@ describe("factory graph editor additions", () => {
       {
         behavior: "STANDARD",
         body: "Review the story output.",
+        cron: null,
         kind: "workstation",
         name: "review",
         workerName: "writer",
+        workstationType: "MODEL_WORKSTATION",
       },
     );
 

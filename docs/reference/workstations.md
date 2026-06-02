@@ -50,8 +50,9 @@ environment, and routing.
   `POLLER`.
 - Use `type` for the runtime implementation: `MODEL_WORKSTATION`,
   `MODEL_INVOKE`, `CLASSIFIER_WORKSTATION`, or `LOGICAL_MOVE`.
-- Use `worker` for the bound worker name. Omit it only for logical routing
-  workstations such as `LOGICAL_MOVE`.
+- Use `worker` for the bound worker name. Omit it for logical routing
+  workstations such as `LOGICAL_MOVE`, including `LOGICAL_MOVE` with
+  `behavior: "CRON"`. Worker-backed cron workstations still require `worker`.
 - Route accepted results through `outputs`, ordinary partial-progress results
   through `onContinue`, rejected results through `onRejection`, and failed or
   timed-out results through `onFailure`.
@@ -137,7 +138,7 @@ execute:
 | `name` | Yes | Stable workstation name. This is also the transition ID in runtime events. |
 | `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, `CRON`, or `POLLER`. Defaults to `STANDARD`. |
 | `type` | Runtime config | Runtime implementation. Use `MODEL_WORKSTATION` for worker dispatch, `CLASSIFIER_WORKSTATION` for single-label branch selection, or `LOGICAL_MOVE` for no-worker routing. |
-| `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch, cron workstations, and poller workstations. Omit only for logical routing workstations. |
+| `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch, worker-backed cron workstations, and poller workstations. Omit for `LOGICAL_MOVE`, including `LOGICAL_MOVE` with `behavior: "CRON"`. |
 | `inputs` | Usually | IO places that enable the workstation. Cron workstations may omit customer inputs but still consume internal time work. |
 | `outputs` | Usually | IO places produced when the worker returns accepted. Cron workstations require at least one output. |
 | `onContinue` | No | IO place produced when the worker reports ordinary partial progress and the work should iterate without being classified as rejection. |
@@ -423,12 +424,18 @@ worker contract and this page for the workstation contract.
 ### Cron Workstations
 
 Use `CRON` when a workstation should run on a schedule while the factory is in
-service mode:
+service mode. Keep the schedule under `cron.schedule`; do not use `cron.interval`.
+
+#### Worker-backed cron
+
+Use worker-backed cron when the scheduled step should dispatch through a bound
+worker:
 
 ```json
 {
   "name": "daily-refresh",
   "behavior": "CRON",
+  "type": "MODEL_WORKSTATION",
   "worker": "refresh-worker",
   "cron": {
     "schedule": "*/5 * * * *",
@@ -439,12 +446,44 @@ service mode:
 }
 ```
 
-Cron workstations require:
+Worker-backed cron workstations require:
 
 - `behavior: "CRON"`
-- a `worker`
-- a `cron.schedule`
+- a bound `worker`
+- `cron.schedule`
 - at least one `outputs` entry
+
+Config validation fails when a worker-backed cron workstation omits `worker`.
+
+#### Workerless cron logical moves
+
+Use `LOGICAL_MOVE` with `CRON` when scheduled routing should move tokens without
+invoking a worker:
+
+```json
+{
+  "name": "hourly-route",
+  "behavior": "CRON",
+  "type": "LOGICAL_MOVE",
+  "cron": {
+    "schedule": "0 * * * *"
+  },
+  "outputs": [{ "workType": "signal", "state": "due" }]
+}
+```
+
+Workerless cron logical moves require:
+
+- `behavior: "CRON"`
+- `type: "LOGICAL_MOVE"`
+- `cron.schedule`
+- at least one `outputs` entry
+- no `worker` field
+
+On schedule, the factory submits internal `__system_time` work, consumes it
+through the cron time arc, and routes output tokens without worker executor
+invocation. Dashboard and event-history projections show `Kind: CRON`, runtime
+type `LOGICAL_MOVE`, and omit worker metadata for these transitions.
 
 The `cron` object supports:
 

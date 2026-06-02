@@ -790,3 +790,78 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromInitialToArbitrary
 		t.Fatalf("move history work ids = %d, want only work-bootstrap", len(state.WorkStateChangesByWorkID))
 	}
 }
+
+func TestReconstructFactoryWorldState_LogicalMoveCronDispatchOmitsWorkerMetadata(t *testing.T) {
+	t0 := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
+	workstationKind := factoryapi.WorkstationKindCron
+	workstationType := factoryapi.WorkstationTypeLogicalMove
+	events := []factoryapi.FactoryEvent{
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeInitialStructureRequest,
+			"initial-logical-cron",
+			0,
+			t0,
+			factoryapi.FactoryEventContext{},
+			factoryapi.InitialStructureRequestEventPayload{
+				Factory: factoryapi.Factory{
+					WorkTypes: &[]factoryapi.WorkType{
+						{
+							Name: "task",
+							States: []factoryapi.WorkState{
+								{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+								{Name: "done", Type: factoryapi.WorkStateTypeTERMINAL},
+							},
+						},
+						{
+							Name: interfaces.SystemTimeWorkTypeID,
+							States: []factoryapi.WorkState{
+								{Name: interfaces.SystemTimePendingState, Type: factoryapi.WorkStateTypePROCESSING},
+							},
+						},
+					},
+					Workstations: &[]factoryapi.Workstation{{
+						Id:       stringPtrForProjectionTest("scheduled-route"),
+						Name:     "scheduled-route",
+						Behavior: &workstationKind,
+						Type:     &workstationType,
+						Worker:   "",
+						Inputs:   []factoryapi.WorkstationIO{{WorkType: interfaces.SystemTimeWorkTypeID, State: interfaces.SystemTimePendingState}},
+						Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "init"}},
+					}},
+				},
+			},
+		),
+		workInputEventWithToken(1, t0.Add(time.Second), "time-route", interfaces.FactoryWorkItem{
+			ID:          "time-route",
+			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
+			DisplayName: "scheduled-route tick",
+			TraceID:     "trace-time",
+			PlaceID:     interfaces.SystemTimePendingPlaceID,
+			Tags: map[string]string{
+				interfaces.TimeWorkTagKeyCronWorkstation: "scheduled-route",
+			},
+		}),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-logical-cron",
+			TransitionID: "scheduled-route",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "scheduled-route", Name: "scheduled-route"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "time-route",
+				PlaceID:  interfaces.SystemTimePendingPlaceID,
+				WorkItem: &interfaces.FactoryWorkItem{ID: "time-route", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time", PlaceID: interfaces.SystemTimePendingPlaceID},
+			}},
+		}),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	dispatch := state.ActiveDispatches["dispatch-logical-cron"]
+	if dispatch.Provider != "" || dispatch.Model != "" {
+		t.Fatalf("dispatch worker metadata = provider %q model %q, want empty", dispatch.Provider, dispatch.Model)
+	}
+	if dispatch.Workstation.Name != "scheduled-route" {
+		t.Fatalf("workstation = %#v, want scheduled-route", dispatch.Workstation)
+	}
+}

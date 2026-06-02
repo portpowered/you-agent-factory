@@ -299,6 +299,33 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerUsesWorkerPool
 	}
 }
 
+func TestDispatchRunnerKey_PrefersTransitionWorkerType(t *testing.T) {
+	tr := &petri.Transition{WorkerType: "cron-worker"}
+	dispatch := interfaces.WorkDispatch{WorkstationName: "scheduled-route", TransitionID: "scheduled-route"}
+
+	if got := dispatchRunnerKey(tr, dispatch); got != "cron-worker" {
+		t.Fatalf("runner key = %q, want cron-worker", got)
+	}
+}
+
+func TestDispatchRunnerKey_UsesWorkstationNameWhenTransitionWorkerTypeEmpty(t *testing.T) {
+	tr := &petri.Transition{Name: "scheduled-route"}
+	dispatch := interfaces.WorkDispatch{WorkstationName: "scheduled-route", TransitionID: "scheduled-route"}
+
+	if got := dispatchRunnerKey(tr, dispatch); got != "scheduled-route" {
+		t.Fatalf("runner key = %q, want scheduled-route", got)
+	}
+}
+
+func TestDispatchRunnerKey_FallsBackToTransitionIDWhenWorkstationNameMissing(t *testing.T) {
+	tr := &petri.Transition{Name: "scheduled-route"}
+	dispatch := interfaces.WorkDispatch{TransitionID: "scheduled-route"}
+
+	if got := dispatchRunnerKey(tr, dispatch); got != "scheduled-route" {
+		t.Fatalf("runner key = %q, want scheduled-route", got)
+	}
+}
+
 func TestWorkerPoolDispatchResultHook_SubmitDispatchWithoutPlannerReturnsMissingRunnerError(t *testing.T) {
 	hook := newWorkerPoolDispatchResultHook(
 		buildSimpleNet(),

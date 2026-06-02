@@ -438,7 +438,7 @@ func ruleCronWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 				Rule:     "cron-output",
 			})
 		}
-		if strings.TrimSpace(ws.WorkerTypeName) == "" {
+		if strings.TrimSpace(ws.WorkerTypeName) == "" && cronWorkstationRequiresWorker(ws) {
 			findings = append(findings, Finding{
 				Severity: SeverityError,
 				Path:     basePath + ".worker",
@@ -449,6 +449,10 @@ func ruleCronWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 	}
 
 	return findings
+}
+
+func cronWorkstationRequiresWorker(ws interfaces.FactoryWorkstationConfig) bool {
+	return strings.TrimSpace(ws.Type) != interfaces.WorkstationTypeLogical
 }
 
 // --- Rule: worker reference validation ---

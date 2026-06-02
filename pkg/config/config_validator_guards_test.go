@@ -529,10 +529,29 @@ func TestRuleCronWorkstations_MissingOutput(t *testing.T) {
 	assertFindingExists(t, findings, "cron-output")
 }
 
+func TestRuleCronWorkstations_ValidLogicalMoveCronWithoutWorker(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name: "scheduled-route",
+		Type: interfaces.WorkstationTypeLogical,
+		Kind: interfaces.WorkstationKindCron,
+		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+		Outputs: []interfaces.IOConfig{{
+			WorkTypeName: "task",
+			StateName:    "init",
+		}},
+	}}
+	findings := ruleCronWorkstations(cfg)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings, got %v", findings)
+	}
+}
+
 func TestRuleCronWorkstations_MissingWorker(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name: "daily-refresh",
+		Type: interfaces.WorkstationTypeModel,
 		Kind: interfaces.WorkstationKindCron,
 		Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
 		Outputs: []interfaces.IOConfig{{

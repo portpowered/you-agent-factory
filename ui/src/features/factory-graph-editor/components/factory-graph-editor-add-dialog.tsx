@@ -1,8 +1,4 @@
 import {
-  FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
-  MonacoPromptEditor,
-} from "../../../components/prompt-editor";
-import {
   Button,
   Dialog,
   DialogContent,
@@ -10,9 +6,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  Input,
-  Select,
-  Textarea,
 } from "../../../components/ui";
 import { EDITABLE_MODEL_PROVIDERS } from "../../current-factory-definition/lib/worker-editable-values";
 import { getWorkerDetailMessages } from "../../current-selection/worker-selection/messages/worker-detail";
@@ -22,14 +15,13 @@ import type {
   FactoryGraphAddEntityFieldErrors,
   FactoryGraphAddWorkerType,
 } from "../lib/factory-graph-editor-additions";
-import { editableWorkstationBehaviorOptions } from "../lib/factory-graph-editor-additions";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-
-const FIELD_GROUP_CLASS = "grid gap-2";
-const FIELD_LABEL_CLASS = "text-sm font-semibold text-af-text";
-const FIELD_HELP_CLASS = "m-0 text-xs leading-5 text-af-text-muted";
-const FIELD_ERROR_CLASS = "m-0 text-sm text-af-danger-text";
-const INPUT_CLASS = "bg-af-surface";
+import {
+  FactoryGraphEditorSelectField,
+  FactoryGraphEditorTextareaField,
+  FactoryGraphEditorTextField,
+} from "./factory-graph-editor-add-dialog-fields";
+import { FactoryGraphEditorAddWorkstationFields } from "./factory-graph-editor-add-workstation-fields";
 
 export function FactoryGraphEditorAddEntityDialog({
   currentFactoryDefinition,
@@ -330,200 +322,13 @@ function renderEntitySpecificFields({
   }
 
   return (
-    <>
-      <FactoryGraphEditorSelectField
-        error={errors.behavior}
-        inputId="factory-graph-add-workstation-kind"
-        label={messages.addDialogKindLabel}
-        onChange={(value) => {
-          onChange({
-            ...draft,
-            behavior: value as typeof draft.behavior,
-          });
-        }}
-        options={editableWorkstationBehaviorOptions().map((behavior) => ({
-          label: behavior,
-          value: behavior,
-        }))}
-        value={draft.behavior}
-      />
-      <FactoryGraphEditorSelectField
-        error={errors.workerName}
-        inputId="factory-graph-add-worker-name"
-        label={messages.addDialogAssignedWorkerLabel}
-        onChange={(value) => {
-          onChange({ ...draft, workerName: value });
-        }}
-        options={[
-          { label: messages.addDialogAssignedWorkerPlaceholder, value: "" },
-          ...(currentFactoryDefinition?.workers ?? []).map((worker) => ({
-            label: worker.name,
-            value: worker.name,
-          })),
-        ]}
-        value={draft.workerName}
-      />
-      <FactoryGraphEditorPromptBodyField
-        helpText={messages.addDialogPromptBodyHelp}
-        label={messages.addDialogPromptBodyLabel}
-        loadingMessage={messages.addDialogPromptBodyEditorLoading}
-        onChange={(value) => {
-          onChange({ ...draft, body: value });
-        }}
-        startupErrorMessage={messages.addDialogPromptBodyEditorError}
-        value={draft.body}
-      />
-    </>
-  );
-}
-
-function FactoryGraphEditorTextareaField({
-  error,
-  inputId,
-  label,
-  onChange,
-  value,
-}: {
-  error?: string;
-  inputId: string;
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <div className={FIELD_GROUP_CLASS}>
-      <label className={FIELD_LABEL_CLASS} htmlFor={inputId}>
-        {label}
-      </label>
-      <Textarea
-        aria-label={label}
-        className={INPUT_CLASS}
-        id={inputId}
-        onChange={(event) => {
-          onChange(event.currentTarget.value);
-        }}
-        value={value}
-      />
-      {error ? <p className={FIELD_ERROR_CLASS}>{error}</p> : null}
-    </div>
-  );
-}
-
-function FactoryGraphEditorTextField({
-  error,
-  helpText,
-  inputId,
-  inputMode,
-  label,
-  onChange,
-  value,
-}: {
-  error?: string;
-  helpText?: string;
-  inputId: string;
-  inputMode?: "numeric";
-  label: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <div className={FIELD_GROUP_CLASS}>
-      <label className={FIELD_LABEL_CLASS} htmlFor={inputId}>
-        {label}
-      </label>
-      <Input
-        aria-label={label}
-        className={INPUT_CLASS}
-        id={inputId}
-        inputMode={inputMode}
-        onChange={(event) => {
-          onChange(event.currentTarget.value);
-        }}
-        value={value}
-      />
-      {helpText ? <p className={FIELD_HELP_CLASS}>{helpText}</p> : null}
-      {error ? <p className={FIELD_ERROR_CLASS}>{error}</p> : null}
-    </div>
-  );
-}
-
-function FactoryGraphEditorSelectField({
-  error,
-  helpText,
-  inputId,
-  label,
-  onChange,
-  options,
-  value,
-}: {
-  error?: string;
-  helpText?: string;
-  inputId: string;
-  label: string;
-  onChange: (value: string) => void;
-  options: Array<{ label: string; value: string }>;
-  value: string;
-}) {
-  return (
-    <div className={FIELD_GROUP_CLASS}>
-      <label className={FIELD_LABEL_CLASS} htmlFor={inputId}>
-        {label}
-      </label>
-      <Select
-        aria-label={label}
-        className={INPUT_CLASS}
-        id={inputId}
-        onChange={(event) => {
-          onChange(event.currentTarget.value);
-        }}
-        value={value}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </Select>
-      {helpText ? <p className={FIELD_HELP_CLASS}>{helpText}</p> : null}
-      {error ? <p className={FIELD_ERROR_CLASS}>{error}</p> : null}
-    </div>
-  );
-}
-
-const factoryGraphAddPromptAutocompleteState = {
-  message: "",
-  status: "empty" as const,
-};
-
-function FactoryGraphEditorPromptBodyField({
-  helpText,
-  label,
-  loadingMessage,
-  onChange,
-  startupErrorMessage,
-  value,
-}: {
-  helpText?: string;
-  label: string;
-  loadingMessage: string;
-  onChange: (value: string) => void;
-  startupErrorMessage: string;
-  value: string;
-}) {
-  return (
-    <div className={FIELD_GROUP_CLASS}>
-      <p className={FIELD_LABEL_CLASS}>{label}</p>
-      <MonacoPromptEditor
-        ariaLabel={label}
-        autocompleteState={factoryGraphAddPromptAutocompleteState}
-        className={INPUT_CLASS}
-        loadingMessage={loadingMessage}
-        modelPath={FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH}
-        onChange={onChange}
-        startupErrorMessage={startupErrorMessage}
-        value={value}
-      />
-      {helpText ? <p className={FIELD_HELP_CLASS}>{helpText}</p> : null}
-    </div>
+    <FactoryGraphEditorAddWorkstationFields
+      currentFactoryDefinition={currentFactoryDefinition}
+      draft={draft}
+      errors={errors}
+      locale={locale}
+      messages={messages}
+      onChange={onChange}
+    />
   );
 }

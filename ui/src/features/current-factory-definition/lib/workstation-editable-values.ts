@@ -216,7 +216,7 @@ export function applyEditableWorkstationDraft(
       ? {}
       : { behavior: draft.behavior }),
     ...(draft.behavior === "CRON" && draft.cron
-      ? { cron: buildCanonicalWorkstationCron(draft.cron) }
+      ? { cron: buildCanonicalWorkstationCronFromDraft(draft.cron) }
       : {}),
   };
 
@@ -250,7 +250,7 @@ export function resolveEditableWorkstationCron(
   };
 }
 
-function buildCanonicalWorkstationCron(
+export function buildCanonicalWorkstationCronFromDraft(
   draft: EditableWorkstationCronDraft,
 ): CanonicalWorkstationCron {
   const cron: CanonicalWorkstationCron = {
