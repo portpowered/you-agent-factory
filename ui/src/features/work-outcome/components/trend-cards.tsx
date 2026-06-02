@@ -53,15 +53,6 @@ interface TimingTrendCardProps {
   widgetId?: string;
 }
 
-const TREND_TOOLBAR_CLASS =
-  "mb-4 flex flex-col items-start justify-between gap-3 md:flex-row";
-const TREND_RANGE_LABEL_CLASS =
-  "grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36";
-const TREND_RANGE_TEXT_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const TREND_RANGE_SELECT_CLASS = cn(
-  "rounded-lg border border-af-accent-border bg-af-surface-raised px-2 py-2 text-af-text",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
 const TREND_SUMMARY_CLASS = cn(
   "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-af-border [&_div]:bg-af-surface-subtle [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
@@ -109,13 +100,18 @@ export function FailureTrendCard({
       title={messages.failureTitle}
       widgetId={widgetId}
     >
-      <div className={TREND_TOOLBAR_CLASS}>
+      <div className="mb-4 flex flex-col items-start justify-between gap-3 md:flex-row">
         <p className={WIDGET_SUBTITLE_CLASS}>{messages.failureSummary}</p>
-        <label className={TREND_RANGE_LABEL_CLASS}>
-          <span className={TREND_RANGE_TEXT_CLASS}>{messages.rangeLabel}</span>
+        <label className="grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36">
+          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            {messages.rangeLabel}
+          </span>
           <select
             aria-label={messages.rangeLabel}
-            className={TREND_RANGE_SELECT_CLASS}
+            className={cn(
+              "rounded-lg border border-af-accent-border bg-af-surface-raised px-2 py-2 text-af-text",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
             value={rangeID}
             onChange={(event) => changeRange(event.target.value)}
           >
