@@ -607,6 +607,68 @@ func TestConfigMapping_DefaultNonRepeaterFanInRejectionUsesFailureDestinations(t
 }
 
 // portos:func-length-exception owner=agent-factory reason=cron-mapping-fixture review=2026-07-18 removal=split-cron-fixture-before-next-cron-topology-change
+func TestConfigMapping_LogicalMoveCronWorkstationWithoutWorker(t *testing.T) {
+	input := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{
+			{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			},
+		},
+		Workstations: []interfaces.FactoryWorkstationConfig{
+			{
+				Name: "scheduled-route",
+				Type: interfaces.WorkstationTypeLogical,
+				Kind: interfaces.WorkstationKindCron,
+				Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+				Outputs: []interfaces.IOConfig{
+					{StateName: "init", WorkTypeName: "task"},
+				},
+			},
+		},
+	}
+
+	mapper := testConfigMapper{}
+	net, err := mapper.Map(context.Background(), input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tr := net.Transitions["scheduled-route"]
+	if tr == nil {
+		t.Fatal("expected cron logical move transition")
+	}
+	if tr.WorkerType != "" {
+		t.Fatalf("logical move cron worker type = %q, want empty", tr.WorkerType)
+	}
+	if len(tr.InputArcs) != 1 {
+		t.Fatalf("expected cron time input only, got %+v", tr.InputArcs)
+	}
+	timeArc := tr.InputArcs[0]
+	if timeArc.PlaceID != interfaces.SystemTimePendingPlaceID {
+		t.Fatalf("expected cron time input from %q, got %+v", interfaces.SystemTimePendingPlaceID, tr.InputArcs)
+	}
+	if _, ok := timeArc.Guard.(*petri.CronTimeWindowGuard); !ok {
+		t.Fatalf("expected cron time guard, got %T", timeArc.Guard)
+	}
+	if timeArc.Mode != interfaces.ArcModeConsume {
+		t.Fatalf("expected cron time arc to consume, got %v", timeArc.Mode)
+	}
+	if net.Places[interfaces.SystemTimePendingPlaceID] == nil {
+		t.Fatalf("expected system time pending place to be materialized")
+	}
+	if net.WorkTypes[interfaces.SystemTimeWorkTypeID] == nil {
+		t.Fatalf("expected system time work type to be materialized")
+	}
+	if len(tr.OutputArcs) != 1 || tr.OutputArcs[0].PlaceID != "task:init" {
+		t.Fatalf("expected cron output to be preserved, got %+v", tr.OutputArcs)
+	}
+}
+
 func TestConfigMapping_WorkstationTypeCron(t *testing.T) {
 	input := &interfaces.FactoryConfig{
 		WorkTypes: []interfaces.WorkTypeConfig{
