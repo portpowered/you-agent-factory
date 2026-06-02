@@ -179,12 +179,20 @@ function editableWorkstationCronDraftsEqualOrNull(
   );
 }
 
+export function editableWorkstationDraftNamesEqual(
+  left: EditableWorkstationDraft,
+  right: EditableWorkstationDraft,
+): boolean {
+  return left.name.trim() === right.name.trim();
+}
+
 export function editableWorkstationDraftsEqual(
   left: EditableWorkstationDraft,
   right: EditableWorkstationDraft,
 ): boolean {
   return (
     left.behavior === right.behavior &&
+    editableWorkstationDraftNamesEqual(left, right) &&
     left.prompt === right.prompt &&
     left.runnerName === right.runnerName &&
     left.workerName === right.workerName &&

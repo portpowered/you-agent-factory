@@ -105,6 +105,7 @@ export interface WorkstationDetailMessages {
   promptFieldLabel: string;
   templateFieldLabel: string;
   workerFieldLabel: string;
+  workstationNameFieldLabel: string;
   currentDispatchLabel: string;
   dispatchLabel: string;
   elapsedLabel: string;

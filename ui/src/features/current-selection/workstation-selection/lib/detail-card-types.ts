@@ -96,6 +96,7 @@ export type EditableWorkstationOverwriteField =
   | "cronJitter"
   | "cronSchedule"
   | "cronTriggerAtStart"
+  | "name"
   | "prompt"
   | "runner"
   | "worker";

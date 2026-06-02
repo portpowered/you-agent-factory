@@ -112,6 +112,7 @@ describe("workstation-guards", () => {
         { maxVisits: 1, type: "VISIT_COUNT" as const, workstation: "A" },
       ],
       inputs: [],
+      name: "Alpha",
       prompt: "",
       runnerName: null,
       workerName: "w",
@@ -132,5 +133,11 @@ describe("workstation-guards", () => {
     expect(guardsDraftEqual(left.guards, right.guards)).toBe(true);
     expect(editableWorkstationDraftsEqual(left, right)).toBe(true);
     expect(editableWorkstationDraftsEqual(left, changed)).toBe(false);
+    expect(
+      editableWorkstationDraftsEqual(left, { ...left, name: "  Alpha  " }),
+    ).toBe(true);
+    expect(
+      editableWorkstationDraftsEqual(left, { ...left, name: "Beta" }),
+    ).toBe(false);
   });
 });

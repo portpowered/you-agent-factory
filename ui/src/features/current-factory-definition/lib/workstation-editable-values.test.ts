@@ -255,6 +255,7 @@ describe("resolveEditableWorkstationValues", () => {
         behavior: "POLLER",
         guards: [{ maxVisits: 1, type: "VISIT_COUNT" }],
         inputs: [{ guards: [], state: "queued", workType: "story" }],
+        name: "Review",
         prompt: "Review the updated prompt before approval.",
         runnerName: null,
         workerName: "reviewer",
@@ -462,6 +463,7 @@ describe("resolveEditableWorkstationValues", () => {
         behavior: "STANDARD",
         guards: [],
         inputs: [{ guards: [], state: "queued", workType: "story" }],
+        name: "Review",
         prompt: "Updated review work",
         runnerName: "gemini",
         workerName: "reviewer",
@@ -522,6 +524,7 @@ describe("resolveEditableWorkstationValues", () => {
         behavior: "REPEATER",
         guards: [],
         inputs: [{ guards: [], state: "queued", workType: "story" }],
+        name: "Review",
         prompt: "Updated review prompt only.",
         runnerName: null,
         workerName: "processor",
@@ -582,6 +585,7 @@ describe("resolveEditableWorkstationValues", () => {
         behavior: "STANDARD",
         guards: [],
         inputs: [{ guards: [], state: "queued", workType: "story" }],
+        name: "Review",
         prompt: "Updated review work",
         runnerName: null,
         workerName: "missing-worker",
@@ -620,6 +624,10 @@ describe("resolveEditableWorkstationValues", () => {
       logicalMoveNode,
       {
         behavior: "POLLER",
+        cron: null,
+        guards: [],
+        inputs: [],
+        name: "Move",
         prompt: "Draft prompt must not apply.",
         runnerName: "codex",
         workerName: "missing-worker",
@@ -637,7 +645,6 @@ describe("resolveEditableWorkstationValues", () => {
         },
       ],
     });
-    expect(updatedFactory?.workstations?.[0]).toBe(factory.workstations?.[0]);
   });
 
   it("keeps cron behavior selectable for existing cron workstations", () => {
@@ -1113,8 +1120,10 @@ describe("applyEditableWorkstationDraft failures", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         behavior: "STANDARD",
+        cron: null,
         guards: [],
         inputs: [],
+        name: "Review",
         prompt: "Updated prompt",
         runnerName: "gemini",
         workerName: "reviewer",
@@ -1141,8 +1150,10 @@ describe("applyEditableWorkstationDraft failures", () => {
     expect(
       applyEditableWorkstationDraft(factory, selectedNode, {
         behavior: "STANDARD",
+        cron: null,
         guards: [],
         inputs: [],
+        name: "Review",
         prompt: "Updated prompt",
         runnerName: "gemini",
         workerName: "reviewer",
@@ -1285,6 +1296,7 @@ describe("editable workstation cron draft", () => {
         },
         guards: [],
         inputs: [],
+        name: "Cron Tick",
         prompt: "",
         runnerName: null,
         workerName: "cron-runner",
@@ -1328,6 +1340,7 @@ describe("editable workstation cron draft", () => {
         },
         guards: [],
         inputs: [],
+        name: "Cron Tick",
         prompt: "Run on demand.",
         runnerName: null,
         workerName: "cron-runner",
@@ -1400,5 +1413,119 @@ describe("editable workstation cron draft", () => {
         latestDefinitionDraft,
       ),
     ).toEqual(["cronJitter"]);
+  });
+});
+
+describe("editable workstation name draft", () => {
+  const factory: CanonicalFactoryDefinition = {
+    name: "Current Factory",
+    workers: [
+      {
+        model: "gpt-5.5",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body: "Review work",
+        id: "review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Review",
+        outputs: [{ state: "approved", workType: "story" }],
+        worker: "reviewer",
+      },
+      {
+        body: "Plan work",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        outputs: [{ state: "approved", workType: "story" }],
+        worker: "reviewer",
+      },
+    ],
+    workTypes: [],
+  };
+
+  it("initializes draft name from the selected workstation", () => {
+    const values = resolveEditableWorkstationValues(factory, selectedNode);
+    expect(values).not.toBeNull();
+    expect(editableWorkstationDraftFromValues(values as NonNullable<typeof values>))
+      .toMatchObject({
+        name: "Review",
+      });
+  });
+
+  it("treats trimmed name-only changes as dirty and unchanged trims as clean", () => {
+    const values = resolveEditableWorkstationValues(factory, selectedNode);
+    expect(values).not.toBeNull();
+    const draft = editableWorkstationDraftFromValues(
+      values as NonNullable<typeof values>,
+    );
+
+    expect(
+      editableWorkstationDraftsEqual(draft, { ...draft, name: "  Review  " }),
+    ).toBe(true);
+    expect(
+      editableWorkstationDraftsEqual(draft, { ...draft, name: "Reviewed" }),
+    ).toBe(false);
+  });
+
+  it("applies a trimmed rename onto the selected workstation in the pending factory", () => {
+    const updatedFactory = applyEditableWorkstationDraft(factory, selectedNode, {
+      behavior: "STANDARD",
+      cron: null,
+      guards: [],
+      inputs: [{ guards: [], state: "queued", workType: "story" }],
+      name: "  Reviewed  ",
+      prompt: "Review work",
+      runnerName: null,
+      workerName: "reviewer",
+    });
+
+    expect(updatedFactory?.workstations?.[0]?.name).toBe("Reviewed");
+    expect(updatedFactory?.workstations?.[1]?.name).toBe("Plan");
+  });
+
+  it("includes name in overwrite-field detection when the latest definition diverges", () => {
+    const sessionStartDraft = editableWorkstationDraftFromValues({
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD"],
+      cron: null,
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
+      prompt: "Review work",
+      resolvedRunnerSelection: { runnerId: "codex", source: "default" },
+      runnerName: null,
+      runnerOptions: ["codex"],
+      runnerSelectionSource: "default",
+      sharedWorkerWorkstationNames: [],
+      sharedWorkerWorkstationNamesByWorkerName: {},
+      workerModelProvider: null,
+      workerName: "reviewer",
+      workerOptions: ["reviewer"],
+      workerTypeByName: { reviewer: "MODEL_WORKER" },
+      guards: [],
+      inputs: [{ guards: [], state: "queued", workType: "story" }],
+      workstationName: "Review",
+      workstationOptions: ["Review", "Plan"],
+      workstationType: "MODEL_WORKSTATION",
+    });
+    const latestDefinitionDraft = {
+      ...sessionStartDraft,
+      name: "Reviewed",
+    };
+    const draft = {
+      ...sessionStartDraft,
+      name: "Reviewed again",
+    };
+
+    expect(
+      resolveEditableWorkstationOverwriteFields(
+        sessionStartDraft,
+        draft,
+        latestDefinitionDraft,
+      ),
+    ).toContain("name");
   });
 });

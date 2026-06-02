@@ -39,8 +39,10 @@ function buildDraft(
 ): EditableWorkstationDraft {
   return {
     behavior: "STANDARD",
+    cron: null,
     guards: [],
     inputs: [],
+    name: "Review",
     prompt: "Review the story.",
     runnerName: null,
     workerName: "reviewer",

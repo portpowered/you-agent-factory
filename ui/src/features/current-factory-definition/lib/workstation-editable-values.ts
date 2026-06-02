@@ -85,6 +85,7 @@ export interface EditableWorkstationDraft {
   cron: EditableWorkstationCronDraft | null;
   guards: CanonicalWorkstationGuard[];
   inputs: EditableWorkstationInputDraft[];
+  name: string;
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
@@ -157,6 +158,7 @@ export function editableWorkstationDraftFromValues(
       state: input.state,
       workType: input.workType,
     })),
+    name: values.workstationName,
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
@@ -177,13 +179,14 @@ export function applyEditableWorkstationDraft(
   }
 
   const { workstation, workstationIndex } = workstationResolution;
+  const trimmedName = draft.name.trim();
 
   if (!workstationRequiresWorkerAssignment(workstation)) {
     return {
       ...factory,
       workers: factory.workers,
       workstations: factory.workstations.map((entry, index) =>
-        index === workstationIndex ? workstation : entry,
+        index === workstationIndex ? { ...entry, name: trimmedName } : entry,
       ),
     };
   }
@@ -208,6 +211,7 @@ export function applyEditableWorkstationDraft(
     ...workstationWithoutCronRunner,
     body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
+    name: trimmedName,
     worker: draft.workerName,
     ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
     ...(draft.runnerName ? { runner: draft.runnerName } : {}),

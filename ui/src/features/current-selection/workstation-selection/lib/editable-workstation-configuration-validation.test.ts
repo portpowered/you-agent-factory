@@ -87,6 +87,7 @@ const baseDraft: EditableWorkstationDraft = {
   behavior: "STANDARD",
   guards: [],
   inputs: [],
+  name: "Review",
   prompt: "",
   runnerName: "gemini",
   workerName: "",

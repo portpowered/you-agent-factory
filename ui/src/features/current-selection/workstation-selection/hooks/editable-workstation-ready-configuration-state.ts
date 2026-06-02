@@ -111,6 +111,9 @@ function createEditableWorkstationDraftHandlers(
         updateEditableWorkstationCronDraft(draft, { triggerAtStart: value }),
       );
     },
+    onNameChange: (value: string) => {
+      updateDraft((draft) => ({ ...draft, name: value }));
+    },
     onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => {
       updateDraft((draft) => ({ ...draft, guards }));
     },

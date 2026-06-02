@@ -16,6 +16,7 @@ const baseCron = {
 const cronDraft: EditableWorkstationDraft = {
   behavior: "CRON",
   cron: baseCron,
+  name: "nightly",
   prompt: "Run the nightly refresh.",
   runnerName: "codex",
   workerName: "reviewer",
@@ -160,10 +161,23 @@ describe("buildEditableWorkstationConfigurationMutators other draft fields", () 
     expect(getSessionState().draft).toEqual({
       behavior: "STANDARD",
       cron: null,
+      name: "nightly",
       prompt: "Updated prompt body.",
       runnerName: null,
       workerName: "operator",
     });
+  });
+
+  it("updates the workstation name on the session draft", () => {
+    const { getSessionState, mutators } = buildMutatorHarness({
+      draft: cronDraft,
+      latestDefinitionDraft: cronDraft,
+      sessionStartDraft: cronDraft,
+    });
+
+    mutators.onNameChange("nightly-refresh");
+
+    expect(getSessionState().draft.name).toBe("nightly-refresh");
   });
 
   it("no-ops mutators when session state is null", () => {

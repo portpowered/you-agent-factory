@@ -100,6 +100,19 @@ export function buildEditableWorkstationConfigurationMutators<
           : currentState,
       );
     },
+    onNameChange: (value: string) => {
+      setSessionState((currentState) =>
+        currentState
+          ? {
+              ...currentState,
+              draft: {
+                ...currentState.draft,
+                name: value,
+              },
+            }
+          : currentState,
+      );
+    },
     onPromptChange: (value: string) => {
       setSessionState((currentState) =>
         currentState
