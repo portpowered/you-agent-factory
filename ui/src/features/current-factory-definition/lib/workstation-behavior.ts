@@ -34,6 +34,11 @@ export function resolveEditableWorkstationBehaviorOptions(
     : BASE_EDITABLE_WORKSTATION_BEHAVIORS;
 }
 
+/** Graph add-workstation exposes CRON at creation time, not only when editing cron workstations. */
+export function resolveFactoryGraphAddWorkstationBehaviorOptions(): EditableWorkstationBehavior[] {
+  return [...BASE_EDITABLE_WORKSTATION_BEHAVIORS, "CRON"];
+}
+
 export function workerSupportsPollerBehavior(
   worker: Pick<CanonicalWorker, "type"> | null | undefined,
 ): boolean {

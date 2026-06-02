@@ -3,12 +3,17 @@ import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
   applyFactoryGraphAddEntityDraft,
   createFactoryGraphAddEntityDraft,
+  editableWorkstationBehaviorOptions,
   resolveFactoryGraphAddWorkstationDraftForBehaviorChange,
   validateFactoryGraphAddEntityDraft,
 } from "./factory-graph-editor-additions";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: cron validation and apply scenarios share one fixture factory.
 describe("factory graph editor additions cron and runtime type", () => {
+  it("exposes CRON in creation-time behavior options", () => {
+    expect(editableWorkstationBehaviorOptions()).toContain("CRON");
+  });
+
   it("clears cron when switching add-workstation behavior away from CRON", () => {
     const workstationDraft = createFactoryGraphAddEntityDraft(
       "workstation",

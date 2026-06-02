@@ -3,7 +3,7 @@ import { parseWorkerArgsText } from "../../current-factory-definition/lib/worker
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
   type EditableWorkstationBehavior,
-  resolveEditableWorkstationBehaviorOptions,
+  resolveFactoryGraphAddWorkstationBehaviorOptions,
   workerSupportsPollerBehavior,
 } from "../../current-factory-definition/lib/workstation-behavior";
 import {
@@ -114,14 +114,12 @@ export function buildFactoryGraphAddEntityMenuActions(
   factoryDefinition: CanonicalFactoryDefinition | null,
   locale?: string | null,
 ): FactoryGraphEditorMenuAction[] {
-  const hasWorkers = (factoryDefinition?.workers?.length ?? 0) > 0;
   const hasWorkTypes = (factoryDefinition?.workTypes?.length ?? 0) > 0;
   const messages = getFactoryGraphEditorMessages(locale);
 
   return [
     {
       description: messages.addMenuAction("workstation").description,
-      disabled: !hasWorkers,
       id: "workstation",
       label: messages.addMenuAction("workstation").label,
     },
@@ -472,7 +470,5 @@ function workerExists(
 }
 
 export function editableWorkstationBehaviorOptions() {
-  return resolveEditableWorkstationBehaviorOptions(
-    DEFAULT_WORKSTATION_BEHAVIOR,
-  );
+  return resolveFactoryGraphAddWorkstationBehaviorOptions();
 }

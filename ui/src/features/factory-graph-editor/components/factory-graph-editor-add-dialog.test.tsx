@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
+import { createEmptyEditableWorkstationCronDraft } from "../../current-factory-definition/lib/workstation-editable-values";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
+import { editableWorkstationBehaviorOptions } from "../lib/factory-graph-editor-additions";
 import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
 
 const currentFactoryDefinition: CanonicalFactoryDefinition = {
@@ -312,6 +314,111 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(
       screen.getByText("Choose a work type before adding a work state."),
     ).toBeTruthy();
+  });
+
+  it("includes CRON in add-workstation behavior options", () => {
+    expect(editableWorkstationBehaviorOptions()).toContain("CRON");
+  });
+
+  it("shows cron fields when CRON behavior is selected", () => {
+    renderDialog({
+      draft: {
+        behavior: "CRON",
+        body: "",
+        cron: createEmptyEditableWorkstationCronDraft(),
+        kind: "workstation",
+        name: "scheduler",
+        workerName: "writer",
+        workstationType: "MODEL_WORKSTATION",
+      },
+      errors: {
+        cronSchedule: "Enter a cron schedule before adding this workstation.",
+      },
+    });
+
+    expect(screen.getByRole("textbox", { name: "Cron schedule" })).toBeTruthy();
+    expect(
+      screen.getByLabelText("Cron trigger at start"),
+    ).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Cron jitter" })).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: "Cron expiry window" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Enter a cron schedule before adding this workstation.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Cron" })).toBeTruthy();
+  });
+
+  it("hides worker and prompt fields for LOGICAL_MOVE workstations", () => {
+    const onChange = vi.fn();
+    renderDialog({
+      draft: {
+        behavior: "CRON",
+        body: "",
+        cron: createEmptyEditableWorkstationCronDraft(),
+        kind: "workstation",
+        name: "route",
+        workerName: "",
+        workstationType: "LOGICAL_MOVE",
+      },
+      onChange,
+    });
+
+    expect(
+      (screen.getByRole("combobox", {
+        name: "Workstation type",
+      }) as HTMLSelectElement).value,
+    ).toBe("LOGICAL_MOVE");
+    expect(screen.queryByRole("combobox", { name: "Assigned worker" })).toBeNull();
+    expect(screen.queryByLabelText("Prompt body")).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Cron schedule" })).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Workstation type" }), {
+      target: { value: "MODEL_WORKSTATION" },
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      behavior: "CRON",
+      body: "",
+      cron: createEmptyEditableWorkstationCronDraft(),
+      kind: "workstation",
+      name: "route",
+      workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
+    });
+  });
+
+  it("initializes cron draft when switching behavior to CRON", () => {
+    const onChange = vi.fn();
+    renderDialog({
+      draft: {
+        behavior: "STANDARD",
+        body: "",
+        cron: null,
+        kind: "workstation",
+        name: "review",
+        workerName: "writer",
+        workstationType: "MODEL_WORKSTATION",
+      },
+      onChange,
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
+      target: { value: "CRON" },
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      behavior: "CRON",
+      body: "",
+      cron: createEmptyEditableWorkstationCronDraft(),
+      kind: "workstation",
+      name: "review",
+      workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
+    });
   });
 
   it("edits workstation worker assignment and prompt body", () => {
