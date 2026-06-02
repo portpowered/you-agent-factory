@@ -60,16 +60,10 @@ interface TerminalWorkRowProps {
   widgetId: string;
 }
 
-const TERMINAL_ROWS_CLASS = "grid gap-3";
 const TERMINAL_ROW_CLASS =
   "grid gap-2.5 rounded-lg border border-af-border bg-af-surface-subtle p-3";
 const TERMINAL_FAILED_ROW_CLASS = "border-af-danger-border";
-const TERMINAL_ROW_HEADER_CLASS =
-  "mb-1.5 flex flex-wrap items-start justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-text-subtle";
-const TERMINAL_ROW_TITLE_CLASS = "flex min-w-0 flex-1 items-center gap-2";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
-const TERMINAL_LIST_CLASS = "grid gap-2";
-const TERMINAL_BUTTON_LABEL_CLASS = "font-bold";
 const TERMINAL_BUTTON_META_CLASS = cn(
   "leading-snug text-current",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -112,7 +106,7 @@ export function CompletedFailedWorkstationCard({
       headerAction={headerAction}
       title={resolvedTitle}
     >
-      <fieldset className={TERMINAL_ROWS_CLASS}>
+      <fieldset className="grid gap-3">
         <legend className="sr-only">{messages.legendLabel}</legend>
         <TerminalWorkRow
           emptyMessage={messages.emptyState("completed")}
@@ -185,9 +179,12 @@ function TerminalWorkRow({
       data-terminal-work-status={status}
     >
       <Collapsible onOpenChange={onExpandedChange} open={expanded}>
-        <div className={TERMINAL_ROW_HEADER_CLASS}>
+        <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-text-subtle">
           <div>
-            <div className={TERMINAL_ROW_TITLE_CLASS} data-terminal-work-title>
+            <div
+              className="flex min-w-0 flex-1 items-center gap-2"
+              data-terminal-work-title
+            >
               <GraphSemanticIcon
                 className={cn(
                   TERMINAL_ROW_TITLE_ICON_CLASS,
@@ -215,7 +212,7 @@ function TerminalWorkRow({
           </ExpandablePanelTrigger>
         </div>
 
-        <CollapsibleContent className={TERMINAL_LIST_CLASS} id={rowId}>
+        <CollapsibleContent className="grid gap-2" id={rowId}>
           {items.length > 0 ? (
             <StandardListSelection>
               {items.map((item) => (
@@ -230,7 +227,7 @@ function TerminalWorkRow({
                   selected={selectedLabel === item.label}
                   tone={status === "failed" ? "danger" : "info"}
                 >
-                  <span className={TERMINAL_BUTTON_LABEL_CLASS}>
+                  <span className="font-bold">
                     {item.label}
                   </span>
                   {renderTerminalWorkContext(
