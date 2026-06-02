@@ -221,6 +221,27 @@ describe("EditableConfigurationSection model workstation fields", () => {
     ).toBeInTheDocument();
   });
 
+  it("does not show worker save-impact warning when the draft worker is shared", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildEditableConfigurationSectionReadyState({
+          initialValues: {
+            sharedWorkerWorkstationNamesByWorkerName: {
+              reviewer: ["Plan", "Code"],
+            },
+          },
+        })}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    expect(
+      screen.queryByText(/updates every workstation that references this worker/i),
+    ).toBeNull();
+  });
+
   it("shows server-changed hints for overwritten worker, kind, runner, and prompt fields", () => {
     render(
       <EditableConfigurationSection
