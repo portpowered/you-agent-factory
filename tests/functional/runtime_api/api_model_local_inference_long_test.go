@@ -72,10 +72,11 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	if err != nil {
 		t.Fatalf("output validation failure: decode invocation audio content: %v", err)
 	}
-	if stringPointerValue(audioPart.ContentType) != "audio/wav" || stringsTrimSpaceOrDefault(audioPart.File, "") == "" {
+	audioPath := generatedAudioPath(audioPart)
+	if stringPointerValue(audioPart.ContentType) != "audio/wav" || audioPath == "" {
 		t.Fatalf("output validation failure: invocation audio part = %#v, want audio/wav file output", audioPart)
 	}
-	assertWAVFile(t, audioPart.File, "output validation failure")
+	assertWAVFile(t, audioPath, "output validation failure")
 
 	streamBytes, streamType := postAudioInvocation(t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
 		Operation: "TTS",
@@ -287,6 +288,16 @@ func assertWAVBytes(t *testing.T, data []byte, failurePrefix string) {
 	if !bytes.Equal(data[:4], []byte("RIFF")) || !bytes.Equal(data[8:12], []byte("WAVE")) {
 		t.Fatalf("%s: audio header = %q/%q, want RIFF/WAVE", failurePrefix, string(data[:4]), string(data[8:12]))
 	}
+}
+
+func generatedAudioPath(audio factoryapi.WorkAudioContentPart) string {
+	if audio.File != nil && strings.TrimSpace(string(*audio.File)) != "" {
+		return string(*audio.File)
+	}
+	if strings.TrimSpace(string(audio.Url)) != "" {
+		return strings.TrimPrefix(string(audio.Url), "file://")
+	}
+	return ""
 }
 
 func findGeneratedWorkByTraceIDAndPlace(t *testing.T, works []factoryapi.Work, traceID string, placeID string) factoryapi.Work {

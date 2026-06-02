@@ -513,12 +513,16 @@ func startRunningSessionServiceOnDir(t *testing.T, rootDir string) *runningSessi
 	}()
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "restarted default runtime")
-	return &runningSessionService{
+	harness := &runningSessionService{
 		rootDir:   rootDir,
 		svc:       svc,
 		runErrCh:  runErrCh,
 		cancelRun: cancelRun,
 	}
+	t.Cleanup(func() {
+		harness.stop(t)
+	})
+	return harness
 }
 
 func TestFactoryService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {
@@ -842,4 +846,3 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 		t.Fatalf("validation target subject id = %q, want %q", target.Subject.Id, wantField)
 	}
 }
-
