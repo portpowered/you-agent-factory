@@ -73,13 +73,28 @@ vi.mock("@xyflow/react", async () => {
       >;
       nodes: Array<{
         data: Record<string, unknown>;
+        height?: number;
         id: string;
+        initialHeight?: number;
+        initialWidth?: number;
+        measured?: { height: number; width: number };
         position?: { x: number; y: number };
         type: string;
+        width?: number;
       }>;
     }) => (
       <div
         data-edge-payload={JSON.stringify(edges)}
+        data-node-bounds={JSON.stringify(
+          nodes.map((node) => ({
+            height: node.height,
+            id: node.id,
+            initialHeight: node.initialHeight,
+            initialWidth: node.initialWidth,
+            measured: node.measured,
+            width: node.width,
+          })),
+        )}
         data-node-ids={JSON.stringify(nodes.map((node) => node.id))}
         data-node-positions={JSON.stringify(
           nodes.map((node) => ({
@@ -142,6 +157,14 @@ function renderedEdges() {
   }>;
 }
 
+type RenderedTraceFlowNodeBounds = {
+  height?: number;
+  initialHeight?: number;
+  initialWidth?: number;
+  measured?: { height: number; width: number };
+  width?: number;
+};
+
 function renderedNodePositionsById(): Map<string, { x: number; y: number }> {
   const payload = screen
     .getByTestId("trace-relation-react-flow")
@@ -157,6 +180,32 @@ function renderedNodePositionsById(): Map<string, { x: number; y: number }> {
         position?: { x: number; y: number };
       }>
     ).map((node) => [node.id, node.position ?? { x: 0, y: 0 }]),
+  );
+}
+
+function renderedNodeBoundsById(): Map<string, RenderedTraceFlowNodeBounds> {
+  const payload = screen
+    .getByTestId("trace-relation-react-flow")
+    .getAttribute("data-node-bounds");
+  if (!payload) {
+    throw new Error("Expected rendered node bounds.");
+  }
+
+  return new Map(
+    (
+      JSON.parse(payload) as Array<
+        { id: string } & RenderedTraceFlowNodeBounds
+      >
+    ).map((node) => [
+      node.id,
+      {
+        height: node.height,
+        initialHeight: node.initialHeight,
+        initialWidth: node.initialWidth,
+        measured: node.measured,
+        width: node.width,
+      },
+    ]),
   );
 }
 
@@ -288,8 +337,19 @@ describe("TraceRelationFlow layout", () => {
 
     await waitFor(() => {
       const renderedPositions = renderedNodePositionsById();
-      for (const [nodeId, position] of expectedPositions) {
-        expect(renderedPositions.get(nodeId)).toEqual(position);
+      const renderedBounds = renderedNodeBoundsById();
+      for (const [nodeId, layout] of expectedPositions) {
+        expect(renderedPositions.get(nodeId)).toEqual({
+          x: layout.x,
+          y: layout.y,
+        });
+        expect(renderedBounds.get(nodeId)).toEqual({
+          height: layout.height,
+          initialHeight: layout.height,
+          initialWidth: layout.width,
+          measured: { height: layout.height, width: layout.width },
+          width: layout.width,
+        });
       }
     });
   });
