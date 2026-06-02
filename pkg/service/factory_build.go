@@ -275,7 +275,7 @@ func assembleRuntimeBundle(
 		factory.WithRuntimeMode(input.cfg.RuntimeMode),
 		factory.WithLogger(logging.NewZapLogger(logger, input.cfg.Verbose)),
 		factory.WithRuntimeConfig(input.loadedFactoryCfg),
-		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig())),
+		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID)),
 		factory.WithClock(input.clock),
 		factory.WithFactoryEventHistory(eventHistory),
 	}

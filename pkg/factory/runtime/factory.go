@@ -12,6 +12,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -524,4 +525,13 @@ func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool
 	}
 
 	return false
+}
+
+// WorkflowContext returns the workflow context wired at factory construction.
+func WorkflowContext(f factory.Factory) *factory_context.FactoryContext {
+	impl, ok := f.(*factoryImpl)
+	if !ok || impl == nil || impl.cfg == nil {
+		return nil
+	}
+	return impl.cfg.WorkflowContext
 }

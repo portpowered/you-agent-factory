@@ -26,6 +26,8 @@ type FactoryContext struct {
 	EnvVars          map[string]string `json:"env_vars"`
 	ArtifactDir      string            `json:"artifact_directory"`
 	ProjectID        string            `json:"project_id,omitempty"`
+	// SessionID is the live factory session that built the runtime (~default or a named session).
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // WorkflowConfig holds workflow-level configuration used when creating
