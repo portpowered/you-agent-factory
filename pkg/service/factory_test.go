@@ -12,8 +12,8 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -428,6 +428,7 @@ type runningSessionService struct {
 	runErrCh      chan error
 	cancelRun     context.CancelFunc
 	factoryDirs   map[string]string
+	stopped       bool
 }
 
 type sessionWorkExpectation struct {
@@ -480,7 +481,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
 
-	return &runningSessionService{
+	harness := &runningSessionService{
 		rootDir:       rootDir,
 		runtimeLogDir: runtimeLogDir,
 		svc:           svc,
@@ -488,10 +489,20 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		cancelRun:     cancelRun,
 		factoryDirs:   factoryDirs,
 	}
+	t.Cleanup(func() {
+		harness.stop(t)
+		removeRunningSessionServiceRoot(t, rootDir)
+	})
+	return harness
 }
 
 func (h *runningSessionService) stop(t *testing.T) {
 	t.Helper()
+
+	if h.stopped {
+		return
+	}
+	h.stopped = true
 
 	if h.svc != nil && h.svc.sessions != nil {
 		for _, sessionID := range append([]string(nil), h.svc.sessions.IDs()...) {
@@ -515,6 +526,23 @@ func (h *runningSessionService) stop(t *testing.T) {
 		t.Fatal("timed out waiting for service shutdown")
 	}
 	closeSessionServiceRuntimeLogs(t, h.svc)
+}
+
+func removeRunningSessionServiceRoot(t *testing.T, rootDir string) {
+	t.Helper()
+	if strings.TrimSpace(rootDir) == "" {
+		return
+	}
+
+	var err error
+	for attempt := 0; attempt < 20; attempt++ {
+		err = os.RemoveAll(rootDir)
+		if err == nil || os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("RemoveAll(%s): %v", rootDir, err)
 }
 
 func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
