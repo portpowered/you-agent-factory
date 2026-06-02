@@ -391,6 +391,120 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
   });
 
+  it("clears worker and prompt when switching to LOGICAL_MOVE", () => {
+    const onChange = vi.fn();
+    renderDialog({
+      draft: {
+        behavior: "STANDARD",
+        body: "Route on schedule.",
+        cron: null,
+        kind: "workstation",
+        name: "route",
+        workerName: "writer",
+        workstationType: "MODEL_WORKSTATION",
+      },
+      onChange,
+    });
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Workstation type" }), {
+      target: { value: "LOGICAL_MOVE" },
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      behavior: "STANDARD",
+      body: "",
+      cron: null,
+      kind: "workstation",
+      name: "route",
+      workerName: "",
+      workstationType: "LOGICAL_MOVE",
+    });
+  });
+
+  it("updates cron draft fields from the add dialog", () => {
+    const onChange = vi.fn();
+    renderDialog({
+      draft: {
+        behavior: "CRON",
+        body: "",
+        cron: createEmptyEditableWorkstationCronDraft(),
+        kind: "workstation",
+        name: "scheduler",
+        workerName: "writer",
+        workstationType: "MODEL_WORKSTATION",
+      },
+      onChange,
+    });
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Cron schedule" }), {
+      target: { value: "0 * * * *" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Cron jitter" }), {
+      target: { value: "5s" },
+    });
+    fireEvent.click(screen.getByLabelText("Cron trigger at start"));
+    fireEvent.change(screen.getByRole("textbox", { name: "Cron expiry window" }), {
+      target: { value: "30m" },
+    });
+
+    expect(onChange).toHaveBeenNthCalledWith(1, {
+      behavior: "CRON",
+      body: "",
+      cron: {
+        expiryWindow: "",
+        jitter: "",
+        schedule: "0 * * * *",
+        triggerAtStart: false,
+      },
+      kind: "workstation",
+      name: "scheduler",
+      workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
+    });
+    expect(onChange).toHaveBeenNthCalledWith(2, {
+      behavior: "CRON",
+      body: "",
+      cron: {
+        expiryWindow: "",
+        jitter: "5s",
+        schedule: "",
+        triggerAtStart: false,
+      },
+      kind: "workstation",
+      name: "scheduler",
+      workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
+    });
+    expect(onChange).toHaveBeenNthCalledWith(3, {
+      behavior: "CRON",
+      body: "",
+      cron: {
+        expiryWindow: "",
+        jitter: "",
+        schedule: "",
+        triggerAtStart: true,
+      },
+      kind: "workstation",
+      name: "scheduler",
+      workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
+    });
+    expect(onChange).toHaveBeenNthCalledWith(4, {
+      behavior: "CRON",
+      body: "",
+      cron: {
+        expiryWindow: "30m",
+        jitter: "",
+        schedule: "",
+        triggerAtStart: false,
+      },
+      kind: "workstation",
+      name: "scheduler",
+      workerName: "writer",
+      workstationType: "MODEL_WORKSTATION",
+    });
+  });
+
   it("initializes cron draft when switching behavior to CRON", () => {
     const onChange = vi.fn();
     renderDialog({

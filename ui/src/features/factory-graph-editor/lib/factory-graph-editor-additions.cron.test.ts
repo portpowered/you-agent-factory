@@ -1,3 +1,4 @@
+import { resolveFactoryGraphAddWorkstationBehaviorOptions } from "../../current-factory-definition/lib/workstation-behavior";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import {
@@ -11,7 +12,40 @@ import {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: cron validation and apply scenarios share one fixture factory.
 describe("factory graph editor additions cron and runtime type", () => {
   it("exposes CRON in creation-time behavior options", () => {
+    expect(resolveFactoryGraphAddWorkstationBehaviorOptions()).toEqual([
+      "STANDARD",
+      "REPEATER",
+      "POLLER",
+      "CRON",
+    ]);
     expect(editableWorkstationBehaviorOptions()).toContain("CRON");
+  });
+
+  it("preserves existing cron draft when behavior stays CRON", () => {
+    const workstationDraft = createFactoryGraphAddEntityDraft(
+      "workstation",
+      baseFactoryDefinition,
+    );
+    const cronDraft = resolveFactoryGraphAddWorkstationDraftForBehaviorChange(
+      workstationDraft,
+      "CRON",
+    );
+    const filledCron = {
+      ...cronDraft,
+      cron: {
+        expiryWindow: "15m",
+        jitter: "1s",
+        schedule: "0 * * * *",
+        triggerAtStart: true,
+      },
+    };
+
+    expect(
+      resolveFactoryGraphAddWorkstationDraftForBehaviorChange(
+        filledCron,
+        "CRON",
+      ).cron,
+    ).toEqual(filledCron.cron);
   });
 
   it("clears cron when switching add-workstation behavior away from CRON", () => {
