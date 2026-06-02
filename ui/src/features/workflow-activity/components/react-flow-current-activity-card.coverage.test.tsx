@@ -367,7 +367,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("Observe mode")).toBeTruthy();
+    expect(screen.getByText("Observe")).toBeTruthy();
     expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(
       screen.getByText(
@@ -480,13 +480,13 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     });
 
     expect(
-      within(toolbar).getByRole("button", { name: "Open add entity menu" }),
+      within(toolbar).getByRole("button", { name: "Add tool" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Connect" }),
+      within(toolbar).getByRole("button", { name: "Connect tool" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Delete" }),
+      within(toolbar).getByRole("button", { name: "Delete tool" }),
     ).toBeTruthy();
     expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
   });

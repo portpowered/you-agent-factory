@@ -227,7 +227,7 @@ async function expectConsolidatedDirtyGraphEditorChrome(page) {
     .poll(
       async () => {
         const toggle = graphCard.getByRole("button", {
-          name: "Leave factory graph editor",
+          name: "Leave editor",
         });
         const toggleClassName = await toggle.getAttribute("class");
         const unsavedStatusCount = await graphCard
@@ -281,7 +281,7 @@ async function expectConsolidatedCleanGraphEditorChrome(page) {
     .poll(
       async () => {
         const toggle = graphCard.getByRole("button", {
-          name: "Leave factory graph editor",
+          name: "Leave editor",
         });
         const toggleClassName = await toggle.getAttribute("class");
         const activeStatusCount = await graphCard
@@ -332,14 +332,12 @@ describe.sequential("factory graph editor browser integration", () => {
         const graphCard = factoryGraphCardScope(browserPage.page);
         await expectTooltipPlacement(
           graphCard,
-          "Enter factory graph editor",
-          "Enter factory graph editor",
+          "Edit mode",
+          "Edit mode",
           "below",
         );
 
-        await graphCard
-          .getByRole("button", { name: "Enter factory graph editor" })
-          .click();
+        await graphCard.getByRole("button", { name: "Edit mode" }).click();
 
         const toolbar = graphCard.getByRole("region", {
           name: "Factory graph editor tools",
@@ -350,8 +348,8 @@ describe.sequential("factory graph editor browser integration", () => {
         });
 
         for (const [triggerName, tooltipName] of [
-          ["Delete", "Remove nodes or edges from the draft"],
-          ["Connect", "Create compatible graph connections"],
+          ["Delete tool", "Delete tool"],
+          ["Connect tool", "Connect tool"],
           [
             "Open hide or show node classes menu",
             "Show or hide node classes on the graph",
@@ -394,10 +392,10 @@ describe.sequential("factory graph editor browser integration", () => {
         });
         await server.replayCompleted;
         await browserPage.page
-          .getByRole("button", { name: "Enter factory graph editor" })
+          .getByRole("button", { name: "Edit mode" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
-          .getByRole("button", { name: "Enter factory graph editor" })
+          .getByRole("button", { name: "Edit mode" })
           .click();
 
         const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
@@ -411,7 +409,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
         await toolbar
-          .getByRole("button", { name: "Open add entity menu" })
+          .getByRole("button", { name: "Add tool" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         expect(
           await toolbar
@@ -713,7 +711,7 @@ describe.sequential("factory graph editor browser integration", () => {
         await server.replayCompleted;
 
         await browserPage.page
-          .getByRole("button", { name: "Enter factory graph editor" })
+          .getByRole("button", { name: "Edit mode" })
           .click();
 
         const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
@@ -727,9 +725,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
 
-        await toolbar
-          .getByRole("button", { name: "Open add entity menu" })
-          .click();
+        await toolbar.getByRole("button", { name: "Add tool" }).click();
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Workstation" })
@@ -755,7 +751,7 @@ describe.sequential("factory graph editor browser integration", () => {
           })
           .toBe(true);
 
-        await toolbar.getByRole("button", { name: "Connect" }).click();
+        await toolbar.getByRole("button", { name: "Connect tool" }).click();
         await browserPage.page
           .getByTestId("rf__node-workstation:draft")
           .getByRole("button", {
@@ -867,7 +863,7 @@ describe.sequential("factory graph editor browser integration", () => {
         await server.replayCompleted;
 
         await browserPage.page
-          .getByRole("button", { name: "Enter factory graph editor" })
+          .getByRole("button", { name: "Edit mode" })
           .click();
 
         const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
@@ -881,9 +877,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
 
-        await toolbar
-          .getByRole("button", { name: "Open add entity menu" })
-          .click();
+        await toolbar.getByRole("button", { name: "Add tool" }).click();
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Work type" })
@@ -953,7 +947,7 @@ describe.sequential("factory graph editor browser integration", () => {
         await server.replayCompleted;
 
         await browserPage.page
-          .getByRole("button", { name: "Enter factory graph editor" })
+          .getByRole("button", { name: "Edit mode" })
           .click();
 
         const toolbar = factoryGraphCardScope(browserPage.page).getByRole(
@@ -967,9 +961,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
 
-        await toolbar
-          .getByRole("button", { name: "Open add entity menu" })
-          .click();
+        await toolbar.getByRole("button", { name: "Add tool" }).click();
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Work type" })
@@ -1003,18 +995,16 @@ describe.sequential("factory graph editor browser integration", () => {
         ).toBe(0);
 
         await browserPage.page
-          .getByRole("button", { name: "Leave factory graph editor" })
+          .getByRole("button", { name: "Leave editor" })
           .click();
 
         await browserPage.page
-          .getByRole("button", { name: "Enter factory graph editor" })
+          .getByRole("button", { name: "Edit mode" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await expect
           .poll(
             async () =>
-              await toolbar
-                .getByRole("button", { name: "Open add entity menu" })
-                .count(),
+              await toolbar.getByRole("button", { name: "Add tool" }).count(),
             { timeout: uiInteractionTimeoutMs },
           )
           .toBe(0);

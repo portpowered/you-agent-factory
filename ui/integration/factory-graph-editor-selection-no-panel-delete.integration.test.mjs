@@ -188,9 +188,7 @@ async function assertNoPanelTopologyDeleteInCurrentSelection(page) {
 }
 
 async function enterGraphEditor(page) {
-  await page
-    .getByRole("button", { name: "Enter factory graph editor" })
-    .click();
+  await page.getByRole("button", { name: "Edit mode" }).click();
   const toolbar = page.getByRole("region", {
     name: "Factory graph editor tools",
   });
@@ -206,7 +204,7 @@ async function addWorker(
   toolbar,
   { model = "gpt-5-mini", modelProvider = "CURSOR", name },
 ) {
-  await toolbar.getByRole("button", { name: "Open add entity menu" }).click();
+  await toolbar.getByRole("button", { name: "Add tool" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Worker" })
@@ -324,7 +322,7 @@ describe.sequential("factory graph editor selection panel delete browser integra
 
         const deleteToolButton = browserPage.page
           .getByRole("article", { name: "Factory graph" })
-          .getByRole("button", { name: "Delete" });
+          .getByRole("button", { name: "Delete tool" });
         await deleteToolButton.scrollIntoViewIfNeeded();
         await deleteToolButton.click();
         expect(await deleteToolButton.getAttribute("aria-pressed")).toBe(

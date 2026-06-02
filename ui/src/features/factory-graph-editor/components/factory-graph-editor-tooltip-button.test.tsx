@@ -29,7 +29,7 @@ describe("FactoryGraphEditorTooltipActionButton", () => {
       />,
     );
 
-    const button = view.getByRole("button", { name: "Delete" });
+    const button = view.getByRole("button", { name: "Delete tool" });
     expect(button.getAttribute("aria-describedby")).toBeNull();
     expect(view.queryByRole("tooltip")).toBeNull();
 
@@ -63,7 +63,7 @@ describe("FactoryGraphEditorTooltipActionButton", () => {
 
     await user.tab();
 
-    const button = view.getByRole("button", { name: "Connect" });
+    const button = view.getByRole("button", { name: "Connect tool" });
     const tooltip = await view.findByRole("tooltip", {
       name: "Connect selected graph nodes",
     });
@@ -85,7 +85,7 @@ describe("FactoryGraphEditorTooltipActionButton", () => {
       />,
     );
 
-    await user.hover(view.getByRole("button", { name: "Delete" }));
+    await user.hover(view.getByRole("button", { name: "Delete tool" }));
 
     const tooltip = await view.findByRole("tooltip", {
       name: "Remove nodes or edges from the draft",

@@ -213,9 +213,7 @@ function factoryGraphCardScope(page) {
 
 async function enterGraphEditor(page) {
   const graphCard = factoryGraphCardScope(page);
-  await graphCard
-    .getByRole("button", { name: "Enter factory graph editor" })
-    .click();
+  await graphCard.getByRole("button", { name: "Edit mode" }).click();
   await graphCard
     .getByRole("region", { name: "Factory graph editor tools" })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
@@ -226,7 +224,7 @@ async function addUnsavedWorkType(page, identifier) {
   const toolbar = graphCard.getByRole("region", {
     name: "Factory graph editor tools",
   });
-  await toolbar.getByRole("button", { name: "Open add entity menu" }).click();
+  await toolbar.getByRole("button", { name: "Add tool" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Work type" })
@@ -256,7 +254,7 @@ async function addUnsavedWorkType(page, identifier) {
 async function expectEditorModeOff(page) {
   const graphCard = factoryGraphCardScope(page);
   await graphCard
-    .getByRole("button", { name: "Enter factory graph editor" })
+    .getByRole("button", { name: "Edit mode" })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
   const toolbar = graphCard.getByRole("region", {
     name: "Factory graph editor tools",
@@ -265,7 +263,7 @@ async function expectEditorModeOff(page) {
     .poll(
       async () => {
         const addMenuCount = await toolbar
-          .getByRole("button", { name: "Open add entity menu" })
+          .getByRole("button", { name: "Add tool" })
           .count();
         const unsavedCount = await graphCard
           .getByText("Unsaved changes")
@@ -391,9 +389,7 @@ async function runLeaveEditorUnsavedPromptScenario(preview) {
     await addUnsavedWorkType(browserPage.page, "memo");
 
     const graphCard = factoryGraphCardScope(browserPage.page);
-    await graphCard
-      .getByRole("button", { name: "Leave factory graph editor" })
-      .click();
+    await graphCard.getByRole("button", { name: "Leave editor" }).click();
 
     const leaveDialog = browserPage.page.getByRole("dialog", {
       name: "Leave graph editor with unsaved changes?",
@@ -411,9 +407,7 @@ async function runLeaveEditorUnsavedPromptScenario(preview) {
       .getByRole("region", { name: "Factory graph editor tools" })
       .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
-    await graphCard
-      .getByRole("button", { name: "Leave factory graph editor" })
-      .click();
+    await graphCard.getByRole("button", { name: "Leave editor" }).click();
     await leaveDialog.waitFor({
       state: "visible",
       timeout: uiInteractionTimeoutMs,

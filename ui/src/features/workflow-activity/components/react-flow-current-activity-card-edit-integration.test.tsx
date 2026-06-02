@@ -302,9 +302,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     renderCurrentActivity();
     enterEditorMode();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open add entity menu" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
     fireEvent.click(screen.getByRole("button", { name: "Work type" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "essay" },
@@ -372,9 +370,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     renderCurrentActivity(createSnapshot(sampleFactoryDocument));
     enterEditorMode();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Open add entity menu" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
     fireEvent.click(screen.getByRole("button", { name: menuAction }));
     for (const field of fields) {
       const role = "role" in field && field.role ? field.role : "textbox";
@@ -398,7 +394,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "workstation:review" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete tool" }));
     fireEvent.click(screen.getByRole("button", { name: "workstation:review" }));
 
     const dialog = await screen.findByRole("dialog", {
@@ -424,7 +420,9 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect tool" }),
+    );
 
     expect(screen.getByTestId("valid-qa-output-connection").textContent).toBe(
       "true",
@@ -447,7 +445,9 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
   it("shows validation feedback and leaves graph edges unchanged for invalid connects", async () => {
     renderCurrentActivity();
     enterEditorMode();
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect tool" }),
+    );
 
     expect(
       screen.queryByRole("button", {
@@ -504,7 +504,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "worker:spare" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete tool" }));
     fireEvent.click(screen.getByRole("button", { name: "worker:spare" }));
 
     const toolbar = await screen.findByRole("region", {
@@ -542,7 +542,9 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect tool" }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );
@@ -617,7 +619,9 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     expect(
       screen.queryByRole("button", { name: "workstation:canonical-review-id" }),
     ).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Connect tool" }),
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );
@@ -715,7 +719,5 @@ function createSnapshot(
 }
 
 function enterEditorMode() {
-  fireEvent.click(
-    screen.getByRole("button", { name: "Enter factory graph editor" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 }

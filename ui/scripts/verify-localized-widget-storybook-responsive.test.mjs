@@ -328,9 +328,9 @@ describe("verify-localized-widget-storybook-responsive", () => {
       name: "工作图视口",
     });
     expect(page.getByRole).toHaveBeenCalledWith("button", {
-      name: "进入工厂图编辑器",
+      name: "编辑模式",
     });
-    expect(page.getByText).toHaveBeenCalledWith("观察模式");
+    expect(page.getByText).toHaveBeenCalledWith("观察");
     expect(expectNoHorizontalOverflow).toHaveBeenCalledWith(
       page,
       "Localized workflow activity card at mobile",

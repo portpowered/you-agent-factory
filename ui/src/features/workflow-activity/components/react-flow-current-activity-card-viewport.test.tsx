@@ -74,9 +74,7 @@ describe("CurrentActivityGraphViewport", () => {
         name: "Open hide or show node classes menu",
       }),
     ).toBeTruthy();
-    expect(
-      screen.queryByRole("button", { name: "Open add entity menu" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add tool" })).toBeNull();
   });
 
   it.each([

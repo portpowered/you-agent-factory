@@ -72,7 +72,7 @@ export async function verifyTraceFactoryGraphVisualConsistency({
 
   await factoryViewport.waitFor({ state: "visible" });
   await expectVisible(
-    page.getByText("Observe mode"),
+    page.getByText("Observe"),
     "Factory graph observe-mode badge",
   );
   const factoryControlsStyle = await readDashboardGraphControlsStyle(
