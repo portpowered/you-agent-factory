@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
 
@@ -73,5 +75,30 @@ func TestBuildReplacementFactoryRuntime_WiresWorkflowContextSessionID(t *testing
 	namedCtx := runtime.WorkflowContext(namedBundle.factory)
 	if namedCtx == nil || namedCtx.SessionID != "session-beta" {
 		t.Fatalf("named workflow context = %#v, want SessionID %q", namedCtx, "session-beta")
+	}
+}
+
+func TestRuntimeWorkflowContext_RendersSessionIDInPromptTemplates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		sessionID string
+		want      string
+	}{
+		{name: "default session", sessionID: factorysessions.DefaultSessionID, want: factory_context.DefaultSessionID},
+		{name: "named session", sessionID: "session-beta", want: "session-beta"},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			wfCtx := runtimeWorkflowContext(&interfaces.FactoryConfig{}, tc.sessionID)
+			data := workerprompting.BuildPromptData(nil, wfCtx)
+			if data.Context.SessionID != tc.want {
+				t.Fatalf("Context.SessionID = %q, want %q", data.Context.SessionID, tc.want)
+			}
+		})
 	}
 }

@@ -15,6 +15,8 @@ const (
 	TIMESTAMP_FORMAT = "20060102T150405"
 	ProjectTagKey    = "project"
 	DefaultProjectID = "default-project"
+	// DefaultSessionID is the stable alias for the primary live factory session.
+	DefaultSessionID = "~default"
 )
 
 // FactoryContext is the shared execution environment passed to workers.

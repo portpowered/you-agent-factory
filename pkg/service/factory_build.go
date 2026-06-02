@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
@@ -229,6 +230,7 @@ func loadRuntimeBundleWorkerOptions(
 		input.loadedFactoryCfg.FactoryConfig(),
 		effectiveFactoryRunnerID,
 		input.loadedFactoryCfg,
+		runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
@@ -570,6 +572,7 @@ func loadWorkersFromConfig(
 	factoryCfg *interfaces.FactoryConfig,
 	factoryRunnerID string,
 	runtimeCfg interfaces.RuntimeConfigLookup,
+	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	providerOverride workerprovider.Provider,
@@ -601,7 +604,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -622,6 +625,7 @@ func loadWorkersFromConfig(
 		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
+			WorkflowContext: workflowContext,
 			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}))
@@ -636,6 +640,7 @@ func buildWorkerExecutor(
 	factoryCfg *interfaces.FactoryConfig,
 	workerName string,
 	factoryRunnerID string,
+	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
 	providerOverride workerprovider.Provider,
 	providerCommandRunner workers.CommandRunner,
@@ -694,6 +699,7 @@ func buildWorkerExecutor(
 		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
+			WorkflowContext: workflowContext,
 			Executor:        agentExec,
 			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
@@ -702,6 +708,7 @@ func buildWorkerExecutor(
 		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
+			WorkflowContext: workflowContext,
 			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
 		}
@@ -722,6 +729,7 @@ func buildWorkerExecutor(
 		return &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
 			DefaultRunnerID: factoryRunnerID,
+			WorkflowContext: workflowContext,
 			Executor:        scriptExec,
 			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
