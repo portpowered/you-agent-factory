@@ -1487,6 +1487,120 @@ describe("editable workstation name draft", () => {
     expect(updatedFactory?.workstations?.[1]?.name).toBe("Plan");
   });
 
+  it("rewrites VISIT_COUNT workstation references across the factory when renaming", () => {
+    const factoryWithGuards: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        { model: "gpt-5.4", name: "Plan", type: "MODEL_WORKER" },
+        { model: "gpt-5.5", name: "reviewer", type: "MODEL_WORKER" },
+      ],
+      workstations: [
+        {
+          body: "Plan work",
+          id: "plan",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Plan",
+          worker: "reviewer",
+        },
+        {
+          body: "Review work",
+          guards: [
+            { maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" },
+            { maxVisits: 1, type: "VISIT_COUNT", workstation: "Review" },
+          ],
+          id: "review",
+          inputs: [
+            {
+              guards: [
+                { maxVisits: 1, type: "VISIT_COUNT", workstation: "Review" },
+              ],
+              state: "queued",
+              workType: "story",
+            },
+          ],
+          name: "Review",
+          worker: "Plan",
+        },
+        {
+          body: "Ship work",
+          guards: [
+            { maxVisits: 1, type: "VISIT_COUNT", workstation: "Review" },
+          ],
+          id: "ship",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Ship",
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factoryWithGuards,
+      selectedNode,
+      {
+        behavior: "STANDARD",
+        cron: null,
+        guards: [
+          { maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" },
+          { maxVisits: 1, type: "VISIT_COUNT", workstation: "Review" },
+        ],
+        inputs: [
+          {
+            guards: [
+              { maxVisits: 1, type: "VISIT_COUNT", workstation: "Review" },
+            ],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+        name: "Reviewed",
+        prompt: "Review work",
+        runnerName: null,
+        workerName: "Plan",
+      },
+    );
+
+    expect(updatedFactory?.workstations).toEqual([
+      {
+        body: "Plan work",
+        id: "plan",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Plan",
+        worker: "reviewer",
+      },
+      {
+        body: "Review work",
+        guards: [
+          { maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" },
+          { maxVisits: 1, type: "VISIT_COUNT", workstation: "Reviewed" },
+        ],
+        id: "review",
+        inputs: [
+          {
+            guards: [
+              { maxVisits: 1, type: "VISIT_COUNT", workstation: "Reviewed" },
+            ],
+            state: "queued",
+            workType: "story",
+          },
+        ],
+        name: "Reviewed",
+        worker: "Plan",
+      },
+      {
+        body: "Ship work",
+        guards: [
+          { maxVisits: 1, type: "VISIT_COUNT", workstation: "Reviewed" },
+        ],
+        id: "ship",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "Ship",
+        worker: "reviewer",
+      },
+    ]);
+  });
+
   it("includes name in overwrite-field detection when the latest definition diverges", () => {
     const sessionStartDraft = editableWorkstationDraftFromValues({
       behavior: "STANDARD",

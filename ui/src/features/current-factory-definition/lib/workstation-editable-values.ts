@@ -19,6 +19,7 @@ import {
 import {
   normalizeEditableInputGuards,
   resolveFactoryWorkstationNameOptions,
+  rewriteWorkstationVisitCountReferences,
 } from "./workstation-guards";
 import {
   type EditableWorkstationType,
@@ -180,15 +181,16 @@ export function applyEditableWorkstationDraft(
 
   const { workstation, workstationIndex } = workstationResolution;
   const trimmedName = draft.name.trim();
+  const previousWorkstationName = workstation.name;
 
   if (!workstationRequiresWorkerAssignment(workstation)) {
-    return {
-      ...factory,
-      workers: factory.workers,
-      workstations: factory.workstations.map((entry, index) =>
-        index === workstationIndex ? { ...entry, name: trimmedName } : entry,
-      ),
-    };
+    return applyWorkstationNameChangeToFactory(
+      factory,
+      workstationIndex,
+      trimmedName,
+      previousWorkstationName,
+      (entry) => ({ ...entry, name: trimmedName }),
+    );
   }
 
   if (!factory.workers) {
@@ -224,11 +226,46 @@ export function applyEditableWorkstationDraft(
       : {}),
   };
 
-  return {
+  return applyWorkstationNameChangeToFactory(
+    factory,
+    workstationIndex,
+    trimmedName,
+    previousWorkstationName,
+    () => nextWorkstation,
+  );
+}
+
+function applyWorkstationNameChangeToFactory(
+  factory: CanonicalFactoryDefinition,
+  workstationIndex: number,
+  trimmedName: string,
+  previousWorkstationName: string,
+  buildUpdatedWorkstation: (
+    workstation: CanonicalWorkstation,
+  ) => CanonicalWorkstation,
+): CanonicalFactoryDefinition {
+  const workstations = factory.workstations ?? [];
+  const updatedWorkstations = workstations.map((entry, index) =>
+    index === workstationIndex ? buildUpdatedWorkstation(entry) : entry,
+  );
+  const nextFactory: CanonicalFactoryDefinition = {
     ...factory,
     workers: factory.workers,
-    workstations: factory.workstations.map((entry, index) =>
-      index === workstationIndex ? nextWorkstation : entry,
+    workstations: updatedWorkstations,
+  };
+
+  if (previousWorkstationName === trimmedName) {
+    return nextFactory;
+  }
+
+  return {
+    ...nextFactory,
+    workstations: (nextFactory.workstations ?? []).map((entry) =>
+      rewriteWorkstationVisitCountReferences(
+        entry,
+        previousWorkstationName,
+        trimmedName,
+      ),
     ),
   };
 }

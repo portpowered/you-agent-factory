@@ -9,6 +9,8 @@ import {
   guardsDraftEqual,
   normalizeEditableInputGuards,
   resolvePeerInputWorkTypes,
+  rewriteVisitCountWorkstationReference,
+  rewriteWorkstationVisitCountReferences,
   setEditableInputSlotGuard,
 } from "./workstation-guards";
 
@@ -139,5 +141,58 @@ describe("workstation-guards", () => {
     expect(
       editableWorkstationDraftsEqual(left, { ...left, name: "Beta" }),
     ).toBe(false);
+  });
+
+  it("rewrites VISIT_COUNT workstation references on workstation and input guards", () => {
+    expect(
+      rewriteVisitCountWorkstationReference(
+        { maxVisits: 2, type: "VISIT_COUNT", workstation: "Plan" },
+        "Plan",
+        "Planning",
+      ),
+    ).toEqual({
+      maxVisits: 2,
+      type: "VISIT_COUNT",
+      workstation: "Planning",
+    });
+    expect(
+      rewriteVisitCountWorkstationReference(
+        { maxVisits: 2, type: "VISIT_COUNT", workstation: "Review" },
+        "Plan",
+        "Planning",
+      ),
+    ).toEqual({
+      maxVisits: 2,
+      type: "VISIT_COUNT",
+      workstation: "Review",
+    });
+
+    expect(
+      rewriteWorkstationVisitCountReferences(
+        {
+          guards: [{ maxVisits: 1, type: "VISIT_COUNT", workstation: "Plan" }],
+          inputs: [
+            {
+              guards: [
+                { maxVisits: 3, type: "VISIT_COUNT", workstation: "Plan" },
+              ],
+            },
+          ],
+        },
+        "Plan",
+        "Planning",
+      ),
+    ).toEqual({
+      guards: [
+        { maxVisits: 1, type: "VISIT_COUNT", workstation: "Planning" },
+      ],
+      inputs: [
+        {
+          guards: [
+            { maxVisits: 3, type: "VISIT_COUNT", workstation: "Planning" },
+          ],
+        },
+      ],
+    });
   });
 });
