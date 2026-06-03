@@ -411,6 +411,49 @@ describe("resolveWorkerOptionsState model workstation", () => {
   });
 });
 
+describe("validateEditableWorkstationDraft MATCHES_FIELDS guards", () => {
+  it("requires inputKey for empty or whitespace-only selectors", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseDraft,
+        workerName: "reviewer",
+        prompt: "Configured prompt",
+        guards: [{ matchConfig: { inputKey: "   " }, type: "MATCHES_FIELDS" }],
+      },
+      modelWorkstationValues,
+      { status: "idle" },
+      messages,
+    );
+
+    expect(errors["guards[0].matchConfig.inputKey"]).toBe(
+      messages.editableConfigurationMatchesFieldsInputKeyRequired,
+    );
+    expect(hasEditableWorkstationValidationErrors(errors)).toBe(true);
+  });
+
+  it("does not block save for non-curated selector values", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseDraft,
+        workerName: "reviewer",
+        prompt: "Configured prompt",
+        guards: [
+          {
+            matchConfig: { inputKey: '.Tags["_last_output"]' },
+            type: "MATCHES_FIELDS",
+          },
+        ],
+      },
+      modelWorkstationValues,
+      { status: "idle" },
+      messages,
+    );
+
+    expect(errors["guards[0].matchConfig.inputKey"]).toBeUndefined();
+    expect(hasEditableWorkstationValidationErrors(errors)).toBe(false);
+  });
+});
+
 describe("hasEditableWorkstationValidationErrors", () => {
   it("returns false when no validation messages are present", () => {
     expect(hasEditableWorkstationValidationErrors({})).toBe(false);

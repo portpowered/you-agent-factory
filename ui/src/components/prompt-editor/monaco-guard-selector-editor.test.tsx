@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { MonacoGuardSelectorEditor } from "./monaco-guard-selector-editor";
 
@@ -34,5 +34,35 @@ describe("MonacoGuardSelectorEditor", () => {
     fireEvent.change(selectorEditor, { target: { value: ".WorkID" } });
 
     expect(onChange).toHaveBeenCalledWith(".WorkID");
+  });
+
+  it("does not surface prompt-style validation markers for guard selector text", async () => {
+    const onChange = vi.fn();
+
+    render(
+      <MonacoGuardSelectorEditor
+        ariaLabel="Field selector"
+        loadingMessage="Starting selector editor."
+        modelPath="inmemory://model/test/workstation-guard-selector/row-0"
+        onChange={onChange}
+        startupErrorMessage="Selector editor failed."
+        value=""
+      />,
+    );
+
+    const selectorEditor = screen.getByLabelText("Field selector");
+    const wrapper = selectorEditor.parentElement;
+
+    await waitFor(() => {
+      expect(wrapper?.getAttribute("data-monaco-marker-count")).toBe("0");
+    });
+
+    fireEvent.change(selectorEditor, {
+      target: { value: '.Custom["not-in-suggestions"]' },
+    });
+
+    expect(onChange).toHaveBeenCalledWith('.Custom["not-in-suggestions"]');
+    expect(wrapper?.getAttribute("data-monaco-marker-count")).toBe("0");
+    expect(wrapper?.getAttribute("data-monaco-marker-messages")).toBe("[]");
   });
 });

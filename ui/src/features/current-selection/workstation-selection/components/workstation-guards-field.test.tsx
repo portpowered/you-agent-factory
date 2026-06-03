@@ -233,4 +233,31 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
       screen.getByText("Max visits must be a positive whole number."),
     ).toBeTruthy();
   });
+
+  it("shows required-field error for empty MATCHES_FIELDS inputKey", () => {
+    renderWorkstationGuardsField({
+      fieldErrors: {
+        "guards[0].matchConfig.inputKey":
+          messages.editableConfigurationMatchesFieldsInputKeyRequired,
+      },
+      guards: [
+        {
+          matchConfig: { inputKey: "" },
+          type: "MATCHES_FIELDS",
+        },
+      ],
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      messages.editableConfigurationMatchesFieldsInputKeyRequired,
+    );
+
+    const selectorEditor = screen.getByLabelText("Field selector");
+    expect(selectorEditor.parentElement?.getAttribute("aria-invalid")).toBe(
+      "true",
+    );
+    expect(selectorEditor.parentElement?.getAttribute("aria-describedby")).toBe(
+      "editable-workstation-guard-0-input-key-error",
+    );
+  });
 });
