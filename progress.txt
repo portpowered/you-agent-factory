@@ -2,6 +2,7 @@
 - Guard list rows in `EditableConfigurationWorkstationGuardsField` use `useStableWorkstationGuardRowKeys` so React keys do not depend on `formatWorkstationGuardSummary(guard)` (which embeds live `inputKey`).
 - `MATCHES_FIELDS` `matchConfig.inputKey` uses `MonacoGuardSelectorEditor` (`data-monaco-editor="workstation-guard-selector"`) with static completions from `buildWorkstationGuardSelectorCompletionItems()` (`.Name`, `.WorkID`, `.Tags["key"]`); do not reuse prompt-template completion providers.
 - When testing bracket-heavy selector typing with `@testing-library/user-event`, prefer incremental `fireEvent.change` loops over `user.type`/`user.keyboard` because `[` and `"` are parsed as key descriptors.
+- `MonacoGuardSelectorEditor` does not accept a `diagnostics` prop or set Monaco model markers; save-time guard validation stays in `validateEditableWorkstationGuardDraft` / `validateEditableWorkstationDraft` only. Vitest Monaco mock exposes `data-monaco-marker-count` / `data-monaco-marker-messages` on the wrapper for asserting zero markers on custom selector text.
 - `applyEditableWorkstationDraft` copies `draft.guards` verbatim onto the workstation; `normalizeFactoryDefinition` and `saveFactoryForSessionDocument` preserve `matchConfig.inputKey` without trimming (trim is validation-only in `workstation-editable-validation.ts`).
 
 ## 2026-06-04T00:40:00Z - prd-workstation-guard-selector-autocomplete-001
@@ -47,4 +48,17 @@
   - Patterns discovered: Use per-row `inmemory://model/.../${inputKeyFieldId}` model paths when multiple guard selector editors can appear on one form; vitest Monaco mock reads `wrapperProps["data-monaco-editor"]` for surface-specific assertions.
   - Gotchas encountered: Summary text and editor value both show `.Name`, so guard-row summary assertions must scope to the header block, not `getByText` on the whole article.
   - Useful context: Browser suggestion-widget verification remains manual; component/setup tests cover completion catalog, filtering, and draft updates.
+---
+
+## 2026-06-04T00:52:00Z - prd-workstation-guard-selector-autocomplete-004
+- What was implemented: Focused tests proving MATCHES_FIELDS selector validation is unchanged after the Monaco editor: whitespace-only `inputKey` still maps to the existing required-field error, non-curated selectors pass draft validation, the guards field surfaces `aria-invalid`/`role=alert` for that error, and the guard selector editor does not apply prompt-style Monaco markers.
+- Files changed:
+  - `ui/src/features/current-selection/workstation-selection/lib/workstation-editable-validation.test.ts`
+  - `ui/src/features/current-selection/workstation-selection/lib/editable-workstation-configuration-validation.test.ts`
+  - `ui/src/features/current-selection/workstation-selection/components/workstation-guards-field.test.tsx`
+  - `ui/src/components/prompt-editor/monaco-guard-selector-editor.test.tsx`
+- **Learnings for future iterations:**
+  - Patterns discovered: Compare guard-selector marker behavior via vitest mock `data-monaco-marker-count` on the editor wrapper; contrast with `MonacoPromptEditor` which sets markers from `diagnostics`.
+  - Gotchas encountered: `validateEditableWorkstationDraft` integration tests need a valid worker/prompt draft when asserting guard-only validation on model workstations.
+  - Useful context: No production validation changes were required; trim-for-emptiness in `workstation-editable-validation.ts` remains the only selector normalization at save time.
 ---
