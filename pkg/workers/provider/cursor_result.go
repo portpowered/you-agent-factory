@@ -14,6 +14,12 @@ const (
 
 	cursorResultSubtypeSuccess = "success"
 
+	cursorCommandOutputExcerptLimit    = 2048
+	cursorCommandOutputLogPreviewLimit = 200
+
+	cursorResponseMetadataStdoutExcerpt = "stdout_excerpt"
+	cursorResponseMetadataStderrExcerpt = "stderr_excerpt"
+
 	cursorResponseMetadataRequestID       = "request_id"
 	cursorResponseMetadataDurationMS      = "duration_ms"
 	cursorResponseMetadataDurationAPIMS   = "duration_api_ms"
@@ -144,6 +150,31 @@ func cursorResponseMetadataFromPayload(payload cursorResultPayload) map[string]s
 		metadata[cursorResponseMetadataCacheWriteTokens] = strconv.Itoa(*payload.Usage.CacheWriteTokens)
 	}
 	return metadata
+}
+
+func boundedCommandOutputExcerpt(output []byte, limit int) string {
+	trimmed := strings.TrimSpace(string(output))
+	if trimmed == "" || limit <= 0 {
+		return ""
+	}
+	if len(trimmed) <= limit {
+		return trimmed
+	}
+	return trimmed[:limit] + "..."
+}
+
+func withCursorCommandOutputExcerpts(diagnostics *interfaces.WorkDiagnostics, stdout, stderr []byte) *interfaces.WorkDiagnostics {
+	excerpts := make(map[string]string, 2)
+	if excerpt := boundedCommandOutputExcerpt(stdout, cursorCommandOutputExcerptLimit); excerpt != "" {
+		excerpts[cursorResponseMetadataStdoutExcerpt] = excerpt
+	}
+	if excerpt := boundedCommandOutputExcerpt(stderr, cursorCommandOutputExcerptLimit); excerpt != "" {
+		excerpts[cursorResponseMetadataStderrExcerpt] = excerpt
+	}
+	if len(excerpts) == 0 {
+		return diagnostics
+	}
+	return withCursorResponseMetadata(diagnostics, excerpts)
 }
 
 func withCursorResponseMetadata(diagnostics *interfaces.WorkDiagnostics, metadata map[string]string) *interfaces.WorkDiagnostics {

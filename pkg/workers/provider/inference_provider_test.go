@@ -572,8 +572,10 @@ func TestScriptWrapProvider_Infer_CursorParsesJSONResult(t *testing.T) {
 }
 
 func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *testing.T) {
+	stdout := []byte(`{"type":"result"`)
+	stderr := []byte("cursor stderr detail")
 	fakeExec := &recordingProviderExec{
-		result: CommandResult{Stdout: []byte(`{"type":"result"`)},
+		result: CommandResult{Stdout: stdout, Stderr: stderr},
 	}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
@@ -590,6 +592,81 @@ func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *tes
 	}
 	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
 		t.Fatalf("error type = %q, want permanent_bad_request", providerErr.Type)
+	}
+	if providerErr.Diagnostics == nil || providerErr.Diagnostics.Command == nil {
+		t.Fatal("expected command diagnostics on parse failure")
+	}
+	if got := providerErr.Diagnostics.Command.Stdout; got != string(stdout) {
+		t.Fatalf("command stdout = %q, want full stdout for worker-internal diagnostics", got)
+	}
+	if got := providerErr.Diagnostics.Command.Stderr; got != string(stderr) {
+		t.Fatalf("command stderr = %q, want full stderr for worker-internal diagnostics", got)
+	}
+	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
+	assertSafeCursorFailureExcerpts(t, providerErr.Diagnostics)
+}
+
+func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsExcerpts(t *testing.T) {
+	stdout := []byte("partial json output")
+	stderr := []byte("noise before\nERROR: unexpected status 500 from cursor upstream")
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{
+			Stdout:   stdout,
+			Stderr:   stderr,
+			ExitCode: 1,
+		},
+	}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "run the tests",
+	})
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("error type = %q, want internal_server_error", providerErr.Type)
+	}
+	if providerErr.Message != "ERROR: unexpected status 500 from cursor upstream" {
+		t.Fatalf("error message = %q", providerErr.Message)
+	}
+	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
+	assertSafeCursorFailureExcerpts(t, providerErr.Diagnostics)
+}
+
+func assertCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics, wantStdout, wantStderr string) {
+	t.Helper()
+	if diagnostics == nil || diagnostics.Provider == nil {
+		t.Fatal("expected provider diagnostics with failure excerpts")
+	}
+	metadata := diagnostics.Provider.ResponseMetadata
+	if got := metadata[cursorResponseMetadataStdoutExcerpt]; got != wantStdout {
+		t.Fatalf("stdout excerpt = %q, want %q", got, wantStdout)
+	}
+	if got := metadata[cursorResponseMetadataStderrExcerpt]; got != wantStderr {
+		t.Fatalf("stderr excerpt = %q, want %q", got, wantStderr)
+	}
+}
+
+func assertSafeCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics) {
+	t.Helper()
+	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+	if safe == nil || safe.Provider == nil {
+		t.Fatal("expected safe provider diagnostics")
+	}
+	if safe.Provider.ResponseMetadata[cursorResponseMetadataStdoutExcerpt] == "" {
+		t.Fatal("expected safe stdout excerpt")
+	}
+	if safe.Provider.ResponseMetadata[cursorResponseMetadataStderrExcerpt] == "" {
+		t.Fatal("expected safe stderr excerpt")
+	}
+	if safe.Provider.ResponseMetadata["raw_body"] != "" {
+		t.Fatal("safe diagnostics must not include unsafe metadata keys")
 	}
 }
 

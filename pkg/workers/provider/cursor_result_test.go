@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -132,6 +133,31 @@ func cursorSuccessStdoutJSON(result, sessionID string) []byte {
 		panic(err)
 	}
 	return encoded
+}
+
+func TestBoundedCommandOutputExcerpt_TruncatesWhenOverLimit(t *testing.T) {
+	const limit = 8
+	long := []byte("0123456789abcdef")
+	got := boundedCommandOutputExcerpt(long, limit)
+	want := "01234567..."
+	if got != want {
+		t.Fatalf("excerpt = %q, want %q", got, want)
+	}
+}
+
+func TestWithCursorCommandOutputExcerpts_AttachesBoundedStdoutAndStderr(t *testing.T) {
+	stdout := []byte(strings.Repeat("a", cursorCommandOutputExcerptLimit+10))
+	stderr := []byte("rate limited\n")
+	diagnostics := withCursorCommandOutputExcerpts(nil, stdout, stderr)
+	if diagnostics == nil || diagnostics.Provider == nil {
+		t.Fatal("expected provider diagnostics with excerpts")
+	}
+	if got := diagnostics.Provider.ResponseMetadata[cursorResponseMetadataStdoutExcerpt]; len(got) != cursorCommandOutputExcerptLimit+3 {
+		t.Fatalf("stdout excerpt len = %d, want %d with ellipsis", len(got), cursorCommandOutputExcerptLimit+3)
+	}
+	if got := diagnostics.Provider.ResponseMetadata[cursorResponseMetadataStderrExcerpt]; got != "rate limited" {
+		t.Fatalf("stderr excerpt = %q, want rate limited", got)
+	}
 }
 
 func assertCursorResponseMetadata(t *testing.T, metadata map[string]string, want map[string]string) {
