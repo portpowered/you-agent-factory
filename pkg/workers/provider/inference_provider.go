@@ -194,51 +194,23 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		logger.Error("inferencer: request failed",
 			cursorFailureLogFields(req, cursorProvider, result,
 				"error", err.Error())...)
-		failureDiagnostics := commandDiagnostics
-		if cursorProvider {
-			failureDiagnostics = withCursorCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-		}
-		return interfaces.InferenceResponse{}, normalizeProviderExecutionError(req.ModelProvider, result, err, providerSession, failureDiagnostics)
+		return interfaces.InferenceResponse{}, normalizeProviderExecutionError(
+			req.ModelProvider, result, err, providerSession,
+			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+		)
 	}
 	if result.ExitCode != 0 {
 		logger.Error("inferencer: request failed",
 			cursorFailureLogFields(req, cursorProvider, result,
 				"exit_code", result.ExitCode)...)
-		failureDiagnostics := commandDiagnostics
-		if cursorProvider {
-			failureDiagnostics = withCursorCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-		}
-		return interfaces.InferenceResponse{}, normalizeProviderExitFailure(req.ModelProvider, result, providerSession, failureDiagnostics)
+		return interfaces.InferenceResponse{}, normalizeProviderExitFailure(
+			req.ModelProvider, result, providerSession,
+			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+		)
 	}
 
 	if cursorProvider {
-		parsed, parseErr := parseCursorInferenceResult(req.ModelProvider, result.Stdout)
-		if parseErr != nil {
-			logger.Error("inferencer: cursor JSON parse failed",
-				cursorFailureLogFields(req, true, result,
-					"error", parseErr.Message)...)
-			failureDiagnostics := withCursorCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-			return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
-				parseErr.Type,
-				parseErr.Message,
-				parseErr.Cause,
-				effectiveProviderSession(req, result),
-				failureDiagnostics,
-			)
-		}
-		diagnostics := withCursorResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
-		logger.Debug("inference results:",
-			workLogFields(req.Dispatch.Execution, "output", parsed.Content)...)
-		logger.Info("inferencer: request completed",
-			workLogFields(req.Dispatch.Execution,
-				"dispatcher", string(req.ModelProvider),
-				"output_len", len(parsed.Content),
-				"session_id", parsed.ProviderSession.ID)...)
-		return interfaces.InferenceResponse{
-			Content:         parsed.Content,
-			ProviderSession: parsed.ProviderSession,
-			Diagnostics:     diagnostics,
-		}, nil
+		return p.completeCursorInference(req, result, commandDiagnostics, logger)
 	}
 
 	content := string(result.Stdout)
