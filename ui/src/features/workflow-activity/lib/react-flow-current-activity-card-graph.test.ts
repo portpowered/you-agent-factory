@@ -504,6 +504,46 @@ describe("current activity graph editor handles", () => {
     });
   });
 
+  it("wires dashboard-view work type nodes to onSelectWorkType and selectedWorkType", async () => {
+    const factory = loadSampleFactoryDefinition();
+    const snapshot = buildSampleFactorySnapshot(factory);
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const onSelectWorkType = vi.fn();
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-05-24T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType,
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "work-type", workTypeName: "task" },
+      snapshot,
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    const workTypeNode = nodes.find((node) => node.id === "work-type:task");
+    expect(workTypeNode?.data).toMatchObject({
+      kind: "work-type",
+      onSelectWorkType: expect.any(Function),
+      selectedWorkType: true,
+    });
+
+    workTypeNode?.data.onSelectWorkType?.("task");
+
+    expect(onSelectWorkType).toHaveBeenCalledWith("task");
+  });
+
   it("wires editor-mode work type nodes to onSelectWorkType instead of onSelectWorkstation", async () => {
     const factory = loadSampleFactoryDefinition();
     const snapshot = buildSampleFactorySnapshot(factory);

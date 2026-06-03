@@ -2544,6 +2544,37 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(resourceButton.getAttribute("data-selected-resource")).toBe("true");
   });
 
+  it("selects work-type nodes from the live activity graph", async () => {
+    const { onSelectWorkType } = renderCurrentActivity({
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select story work type" }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Select story work type" }),
+    );
+
+    expect(onSelectWorkType).toHaveBeenCalledWith("story");
+  });
+
+  it("shows selected styling for the active work-type selection", async () => {
+    renderCurrentActivity({
+      selection: { kind: "work-type", workTypeName: "story" },
+      snapshot: semanticWorkflowDashboardSnapshot,
+    });
+
+    const workTypeButton = await screen.findByRole("button", {
+      name: "Select story work type",
+    });
+    expect(workTypeButton.getAttribute("aria-pressed")).toBe("true");
+    expect(workTypeButton.getAttribute("data-selected-work-type")).toBe("true");
+  });
+
   it("selects worker nodes from the live activity graph", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
@@ -2683,7 +2714,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     ).toBeTruthy();
     expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(screen.getByLabelText("worker:agent")).toBeTruthy();
-    expect(screen.getByLabelText("work-type:story")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Select story work type" }),
+    ).toBeTruthy();
     expect(
       screen
         .getAllByRole("img", { name: "Queue" })[0]
@@ -2915,8 +2948,10 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const resourceArticle = resourceLabelContainer.closest("article");
     const workerLabelContainer = screen.getByLabelText("worker:agent");
     const workerArticle = workerLabelContainer.closest("article");
-    const workTypeLabelContainer = screen.getByLabelText("work-type:story");
-    const workTypeArticle = workTypeLabelContainer.closest("article");
+    const workTypeButton = screen.getByRole("button", {
+      name: "Select story work type",
+    });
+    const workTypeArticle = workTypeButton.closest("article");
 
     expect(
       within(resourceArticle as HTMLElement)
@@ -2929,19 +2964,15 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("worker");
     expect(
-      within(workTypeArticle as HTMLElement)
-        .getByRole("img", { name: "Work type" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("work-type");
+      workTypeArticle?.querySelector("[data-graph-semantic-icon='work-type']"),
+    ).toBeTruthy();
     expect(resourceLabelContainer.getAttribute("aria-label")).toBe(
       "agent-slot",
     );
     expect(workerLabelContainer.getAttribute("aria-label")).toBe(
       "worker:agent",
     );
-    expect(workTypeLabelContainer.getAttribute("aria-label")).toBe(
-      "work-type:story",
-    );
+    expect(workTypeButton.getAttribute("aria-pressed")).toBe("false");
     expect(
       resourceArticle?.querySelector("[data-resource-name]")?.textContent,
     ).toBe("agent-slot");
