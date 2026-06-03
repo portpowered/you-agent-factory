@@ -523,7 +523,7 @@ func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.
 		SelectedClassificationLabel: stringPtrForProjectionTest(payload.Result.SelectedClassificationLabel),
 		FailureReason:               stringPtrForProjectionTest(payload.Result.FailureReason),
 		FailureMessage:              stringPtrForProjectionTest(payload.Result.FailureMessage),
-		ProviderFailure:             interfaces.PublishedProviderFailureMetadata(payload.Result.FailureMetadata, payload.Result.ProviderFailure),
+		ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(payload.Result.FailureMetadata),
 		DurationMillis:              int64PtrForProjectionTest(payload.DurationMillis),
 		OutputWork:                  &outputWork,
 		OutputResources:             generatedResourcesForProjectionTest(payload.OutputResources),

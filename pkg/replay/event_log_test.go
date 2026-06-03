@@ -127,7 +127,7 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result inte
 		OutputWork:      generatedReplayOutputWorkPtr(result.RecordedOutputWork),
 		Error:           stringPtrIfNotEmpty(result.Error),
 		Feedback:        stringPtrIfNotEmpty(result.Feedback),
-		ProviderFailure: interfaces.PublishedProviderFailureMetadata(result.FailureMetadata, result.ProviderFailure),
+		ProviderFailure: interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:         generatedWorkMetrics(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
@@ -372,7 +372,7 @@ func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			TransitionID: "transition-safe",
 			Outcome:      interfaces.OutcomeAccepted,
 			Output:       "recorded provider output",
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyRetryable,
 				Type:   interfaces.WorkFailureTypeThrottled,
 			},

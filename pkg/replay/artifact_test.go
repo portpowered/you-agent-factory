@@ -195,7 +195,7 @@ func safeDiagnosticsReplayArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			TransitionID: "transition-safe",
 			Outcome:      interfaces.OutcomeAccepted,
 			Output:       "completed",
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyRetryable,
 				Type:   interfaces.WorkFailureTypeThrottled,
 			},

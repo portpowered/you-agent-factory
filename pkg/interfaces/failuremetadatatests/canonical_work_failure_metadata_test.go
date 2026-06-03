@@ -58,7 +58,7 @@ func TestGeneratedWorkFailureMetadata_MapsFailureMetadataOnlyInternalInput(t *te
 		Type:   interfaces.WorkFailureTypeThrottled,
 	}
 
-	got := interfaces.GeneratedWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(failure, nil))
+	got := interfaces.GeneratedWorkFailureMetadata(failure)
 	if got == nil {
 		t.Fatal("published provider failure = nil, want throttle/throttled metadata")
 	}
@@ -70,39 +70,8 @@ func TestGeneratedWorkFailureMetadata_MapsFailureMetadataOnlyInternalInput(t *te
 	}
 }
 
-func TestGeneratedWorkFailureMetadata_FallsBackToLegacyProviderFailureOnlyInput(t *testing.T) {
-	providerFailure := &interfaces.WorkFailureMetadata{
-		Family: interfaces.WorkFailureFamilyRetryable,
-		Type:   interfaces.WorkFailureTypeInternalServerError,
-	}
-
-	got := interfaces.GeneratedWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(nil, providerFailure))
-	if got == nil {
-		t.Fatal("published provider failure = nil, want legacy metadata on wire")
-	}
-	if got.Family == nil || string(*got.Family) != string(interfaces.WorkFailureFamilyRetryable) {
-		t.Fatalf("published family = %#v, want retryable", got.Family)
-	}
-	if got.Type == nil || string(*got.Type) != string(interfaces.WorkFailureTypeInternalServerError) {
-		t.Fatalf("published type = %#v, want internal_server_error", got.Type)
-	}
-}
-
-func TestGeneratedWorkFailureMetadata_PrefersFailureMetadataWhenBothSet(t *testing.T) {
-	failure := &interfaces.WorkFailureMetadata{
-		Family: interfaces.WorkFailureFamilyRetryable,
-		Type:   interfaces.WorkFailureTypeTimeout,
-	}
-	providerFailure := &interfaces.WorkFailureMetadata{
-		Family: interfaces.WorkFailureFamilyThrottle,
-		Type:   interfaces.WorkFailureTypeThrottled,
-	}
-
-	got := interfaces.GeneratedWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(failure, providerFailure))
-	if got == nil {
-		t.Fatal("published provider failure = nil")
-	}
-	if got.Type == nil || string(*got.Type) != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("published type = %#v, want failure_metadata precedence (timeout)", got.Type)
+func TestGeneratedWorkFailureMetadata_OmitsWhenFailureMetadataUnset(t *testing.T) {
+	if got := interfaces.GeneratedWorkFailureMetadata(nil); got != nil {
+		t.Fatalf("published provider failure = %#v, want nil", got)
 	}
 }
