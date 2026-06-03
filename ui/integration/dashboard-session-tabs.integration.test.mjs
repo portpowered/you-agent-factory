@@ -305,16 +305,16 @@ async function readSessionTabShellClassName(tabLocator) {
 }
 
 function expectSubtleActiveSessionTabShell(className) {
-  expect(className).toContain("bg-af-surface-subtle");
-  expect(className).not.toContain("border-af-border-strong");
-  expect(className).not.toContain("bg-af-surface-raised");
-  expect(className).not.toContain("bg-af-accent");
-  expect(className).not.toContain("bg-af-accent-surface");
+  expect(className).toContain("bg-surface-container-low");
+  expect(className).not.toContain("border-outline-variant");
+  expect(className).not.toContain("bg-surface-container-high");
+  expect(className).not.toContain("bg-primary");
+  expect(className).not.toContain("bg-primary-container");
 }
 
 function expectMutedInactiveSessionTabShell(className) {
-  expect(className).toContain("text-af-text-muted");
-  expect(className).not.toContain("bg-af-surface-subtle");
-  expect(className).not.toContain("bg-af-surface-raised");
-  expect(className).not.toContain("hover:border-af-border");
+  expect(className).toContain("text-on-surface-variant");
+  expect(className).not.toContain("bg-surface-container-low");
+  expect(className).not.toContain("bg-surface-container-high");
+  expect(className).not.toContain("hover:border-outline");
 }

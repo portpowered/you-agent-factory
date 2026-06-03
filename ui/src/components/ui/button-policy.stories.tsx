@@ -216,7 +216,7 @@ function ButtonPolicyShowcase() {
           aria-label="Dashboard action row policy example"
           statuses={
             <>
-              <DashboardStatusPill role="status" tone="warning">
+              <DashboardStatusPill role="status" tone="info">
                 Draft changes pending
               </DashboardStatusPill>
               <DashboardStatusPill tone="neutral">

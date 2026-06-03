@@ -30,13 +30,13 @@ import {
 
 const IMPORT_DIALOG_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const IMPORT_DIALOG_LABEL_CLASS = cn(
-  "text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent",
+  "text-[0.7rem] font-bold uppercase tracking-[0.14em] text-primary",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const IMPORT_SAVE_CHOICE_OPTION_CLASS =
-  "grid cursor-pointer gap-1 rounded-xl border border-transparent p-3 transition-colors has-[:focus-visible]:border-af-accent has-[:checked]:border-af-accent has-[:checked]:bg-af-surface";
+  "grid cursor-pointer gap-1 rounded-xl border border-transparent p-3 transition-colors has-[:focus-visible]:border-primary has-[:checked]:border-primary has-[:checked]:bg-surface";
 const IMPORT_ERROR_PANEL_CLASS =
-  "border-af-danger-border bg-af-danger-surface text-af-danger-text";
+  "border-af-danger-border bg-error-container text-on-error-container";
 
 type ReadyFactoryImportPreviewState = Extract<
   FactoryImportPreviewState,
@@ -78,7 +78,9 @@ function renderImportPreviewCurrentFactoryDescription(
   return (
     <>
       {beforeFactoryName}
-      <span className="font-semibold text-af-text">{currentFactoryName}</span>
+      <span className="font-semibold text-on-surface">
+        {currentFactoryName}
+      </span>
       {afterFactoryName}
     </>
   );
@@ -175,7 +177,7 @@ function FactoryImportSaveChoiceFieldset({
 
   return (
     <fieldset
-      className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4"
+      className="grid gap-3 rounded-2xl border border-outline bg-surface-container-low p-4"
       disabled={isSubmitting}
     >
       <legend className={IMPORT_DIALOG_LABEL_CLASS}>
@@ -203,13 +205,13 @@ function FactoryImportSaveChoiceFieldset({
               value="replace_current"
             />
             <span className="grid gap-1">
-              <span className="text-base font-semibold text-af-text">
+              <span className="text-base font-semibold text-on-surface">
                 {messages.replaceCurrentOption}
               </span>
               <span className={IMPORT_DIALOG_HINT_CLASS}>
                 {messages.replaceCurrentOptionDescription}
               </span>
-              <span className="text-sm font-semibold text-af-text">
+              <span className="text-sm font-semibold text-on-surface">
                 {currentSessionFactoryName}
               </span>
             </span>
@@ -232,7 +234,7 @@ function FactoryImportSaveChoiceFieldset({
               value="create_new_named"
             />
             <span className="grid gap-1">
-              <span className="text-base font-semibold text-af-text">
+              <span className="text-base font-semibold text-on-surface">
                 {messages.createNewNamedOption}
               </span>
               <span className={IMPORT_DIALOG_HINT_CLASS}>
@@ -242,7 +244,7 @@ function FactoryImportSaveChoiceFieldset({
                 <span className={IMPORT_DIALOG_LABEL_CLASS}>
                   {messages.createResolvedNameLabel}
                 </span>
-                <span className="text-sm font-semibold text-af-text">
+                <span className="text-sm font-semibold text-on-surface">
                   {createFactoryName}
                 </span>
               </span>
@@ -321,7 +323,7 @@ export function FactoryImportPreviewDialog({
           }
         }}
       >
-        <div className="overflow-hidden rounded-3xl border border-af-border bg-af-surface-subtle p-3">
+        <div className="overflow-hidden rounded-3xl border border-outline bg-surface-container-low p-3">
           <img
             alt={messages.previewImageAlt(previewState.value.factory.name)}
             className="block h-full max-h-96 w-full rounded-2xl object-contain"
@@ -348,16 +350,16 @@ export function FactoryImportPreviewDialog({
             </div>
           </DialogHeader>
 
-          <p className="m-0 text-base font-semibold text-af-text">
+          <p className="m-0 text-base font-semibold text-on-surface">
             {previewState.value.factory.name}
           </p>
 
-          <dl className="grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-sm text-af-text-muted">
+          <dl className="grid gap-3 rounded-2xl border border-outline bg-surface-container-low p-4 text-sm text-on-surface-variant">
             <div className="grid gap-1">
               <dt className={IMPORT_DIALOG_LABEL_CLASS}>
                 {messages.droppedFileLabel}
               </dt>
-              <dd className="m-0 font-semibold text-af-text">
+              <dd className="m-0 font-semibold text-on-surface">
                 {previewState.file.name}
               </dd>
             </div>
@@ -365,7 +367,7 @@ export function FactoryImportPreviewDialog({
               <dt className={IMPORT_DIALOG_LABEL_CLASS}>
                 {messages.embeddedFactoryLabel}
               </dt>
-              <dd className="m-0 font-semibold text-af-text">
+              <dd className="m-0 font-semibold text-on-surface">
                 {previewState.value.factory.name}
               </dd>
             </div>

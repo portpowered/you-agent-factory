@@ -66,8 +66,8 @@ describe("Trace dispatch factory graph node", () => {
     if (!node) {
       throw new Error("Expected dispatch node shell to render.");
     }
-    expect(node.className).toContain("border-af-border");
-    expect(node.className).toContain("bg-af-surface");
+    expect(node.className).toContain("border-outline");
+    expect(node.className).toContain("bg-surface");
   });
 
   it("renders warning dispatch chrome for CONTINUE outcomes", () => {
@@ -94,7 +94,7 @@ describe("Trace dispatch factory graph node", () => {
       throw new Error("Expected dispatch node shell to render.");
     }
     expect(node.className).toContain("border-af-warning-border");
-    expect(node.className).toContain("bg-af-warning-surface");
+    expect(node.className).toContain("bg-warning-container");
   });
 });
 
@@ -127,8 +127,8 @@ describe("Trace relation factory graph node", () => {
     if (!node) {
       throw new Error("Expected relation node shell to render.");
     }
-    expect(node.className).toContain("border-af-border");
-    expect(node.className).toContain("bg-af-surface");
+    expect(node.className).toContain("border-outline");
+    expect(node.className).toContain("bg-surface");
   });
 
   it("renders resource and worker relation semantic icons", () => {

@@ -25,7 +25,7 @@ interface StatCardProps {
 const WORK_TOTALS_BODY_CLASS =
   "!block !h-auto !min-h-0 !gap-1.5 !pb-2.5 !pt-2 [&>*]:pb-0";
 const STAT_CARD_CLASS =
-  "min-h-0 rounded-lg border bg-af-surface-raised px-2 py-1.5";
+  "min-h-0 rounded-lg border bg-surface-container-high px-2 py-1.5";
 
 export function WorkTotalsCard({
   completedCount,
@@ -100,13 +100,13 @@ function StatCard({ label, locale, value, valueLabel, tone }: StatCardProps) {
       aria-label={valueLabel}
       className={cn(
         STAT_CARD_CLASS,
-        tone === "neutral" && "border-af-border",
-        tone === "live" && "border-af-info-border bg-af-info-surface",
-        tone === "success" && "border-af-success-border bg-af-success-surface",
-        tone === "danger" && "border-af-danger-border bg-af-danger-surface",
+        tone === "neutral" && "border-outline",
+        tone === "live" && "border-info-border bg-info-container",
+        tone === "success" && "border-af-success-border bg-success-container",
+        tone === "danger" && "border-af-danger-border bg-error-container",
       )}
     >
-      <span className="mb-1 block text-[0.68rem] leading-tight uppercase text-af-text-subtle [overflow-wrap:anywhere]">
+      <span className="mb-1 block text-[0.68rem] leading-tight uppercase text-on-surface-subtle [overflow-wrap:anywhere]">
         {label}
       </span>
       <strong className="font-display text-[1.2rem] leading-none">

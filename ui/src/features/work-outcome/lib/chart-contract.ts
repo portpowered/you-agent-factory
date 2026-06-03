@@ -39,9 +39,9 @@ const DASHBOARD_CHART_POINT_WEIGHT_CLASS = "[stroke-width:1.5]";
 const DASHBOARD_CHART_DEFAULT_POINT_RADIUS = 3.25;
 
 export const DASHBOARD_CHART_AXIS_CLASS =
-  "stroke-af-border-strong [stroke-width:1]";
+  "stroke-outline-variant [stroke-width:1]";
 export const DASHBOARD_CHART_AXIS_LABEL_CLASS = cn(
-  "fill-af-text-subtle [letter-spacing:0.16em]",
+  "fill-on-surface-subtle [letter-spacing:0.16em]",
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 );
 export const DASHBOARD_CHART_LINE_CLASS = cn(
@@ -49,7 +49,7 @@ export const DASHBOARD_CHART_LINE_CLASS = cn(
   DASHBOARD_CHART_LINE_WEIGHT_CLASS,
 );
 export const DASHBOARD_CHART_POINT_CLASS = cn(
-  "stroke-af-background",
+  "stroke-background",
   DASHBOARD_CHART_POINT_WEIGHT_CLASS,
 );
 export const DASHBOARD_CHART_SURFACE_CLASS =

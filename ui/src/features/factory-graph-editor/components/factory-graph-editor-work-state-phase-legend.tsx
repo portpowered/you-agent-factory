@@ -20,13 +20,13 @@ export function FactoryGraphEditorWorkStatePhaseLegend({
   return (
     <section
       aria-label={messages.workStatePhaseLegendAriaLabel}
-      className="pointer-events-auto absolute right-4 top-4 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
+      className="pointer-events-auto absolute right-4 top-4 z-20 flex flex-wrap items-center gap-2 rounded-full border border-outline bg-surface-container-high px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
       data-factory-graph-work-state-phase-legend=""
     >
       <ul className="m-0 flex list-none flex-wrap items-center gap-2 p-0">
         {WORK_STATE_PHASE_LEGEND_ORDER.map((phase) => (
           <li
-            className="flex items-center gap-1.5 text-xs leading-5 text-af-text-muted"
+            className="flex items-center gap-1.5 text-xs leading-5 text-on-surface-variant"
             key={phase}
           >
             <span

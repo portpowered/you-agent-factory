@@ -6,10 +6,10 @@ import { cn } from "../../../lib/cn";
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
 
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
+  danger: "border-af-danger-border bg-error-container text-on-error-container",
+  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
   warning:
-    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+    "border-af-warning-border bg-warning-container text-on-warning-container",
 };
 
 export function FactoryGraphEditorNotice({

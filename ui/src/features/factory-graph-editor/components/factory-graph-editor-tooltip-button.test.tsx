@@ -40,9 +40,9 @@ describe("FactoryGraphEditorTooltipActionButton", () => {
     });
     expect(button.getAttribute("aria-describedby")).toBe(tooltip.id);
     expect(tooltip.className).toContain("pointer-events-none");
-    expect(tooltip.className).toContain("border-af-border-strong");
-    expect(tooltip.className).toContain("bg-af-surface-raised");
-    expect(tooltip.className).toContain("text-af-text");
+    expect(tooltip.className).toContain("border-outline-variant");
+    expect(tooltip.className).toContain("bg-surface-container-high");
+    expect(tooltip.className).toContain("text-on-surface");
     expect(tooltip.className).toContain("top-full");
     expect(tooltip.className).toContain("mt-2");
 

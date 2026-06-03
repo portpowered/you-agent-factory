@@ -11,7 +11,7 @@ const SCROLL_AREA_VIEWPORT_CLASS = cn(
 );
 
 export const SCROLL_AREA_THUMB_CLASS =
-  "relative flex-1 rounded-full bg-af-border-strong transition-colors hover:bg-af-text-subtle";
+  "relative flex-1 rounded-full bg-outline-variant transition-colors hover:bg-af-text-subtle";
 
 export type ScrollAreaProps = ComponentProps<
   typeof ScrollAreaPrimitive.Root

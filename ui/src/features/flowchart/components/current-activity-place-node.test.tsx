@@ -156,7 +156,7 @@ describe("CurrentActivity place node work-state phase precedence", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).toContain("border-af-accent-border");
+    expect(shell?.className).toContain("border-primary");
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("INITIAL"),
     );

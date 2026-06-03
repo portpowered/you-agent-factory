@@ -14,13 +14,13 @@ import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import
 
 const DIALOG_OVERLAY_CLASS =
   "z-50 flex items-center justify-center bg-af-overlay-strong p-4 backdrop-blur-sm";
-const DIALOG_CONTENT_CLASS = "grid gap-5 p-4 md:p-5";
+const DIALOG_CONTENT_CLASS = "grid gap-layout-block p-4 md:p-5";
 const DIALOG_CONTENT_WITH_MEDIA_CLASS =
   "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
 
 const MESSAGE_PANEL_TONE_CLASS = {
-  error: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
+  error: "border-af-danger-border bg-error-container text-on-error-container",
+  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
 } as const;
 
 export interface DashboardMutationDialogProps {
@@ -91,7 +91,7 @@ export function DashboardMutationDialog({
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-af-border bg-af-surface-raised shadow-af-panel"
+        className="pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-outline bg-surface-container-high shadow-af-panel"
         role="dialog"
       >
         <div
@@ -107,7 +107,7 @@ export function DashboardMutationDialog({
               <div className="grid gap-2">
                 <p
                   className={cn(
-                    "mb-0 text-xs font-bold uppercase tracking-[0.16em] text-af-accent",
+                    "mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary",
                     DASHBOARD_SUPPORTING_LABELS_CLASS,
                   )}
                 >
@@ -132,7 +132,7 @@ export function DashboardMutationDialog({
               {showCloseButton && onClose ? (
                 <button
                   aria-label={resolvedCloseLabel}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-outline bg-surface-container-low text-on-surface-variant outline-af-focus-ring transition hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled"
                   disabled={closeDisabled}
                   onClick={onClose}
                   type="button"

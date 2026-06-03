@@ -106,7 +106,7 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
       "border-af-success-border shadow-af-success-chip",
     data.selectedStateNode &&
       !data.validationError &&
-      "border-af-accent-border shadow-af-accent-selected",
+      "border-primary shadow-af-accent-selected",
     data.validationError &&
       "ring-2 ring-af-danger-border motion-safe:animate-pulse",
     data.muted && "opacity-[0.45]",
@@ -163,11 +163,11 @@ function placeNodeClassName(place: DashboardPlaceRef): string {
 
   if (place.kind === "resource") {
     // hardcoded-ui-copy-exception: non-product-diagnostic
-    return "af-current-activity-node-surface-resource text-af-text";
+    return "af-current-activity-node-surface-resource text-on-surface";
   }
 
   // hardcoded-ui-copy-exception: non-product-diagnostic
-  return "border-dashed af-current-activity-node-surface-info text-af-text";
+  return "border-dashed af-current-activity-node-surface-info text-on-surface";
 }
 
 function placeSemanticIconKind(
@@ -197,10 +197,10 @@ function placeSemanticIconClassName(place: DashboardPlaceRef): string {
   }
 
   if (place.kind === "resource") {
-    return "text-af-success";
+    return "text-success";
   }
 
-  return place.kind === "limit" ? "text-af-danger" : "text-af-info";
+  return place.kind === "limit" ? "text-error" : "text-info";
 }
 
 function activeItemCountLabel(count: number, locale?: string): string {
@@ -216,7 +216,7 @@ function statePositionMarkers(count: number, locale?: string): ReactNode {
     return (
       <span
         aria-label={activeItemCountLabel(count, locale)}
-        className="inline-flex min-h-5 min-w-7 items-center justify-center rounded-full border border-af-success-border bg-af-success-surface px-2 font-mono text-[0.76rem] font-bold leading-none text-af-success"
+        className="inline-flex min-h-5 min-w-7 items-center justify-center rounded-full border border-af-success-border bg-success-container px-2 font-mono text-[0.76rem] font-bold leading-none text-success"
         data-state-work-progress="numeric"
         role="status"
       >
@@ -237,7 +237,7 @@ function statePositionMarkers(count: number, locale?: string): ReactNode {
           <span
             key={`${count}-${dotNumber}`}
             aria-hidden="true"
-            className="h-2 w-2 rounded-full bg-af-success"
+            className="h-2 w-2 rounded-full bg-success"
             data-state-work-progress-dot={String(dotNumber - 1)}
           />
         ),
@@ -309,7 +309,7 @@ function PlaceLabelText({
   return (
     <span className="grid min-w-0 gap-px overflow-hidden" title={label}>
       <span
-        className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-text-subtle"
+        className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-on-surface-subtle"
         data-place-work-type={dataPrefix === "place" ? true : undefined}
         data-state-work-type={dataPrefix === "state" ? true : undefined}
         title={labelParts.workType}
@@ -317,7 +317,7 @@ function PlaceLabelText({
         {labelParts.workType}
       </span>
       <span
-        className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-af-text"
+        className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface"
         data-place-state-value={dataPrefix === "place" ? true : undefined}
         data-state-value={dataPrefix === "state" ? true : undefined}
         title={labelParts.stateValue}

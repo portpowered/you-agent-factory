@@ -68,7 +68,7 @@ export function EditableConfigurationRunnerField({
       </Select>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >

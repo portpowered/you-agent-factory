@@ -107,7 +107,7 @@ describe("DashboardImportPreviewDialog", () => {
           .getByText(messages.embeddedFactoryLabel)
           .closest("div") as HTMLElement,
       ).getByText("Dropped Factory").className,
-    ).toContain("text-af-text");
+    ).toContain("text-on-surface");
 
     fireEvent.click(
       within(previewDialog).getByRole("button", {
@@ -160,7 +160,7 @@ describe("DashboardImportPreviewDialog", () => {
     const alert = within(previewDialog).getByRole("alert");
     expect(alert).toBeTruthy();
     expect(alert.className).toContain("border-af-danger-border");
-    expect(alert.className).toContain("bg-af-danger-surface");
+    expect(alert.className).toContain("bg-error-container");
 
     const results = await axe(baseElement);
 

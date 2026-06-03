@@ -43,7 +43,7 @@ export function WorkerNodeView({ data }: NodeProps<CurrentActivityWorkerNode>) {
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "af-current-activity-node-surface-worker justify-center text-left text-af-text",
+        "af-current-activity-node-surface-worker justify-center text-left text-on-surface",
         currentActivityGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
@@ -52,8 +52,7 @@ export function WorkerNodeView({ data }: NodeProps<CurrentActivityWorkerNode>) {
         data.activeFlow &&
           !data.selectedWorker &&
           "border-af-success-border shadow-af-success-chip",
-        data.selectedWorker &&
-          "border-af-accent-border shadow-af-accent-selected",
+        data.selectedWorker && "border-primary shadow-af-accent-selected",
         data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}
@@ -110,16 +109,16 @@ function WorkerNodeContent({
     >
       <span className="sr-only">{label}</span>
       <GraphSemanticIcon
-        className="h-3.5 w-3.5 shrink-0 text-af-worker"
+        className="h-3.5 w-3.5 shrink-0 text-tertiary"
         kind="worker"
         label={workerLabel}
         locale={locale}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-worker-text">
+        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-on-tertiary-container">
           {workerLabel}
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-af-text">
+        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
           {workerName}
         </strong>
       </span>

@@ -67,14 +67,14 @@ export function WorkTypeNodeView({
     >
       {selectable ? null : <span className="sr-only">{label}</span>}
       <GraphSemanticIcon
-        className="h-3.5 w-3.5 shrink-0 text-af-info"
+        className="h-3.5 w-3.5 shrink-0 text-info"
         kind="work-type"
         label={workTypeLabel}
         locale={data.locale}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
         <span className="flex min-w-0 items-center gap-1 overflow-hidden">
-          <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-af-info">
+          <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
             {workTypeLabel}
           </span>
           {data.isDefaultWorkType ? (
@@ -88,7 +88,7 @@ export function WorkTypeNodeView({
             </ActivityGraphNodeBadge>
           ) : null}
         </span>
-        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-af-text">
+        <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">
           {name}
         </strong>
       </span>
@@ -98,20 +98,20 @@ export function WorkTypeNodeView({
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "af-current-activity-node-surface-info justify-center border-dashed text-left text-af-text",
+        "af-current-activity-node-surface-info justify-center border-dashed text-left text-on-surface",
         currentActivityGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
           selected: data.selectedWorkType,
           validationError: data.validationError,
         }),
-        data.activeFlow && "border-af-info shadow-af-info-chip",
+        data.activeFlow && "border-info shadow-af-info-chip",
         data.muted && "opacity-[0.45]",
         data.validationError &&
           "ring-2 ring-af-danger-border motion-safe:animate-pulse",
         data.selectedWorkType &&
           !data.validationError &&
-          "border-af-accent-border shadow-af-accent-selected",
+          "border-primary shadow-af-accent-selected",
       )}
       handles={data.handles}
       nodeType="workType"

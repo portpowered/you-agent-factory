@@ -1,0 +1,24 @@
+/*
+ * Dashboard layout spacing scale (4px grid, Material-aligned rhythm).
+ *
+ * Semantic layout spacing roles map to Tailwind gap/padding utilities:
+ * gap-layout-tight, p-layout-inset-dialog, etc.
+ *
+ * Prefer layout primitives and dashboard-layout.ts constants in TSX;
+ * use raw Tailwind spacing utilities only for one-off composition (US-007).
+ */
+
+@theme {
+  /* Vertical / horizontal gaps between related elements */
+  --spacing-layout-tight: 0.5rem;
+  --spacing-layout-element: 0.75rem;
+  --spacing-layout-group: 1rem;
+  --spacing-layout-block: 1.25rem;
+  --spacing-layout-section: 1.5rem;
+  --spacing-layout-page: 2rem;
+
+  /* Insets for recurring shells */
+  --spacing-layout-inset-card: 1rem;
+  --spacing-layout-inset-card-relaxed: 1.25rem;
+  --spacing-layout-inset-dialog: 1.5rem;
+}

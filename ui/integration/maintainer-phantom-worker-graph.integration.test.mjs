@@ -160,20 +160,23 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
             .count(),
         ).toBe(0);
 
-        await processorWorkerButton.click({ force: true });
+        await processorWorkerButton.scrollIntoViewIfNeeded();
+        await processorWorkerButton.click();
         await expect
           .poll(
-            async () => processorWorkerButton.getAttribute("aria-pressed"),
+            async () => processorWorkerButton.getAttribute("data-selected-worker"),
             {
               timeout: uiInteractionTimeoutMs,
             },
           )
           .toBe("true");
 
-        await workspaceSetupWorkerButton.click({ force: true });
+        await workspaceSetupWorkerButton.scrollIntoViewIfNeeded();
+        await workspaceSetupWorkerButton.click();
         await expect
           .poll(
-            async () => workspaceSetupWorkerButton.getAttribute("aria-pressed"),
+            async () =>
+              workspaceSetupWorkerButton.getAttribute("data-selected-worker"),
             {
               timeout: uiInteractionTimeoutMs,
             },
@@ -181,12 +184,12 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
           .toBe("true");
         await expect
           .poll(
-            async () => processorWorkerButton.getAttribute("aria-pressed"),
+            async () => processorWorkerButton.getAttribute("data-selected-worker"),
             {
               timeout: uiInteractionTimeoutMs,
             },
           )
-          .toBe("false");
+          .toBeNull();
 
         expectNoBrowserErrors(
           browserPage.pageErrors,

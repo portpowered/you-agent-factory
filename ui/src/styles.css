@@ -1,4 +1,11 @@
 @import "tailwindcss";
+@import "./styles/color-palette-presets.css";
+@import "./styles/color-role-tokens.css";
+@import "./styles/text-color-role-tokens.css";
+@import "./styles/typography-role-tokens.css";
+@import "./styles/typography-role-utilities.css";
+@import "./styles/layout-role-tokens.css";
+@import "./styles/color-role-aliases.css";
 @import "./styles/current-activity-graph-nodes.css";
 @import "./styles/tick-slider.css";
 
@@ -22,6 +29,11 @@
   --color-af-foundation-info-strong: #5097be;
   --color-af-foundation-info-bright: #7dd3fc;
   --color-af-foundation-info-ink: #b5edf4;
+  /* Calmer accent hues (US-003): same families as info/worker, lower chroma than semantic info */
+  --color-af-foundation-secondary-accent: #507f8c;
+  --color-af-foundation-secondary-accent-ink: #8aaeb8;
+  --color-af-foundation-tertiary-accent: #6d6290;
+  --color-af-foundation-tertiary-accent-ink: #a89ec4;
   --color-af-foundation-success: #57c18b;
   --color-af-foundation-success-ink: #a7f0c4;
   --color-af-foundation-warning: #f0b15a;
@@ -31,24 +43,10 @@
   --color-af-foundation-danger-ink: #ffb2b2;
   --color-af-foundation-worker: #b68cff;
   --color-af-foundation-worker-ink: #dfccff;
-  --color-af-background: var(--color-af-foundation-background);
-  --color-af-surface: var(--color-af-foundation-surface);
-  --color-af-surface-subtle: rgb(
-    from var(--color-af-foundation-overlay) r g b /
-    0.04
-  );
+  /* Neutral/product af-* aliases: color-role-aliases.css */
   --color-af-surface-subtle-muted: rgb(
     from var(--color-af-foundation-overlay) r g b /
     0.028
-  );
-  --color-af-surface-raised: rgb(
-    from var(--color-af-foundation-surface) r g b /
-    0.94
-  );
-  --color-af-border: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
-  --color-af-border-strong: rgb(
-    from var(--color-af-foundation-overlay) r g b /
-    0.18
   );
   --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
   --color-af-overlay-subtle: rgb(
@@ -67,32 +65,12 @@
     from var(--color-af-foundation-accent) r g b /
     0.25
   );
-  --color-af-text: var(--color-af-foundation-ink);
-  --color-af-text-muted: rgb(from var(--color-af-foundation-ink) r g b / 0.78);
-  --color-af-text-subtle: rgb(from var(--color-af-foundation-ink) r g b / 0.58);
-  --color-af-text-disabled: rgb(
-    from var(--color-af-foundation-ink) r g b /
-    0.42
-  );
-  --color-af-text-inverse: var(--color-af-foundation-canvas);
-  --color-af-accent: var(--color-af-foundation-accent);
-  --color-af-accent-hover: var(--color-af-foundation-accent-strong);
-  --color-af-accent-surface: rgb(
-    from var(--color-af-foundation-accent) r g b /
-    0.18
-  );
-  --color-af-accent-border: var(--color-af-foundation-accent);
-  --color-af-on-accent: var(--color-af-text-inverse);
-  --color-af-success: var(--color-af-foundation-success);
-  --color-af-success-surface: rgb(
-    from var(--color-af-foundation-success) r g b /
-    0.12
-  );
+  /* Text af-* aliases (on-surface*): color-role-aliases.css */
+  /* Accent/semantic af-* aliases: color-role-aliases.css */
   --color-af-success-border: rgb(
     from var(--color-af-foundation-success) r g b /
     0.28
   );
-  --color-af-success-text: var(--color-af-foundation-success-ink);
   --color-af-session-live-ping: radial-gradient(
     circle,
     rgb(from var(--color-af-foundation-success) r g b / 0.48) 0%,
@@ -100,52 +78,24 @@
     rgb(from var(--color-af-foundation-success) r g b / 0.08) 56%,
     transparent 76%
   );
-  --color-af-on-success: var(--color-af-text-inverse);
-  --color-af-warning: var(--color-af-foundation-warning);
-  --color-af-warning-surface: rgb(
-    from var(--color-af-foundation-warning) r g b /
-    0.14
-  );
   --color-af-warning-border: rgb(
     from var(--color-af-foundation-warning) r g b /
     0.3
   );
-  --color-af-warning-text: var(--color-af-foundation-warning-ink);
-  --color-af-on-warning: var(--color-af-text-inverse);
-  --color-af-danger: var(--color-af-foundation-danger);
   --color-af-danger-hover: var(--color-af-foundation-danger-bright);
-  --color-af-danger-surface: rgb(
-    from var(--color-af-foundation-danger) r g b /
-    0.18
-  );
   --color-af-danger-border: rgb(
     from var(--color-af-foundation-danger) r g b /
     0.3
-  );
-  --color-af-danger-text: var(--color-af-foundation-danger-ink);
-  --color-af-on-danger: var(--color-af-text-inverse);
-  --color-af-info: var(--color-af-foundation-info);
-  --color-af-info-surface: rgb(
-    from var(--color-af-foundation-info) r g b /
-    0.12
   );
   --color-af-info-border: rgb(
     from var(--color-af-foundation-info) r g b /
     0.28
   );
-  --color-af-info-text: var(--color-af-foundation-info-ink);
-  --color-af-on-info: var(--color-af-text-inverse);
-  --color-af-worker: var(--color-af-foundation-worker);
-  --color-af-worker-surface: rgb(
-    from var(--color-af-foundation-worker) r g b /
-    0.13
-  );
   --color-af-worker-border: rgb(
-    from var(--color-af-foundation-worker) r g b /
+    from var(--color-af-foundation-tertiary-accent) r g b /
     0.3
   );
-  --color-af-worker-text: var(--color-af-foundation-worker-ink);
-  --color-af-bg: var(--color-af-foundation-background);
+  --color-af-bg: var(--color-af-background);
   --color-af-bg-start: var(--color-af-foundation-background-start);
   --color-af-bg-mid: var(--color-af-foundation-background-mid);
   --color-af-canvas: var(--color-af-foundation-canvas);
@@ -172,8 +122,8 @@
   --color-af-chart-selection-stroke: var(--color-af-accent-border);
   --color-af-chart-cursor: var(--color-af-border-strong);
   --color-af-chart-active-dot-stroke: var(--color-af-background);
-  --color-af-code-ink: var(--color-af-foundation-code-ink);
-  --color-on-foreground: var(--color-af-text-inverse);
+  /* code / inverse text roles: text-color-role-tokens.css; af-* aliases in color-role-aliases.css */
+  --color-on-foreground: var(--color-on-inverse);
   --color-af-edge-muted: var(--color-af-border-strong);
   --color-af-edge-muted-soft: var(--color-af-border);
   --color-af-edge-danger-muted: rgb(from var(--color-af-danger) r g b / 0.32);
@@ -241,31 +191,31 @@
   }
 
   .af-dashboard-page-heading {
-    @apply font-display text-[clamp(1.85rem,4vw,3rem)] leading-none tracking-[-0.035em] text-af-text;
+    @apply font-display text-display-medium text-on-surface;
   }
 
   .af-dashboard-section-heading {
-    @apply text-[1.02rem] font-semibold leading-tight text-af-text;
+    @apply text-title-large text-on-surface;
   }
 
   .af-dashboard-body-text {
-    @apply text-[0.9rem] leading-[1.55] text-af-text-muted;
+    @apply text-body-medium text-on-surface-variant;
   }
 
   .af-dashboard-supporting-text {
-    @apply text-[0.8rem] leading-[1.45] text-af-text-muted;
+    @apply text-body-small text-on-surface-variant;
   }
 
   .af-dashboard-supporting-label {
-    @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-text-subtle;
+    @apply text-label-medium uppercase text-on-surface-subtle;
   }
 
   .af-dashboard-body-code {
-    @apply font-mono text-[0.9rem] leading-[1.55] text-af-code-ink;
+    @apply font-mono text-code-medium text-code;
   }
 
   .af-dashboard-supporting-code {
-    @apply font-mono text-[0.8rem] leading-[1.45] text-af-code-ink;
+    @apply font-mono text-code-small text-code;
   }
 
   .af-chart-grid-surface {
@@ -280,13 +230,13 @@
   }
 
   .af-dashboard-widget-subtitle {
-    @apply font-mono text-2xl text-af-text-muted;
+    @apply font-mono text-display-small text-on-surface-variant;
     overflow-wrap: anywhere;
   }
 
   .af-dashboard-supporting-labels {
     dt {
-      @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-text-subtle;
+      @apply text-label-medium uppercase text-on-surface-subtle;
     }
   }
 

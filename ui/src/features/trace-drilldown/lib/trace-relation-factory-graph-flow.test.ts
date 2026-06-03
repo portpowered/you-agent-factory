@@ -58,7 +58,7 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
             label: editorMessages.edgeKindLabel("work-type-state"),
           }),
           style: expect.objectContaining({
-            stroke: "var(--color-af-success)",
+            stroke: "var(--color-success)",
             strokeDasharray: "7 5",
           }),
         }),
@@ -103,12 +103,12 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
     ]);
 
     expect(parentChildFlow.edges[0]?.style).toMatchObject({
-      stroke: "var(--color-af-accent)",
+      stroke: "var(--color-primary)",
       strokeDasharray: undefined,
       strokeWidth: 1.7,
     });
     expect(relatedFlow.edges[0]?.style).toMatchObject({
-      stroke: "var(--color-af-edge-muted)",
+      stroke: "var(--color-outline-variant)",
       strokeDasharray: undefined,
       strokeWidth: 1.7,
     });
@@ -139,10 +139,10 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
     ]);
 
     expect(warningFlow.edges[0]?.style?.stroke).toBe(
-      "var(--color-af-warning-text)",
+      "var(--color-on-warning-container)",
     );
     expect(dangerFlow.edges[0]?.style?.stroke).toBe(
-      "var(--color-af-danger-text)",
+      "var(--color-on-error-container)",
     );
   });
 });

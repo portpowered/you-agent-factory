@@ -122,7 +122,7 @@ export function TraceRelationFlow({
   return (
     <DashboardGraphFrame
       aria-label={getTraceDrilldownMessages(locale).batchRelationGraphLabel}
-      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle"
+      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-surface-container-low"
       data-trace-relation-flow
       style={GRAPH_SHELL_STYLE}
     >

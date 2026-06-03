@@ -14,13 +14,13 @@ import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const WORKSTATION_NODE_CLASS =
   "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";
-const DISPATCH_NODE_TONE_DEFAULT_CLASS = "border-af-border bg-af-surface";
+const DISPATCH_NODE_TONE_DEFAULT_CLASS = "border-outline bg-surface";
 const DISPATCH_NODE_TONE_DANGER_CLASS =
-  "border-af-danger-border bg-af-danger-surface";
+  "border-af-danger-border bg-error-container";
 const DISPATCH_NODE_TONE_WARNING_CLASS =
-  "border-af-warning-border bg-af-warning-surface";
+  "border-af-warning-border bg-warning-container";
 const DISPATCH_NODE_TONE_SUCCESS_CLASS =
-  "border-af-success-border bg-af-success-surface";
+  "border-af-success-border bg-success-container";
 
 function TraceDispatchFactoryGraphNode({
   data,
@@ -45,7 +45,7 @@ function TraceDispatchFactoryGraphNode({
               title={data.kindLabel}
             >
               <GraphSemanticIcon
-                className="h-4 w-4 text-af-text"
+                className="h-4 w-4 text-on-surface"
                 kind="workstation"
                 label={data.kindLabel}
               />
@@ -75,10 +75,10 @@ function TraceDispatchFactoryGraphNode({
         >
           {data.displayLabel}
         </p>
-        <p className="m-0 text-[0.76rem] text-af-text-muted [overflow-wrap:anywhere]">
+        <p className="m-0 text-[0.76rem] text-on-surface-variant [overflow-wrap:anywhere]">
           {messages.dispatchPathInputPrefix}: {data.inputSummary}
         </p>
-        <p className="m-0 text-[0.76rem] text-af-text-muted [overflow-wrap:anywhere]">
+        <p className="m-0 text-[0.76rem] text-on-surface-variant [overflow-wrap:anywhere]">
           {messages.dispatchPathOutputPrefix}: {data.outputSummary}
         </p>
       </div>

@@ -78,7 +78,7 @@ function EditorModeStory() {
           onClick={() => {}}
         />
       </div>
-      <div className="relative min-h-44 rounded-[1.5rem] border border-af-border bg-af-surface-subtle">
+      <div className="relative min-h-44 rounded-[1.5rem] border border-outline bg-surface-container-low">
         <FactoryGraphEditorToolbar
           activeTool={activeTool}
           addMenuActions={[...ADD_MENU_ACTIONS]}
@@ -102,7 +102,7 @@ function EditorModeStory() {
 function AddMenuOpenStory() {
   return (
     <div className="grid gap-4 p-6">
-      <div className="relative min-h-52 rounded-[1.5rem] border border-af-border bg-af-surface-subtle">
+      <div className="relative min-h-52 rounded-[1.5rem] border border-outline bg-surface-container-low">
         <FactoryGraphEditorToolbar
           activeTool="add"
           addMenuActions={[...ADD_MENU_ACTIONS]}

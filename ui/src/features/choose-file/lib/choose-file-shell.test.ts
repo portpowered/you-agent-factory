@@ -5,18 +5,18 @@ describe("chooseFileShellClassName", () => {
     const className = chooseFileShellClassName();
 
     expect(className).toContain("border-dashed");
-    expect(className).toContain("border-af-border-strong");
-    expect(className).toContain("bg-af-surface-subtle");
-    expect(className).not.toContain("bg-af-accent-surface");
-    expect(className).not.toContain("border-af-accent-border");
+    expect(className).toContain("border-outline-variant");
+    expect(className).toContain("bg-surface-container-low");
+    expect(className).not.toContain("bg-primary-container");
+    expect(className).not.toContain("border-primary");
   });
 
   it("uses neutral border and overlay emphasis when drag is active", () => {
     const className = chooseFileShellClassName({ dragActive: true });
 
-    expect(className).toContain("border-af-border-strong");
+    expect(className).toContain("border-outline-variant");
     expect(className).toContain("bg-af-overlay");
-    expect(className).not.toContain("bg-af-accent-surface");
-    expect(className).not.toContain("border-af-accent-border");
+    expect(className).not.toContain("bg-primary-container");
+    expect(className).not.toContain("border-primary");
   });
 });

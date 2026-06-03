@@ -1858,8 +1858,8 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
       name: "Leave editor",
     });
     expect(toggle.className).toContain("border-af-warning-border");
-    expect(toggle.className).toContain("bg-af-warning-surface");
-    expect(toggle.className).toContain("text-af-warning-text");
+    expect(toggle.className).toContain("bg-warning-container");
+    expect(toggle.className).toContain("text-on-warning-container");
   });
 
   it("confirms pending save changes before saving the graph draft", async () => {
@@ -3067,7 +3067,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(idleStateArticle.querySelector("article")?.className).toContain(
       "opacity-[0.45]",
     );
-    expect(idleResourceArticle?.className).toContain("border-af-border-strong");
+    expect(idleResourceArticle?.className).toContain("border-outline-variant");
     expect(idleResourceArticle?.className).not.toContain("opacity-[0.45]");
   });
 
@@ -3109,9 +3109,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const activeSelectedState = await getStateNodeArticle("story:complete");
     const activeSelectedArticle = activeSelectedState.querySelector("article");
 
-    expect(activeSelectedArticle?.className).toContain(
-      "border-af-accent-border",
-    );
+    expect(activeSelectedArticle?.className).toContain("border-primary");
     expect(activeSelectedArticle?.className).not.toContain(
       "shadow-af-success-chip",
     );
@@ -3130,7 +3128,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     });
     const reviewArticle = reviewButton.closest("article");
 
-    expect(reviewArticle?.className).toContain("border-af-accent-border");
+    expect(reviewArticle?.className).toContain("border-primary");
     expect(reviewArticle?.className).not.toContain("agent-flow-node--active");
   });
 
@@ -3378,10 +3376,10 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
 
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-background-color-props: var(--color-af-graph-controls-button-surface)",
+      "--xy-controls-button-background-color-props: var(--color-surface-container-high)",
     );
     expect(controls?.getAttribute("style")).toContain(
-      "--xy-controls-button-color-props: var(--color-af-graph-controls-text)",
+      "--xy-controls-button-color-props: var(--color-on-surface-variant)",
     );
     expect(controls?.getAttribute("style")).toContain(
       "--xy-controls-box-shadow: none",

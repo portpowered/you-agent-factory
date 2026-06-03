@@ -125,7 +125,10 @@ export function WorkTypeReadySection({
     <form className="grid gap-2.5" onSubmit={(event) => event.preventDefault()}>
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {validationErrors.contract}
@@ -133,7 +136,10 @@ export function WorkTypeReadySection({
       ) : null}
       {state.hasValidationErrors ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {messages.editableConfigurationValidationStatus}
@@ -151,7 +157,7 @@ export function WorkTypeReadySection({
                   : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-work-type-name"
               onChange={(event) => state.onNameChange(event.target.value)}
               type="text"
@@ -183,7 +189,7 @@ export function WorkTypeReadySection({
                 validationErrors.handlingBehavior ? "true" : undefined
               }
               checked={hasDefaultHandlingBehavior}
-              className="size-4 rounded border border-af-border"
+              className="size-4 rounded border border-outline"
               id="editable-work-type-handling-behavior-default"
               onChange={(event) =>
                 state.onHandlingBehaviorChange(
@@ -205,7 +211,7 @@ export function WorkTypeReadySection({
           {validationErrors.handlingBehavior ? (
             <p
               className={cn(
-                "m-0 text-af-danger-text",
+                "m-0 text-on-error-container",
                 DASHBOARD_BODY_TEXT_CLASS,
               )}
               id="editable-work-type-handling-behavior-error"
@@ -245,7 +251,10 @@ function WorkTypeEditableField({
       {input}
       {errorMessage ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           id={`${fieldId}-error`}
           role="alert"
         >

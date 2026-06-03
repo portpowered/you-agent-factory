@@ -44,7 +44,7 @@ export function FriendlyExecCommandOutput({
       {text ? (
         <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p>
       ) : null}
-      <section className="grid gap-2 rounded-lg border border-af-border bg-af-surface-subtle p-3">
+      <section className="grid gap-2 rounded-lg border border-outline bg-surface-container-low p-3">
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.execCommandResultHeading}
         </span>

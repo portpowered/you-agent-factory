@@ -38,7 +38,7 @@ export interface WorkstationIconMetadata {
 
 const WORKSTATION_ICON_METADATA_BY_KIND = {
   [CRON_WORKSTATION_KIND]: {
-    className: "text-af-success",
+    className: "text-success",
     iconKind: "cron",
     label: getActivityGraphMessages().workstationIconLabel(
       CRON_WORKSTATION_KIND,
@@ -46,7 +46,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: CRON_WORKSTATION_KIND,
   },
   [POLLER_WORKSTATION_KIND]: {
-    className: "text-af-accent",
+    className: "text-primary",
     iconKind: "poller",
     label: getActivityGraphMessages().workstationIconLabel(
       POLLER_WORKSTATION_KIND,
@@ -54,7 +54,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: POLLER_WORKSTATION_KIND,
   },
   [EXHAUSTION_WORKSTATION_KIND]: {
-    className: "text-af-danger",
+    className: "text-error",
     iconKind: "exhaustion",
     label: getActivityGraphMessages().workstationIconLabel(
       EXHAUSTION_WORKSTATION_KIND,
@@ -62,7 +62,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: EXHAUSTION_WORKSTATION_KIND,
   },
   [REPEATER_WORKSTATION_KIND]: {
-    className: "text-af-info",
+    className: "text-info",
     iconKind: "repeater",
     label: getActivityGraphMessages().workstationIconLabel(
       REPEATER_WORKSTATION_KIND,
@@ -70,7 +70,7 @@ const WORKSTATION_ICON_METADATA_BY_KIND = {
     semanticKind: REPEATER_WORKSTATION_KIND,
   },
   [STANDARD_WORKSTATION_KIND]: {
-    className: "text-af-text-subtle",
+    className: "text-on-surface-subtle",
     iconKind: "workstation",
     label: getActivityGraphMessages().workstationIconLabel(
       STANDARD_WORKSTATION_KIND,

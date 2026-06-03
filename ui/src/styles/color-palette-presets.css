@@ -1,0 +1,162 @@
+/*
+ * Predefined Material-style palette presets (US-008).
+ *
+ * Each preset overrides af-foundation-* keys on :root via data-color-palette.
+ * Role tokens in color-role-tokens.css and aliases cascade from these keys.
+ */
+
+:root,
+[data-color-palette="factory-dark"] {
+  --color-af-foundation-background: #0a1117;
+  --color-af-foundation-background-start: #0d181f;
+  --color-af-foundation-background-mid: #10252f;
+  --color-af-foundation-canvas: #050b10;
+  --color-af-foundation-surface: #091117;
+  --color-af-foundation-ink: #f7f2e8;
+  --color-af-foundation-code-ink: #d5fbff;
+  --color-af-foundation-overlay: #ffffff;
+  --color-af-foundation-accent: #f5c76f;
+  --color-af-foundation-accent-strong: #ecbf58;
+  --color-af-foundation-info: #5ccadd;
+  --color-af-foundation-info-strong: #5097be;
+  --color-af-foundation-info-bright: #7dd3fc;
+  --color-af-foundation-info-ink: #b5edf4;
+  --color-af-foundation-secondary-accent: #507f8c;
+  --color-af-foundation-secondary-accent-ink: #8aaeb8;
+  --color-af-foundation-tertiary-accent: #6d6290;
+  --color-af-foundation-tertiary-accent-ink: #a89ec4;
+  --color-af-foundation-success: #57c18b;
+  --color-af-foundation-success-ink: #a7f0c4;
+  --color-af-foundation-warning: #f0b15a;
+  --color-af-foundation-warning-ink: #ffd8a3;
+  --color-af-foundation-danger: #f05f5f;
+  --color-af-foundation-danger-bright: #ff8a8a;
+  --color-af-foundation-danger-ink: #ffb2b2;
+  --color-af-foundation-worker: #b68cff;
+  --color-af-foundation-worker-ink: #dfccff;
+  --color-af-shadow: #000000;
+}
+
+[data-color-palette="factory-light"] {
+  --color-af-foundation-background: #f4f1e8;
+  --color-af-foundation-background-start: #ece8dc;
+  --color-af-foundation-background-mid: #e4ded0;
+  --color-af-foundation-canvas: #faf8f3;
+  --color-af-foundation-surface: #ffffff;
+  --color-af-foundation-ink: #1a2228;
+  --color-af-foundation-code-ink: #0f4c5c;
+  --color-af-foundation-overlay: #000000;
+  --color-af-foundation-accent: #f5c76f;
+  --color-af-foundation-accent-strong: #c9972e;
+  --color-af-foundation-info: #2f8fad;
+  --color-af-foundation-info-strong: #256f89;
+  --color-af-foundation-info-bright: #4aa9c9;
+  --color-af-foundation-info-ink: #1f6178;
+  --color-af-foundation-secondary-accent: #4a7a87;
+  --color-af-foundation-secondary-accent-ink: #355962;
+  --color-af-foundation-tertiary-accent: #5c5280;
+  --color-af-foundation-tertiary-accent-ink: #433b61;
+  --color-af-foundation-success: #2f9a66;
+  --color-af-foundation-success-ink: #1f6f49;
+  --color-af-foundation-warning: #c9852d;
+  --color-af-foundation-warning-ink: #8f5d16;
+  --color-af-foundation-danger: #d94848;
+  --color-af-foundation-danger-bright: #ef6b6b;
+  --color-af-foundation-danger-ink: #9f2f2f;
+  --color-af-foundation-worker: #7f63b8;
+  --color-af-foundation-worker-ink: #5d4788;
+  --color-af-shadow: #1a2228;
+}
+
+[data-color-palette="material-baseline"] {
+  --color-af-foundation-background: #141218;
+  --color-af-foundation-background-start: #17151b;
+  --color-af-foundation-background-mid: #1b1920;
+  --color-af-foundation-canvas: #0f0d12;
+  --color-af-foundation-surface: #1d1b20;
+  --color-af-foundation-ink: #e6e0e9;
+  --color-af-foundation-code-ink: #c8f0ff;
+  --color-af-foundation-overlay: #ffffff;
+  --color-af-foundation-accent: #f5c76f;
+  --color-af-foundation-accent-strong: #ecbf58;
+  --color-af-foundation-info: #67cbe0;
+  --color-af-foundation-info-strong: #4f9db8;
+  --color-af-foundation-info-bright: #8adcf0;
+  --color-af-foundation-info-ink: #b8edf8;
+  --color-af-foundation-secondary-accent: #5a8894;
+  --color-af-foundation-secondary-accent-ink: #94b4bd;
+  --color-af-foundation-tertiary-accent: #7a7198;
+  --color-af-foundation-tertiary-accent-ink: #b0a8c8;
+  --color-af-foundation-success: #63c995;
+  --color-af-foundation-success-ink: #a8f0c8;
+  --color-af-foundation-warning: #efb865;
+  --color-af-foundation-warning-ink: #ffddb0;
+  --color-af-foundation-danger: #ef6a6a;
+  --color-af-foundation-danger-bright: #ff9494;
+  --color-af-foundation-danger-ink: #ffb8b8;
+  --color-af-foundation-worker: #c0a8f0;
+  --color-af-foundation-worker-ink: #e4d8ff;
+  --color-af-shadow: #000000;
+}
+
+[data-color-palette="slate"] {
+  --color-af-foundation-background: #0d1117;
+  --color-af-foundation-background-start: #101620;
+  --color-af-foundation-background-mid: #131b28;
+  --color-af-foundation-canvas: #070b10;
+  --color-af-foundation-surface: #161b22;
+  --color-af-foundation-ink: #e6edf3;
+  --color-af-foundation-code-ink: #c7e7ff;
+  --color-af-foundation-overlay: #ffffff;
+  --color-af-foundation-accent: #f5c76f;
+  --color-af-foundation-accent-strong: #ecbf58;
+  --color-af-foundation-info: #58b8d8;
+  --color-af-foundation-info-strong: #468ea8;
+  --color-af-foundation-info-bright: #7ecbf0;
+  --color-af-foundation-info-ink: #b0e0f2;
+  --color-af-foundation-secondary-accent: #6e9bae;
+  --color-af-foundation-secondary-accent-ink: #9bb8c8;
+  --color-af-foundation-tertiary-accent: #7b8cde;
+  --color-af-foundation-tertiary-accent-ink: #adb6e8;
+  --color-af-foundation-success: #56b888;
+  --color-af-foundation-success-ink: #a4e8c4;
+  --color-af-foundation-warning: #e8ad58;
+  --color-af-foundation-warning-ink: #ffd49a;
+  --color-af-foundation-danger: #e86262;
+  --color-af-foundation-danger-bright: #ff8e8e;
+  --color-af-foundation-danger-ink: #ffb0b0;
+  --color-af-foundation-worker: #a898f0;
+  --color-af-foundation-worker-ink: #d8d0ff;
+  --color-af-shadow: #000000;
+}
+
+[data-color-palette="olive"] {
+  --color-af-foundation-background: #13150f;
+  --color-af-foundation-background-start: #171912;
+  --color-af-foundation-background-mid: #1b1e15;
+  --color-af-foundation-canvas: #0a0c08;
+  --color-af-foundation-surface: #1a1d15;
+  --color-af-foundation-ink: #eef2e4;
+  --color-af-foundation-code-ink: #d0f5e8;
+  --color-af-foundation-overlay: #ffffff;
+  --color-af-foundation-accent: #f5c76f;
+  --color-af-foundation-accent-strong: #ecbf58;
+  --color-af-foundation-info: #58b0a0;
+  --color-af-foundation-info-strong: #458a7d;
+  --color-af-foundation-info-bright: #7ecfb8;
+  --color-af-foundation-info-ink: #b0e8d8;
+  --color-af-foundation-secondary-accent: #6a8f72;
+  --color-af-foundation-secondary-accent-ink: #98b8a0;
+  --color-af-foundation-tertiary-accent: #8a7d5c;
+  --color-af-foundation-tertiary-accent-ink: #b8aa88;
+  --color-af-foundation-success: #62b878;
+  --color-af-foundation-success-ink: #a8e8bc;
+  --color-af-foundation-warning: #e8b058;
+  --color-af-foundation-warning-ink: #ffd898;
+  --color-af-foundation-danger: #e06868;
+  --color-af-foundation-danger-ink: #ffb0b0;
+  --color-af-foundation-danger-bright: #ff9090;
+  --color-af-foundation-worker: #b0a070;
+  --color-af-foundation-worker-ink: #e0d4b0;
+  --color-af-shadow: #000000;
+}

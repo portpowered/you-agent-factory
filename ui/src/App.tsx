@@ -1,6 +1,7 @@
 import { DashboardScreen } from "./features/dashboard/public";
 import { AppNotificationToaster } from "./features/notifications/public";
 import { AppLocaleProvider } from "./i18n";
+import { AppColorPaletteProvider } from "./theme";
 
 export interface AppProps {
   browserLanguage?: string | null;
@@ -16,14 +17,16 @@ export function App({
   locationSearch,
 }: AppProps) {
   return (
-    <AppLocaleProvider
-      browserLanguage={browserLanguage}
-      browserLanguages={browserLanguages}
-      initialLocale={initialLocale}
-      locationSearch={locationSearch}
-    >
-      <DashboardScreen />
-      <AppNotificationToaster />
-    </AppLocaleProvider>
+    <AppColorPaletteProvider>
+      <AppLocaleProvider
+        browserLanguage={browserLanguage}
+        browserLanguages={browserLanguages}
+        initialLocale={initialLocale}
+        locationSearch={locationSearch}
+      >
+        <DashboardScreen />
+        <AppNotificationToaster />
+      </AppLocaleProvider>
+    </AppColorPaletteProvider>
   );
 }

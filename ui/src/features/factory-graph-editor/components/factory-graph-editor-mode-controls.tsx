@@ -4,7 +4,7 @@ import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 const MODE_TOGGLE_WARNING_CLASS =
-  "border-af-warning-border bg-af-warning-surface text-af-warning-text hover:border-af-warning-border hover:bg-af-warning-surface hover:text-af-warning-text";
+  "border-af-warning-border bg-warning-container text-on-warning-container hover:border-af-warning-border hover:bg-warning-container hover:text-on-warning-container";
 
 function EditModeIcon() {
   return (

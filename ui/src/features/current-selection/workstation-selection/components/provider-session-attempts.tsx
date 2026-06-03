@@ -264,7 +264,7 @@ function ProviderSessionAttemptList({
               <div className="flex flex-wrap items-center gap-2">
                 <p
                   className={cn(
-                    "m-0 text-af-text-muted",
+                    "m-0 text-on-surface-variant",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
                 >
@@ -396,7 +396,7 @@ function ProviderSessionLogAccess({
       {logTarget ? (
         <a
           className={cn(
-            "w-fit rounded-lg font-bold text-af-accent underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
+            "w-fit rounded-lg font-bold text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
             DASHBOARD_BODY_TEXT_CLASS,
           )}
           href={logTarget.href}
@@ -407,7 +407,7 @@ function ProviderSessionLogAccess({
       ) : (
         <span
           className={cn(
-            "font-bold text-af-text-muted",
+            "font-bold text-on-surface-variant",
             DASHBOARD_BODY_TEXT_CLASS,
           )}
         >

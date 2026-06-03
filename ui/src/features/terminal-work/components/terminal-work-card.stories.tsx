@@ -56,9 +56,9 @@ const failedItems: TerminalWorkItem[] = [
 ];
 
 const ACCENT_SELECTED_TOKENS = [
-  "bg-af-accent",
-  "bg-af-accent-surface",
-  "border-af-accent",
+  "bg-primary",
+  "bg-primary-container",
+  "border-primary",
   "shadow-af-accent-selected",
 ] as const;
 

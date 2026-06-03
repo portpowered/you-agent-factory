@@ -94,7 +94,7 @@ export function WorkstationNodeView({
     }),
     exhaustionRule
       ? "border-dashed border-af-danger-border"
-      : "border-af-info-border",
+      : "border-info-border",
     !exhaustionRule &&
       semanticIconMetadata.semanticKind === REPEATER_WORKSTATION_KIND &&
       "border-double",
@@ -106,11 +106,10 @@ export function WorkstationNodeView({
       data.activeFlow &&
       !data.selectedWorkstation &&
       "agent-flow-node--active ring-2 ring-af-success-border",
-    data.selectedWorkstation &&
-      "border-af-accent-border shadow-af-accent-selected",
+    data.selectedWorkstation && "border-primary shadow-af-accent-selected",
     !exhaustionRule &&
       selectedWork &&
-      "border-af-info-border shadow-af-info-selected",
+      "border-info-border shadow-af-info-selected",
     data.muted && "opacity-[0.45]",
   );
 
@@ -169,7 +168,7 @@ function ExhaustionRuleNodeButton({
         />
       </span>
       <span
-        className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.74rem] font-bold leading-tight text-af-text"
+        className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.74rem] font-bold leading-tight text-on-surface"
         data-workstation-title
       >
         {workstationTitle}
@@ -290,7 +289,7 @@ function ActiveWorkstationNodeContent({
                 {workItemLabel}
               </span>
               <span
-                className="shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-af-text-subtle"
+                className="shrink-0 whitespace-nowrap text-right font-mono text-[0.72rem] text-on-surface-subtle"
                 data-active-work-duration
               >
                 {durationLabel}
@@ -298,9 +297,9 @@ function ActiveWorkstationNodeContent({
             </>
           );
           const workItemClassName = cn(
-            "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-af-border bg-af-surface px-2 py-1.5 text-[0.74rem]",
+            "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-outline bg-surface px-2 py-1.5 text-[0.74rem]",
             workItemSelected &&
-              "border-af-info-border bg-af-info-surface shadow-af-info-chip",
+              "border-info-border bg-info-container shadow-af-info-chip",
           );
 
           return (
@@ -378,7 +377,7 @@ function WorkstationHeaderContent({
           tone="success"
         >
           <GraphSemanticIcon
-            className="h-3.5 w-3.5 text-af-success"
+            className="h-3.5 w-3.5 text-success"
             kind="active-work"
             label={getActivityGraphMessages(data.locale).activeBadgeLabel}
             locale={data.locale}
@@ -404,7 +403,7 @@ function workstationOverflowMarkers(
     return (
       <span
         aria-label={messages.activeItemCountLabel(totalCount)}
-        className="mt-2 flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success-border bg-af-success-surface px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-af-success"
+        className="mt-2 flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success-border bg-success-container px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-success"
         data-workstation-work-progress="numeric"
         role="status"
       >
@@ -416,7 +415,7 @@ function workstationOverflowMarkers(
   return (
     <span
       aria-label={messages.activeItemCountLabel(totalCount)}
-      className="mt-2 flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success-border bg-af-success-surface px-2"
+      className="mt-2 flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success-border bg-success-container px-2"
       data-workstation-work-progress="dots"
       role="status"
     >
@@ -427,11 +426,11 @@ function workstationOverflowMarkers(
         <span
           key={`${remainingCount}-${dotNumber}`}
           aria-hidden="true"
-          className="h-1.5 w-1.5 rounded-full bg-af-success"
+          className="h-1.5 w-1.5 rounded-full bg-success"
           data-workstation-work-progress-dot={String(dotNumber - 1)}
         />
       ))}
-      <span className="ml-1 font-mono text-[0.68rem] font-bold text-af-success">
+      <span className="ml-1 font-mono text-[0.68rem] font-bold text-success">
         +{remainingCount}
       </span>
     </span>

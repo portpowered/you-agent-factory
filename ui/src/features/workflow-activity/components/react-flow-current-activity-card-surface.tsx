@@ -210,7 +210,7 @@ function snapshotHasObserverGraph(snapshot: DashboardSnapshot): boolean {
 function EmptyCurrentActivityState({ locale }: { locale?: string }) {
   const messages = getFactoryGraphEditorMessages(locale);
   return (
-    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-border-strong bg-af-surface-subtle p-5 [&_h3]:m-0">
+    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-outline-variant bg-surface-container-low p-5 [&_h3]:m-0">
       <h3>{messages.noticeEmptyTitle}</h3>
       <p>{messages.noticeEmptyMessage}</p>
     </div>

@@ -273,9 +273,9 @@ export function CurrentActivityGraphViewport({
           "relative h-full min-h-96 overflow-hidden rounded-3xl border transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
-            "border-af-accent-border bg-af-accent-surface",
+            "border-primary bg-primary-container",
           imports.dropState.status === "error" &&
-            "border-af-danger-border bg-af-danger-surface",
+            "border-af-danger-border bg-error-container",
           imports.dropState.status === "idle" && "border-transparent",
         )}
         data-current-activity-drop-state={graphDropStateAttribute(
@@ -289,7 +289,7 @@ export function CurrentActivityGraphViewport({
       >
         <ReactFlow
           connectionLineStyle={{
-            stroke: "var(--color-af-accent)",
+            stroke: "var(--color-primary)",
             strokeWidth: 2.4,
           }}
           edges={edges}

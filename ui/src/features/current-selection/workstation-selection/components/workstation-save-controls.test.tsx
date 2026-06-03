@@ -48,11 +48,11 @@ describe("EditableWorkstationSaveHeaderAction", () => {
 
     const saveButton = screen.getByRole("button", { name: "Save changes" });
     expect(saveButton.className).toContain("border-af-warning-border");
-    expect(saveButton.className).toContain("bg-af-warning-surface");
-    expect(saveButton.className).toContain("text-af-warning-text");
+    expect(saveButton.className).toContain("bg-warning-container");
+    expect(saveButton.className).toContain("text-on-warning-container");
     expect(saveButton.className).toContain("hover:border-af-warning");
-    expect(saveButton.className).toContain("hover:bg-af-warning");
-    expect(saveButton.className).toContain("hover:text-af-on-warning");
+    expect(saveButton.className).toContain("hover:bg-warning");
+    expect(saveButton.className).toContain("hover:text-on-warning");
 
     rerender(
       <EditableWorkstationSaveHeaderAction

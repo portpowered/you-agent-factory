@@ -49,7 +49,7 @@ export function WorkItemPayloadList({
 
           return (
             <article
-              className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
+              className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
               key={workItem.work_id}
             >
               <div className="flex flex-wrap items-center gap-2">
@@ -59,7 +59,7 @@ export function WorkItemPayloadList({
                   className={cn(
                     WORK_SELECTION_BUTTON_CLASS,
                     isSelected &&
-                      "border-af-accent-border bg-af-accent-surface text-af-accent",
+                      "border-primary bg-primary-container text-primary",
                   )}
                   onClick={() => onSelectWorkID?.(workItem.work_id)}
                   type="button"
@@ -69,7 +69,7 @@ export function WorkItemPayloadList({
                 {workItem.state ? (
                   <span
                     className={cn(
-                      "text-af-text-muted",
+                      "text-on-surface-variant",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >
@@ -79,7 +79,7 @@ export function WorkItemPayloadList({
                 {resolveWorkTypeID(workItem) ? (
                   <span
                     className={cn(
-                      "text-af-text-muted",
+                      "text-on-surface-variant",
                       DASHBOARD_SUPPORTING_TEXT_CLASS,
                     )}
                   >

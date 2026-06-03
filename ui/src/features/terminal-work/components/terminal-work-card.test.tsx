@@ -7,8 +7,8 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import {
   STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
   STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+  STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
 } from "../../../components/ui/standard-list-selection";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
@@ -88,7 +88,7 @@ describe("CompletedFailedWorkstationCard", () => {
           name: messages.iconLabel("completed"),
         })
         .getAttribute("class"),
-    ).toContain("text-af-on-info");
+    ).toContain("text-on-info");
     expect(
       within(failedTitle as HTMLElement)
         .getByRole("img", { name: messages.iconLabel("failed") })
@@ -100,17 +100,17 @@ describe("CompletedFailedWorkstationCard", () => {
           name: messages.iconLabel("failed"),
         })
         .getAttribute("class"),
-    ).toContain("text-af-on-danger");
+    ).toContain("text-on-error");
     const doneStoryButton = screen.getByRole("button", { name: /Done Story/ });
     expect(doneStoryButton.getAttribute("aria-label")).toBe("Done Story");
     expect(doneStoryButton.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-    expect(doneStoryButton.className).toContain("text-af-on-info");
+    expect(doneStoryButton.className).toContain("text-on-success-container");
     expect(doneStoryButton).toBeTruthy();
     const failedStoryButton = screen.getByRole("button", {
       name: /Failed Story/,
     });
     expect(failedStoryButton.getAttribute("aria-label")).toBe("Failed Story");
-    expect(failedStoryButton.className).toContain("text-af-on-danger");
+    expect(failedStoryButton.className).toContain("text-on-error");
     expect(failedStoryButton).toBeTruthy();
     const failedMeta = screen.getByText("Failed at setup-workspace");
     expect(failedMeta.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
@@ -313,7 +313,7 @@ describe("CompletedFailedWorkstationCard", () => {
     );
     expectStandardListTerminalRow(
       screen.getByRole("button", { name: /Done Story/ }),
-      { selected: false, tone: "info" },
+      { selected: false, tone: "success" },
     );
   });
 
@@ -352,7 +352,7 @@ describe("CompletedFailedWorkstationCard", () => {
 
     expectStandardListTerminalRow(
       screen.getByRole("button", { name: /Done Story/ }),
-      { selected: false, tone: "info" },
+      { selected: false, tone: "success" },
     );
     expectStandardListTerminalRow(
       screen.getByRole("button", { name: /Failed Story/ }),
@@ -480,9 +480,9 @@ describe("CompletedFailedWorkstationCard", () => {
 });
 
 const ACCENT_SELECTED_TOKENS = [
-  "bg-af-accent",
-  "bg-af-accent-surface",
-  "border-af-accent",
+  "bg-primary",
+  "bg-primary-container",
+  "border-primary",
   "shadow-af-accent-selected",
 ] as const;
 
@@ -493,13 +493,13 @@ function expectStandardListTerminalRow(
     tone,
   }: {
     selected: boolean;
-    tone: "info" | "danger";
+    tone: "success" | "danger";
   },
 ) {
   const unselectedToneClass =
     tone === "danger"
       ? STANDARD_LIST_SELECTION_ROW_DANGER_CLASS
-      : STANDARD_LIST_SELECTION_ROW_INFO_CLASS;
+      : STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS;
 
   expect(row.getAttribute("aria-pressed")).toBe(selected ? "true" : "false");
   expect(row.getAttribute("data-selected")).toBe(selected ? "true" : "false");

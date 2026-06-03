@@ -96,8 +96,11 @@ function DashboardActionControlsShowcase() {
           <DashboardStatusPill role="status" tone="active">
             Active stream
           </DashboardStatusPill>
-          <DashboardStatusPill tone="warning">
+          <DashboardStatusPill tone="info">
             Draft changes pending
+          </DashboardStatusPill>
+          <DashboardStatusPill tone="warning">
+            Unsaved changes
           </DashboardStatusPill>
           <DashboardStatusPill tone="danger">
             Editor unavailable
@@ -128,7 +131,7 @@ function DashboardActionControlsShowcase() {
           }
           aria-label="Shared dashboard action row example"
           statuses={
-            <DashboardStatusPill role="status" tone="warning">
+            <DashboardStatusPill role="status" tone="info">
               Draft changes pending
             </DashboardStatusPill>
           }
@@ -177,6 +180,7 @@ export const SharedDashboardActionControls = {
     ).toHaveAttribute("aria-busy", "true");
     await expect(canvas.getByText("Active stream")).toBeVisible();
     await expect(canvas.getAllByText("Draft changes pending")).toHaveLength(2);
+    await expect(canvas.getByText("Unsaved changes")).toBeVisible();
     await expect(canvas.getByText("Editor unavailable")).toBeVisible();
     await expect(sections).toHaveLength(2);
     await expect(

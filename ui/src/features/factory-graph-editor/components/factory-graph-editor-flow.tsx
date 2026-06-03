@@ -36,11 +36,11 @@ import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 type FactoryGraphEditorNode = FactoryGraphReactFlowNode;
 
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
-  resource: "border-af-success-border bg-af-success-surface",
-  worker: "border-af-info-border bg-af-info-surface",
-  workstation: "border-af-accent-border bg-af-accent-surface",
-  "work-type": "border-af-border bg-af-surface-subtle",
-  "work-state": "border-af-border-strong bg-af-surface-raised",
+  resource: "border-af-success-border bg-success-container",
+  worker: "border-info-border bg-info-container",
+  workstation: "border-primary bg-primary-container",
+  "work-type": "border-outline bg-surface-container-low",
+  "work-state": "border-outline-variant bg-surface-container-high",
 };
 
 export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {
@@ -120,7 +120,7 @@ function FactoryGraphEditorNodeView({
           : undefined,
         data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
         data.draftStatus === "removal" &&
-          "border-af-danger-border bg-af-danger-surface ring-2 ring-af-danger-border",
+          "border-af-danger-border bg-error-container ring-2 ring-af-danger-border",
       )}
       handles={data.connectionAnchors}
       nodeType={data.kind === "workstation" ? "workstation" : "resource"}
@@ -200,7 +200,7 @@ function FactoryGraphEditorNodeView({
           {data.label}
         </p>
         {data.canEditConnections ? (
-          <p className="m-0 text-[0.65rem] leading-5 text-af-text-subtle">
+          <p className="m-0 text-[0.65rem] leading-5 text-on-surface-subtle">
             {data.connectionHint}
           </p>
         ) : null}
@@ -239,13 +239,13 @@ function semanticIconClassName(
 
   switch (kind) {
     case "resource":
-      return "text-af-success";
+      return "text-success";
     case "worker":
-      return "text-af-info";
+      return "text-info";
     case "workstation":
-      return "text-af-text";
+      return "text-on-surface";
     case "work-type":
-      return "text-af-info";
+      return "text-info";
   }
 }
 

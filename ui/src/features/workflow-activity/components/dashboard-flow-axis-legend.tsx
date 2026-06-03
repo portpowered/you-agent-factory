@@ -70,37 +70,37 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
 
   return [
     {
-      iconClassName: "text-af-text-subtle",
+      iconClassName: "text-on-surface-subtle",
       kind: "queue",
       label: messages.iconLabels.queue,
     },
     {
-      iconClassName: "text-af-info",
+      iconClassName: "text-info",
       kind: "processing",
       label: messages.iconLabels.processing,
     },
     {
-      iconClassName: "text-af-success",
+      iconClassName: "text-success",
       kind: "terminal",
       label: messages.iconLabels.terminal,
     },
     {
-      iconClassName: "text-af-danger",
+      iconClassName: "text-error",
       kind: "failed",
       label: messages.iconLabels.failed,
     },
     {
-      iconClassName: "text-af-success",
+      iconClassName: "text-success",
       kind: "resource",
       label: messages.iconLabels.resource,
     },
     {
-      iconClassName: "text-af-info",
+      iconClassName: "text-info",
       kind: "constraint",
       label: messages.iconLabels.constraint,
     },
     {
-      iconClassName: "text-af-danger",
+      iconClassName: "text-error",
       kind: "limit",
       label: messages.iconLabels.limit,
     },
@@ -110,7 +110,7 @@ export function getDefaultDashboardFlowAxisLegendIconItems(
       label: messages.iconLabels[metadata.iconKind],
     })),
     {
-      iconClassName: "text-af-success",
+      iconClassName: "text-success",
       kind: "active-work",
       label: messages.iconLabels["active-work"],
     },
@@ -148,10 +148,10 @@ function edgeSwatchClassName(
   tone: DashboardFlowAxisLegendEdgeItem["tone"],
 ): string {
   if (tone === "active") {
-    return "bg-af-success";
+    return "bg-success";
   }
 
-  return "bg-af-danger";
+  return "bg-error";
 }
 
 function LegendToggleGlyph() {
@@ -205,7 +205,7 @@ function DashboardFlowAxisLegendItems({
                 )}
                 data-legend-flow={item.tone === "active" ? "" : undefined}
               />
-              <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
+              <span className="dashboard-body-sm min-w-0 text-on-surface-variant [overflow-wrap:anywhere]">
                 {item.label}
               </span>
             </li>
@@ -225,7 +225,7 @@ function DashboardFlowAxisLegendItems({
                   aria-hidden="true"
                   className={cn(PHASE_SWATCH_CLASS, item.swatchClassName)}
                 />
-                <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
+                <span className="dashboard-body-sm min-w-0 text-on-surface-variant [overflow-wrap:anywhere]">
                   {item.label}
                 </span>
               </li>
@@ -246,7 +246,7 @@ function DashboardFlowAxisLegendItems({
                 kind={item.kind}
                 label={messages.iconLabel(item.label)}
               />
-              <span className="dashboard-body-sm min-w-0 text-af-text-muted [overflow-wrap:anywhere]">
+              <span className="dashboard-body-sm min-w-0 text-on-surface-variant [overflow-wrap:anywhere]">
                 {item.label}
               </span>
             </li>
@@ -281,20 +281,20 @@ export function DashboardFlowAxisLegend({
       {expanded ? (
         <aside
           aria-label={resolvedAriaLabel}
-          className="dashboard-body-sm pointer-events-auto w-full rounded-lg border border-af-border bg-af-surface-raised px-3 py-3 text-af-text-muted shadow-af-card backdrop-blur-md md:max-w-md"
+          className="dashboard-body-sm pointer-events-auto w-full rounded-lg border border-outline bg-surface-container-high px-3 py-3 text-on-surface-variant shadow-af-card backdrop-blur-md md:max-w-md"
           data-dashboard-flow-axis-legend-panel=""
           id={panelId}
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <LegendToggleGlyph />
-              <h3 className="dashboard-eyebrow m-0 text-af-accent">
+              <h3 className="dashboard-eyebrow m-0 text-primary">
                 {resolvedAriaLabel}
               </h3>
             </div>
             <DisclosureButton
               aria-label={messages.collapseToggleLabel(actionTargetLabel)}
-              className="dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-af-border bg-af-surface-subtle px-3 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
+              className="dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-outline bg-surface-container-low px-3 py-2 text-on-surface-variant transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
               controlsID={panelId}
               data-dashboard-flow-axis-legend-toggle=""
               expanded={true}
@@ -315,7 +315,7 @@ export function DashboardFlowAxisLegend({
       ) : (
         <DisclosureButton
           aria-label={messages.expandToggleLabel(actionTargetLabel)}
-          className="dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 text-af-text-muted shadow-af-card backdrop-blur-md transition-colors hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
+          className="dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-outline bg-surface-container-high px-3 py-2 text-on-surface-variant shadow-af-card backdrop-blur-md transition-colors hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
           controlsID={panelId}
           data-dashboard-flow-axis-legend-toggle=""
           expanded={false}

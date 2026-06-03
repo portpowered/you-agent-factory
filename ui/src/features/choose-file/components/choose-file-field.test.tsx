@@ -20,10 +20,10 @@ describe("ChooseFileField", () => {
     const shell = screen.getByText("Choose a file");
     expect(fieldGroup?.className).toContain("space-y-2");
     expect(shell.className).toContain("border-dashed");
-    expect(shell.className).toContain("border-af-border-strong");
-    expect(shell.className).toContain("bg-af-surface-subtle");
-    expect(shell.className).not.toContain("bg-af-accent-surface");
-    expect(shell.className).not.toContain("border-af-accent-border");
+    expect(shell.className).toContain("border-outline-variant");
+    expect(shell.className).toContain("bg-surface-container-low");
+    expect(shell.className).not.toContain("bg-primary-container");
+    expect(shell.className).not.toContain("border-primary");
     expect(screen.getByText("Cover image")).toBeTruthy();
     expect(screen.getByText("Supported formats: PNG")).toBeTruthy();
   });
@@ -37,9 +37,9 @@ describe("ChooseFileField", () => {
     );
 
     const shell = screen.getByTestId("choose-file-shell");
-    expect(shell.className).toContain("bg-af-surface-subtle");
-    expect(shell.className).not.toContain("bg-af-accent-surface");
-    expect(shell.className).not.toContain("border-af-accent-border");
+    expect(shell.className).toContain("bg-surface-container-low");
+    expect(shell.className).not.toContain("bg-primary-container");
+    expect(shell.className).not.toContain("border-primary");
 
     rerender(
       <ChooseFileField
@@ -49,9 +49,9 @@ describe("ChooseFileField", () => {
     );
 
     const activeShell = screen.getByTestId("choose-file-shell");
-    expect(activeShell.className).toContain("border-af-border-strong");
+    expect(activeShell.className).toContain("border-outline-variant");
     expect(activeShell.className).toContain("bg-af-overlay");
-    expect(activeShell.className).not.toContain("bg-af-accent-surface");
-    expect(activeShell.className).not.toContain("border-af-accent-border");
+    expect(activeShell.className).not.toContain("bg-primary-container");
+    expect(activeShell.className).not.toContain("border-primary");
   });
 });

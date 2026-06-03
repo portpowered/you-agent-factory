@@ -35,10 +35,10 @@ export type ChartPresentation = "embedded" | "standalone";
 
 // tailwind-exception: intrinsic-sizing
 const CHART_CONTAINER_STANDALONE_CLASS =
-  "relative h-[18rem] rounded-2xl border border-af-border bg-af-surface-subtle p-4 text-af-text";
+  "relative h-[18rem] rounded-2xl border border-outline bg-surface-container-low p-4 text-on-surface";
 // tailwind-exception: intrinsic-sizing
 const CHART_CONTAINER_EMBEDDED_CLASS =
-  "relative flex h-full min-h-0 min-w-0 w-full flex-1 flex-col text-af-text";
+  "relative flex h-full min-h-0 min-w-0 w-full flex-1 flex-col text-on-surface";
 const DEFAULT_CHART_INITIAL_DIMENSION = { height: 288, width: 640 } as const;
 
 function chartContainerClassName(
@@ -154,11 +154,11 @@ export function ChartTooltipContent({
   return (
     <div
       className={cn(
-        "grid min-w-40 gap-2 rounded-xl border border-af-border bg-af-surface-raised px-3 py-2 text-sm shadow-af-card",
+        "grid min-w-40 gap-2 rounded-xl border border-outline bg-surface-container-high px-3 py-2 text-sm shadow-af-card",
         className,
       )}
     >
-      <p className="m-0 font-semibold text-af-text">{String(label)}</p>
+      <p className="m-0 font-semibold text-on-surface">{String(label)}</p>
       <div className="grid gap-1">
         {payload.map((entry) => {
           const key = entry.dataKey?.toString() ?? "";
@@ -166,7 +166,7 @@ export function ChartTooltipContent({
 
           return (
             <div
-              className="flex items-center justify-between gap-3 text-af-text-muted"
+              className="flex items-center justify-between gap-3 text-on-surface-variant"
               key={key}
             >
               <div className="flex items-center gap-2">
@@ -179,7 +179,7 @@ export function ChartTooltipContent({
                 />
                 <span>{item?.label ?? key}</span>
               </div>
-              <span className="font-medium text-af-text">{entry.value}</span>
+              <span className="font-medium text-on-surface">{entry.value}</span>
             </div>
           );
         })}
@@ -217,7 +217,7 @@ export function ChartLegendContent({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-4 pt-3 text-xs text-af-text-muted",
+        "flex flex-wrap items-center gap-4 pt-3 text-xs text-on-surface-variant",
         className,
       )}
     >
@@ -233,7 +233,7 @@ export function ChartLegendContent({
               className={cn(
                 "rounded-full",
                 swatchClassName ?? "h-2.5 w-2.5",
-                hidden ? "border border-af-border bg-af-surface-subtle" : "",
+                hidden ? "border border-outline bg-surface-container-low" : "",
               )}
               style={{
                 backgroundColor: hidden

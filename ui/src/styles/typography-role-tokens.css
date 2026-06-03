@@ -1,0 +1,68 @@
+/*
+ * Material 3 typography scale (Factory Dark baseline).
+ *
+ * Role families: display, headline, title, body, label (+ product code extension).
+ * Tailwind utilities: text-display-medium, text-body-small, type-title-large, etc.
+ *
+ * Intent follows Material applying-type guidance; sizes are tuned for dashboard density.
+ */
+
+@theme {
+  /* --- Display (hero / high-emphasis numeric) --- */
+  --text-display-large: clamp(2.25rem, 5vw, 3.75rem);
+  --text-display-large--line-height: 1;
+  --text-display-large--letter-spacing: -0.04em;
+  --text-display-medium: clamp(1.85rem, 4vw, 3rem);
+  --text-display-medium--line-height: 1;
+  --text-display-medium--letter-spacing: -0.035em;
+  --text-display-small: 2rem;
+  --text-display-small--line-height: 1.1;
+  --text-display-small--letter-spacing: -0.03em;
+
+  /* --- Headline (prominent short headings) --- */
+  --text-headline-large: 1.5rem;
+  --text-headline-large--line-height: 1.2;
+  --text-headline-large--letter-spacing: -0.02em;
+  --text-headline-medium: 1.25rem;
+  --text-headline-medium--line-height: 1.25;
+  --text-headline-small: 1.125rem;
+  --text-headline-small--line-height: 1.3;
+
+  /* --- Title (page / section / subsection wayfinding) --- */
+  --text-title-large: 1.02rem;
+  --text-title-large--line-height: 1.25;
+  --text-title-large--font-weight: 600;
+  --text-title-medium: 0.95rem;
+  --text-title-medium--line-height: 1.3;
+  --text-title-medium--font-weight: 600;
+  --text-title-small: 0.875rem;
+  --text-title-small--line-height: 1.35;
+  --text-title-small--font-weight: 600;
+
+  /* --- Body (long-form reading) --- */
+  --text-body-large: 1rem;
+  --text-body-large--line-height: 1.55;
+  --text-body-medium: 0.9rem;
+  --text-body-medium--line-height: 1.55;
+  --text-body-small: 0.8rem;
+  --text-body-small--line-height: 1.45;
+
+  /* --- Label (controls, compact annotations) --- */
+  --text-label-large: 0.875rem;
+  --text-label-large--line-height: 1.35;
+  --text-label-large--font-weight: 600;
+  --text-label-medium: 0.8rem;
+  --text-label-medium--line-height: 1.35;
+  --text-label-medium--font-weight: 700;
+  --text-label-medium--letter-spacing: 0.08em;
+  --text-label-small: 0.75rem;
+  --text-label-small--line-height: 1.3;
+  --text-label-small--font-weight: 700;
+  --text-label-small--letter-spacing: 0.1em;
+
+  /* --- Code (product extension, monospace) --- */
+  --text-code-medium: 0.9rem;
+  --text-code-medium--line-height: 1.55;
+  --text-code-small: 0.8rem;
+  --text-code-small--line-height: 1.45;
+}

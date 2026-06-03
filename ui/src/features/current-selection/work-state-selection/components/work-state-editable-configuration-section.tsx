@@ -68,14 +68,20 @@ export function WorkStateEditableConfigurationSection({
         >
           {state?.status === "loading" ? (
             <p
-              className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn(
+                "m-0 text-on-surface-variant",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
             >
               {messages.editableConfigurationLoading}
             </p>
           ) : null}
           {state?.status === "error" ? (
             <p
-              className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn(
+                "m-0 text-on-error-container",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
               role="alert"
             >
               {messages.editableConfigurationErrorPrefix} {state.errorMessage}
@@ -83,7 +89,10 @@ export function WorkStateEditableConfigurationSection({
           ) : null}
           {state?.status === "empty" ? (
             <p
-              className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+              className={cn(
+                "m-0 text-on-surface-variant",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
             >
               {state.message || messages.editableConfigurationEmpty}
             </p>
@@ -119,7 +128,10 @@ function WorkStateEditableConfigurationReadyForm({
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {validationErrors.contract}
@@ -141,7 +153,7 @@ function WorkStateEditableConfigurationReadyForm({
                   : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-work-state-name"
               onChange={(event) => state.onNameChange(event.target.value)}
               type="text"
@@ -154,7 +166,7 @@ function WorkStateEditableConfigurationReadyForm({
           fieldId="editable-work-state-type"
           input={
             <output
-              className="block w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text-muted"
+              className="block w-full rounded-lg border border-outline bg-surface-container-high px-3 py-2 text-sm text-on-surface-variant"
               id="editable-work-state-type"
             >
               {messages.localizeWorkStateType(state.draft.type)}
@@ -181,14 +193,14 @@ function WorkStateEditableConfigurationDraftStatus({
   return (
     <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <p
-        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationValidationStatus}
       </p>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -218,7 +230,7 @@ function WorkStateEditableConfigurationField({
       {errorMessage ? (
         <p
           className={cn(
-            "m-0 text-af-danger-text",
+            "m-0 text-on-error-container",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}

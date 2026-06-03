@@ -2123,7 +2123,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       screen.getByText(
         "Loading the current factory definition for this workstation.",
       ).className,
-    ).toContain("text-af-text-muted");
+    ).toContain("text-on-surface-variant");
 
     rerender(
       <WorkstationDetailCard
@@ -2148,7 +2148,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       screen.getByText(
         "Editable configuration unavailable. The current factory API rejected the request.",
       ).className,
-    ).toContain("text-af-danger-text");
+    ).toContain("text-on-error-container");
 
     rerender(
       <WorkstationDetailCard
@@ -2173,7 +2173,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       screen.getByText(
         "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
       ).className,
-    ).toContain("text-af-text-muted");
+    ).toContain("text-on-surface-variant");
   });
 
   it("does not render inline save outcome copy in the configuration section", () => {
@@ -2255,15 +2255,15 @@ describe("WorkstationDetailCard editable configuration", () => {
         .getByText(
           "Autocomplete is ready with 2 variables for 1 authored input.",
         )
-        .closest(".border-af-border")?.className,
-    ).toContain("border-af-border");
+        .closest(".border-outline")?.className,
+    ).toContain("border-outline");
     fireEvent.click(promptVariableHelpToggle());
     expect(
       screen.getByText("Prompt diagnostics").closest("[role='alert']")
         ?.className,
     ).toContain("border-af-danger-border");
     expect(screen.getByText(".Inputs[1]").className).toContain(
-      "text-af-text-muted",
+      "text-on-surface-variant",
     );
   });
 

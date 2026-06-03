@@ -84,7 +84,7 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "loading" ? (
             <p
               className={cn(
-                "m-0 text-af-text-muted",
+                "m-0 text-on-surface-variant",
                 DASHBOARD_BODY_TEXT_CLASS,
               )}
             >
@@ -94,7 +94,7 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "error" ? (
             <p
               className={cn(
-                "m-0 text-af-danger-text",
+                "m-0 text-on-error-container",
                 DASHBOARD_BODY_TEXT_CLASS,
               )}
               role="alert"
@@ -105,7 +105,7 @@ export function WorkerEditableConfigurationSection({
           {state?.status === "empty" ? (
             <p
               className={cn(
-                "m-0 text-af-text-muted",
+                "m-0 text-on-surface-variant",
                 DASHBOARD_BODY_TEXT_CLASS,
               )}
             >
@@ -155,7 +155,10 @@ function WorkerEditableConfigurationReadyForm({
       />
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {validationErrors.contract}
@@ -175,7 +178,7 @@ function WorkerEditableConfigurationReadyForm({
                 validationErrors.name ? "editable-worker-name-error" : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-worker-name"
               onChange={(event) => state.onNameChange(event.target.value)}
               type="text"
@@ -254,7 +257,10 @@ function WorkerEditableConfigurationOverwriteWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-on-warning-container",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
@@ -279,7 +285,7 @@ function WorkerEditableConfigurationServerChangedHint({
   return (
     <p
       className={cn(
-        "m-0 text-af-warning-text",
+        "m-0 text-on-warning-container",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
     >
@@ -305,7 +311,10 @@ function WorkerEditableConfigurationSharedImpactWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-on-warning-container",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
         role="alert"
       >
         {messages.editableConfigurationSharedImpactWarning(
@@ -331,14 +340,14 @@ function WorkerEditableConfigurationDraftStatus({
   return (
     <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <p
-        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationValidationStatus}
       </p>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -446,7 +455,7 @@ function ModelWorkerEditableFields({
               validationErrors.model ? "editable-worker-model-error" : undefined
             }
             aria-invalid={validationErrors.model ? "true" : undefined}
-            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-worker-model"
             onChange={(event) => state.onModelChange(event.target.value)}
             type="text"
@@ -554,7 +563,7 @@ function ScriptWorkerEditableFields({
                 : undefined
             }
             aria-invalid={validationErrors.command ? "true" : undefined}
-            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-worker-command"
             onChange={(event) => state.onCommandChange(event.target.value)}
             type="text"
@@ -579,7 +588,7 @@ function ScriptWorkerEditableFields({
               validationErrors.args ? "editable-worker-args-error" : undefined
             }
             aria-invalid={validationErrors.args ? "true" : undefined}
-            className="min-h-24 w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            className="min-h-24 w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-worker-args"
             onChange={(event) => state.onArgsTextChange(event.target.value)}
             value={state.draft.argsText}
@@ -603,7 +612,7 @@ function ScriptWorkerEditableFields({
               validationErrors.body ? "editable-worker-body-error" : undefined
             }
             aria-invalid={validationErrors.body ? "true" : undefined}
-            className="min-h-32 w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            className="min-h-32 w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-worker-body"
             onChange={(event) => state.onBodyChange(event.target.value)}
             value={state.draft.body}
@@ -717,7 +726,10 @@ function WorkerEditableConfigurationFieldHelp({
 }) {
   return (
     <p
-      className={cn("m-0 text-af-text-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn(
+        "m-0 text-on-surface-subtle",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
     >
       {children}
     </p>
@@ -747,7 +759,7 @@ function WorkerEditableConfigurationField({
       {errorMessage ? (
         <p
           className={cn(
-            "m-0 text-af-danger-text",
+            "m-0 text-on-error-container",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}

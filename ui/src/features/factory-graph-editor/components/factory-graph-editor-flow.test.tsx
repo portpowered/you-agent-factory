@@ -418,7 +418,7 @@ describe("factory graph editor work state lifecycle styling", () => {
       expect(node?.className).toContain(borderClass);
     };
 
-    await expectSurface("story:queued", "border-af-info-border");
+    await expectSurface("story:queued", "border-info-border");
     await expectSurface("story:review", "border-af-warning-border");
     await expectSurface("story:done", "border-af-success-border");
     await expectSurface("story:failed", "border-af-danger-border");
@@ -430,8 +430,8 @@ describe("factory graph editor work state lifecycle styling", () => {
     });
 
     const workerNode = (await screen.findByTitle("writer")).closest("article");
-    expect(workerNode?.className).toContain("border-af-info-border");
-    expect(workerNode?.className).toContain("bg-af-info-surface");
+    expect(workerNode?.className).toContain("border-info-border");
+    expect(workerNode?.className).toContain("bg-info-container");
   });
 
   it("falls back to neutral work-state styling without factory definition", async () => {
@@ -440,8 +440,8 @@ describe("factory graph editor work state lifecycle styling", () => {
     const queuedNode = (await screen.findByTitle("story:queued")).closest(
       "article",
     );
-    expect(queuedNode?.className).toContain("border-af-border-strong");
-    expect(queuedNode?.className).toContain("bg-af-surface-raised");
+    expect(queuedNode?.className).toContain("border-outline-variant");
+    expect(queuedNode?.className).toContain("bg-surface-container-high");
   });
 
   it("keeps draft addition and removal treatments visible on phase-colored nodes", async () => {
@@ -458,12 +458,12 @@ describe("factory graph editor work state lifecycle styling", () => {
       "article",
     );
 
-    expect(additionNode?.className).toContain("border-af-info-border");
+    expect(additionNode?.className).toContain("border-info-border");
     expect(additionNode?.className).toContain("ring-af-warning-border");
     expect(additionNode?.textContent).toContain("Pending");
 
     expect(removalNode?.className).toContain("ring-af-danger-border");
-    expect(removalNode?.className).toContain("bg-af-danger-surface");
+    expect(removalNode?.className).toContain("bg-error-container");
     expect(removalNode?.textContent).toContain("Removing");
   });
 });

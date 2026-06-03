@@ -20,24 +20,24 @@ import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const RELATION_NODE_ACTIVE_CLASS =
-  "hover:border-af-accent-border hover:bg-af-accent-surface";
+  "hover:border-primary hover:bg-primary-container";
 const RELATION_NODE_BADGE_CLASS =
   "inline-flex rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em]";
 const RELATION_NODE_CLASS =
   "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";
 const RELATION_STATE_BADGE_DANGER_CLASS =
-  "border-af-danger-border bg-af-danger-surface text-af-danger-text";
+  "border-af-danger-border bg-error-container text-on-error-container";
 const RELATION_STATE_BADGE_SUCCESS_CLASS =
-  "border-af-success-border bg-af-success-surface text-af-success-text";
+  "border-af-success-border bg-success-container text-on-success-container";
 const RELATION_STATE_BADGE_WARNING_CLASS =
-  "border-af-warning-border bg-af-warning-surface text-af-warning-text";
-const RELATION_NODE_TONE_DEFAULT_CLASS = "border-af-border bg-af-surface";
+  "border-af-warning-border bg-warning-container text-on-warning-container";
+const RELATION_NODE_TONE_DEFAULT_CLASS = "border-outline bg-surface";
 const RELATION_NODE_TONE_DANGER_CLASS =
-  "border-af-danger-border bg-af-danger-surface";
+  "border-af-danger-border bg-error-container";
 const RELATION_NODE_TONE_SUCCESS_CLASS =
-  "border-af-success-border bg-af-success-surface";
+  "border-af-success-border bg-success-container";
 const RELATION_NODE_TONE_WARNING_CLASS =
-  "border-af-warning-border bg-af-warning-surface";
+  "border-af-warning-border bg-warning-container";
 
 function TraceRelationFactoryGraphNode({
   data,
@@ -77,7 +77,7 @@ function TraceRelationFactoryGraphNode({
             <span
               className={cn(
                 RELATION_NODE_BADGE_CLASS,
-                "border-af-info-border bg-af-info-surface text-af-info",
+                "border-info-border bg-info-container text-info",
                 DASHBOARD_SUPPORTING_LABEL_CLASS,
               )}
               key={relationType}
@@ -169,15 +169,15 @@ function semanticIconKind(kind: FactoryGraphNodeKind): GraphSemanticIconKind {
 function semanticIconClassName(kind: FactoryGraphNodeKind): string {
   switch (kind) {
     case "resource":
-      return "text-af-success";
+      return "text-success";
     case "worker":
-      return "text-af-info";
+      return "text-info";
     case "workstation":
-      return "text-af-text";
+      return "text-on-surface";
     case "work-type":
-      return "text-af-info";
+      return "text-info";
     case "work-state":
-      return "text-af-text-muted";
+      return "text-on-surface-variant";
   }
 }
 

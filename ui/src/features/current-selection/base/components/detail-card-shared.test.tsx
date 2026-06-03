@@ -15,8 +15,8 @@ describe("detail-card-shared row surfaces", () => {
       CURRENT_SELECTION_FIELD_PANEL_CLASS,
       CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
     ]) {
-      expect(className).toContain("bg-af-surface-raised");
-      expect(className).not.toContain("bg-af-surface-subtle");
+      expect(className).toContain("bg-surface-container-high");
+      expect(className).not.toContain("bg-surface-container-low");
     }
   });
 
@@ -26,7 +26,9 @@ describe("detail-card-shared row surfaces", () => {
   });
 
   it("keeps provider session cards on the subtle surface", () => {
-    expect(PROVIDER_SESSION_CARD_CLASS).toContain("bg-af-surface-subtle");
-    expect(PROVIDER_SESSION_CARD_CLASS).not.toContain("bg-af-surface-raised");
+    expect(PROVIDER_SESSION_CARD_CLASS).toContain("bg-surface-container-low");
+    expect(PROVIDER_SESSION_CARD_CLASS).not.toContain(
+      "bg-surface-container-high",
+    );
   });
 });

@@ -24,7 +24,7 @@ describe("GraphSemanticIcon", () => {
       expect(icon.tagName.toLowerCase()).toBe("svg");
       expect(icon.getAttribute("data-graph-semantic-icon")).toBe(kind);
       expect(icon.getAttribute("stroke")).toBe("currentColor");
-      expect(icon.getAttribute("class")).toContain("text-af-text-muted");
+      expect(icon.getAttribute("class")).toContain("text-on-surface-variant");
       expect(
         icon.querySelectorAll("path, rect, circle, ellipse").length,
       ).toBeGreaterThan(0);

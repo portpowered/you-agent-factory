@@ -1,24 +1,25 @@
 import { expect, within } from "storybook/test";
 
 import {
+  STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
   STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
   STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
   STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+  STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
   StandardListSelection,
   StandardListSelectionItem,
 } from "./standard-list-selection";
 
-const ACCENT_SELECTED_TOKENS = [
-  "bg-af-accent",
-  "bg-af-accent-surface",
-  "border-af-accent",
+const SOLID_ACCENT_SELECTED_TOKENS = [
+  "bg-primary",
+  "border-primary",
   "shadow-af-accent-selected",
 ] as const;
 
-function expectNoAccentSelectedTreatment(className: string) {
-  for (const token of ACCENT_SELECTED_TOKENS) {
-    expect(className).not.toContain(token);
+function expectNoSolidAccentSelectedTreatment(className: string) {
+  const tokens = className.split(/\s+/);
+  for (const token of SOLID_ACCENT_SELECTED_TOKENS) {
+    expect(tokens).not.toContain(token);
   }
 }
 
@@ -56,14 +57,17 @@ function StandardListSelectionShowcase() {
           className="text-sm font-semibold text-af-text"
           id="standard-list-selection-tones"
         >
-          Outcome tone variants
+          Accent and semantic row tones
         </h2>
         <StandardListSelection>
-          <StandardListSelectionItem tone="info">
-            Info unselected
+          <StandardListSelectionItem tone="accent">
+            Accent unselected
           </StandardListSelectionItem>
-          <StandardListSelectionItem selected tone="info">
-            Info selected
+          <StandardListSelectionItem selected tone="accent">
+            Accent selected
+          </StandardListSelectionItem>
+          <StandardListSelectionItem tone="success">
+            Success unselected
           </StandardListSelectionItem>
           <StandardListSelectionItem tone="danger">
             Danger unselected
@@ -112,7 +116,7 @@ export const SharedStandardListSelection = {
     );
     await expect(neutralUnselected).toHaveAttribute("aria-pressed", "false");
     await expect(neutralUnselected).toHaveAttribute("data-selected", "false");
-    expectNoAccentSelectedTreatment(neutralUnselected.className);
+    expectNoSolidAccentSelectedTreatment(neutralUnselected.className);
 
     const neutralSelected = canvas.getByRole("button", {
       name: "Neutral selected",
@@ -122,29 +126,39 @@ export const SharedStandardListSelection = {
     );
     await expect(neutralSelected).toHaveAttribute("aria-pressed", "true");
     await expect(neutralSelected).toHaveAttribute("data-selected", "true");
-    expectNoAccentSelectedTreatment(neutralSelected.className);
+    expectNoSolidAccentSelectedTreatment(neutralSelected.className);
 
     await expect(
       canvas.getByRole("button", { name: "Disabled row" }),
     ).toBeDisabled();
 
-    const infoUnselected = canvas.getByRole("button", {
-      name: "Info unselected",
+    const accentUnselected = canvas.getByRole("button", {
+      name: "Accent unselected",
     });
-    expect(infoUnselected.className).toContain(
-      STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
+    expect(accentUnselected.className).toContain(
+      STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
     );
-    expectNoAccentSelectedTreatment(infoUnselected.className);
+    expectNoSolidAccentSelectedTreatment(accentUnselected.className);
 
-    const infoSelected = canvas.getByRole("button", { name: "Info selected" });
-    expect(infoSelected.className).toContain(
+    const accentSelected = canvas.getByRole("button", {
+      name: "Accent selected",
+    });
+    expect(accentSelected.className).toContain(
       STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
     );
-    expect(infoSelected.className).not.toContain(
-      STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
+    expect(accentSelected.className).not.toContain(
+      STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
     );
-    await expect(infoSelected).toHaveAttribute("aria-pressed", "true");
-    expectNoAccentSelectedTreatment(infoSelected.className);
+    await expect(accentSelected).toHaveAttribute("aria-pressed", "true");
+    expectNoSolidAccentSelectedTreatment(accentSelected.className);
+
+    const successUnselected = canvas.getByRole("button", {
+      name: "Success unselected",
+    });
+    expect(successUnselected.className).toContain(
+      STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
+    );
+    expectNoSolidAccentSelectedTreatment(successUnselected.className);
 
     const dangerUnselected = canvas.getByRole("button", {
       name: "Danger unselected",
@@ -152,7 +166,7 @@ export const SharedStandardListSelection = {
     expect(dangerUnselected.className).toContain(
       STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
     );
-    expectNoAccentSelectedTreatment(dangerUnselected.className);
+    expectNoSolidAccentSelectedTreatment(dangerUnselected.className);
 
     const dangerSelected = canvas.getByRole("button", {
       name: "Danger selected",
@@ -160,14 +174,14 @@ export const SharedStandardListSelection = {
     expect(dangerSelected.className).toContain(
       STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
     );
-    expectNoAccentSelectedTreatment(dangerSelected.className);
+    expectNoSolidAccentSelectedTreatment(dangerSelected.className);
 
     const pendingList = canvas.getByRole("button", {
       name: "Pending selected row",
     });
     await expect(pendingList).toBeDisabled();
     await expect(pendingList).toHaveAttribute("aria-pressed", "true");
-    expectNoAccentSelectedTreatment(pendingList.className);
+    expectNoSolidAccentSelectedTreatment(pendingList.className);
 
     await expect(canvas.getByText("Alpha target selected")).toBeVisible();
   },

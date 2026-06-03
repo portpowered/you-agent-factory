@@ -26,7 +26,7 @@ import { getExportDialogMessages } from "../messages/export-dialog";
 import { ExportFactoryDialogImageField } from "./export-factory-dialog-image-field";
 
 const DIALOG_ERROR_PANEL_CLASS =
-  "rounded-2xl border border-af-danger-border bg-af-danger-surface px-4 py-3 text-sm text-af-danger-text";
+  "rounded-2xl border border-af-danger-border bg-error-container px-4 py-3 text-sm text-on-error-container";
 
 export interface ExportFactoryDialogProps {
   factory: ImportFactoryValue | null;
@@ -160,7 +160,7 @@ function ExportFactoryDialogForm({
       <div className="space-y-2">
         <label
           className={cn(
-            "block text-sm font-semibold text-af-text",
+            "block text-sm font-semibold text-on-surface",
             DASHBOARD_SUPPORTING_LABELS_CLASS,
           )}
           htmlFor="export-factory-name"
@@ -196,7 +196,7 @@ function ExportFactoryDialogForm({
         </p>
         {formState.nameValidationMessage ? (
           <p
-            className="m-0 text-sm font-medium text-af-danger-text"
+            className="m-0 text-sm font-medium text-on-error-container"
             id={formState.nameValidationId}
           >
             {formState.nameValidationMessage}
@@ -256,7 +256,7 @@ function ExportFactoryDialogMessages({
       {dialogState.status === "success" ? (
         <div
           aria-live="polite"
-          className="rounded-2xl border border-af-success-border bg-af-success-surface px-4 py-3 text-sm text-af-success-text"
+          className="rounded-2xl border border-af-success-border bg-success-container px-4 py-3 text-sm text-on-success-container"
           role="status"
         >
           {messages.successMessage(dialogState.filename)}

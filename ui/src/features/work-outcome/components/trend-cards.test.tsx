@@ -200,8 +200,8 @@ describe("dashboard trend cards", () => {
       requireValue(summary, "expected failure summary").className,
     ).toContain("md:grid-cols-3");
     expect(summary?.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
-    expect(summary?.className).toContain("border-af-border");
-    expect(summary?.className).toContain("bg-af-surface-subtle");
+    expect(summary?.className).toContain("border-outline");
+    expect(summary?.className).toContain("bg-surface-container-low");
     expect(
       failureScope
         .getByText("Failed in range")
@@ -212,13 +212,13 @@ describe("dashboard trend cards", () => {
       DASHBOARD_BODY_TEXT_CLASS,
     );
     expect(failureScope.getByText("Work type: story").className).toContain(
-      "text-af-text-muted",
+      "text-on-surface-variant",
     );
     expect(failureScope.getByLabelText("Time range").className).toContain(
-      "border-af-accent-border",
+      "border-primary",
     );
     expect(failureScope.getByLabelText("Time range").className).toContain(
-      "bg-af-surface-raised",
+      "bg-surface-container-high",
     );
 
     expect(reworkScope.getByText("work-active-story").className).toContain(

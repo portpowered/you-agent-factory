@@ -61,7 +61,7 @@ interface TerminalWorkRowProps {
 }
 
 const TERMINAL_ROW_CLASS =
-  "grid gap-2.5 rounded-lg border border-af-border bg-af-surface-subtle p-3";
+  "grid gap-2.5 rounded-lg border border-outline bg-surface-container-low p-3";
 const TERMINAL_FAILED_ROW_CLASS = "border-af-danger-border";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_BUTTON_META_CLASS = cn(
@@ -76,7 +76,7 @@ function terminalStatusIconKind(
 }
 
 function terminalStatusIconClassName(status: TerminalWorkStatus): string {
-  return status === "failed" ? "text-af-on-danger" : "text-af-on-info";
+  return status === "failed" ? "text-on-error" : "text-on-info";
 }
 
 export function CompletedFailedWorkstationCard({
@@ -179,7 +179,7 @@ function TerminalWorkRow({
       data-terminal-work-status={status}
     >
       <Collapsible onOpenChange={onExpandedChange} open={expanded}>
-        <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-af-text-subtle">
+        <div className="mb-1.5 flex flex-wrap items-start justify-between gap-2 [&_h4]:m-0 [&_p]:m-0 [&_p]:mt-1 [&_p]:text-[0.82rem] [&_p]:text-on-surface-subtle">
           <div>
             <div
               className="flex min-w-0 flex-1 items-center gap-2"
@@ -225,11 +225,9 @@ function TerminalWorkRow({
                   key={`${status}-${item.label}`}
                   onClick={() => onSelectItem(item)}
                   selected={selectedLabel === item.label}
-                  tone={status === "failed" ? "danger" : "info"}
+                  tone={status === "failed" ? "danger" : "success"}
                 >
-                  <span className="font-bold">
-                    {item.label}
-                  </span>
+                  <span className="font-bold">{item.label}</span>
                   {renderTerminalWorkContext(
                     item,
                     fallbackMessage,

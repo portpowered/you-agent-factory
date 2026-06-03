@@ -1,0 +1,29 @@
+/*
+ * Text color roles (Factory Dark baseline).
+ *
+ * Complements surface/accent/semantic fill roles in color-role-tokens.css.
+ * Use utilities such as text-on-surface, text-on-inverse, text-on-primary-container.
+ */
+
+@theme {
+  /* High- and medium-emphasis text on neutral surfaces */
+  --color-on-surface: var(--color-af-foundation-ink);
+  --color-on-surface-variant: rgb(
+    from var(--color-af-foundation-ink) r g b /
+    0.78
+  );
+  --color-on-surface-subtle: rgb(
+    from var(--color-af-foundation-ink) r g b /
+    0.58
+  );
+  --color-on-surface-disabled: rgb(
+    from var(--color-af-foundation-ink) r g b /
+    0.42
+  );
+
+  /* Inverse / on-dark fills (accent chips, inverted tooltips) */
+  --color-on-inverse: var(--color-af-foundation-canvas);
+
+  /* Product extension: monospace and code blocks beside Material body roles */
+  --color-code: var(--color-af-foundation-code-ink);
+}
