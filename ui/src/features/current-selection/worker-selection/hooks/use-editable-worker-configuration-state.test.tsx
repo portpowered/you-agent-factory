@@ -380,6 +380,57 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("preserves runtime fields in the draft when changing worker type", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "reviewer",
+            skipPermissions: true,
+            stopToken: "<COMPLETE>",
+            timeout: "30m",
+            type: "MODEL_WORKER",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTypeChange("SCRIPT_WORKER");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      draft: {
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        skipPermissions: true,
+        stopToken: "<COMPLETE>",
+        timeoutAmount: "30",
+        timeoutUnit: "m",
+        type: "SCRIPT_WORKER",
+      },
+      isDirty: true,
+    });
+  });
+
   it("updates locality, executor, type, and hosted provider draft fields", async () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),

@@ -135,9 +135,12 @@ export function applyEditableWorkerDraft(
   }
 
   const trimmedName = draft.name.trim();
-  const nextWorker = applyWorkerStopTokenFromDraft(
-    applyWorkerTimeoutFromDraft(
-      buildWorkerFromDraft(workerResolution.worker, draft),
+  const nextWorker = applyWorkerSkipPermissionsFromDraft(
+    applyWorkerStopTokenFromDraft(
+      applyWorkerTimeoutFromDraft(
+        buildWorkerFromDraft(workerResolution.worker, draft),
+        draft,
+      ),
       draft,
     ),
     draft,
@@ -179,20 +182,14 @@ function buildWorkerFromDraft(
   };
 
   if (draft.type === "MODEL_WORKER") {
-    const {
-      skipPermissions: _preservedSkipPermissions,
-      ...baseWithoutSkipPermissions
-    } = base;
-
     return {
-      ...baseWithoutSkipPermissions,
+      ...base,
       ...(draft.modelProvider ? { modelProvider: draft.modelProvider } : {}),
       ...(draft.model.trim().length > 0 ? { model: draft.model.trim() } : {}),
       ...(draft.modelLocality ? { modelLocality: draft.modelLocality } : {}),
       ...(draft.executorProvider
         ? { executorProvider: draft.executorProvider }
         : {}),
-      ...(draft.skipPermissions ? { skipPermissions: true } : {}),
     };
   }
 
@@ -239,6 +236,18 @@ function applyWorkerStopTokenFromDraft(
     : withoutStopToken;
 }
 
+function applyWorkerSkipPermissionsFromDraft(
+  worker: CanonicalWorker,
+  draft: EditableWorkerDraft,
+): CanonicalWorker {
+  const { skipPermissions: _preservedSkipPermissions, ...withoutSkipPermissions } =
+    worker;
+
+  return draft.skipPermissions
+    ? { ...withoutSkipPermissions, skipPermissions: true }
+    : withoutSkipPermissions;
+}
+
 function pickPreservedWorkerFields(
   worker: CanonicalWorker,
 ): Partial<CanonicalWorker> {
@@ -246,9 +255,6 @@ function pickPreservedWorkerFields(
 
   if (worker.resources !== undefined) {
     preserved.resources = worker.resources;
-  }
-  if (worker.skipPermissions !== undefined) {
-    preserved.skipPermissions = worker.skipPermissions;
   }
   if (worker.operations !== undefined) {
     preserved.operations = worker.operations;

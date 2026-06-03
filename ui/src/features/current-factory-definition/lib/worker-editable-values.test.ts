@@ -412,6 +412,99 @@ describe("applyEditableWorkerDraft", () => {
     expect(clearedFactory?.workstations?.[0]?.stopWords).toEqual(["DONE"]);
   });
 
+  it("preserves runtime fields when saving a model worker type change to script worker", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          skipPermissions: true,
+          stopToken: "<COMPLETE>",
+          timeout: "30m",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkerDraft(factory, "reviewer", {
+      argsText: "--verbose",
+      body: "",
+      command: "node",
+      executorProvider: null,
+      model: "gpt-5.5",
+      modelLocality: null,
+      modelProvider: "CURSOR",
+      name: "reviewer",
+      provider: null,
+      skipPermissions: true,
+      stopToken: "<COMPLETE>",
+      timeoutAmount: "30",
+      timeoutUnit: "m",
+      type: "SCRIPT_WORKER",
+    });
+
+    expect(updatedFactory?.workers?.[0]).toEqual({
+      args: ["--verbose"],
+      command: "node",
+      name: "reviewer",
+      skipPermissions: true,
+      stopToken: "<COMPLETE>",
+      timeout: "30m",
+      type: "SCRIPT_WORKER",
+    });
+    expect(updatedFactory?.workers?.[0]).not.toHaveProperty("model");
+    expect(updatedFactory?.workers?.[0]).not.toHaveProperty("modelProvider");
+  });
+
+  it("preserves runtime fields when saving a script worker type change to model worker", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          command: "node",
+          name: "runner",
+          stopToken: "STOP",
+          timeout: "1h",
+          type: "SCRIPT_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkerDraft(factory, "runner", {
+      argsText: "",
+      body: "",
+      command: "node",
+      executorProvider: null,
+      model: "gpt-5.5",
+      modelLocality: "CLOUD",
+      modelProvider: "CODEX",
+      name: "runner",
+      provider: null,
+      skipPermissions: true,
+      stopToken: "STOP",
+      timeoutAmount: "1",
+      timeoutUnit: "h",
+      type: "MODEL_WORKER",
+    });
+
+    expect(updatedFactory?.workers?.[0]).toEqual({
+      model: "gpt-5.5",
+      modelLocality: "CLOUD",
+      modelProvider: "CODEX",
+      name: "runner",
+      skipPermissions: true,
+      stopToken: "STOP",
+      timeout: "1h",
+      type: "MODEL_WORKER",
+    });
+    expect(updatedFactory?.workers?.[0]).not.toHaveProperty("command");
+    expect(updatedFactory?.workers?.[0]).not.toHaveProperty("args");
+  });
+
   it("applies script worker fields without writing model provider overrides", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
