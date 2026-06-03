@@ -478,9 +478,9 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 		TransitionID: "build",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        errorText,
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeInternalServerError,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeInternalServerError,
 		},
 	}
 	completed := interfaces.CompletedDispatch{
@@ -503,8 +503,8 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 	if err != nil {
 		t.Fatalf("dispatch completed payload: %v", err)
 	}
-	if stringValueForEventHistoryTest(payload.FailureReason) != string(interfaces.ProviderErrorTypeInternalServerError) {
-		t.Fatalf("failure reason = %q, want %q", stringValueForEventHistoryTest(payload.FailureReason), interfaces.ProviderErrorTypeInternalServerError)
+	if stringValueForEventHistoryTest(payload.FailureReason) != string(interfaces.WorkFailureTypeInternalServerError) {
+		t.Fatalf("failure reason = %q, want %q", stringValueForEventHistoryTest(payload.FailureReason), interfaces.WorkFailureTypeInternalServerError)
 	}
 	if stringValueForEventHistoryTest(payload.FailureMessage) != errorText {
 		t.Fatalf("failure message = %q, want %q", stringValueForEventHistoryTest(payload.FailureMessage), errorText)
@@ -512,11 +512,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 	if payload.ProviderFailure == nil {
 		t.Fatal("expected provider failure metadata on dispatch completed payload")
 	}
-	if stringValueForEventHistoryTest(payload.ProviderFailure.Family) != string(interfaces.ProviderErrorFamilyRetryable) {
-		t.Fatalf("provider failure family = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Family), interfaces.ProviderErrorFamilyRetryable)
+	if stringValueForEventHistoryTest(payload.ProviderFailure.Family) != string(interfaces.WorkFailureFamilyRetryable) {
+		t.Fatalf("provider failure family = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Family), interfaces.WorkFailureFamilyRetryable)
 	}
-	if stringValueForEventHistoryTest(payload.ProviderFailure.Type) != string(interfaces.ProviderErrorTypeInternalServerError) {
-		t.Fatalf("provider failure type = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Type), interfaces.ProviderErrorTypeInternalServerError)
+	if stringValueForEventHistoryTest(payload.ProviderFailure.Type) != string(interfaces.WorkFailureTypeInternalServerError) {
+		t.Fatalf("provider failure type = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Type), interfaces.WorkFailureTypeInternalServerError)
 	}
 }
 

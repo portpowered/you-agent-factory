@@ -106,7 +106,7 @@ func inferenceErrorWorkResult(dispatch interfaces.WorkDispatch, err error, diagn
 		Outcome:         interfaces.OutcomeFailed,
 		Error:           formatAgentProviderError(err),
 		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
-		ProviderFailure: interfaces.CloneProviderFailureMetadata(failureMetadata),
+		ProviderFailure: interfaces.CloneWorkFailureMetadata(failureMetadata),
 		ProviderSession: providerSessionFromError(providerErr),
 		Diagnostics:     mergeWorkDiagnostics(withInferenceErrorDiagnostics(diagnostics, err, retryCount), providerDiagnosticsFromError(providerErr)),
 		Metrics:         agentWorkMetrics(start, retryCount),
@@ -252,7 +252,7 @@ func formatAgentProviderError(err error) string {
 	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) {
 		message := strings.TrimSpace(providerErr.Message)
-		if providerErr.Type == interfaces.ProviderErrorTypeTimeout && message == "execution timeout" {
+		if providerErr.Type == interfaces.WorkFailureTypeTimeout && message == "execution timeout" {
 			return message
 		}
 		if message != "" {
@@ -339,7 +339,7 @@ func RunnerFromProvider(provider Provider) Runner {
 func (a providerRunnerAdapter) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
 	if a.inner == nil {
 		return interfaces.RunnerExecutionResult{}, workerprovider.NewProviderError(
-			interfaces.ProviderErrorTypeMisconfigured,
+			interfaces.WorkFailureTypeMisconfigured,
 			"runner requires a provider implementation",
 			nil,
 		)

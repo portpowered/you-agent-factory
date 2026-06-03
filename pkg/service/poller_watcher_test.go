@@ -1042,7 +1042,7 @@ func TestFactoryService_CronTickTimeoutFailureIsClassifiedAndBounded(t *testing.
 	}
 
 	failure := classifyCronTriggerFailure(err)
-	if !failure.retryable || failure.Family != interfaces.ProviderErrorFamilyRetryable || failure.Type != interfaces.ProviderErrorTypeTimeout {
+	if !failure.retryable || failure.Family != interfaces.WorkFailureFamilyRetryable || failure.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("cron timeout classification = %#v, want retryable timeout", failure)
 	}
 }

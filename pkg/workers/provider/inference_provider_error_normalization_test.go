@@ -53,8 +53,8 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 				Name:           "codex_unknown_unclassified",
 				ExitCode:       1,
 				Stderr:         `some brand new failure`,
-				ExpectedType:   interfaces.ProviderErrorTypeUnknown,
-				ExpectedFamily: interfaces.ProviderErrorFamilyTerminal,
+				ExpectedType:   interfaces.WorkFailureTypeUnknown,
+				ExpectedFamily: interfaces.WorkFailureFamilyTerminal,
 			},
 		},
 	}
@@ -94,7 +94,7 @@ func TestScriptWrapProvider_Infer_CodexExitFailuresNormalizeIntoSharedContract(t
 			if decision.TriggersThrottlePause != tc.entry.TriggersThrottlePause {
 				t.Fatalf("%s TriggersThrottlePause = %t, want %t", entryLabel, decision.TriggersThrottlePause, tc.entry.TriggersThrottlePause)
 			}
-			wantTerminal := tc.entry.ExpectedFamily == interfaces.ProviderErrorFamilyTerminal
+			wantTerminal := tc.entry.ExpectedFamily == interfaces.WorkFailureFamilyTerminal
 			if decision.Terminal != wantTerminal {
 				t.Fatalf("%s Terminal = %t, want %t", entryLabel, decision.Terminal, wantTerminal)
 			}
@@ -106,8 +106,8 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 	testCases := []struct {
 		name              string
 		stderr            string
-		wantType          interfaces.ProviderErrorType
-		wantFamily        interfaces.ProviderErrorFamily
+		wantType          interfaces.WorkFailureType
+		wantFamily        interfaces.WorkFailureFamily
 		wantRetryable     bool
 		wantTerminal      bool
 		wantThrottlePause bool
@@ -115,8 +115,8 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 		{
 			name:              "InternalServerError_HighDemandTemporaryErrors_RetriesWithoutThrottlePause",
 			stderr:            `ERROR: We're currently experiencing high demand, which may cause temporary errors.`,
-			wantType:          interfaces.ProviderErrorTypeInternalServerError,
-			wantFamily:        interfaces.ProviderErrorFamilyRetryable,
+			wantType:          interfaces.WorkFailureTypeInternalServerError,
+			wantFamily:        interfaces.WorkFailureFamilyRetryable,
 			wantRetryable:     true,
 			wantTerminal:      false,
 			wantThrottlePause: false,
@@ -124,8 +124,8 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 		{
 			name:              "InternalServerError_UnexpectedStatus500_RetriesWithoutThrottlePause",
 			stderr:            `ERROR: unexpected status 500 Internal Server Error`,
-			wantType:          interfaces.ProviderErrorTypeInternalServerError,
-			wantFamily:        interfaces.ProviderErrorFamilyRetryable,
+			wantType:          interfaces.WorkFailureTypeInternalServerError,
+			wantFamily:        interfaces.WorkFailureFamilyRetryable,
 			wantRetryable:     true,
 			wantTerminal:      false,
 			wantThrottlePause: false,
@@ -133,8 +133,8 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 		{
 			name:              "AuthFailure_UnexpectedStatus401_IsTerminal",
 			stderr:            `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`,
-			wantType:          interfaces.ProviderErrorTypeAuthFailure,
-			wantFamily:        interfaces.ProviderErrorFamilyTerminal,
+			wantType:          interfaces.WorkFailureTypeAuthFailure,
+			wantFamily:        interfaces.WorkFailureFamilyTerminal,
 			wantRetryable:     false,
 			wantTerminal:      true,
 			wantThrottlePause: false,
@@ -142,8 +142,8 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 		{
 			name:              "PermanentBadRequest_UnexpectedStatus400_IsTerminal",
 			stderr:            `ERROR: unexpected status 400 Bad Request {"type":"invalid_request_error","message":"bad request"}`,
-			wantType:          interfaces.ProviderErrorTypePermanentBadRequest,
-			wantFamily:        interfaces.ProviderErrorFamilyTerminal,
+			wantType:          interfaces.WorkFailureTypePermanentBadRequest,
+			wantFamily:        interfaces.WorkFailureFamilyTerminal,
 			wantRetryable:     false,
 			wantTerminal:      true,
 			wantThrottlePause: false,
@@ -175,21 +175,21 @@ func TestScriptWrapProvider_Infer_CodexNormalizedRetryDecisionRegressions(t *tes
 func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuthFailure(t *testing.T) {
 	testCases := []struct {
 		entryName          string
-		wantType           interfaces.ProviderErrorType
+		wantType           interfaces.WorkFailureType
 		wantRetryable      bool
 		wantThrottlePause  bool
 		wantRejectAuthType bool
 	}{
 		{
 			entryName:          "codex_windows_exit_code_4294967295",
-			wantType:           interfaces.ProviderErrorTypeInternalServerError,
+			wantType:           interfaces.WorkFailureTypeInternalServerError,
 			wantRetryable:      true,
 			wantThrottlePause:  false,
 			wantRejectAuthType: true,
 		},
 		{
 			entryName:         "codex_authentication_unauthorized",
-			wantType:          interfaces.ProviderErrorTypeAuthFailure,
+			wantType:          interfaces.WorkFailureTypeAuthFailure,
 			wantRetryable:     false,
 			wantThrottlePause: false,
 		},
@@ -217,7 +217,7 @@ func TestScriptWrapProvider_Infer_CodexWindowsCorpusEntryRemainsDistinctFromAuth
 			if providerErr.Type != tc.wantType {
 				t.Fatalf("%s Type = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Type, tc.wantType)
 			}
-			if tc.wantRejectAuthType && providerErr.Type == interfaces.ProviderErrorTypeAuthFailure {
+			if tc.wantRejectAuthType && providerErr.Type == interfaces.WorkFailureTypeAuthFailure {
 				t.Fatalf("%s Type = %q, want non-auth retryable failure", providerErrorCorpusEntryLabel(entry), providerErr.Type)
 			}
 
@@ -236,8 +236,8 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 	testCases := []struct {
 		name              string
 		result            CommandResult
-		wantType          interfaces.ProviderErrorType
-		wantFamily        interfaces.ProviderErrorFamily
+		wantType          interfaces.WorkFailureType
+		wantFamily        interfaces.WorkFailureFamily
 		wantMessage       string
 		wantRetryable     bool
 		wantTerminal      bool
@@ -253,8 +253,8 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 					"provider: openai",
 				}, "\n")),
 			},
-			wantType:          interfaces.ProviderErrorTypeInternalServerError,
-			wantFamily:        interfaces.ProviderErrorFamilyRetryable,
+			wantType:          interfaces.WorkFailureTypeInternalServerError,
+			wantFamily:        interfaces.WorkFailureFamilyRetryable,
 			wantMessage:       "codex exited with code 4294967295",
 			wantRetryable:     true,
 			wantTerminal:      false,
@@ -266,8 +266,8 @@ func TestScriptWrapProvider_Infer_CodexWindowsExitCode4294967295Normalization(t 
 				ExitCode: codexWindowsProcessFailureExitCode,
 				Stderr:   []byte(`ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`),
 			},
-			wantType:          interfaces.ProviderErrorTypeAuthFailure,
-			wantFamily:        interfaces.ProviderErrorFamilyTerminal,
+			wantType:          interfaces.WorkFailureTypeAuthFailure,
+			wantFamily:        interfaces.WorkFailureFamilyTerminal,
 			wantMessage:       `ERROR: unexpected status 401 Unauthorized {"type":"authentication_error","message":"invalid api key"}`,
 			wantRetryable:     false,
 			wantTerminal:      true,
@@ -371,8 +371,8 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 	testCases := []struct {
 		name                 string
 		result               CommandResult
-		wantType             interfaces.ProviderErrorType
-		wantFamily           interfaces.ProviderErrorFamily
+		wantType             interfaces.WorkFailureType
+		wantFamily           interfaces.WorkFailureFamily
 		wantMessage          string
 		wantRetryable        bool
 		wantTerminal         bool
@@ -385,8 +385,8 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 				ExitCode: 1,
 				Stdout:   capacityEntry.CommandResult().Stdout,
 			},
-			wantType:             interfaces.ProviderErrorTypeThrottled,
-			wantFamily:           interfaces.ProviderErrorFamilyThrottle,
+			wantType:             interfaces.WorkFailureTypeThrottled,
+			wantFamily:           interfaces.WorkFailureFamilyThrottle,
 			wantMessage:          capacityLine,
 			wantRetryable:        true,
 			wantThrottlePause:    true,
@@ -398,8 +398,8 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 				ExitCode: 1,
 				Stderr:   []byte("ERROR: command timed out while waiting for codex"),
 			},
-			wantType:      interfaces.ProviderErrorTypeTimeout,
-			wantFamily:    interfaces.ProviderErrorFamilyRetryable,
+			wantType:      interfaces.WorkFailureTypeTimeout,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
 			wantMessage:   "ERROR: command timed out while waiting for codex",
 			wantRetryable: true,
 		},
@@ -409,8 +409,8 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 				ExitCode: 1,
 				Stdout:   []byte("ERROR: context deadline exceeded"),
 			},
-			wantType:      interfaces.ProviderErrorTypeTimeout,
-			wantFamily:    interfaces.ProviderErrorFamilyRetryable,
+			wantType:      interfaces.WorkFailureTypeTimeout,
+			wantFamily:    interfaces.WorkFailureFamilyRetryable,
 			wantMessage:   "ERROR: context deadline exceeded",
 			wantRetryable: true,
 		},
@@ -420,8 +420,8 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 				ExitCode: 1,
 				Stderr:   []byte("ERROR: The process with PID 1234 could not be terminated"),
 			},
-			wantType:          interfaces.ProviderErrorTypeUnknown,
-			wantFamily:        interfaces.ProviderErrorFamilyTerminal,
+			wantType:          interfaces.WorkFailureTypeUnknown,
+			wantFamily:        interfaces.WorkFailureFamilyTerminal,
 			wantMessage:       "ERROR: The process with PID 1234 could not be terminated",
 			wantTerminal:      true,
 			wantThrottlePause: false,
@@ -433,8 +433,8 @@ func TestScriptWrapProvider_Infer_KnownCodexErrorLinesMapToProviderFailureCatego
 				Stderr:   []byte(capacityLine),
 				Stdout:   []byte("request failed with 400 bad request after full transcript"),
 			},
-			wantType:             interfaces.ProviderErrorTypeThrottled,
-			wantFamily:           interfaces.ProviderErrorFamilyThrottle,
+			wantType:             interfaces.WorkFailureTypeThrottled,
+			wantFamily:           interfaces.WorkFailureFamilyThrottle,
 			wantMessage:          capacityLine,
 			wantRetryable:        true,
 			wantThrottlePause:    true,
@@ -561,8 +561,8 @@ func TestScriptWrapProvider_Infer_ClaudeExitFailuresNormalizeIntoSharedContract(
 				Name:           "claude_unknown_unclassified",
 				ExitCode:       1,
 				Stderr:         `some brand new claude failure`,
-				ExpectedType:   interfaces.ProviderErrorTypeUnknown,
-				ExpectedFamily: interfaces.ProviderErrorFamilyTerminal,
+				ExpectedType:   interfaces.WorkFailureTypeUnknown,
+				ExpectedFamily: interfaces.WorkFailureFamilyTerminal,
 			},
 		},
 	}
@@ -604,16 +604,16 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 		name        string
 		result      CommandResult
 		runErr      error
-		wantType    interfaces.ProviderErrorType
-		wantFamily  interfaces.ProviderErrorFamily
+		wantType    interfaces.WorkFailureType
+		wantFamily  interfaces.WorkFailureFamily
 		wantMessage string
 		rejectText  string
 	}{
 		{
 			name:        "DeadlineExceeded_IsTimeout",
 			runErr:      context.DeadlineExceeded,
-			wantType:    interfaces.ProviderErrorTypeTimeout,
-			wantFamily:  interfaces.ProviderErrorFamilyRetryable,
+			wantType:    interfaces.WorkFailureTypeTimeout,
+			wantFamily:  interfaces.WorkFailureFamilyRetryable,
 			wantMessage: "execution timeout",
 		},
 		{
@@ -622,8 +622,8 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 				Stderr: []byte("context canceled after command timed out"),
 			},
 			runErr:      context.Canceled,
-			wantType:    interfaces.ProviderErrorTypeTimeout,
-			wantFamily:  interfaces.ProviderErrorFamilyRetryable,
+			wantType:    interfaces.WorkFailureTypeTimeout,
+			wantFamily:  interfaces.WorkFailureFamilyRetryable,
 			wantMessage: "context canceled after command timed out",
 		},
 		{
@@ -637,8 +637,8 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 				}, "\n")),
 			},
 			runErr:      context.DeadlineExceeded,
-			wantType:    interfaces.ProviderErrorTypeTimeout,
-			wantFamily:  interfaces.ProviderErrorFamilyRetryable,
+			wantType:    interfaces.WorkFailureTypeTimeout,
+			wantFamily:  interfaces.WorkFailureFamilyRetryable,
 			wantMessage: capacityLine,
 			rejectText:  "raw inference transcript",
 		},
@@ -653,22 +653,22 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 				}, "\n")),
 			},
 			runErr:      context.Canceled,
-			wantType:    interfaces.ProviderErrorTypeTimeout,
-			wantFamily:  interfaces.ProviderErrorFamilyRetryable,
+			wantType:    interfaces.WorkFailureTypeTimeout,
+			wantFamily:  interfaces.WorkFailureFamilyRetryable,
 			wantMessage: "ERROR: context deadline exceeded while waiting for codex",
 			rejectText:  "raw inference transcript",
 		},
 		{
 			name:       "ExecutableMissing_IsMisconfigured",
 			runErr:     exec.ErrNotFound,
-			wantType:   interfaces.ProviderErrorTypeMisconfigured,
-			wantFamily: interfaces.ProviderErrorFamilyTerminal,
+			wantType:   interfaces.WorkFailureTypeMisconfigured,
+			wantFamily: interfaces.WorkFailureFamilyTerminal,
 		},
 		{
 			name:       "UnknownRuntimeFailure_IsUnknown",
 			runErr:     errors.New("pipe broke"),
-			wantType:   interfaces.ProviderErrorTypeUnknown,
-			wantFamily: interfaces.ProviderErrorFamilyTerminal,
+			wantType:   interfaces.WorkFailureTypeUnknown,
+			wantFamily: interfaces.WorkFailureFamilyTerminal,
 		},
 	}
 
@@ -687,9 +687,9 @@ func TestScriptWrapProvider_Infer_RunErrorsNormalizeTimeoutAndMisconfigured(t *t
 				wantFamily:             tc.wantFamily,
 				wantMessage:            tc.wantMessage,
 				rejectText:             tc.rejectText,
-				wantRetryable:          tc.wantType == interfaces.ProviderErrorTypeTimeout,
-				requireTimeoutDecision: tc.wantType == interfaces.ProviderErrorTypeTimeout,
-				requireTimeoutDiag:     tc.wantType == interfaces.ProviderErrorTypeTimeout,
+				wantRetryable:          tc.wantType == interfaces.WorkFailureTypeTimeout,
+				requireTimeoutDecision: tc.wantType == interfaces.WorkFailureTypeTimeout,
+				requireTimeoutDiag:     tc.wantType == interfaces.WorkFailureTypeTimeout,
 			})
 		})
 	}
@@ -734,7 +734,7 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 				UserMessage:   "fix it",
 			})
 			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-				wantType:               interfaces.ProviderErrorTypeTimeout,
+				wantType:               interfaces.WorkFailureTypeTimeout,
 				wantRetryable:          true,
 				requireTimeoutDecision: true,
 			})
@@ -743,8 +743,8 @@ func TestScriptWrapProvider_Infer_ProviderTimeoutTextNormalizesToRetryableTimeou
 }
 
 type normalizedProviderFailureExpectation struct {
-	wantType               interfaces.ProviderErrorType
-	wantFamily             interfaces.ProviderErrorFamily
+	wantType               interfaces.WorkFailureType
+	wantFamily             interfaces.WorkFailureFamily
 	wantMessage            string
 	rejectText             string
 	rejectTexts            []string

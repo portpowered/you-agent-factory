@@ -662,11 +662,11 @@ func TestCursorAndCodexProviderBehavior_ExitFailureBehavior(t *testing.T) {
 		ExitCode: 1,
 		Stderr:   []byte("ERROR: unexpected status 500 from codex upstream"),
 	}
-	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.ProviderErrorTypeInternalServerError {
-		t.Fatalf("cursor ClassifyExitFailure() = %q, want %q", got, interfaces.ProviderErrorTypeInternalServerError)
+	if got := cursorBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("cursor ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if got := codexBehavior.ClassifyExitFailure(result); got != interfaces.ProviderErrorTypeInternalServerError {
-		t.Fatalf("codex ClassifyExitFailure() = %q, want %q", got, interfaces.ProviderErrorTypeInternalServerError)
+	if got := codexBehavior.ClassifyExitFailure(result); got != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("codex ClassifyExitFailure() = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
 	}
 }
 
@@ -746,37 +746,37 @@ func assertProviderExitFailureClassification(t *testing.T, behavior providerBeha
 	testCases := []struct {
 		name   string
 		result CommandResult
-		want   interfaces.ProviderErrorType
+		want   interfaces.WorkFailureType
 	}{
 		{
 			name:   "AuthFailure",
 			result: CommandResult{ExitCode: 1, Stderr: []byte("login required for this API key")},
-			want:   interfaces.ProviderErrorTypeAuthFailure,
+			want:   interfaces.WorkFailureTypeAuthFailure,
 		},
 		{
 			name:   "PermanentBadRequest",
 			result: CommandResult{ExitCode: 1, Stderr: []byte("invalid argument in request payload")},
-			want:   interfaces.ProviderErrorTypePermanentBadRequest,
+			want:   interfaces.WorkFailureTypePermanentBadRequest,
 		},
 		{
 			name:   "Throttled",
 			result: CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
-			want:   interfaces.ProviderErrorTypeThrottled,
+			want:   interfaces.WorkFailureTypeThrottled,
 		},
 		{
 			name:   "InternalServerError",
 			result: CommandResult{ExitCode: 1, Stderr: []byte("unexpected status 503 from upstream")},
-			want:   interfaces.ProviderErrorTypeInternalServerError,
+			want:   interfaces.WorkFailureTypeInternalServerError,
 		},
 		{
 			name:   "Timeout",
 			result: CommandResult{ExitCode: 124},
-			want:   interfaces.ProviderErrorTypeTimeout,
+			want:   interfaces.WorkFailureTypeTimeout,
 		},
 		{
 			name:   "Unknown",
 			result: CommandResult{ExitCode: 1, Stderr: []byte("provider stopped without classification markers")},
-			want:   interfaces.ProviderErrorTypeUnknown,
+			want:   interfaces.WorkFailureTypeUnknown,
 		},
 	}
 

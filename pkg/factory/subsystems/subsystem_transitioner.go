@@ -242,7 +242,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
 		FailureMetadata:             interfaces.CloneWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
-		ProviderFailure:             interfaces.CloneProviderFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
+		ProviderFailure:             interfaces.CloneWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
 		ProviderSession:             interfaces.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:                     endTime,
 		ConsumedTokens:              interfaces.CloneTokens(consumedTokens),

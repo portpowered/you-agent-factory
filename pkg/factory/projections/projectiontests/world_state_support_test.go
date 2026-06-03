@@ -743,7 +743,7 @@ func generatedProviderSessionForProjectionTest(session *interfaces.ProviderSessi
 	}
 }
 
-func generatedProviderFailureForProjectionTest(failure *interfaces.ProviderFailureMetadata) *factoryapi.ProviderFailureMetadata {
+func generatedProviderFailureForProjectionTest(failure *interfaces.WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
 	if failure == nil {
 		return nil
 	}

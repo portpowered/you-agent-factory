@@ -566,7 +566,7 @@ func timeoutWorkResult(dispatch interfaces.WorkDispatch, duration time.Duration)
 		Outcome:         interfaces.OutcomeFailed,
 		Error:           "execution timeout",
 		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
-		ProviderFailure: interfaces.CloneProviderFailureMetadata(failureMetadata),
+		ProviderFailure: interfaces.CloneWorkFailureMetadata(failureMetadata),
 		Metrics:         interfaces.WorkMetrics{Duration: duration},
 	}
 }

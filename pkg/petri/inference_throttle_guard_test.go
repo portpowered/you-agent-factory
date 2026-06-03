@@ -158,8 +158,8 @@ func completedThrottleFailure(dispatchID, transitionID string, endedAt time.Time
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyThrottle,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
 		},
 	}
 }
@@ -169,8 +169,8 @@ func completedNonThrottleFailure(dispatchID, transitionID string, endedAt time.T
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
 		},
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type testPipeline struct {
@@ -168,9 +168,9 @@ func TestHistoryTransitionerPipeline_ThrottledFailureRequeuesConsumedWorkToOrigi
 		TransitionID: "t1",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        "provider error: claude rate limit exceeded",
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyThrottle,
-			Type:   interfaces.ProviderErrorTypeThrottled,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	})
 	createdAt := time.Date(2026, time.April, 6, 10, 0, 0, 0, time.UTC)
@@ -289,8 +289,8 @@ func assertTimeoutFailureRequeueResult(t *testing.T, result *interfaces.TickResu
 	if completed.ProviderFailure == nil {
 		t.Fatal("completed dispatch ProviderFailure = nil, want mirrored timeout metadata")
 	}
-	if completed.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("completed dispatch ProviderFailure.Type = %q, want %q", completed.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	if completed.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("completed dispatch ProviderFailure.Type = %q, want %q", completed.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
 	}
 }
 
@@ -345,9 +345,9 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesConsumedWorkTo
 		TransitionID: "t1",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        "provider error: internal_server_error",
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeInternalServerError,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeInternalServerError,
 		},
 	})
 
@@ -376,21 +376,21 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesConsumedWorkTo
 func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesFromNormalizedTypeWhenFamilyIsMissingOrStale(t *testing.T) {
 	testCases := []struct {
 		name     string
-		metadata *interfaces.ProviderFailureMetadata
+		metadata *interfaces.WorkFailureMetadata
 		workID   string
 	}{
 		{
 			name: "MissingFamily",
-			metadata: &interfaces.ProviderFailureMetadata{
-				Type: interfaces.ProviderErrorTypeInternalServerError,
+			metadata: &interfaces.WorkFailureMetadata{
+				Type: interfaces.WorkFailureTypeInternalServerError,
 			},
 			workID: "w-retryable-missing-family",
 		},
 		{
 			name: "StaleTerminalFamily",
-			metadata: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyTerminal,
-				Type:   interfaces.ProviderErrorTypeInternalServerError,
+			metadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyTerminal,
+				Type:   interfaces.WorkFailureTypeInternalServerError,
 			},
 			workID: "w-retryable-stale-family",
 		},
@@ -437,9 +437,9 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	n := buildPipelineNet()
 	tp := newTestPipeline(n)
 	errorText := "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)"
-	providerFailure := &interfaces.ProviderFailureMetadata{
-		Family: interfaces.ProviderErrorFamilyRetryable,
-		Type:   interfaces.ProviderErrorTypeInternalServerError,
+	providerFailure := &interfaces.WorkFailureMetadata{
+		Family: interfaces.WorkFailureFamilyRetryable,
+		Type:   interfaces.WorkFailureTypeInternalServerError,
 	}
 	tp.WriteResult(interfaces.WorkResult{
 		DispatchID:      "d-1",
@@ -479,22 +479,22 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	if completed.ProviderFailure == nil {
 		t.Fatal("expected completed dispatch provider failure metadata")
 	}
-	if completed.ProviderFailure.Type != interfaces.ProviderErrorTypeInternalServerError {
-		t.Fatalf("completed dispatch provider failure type = %q, want %q", completed.ProviderFailure.Type, interfaces.ProviderErrorTypeInternalServerError)
+	if completed.ProviderFailure.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("completed dispatch provider failure type = %q, want %q", completed.ProviderFailure.Type, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if completed.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
-		t.Fatalf("completed dispatch provider failure family = %q, want %q", completed.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
+	if completed.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("completed dispatch provider failure family = %q, want %q", completed.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
-	decision := workers.ProviderFailureDecisionFromMetadata(completed.ProviderFailure)
+	decision := workerprovider.WorkFailureDecisionFromMetadata(completed.ProviderFailure)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
-		t.Fatalf("ProviderFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", completed.ProviderFailure, decision)
+		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", completed.ProviderFailure, decision)
 	}
-	providerFailure.Type = interfaces.ProviderErrorTypeAuthFailure
-	providerFailure.Family = interfaces.ProviderErrorFamilyTerminal
-	if completed.ProviderFailure.Type != interfaces.ProviderErrorTypeInternalServerError {
+	providerFailure.Type = interfaces.WorkFailureTypeAuthFailure
+	providerFailure.Family = interfaces.WorkFailureFamilyTerminal
+	if completed.ProviderFailure.Type != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("completed dispatch provider failure type after source mutation = %q, want detached original", completed.ProviderFailure.Type)
 	}
-	if completed.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
+	if completed.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
 		t.Fatalf("completed dispatch provider failure family after source mutation = %q, want detached original", completed.ProviderFailure.Family)
 	}
 }
