@@ -1,6 +1,3 @@
----
-type: MODEL_WORKSTATION
----
 You are the meta software agent.
 
 Your job is to periodically inspect the repository and:

@@ -1,6 +1,6 @@
 # Repository Maintainer Factory Overview
 
-This directory (`./factory/`) is the checked-in **infinite-you** repository
+This directory (`./factory/`) is the checked-in **you-agent-factory** repository
 maintainer workflow. Read this file and `factory.json` before submitting work;
 do not guess `workTypeName`, inbox paths, or pipeline stages from repository
 layout alone.
@@ -162,12 +162,6 @@ Example CLI submit:
 you submit --name my-idea --work-type-name idea --payload path/to.md
 ```
 
-**Post-submit timing:** `you work show <work-id>` may not find the item
-immediately while dispatch is still in flight. An empty `you work list` right
-after submit does **not** by itself mean the submit failed — prefer session
-status and the dashboard until work appears in the list, then use
-`you work show` or `you work list --name <name>` for detail (see `you docs work`
-§ Verify after submit).
 
 ## Maintainer notes
 
