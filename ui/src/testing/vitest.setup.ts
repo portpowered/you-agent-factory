@@ -2,7 +2,7 @@ import "./guarded-suite-console.setup";
 
 import { configure } from "@testing-library/react";
 import { installResizeObserverShim } from "../components/dashboard/test-browser-shims";
-import { monacoEditorReactMock } from "./vitest-monaco-editor-mock";
+import { MonacoEditorMock } from "./vitest-monaco-editor-mock";
 
 installResizeObserverShim();
 
@@ -32,7 +32,12 @@ if (typeof document !== "undefined" && !document.queryCommandSupported) {
   document.queryCommandSupported = () => false;
 }
 
-vi.mock("@monaco-editor/react", () => monacoEditorReactMock);
+vi.mock("@monaco-editor/react", () => ({
+  default: MonacoEditorMock,
+  loader: {
+    config: vi.fn(),
+  },
+}));
 
 const mockedMonacoModule = {
   editor: {

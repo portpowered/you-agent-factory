@@ -151,10 +151,3 @@ export function MonacoEditorMock({
     }),
   );
 }
-
-export const monacoEditorReactMock = {
-  default: MonacoEditorMock,
-  loader: {
-    config: vi.fn(),
-  },
-};
