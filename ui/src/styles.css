@@ -24,6 +24,11 @@
   --color-af-foundation-info-strong: #5097be;
   --color-af-foundation-info-bright: #7dd3fc;
   --color-af-foundation-info-ink: #b5edf4;
+  /* Calmer accent hues (US-003): same families as info/worker, lower chroma than semantic info */
+  --color-af-foundation-secondary-accent: #507f8c;
+  --color-af-foundation-secondary-accent-ink: #8aaeb8;
+  --color-af-foundation-tertiary-accent: #6d6290;
+  --color-af-foundation-tertiary-accent-ink: #a89ec4;
   --color-af-foundation-success: #57c18b;
   --color-af-foundation-success-ink: #a7f0c4;
   --color-af-foundation-warning: #f0b15a;
@@ -88,7 +93,7 @@
     0.28
   );
   --color-af-worker-border: rgb(
-    from var(--color-af-foundation-worker) r g b /
+    from var(--color-af-foundation-tertiary-accent) r g b /
     0.3
   );
   --color-af-bg: var(--color-af-background);

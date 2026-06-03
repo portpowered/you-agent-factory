@@ -6,8 +6,8 @@
  *
  * Accent intent:
  * - primary: yellow brand accent (most prominent)
- * - secondary: cool cyan supporting accent (moderate saturation; tuned in US-003)
- * - tertiary: violet supporting accent (moderate saturation; tuned in US-003)
+ * - secondary: cool cyan supporting accent (af-foundation-secondary-accent)
+ * - tertiary: violet supporting accent (af-foundation-tertiary-accent)
  *
  * Semantic families are status-only; do not substitute for accent emphasis.
  */
@@ -52,23 +52,25 @@
   );
   --color-on-primary-container: var(--color-af-foundation-accent-strong);
 
-  /* --- Secondary accent (cyan; calmer than primary after US-003) --- */
-  --color-secondary: var(--color-af-foundation-info);
+  /* --- Secondary accent (cyan; calmer than semantic info and primary) --- */
+  --color-secondary: var(--color-af-foundation-secondary-accent);
   --color-on-secondary: var(--color-af-foundation-canvas);
   --color-secondary-container: rgb(
-    from var(--color-af-foundation-info) r g b /
+    from var(--color-af-foundation-secondary-accent) r g b /
     0.12
   );
-  --color-on-secondary-container: var(--color-af-foundation-info-ink);
+  --color-on-secondary-container: var(
+    --color-af-foundation-secondary-accent-ink
+  );
 
-  /* --- Tertiary accent (violet; calmer than primary after US-003) --- */
-  --color-tertiary: var(--color-af-foundation-worker);
+  /* --- Tertiary accent (violet; calmer than legacy worker chrome) --- */
+  --color-tertiary: var(--color-af-foundation-tertiary-accent);
   --color-on-tertiary: var(--color-af-foundation-canvas);
   --color-tertiary-container: rgb(
-    from var(--color-af-foundation-worker) r g b /
+    from var(--color-af-foundation-tertiary-accent) r g b /
     0.13
   );
-  --color-on-tertiary-container: var(--color-af-foundation-worker-ink);
+  --color-on-tertiary-container: var(--color-af-foundation-tertiary-accent-ink);
 
   /* --- Semantic: success --- */
   --color-success: var(--color-af-foundation-success);

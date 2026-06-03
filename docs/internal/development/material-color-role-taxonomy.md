@@ -37,8 +37,8 @@ Each accent family exposes `role`, `on-role`, `role-container`, and `on-role-con
 | Family | Hue family | Notes |
 | --- | --- | --- |
 | `primary` | Yellow (`#f5c76f`) | Brand accent; most visually prominent accent |
-| `secondary` | Cyan (`af-foundation-info`) | Supporting accent; moderate saturation (rebalanced in US-003) |
-| `tertiary` | Violet (`af-foundation-worker`) | Supporting accent; moderate saturation (rebalanced in US-003) |
+| `secondary` | Cyan (`af-foundation-secondary-accent`) | Supporting accent; calmer than semantic `info` |
+| `tertiary` | Violet (`af-foundation-tertiary-accent`) | Supporting accent; calmer than legacy `af-foundation-worker` chrome |
 
 **Do not** use `warning` for ordinary brand emphasis. **Do not** use semantic greens/blues/reds for non-status UI chrome.
 
@@ -58,7 +58,7 @@ Each semantic family includes `on-*` and `*-container` / `on-*-container` pairs 
 ## Implementation notes
 
 1. **Yellow primary** — `primary` stays tied to `af-foundation-accent` so Factory Dark identity is preserved.
-2. **Secondary and tertiary saturation** — Initial tokens mirror current foundation info/worker hues. US-003 lowers vibrancy while keeping hue families distinguishable from neutrals and from each other.
+2. **Secondary and tertiary saturation (US-003)** — `secondary` / `tertiary` roles use `af-foundation-secondary-accent` and `af-foundation-tertiary-accent` (calmer than `af-foundation-info` / `af-foundation-worker`). Semantic `info` and chart/info chrome keep the vibrant `af-foundation-info` family. Visual review: Storybook `Agent Factory/UI/Color Role Accent Contrast`.
 3. **Palette switching (US-008)** — Future palette sets override the same role keys; role names stay stable across Factory Dark, Factory Light, Material Baseline, Slate, and Olive.
 4. **Migration order** — Taxonomy (this doc) → `af-*` aliases → shared primitives → feature surfaces → alias cleanup.
 
