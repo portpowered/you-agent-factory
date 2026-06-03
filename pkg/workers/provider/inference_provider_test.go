@@ -532,11 +532,76 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 	}
 }
 
+func TestScriptWrapProvider_Infer_CursorParsesJSONResult(t *testing.T) {
+	stdout := cursorSuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
+	stdout = append(stdout, '\n')
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{Stdout: stdout},
+	}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		Model:         "gpt-5",
+		UserMessage:   "run the tests",
+	})
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+	if resp.Content != "Parsed assistant answer." {
+		t.Fatalf("content = %q, want parsed result text", resp.Content)
+	}
+	if resp.Content == string(stdout) {
+		t.Fatal("content must not be raw JSON stdout")
+	}
+	if resp.ProviderSession == nil {
+		t.Fatal("expected provider session metadata")
+	}
+	if resp.ProviderSession.Provider != string(interfaces.ModelProviderCursor) {
+		t.Fatalf("provider = %q, want cursor", resp.ProviderSession.Provider)
+	}
+	if resp.ProviderSession.ID != "cursor-session-abc" {
+		t.Fatalf("session id = %q, want cursor-session-abc", resp.ProviderSession.ID)
+	}
+	if resp.Diagnostics == nil || resp.Diagnostics.Command == nil {
+		t.Fatal("expected command diagnostics on success")
+	}
+	if string(resp.Diagnostics.Command.Stdout) != string(stdout) {
+		t.Fatal("command diagnostics should retain raw stdout for observability")
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *testing.T) {
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{Stdout: []byte(`{"type":"result"`)},
+	}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "run the tests",
+	})
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error type = %q, want permanent_bad_request", providerErr.Type)
+	}
+}
+
 func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNoStdin(t *testing.T) {
 	for _, tc := range nonCodexInferencePayloadTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			stdout := []byte(strings.ToLower(tc.name) + " output")
+			if tc.req.ModelProvider == string(interfaces.ModelProviderCursor) {
+				stdout = cursorSuccessStdoutJSON(strings.ToLower(tc.name)+" output", "cursor-session-from-json")
+			}
 			fakeExec := &recordingProviderExec{
-				result: CommandResult{Stdout: []byte(strings.ToLower(tc.name) + " output")},
+				result: CommandResult{Stdout: stdout},
 			}
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
@@ -544,8 +609,9 @@ func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNo
 			if err != nil {
 				t.Fatalf("Infer returned error: %v", err)
 			}
-			if resp.Content != strings.ToLower(tc.name)+" output" {
-				t.Fatalf("response content = %q", resp.Content)
+			wantContent := strings.ToLower(tc.name) + " output"
+			if resp.Content != wantContent {
+				t.Fatalf("response content = %q, want %q", resp.Content, wantContent)
 			}
 			if fakeExec.request.Command != tc.req.ModelProvider {
 				t.Fatalf("command = %q, want %q", fakeExec.request.Command, tc.req.ModelProvider)

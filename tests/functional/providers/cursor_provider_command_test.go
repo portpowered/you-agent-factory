@@ -16,7 +16,7 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", buildCursorModelWorkerConfig("test-cursor-model", false))
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProviderCommandRunner(runner),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
@@ -48,7 +48,7 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", buildCursorModelWorkerConfig("test-cursor-model", true))
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProviderCommandRunner(runner),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
@@ -82,7 +82,7 @@ stopToken: COMPLETE
 Process the input task.
 `)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProviderCommandRunner(runner),
 		testutil.WithFullWorkerPoolAndScriptWrap(),

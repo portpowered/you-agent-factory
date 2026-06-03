@@ -1,6 +1,7 @@
 package support
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -29,6 +30,24 @@ func AcceptedProviderResponse() interfaces.InferenceResponse {
 
 func RejectedProviderResponse(content string) interfaces.InferenceResponse {
 	return interfaces.InferenceResponse{Content: content}
+}
+
+func CursorProviderSuccessStdout(result string) []byte {
+	if result == "" {
+		result = "Done. COMPLETE"
+	}
+	payload := map[string]any{
+		"type":       "result",
+		"subtype":    "success",
+		"is_error":   false,
+		"result":     result,
+		"session_id": "cursor-functional-test-session",
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return encoded
 }
 
 func AcceptedCommandResults(count int) []workers.CommandResult {

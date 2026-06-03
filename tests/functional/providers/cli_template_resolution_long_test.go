@@ -239,7 +239,7 @@ func TestTemplateTests_ScriptWrapCursorResolvesWorkstationExecutionTemplates(t *
 
 	writeExecutionTemplateSeed(t, dir)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithProviderCommandRunner(runner),
