@@ -2,5 +2,7 @@ type: string
 description: Canonical provider value for provider-session detail requests that can be loaded by the API.
 x-enum-varnames:
   - Codex
+  - Cursor
 enum:
   - codex
+  - cursor

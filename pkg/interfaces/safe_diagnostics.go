@@ -304,6 +304,8 @@ func isSafeProviderMetadataKey(key string) bool {
 		"retry_count",
 		"session_id",
 		"source",
+		"stderr_excerpt",
+		"stdout_excerpt",
 		"worker_type",
 		"workstation_type",
 		"working_directory",

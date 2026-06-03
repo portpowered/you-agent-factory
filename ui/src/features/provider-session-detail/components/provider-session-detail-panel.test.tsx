@@ -24,6 +24,54 @@ describe("ProviderSessionDetailPanel", () => {
     vi.unstubAllGlobals();
   });
 
+  it("loads Cursor session details when provider is cursor", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse(
+        buildProviderSessionDetailResponse({
+          providerSession: {
+            id: "cursor_sess_01",
+            kind: "session_id",
+            provider: "cursor",
+          },
+          source: {
+            relativePath: "store.db",
+            sizeBytes: 4096,
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              text: "Hello from Cursor",
+              type: "assistant_message",
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderWithQueryClient(
+      <ProviderSessionDetailPanel
+        selectedProviderSession={{
+          dispatchID: "dispatch-cursor-active",
+          id: "cursor_sess_01",
+          kind: "session_id",
+          provider: "cursor",
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("cursor / Session ID / cursor_sess_01").length).toBeGreaterThan(0);
+    expect(screen.getByText("Hello from Cursor")).toBeTruthy();
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/provider-sessions/detail?id=cursor_sess_01&kind=session_id&provider=cursor",
+      { method: "GET" },
+    );
+  });
+
   it("shows an explicit loading state while session details are being fetched", () => {
     vi.mocked(globalThis.fetch).mockReturnValue(new Promise(() => undefined));
 
@@ -73,7 +121,7 @@ describe("ProviderSessionDetailPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain(
-        "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
+        "无法在服务器上找到所选 provider session。",
       );
     });
   });
@@ -121,7 +169,7 @@ describe("ProviderSessionDetailPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain(
-        "The selected provider-session file could not be found under the configured Codex sessions directory.",
+        "The selected provider session could not be found on the server.",
       );
     });
   });
@@ -151,7 +199,7 @@ describe("ProviderSessionDetailPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain(
-        "The selected session file did not contain any Codex event records.",
+        "The selected session did not contain any parseable event records.",
       );
     });
     expect(
@@ -189,7 +237,7 @@ describe("ProviderSessionDetailPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByRole("alert").textContent).toContain(
-        "The selected session file could not be parsed into Codex events. Review the malformed-line diagnostics below.",
+        "The selected session could not be parsed. Review the malformed-line diagnostics below.",
       );
     });
     expect(

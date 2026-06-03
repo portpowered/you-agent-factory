@@ -12,49 +12,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
-
-// --- ContainsStopToken (pure function) ---
-
-func TestContainsStopToken_Found(t *testing.T) {
-	output := "Some output text\n<promise>COMPLETE</promise>\nMore text"
-	if !ContainsStopToken(output, "<promise>COMPLETE</promise>") {
-		t.Error("expected stop token to be found")
-	}
-}
-
-func TestContainsStopToken_NotFound(t *testing.T) {
-	output := "Some output text without the token"
-	if ContainsStopToken(output, "<promise>COMPLETE</promise>") {
-		t.Error("expected stop token NOT to be found")
-	}
-}
-
-func TestContainsStopToken_EmptyToken(t *testing.T) {
-	if ContainsStopToken("any output", "") {
-		t.Error("empty stop token should never match")
-	}
-}
-
-func TestContainsStopToken_EmptyOutput(t *testing.T) {
-	if ContainsStopToken("", "COMPLETE") {
-		t.Error("empty output should never match")
-	}
-}
-
-func TestContainsStopToken_CaseSensitive(t *testing.T) {
-	output := "The task is complete"
-	if ContainsStopToken(output, "COMPLETE") {
-		t.Error("stop token check should be case-sensitive")
-	}
-}
-
-func TestContainsStopToken_PartialMatch(t *testing.T) {
-	output := "This is COMPLETED now"
-	if !ContainsStopToken(output, "COMPLETE") {
-		t.Error("substring match should work — COMPLETE is in COMPLETED")
-	}
-}
 
 // --- NewScriptWrapProvider ---
 
@@ -532,11 +491,153 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 	}
 }
 
+func TestScriptWrapProvider_Infer_CursorParsesJSONResult(t *testing.T) {
+	stdout := cursorpkg.SuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
+	stdout = append(stdout, '\n')
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{Stdout: stdout},
+	}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		Model:         "gpt-5",
+		UserMessage:   "run the tests",
+	})
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+	if resp.Content != "Parsed assistant answer." {
+		t.Fatalf("content = %q, want parsed result text", resp.Content)
+	}
+	if resp.Content == string(stdout) {
+		t.Fatal("content must not be raw JSON stdout")
+	}
+	if resp.ProviderSession == nil {
+		t.Fatal("expected provider session metadata")
+	}
+	if resp.ProviderSession.Provider != string(interfaces.ModelProviderCursor) {
+		t.Fatalf("provider = %q, want cursor", resp.ProviderSession.Provider)
+	}
+	if resp.ProviderSession.ID != "cursor-session-abc" {
+		t.Fatalf("session id = %q, want cursor-session-abc", resp.ProviderSession.ID)
+	}
+	if resp.Diagnostics == nil || resp.Diagnostics.Command == nil {
+		t.Fatal("expected command diagnostics on success")
+	}
+	if string(resp.Diagnostics.Command.Stdout) != string(stdout) {
+		t.Fatal("command diagnostics should retain raw stdout for observability")
+	}
+}
+
+func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *testing.T) {
+	stdout := []byte(`{"type":"result"`)
+	stderr := []byte("cursor stderr detail")
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{Stdout: stdout, Stderr: stderr},
+	}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "run the tests",
+	})
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error type = %q, want permanent_bad_request", providerErr.Type)
+	}
+	if providerErr.Diagnostics == nil || providerErr.Diagnostics.Command == nil {
+		t.Fatal("expected command diagnostics on parse failure")
+	}
+	if got := providerErr.Diagnostics.Command.Stdout; got != string(stdout) {
+		t.Fatalf("command stdout = %q, want full stdout for worker-internal diagnostics", got)
+	}
+	if got := providerErr.Diagnostics.Command.Stderr; got != string(stderr) {
+		t.Fatalf("command stderr = %q, want full stderr for worker-internal diagnostics", got)
+	}
+	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
+	assertSafeCursorFailureExcerpts(t, providerErr.Diagnostics)
+}
+
+func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsExcerpts(t *testing.T) {
+	stdout := []byte("partial json output")
+	stderr := []byte("noise before\nERROR: unexpected status 500 from cursor upstream")
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{
+			Stdout:   stdout,
+			Stderr:   stderr,
+			ExitCode: 1,
+		},
+	}
+	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "run the tests",
+	})
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+	providerErr, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError, got %T", err)
+	}
+	if providerErr.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("error type = %q, want internal_server_error", providerErr.Type)
+	}
+	if providerErr.Message != "ERROR: unexpected status 500 from cursor upstream" {
+		t.Fatalf("error message = %q", providerErr.Message)
+	}
+	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
+	assertSafeCursorFailureExcerpts(t, providerErr.Diagnostics)
+}
+
+func assertCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics, wantStdout, wantStderr string) {
+	t.Helper()
+	if diagnostics == nil || diagnostics.Provider == nil {
+		t.Fatal("expected provider diagnostics with failure excerpts")
+	}
+	metadata := diagnostics.Provider.ResponseMetadata
+	if got := metadata[cursorpkg.ResponseMetadataStdoutExcerpt]; got != wantStdout {
+		t.Fatalf("stdout excerpt = %q, want %q", got, wantStdout)
+	}
+	if got := metadata[cursorpkg.ResponseMetadataStderrExcerpt]; got != wantStderr {
+		t.Fatalf("stderr excerpt = %q, want %q", got, wantStderr)
+	}
+}
+
+func assertSafeCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics) {
+	t.Helper()
+	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+	if safe == nil || safe.Provider == nil {
+		t.Fatal("expected safe provider diagnostics")
+	}
+	if safe.Provider.ResponseMetadata[cursorpkg.ResponseMetadataStdoutExcerpt] == "" {
+		t.Fatal("expected safe stdout excerpt")
+	}
+	if safe.Provider.ResponseMetadata[cursorpkg.ResponseMetadataStderrExcerpt] == "" {
+		t.Fatal("expected safe stderr excerpt")
+	}
+	if safe.Provider.ResponseMetadata["raw_body"] != "" {
+		t.Fatal("safe diagnostics must not include unsafe metadata keys")
+	}
+}
+
 func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNoStdin(t *testing.T) {
 	for _, tc := range nonCodexInferencePayloadTestCases() {
 		t.Run(tc.name, func(t *testing.T) {
+			stdout := []byte(strings.ToLower(tc.name) + " output")
+			if tc.req.ModelProvider == string(interfaces.ModelProviderCursor) {
+				stdout = cursorpkg.SuccessStdoutJSON(strings.ToLower(tc.name)+" output", "cursor-session-from-json")
+			}
 			fakeExec := &recordingProviderExec{
-				result: CommandResult{Stdout: []byte(strings.ToLower(tc.name) + " output")},
+				result: CommandResult{Stdout: stdout},
 			}
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
@@ -544,8 +645,9 @@ func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNo
 			if err != nil {
 				t.Fatalf("Infer returned error: %v", err)
 			}
-			if resp.Content != strings.ToLower(tc.name)+" output" {
-				t.Fatalf("response content = %q", resp.Content)
+			wantContent := strings.ToLower(tc.name) + " output"
+			if resp.Content != wantContent {
+				t.Fatalf("response content = %q, want %q", resp.Content, wantContent)
 			}
 			if fakeExec.request.Command != tc.req.ModelProvider {
 				t.Fatalf("command = %q, want %q", fakeExec.request.Command, tc.req.ModelProvider)
@@ -616,7 +718,7 @@ func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 					"AGENT_FACTORY_CURSOR_ENV": "enabled",
 				},
 			},
-			wantArgs: []string{"-p", "--model", "gpt-5", "--resume", "cursor-session-123", "run the tests"},
+			wantArgs: []string{"-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "json", "run the tests"},
 			wantEnv:  "AGENT_FACTORY_CURSOR_ENV=enabled",
 		},
 		{

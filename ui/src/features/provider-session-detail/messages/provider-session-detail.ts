@@ -15,7 +15,7 @@ const providerSessionDetailMessagesByLocale = {
     collapseAction: "Collapse",
     dispatchLabel: "Dispatch",
     emptyState:
-      "The selected session file did not contain any Codex event records.",
+      "The selected session did not contain any parseable event records.",
     emptyTranscriptState:
       "The selected session was parsed, but it did not contain any transcript-visible entries.",
     encryptedReasoningDescription:
@@ -45,7 +45,7 @@ const providerSessionDetailMessagesByLocale = {
     malformedLineCountLabel: "Malformed lines",
     kindLabel: "Kind",
     missingState:
-      "The selected provider-session file could not be found under the configured Codex sessions directory.",
+      "The selected provider session could not be found on the server.",
     modifiedAtLabel: "Modified at",
     parseSummaryHeading: "Parse summary",
     providerLabel: "Provider",
@@ -60,7 +60,7 @@ const providerSessionDetailMessagesByLocale = {
     parseDiagnosticsHeading: "Parse diagnostics",
     parseErrorsHeading: "Malformed records",
     parseErrorState:
-      "The selected session file could not be parsed into Codex events. Review the malformed-line diagnostics below.",
+      "The selected session could not be parsed. Review the malformed-line diagnostics below.",
     readyState: "Ready",
     reasoningCountLabel: "Reasoning",
     reasoningHeading: "Reasoning",
@@ -120,7 +120,7 @@ const providerSessionDetailMessagesByLocale = {
     collapseAction: "折りたたむ",
     dispatchLabel: "ディスパッチ",
     emptyState:
-      "選択したセッションファイルには Codex のイベント記録が含まれていませんでした。",
+      "選択したセッションには解析可能なイベント記録が含まれていませんでした。",
     emptyTranscriptState:
       "選択したセッションは解析されましたが、文字起こしとして表示できるエントリは含まれていませんでした。",
     encryptedReasoningDescription:
@@ -151,7 +151,7 @@ const providerSessionDetailMessagesByLocale = {
     malformedLineCountLabel: "不正な行数",
     kindLabel: "種別",
     missingState:
-      "選択した provider-session ファイルは、設定済み Codex sessions ディレクトリ配下に見つかりませんでした。",
+      "選択した provider session はサーバー上で見つかりませんでした。",
     modifiedAtLabel: "更新日時",
     parseSummaryHeading: "解析サマリー",
     providerLabel: "プロバイダー",
@@ -166,7 +166,7 @@ const providerSessionDetailMessagesByLocale = {
     parseDiagnosticsHeading: "解析診断",
     parseErrorsHeading: "不正なレコード",
     parseErrorState:
-      "選択したセッションファイルを Codex イベントとして解析できませんでした。以下の不正な行の診断を確認してください。",
+      "選択したセッションを解析できませんでした。以下の不正な行の診断を確認してください。",
     readyState: "準備完了",
     reasoningCountLabel: "推論",
     reasoningHeading: "推論",
@@ -228,7 +228,7 @@ const providerSessionDetailMessagesByLocale = {
     collapseAction: "접기",
     dispatchLabel: "디스패치",
     emptyState:
-      "선택한 세션 파일에 Codex 이벤트 레코드가 포함되어 있지 않습니다.",
+      "선택한 세션에 파싱 가능한 이벤트 레코드가 포함되어 있지 않습니다.",
     emptyTranscriptState:
       "선택한 세션은 파싱되었지만, 대화 기록으로 표시할 수 있는 항목이 없습니다.",
     encryptedReasoningDescription:
@@ -258,7 +258,7 @@ const providerSessionDetailMessagesByLocale = {
     malformedLineCountLabel: "잘못된 줄 수",
     kindLabel: "유형",
     missingState:
-      "선택한 provider-session 파일을 구성된 Codex sessions 디렉터리 아래에서 찾을 수 없습니다.",
+      "선택한 provider session을 서버에서 찾을 수 없습니다.",
     modifiedAtLabel: "수정 시각",
     parseSummaryHeading: "파싱 요약",
     providerLabel: "공급자",
@@ -273,7 +273,7 @@ const providerSessionDetailMessagesByLocale = {
     parseDiagnosticsHeading: "파싱 진단",
     parseErrorsHeading: "잘못된 레코드",
     parseErrorState:
-      "선택한 세션 파일을 Codex 이벤트로 파싱할 수 없습니다. 아래의 잘못된 줄 진단을 확인하세요.",
+      "선택한 세션을 파싱할 수 없습니다. 아래의 잘못된 줄 진단을 확인하세요.",
     readyState: "준비됨",
     reasoningCountLabel: "추론",
     reasoningHeading: "추론",
@@ -332,7 +332,7 @@ const providerSessionDetailMessagesByLocale = {
     cachedInputLabel: "缓存输入",
     collapseAction: "折叠",
     dispatchLabel: "分派",
-    emptyState: "所选会话文件不包含任何 Codex 事件记录。",
+    emptyState: "所选会话不包含任何可解析的事件记录。",
     emptyTranscriptState:
       "所选会话已成功解析，但不包含可显示为会话记录的条目。",
     encryptedReasoningDescription:
@@ -361,8 +361,7 @@ const providerSessionDetailMessagesByLocale = {
     maintainerDiagnosticsHeading: "维护诊断",
     malformedLineCountLabel: "损坏行数",
     kindLabel: "类型",
-    missingState:
-      "无法在已配置的 Codex sessions 目录下找到所选 provider-session 文件。",
+    missingState: "无法在服务器上找到所选 provider session。",
     modifiedAtLabel: "修改时间",
     parseSummaryHeading: "解析摘要",
     providerLabel: "提供方",
@@ -376,8 +375,7 @@ const providerSessionDetailMessagesByLocale = {
     outputLabel: "输出",
     parseDiagnosticsHeading: "解析诊断",
     parseErrorsHeading: "损坏记录",
-    parseErrorState:
-      "无法将所选会话文件解析为 Codex 事件。请检查下面的损坏行诊断。",
+    parseErrorState: "无法解析所选会话。请检查下面的损坏行诊断。",
     readyState: "就绪",
     reasoningCountLabel: "推理数",
     reasoningHeading: "推理",
