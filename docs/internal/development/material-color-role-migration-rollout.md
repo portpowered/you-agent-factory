@@ -85,7 +85,7 @@ Execute only after grep shows no production consumers of transitional class name
 1. Delete `ui/src/styles/color-role-aliases.css` and remove its `@import` from `ui/src/styles.css`.
 2. Remove duplicate `af-*` entries from `ui/src/styles.css` that only existed for alias indirection (keep foundation keys, overlays, semantic borders, chart keys until replaced).
 3. Delete `ui/src/styles/color-role-aliases.test.ts` after aliases are gone.
-4. Run `ui/scripts/migrate-feature-color-roles.mjs` only if reintroducing bulk replacements; otherwise remove the script when no longer needed.
+4. **Bulk migrator removed (complete).** The one-shot replacer `ui/scripts/migrate-feature-color-roles.mjs` was deleted after US-009; bulk migration is finished. Do not restore it. If transitional `af-*` patterns reappear, fix violations using `ui/src/features/feature-surface-color-roles.test.ts` and targeted manual edits.
 5. Update [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) to drop transitional tables and mark role utilities as the only API.
 
 ### Tokens that may remain after alias cleanup
