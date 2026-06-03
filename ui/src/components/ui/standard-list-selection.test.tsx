@@ -10,9 +10,9 @@ import {
   StandardListSelectionItem,
 } from "./standard-list-selection";
 
+/** Solid primary fill + selected shadow — not used for unselected accent rows (they use container + border-primary). */
 const SOLID_ACCENT_SELECTED_TOKENS = [
   "bg-primary",
-  "border-primary",
   "shadow-af-accent-selected",
 ] as const;
 
