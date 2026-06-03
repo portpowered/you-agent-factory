@@ -79,7 +79,7 @@ func (p *RecordingProvider) Infer(ctx context.Context, req interfaces.ProviderIn
 func (p *RecordingProvider) inferInner(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
 	if p.inner == nil {
 		return interfaces.InferenceResponse{}, NewProviderError(
-			interfaces.ProviderErrorTypeMisconfigured,
+			interfaces.WorkFailureTypeMisconfigured,
 			"recording provider requires an inner provider",
 			nil,
 		)
@@ -213,7 +213,7 @@ func providerErrorClass(err error) string {
 	if errors.As(err, &providerErr) && providerErr.Type != "" {
 		return string(providerErr.Type)
 	}
-	return string(interfaces.ProviderErrorTypeUnknown)
+	return string(interfaces.WorkFailureTypeUnknown)
 }
 
 func providerErrorExitCode(err error) *int {

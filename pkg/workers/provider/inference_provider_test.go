@@ -519,8 +519,8 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("expected ProviderError, got %T: %v", err, err)
 	}
-	if providerErr.Type != interfaces.ProviderErrorTypePermanentBadRequest {
-		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypePermanentBadRequest)
+	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypePermanentBadRequest)
 	}
 	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[1].file`) ||
 		!strings.Contains(providerErr.Message, `model provider claude`) ||

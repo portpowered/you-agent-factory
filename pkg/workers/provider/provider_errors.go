@@ -13,15 +13,15 @@ import (
 // customer-messaging logic can make deterministic decisions without parsing raw
 // provider output at every call site.
 type ProviderError struct {
-	Family          interfaces.ProviderErrorFamily
-	Type            interfaces.ProviderErrorType
+	Family          interfaces.WorkFailureFamily
+	Type            interfaces.WorkFailureType
 	Message         string
 	ProviderSession *interfaces.ProviderSessionMetadata
 	Diagnostics     *interfaces.WorkDiagnostics
 	Cause           error
 }
 
-func NewProviderError(errorType interfaces.ProviderErrorType, message string, cause error) *ProviderError {
+func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {
 	return &ProviderError{
 		Family:  providerErrorFamilyForType(errorType),
 		Type:    errorType,
@@ -30,13 +30,13 @@ func NewProviderError(errorType interfaces.ProviderErrorType, message string, ca
 	}
 }
 
-func NewProviderErrorWithSession(errorType interfaces.ProviderErrorType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
+func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
 	err := NewProviderError(errorType, message, cause)
 	err.ProviderSession = interfaces.CloneProviderSessionMetadata(session)
 	return err
 }
 
-func newProviderErrorWithDiagnostics(errorType interfaces.ProviderErrorType, message string, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+func newProviderErrorWithDiagnostics(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
 	err := NewProviderErrorWithSession(errorType, message, cause, session)
 	err.Diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
 	return err
@@ -60,16 +60,10 @@ func ClassifyProviderFailure(err *ProviderError) interfaces.WorkFailureDecision 
 	return providerFailureDecisionForFamily(err.Family)
 }
 
-// ProviderFailureDecisionFromMetadata resolves retry behavior from the durable
-// normalized provider-failure metadata carried across runtime boundaries.
-// The normalized type is canonical when present; family remains a fallback for
-// older or partial metadata that omitted type.
-func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMetadata) interfaces.WorkFailureDecision {
-	return WorkFailureDecisionFromMetadata(metadata)
-}
-
 // WorkFailureDecisionFromMetadata resolves retry behavior from durable
 // generalized failure metadata carried across runtime boundaries.
+// The normalized type is canonical when present; family remains a fallback for
+// older or partial metadata that omitted type.
 func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) interfaces.WorkFailureDecision {
 	if metadata == nil {
 		return interfaces.WorkFailureDecision{}
@@ -82,11 +76,11 @@ func WorkFailureDecisionFromMetadata(metadata *interfaces.WorkFailureMetadata) i
 
 func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) interfaces.WorkFailureDecision {
 	switch family {
-	case interfaces.ProviderErrorFamilyRetryable:
+	case interfaces.WorkFailureFamilyRetryable:
 		return interfaces.WorkFailureDecision{Retryable: true}
-	case interfaces.ProviderErrorFamilyThrottle:
+	case interfaces.WorkFailureFamilyThrottle:
 		return interfaces.WorkFailureDecision{Retryable: true, TriggersThrottlePause: true}
-	case interfaces.ProviderErrorFamilyTerminal:
+	case interfaces.WorkFailureFamilyTerminal:
 		return interfaces.WorkFailureDecision{Terminal: true}
 	default:
 		return interfaces.WorkFailureDecision{Terminal: true}
@@ -95,14 +89,14 @@ func providerFailureDecisionForFamily(family interfaces.WorkFailureFamily) inter
 
 func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces.WorkFailureFamily {
 	switch errorType {
-	case interfaces.ProviderErrorTypeThrottled:
-		return interfaces.ProviderErrorFamilyThrottle
-	case interfaces.ProviderErrorTypeInternalServerError, interfaces.ProviderErrorTypeTimeout:
-		return interfaces.ProviderErrorFamilyRetryable
-	case interfaces.ProviderErrorTypeAuthFailure, interfaces.ProviderErrorTypePermanentBadRequest, interfaces.ProviderErrorTypeUnknown, interfaces.ProviderErrorTypeMisconfigured:
-		return interfaces.ProviderErrorFamilyTerminal
+	case interfaces.WorkFailureTypeThrottled:
+		return interfaces.WorkFailureFamilyThrottle
+	case interfaces.WorkFailureTypeInternalServerError, interfaces.WorkFailureTypeTimeout:
+		return interfaces.WorkFailureFamilyRetryable
+	case interfaces.WorkFailureTypeAuthFailure, interfaces.WorkFailureTypePermanentBadRequest, interfaces.WorkFailureTypeUnknown, interfaces.WorkFailureTypeMisconfigured:
+		return interfaces.WorkFailureFamilyTerminal
 	default:
-		return interfaces.ProviderErrorFamilyTerminal
+		return interfaces.WorkFailureFamilyTerminal
 	}
 }
 
@@ -130,7 +124,7 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 		return providerErr
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return NewProviderError(interfaces.ProviderErrorTypeTimeout, "execution timeout", err)
+		return NewProviderError(interfaces.WorkFailureTypeTimeout, "execution timeout", err)
 	}
 	return nil
 }

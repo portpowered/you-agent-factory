@@ -54,7 +54,7 @@ type providerBehavior interface {
 	BuildArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, buildCtx *ProviderBuildContext) ([]string, error)
 	BuildCommandRequest(req interfaces.ProviderInferenceRequest, args []string) CommandRequest
 	FormatExitFailure(provider string, result CommandResult) string
-	ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType
+	ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType
 	FormatTimeoutFailure(result CommandResult) string
 }
 
@@ -135,21 +135,21 @@ func (sharedNonCodexProviderBehavior) FormatExitFailure(provider string, result 
 	return formatProviderOutputOrDefault(result, fmt.Sprintf("%s exited with code %d", provider, result.ExitCode))
 }
 
-func (sharedNonCodexProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+func (sharedNonCodexProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
 	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
 	switch {
 	case containsAny(normalizedOutput, "api key", "authentication", "unauthorized", "forbidden", "login required", "not authenticated"):
-		return interfaces.ProviderErrorTypeAuthFailure
+		return interfaces.WorkFailureTypeAuthFailure
 	case containsAny(normalizedOutput, "invalid argument", "bad request", "invalid request"):
-		return interfaces.ProviderErrorTypePermanentBadRequest
+		return interfaces.WorkFailureTypePermanentBadRequest
 	case containsAny(normalizedOutput, "rate limit", "too many requests", "resource exhausted", "429"):
-		return interfaces.ProviderErrorTypeThrottled
+		return interfaces.WorkFailureTypeThrottled
 	case containsAny(normalizedOutput, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.ProviderErrorTypeInternalServerError
+		return interfaces.WorkFailureTypeInternalServerError
 	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.ProviderErrorTypeTimeout
+		return interfaces.WorkFailureTypeTimeout
 	default:
-		return interfaces.ProviderErrorTypeUnknown
+		return interfaces.WorkFailureTypeUnknown
 	}
 }
 
@@ -186,21 +186,21 @@ func (b claudeProviderBehavior) FormatExitFailure(provider string, result Comman
 	return fmt.Sprintf("%s exited with code %d", provider, result.ExitCode)
 }
 
-func (b claudeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+func (b claudeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
 	normalizedOutput := strings.ToLower(formatCombinedProviderOutput(result))
 	switch {
 	case containsAny(normalizedOutput, `"type":"authentication_error"`, `"type":"permission_error"`, "api key", "authentication error", "permission error", "unauthorized", "forbidden"):
-		return interfaces.ProviderErrorTypeAuthFailure
+		return interfaces.WorkFailureTypeAuthFailure
 	case containsAny(normalizedOutput, `"type":"invalid_request_error"`, "invalid_request_error", "bad request", "invalid request", "request_too_large"):
-		return interfaces.ProviderErrorTypePermanentBadRequest
+		return interfaces.WorkFailureTypePermanentBadRequest
 	case containsAny(normalizedOutput, `"type":"rate_limit_error"`, `"type":"overloaded_error"`, "rate limit", "too many requests", "overloaded", "529"):
-		return interfaces.ProviderErrorTypeThrottled
+		return interfaces.WorkFailureTypeThrottled
 	case containsAny(normalizedOutput, `"type":"api_error"`, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.ProviderErrorTypeInternalServerError
+		return interfaces.WorkFailureTypeInternalServerError
 	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.ProviderErrorTypeTimeout
+		return interfaces.WorkFailureTypeTimeout
 	default:
-		return interfaces.ProviderErrorTypeUnknown
+		return interfaces.WorkFailureTypeUnknown
 	}
 }
 
@@ -248,27 +248,27 @@ func (b codexProviderBehavior) FormatExitFailure(provider string, result Command
 	return fmt.Sprintf("%s exited with code %d", provider, result.ExitCode)
 }
 
-func (b codexProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+func (b codexProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
 	normalizedOutput := strings.ToLower(formatCodexOutputForClassification(result))
 	switch {
 	case containsAny(normalizedOutput, `"type":"authentication_error"`, "authentication_error", "api key", "unauthorized", "forbidden", "401 unauthorized", "403 forbidden"):
-		return interfaces.ProviderErrorTypeAuthFailure
+		return interfaces.WorkFailureTypeAuthFailure
 	case containsAny(normalizedOutput, `"type":"invalid_request_error"`, "invalid_request_error", "bad request", "400 item", "400 previous response", "400 ") && !containsAny(normalizedOutput, "timeout"):
-		return interfaces.ProviderErrorTypePermanentBadRequest
+		return interfaces.WorkFailureTypePermanentBadRequest
 	case containsAny(normalizedOutput, codexThrottledFailureNeedles...):
-		return interfaces.ProviderErrorTypeThrottled
+		return interfaces.WorkFailureTypeThrottled
 	case containsAny(normalizedOutput, codexTemporaryServerFailureNeedles...):
-		return interfaces.ProviderErrorTypeInternalServerError
+		return interfaces.WorkFailureTypeInternalServerError
 	case result.ExitCode == 124 || containsAny(normalizedOutput, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.ProviderErrorTypeTimeout
+		return interfaces.WorkFailureTypeTimeout
 	case result.ExitCode == codexWindowsProcessFailureExitCode:
 		// Windows sometimes reports interrupted Codex subprocess failures as
 		// 4294967295 without any audited provider signal. Keep that path on the
 		// shared retryable provider/process-failure class instead of falling
 		// through to a terminal bucket.
-		return interfaces.ProviderErrorTypeInternalServerError
+		return interfaces.WorkFailureTypeInternalServerError
 	default:
-		return interfaces.ProviderErrorTypeUnknown
+		return interfaces.WorkFailureTypeUnknown
 	}
 }
 
@@ -300,7 +300,7 @@ func (b geminiProviderBehavior) FormatExitFailure(provider string, result Comman
 	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
 }
 
-func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+func (b geminiProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
 	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
@@ -325,7 +325,7 @@ func (b kiroProviderBehavior) FormatExitFailure(provider string, result CommandR
 	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
 }
 
-func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+func (b kiroProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
 	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 
@@ -359,7 +359,7 @@ func (b cursorProviderBehavior) FormatExitFailure(provider string, result Comman
 	return codexProviderBehavior{}.FormatExitFailure(provider, result)
 }
 
-func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+func (b cursorProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
 	return codexProviderBehavior{}.ClassifyExitFailure(result)
 }
 
@@ -391,7 +391,7 @@ func (b openCodeProviderBehavior) FormatExitFailure(provider string, result Comm
 	return b.sharedNonCodexProviderBehavior.FormatExitFailure(provider, result)
 }
 
-func (b openCodeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.ProviderErrorType {
+func (b openCodeProviderBehavior) ClassifyExitFailure(result CommandResult) interfaces.WorkFailureType {
 	return b.sharedNonCodexProviderBehavior.ClassifyExitFailure(result)
 }
 

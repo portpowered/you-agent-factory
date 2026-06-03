@@ -330,7 +330,7 @@ func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testi
 		Metadata: map[string]string{"phase": "initial"},
 	}
 	provider := &agentMockProvider{
-		err: workerprovider.NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
+		err: workerprovider.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
 	}
 	var providerErr *ProviderError
 	if !errors.As(provider.err, &providerErr) {
@@ -623,8 +623,8 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
-			workerprovider.NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
-			workerprovider.NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timeout", nil),
+			workerprovider.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
+			workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timeout", nil),
 			nil,
 		},
 		responses: []interfaces.InferenceResponse{
@@ -737,15 +737,15 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	if result.ProviderFailure == nil {
 		t.Fatal("expected provider failure metadata on failed result")
 	}
-	if result.ProviderFailure.Type != interfaces.ProviderErrorTypeInternalServerError {
-		t.Fatalf("provider failure type = %q, want %q", result.ProviderFailure.Type, interfaces.ProviderErrorTypeInternalServerError)
+	if result.ProviderFailure.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("provider failure type = %q, want %q", result.ProviderFailure.Type, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if result.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
-		t.Fatalf("provider failure family = %q, want %q", result.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
+	if result.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("provider failure family = %q, want %q", result.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
-	decision := workerprovider.ProviderFailureDecisionFromMetadata(result.ProviderFailure)
+	decision := workerprovider.WorkFailureDecisionFromMetadata(result.ProviderFailure)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
-		t.Fatalf("ProviderFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", result.ProviderFailure, decision)
+		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", result.ProviderFailure, decision)
 	}
 	if result.ProviderSession == nil {
 		t.Fatal("expected provider session metadata on failed result")
@@ -759,7 +759,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
 			workerprovider.NewProviderErrorWithSession(
-				interfaces.ProviderErrorTypeAuthFailure,
+				interfaces.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
 				&interfaces.ProviderSessionMetadata{
@@ -821,7 +821,7 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	provider := &agentMockProvider{
 		errors: []error{
 			workerprovider.NewProviderErrorWithSession(
-				interfaces.ProviderErrorTypeAuthFailure,
+				interfaces.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
 				&interfaces.ProviderSessionMetadata{
@@ -973,10 +973,10 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 	if result.ProviderFailure == nil {
 		t.Fatal("ProviderFailure = nil, want timeout metadata")
 	}
-	if result.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("ProviderFailure.Type = %q, want %q", result.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	if result.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("ProviderFailure.Type = %q, want %q", result.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
 	}
-	if result.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
-		t.Fatalf("ProviderFailure.Family = %q, want %q", result.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
+	if result.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("ProviderFailure.Family = %q, want %q", result.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 }

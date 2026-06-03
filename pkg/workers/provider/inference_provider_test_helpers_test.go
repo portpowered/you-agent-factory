@@ -96,7 +96,7 @@ type april11FailureShapeSample struct {
 	ExitCode              int                          `json:"exit_code"`
 	Stdout                string                       `json:"stdout"`
 	Stderr                string                       `json:"stderr"`
-	WantType              interfaces.ProviderErrorType `json:"want_type"`
+	WantType              interfaces.WorkFailureType `json:"want_type"`
 	WantMessage           string                       `json:"want_message"`
 	WantRetryable         bool                         `json:"want_retryable"`
 	WantTerminal          bool                         `json:"want_terminal"`
@@ -409,8 +409,8 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("expected ProviderError, got %T: %v", err, providerErr)
 	}
-	if providerErr.Type != interfaces.ProviderErrorTypePermanentBadRequest {
-		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypePermanentBadRequest)
+	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypePermanentBadRequest)
 	}
 	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[0].url`) ||
 		!strings.Contains(providerErr.Message, `media url not readable`) ||
@@ -521,8 +521,8 @@ func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(
 	if !errors.As(err, &providerErr) {
 		t.Fatalf("expected ProviderError, got %T: %v", err, providerErr)
 	}
-	if providerErr.Type != interfaces.ProviderErrorTypePermanentBadRequest {
-		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypePermanentBadRequest)
+	if providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypePermanentBadRequest)
 	}
 	if !strings.Contains(providerErr.Message, `input_tokens[0].color.content[0].url`) ||
 		!strings.Contains(providerErr.Message, `media url inaccessible`) {

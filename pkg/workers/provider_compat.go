@@ -24,14 +24,10 @@ const (
 	codexWindowsProcessFailureExitCode = 4294967295
 )
 
-func NewProviderError(errorType interfaces.ProviderErrorType, message string, cause error) *ProviderError {
+func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {
 	return workerprovider.NewProviderError(errorType, message, cause)
 }
 
-func NewProviderErrorWithSession(errorType interfaces.ProviderErrorType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
+func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
 	return workerprovider.NewProviderErrorWithSession(errorType, message, cause, session)
-}
-
-func ProviderFailureDecisionFromMetadata(metadata *interfaces.ProviderFailureMetadata) interfaces.ProviderFailureDecision {
-	return workerprovider.ProviderFailureDecisionFromMetadata(metadata)
 }
