@@ -5,18 +5,6 @@ import (
 	"fmt"
 )
 
-// AgentStorageReader reads session data from cursor-agent CLI store.db files
-type AgentStorageReader struct {
-	storeDBPaths []string
-}
-
-// NewAgentStorageReader creates a new AgentStorageReader with the given store.db paths
-func NewAgentStorageReader(storeDBPaths []string) *AgentStorageReader {
-	return &AgentStorageReader{
-		storeDBPaths: storeDBPaths,
-	}
-}
-
 // pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session store schema probing stays grouped until extraction refactor.
 // QueryBlobsTable queries the blobs table from a store.db file
 func QueryBlobsTable(db *sql.DB) ([]BlobEntry, error) {

@@ -150,33 +150,6 @@ func applySessionMetadata(bubbles map[string]*RawBubble, composers []*RawCompose
 	}
 }
 
-// LoadAllSessionsFromAgentStorage loads all sessions from all store.db files.
-func (r *AgentStorageReader) LoadAllSessionsFromAgentStorage() (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, error) {
-	allBubbles := make(map[string]*RawBubble)
-	var allComposers []*RawComposer
-	allContexts := make(map[string][]*MessageContext)
-
-	for _, dbPath := range r.storeDBPaths {
-		bubbles, composers, contexts, _, err := LoadSessionFromStoreDB(dbPath)
-		if err != nil {
-			LogWarn("Failed to load session from %s: %v", dbPath, err)
-			continue
-		}
-
-		for id, bubble := range bubbles {
-			allBubbles[id] = bubble
-		}
-		allComposers = append(allComposers, composers...)
-		LogInfo("Loaded from %s: %d bubbles, %d composers, %d context entries", dbPath, len(bubbles), len(composers), len(contexts))
-
-		for composerID, ctxList := range contexts {
-			allContexts[composerID] = append(allContexts[composerID], ctxList...)
-		}
-	}
-
-	LogInfo("Total loaded from agent storage: %d bubbles, %d composers, %d context groups", len(allBubbles), len(allComposers), len(allContexts))
-	return allBubbles, allComposers, allContexts, nil
-}
 // ingestDecodedBlobData maps decoded blob JSON into bubbles, composers, and token usage.
 func ingestDecodedBlobData(
 	blob BlobEntry,

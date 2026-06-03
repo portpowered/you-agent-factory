@@ -5,14 +5,7 @@ import (
 	"fmt"
 )
 
-// DecodeProtobufStrings extracts all length-delimited strings from protobuf-encoded data
-// Protobuf wire format: [field_number << 3 | wire_type] [length] [data]
-// Wire type 2 = length-delimited (strings, embedded messages, packed repeated fields)
-func DecodeProtobufStrings(data []byte) ([]string, error) {
-	return decodeProtobufStrings(data)
-}
-
-// decodeProtobufStrings is the internal implementation
+// decodeProtobufStrings extracts length-delimited strings from protobuf-encoded data.
 func decodeProtobufStrings(data []byte) ([]string, error) {
 	var strings []string
 	offset := 0
@@ -198,12 +191,6 @@ func extractProtobufFields(data []byte) (map[string]interface{}, error) {
 	return result, nil
 }
 
-// TryProtobufDecode attempts to decode binary data as protobuf and extract readable content
-func TryProtobufDecode(data []byte) (map[string]interface{}, bool) {
-	return tryProtobufDecode(data)
-}
-
-// tryProtobufDecode is the internal implementation
 func tryProtobufDecode(data []byte) (map[string]interface{}, bool) {
 	// Check if it looks like protobuf (starts with valid tag bytes)
 	if len(data) == 0 {

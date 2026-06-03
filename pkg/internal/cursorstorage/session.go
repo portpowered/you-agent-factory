@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"time"
 )
 
 // SessionData is parsed cursor-agent CLI storage for one session store.db file.
@@ -74,42 +73,6 @@ func (s *SessionData) OrderedBubbles() []*RawBubble {
 	return ordered
 }
 
-// LatestActivityAt returns the newest bubble or composer timestamp when available.
-func (s *SessionData) LatestActivityAt() *time.Time {
-	if s == nil {
-		return nil
-	}
-	var latest time.Time
-	var found bool
-	for _, bubble := range s.Bubbles {
-		ts := bubble.GetTimestamp()
-		if ts.IsZero() {
-			continue
-		}
-		if !found || ts.After(latest) {
-			latest = ts
-			found = true
-		}
-	}
-	for _, composer := range s.Composers {
-		ts := composer.GetLastUpdatedAt()
-		if ts.IsZero() {
-			ts = composer.GetCreatedAt()
-		}
-		if ts.IsZero() {
-			continue
-		}
-		if !found || ts.After(latest) {
-			latest = ts
-			found = true
-		}
-	}
-	if !found {
-		return nil
-	}
-	utc := latest.UTC()
-	return &utc
-}
 func loadSessionFromStoreDBWithStats(dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionParseStats, SessionTokenUsage, error) {
 	db, err := OpenDatabase(dbPath)
 	if err != nil {

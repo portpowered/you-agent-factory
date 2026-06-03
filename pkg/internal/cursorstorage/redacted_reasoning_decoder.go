@@ -158,8 +158,3 @@ func calculateEntropy(data []byte) float64 {
 
 	return entropy
 }
-
-// DecodeRedactedReasoning is the exported version for external use
-func DecodeRedactedReasoning(encoded string) (string, bool) {
-	return decodeRedactedReasoning(encoded)
-}
