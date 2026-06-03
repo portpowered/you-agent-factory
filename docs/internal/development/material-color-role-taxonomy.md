@@ -129,7 +129,7 @@ Dashboard feature modules under `ui/src/features/` consume role utilities direct
 | Charts (`work-outcome`) | Series colors stay on `af-chart-*` keys; grid/label utilities use `stroke-outline-variant`, `fill-on-surface-subtle` |
 | Mutation dialog | `gap-layout-block`; role surfaces for shell and message panels |
 
-Contract: `ui/src/features/feature-surface-color-roles.test.ts`. One-shot migrator: `ui/scripts/migrate-feature-color-roles.mjs`.
+Enforcement contract: `ui/src/features/feature-surface-color-roles.test.ts` — feature surface color roles must pass this test; fix violations with targeted manual edits per [material-color-role-migration-rollout.md](./material-color-role-migration-rollout.md) cleanup steps.
 
 ## Related layout system (US-007)
 
