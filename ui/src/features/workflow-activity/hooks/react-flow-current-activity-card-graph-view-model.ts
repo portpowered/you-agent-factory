@@ -3,7 +3,13 @@ import {
   type FitViewOptions,
   type NodeChange,
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import type {
   DashboardActiveExecution,
@@ -24,6 +30,7 @@ import {
   buildHandleAssignments,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
+import { resolveStoredNodePositionsForGraphKey } from "../lib/bridge-graph-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -340,12 +347,38 @@ export function useCurrentActivityGraphViewModel({
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
   );
-  const storedNodePositions = useCurrentActivityGraphStore(
-    (state) => state.positionsByGraphKey[graphKey] ?? EMPTY_NODE_POSITIONS,
+  const layoutNodeIds = useMemo(
+    () => graphLayout.nodes.map((node) => node.nodeId),
+    [graphLayout.nodes],
+  );
+  const positionsByGraphKey = useCurrentActivityGraphStore(
+    (state) => state.positionsByGraphKey,
+  );
+  const bridgePositionsToGraphKey = useCurrentActivityGraphStore(
+    (state) => state.bridgePositionsToGraphKey,
+  );
+  const storedNodePositions = useMemo(
+    () =>
+      graphKey
+        ? resolveStoredNodePositionsForGraphKey(
+            positionsByGraphKey,
+            graphKey,
+            layoutNodeIds,
+          )
+        : EMPTY_NODE_POSITIONS,
+    [graphKey, layoutNodeIds, positionsByGraphKey],
   );
   const setStoredNodePosition = useCurrentActivityGraphStore(
     (state) => state.setNodePosition,
   );
+
+  useLayoutEffect(() => {
+    if (!graphKey || layoutNodeIds.length === 0) {
+      return;
+    }
+
+    bridgePositionsToGraphKey(graphKey, layoutNodeIds);
+  }, [bridgePositionsToGraphKey, graphKey, layoutNodeIds]);
   const { pendingAdditionEdgeIds, visibleGraphEdges } = useMemo(
     () =>
       buildVisibleGraphEdgesWithDraft({
@@ -407,5 +440,6 @@ export function useCurrentActivityGraphViewModel({
     initialFitViewOptions,
     nodes: displayNodes,
     setStoredNodePosition,
+    storedNodePositions,
   };
 }

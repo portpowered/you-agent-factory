@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
+import { bridgeGraphLayoutPositions } from "../lib/bridge-graph-layout-positions";
 import { migrateWorkStateGraphLayoutPositions } from "../lib/migrate-work-state-graph-layout-positions";
 
 export interface GraphNodePosition {
@@ -17,6 +18,10 @@ export interface MigrateWorkStateNodePositionsInput {
 }
 
 interface CurrentActivityGraphState {
+  bridgePositionsToGraphKey: (
+    graphKey: string,
+    nodeIds: readonly string[],
+  ) => void;
   migrateWorkStateNodePositions: (
     input: MigrateWorkStateNodePositionsInput,
   ) => void;
@@ -34,6 +39,20 @@ export const CURRENT_ACTIVITY_GRAPH_STORAGE_KEY =
 export const useCurrentActivityGraphStore = create<CurrentActivityGraphState>()(
   persist(
     (set) => ({
+      bridgePositionsToGraphKey: (graphKey, nodeIds) => {
+        set((state) => {
+          const nextPositionsByGraphKey = bridgeGraphLayoutPositions({
+            nodeIds,
+            positionsByGraphKey: state.positionsByGraphKey,
+            targetGraphKey: graphKey,
+          });
+          if (!nextPositionsByGraphKey) {
+            return state;
+          }
+
+          return { positionsByGraphKey: nextPositionsByGraphKey };
+        });
+      },
       migrateWorkStateNodePositions: (input) => {
         set((state) => ({
           positionsByGraphKey: migrateWorkStateGraphLayoutPositions({
