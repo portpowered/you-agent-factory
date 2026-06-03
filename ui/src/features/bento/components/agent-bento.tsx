@@ -82,10 +82,6 @@ const BENTO_CARD_HEADER_CLASS =
   "flex min-h-13 cursor-grab items-center justify-between gap-3 border-af-border px-3.5 py-3 active:cursor-grabbing";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
   "min-h-11 flex-wrap items-start gap-2 px-3 py-2.5";
-const BENTO_CARD_TITLE_CLASS = cn(
-  "m-0 min-w-0 flex-1 [overflow-wrap:anywhere]",
-  DASHBOARD_SECTION_HEADING_CLASS,
-);
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
@@ -369,7 +365,14 @@ export function AgentBentoCardHeader({
       data-bento-drag-handle="true"
     >
       <div className="min-w-0 flex-1">
-        <h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>
+        <h3
+          className={cn(
+            "m-0 min-w-0 flex-1 [overflow-wrap:anywhere]",
+            DASHBOARD_SECTION_HEADING_CLASS,
+          )}
+        >
+          {title}
+        </h3>
       </div>
       {headerAction ? (
         <div
