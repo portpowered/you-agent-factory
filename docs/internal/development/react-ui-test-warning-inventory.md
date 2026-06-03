@@ -206,3 +206,17 @@ Stub imports today: `App.export-submit`, `App.export-dialog`, `App.follow-up-tra
 - `withStrictConsole(options, callback)` runs an async callback under a temporary guard.
 - Allowlist entries require `name`, `level`, narrow `match` (substring or specific RegExp), and `reason`; broad wildcards are rejected at install time.
 - Story 006 adopts the guard on cleaned App shell and current-selection suites.
+
+## Console guard adoption (story 006)
+
+**Status (UTC 2026-06-03):** Guarded suites verified with `make ui-test`.
+
+| Suite | Guard wiring | Allowlist |
+| --- | --- | --- |
+| App shell (`src/App.*.test.tsx`) | `ui/src/testing/guarded-suite-console.setup.ts` imported from `vitest.setup.ts` (path-scoped) | None (zero hooked noise after stories 002–004) |
+| current-selection components | Same path-scoped setup; excludes `hooks/` and manual-guard files below | None for most files |
+| `current-selection-widget.graph-draft-conflict-notifications.test.tsx` | `useStrictConsoleGuard()` on describe root | `widget-save-notifications-mutation-settle` — async mocked document-save re-renders `CurrentSelectionWidgetSaveNotifications` |
+| `current-selection-detail-layout.test.tsx` (actions describe) | `useStrictConsoleGuard()` on describe root | `detail-layout-history-controls` — undo/redo updates `SelectionDetailLayout` subscribers |
+| `hooks/useCurrentSelection.test.tsx` | Excluded from path guard (render/probe harness); hook sync behavior required | N/A |
+
+**Helpers:** `settleCurrentSelectionEffects()` and `waitForCurrentSelection()` in `ui/src/testing/current-selection-test-utils.ts`. Set `VITEST_DISABLE_GUARDED_CONSOLE=1` to bisect guard failures locally.

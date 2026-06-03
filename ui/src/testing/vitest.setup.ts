@@ -1,3 +1,5 @@
+import "./guarded-suite-console.setup";
+
 import { configure } from "@testing-library/react";
 import {
   createElement,

@@ -1,4 +1,9 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, render, type RenderResult } from "@testing-library/react";
+import type { ReactNode } from "react";
+import {
+  settleCurrentSelectionEffects,
+  waitForCurrentSelection,
+} from "../../../testing/current-selection-test-utils";
 import type {
   DashboardActiveExecution,
   DashboardInferenceAttempt,
@@ -389,16 +394,60 @@ type CurrentSelectionHookProps = {
   workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;
 };
 
-function renderCurrentSelectionHook(initialProps: CurrentSelectionHookProps) {
-  return renderHook(
-    (props: CurrentSelectionHookProps) =>
-      useCurrentSelection({
-        sessionID: props.sessionID ?? "~default",
-        snapshot: props.snapshot,
-        workstationRequestsByDispatchID: props.workstationRequestsByDispatchID,
-      }),
-    { initialProps },
-  );
+type CurrentSelectionProbeHandle = {
+  get current(): CurrentSelectionState;
+  rerender: (nextProps: CurrentSelectionHookProps) => void;
+  unmount: () => void;
+};
+
+function CurrentSelectionProbe(
+  props: CurrentSelectionHookProps & {
+    stateRef: { current: CurrentSelectionState | null };
+  },
+): ReactNode {
+  const state = useCurrentSelection({
+    sessionID: props.sessionID ?? "~default",
+    snapshot: props.snapshot,
+    workstationRequestsByDispatchID: props.workstationRequestsByDispatchID,
+  });
+  props.stateRef.current = state;
+  return null;
+}
+
+async function renderCurrentSelectionHook(
+  initialProps: CurrentSelectionHookProps,
+): Promise<CurrentSelectionProbeHandle> {
+  const stateRef = { current: null as CurrentSelectionState | null };
+  let view: RenderResult | null = null;
+
+  await act(async () => {
+    view = render(
+      <CurrentSelectionProbe {...initialProps} stateRef={stateRef} />,
+    );
+  });
+  await settleCurrentSelectionEffects();
+
+  if (view == null || stateRef.current == null) {
+    throw new Error("CurrentSelectionProbe did not mount");
+  }
+
+  return {
+    get current() {
+      if (stateRef.current == null) {
+        throw new Error("CurrentSelectionProbe is not mounted");
+      }
+      return stateRef.current;
+    },
+    rerender(nextProps: CurrentSelectionHookProps) {
+      view?.rerender(
+        <CurrentSelectionProbe {...nextProps} stateRef={stateRef} />,
+      );
+    },
+    unmount() {
+      view?.unmount();
+      stateRef.current = null;
+    },
+  };
 }
 
 describe("useCurrentSelection", () => {
@@ -458,12 +507,12 @@ describe("useCurrentSelection", () => {
       snapshot,
       projectedRequests,
     );
-    const { result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot,
       workstationRequestsByDispatchID: projectedRequests,
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(readDispatchHistory(result.current)).toBe(
         "dispatch-review-active",
       );
@@ -513,12 +562,12 @@ describe("useCurrentSelection", () => {
       snapshot,
       projectedRequests,
     );
-    const { result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot,
       workstationRequestsByDispatchID: projectedRequests,
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(readDispatchHistory(result.current)).toBe(
         "dispatch-review-completed",
       );
@@ -567,7 +616,7 @@ describe("useCurrentSelection", () => {
       "review",
       selectedWorkItem,
     );
-    const { result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot: buildSnapshot({
           inferenceAttemptsByDispatchID,
           providerSessions: [
@@ -582,7 +631,7 @@ describe("useCurrentSelection", () => {
       workstationRequestsByDispatchID: {},
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(readDispatchHistory(result.current)).toBe(
         "dispatch-review-runtime-fallback",
       );
@@ -628,7 +677,7 @@ describe("useCurrentSelection", () => {
     };
 
     seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);
-    const { rerender, result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot: buildSnapshot({
           activeExecution,
           providerSessions: [
@@ -649,7 +698,7 @@ describe("useCurrentSelection", () => {
       workstationRequestsByDispatchID: initialProjectedRequests,
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(readDispatchHistory(result.current)).toBe(
         "dispatch-review-active",
       );
@@ -659,7 +708,7 @@ describe("useCurrentSelection", () => {
     });
 
     act(() => {
-      rerender({
+      result.rerender({
       snapshot: buildSnapshot({
           providerSessions: [
             buildProviderSessionAttempt({
@@ -681,8 +730,9 @@ describe("useCurrentSelection", () => {
       workstationRequestsByDispatchID: rerenderedProjectedRequests,
       });
     });
+    await settleCurrentSelectionEffects();
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(readDispatchHistory(result.current)).toBe(
         "dispatch-repair-completed",
       );
@@ -728,7 +778,7 @@ describe("useCurrentSelection", () => {
     };
 
     seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);
-    const { result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
         snapshot: buildSnapshot({
           activeExecution,
           providerSessions: [
@@ -779,7 +829,7 @@ describe("useCurrentSelection", () => {
         workstationRequestsByDispatchID: projectedRequests,
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(readDispatchHistory(result.current)).toBe(
         "dispatch-review-active,dispatch-review-output,dispatch-review-old",
       );
@@ -829,13 +879,13 @@ describe("useCurrentSelection", () => {
       selectedWorkItem,
     );
 
-    const { result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot: replaySnapshot,
       workstationRequestsByDispatchID:
         replaySnapshot.workstationRequestsByDispatchID,
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(readDispatchHistory(result.current)).toBe(
         "062f0677-3b56-42f7-9a04-dc92997c7bf7,17c38f40-de4e-4d5f-bd44-649a2bf4a284",
       );
@@ -872,12 +922,12 @@ describe("useCurrentSelection", () => {
       });
     });
 
-    const { result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot,
       workstationRequestsByDispatchID: {},
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selectedWorkerName ?? "").toBe(
         "writer",
       );
@@ -910,12 +960,12 @@ describe("useCurrentSelection", () => {
       });
     });
 
-    const { result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot,
       workstationRequestsByDispatchID: {},
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selectedResourceName ?? "").toBe(
         "gpu",
       );
@@ -942,12 +992,12 @@ describe("useCurrentSelection", () => {
       });
     });
 
-    const { rerender, result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot,
       workstationRequestsByDispatchID: {},
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selection?.kind ?? "").toBe("node");
       expect(result.current.selectedResourceName ?? "").toBe("");
     });
@@ -964,13 +1014,14 @@ describe("useCurrentSelection", () => {
     });
 
     act(() => {
-      rerender({
+      result.rerender({
       snapshot,
       workstationRequestsByDispatchID: {},
       });
     });
+    await settleCurrentSelectionEffects();
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selection?.kind ?? "").toBe("resource");
       expect(result.current.selectedResourceName ?? "").toBe(
         "gpu",
@@ -998,12 +1049,12 @@ describe("useCurrentSelection", () => {
       });
     });
 
-    const { rerender, result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       snapshot,
       workstationRequestsByDispatchID: {},
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selection?.kind ?? "").toBe("node");
       expect(result.current.selectedWorkerName ?? "").toBe("");
       expect(result.current.selectedWorker?.type ?? "").toBe("");
@@ -1022,13 +1073,14 @@ describe("useCurrentSelection", () => {
     });
 
     act(() => {
-      rerender({
+      result.rerender({
       snapshot,
       workstationRequestsByDispatchID: {},
       });
     });
+    await settleCurrentSelectionEffects();
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selection?.kind ?? "").toBe("worker");
       expect(result.current.selectedWorkerName ?? "").toBe(
         "writer",
@@ -1040,7 +1092,7 @@ describe("useCurrentSelection", () => {
     const selectedWorkItem = buildWorkItem("work-active", "Active Story");
     seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);
 
-    const { rerender, result } = renderCurrentSelectionHook({
+    const result = await renderCurrentSelectionHook({
       sessionID: "~default",
       snapshot: buildSnapshot({
         activeExecution: buildActiveExecution(
@@ -1052,14 +1104,14 @@ describe("useCurrentSelection", () => {
       workstationRequestsByDispatchID: {},
     });
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selectedWorkID ?? "").toBe(
         "work-active",
       );
     });
 
     act(() => {
-      rerender({
+      result.rerender({
       sessionID: "session-beta",
       snapshot: buildSnapshot({
         activeExecution: buildActiveExecution(
@@ -1071,8 +1123,9 @@ describe("useCurrentSelection", () => {
       workstationRequestsByDispatchID: {},
       });
     });
+    await settleCurrentSelectionEffects();
 
-    await waitFor(() => {
+    await waitForCurrentSelection(() => {
       expect(result.current.selectedWorkID ?? "").toBe("");
       expect(readDispatchHistory(result.current)).toBe("");
     });

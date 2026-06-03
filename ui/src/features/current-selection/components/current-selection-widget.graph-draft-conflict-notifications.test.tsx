@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
+import { useStrictConsoleGuard } from "../../../testing/strict-console-guard";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
@@ -213,6 +214,18 @@ async function renderWorkStateSelection() {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: cross-entity graph-draft conflict regressions share one mocked save seam.
 describe("CurrentSelectionWidget graph draft conflict warning boundaries", () => {
+  useStrictConsoleGuard({
+    allowlist: [
+      {
+        name: "widget-save-notifications-mutation-settle",
+        level: "error",
+        match: "CurrentSelectionWidgetSaveNotifications",
+        reason:
+          "Mocked document-save mutations resolve after userEvent; the save-notification subtree re-renders before the enclosing act scope closes.",
+      },
+    ],
+  });
+
   beforeEach(() => {
     resetSelectionHistoryStore();
     resetGraphDraftBridge();
@@ -267,11 +280,17 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       fireEvent.change(screen.getByLabelText("Worker"), {
         target: { value: "planner" },
       });
+      await settleCurrentSelectionEffects();
       await user.click(workstationFooterSaveButton());
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "Overwrite factory" }),
+        ).toBeTruthy();
+      });
+      await settleCurrentSelectionEffects();
       await user.click(
         screen.getByRole("button", { name: "Overwrite factory" }),
       );
-
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -293,13 +312,14 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       fireEvent.change(screen.getByLabelText("Worker name"), {
         target: { value: "senior-reviewer" },
       });
+      await settleCurrentSelectionEffects();
       const saveWorkerButtons = screen.getAllByRole("button", {
         name: "Save worker",
       });
       await userEvent.setup().click(
-        saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0],
+        saveWorkerButtons[saveWorkerButtons.length - 1] ??
+          saveWorkerButtons[0],
       );
-
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -353,10 +373,10 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       fireEvent.change(screen.getByLabelText("Name"), {
         target: { value: "expanded-slot" },
       });
+      await settleCurrentSelectionEffects();
       await userEvent
         .setup()
         .click(screen.getByRole("button", { name: "Save resource" }));
-
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -390,12 +410,13 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       fireEvent.change(screen.getByLabelText("Work type"), {
         target: { value: "feature" },
       });
+      await settleCurrentSelectionEffects();
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Save changes" }));
+      await settleCurrentSelectionEffects();
       await user.click(
         screen.getByRole("button", { name: "Overwrite factory" }),
       );
-
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -428,10 +449,10 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       fireEvent.change(screen.getByLabelText("State name"), {
         target: { value: "ready" },
       });
+      await settleCurrentSelectionEffects();
       await userEvent
         .setup()
         .click(screen.getByRole("button", { name: "Save work state" }));
-
       await expectGraphDraftConflictWarningToast();
     });
   });
@@ -452,13 +473,14 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       fireEvent.change(screen.getByLabelText("Model"), {
         target: { value: "gpt-5.9" },
       });
+      await settleCurrentSelectionEffects();
       const saveWorkerButtons = screen.getAllByRole("button", {
         name: "Save worker",
       });
       await userEvent.setup().click(
-        saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0],
+        saveWorkerButtons[saveWorkerButtons.length - 1] ??
+          saveWorkerButtons[0],
       );
-
       await expectWorkerSaveSuccessToast("reviewer");
       await expectNoGraphDraftConflictWarningToast();
     });

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { settleCurrentSelectionEffects } from "../../../../testing/current-selection-test-utils";
+import { useStrictConsoleGuard } from "../../../../testing/strict-console-guard";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
@@ -82,8 +83,19 @@ describe("SelectionDetailLayout shell copy", () => {
 describe("SelectionDetailLayout actions", () => {
   resetSelectionHistory();
 
+  useStrictConsoleGuard({
+    allowlist: [
+      {
+        name: "detail-layout-history-controls",
+        level: "error",
+        match: "SelectionDetailLayout",
+        reason:
+          "Undo and redo controls update selection-history subscribers on the layout shell after user interaction.",
+      },
+    ],
+  });
+
   it("keeps undo and redo history behavior unchanged apart from the localized copy source", async () => {
-    const user = userEvent.setup();
     const store = useSelectionHistoryStore.getState();
 
     act(() => {
@@ -112,7 +124,9 @@ describe("SelectionDetailLayout actions", () => {
     expect(undoButton.hasAttribute("disabled")).toBe(false);
     expect(redoButton.hasAttribute("disabled")).toBe(true);
 
+    const user = userEvent.setup();
     await user.click(undoButton);
+    await settleCurrentSelectionEffects();
 
     expect(useSelectionHistoryStore.getState().present.selection).toEqual({
       kind: "node",
@@ -125,6 +139,7 @@ describe("SelectionDetailLayout actions", () => {
     ).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "重做所选内容" }));
+    await settleCurrentSelectionEffects();
 
     expect(useSelectionHistoryStore.getState().present.selection).toEqual({
       kind: "state-node",
@@ -135,6 +150,7 @@ describe("SelectionDetailLayout actions", () => {
         .getByRole("button", { name: "重做所选内容" })
         .hasAttribute("disabled"),
     ).toBe(true);
+    await settleCurrentSelectionEffects();
   });
 
   it("orders undo, redo, detail actions, then shared header actions", () => {
