@@ -5,6 +5,7 @@ const (
 	CodeDanglingWorkerReference          = "factory.worker.danglingReference"
 	CodeDanglingPlaceReference           = "factory.route.danglingPlaceReference"
 	CodeDanglingResourceReference        = "factory.resource.danglingReference"
+	CodeWorkstationMissingOutputRoutes   = "factory.workstation.missingOutputRoutes"
 	CodeWorkstationMissingFailureRoute   = "factory.workstation.missingFailureRoute"
 	CodeWorkstationMissingRejectionRoute = "factory.workstation.missingRejectionRoute"
 	CodeWorkstationConflictingOutputs    = "factory.workstation.conflictingWorkStateOutputs"

@@ -767,7 +767,7 @@ components:
                 family: BAD_REQUEST
                 code: INVALID_FACTORY_NAME
             invalidFactory:
-              summary: Factory payload failed validation.
+              summary: Factory payload failed validation because a workstation has outputs but no failure route.
               value:
                 message: Factory payload is not a valid Agent Factory definition.
                 family: BAD_REQUEST
@@ -780,6 +780,20 @@ components:
                       type: WORKSTATION
                       id: bob
                       location: ON_FAILURE
+            routelessWorkstation:
+              summary: Factory payload failed validation because a workstation has no output routes.
+              value:
+                message: Factory payload is not a valid Agent Factory definition.
+                family: BAD_REQUEST
+                code: INVALID_FACTORY
+                targets:
+                  - code: factory.workstation.missingOutputRoutes
+                    severity: error
+                    message: workstation "bob" must define output routes.
+                    subject:
+                      type: WORKSTATION
+                      id: bob
+                      location: OUTPUTS
     CreateFactoryConflict:
       description: Named factory could not be activated because the name already exists or the current runtime is not idle.
       content:
@@ -834,7 +848,7 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
           examples:
             invalidFactory:
-              summary: Factory payload failed validation.
+              summary: Factory payload failed validation because a workstation has outputs but no failure route.
               value:
                 message: Factory payload is not a valid Agent Factory definition.
                 family: BAD_REQUEST
@@ -847,6 +861,20 @@ components:
                       type: WORKSTATION
                       id: bob
                       location: ON_FAILURE
+            routelessWorkstation:
+              summary: Factory payload failed validation because a workstation has no output routes.
+              value:
+                message: Factory payload is not a valid Agent Factory definition.
+                family: BAD_REQUEST
+                code: INVALID_FACTORY
+                targets:
+                  - code: factory.workstation.missingOutputRoutes
+                    severity: error
+                    message: workstation "bob" must define output routes.
+                    subject:
+                      type: WORKSTATION
+                      id: bob
+                      location: OUTPUTS
     SaveCurrentFactoryConflict:
       description: Current factory could not be saved because the runtime or submitted version is not safe to replace.
       content:
