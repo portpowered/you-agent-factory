@@ -53,7 +53,12 @@ func terminateCommandProcessTree(cmd *exec.Cmd, _ *commandProcessTree) error {
 	return terminateCommandProcessGroup(cmd, 0)
 }
 
-func closeCommandProcessTree(_ *commandProcessTree) {}
+func closeCommandProcessTree(cmd *exec.Cmd, _ *commandProcessTree) {
+	if cmd == nil {
+		return
+	}
+	_ = terminateCommandProcessGroup(cmd, commandProcessGroupGracePeriod)
+}
 
 func commandProcessGroupRunning(pgid int) bool {
 	err := syscall.Kill(-pgid, 0)

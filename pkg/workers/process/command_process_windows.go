@@ -64,7 +64,7 @@ func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree) error 
 	return cmd.Process.Kill()
 }
 
-func closeCommandProcessTree(tree *commandProcessTree) {
+func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree) {
 	if tree == nil || tree.job == 0 {
 		return
 	}

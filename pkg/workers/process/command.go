@@ -98,13 +98,13 @@ func (ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandRe
 	case <-ctx.Done():
 		_ = terminateCommandProcessTree(cmd, tree)
 		<-waitCh
-		closeCommandProcessTree(tree)
+		closeCommandProcessTree(cmd, tree)
 		return CommandResult{
 			Stdout: stdout.Bytes(),
 			Stderr: stderr.Bytes(),
 		}, ctx.Err()
 	}
-	closeCommandProcessTree(tree)
+	closeCommandProcessTree(cmd, tree)
 
 	result := CommandResult{
 		Stdout: stdout.Bytes(),
