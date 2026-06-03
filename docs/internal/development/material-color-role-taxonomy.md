@@ -116,3 +116,7 @@ Tokens without a direct role yet (for example `af-text-subtle`, `af-overlay`, se
 ## CSS variable reference
 
 Neutral and accent/semantic roles register in Tailwind v4 `@theme` as `--color-<role-name>`, enabling utilities such as `bg-primary`, `text-on-surface`, and `border-outline-variant`.
+
+## Related layout system (US-007)
+
+Layout spacing roles and shared primitives are documented in `material-layout-role-taxonomy.md`. Storybook: `Agent Factory/UI/Layout Role Primitives`.

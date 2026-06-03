@@ -4,6 +4,10 @@ import type { ComponentProps, HTMLAttributes } from "react";
 import { useAppLocale } from "../../i18n";
 import { cn } from "../../lib/cn";
 import { buttonVariants } from "./button";
+import {
+  LAYOUT_DIALOG_CONTENT_SHELL_CLASS,
+  LAYOUT_FORM_GROUP_CLASS,
+} from "./dashboard-layout";
 import { getSharedPrimitiveMessages } from "./messages/shared-primitives";
 
 export const Dialog = DialogPrimitive.Root;
@@ -45,7 +49,8 @@ export function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed inset-x-4 top-1/2 z-50 mx-auto grid max-w-2xl -translate-y-1/2 gap-4 rounded-2xl border border-outline bg-surface-container-high p-6 text-on-surface shadow-af-panel",
+          "fixed inset-x-4 top-1/2 z-50 mx-auto max-w-2xl -translate-y-1/2 rounded-2xl border border-outline bg-surface-container-high text-on-surface shadow-af-panel",
+          LAYOUT_DIALOG_CONTENT_SHELL_CLASS,
           className,
         )}
         {...props}
@@ -113,7 +118,12 @@ export function DialogHeader({
   className,
   ...props
 }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("grid gap-2 text-left", className)} {...props} />;
+  return (
+    <div
+      className={cn(LAYOUT_FORM_GROUP_CLASS, "text-left", className)}
+      {...props}
+    />
+  );
 }
 
 export function DialogFooter({
@@ -122,7 +132,7 @@ export function DialogFooter({
 }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex flex-wrap justify-end gap-3", className)}
+      className={cn("flex flex-wrap justify-end gap-layout-element", className)}
       {...props}
     />
   );
