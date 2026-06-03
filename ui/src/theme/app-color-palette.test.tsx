@@ -104,4 +104,57 @@ describe("AppColorPaletteProvider", () => {
     expect(resolveInitialColorPalette("unknown")).toBe("factory-dark");
     expect(readStoredColorPalette()).toBeNull();
   });
+
+  it("honors paletteOverride when used outside the provider", () => {
+    function OverrideProbe() {
+      const { palette, setPalette, clearPaletteSelection } =
+        useAppColorPalette("material-baseline");
+
+      return (
+        <div>
+          <output data-testid="palette">{palette}</output>
+          <button
+            onClick={() => {
+              setPalette("slate");
+            }}
+            type="button"
+          >
+            noop set
+          </button>
+          <button
+            onClick={() => {
+              clearPaletteSelection();
+            }}
+            type="button"
+          >
+            noop clear
+          </button>
+        </div>
+      );
+    }
+
+    render(<OverrideProbe />);
+
+    expect(screen.getByTestId("palette").textContent).toBe(
+      "material-baseline",
+    );
+    screen.getByRole("button", { name: "noop set" }).click();
+    screen.getByRole("button", { name: "noop clear" }).click();
+    expect(screen.getByTestId("palette").textContent).toBe(
+      "material-baseline",
+    );
+  });
+
+  it("falls back to stored or default palette when used outside the provider", () => {
+    window.sessionStorage.setItem(COLOR_PALETTE_STORAGE_KEY, "olive");
+
+    function FallbackProbe() {
+      const { palette } = useAppColorPalette();
+      return <output data-testid="palette">{palette}</output>;
+    }
+
+    render(<FallbackProbe />);
+
+    expect(screen.getByTestId("palette").textContent).toBe("olive");
+  });
 });

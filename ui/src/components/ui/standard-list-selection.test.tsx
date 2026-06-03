@@ -99,8 +99,10 @@ describe("StandardListSelectionItem", () => {
       </StandardListSelectionItem>,
     );
 
-    let row = screen.getByRole("button", { name: "Accent row" });
+    let     row = screen.getByRole("button", { name: "Accent row" });
     expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS);
+    expect(row.className).toContain("border-primary");
+    expect(row.className).toContain("bg-primary-container");
     expectNoSolidAccentSelectedTreatment(row.className);
 
     rerender(
