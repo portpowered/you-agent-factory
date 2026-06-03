@@ -30,7 +30,7 @@ export function FactoryGraphEditorHideShowMenu({
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>
         <FactoryGraphEditorTooltipActionButton
-          aria-label={messages.toolbarOpenHideShowMenuLabel}
+          aria-label={messages.toolbarHideShowLabel}
           aria-pressed={pressed}
           iconOnly
           placement="above"

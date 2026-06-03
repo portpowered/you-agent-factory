@@ -18,7 +18,8 @@ import {
 } from "../../../current-factory-definition/lib/worker-editable-values";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
+  CURRENT_SELECTION_FORM_FIELD_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   CurrentSelectionSectionHeader,
@@ -76,7 +77,10 @@ export function WorkerEditableConfigurationSection({
         title={messages.editableConfigurationHeading}
       />
       {expanded ? (
-        <div className="grid gap-2.5" id={contentId}>
+        <div
+          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+          id={contentId}
+        >
           {state?.status === "loading" ? (
             <p
               className={cn(
@@ -255,14 +259,6 @@ function WorkerEditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationOverwriteWarningDetail}
-      </p>
     </div>
   );
 }
@@ -317,14 +313,6 @@ function WorkerEditableConfigurationSharedImpactWarning({
           formatList(workstationNames),
         )}
       </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationSharedImpactWarningDetail}
-      </p>
     </div>
   );
 }
@@ -341,7 +329,7 @@ function WorkerEditableConfigurationDraftStatus({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <p
         className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
@@ -750,7 +738,7 @@ function WorkerEditableConfigurationField({
   supportingContent?: ReactNode;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
         {label}
       </label>

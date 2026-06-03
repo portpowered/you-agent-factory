@@ -28,6 +28,12 @@ export const EXECUTION_PILL_CLASS = cn(
 );
 export const PROVIDER_SESSION_CARD_CLASS =
   "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
+/** Outer shell for expanded current-selection configuration and history panels. */
+export const CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS =
+  "grid gap-3 rounded-2xl border border-af-border bg-af-surface-raised p-3";
+/** Field stack inside an expandable section body (no per-field outline). */
+export const CURRENT_SELECTION_FORM_FIELD_CLASS = "grid gap-2";
+/** Standalone nested panel when a field group is not inside an expandable section body. */
 export const CURRENT_SELECTION_FIELD_PANEL_CLASS =
   "grid gap-2 rounded-2xl border border-af-border bg-af-surface-raised p-3";
 /** Editable configuration field groups must use this stack instead of multi-column grid wrappers. */

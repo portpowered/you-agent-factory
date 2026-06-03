@@ -23,6 +23,7 @@ import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../lib/factory-graph-react-flow-projection";
+import { currentActivityGraphNodeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSemanticIconKind,
@@ -97,6 +98,7 @@ export function buildFactoryGraphEditorFlowModel(input: {
 
 function FactoryGraphEditorNodeView({
   data,
+  selected,
 }: NodeProps<FactoryGraphEditorNode>) {
   const surfaceClassName =
     data.kind === "work-state"
@@ -108,6 +110,14 @@ function FactoryGraphEditorNodeView({
       className={cn(
         "min-w-0 w-full justify-start overflow-hidden text-left shadow-none",
         surfaceClassName,
+        data.draftStatus === "none"
+          ? currentActivityGraphNodeHoverClassName({
+              activeFlow: data.activeFlow,
+              muted: data.muted,
+              selected: selected || data.focused,
+              validationError: data.validationMessage !== null,
+            })
+          : undefined,
         data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
         data.draftStatus === "removal" &&
           "border-af-danger-border bg-af-danger-surface ring-2 ring-af-danger-border",

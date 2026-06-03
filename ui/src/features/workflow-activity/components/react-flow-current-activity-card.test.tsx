@@ -63,6 +63,15 @@ import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "../lib/current-activity-factory-graph-layout";
+import { buildGraphEdges } from "../lib/react-flow-current-activity-card-edges";
+import {
+  buildActiveGraphHighlights,
+  buildActiveItemLabelsByPlaceId,
+  buildCurrentActivityNodes,
+  buildHandleAssignments,
+  buildVisibleGraphEdges,
+  EMPTY_NODE_POSITIONS,
+} from "../lib/react-flow-current-activity-card-graph";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -362,6 +371,58 @@ async function getWorkstationNode(label = "Review"): Promise<HTMLElement> {
 function expectFixedWorkstationNodeDimensions(node: Element | null) {
   expect(node?.getAttribute("style")).toContain("width: 156px");
   expect(node?.getAttribute("style")).toContain("height: 196px");
+}
+
+async function expectRenderableCurrentActivityGraphEdges(
+  snapshot: DashboardSnapshot,
+) {
+  const factory = snapshot.factory;
+  if (!factory) {
+    throw new Error("Expected snapshot factory for graph edge assertions.");
+  }
+
+  const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+  const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+  const handleAssignments = buildHandleAssignments(
+    visibleGraphEdges,
+    graphLayout.nodes,
+  );
+  const nodes = buildCurrentActivityNodes({
+    activeExecutionsByWorkstationNodeID: {},
+    activeGraphHighlights: buildActiveGraphHighlights(
+      [],
+      visibleGraphEdges,
+      graphLayout.nodes,
+    ),
+    activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+    graphLayout,
+    now: Date.parse("2026-04-08T12:00:04Z"),
+    onSelectStateNode: vi.fn(),
+    onSelectWorkID: vi.fn(),
+    onSelectResource: vi.fn(),
+    onSelectWorker: vi.fn(),
+    onSelectWorkType: vi.fn(),
+    onSelectWorkstation: vi.fn(),
+    selection: null,
+    snapshot,
+    storedNodePositions: EMPTY_NODE_POSITIONS,
+  });
+  const reactFlowEdges = buildGraphEdges(
+    buildActiveGraphHighlights([], visibleGraphEdges, graphLayout.nodes),
+    handleAssignments,
+    new Set(),
+    visibleGraphEdges,
+    nodes,
+  );
+
+  expect(visibleGraphEdges.length).toBeGreaterThan(0);
+  expect(reactFlowEdges.length).toBeGreaterThan(0);
+  expect(
+    reactFlowEdges.every(
+      (edge) =>
+        edge.sourceHandle && edge.targetHandle && edge.source && edge.target,
+    ),
+  ).toBe(true);
 }
 
 function renderCurrentActivity({
@@ -924,12 +985,10 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
     expect(
       within(toolbar).getByRole("button", {
-        name: "Open hide or show node classes menu",
+        name: "Show or hide",
       }),
     ).toBeTruthy();
-    expect(
-      within(toolbar).queryByRole("button", { name: "Add tool" }),
-    ).toBeNull();
+    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.getByText("Observe")).toBeTruthy();
   });
 
@@ -949,14 +1008,12 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
     });
+    expect(within(toolbar).getByRole("button", { name: "Add" })).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Add tool" }),
+      within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Delete tool" }),
-    ).toBeTruthy();
-    expect(
-      within(toolbar).getByRole("button", { name: "Connect tool" }),
+      within(toolbar).getByRole("button", { name: "Connect" }),
     ).toBeTruthy();
     expect(screen.getByText("Editor mode active")).toBeTruthy();
   });
@@ -1005,12 +1062,10 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
     expect(
       within(toolbar).getByRole("button", {
-        name: "Open hide or show node classes menu",
+        name: "Show or hide",
       }),
     ).toBeTruthy();
-    expect(
-      within(toolbar).queryByRole("button", { name: "Add tool" }),
-    ).toBeNull();
+    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.queryByText("Editor mode active")).toBeNull();
   });
 
@@ -1031,7 +1086,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
 
     expect(screen.getByRole("button", { name: "Workstation" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Worker" })).toBeTruthy();
@@ -1068,7 +1123,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Work type" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "essay" },
@@ -1110,7 +1165,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Work state" }));
 
     expect(screen.getByText("Add work state")).toBeTruthy();
@@ -1160,7 +1215,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Work state" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "approved" },
@@ -1615,17 +1670,17 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     expect(screen.getByText("Loading editor definition")).toBeTruthy();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Add tool" })
+        .getByRole("button", { name: "Add" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Delete tool" })
+        .getByRole("button", { name: "Delete" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Connect tool" })
+        .getByRole("button", { name: "Connect" })
         .getAttribute("disabled"),
     ).not.toBeNull();
   });
@@ -2678,7 +2733,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     ).toBeTruthy();
     expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(screen.getByLabelText("worker:agent")).toBeTruthy();
-    expect(screen.getByLabelText("work-type:story")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Select story work type" }),
+    ).toBeTruthy();
     expect(
       screen
         .getAllByRole("img", { name: "Queue" })[0]
@@ -2712,7 +2769,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       (await getStateNodeArticle("story:documented"))
         .querySelector("article")
-        ?.className.includes("border-af-border-strong"),
+        ?.className.includes("border-af-warning-border"),
     ).toBe(true);
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("dispatch-review-active")).toBeNull();
@@ -2734,11 +2791,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       ).toBeTruthy();
       await waitFor(() => {
         expect(
-          document.querySelectorAll(".react-flow__edge").length,
-        ).toBeGreaterThan(0);
+          screen.getAllByRole("button", { name: /Select .* workstation/ }),
+        ).toHaveLength(5);
       });
-      expect(document.querySelectorAll(".react-flow__edge-path")).toHaveLength(
-        document.querySelectorAll(".react-flow__edge").length,
+      await expectRenderableCurrentActivityGraphEdges(
+        semanticWorkflowDashboardSnapshot,
       );
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
@@ -2767,12 +2824,10 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
-      await screen.findByRole("button", { name: "Connect tool" });
-      await waitFor(() => {
-        expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
-          0,
-        );
-      });
+      await screen.findByRole("button", { name: "Connect" });
+      await expectRenderableCurrentActivityGraphEdges(
+        semanticWorkflowDashboardSnapshot,
+      );
 
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
@@ -2827,11 +2882,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       await screen.findByRole("button", { name: "Save changes" });
       expect(await screen.findByText("Unsaved changes")).toBeTruthy();
       expect(screen.queryByText("Topology edits are blocked")).toBeNull();
-      await waitFor(() => {
-        expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
-          0,
-        );
-      });
+      await expectRenderableCurrentActivityGraphEdges(idleSnapshot);
 
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
@@ -2910,8 +2961,10 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const resourceArticle = resourceLabelContainer.closest("article");
     const workerLabelContainer = screen.getByLabelText("worker:agent");
     const workerArticle = workerLabelContainer.closest("article");
-    const workTypeLabelContainer = screen.getByLabelText("work-type:story");
-    const workTypeArticle = workTypeLabelContainer.closest("article");
+    const workTypeButton = screen.getByRole("button", {
+      name: "Select story work type",
+    });
+    const workTypeArticle = workTypeButton.closest("article");
 
     expect(
       within(resourceArticle as HTMLElement)
@@ -2924,9 +2977,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("worker");
     expect(
-      within(workTypeArticle as HTMLElement)
-        .getByRole("img", { name: "Work type" })
-        .getAttribute("data-graph-semantic-icon"),
+      workTypeArticle
+        ?.querySelector("[data-graph-semantic-icon='work-type']")
+        ?.getAttribute("data-graph-semantic-icon"),
     ).toBe("work-type");
     expect(resourceLabelContainer.getAttribute("aria-label")).toBe(
       "agent-slot",
@@ -2934,8 +2987,8 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(workerLabelContainer.getAttribute("aria-label")).toBe(
       "worker:agent",
     );
-    expect(workTypeLabelContainer.getAttribute("aria-label")).toBe(
-      "work-type:story",
+    expect(workTypeButton.getAttribute("aria-label")).toBe(
+      "Select story work type",
     );
     expect(
       resourceArticle?.querySelector("[data-resource-name]")?.textContent,
@@ -3060,7 +3113,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       "border-af-accent-border",
     );
     expect(activeSelectedArticle?.className).not.toContain(
-      "border-af-success-border",
+      "shadow-af-success-chip",
     );
 
     cleanup();
@@ -3269,19 +3322,19 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     ).toBe("queue");
     expect(
       within(processingStateArticle)
-        .getByRole("img", { name: "Queue" })
+        .getByRole("img", { name: "Processing state" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
+    ).toBe("processing");
     expect(
       within(terminalStateArticle)
-        .getByRole("img", { name: "Queue" })
+        .getByRole("img", { name: "Terminal" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
+    ).toBe("terminal");
     expect(
       within(failedStateArticle)
-        .getByRole("img", { name: "Queue" })
+        .getByRole("img", { name: "Failed" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
+    ).toBe("failed");
     expect(
       initialStateArticle.querySelector("[data-state-work-type]")?.textContent,
     ).toBe("story");
@@ -3473,11 +3526,21 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       await getStateNodeArticle("story:documented");
 
     expect(readyStateArticle.querySelector("article")?.className).toContain(
-      "border-af-border-strong",
+      "border-af-warning-border",
     );
     expect(
       documentedStateArticle.querySelector("article")?.className,
-    ).toContain("border-af-border-strong");
+    ).toContain("border-af-warning-border");
+    expect(
+      within(readyStateArticle).getByRole("status", {
+        name: "4 active items",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(documentedStateArticle).queryByRole("status", {
+        name: /active items/,
+      }),
+    ).toBeNull();
   });
 
   it("selects workstation and work item context through the dashboard callbacks", async () => {

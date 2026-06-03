@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS } from "../../base/components/detail-card-shared";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
 import {
@@ -14,6 +15,29 @@ import {
 const messages = editableConfigurationSectionMessages;
 
 describe("EditableConfigurationSection async states", () => {
+  it("wraps expanded configuration in one shared section shell", () => {
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={buildEditableConfigurationSectionReadyState()}
+      />,
+    );
+
+    const expandButton = screen.getByRole("button", {
+      name: "Expand editable configuration",
+    });
+    expandEditableConfigurationSection();
+    const sectionBody = document.getElementById(
+      expandButton.getAttribute("aria-controls") ?? "",
+    );
+    expect(sectionBody?.className).toContain(
+      CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
+    );
+    expect(
+      screen.getByLabelText("Workstation name").closest(".rounded-2xl"),
+    ).toBe(sectionBody);
+  });
+
   it("shows loading, error, and empty copy when expanded", () => {
     const { rerender } = render(
       <EditableConfigurationSection

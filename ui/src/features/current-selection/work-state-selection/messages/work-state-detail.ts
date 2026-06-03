@@ -17,7 +17,13 @@ const workStateDetailMessagesByLocale = {
     configurationErrorPrefix: "Work state definition unavailable.",
     configurationLoading:
       "Loading the current factory definition for this work state.",
+    collapseAction: "Collapse",
     discardDraftAction: "Discard local changes",
+    editableConfigurationCollapseActionLabel:
+      "Collapse work state configuration editor",
+    editableConfigurationExpandActionLabel:
+      "Expand work state configuration editor",
+    expandAction: "Expand",
     editableConfigurationContractInvalidPrefix:
       "Work state configuration is invalid.",
     editableConfigurationDirtyStatus:
@@ -55,7 +61,12 @@ const workStateDetailMessagesByLocale = {
     configurationErrorPrefix: "ワーク状態定義を利用できません。",
     configurationLoading:
       "このワーク状態の現在のファクトリー定義を読み込んでいます。",
+    collapseAction: "折りたたむ",
     discardDraftAction: "ローカルの変更を破棄",
+    editableConfigurationCollapseActionLabel:
+      "ワーク状態構成エディターを折りたたむ",
+    editableConfigurationExpandActionLabel: "ワーク状態構成エディターを展開",
+    expandAction: "展開",
     editableConfigurationContractInvalidPrefix: "ワーク状態の構成が無効です。",
     editableConfigurationDirtyStatus:
       "このワーク状態に未保存の変更があります。",
@@ -93,7 +104,11 @@ const workStateDetailMessagesByLocale = {
     configurationErrorPrefix: "작업 상태 정의를 사용할 수 없습니다.",
     configurationLoading:
       "이 작업 상태의 현재 팩토리 정의를 불러오는 중입니다.",
+    collapseAction: "접기",
     discardDraftAction: "로컬 변경 사항 취소",
+    editableConfigurationCollapseActionLabel: "작업 상태 구성 편집기 접기",
+    editableConfigurationExpandActionLabel: "작업 상태 구성 편집기 펼치기",
+    expandAction: "펼치기",
     editableConfigurationContractInvalidPrefix:
       "작업 상태 구성이 유효하지 않습니다.",
     editableConfigurationDirtyStatus:
@@ -130,7 +145,11 @@ const workStateDetailMessagesByLocale = {
     configurationEmpty: "运行中的工厂定义不包含所选工作状态。",
     configurationErrorPrefix: "工作状态定义不可用。",
     configurationLoading: "正在加载此工作状态的当前工厂定义。",
+    collapseAction: "收起",
     discardDraftAction: "放弃本地更改",
+    editableConfigurationCollapseActionLabel: "收起工作状态配置编辑器",
+    editableConfigurationExpandActionLabel: "展开工作状态配置编辑器",
+    expandAction: "展开",
     editableConfigurationContractInvalidPrefix: "工作状态配置无效。",
     editableConfigurationDirtyStatus: "此工作状态有未保存的更改。",
     editableConfigurationDraftNote:

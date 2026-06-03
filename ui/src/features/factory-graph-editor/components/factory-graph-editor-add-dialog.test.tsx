@@ -1,7 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-
-import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
 import { createEmptyEditableWorkstationCronDraft } from "../../current-factory-definition/lib/workstation-editable-values";
+import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
 import { editableWorkstationBehaviorOptions } from "../lib/factory-graph-editor-additions";
 import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
@@ -149,9 +148,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       screen.getByText("Select a model provider for the new worker."),
     ).toBeTruthy();
     expect(
-      screen.getByText(
-        "Optional. Leave blank to use the provider default model identifier.",
-      ),
+      screen.getByText("Blank uses the provider default model."),
     ).toBeTruthy();
   });
 
@@ -337,17 +334,13 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
 
     expect(screen.getByRole("textbox", { name: "Cron schedule" })).toBeTruthy();
-    expect(
-      screen.getByLabelText("Cron trigger at start"),
-    ).toBeTruthy();
+    expect(screen.getByLabelText("Cron trigger at start")).toBeTruthy();
     expect(screen.getByRole("textbox", { name: "Cron jitter" })).toBeTruthy();
     expect(
       screen.getByRole("textbox", { name: "Cron expiry window" }),
     ).toBeTruthy();
     expect(
-      screen.getByText(
-        "Enter a cron schedule before adding this workstation.",
-      ),
+      screen.getByText("Enter a cron schedule before adding this workstation."),
     ).toBeTruthy();
     expect(screen.getByRole("option", { name: "Cron" })).toBeTruthy();
   });
@@ -368,17 +361,24 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
 
     expect(
-      (screen.getByRole("combobox", {
-        name: "Workstation type",
-      }) as HTMLSelectElement).value,
+      (
+        screen.getByRole("combobox", {
+          name: "Workstation type",
+        }) as HTMLSelectElement
+      ).value,
     ).toBe("LOGICAL_MOVE");
-    expect(screen.queryByRole("combobox", { name: "Assigned worker" })).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Assigned worker" }),
+    ).toBeNull();
     expect(screen.queryByLabelText("Prompt body")).toBeNull();
     expect(screen.getByRole("textbox", { name: "Cron schedule" })).toBeTruthy();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Workstation type" }), {
-      target: { value: "MODEL_WORKSTATION" },
-    });
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Workstation type" }),
+      {
+        target: { value: "MODEL_WORKSTATION" },
+      },
+    );
 
     expect(onChange).toHaveBeenCalledWith({
       behavior: "CRON",
@@ -406,9 +406,12 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       onChange,
     });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Workstation type" }), {
-      target: { value: "LOGICAL_MOVE" },
-    });
+    fireEvent.change(
+      screen.getByRole("combobox", { name: "Workstation type" }),
+      {
+        target: { value: "LOGICAL_MOVE" },
+      },
+    );
 
     expect(onChange).toHaveBeenCalledWith({
       behavior: "STANDARD",
@@ -443,9 +446,12 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       target: { value: "5s" },
     });
     fireEvent.click(screen.getByLabelText("Cron trigger at start"));
-    fireEvent.change(screen.getByRole("textbox", { name: "Cron expiry window" }), {
-      target: { value: "30m" },
-    });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "Cron expiry window" }),
+      {
+        target: { value: "30m" },
+      },
+    );
 
     expect(onChange).toHaveBeenNthCalledWith(1, {
       behavior: "CRON",

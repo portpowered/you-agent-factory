@@ -1,5 +1,5 @@
 import type { ReactFlowInstance } from "@xyflow/react";
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/factory-graph-editor-controls";
@@ -8,6 +8,7 @@ import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
+import { shouldShowGraphSaveFailureNotice } from "../lib/graph-save-failure-notice-visibility";
 import {
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,
@@ -75,14 +76,26 @@ export function CurrentActivityGraphSurface({
   const saveFailureMessages = editor.editorMode
     ? saveErrorNoticeMessages(saveError)
     : [];
+  const [dismissedSaveFailureRevision, setDismissedSaveFailureRevision] =
+    useState<number | null>(null);
+  const dismissSaveFailureNotice = useCallback(() => {
+    setDismissedSaveFailureRevision(editor.saveAttemptRevision);
+  }, [editor.saveAttemptRevision]);
+  const showSaveFailureNotice = shouldShowGraphSaveFailureNotice({
+    dismissedSaveFailureRevision,
+    hasFailureMessages: saveFailureMessages.length > 0,
+    saveAttemptRevision: editor.saveAttemptRevision,
+  });
   if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
 
   return (
     <div className="grid min-h-0 flex-1 gap-3">
-      {saveFailureMessages.length > 0 ? (
+      {showSaveFailureNotice ? (
         <FactoryGraphEditorNotice
+          dismissLabel={messages.noticeDismissLabel}
+          onDismiss={dismissSaveFailureNotice}
           title={messages.noticeSaveFailedTitle}
           tone="danger"
         >

@@ -84,6 +84,7 @@ export interface FactoryGraphEditorMessages {
   noticeConnectionBlockedTitle: string;
   noticeEmptyMessage: string;
   noticeEmptyTitle: string;
+  noticeDismissLabel: string;
   noticeRemovalBlockedTitle: string;
   noticeSaveFailedAffectedSummary: (labels: string) => string;
   noticeSaveFailedTitle: string;
@@ -506,6 +507,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeEmptyMessage:
         "The factory has not published any workstation graph yet.",
       noticeEmptyTitle: "No workflow topology loaded",
+      noticeDismissLabel: "Dismiss",
       noticeRemovalBlockedTitle: "Removal blocked",
       noticeSaveFailedAffectedSummary: (labels) => `Affected: ${labels}`,
       noticeSaveFailedTitle: "Topology save failed",
@@ -536,21 +538,21 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       stateCollapsed: "Collapsed",
       stateTypeLabel: describeEnglishStateType,
       stateVisible: "Visible",
-      toolbarAddDescription: "Add tool",
-      toolbarAddLabel: "Add tool",
+      toolbarAddDescription: "Add a graph entity",
+      toolbarAddLabel: "Add",
       toolbarAriaLabel: "Factory graph editor tools",
-      toolbarConnectDescription: "Connect tool",
-      toolbarConnectLabel: "Connect tool",
-      toolbarDeleteDescription: "Delete tool",
-      toolbarDeleteLabel: "Delete tool",
+      toolbarConnectDescription: "Connect nodes on the graph",
+      toolbarConnectLabel: "Connect",
+      toolbarDeleteDescription: "Remove nodes or edges from the graph",
+      toolbarDeleteLabel: "Delete",
       toolbarHideShowDescription: "Show or hide node classes on the graph",
-      toolbarHideShowLabel: "Hide or show",
+      toolbarHideShowLabel: "Show or hide",
       toolbarHideShowMenuAriaLabel: "Factory graph node class visibility menu",
       toolbarHideShowMenuDescription:
         "Toggle which node classes appear on the graph. Hidden classes stay out of the view until you show them again.",
       toolbarHideShowMenuTitle: "Hide or show node classes",
-      toolbarOpenAddMenuLabel: "Add tool",
-      toolbarOpenHideShowMenuLabel: "Open hide or show node classes menu",
+      toolbarOpenAddMenuLabel: "Add",
+      toolbarOpenHideShowMenuLabel: "Show or hide",
       nodeClassVisibilityDescription: describeEnglishNodeClassVisibility,
       toolbarVisibilityMenuAriaLabel: "Add graph entity menu",
       toolbarVisibilityMenuDescription:
@@ -869,6 +871,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeConnectionBlockedTitle: "连接被阻止",
       noticeEmptyMessage: "该工厂尚未发布任何工作站图。",
       noticeEmptyTitle: "尚未加载工作流拓扑",
+      noticeDismissLabel: "关闭",
       noticeRemovalBlockedTitle: "移除被阻止",
       noticeSaveFailedAffectedSummary: (labels) => `受影响项：${labels}`,
       noticeSaveFailedTitle: "拓扑保存失败",
@@ -925,21 +928,21 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         }
       },
       stateVisible: "可见",
-      toolbarAddDescription: "添加工具",
-      toolbarAddLabel: "添加工具",
+      toolbarAddDescription: "添加图实体",
+      toolbarAddLabel: "添加",
       toolbarAriaLabel: "工厂图编辑器工具",
-      toolbarConnectDescription: "连接工具",
-      toolbarConnectLabel: "连接工具",
-      toolbarDeleteDescription: "删除工具",
-      toolbarDeleteLabel: "删除工具",
+      toolbarConnectDescription: "在图上连接节点",
+      toolbarConnectLabel: "连接",
+      toolbarDeleteDescription: "从图中删除节点或边",
+      toolbarDeleteLabel: "删除",
       toolbarHideShowDescription: "在图上显示或隐藏节点类别",
-      toolbarHideShowLabel: "隐藏或显示",
+      toolbarHideShowLabel: "显示或隐藏",
       toolbarHideShowMenuAriaLabel: "工厂图节点类别可见性菜单",
       toolbarHideShowMenuDescription:
         "切换哪些节点类别显示在图上。隐藏的类别会保持不可见，直到你再次显示它们。",
       toolbarHideShowMenuTitle: "隐藏或显示节点类别",
-      toolbarOpenAddMenuLabel: "添加工具",
-      toolbarOpenHideShowMenuLabel: "打开隐藏或显示节点类别菜单",
+      toolbarOpenAddMenuLabel: "添加",
+      toolbarOpenHideShowMenuLabel: "显示或隐藏",
       nodeClassVisibilityDescription: (kind) => {
         const label = getFactoryGraphEditorMessages("zh-CN").kindLabel(kind);
         return `在图上显示${label}节点。`;

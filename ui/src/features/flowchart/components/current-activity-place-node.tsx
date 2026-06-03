@@ -15,6 +15,7 @@ import {
   workStatePhaseSurfaceClassName,
 } from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import {
@@ -93,6 +94,12 @@ function PlaceNodeView({ data }: NodeProps<CurrentActivityPlaceNode>) {
         : "constraint";
   const nodeClassName = cn(
     placeNodeClassName(data.place),
+    currentActivityGraphNodeHoverClassName({
+      activeFlow: data.activeFlow,
+      muted: data.muted,
+      selected: data.selectedStateNode,
+      validationError: data.validationError,
+    }),
     data.activeFlow &&
       !data.selectedStateNode &&
       !data.validationError &&

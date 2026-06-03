@@ -482,15 +482,14 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     });
 
     expect(
-      within(toolbar).getByRole("button", { name: "Add tool" }),
+      within(toolbar).getAllByRole("button", { name: "Add" }),
+    ).toHaveLength(1);
+    expect(
+      within(toolbar).getByRole("button", { name: "Connect" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Connect tool" }),
+      within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
-    expect(
-      within(toolbar).getByRole("button", { name: "Delete tool" }),
-    ).toBeTruthy();
-    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
   });
 
   it("skips node-position persistence when the viewport has no graph key", () => {

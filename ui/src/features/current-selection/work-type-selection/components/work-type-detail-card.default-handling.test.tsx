@@ -116,7 +116,7 @@ describe("WorkTypeDetailCard default handling", () => {
     );
     expect(
       within(panel).queryByText(
-        "When marked default, this work type receives prompt text from simplified you run --factory flows.",
+        "Default work type supplies prompt text for simplified factory runs.",
       ),
     ).toBeNull();
   });

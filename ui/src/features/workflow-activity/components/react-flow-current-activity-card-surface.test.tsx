@@ -10,16 +10,25 @@ vi.mock(
   () => ({
     FactoryGraphEditorNotice: ({
       children,
+      dismissLabel,
+      onDismiss,
       title,
       tone,
     }: {
       children: React.ReactNode;
+      dismissLabel?: string;
+      onDismiss?: () => void;
       title: string;
       tone: string;
     }) => (
-      <section data-testid={`notice-${tone}`}>
+      <section data-testid={`notice-${tone}`} role={tone === "danger" ? "alert" : "status"}>
         <h3>{title}</h3>
         <div>{children}</div>
+        {onDismiss && dismissLabel ? (
+          <button aria-label={dismissLabel} onClick={onDismiss} type="button">
+            {dismissLabel}
+          </button>
+        ) : null}
       </section>
     ),
   }),
@@ -122,6 +131,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     hasActiveWork: true,
     isStaleDraft: true,
     saveBlockedReason: "Stop active work before saving this draft.",
+    saveAttemptRevision: 0,
     saveEditableDefinition: {
       error: null,
       isPending: false,

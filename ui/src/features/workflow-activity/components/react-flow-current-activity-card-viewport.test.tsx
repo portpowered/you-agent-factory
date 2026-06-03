@@ -71,10 +71,10 @@ describe("CurrentActivityGraphViewport", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Open hide or show node classes menu",
+        name: "Show or hide",
       }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Add tool" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
   });
 
   it.each([
