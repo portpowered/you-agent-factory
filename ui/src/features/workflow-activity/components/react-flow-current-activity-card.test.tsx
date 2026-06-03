@@ -924,11 +924,11 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
     expect(
       within(toolbar).getByRole("button", {
-        name: "Open hide or show node classes menu",
+        name: "Show or hide",
       }),
     ).toBeTruthy();
     expect(
-      within(toolbar).queryByRole("button", { name: "Add tool" }),
+      within(toolbar).queryByRole("button", { name: "Add" }),
     ).toBeNull();
     expect(screen.getByText("Observe")).toBeTruthy();
   });
@@ -950,13 +950,13 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       name: "Factory graph editor tools",
     });
     expect(
-      within(toolbar).getByRole("button", { name: "Add tool" }),
+      within(toolbar).getByRole("button", { name: "Add" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Delete tool" }),
+      within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Connect tool" }),
+      within(toolbar).getByRole("button", { name: "Connect" }),
     ).toBeTruthy();
     expect(screen.getByText("Editor mode active")).toBeTruthy();
   });
@@ -1005,11 +1005,11 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
     expect(
       within(toolbar).getByRole("button", {
-        name: "Open hide or show node classes menu",
+        name: "Show or hide",
       }),
     ).toBeTruthy();
     expect(
-      within(toolbar).queryByRole("button", { name: "Add tool" }),
+      within(toolbar).queryByRole("button", { name: "Add" }),
     ).toBeNull();
     expect(screen.queryByText("Editor mode active")).toBeNull();
   });
@@ -1031,7 +1031,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
 
     expect(screen.getByRole("button", { name: "Workstation" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Worker" })).toBeTruthy();
@@ -1068,7 +1068,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Work type" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "essay" },
@@ -1110,7 +1110,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Work state" }));
 
     expect(screen.getByText("Add work state")).toBeTruthy();
@@ -1160,7 +1160,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Add tool" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: "Work state" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "approved" },
@@ -1615,17 +1615,17 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     expect(screen.getByText("Loading editor definition")).toBeTruthy();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Add tool" })
+        .getByRole("button", { name: "Add" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Delete tool" })
+        .getByRole("button", { name: "Delete" })
         .getAttribute("disabled"),
     ).not.toBeNull();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Connect tool" })
+        .getByRole("button", { name: "Connect" })
         .getAttribute("disabled"),
     ).not.toBeNull();
   });
@@ -2767,7 +2767,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
-      await screen.findByRole("button", { name: "Connect tool" });
+      await screen.findByRole("button", { name: "Connect" });
       await waitFor(() => {
         expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
           0,

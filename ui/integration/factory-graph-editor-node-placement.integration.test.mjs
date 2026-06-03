@@ -261,7 +261,7 @@ async function addWorker(
   toolbar,
   { model = "gpt-5", modelProvider = "CURSOR", name },
 ) {
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Worker" })
@@ -281,7 +281,7 @@ async function addWorker(
 }
 
 async function addWorkstation(page, toolbar, { body, name }) {
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Workstation" })
@@ -349,7 +349,7 @@ async function readNodeScreenPosition(page, nodeTestId) {
 }
 
 async function addResource(page, toolbar, { capacity = "1", name }) {
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Resource" })

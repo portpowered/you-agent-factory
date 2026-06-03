@@ -291,10 +291,12 @@ function FactoryGraphEditorAddMenu({
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>
-        <DashboardActionButton
+        <FactoryGraphEditorTooltipActionButton
           aria-label={messages.toolbarOpenAddMenuLabel}
           disabled={!canInteract}
           iconOnly
+          placement="above"
+          tooltip={messages.toolbarAddDescription}
           tone={open ? "secondary" : "outline"}
           type="button"
         >
@@ -312,7 +314,7 @@ function FactoryGraphEditorAddMenu({
             <path d="M12 5v14" />
             <path d="M5 12h14" />
           </svg>
-        </DashboardActionButton>
+        </FactoryGraphEditorTooltipActionButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"

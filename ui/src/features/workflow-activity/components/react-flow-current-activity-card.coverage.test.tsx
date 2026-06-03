@@ -482,13 +482,13 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     });
 
     expect(
-      within(toolbar).getByRole("button", { name: "Add tool" }),
+      within(toolbar).getByRole("button", { name: "Add" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Connect tool" }),
+      within(toolbar).getByRole("button", { name: "Connect" }),
     ).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Delete tool" }),
+      within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
     expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
   });
