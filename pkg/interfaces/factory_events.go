@@ -181,7 +181,7 @@ type WorkstationResult struct {
 	FailureReason               string                   `json:"failure_reason,omitempty"`
 	FailureMessage              string                   `json:"failure_message,omitempty"`
 	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
+	ProviderFailure             *WorkFailureMetadata `json:"provider_failure,omitempty"`
 }
 
 // FactoryTraceData carries trace identifiers attached to a runtime event.

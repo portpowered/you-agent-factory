@@ -786,8 +786,8 @@ func TestCloneProviderMetadata_PreserveNilValuesAndDetachCopies(t *testing.T) {
 	if CloneProviderSessionMetadata(nil) != nil {
 		t.Fatal("CloneProviderSessionMetadata(nil) = non-nil, want nil")
 	}
-	if CloneProviderFailureMetadata(nil) != nil {
-		t.Fatal("CloneProviderFailureMetadata(nil) = non-nil, want nil")
+	if CloneWorkFailureMetadata(nil) != nil {
+		t.Fatal("CloneWorkFailureMetadata(nil) = non-nil, want nil")
 	}
 
 	session := &ProviderSessionMetadata{
@@ -801,14 +801,14 @@ func TestCloneProviderMetadata_PreserveNilValuesAndDetachCopies(t *testing.T) {
 		t.Fatalf("original provider session = %#v, want sess-1 unchanged", session)
 	}
 
-	failure := &ProviderFailureMetadata{
-		Family: ProviderErrorFamilyRetryable,
-		Type:   ProviderErrorTypeTimeout,
+	failure := &WorkFailureMetadata{
+		Family: WorkFailureFamilyRetryable,
+		Type:   WorkFailureTypeTimeout,
 	}
-	clonedFailure := CloneProviderFailureMetadata(failure)
-	clonedFailure.Family = ProviderErrorFamilyTerminal
-	clonedFailure.Type = ProviderErrorTypeInternalServerError
-	if failure.Family != ProviderErrorFamilyRetryable || failure.Type != ProviderErrorTypeTimeout {
+	clonedFailure := CloneWorkFailureMetadata(failure)
+	clonedFailure.Family = WorkFailureFamilyTerminal
+	clonedFailure.Type = WorkFailureTypeInternalServerError
+	if failure.Family != WorkFailureFamilyRetryable || failure.Type != WorkFailureTypeTimeout {
 		t.Fatalf("original provider failure = %#v, want retryable timeout unchanged", failure)
 	}
 }
@@ -832,9 +832,9 @@ func testFactoryWorldDispatchCompletion() FactoryWorldDispatchCompletion {
 		DispatchID: "dispatch-1",
 		Result: WorkstationResult{
 			Outcome: "FAILED",
-			ProviderFailure: &ProviderFailureMetadata{
-				Family: ProviderErrorFamilyRetryable,
-				Type:   ProviderErrorTypeTimeout,
+			ProviderFailure: &WorkFailureMetadata{
+				Family: WorkFailureFamilyRetryable,
+				Type:   WorkFailureTypeTimeout,
 			},
 		},
 		WorkItemIDs: []string{"work-1"},
@@ -879,7 +879,7 @@ func testFactoryWorldDispatchCompletion() FactoryWorldDispatchCompletion {
 }
 
 func mutateClonedDispatchCompletion(cloned FactoryWorldDispatchCompletion) {
-	cloned.Result.ProviderFailure.Family = ProviderErrorFamilyTerminal
+	cloned.Result.ProviderFailure.Family = WorkFailureFamilyTerminal
 	cloned.ProviderSession.ID = "sess-2"
 	cloned.Diagnostics.RenderedPrompt.Variables["prompt_source"] = "mutated"
 	cloned.Diagnostics.Provider.RequestMetadata["session_id"] = "sess-2"
@@ -893,7 +893,7 @@ func mutateClonedDispatchCompletion(cloned FactoryWorldDispatchCompletion) {
 func assertOriginalDispatchCompletionUnchanged(t *testing.T, original FactoryWorldDispatchCompletion) {
 	t.Helper()
 
-	if original.Result.ProviderFailure.Family != ProviderErrorFamilyRetryable {
+	if original.Result.ProviderFailure.Family != WorkFailureFamilyRetryable {
 		t.Fatalf("original provider failure = %#v, want retryable metadata unchanged", original.Result.ProviderFailure)
 	}
 	if original.ProviderSession.ID != "sess-1" {

@@ -100,12 +100,6 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *W
 	return out
 }
 
-// GeneratedProviderFailureMetadata converts canonical provider-failure metadata
-// into the generated event contract.
-func GeneratedProviderFailureMetadata(failure *ProviderFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	return GeneratedWorkFailureMetadata(failure)
-}
-
 // GeneratedWorkFailureMetadata converts canonical work-failure metadata into
 // the generated event contract.
 func GeneratedWorkFailureMetadata(failure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
