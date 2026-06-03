@@ -1,5 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
+import { settleCurrentSelectionEffects } from "../../../../testing/current-selection-test-utils";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
@@ -80,7 +82,8 @@ describe("SelectionDetailLayout shell copy", () => {
 describe("SelectionDetailLayout actions", () => {
   resetSelectionHistory();
 
-  it("keeps undo and redo history behavior unchanged apart from the localized copy source", () => {
+  it("keeps undo and redo history behavior unchanged apart from the localized copy source", async () => {
+    const user = userEvent.setup();
     const store = useSelectionHistoryStore.getState();
 
     act(() => {
@@ -101,6 +104,7 @@ describe("SelectionDetailLayout actions", () => {
         </SelectionDetailLayout>
       </CurrentSelectionLocaleProvider>,
     );
+    await settleCurrentSelectionEffects();
 
     const undoButton = screen.getByRole("button", { name: "撤销所选内容" });
     const redoButton = screen.getByRole("button", { name: "重做所选内容" });
@@ -108,9 +112,7 @@ describe("SelectionDetailLayout actions", () => {
     expect(undoButton.hasAttribute("disabled")).toBe(false);
     expect(redoButton.hasAttribute("disabled")).toBe(true);
 
-    act(() => {
-      fireEvent.click(undoButton);
-    });
+    await user.click(undoButton);
 
     expect(useSelectionHistoryStore.getState().present.selection).toEqual({
       kind: "node",
@@ -122,9 +124,7 @@ describe("SelectionDetailLayout actions", () => {
         .hasAttribute("disabled"),
     ).toBe(false);
 
-    act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "重做所选内容" }));
-    });
+    await user.click(screen.getByRole("button", { name: "重做所选内容" }));
 
     expect(useSelectionHistoryStore.getState().present.selection).toEqual({
       kind: "state-node",

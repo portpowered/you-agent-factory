@@ -6,6 +6,7 @@ import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
 } from "../../../notifications/public";
+import { settleCurrentSelectionEffects } from "../../../../testing/current-selection-test-utils";
 import { getCurrentSelectionGraphDraftConflictMessages } from "../messages/current-selection-graph-draft-conflict";
 
 const graphDraftConflictMessages =
@@ -106,6 +107,7 @@ export async function expectWorkerSaveSuccessToast(workerName: string) {
       }),
     );
   });
+  await settleCurrentSelectionEffects();
 }
 
 export async function expectResourceSaveSuccessToast(resourceName: string) {
@@ -155,6 +157,7 @@ export async function expectGraphDraftConflictWarningToast() {
       }),
     );
   });
+  await settleCurrentSelectionEffects();
 }
 
 export async function expectNoGraphDraftConflictWarningToast() {
@@ -167,4 +170,5 @@ export async function expectNoGraphDraftConflictWarningToast() {
       );
     expect(conflictCalls).toHaveLength(0);
   });
+  await settleCurrentSelectionEffects();
 }

@@ -16,8 +16,12 @@ export function buildDashboardInferenceAttemptFixture(
   dispatchID: string,
   overrides: Partial<DashboardInferenceAttempt> = {},
 ): DashboardInferenceAttempt {
+  const attempt = overrides.attempt ?? 1;
+  const inferenceRequestID =
+    overrides.inference_request_id ??
+    `${dispatchID}/inference-request/${attempt}`;
+
   return {
-    attempt: 1,
     diagnostics: {
       provider: {
         model: "gpt-5.4",
@@ -25,7 +29,6 @@ export function buildDashboardInferenceAttemptFixture(
       },
     },
     dispatch_id: dispatchID,
-    inference_request_id: `${dispatchID}/inference-request/1`,
     prompt: "Review the active story and return a concise result.",
     provider_session: {
       id: `${dispatchID}/session/1`,
@@ -37,6 +40,8 @@ export function buildDashboardInferenceAttemptFixture(
     working_directory: REVIEW_WORKING_DIRECTORY,
     worktree: REVIEW_WORKTREE,
     ...overrides,
+    attempt,
+    inference_request_id: inferenceRequestID,
   };
 }
 

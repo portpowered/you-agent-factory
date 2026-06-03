@@ -150,7 +150,18 @@ node scripts/summarize-warning-inventory.mjs
 
 **Status (UTC 2026-06-03):** All `src/App.*.test.tsx` suites pass the warning-inventory capture with **zero** hooked `console.error` / `console.warn` lines.
 
+## Current-selection cleanup (story 003)
+
+**Status (UTC 2026-06-03):** All `src/features/current-selection/**` unit tests pass the warning-inventory capture with **zero** hooked `console.error` / `console.warn` lines.
+
 **Harness approach:**
+
+| Concern | Mitigation |
+| --- | --- |
+| Duplicate inference-attempt React keys in tests | Derive default `inference_request_id` from `attempt` in `buildDashboardInferenceAttemptFixture` |
+| `useCurrentSelection` hook act noise | Prefer `renderHook` + pre-synced `resolveDashboardSelection` seeds; stub `useTerminalWorkDetailCleanup` in hook tests |
+| Save-notification act noise | `settleCurrentSelectionEffects()` after render/save; use `userEvent` for async save clicks; flush toast helpers with settle |
+| Selection detail undo/redo act noise | `userEvent` clicks + post-render settle in layout shell tests |
 
 | Concern | Mitigation |
 | --- | --- |
