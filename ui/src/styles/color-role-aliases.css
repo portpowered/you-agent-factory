@@ -4,7 +4,8 @@
  * Long-term source of truth: role tokens in color-role-tokens.css
  * (--color-primary, --color-on-surface, etc.).
  *
- * af-* names remain for incremental component migration; remove in US-010
+ * af-* names remain for incremental component migration; remove per
+ * docs/internal/development/material-color-role-migration-rollout.md
  * after consumers switch to role utilities directly.
  */
 
