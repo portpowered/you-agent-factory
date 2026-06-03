@@ -602,7 +602,7 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 		Error:                       serviceStringPtr(result.Error),
 		Feedback:                    serviceStringPtr(result.Feedback),
 		SelectedClassificationLabel: serviceStringPtr(result.SelectedClassificationLabel),
-		ProviderFailure:             serviceProviderFailurePtr(result.ProviderFailure),
+		ProviderFailure:             interfaces.PublishedProviderFailureMetadata(result.FailureMetadata, result.ProviderFailure),
 		Metrics:                     serviceWorkMetricsPtr(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
@@ -694,10 +694,6 @@ func serviceDispatchRequestMetadata(values map[string]string) *factoryapi.Dispat
 	return &factoryapi.DispatchRequestEventMetadata{
 		ReplayKey: serviceStringPtr(values["replayKey"]),
 	}
-}
-
-func serviceProviderFailurePtr(failure *interfaces.WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	return interfaces.GeneratedWorkFailureMetadata(failure)
 }
 
 func serviceWorkMetricsPtr(metrics interfaces.WorkMetrics) *factoryapi.WorkMetrics {
