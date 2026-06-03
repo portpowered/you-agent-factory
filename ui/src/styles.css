@@ -79,10 +79,7 @@
     from var(--color-af-foundation-accent) r g b /
     0.18
   );
-  --color-af-accent-border: rgb(
-    from var(--color-af-foundation-accent) r g b /
-    0.28
-  );
+  --color-af-accent-border: var(--color-af-foundation-accent);
   --color-af-on-accent: var(--color-af-text-inverse);
   --color-af-success: var(--color-af-foundation-success);
   --color-af-success-surface: rgb(

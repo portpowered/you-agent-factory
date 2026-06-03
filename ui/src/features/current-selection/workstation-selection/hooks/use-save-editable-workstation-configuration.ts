@@ -19,11 +19,9 @@ interface UseSaveEditableWorkstationConfigurationOptions {
 }
 
 export interface UseSaveEditableWorkstationConfigurationResult {
-  beginSaveConfirmation: () => void;
   canSave: boolean;
-  cancelSaveConfirmation: () => void;
-  confirmSave: () => Promise<void>;
   lastSuccessfulSaveWasTopologyAffecting: boolean;
+  save: () => Promise<void>;
   saveAttemptRevision: number;
   saveMutationError: CurrentFactoryDefinitionError | null;
   saveState: EditableWorkstationSaveState;
@@ -41,13 +39,11 @@ export function useSaveEditableWorkstationConfiguration({
     editableConfigurationState.isDirty;
 
   const {
-    beginConfirmation,
-    cancelConfirmation,
-    confirmSave: confirmScopedSave,
     error: saveMutationError,
     isPending,
     lastSuccessfulSaveWasTopologyAffecting,
     saveAttemptRevision,
+    saveNow,
     saveState,
   } = useScopedFactoryDocumentSave<EditableWorkstationSaveValidationErrors>({
     fallbackErrorMessage: messages.editableConfigurationSaveFallbackError,
@@ -63,16 +59,9 @@ export function useSaveEditableWorkstationConfiguration({
     editableConfigurationState.pendingFactoryDefinition != null &&
     !isPending;
 
-  const beginSaveConfirmation = useCallback(() => {
-    if (!canSave) {
-      return;
-    }
-
-    beginConfirmation();
-  }, [beginConfirmation, canSave]);
-
-  const confirmSave = useCallback(async () => {
+  const save = useCallback(async () => {
     if (
+      !canSave ||
       editableConfigurationState?.status !== "ready" ||
       editableConfigurationState.pendingFactoryDefinition == null ||
       scopeKey == null
@@ -80,7 +69,7 @@ export function useSaveEditableWorkstationConfiguration({
       return;
     }
 
-    await confirmScopedSave({
+    await saveNow({
       baseVersion: editableConfigurationState.baseVersion,
       factory: editableConfigurationState.pendingFactoryDefinition,
       onSaved: () => {
@@ -101,29 +90,26 @@ export function useSaveEditableWorkstationConfiguration({
       scopeKey,
     });
   }, [
-    confirmScopedSave,
+    canSave,
     editableConfigurationState,
     onWorkstationRenamed,
+    saveNow,
     scopeKey,
   ]);
 
   return useMemo(
     () => ({
-      beginSaveConfirmation,
       canSave,
-      cancelSaveConfirmation: cancelConfirmation,
-      confirmSave,
       lastSuccessfulSaveWasTopologyAffecting,
+      save,
       saveAttemptRevision,
       saveMutationError,
       saveState,
     }),
     [
-      beginSaveConfirmation,
       canSave,
-      cancelConfirmation,
-      confirmSave,
       lastSuccessfulSaveWasTopologyAffecting,
+      save,
       saveAttemptRevision,
       saveMutationError,
       saveState,

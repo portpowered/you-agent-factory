@@ -16,7 +16,6 @@ describe("EditableConfigurationSection overwrite and field errors", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        onSaveConfiguration={() => undefined}
         saveState={{
           fieldErrors: {
             "guards[0].maxVisits":

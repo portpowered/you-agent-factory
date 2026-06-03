@@ -1,11 +1,7 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
 import { type ReactNode, useId, useState } from "react";
 
-import {
-  DashboardActionButton,
-  ExpandablePanelTrigger,
-  Select,
-} from "../../../../components/ui";
+import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -23,7 +19,6 @@ import {
   CurrentSelectionSectionHeader,
   WORKSTATION_SUMMARY_ITEM_CLASS,
 } from "../../base/components/detail-card-shared";
-import { EditableConfigurationSaveRow } from "../../base/components/editable-configuration-save-row";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type {
   EditableWorkstationOverwriteField,
@@ -50,12 +45,10 @@ import {
 
 export function EditableConfigurationSection({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
@@ -125,7 +118,6 @@ export function EditableConfigurationSection({
           {state?.status === "ready" ? (
             <EditableConfigurationReadyForm
               messages={messages}
-              onSaveConfiguration={onSaveConfiguration}
               saveState={saveState}
               state={state}
             />
@@ -139,12 +131,10 @@ export function EditableConfigurationSection({
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: workstation ready form keeps save feedback, overwrite hints, and vertical field wiring colocated.
 function EditableConfigurationReadyForm({
   messages,
-  onSaveConfiguration,
   saveState,
   state,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  onSaveConfiguration?: () => void;
   saveState?: EditableWorkstationSaveState;
   state: Extract<
     NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
@@ -155,12 +145,6 @@ function EditableConfigurationReadyForm({
     EditableWorkstationValidationErrors & Record<string, string | undefined>,
     EditableWorkstationSaveValidationErrors
   >(state.validationErrors, saveState);
-  const isSaving = saveState?.status === "submitting";
-  const canSave =
-    state.isDirty &&
-    !state.hasValidationErrors &&
-    state.pendingFactoryDefinition != null &&
-    !isSaving;
   const renderState = {
     ...state,
     validationErrors,
@@ -182,7 +166,9 @@ function EditableConfigurationReadyForm({
         input={
           <input
             aria-describedby={
-              validationErrors.name ? "editable-workstation-name-error" : undefined
+              validationErrors.name
+                ? "editable-workstation-name-error"
+                : undefined
             }
             aria-invalid={validationErrors.name ? "true" : undefined}
             className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
@@ -300,26 +286,6 @@ function EditableConfigurationReadyForm({
         messages={messages}
         onInputsChange={state.onInputsChange}
       />
-      {onSaveConfiguration ? (
-        <EditableConfigurationSaveRow
-          busyLabel={messages.editableConfigurationSaveBusyAction}
-          canSave={canSave}
-          isSaving={isSaving}
-          onSave={onSaveConfiguration}
-          resetSlot={
-            state.isDirty ? (
-              <DashboardActionButton
-                disabled={isSaving}
-                onClick={state.onResetToLatest}
-                type="button"
-              >
-                {messages.editableConfigurationResetAction}
-              </DashboardActionButton>
-            ) : undefined
-          }
-          saveLabel={messages.editableConfigurationSaveAction}
-        />
-      ) : null}
     </form>
   );
 }

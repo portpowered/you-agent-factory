@@ -20,12 +20,8 @@ import type { useEditableWorkerConfigurationState } from "../worker-selection/ho
 import { useSaveEditableWorkerConfiguration } from "../worker-selection/hooks/use-save-editable-worker-configuration";
 import { EditableWorkstationConfigurationHeaderActions } from "../workstation-selection/components/workstation-save-controls";
 import type { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
-import {
-  type UseSaveEditableWorkstationConfigurationResult,
-  useSaveEditableWorkstationConfiguration,
-} from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
+import { useSaveEditableWorkstationConfiguration } from "../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import { buildWorkstationSaveScopeKey } from "../workstation-selection/lib/workstation-save-scope-key";
-import { EditableWorkstationSaveDialog } from "../workstation-selection/public";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one hook wires save scopes and paired header actions for every editable selection kind.
 export function useCurrentSelectionDetailSave({
@@ -131,7 +127,7 @@ export function useCurrentSelectionDetailSave({
           editableConfigurationState.onResetToLatest();
         }
       }}
-      onSave={workstationSave.beginSaveConfirmation}
+      onSave={() => void workstationSave.save()}
       saveState={workstationSave.saveState}
     />
   );
@@ -223,32 +219,6 @@ export function useCurrentSelectionDetailSave({
     workTypeSave,
     workTypeSaveState: workTypeSave.saveState,
   };
-}
-
-export function CurrentSelectionWorkstationSaveDialog({
-  editableConfigurationState,
-  locale,
-  workstationSave,
-}: {
-  editableConfigurationState: ReturnType<
-    typeof useEditableWorkstationConfigurationState
-  >;
-  locale?: string | null;
-  workstationSave: UseSaveEditableWorkstationConfigurationResult;
-}) {
-  return (
-    <EditableWorkstationSaveDialog
-      locale={locale ?? undefined}
-      onCancel={workstationSave.cancelSaveConfirmation}
-      onConfirm={() => void workstationSave.confirmSave()}
-      overwriteFieldNames={
-        editableConfigurationState?.status === "ready"
-          ? editableConfigurationState.overwriteFieldNames
-          : []
-      }
-      saveState={workstationSave.saveState}
-    />
-  );
 }
 
 export function CurrentSelectionWorkTypeSaveDialog({

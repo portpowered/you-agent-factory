@@ -270,7 +270,6 @@ describe("CurrentSelectionWidget save notification delivery", () => {
       target: { value: "Deferred workstation save." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     rerender(
       <CurrentSelectionWidget
@@ -325,7 +324,6 @@ describe("CurrentSelectionWidget save notification delivery", () => {
       target: { value: "Keep this draft through a generic failure." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveFailedToast("Network dropped");
     expectNoInlineSaveOutcomesIn(

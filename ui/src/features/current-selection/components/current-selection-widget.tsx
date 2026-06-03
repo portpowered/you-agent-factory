@@ -32,7 +32,6 @@ import {
 } from "./current-selection-cards";
 import { CurrentSelectionWidgetSaveNotifications } from "./current-selection-widget-save-notifications";
 import {
-  CurrentSelectionWorkstationSaveDialog,
   CurrentSelectionWorkTypeSaveDialog,
   useCurrentSelectionDetailSave,
 } from "./use-current-selection-detail-save";
@@ -73,7 +72,6 @@ function renderCurrentSelectionDetailCard({
   workStateHeaderAction,
   workStateSaveState,
   onSaveWorkerConfiguration,
-  onSaveWorkstationConfiguration,
   onSaveWorkStateConfiguration,
   workerHeaderAction,
   workTypeHeaderAction,
@@ -120,7 +118,6 @@ function renderCurrentSelectionDetailCard({
     typeof useCurrentSelectionDetailSave
   >["workStateSaveState"];
   onSaveWorkerConfiguration: () => void;
-  onSaveWorkstationConfiguration: () => void;
   onSaveWorkStateConfiguration: () => void;
   workerHeaderAction: ReactNode;
   workTypeHeaderAction: ReactNode;
@@ -271,7 +268,6 @@ function renderCurrentSelectionDetailCard({
         headerAction={headerAction}
         locale={locale}
         now={now}
-        onSaveConfiguration={onSaveWorkstationConfiguration}
         onSelectProviderSession={setSelectedProviderSession}
         onSelectWorkID={selectWorkByID}
         onSelectWorkstationRequest={selectWorkstationRequest}
@@ -405,7 +401,6 @@ export function CurrentSelectionWidget({
     workStateHeaderAction,
     workStateSaveState,
     onSaveWorkerConfiguration: saveWorkerConfiguration,
-    onSaveWorkstationConfiguration: workstationSave.beginSaveConfirmation,
     onSaveWorkStateConfiguration: saveWorkStateConfiguration,
     workerHeaderAction,
     workTypeHeaderAction,
@@ -450,11 +445,6 @@ export function CurrentSelectionWidget({
         workstationSave={workstationSave}
         workstationSaveState={workstationSaveState}
         workTypeSave={workTypeSave}
-      />
-      <CurrentSelectionWorkstationSaveDialog
-        editableConfigurationState={editableConfigurationState}
-        locale={locale}
-        workstationSave={workstationSave}
       />
       <CurrentSelectionWorkTypeSaveDialog
         locale={locale}

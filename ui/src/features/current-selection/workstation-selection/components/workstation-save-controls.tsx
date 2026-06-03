@@ -74,7 +74,7 @@ export function EditableWorkstationSaveHeaderAction({
         emphasizeSave
           ? cn(
               "border-af-warning-border bg-af-warning-surface text-af-warning-text",
-              "hover:border-af-warning-border hover:bg-af-warning-surface hover:text-af-warning-text",
+              "hover:border-af-warning hover:bg-af-warning hover:text-af-on-warning",
             )
           : undefined
       }

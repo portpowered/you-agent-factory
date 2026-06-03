@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import {
   getCurrentFactoryWorkstationPromptTemplateContract,
@@ -123,7 +123,7 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
     resetSelectionHistoryStore();
   });
 
-  it("enables save and opens overwrite confirmation after a valid prompt-only edit", async () => {
+  it("enables save and submits after a valid prompt-only edit", async () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardWorkstationNodeSelection()}
@@ -147,16 +147,9 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
 
     fireEvent.click(saveButton);
 
-    expect(
-      await screen.findByRole("heading", {
-        name: "Overwrite the running factory definition?",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(screen.getByRole("dialog")).getByRole("button", {
-        name: "Overwrite factory",
-      }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("re-enables save after correcting a template syntax typo", async () => {
@@ -191,10 +184,8 @@ describe("CurrentSelectionWidget prompt-edit save enablement", () => {
 
     fireEvent.click(saveButton);
 
-    expect(
-      await screen.findByRole("heading", {
-        name: "Overwrite the running factory definition?",
-      }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -7,9 +7,6 @@ describe("workstation-selection/public", () => {
     expect(workstationSelectionPublic.WorkstationDetailCard).toBeTypeOf(
       "function",
     );
-    expect(workstationSelectionPublic.EditableWorkstationSaveDialog).toBeTypeOf(
-      "function",
-    );
     expect(
       workstationSelectionPublic.EditableWorkstationSaveHeaderAction,
     ).toBeTypeOf("function");

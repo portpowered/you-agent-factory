@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 
 import {
@@ -231,14 +231,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
 
     clickWorkstationSave();
 
-    expect(
-      screen.getByRole("heading", {
-        name: "Overwrite the running factory definition?",
-      }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
+    });
   });
 
-  it("confirms before saving and refreshes the form to the saved workstation values", async () => {
+  it("saves immediately and refreshes the form to the saved workstation values", async () => {
     const savedFactory = buildDetailCardEditableFactoryDocument({
       prompt: "Review the diff and verify browser behavior.",
     });
@@ -251,14 +249,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Review the diff and verify browser behavior." },
     });
     clickWorkstationSave();
-
-    expect(
-      screen.getByRole("heading", {
-        name: "Overwrite the running factory definition?",
-      }),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
@@ -311,7 +301,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Keep this draft while the save fails." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveFailedToast(
       "Current factory runtime must be idle before activation.",
@@ -336,7 +325,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Keep this draft through a generic failure." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveFailedToast("Network dropped");
     expectNoInlineSaveOutcomesIn(
@@ -367,7 +355,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Keep this draft through a stale write." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationStaleSaveWarningToast(
       "Current factory definition is stale. Refresh the dashboard before saving or importing again.",
@@ -411,41 +398,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "planner" },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveFailedToast(
       "Worker selection must reference a configured worker.",
     );
     expect(screen.getByLabelText("Worker").getAttribute("aria-invalid")).toBe(
       "true",
-    );
-  });
-
-  it("allows the overwrite confirmation to be cancelled before saving", () => {
-    renderWorkstationSelection();
-    expandDetailCardWorkstationConfiguration();
-
-    fireEvent.change(screen.getByLabelText("Prompt"), {
-      target: { value: "Changed prompt before cancelling save." },
-    });
-    clickWorkstationSave();
-
-    expect(
-      screen.getByRole("heading", {
-        name: "Overwrite the running factory definition?",
-      }),
-    ).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-
-    expect(saveCurrentFactoryMutation).not.toHaveBeenCalled();
-    expect(
-      screen.queryByRole("heading", {
-        name: "Overwrite the running factory definition?",
-      }),
-    ).toBeNull();
-    expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
-      "Changed prompt before cancelling save.",
     );
   });
 
@@ -462,7 +420,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "planner" },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
@@ -508,7 +465,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       screen.getAllByRole("button", { name: "保存更改" }).at(-1) ??
         screen.getAllByRole("button", { name: "保存更改" })[0],
     );
-    fireEvent.click(screen.getByRole("button", { name: "覆盖工厂" }));
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
@@ -526,7 +482,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
   });
 
-  it("warns in the save confirmation when newer server values would be overwritten", () => {
+  it("warns in the configuration when newer server values would be overwritten", () => {
     const refreshedFactory = buildDetailCardEditableFactoryDocument({
       prompt: "Server changed prompt",
       workerName: "planner",
@@ -570,11 +526,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       />,
     );
 
-    clickWorkstationSave();
-
     expect(
       screen.getByText(
-        "Saving will overwrite newer server values for prompt, worker with the draft currently shown in the editor.",
+        "The running factory changed after you started editing. Saving now will overwrite newer server values for prompt, worker.",
       ),
     ).toBeTruthy();
   });
@@ -598,7 +552,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Updated only the review workstation prompt." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledWith(
@@ -666,7 +619,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Review the latest branch diff before approval." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
@@ -746,7 +698,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Review the saved factory before approval." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveSuccessToast();
 
@@ -786,7 +737,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     ).not.toBeNull();
   });
 
-  it("disables overwrite confirmation while saving so the workstation action cannot double-submit", async () => {
+  it("disables workstation save while saving so the action cannot double-submit", async () => {
     const deferredSave =
       createDetailCardDeferredFactoryDocumentSave<CurrentFactoryDocument>();
     saveCurrentFactoryMutation.mockReturnValue(deferredSave.promise);
@@ -799,24 +750,13 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
     clickWorkstationSave();
 
-    const confirmButton = screen.getByRole("button", {
-      name: "Overwrite factory",
-    });
-    fireEvent.click(confirmButton);
-
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
     });
-    const saveDialog = screen.getByRole("dialog", {
-      name: "Overwrite the running factory definition?",
-    });
-    expect(
-      within(saveDialog).getByRole("button", { name: "Saving..." }).disabled,
-    ).toBe(true);
 
-    fireEvent.click(
-      within(saveDialog).getByRole("button", { name: "Saving..." }),
-    );
+    const savingButton = screen.getByRole("button", { name: "Saving..." });
+    expect(savingButton.getAttribute("disabled")).not.toBeNull();
+    fireEvent.click(savingButton);
     expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
 
     deferredSave.resolve(
@@ -861,7 +801,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Review the saved factory before approval." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveSuccessToast();
 
@@ -942,7 +881,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Keep the failed review draft scoped here." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await waitFor(() => {
       expect(saveCurrentFactoryMutation).toHaveBeenCalledTimes(1);
@@ -1018,7 +956,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Keep this failed draft from leaking back in." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveFailedToast(
       "Current factory runtime must be idle before activation.",
@@ -1093,7 +1030,6 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       target: { value: "Keep this failed draft from leaking back in." },
     });
     clickWorkstationSave();
-    fireEvent.click(screen.getByRole("button", { name: "Overwrite factory" }));
 
     await expectWorkstationSaveFailedToast(
       "Current factory runtime must be idle before activation.",
