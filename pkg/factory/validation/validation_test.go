@@ -428,6 +428,102 @@ func assertNoWorkstationRouteRequirementTargets(t *testing.T, targets []factoryv
 	}
 }
 
+func TestValidate_WorkerBackedKindsPreserveMissingFailureRouteWhenOutputsExist(t *testing.T) {
+	t.Parallel()
+
+	workTypesWithoutDefaultableFailure := []interfaces.WorkTypeConfig{{
+		Name: "task",
+		States: []interfaces.StateConfig{
+			{Name: "in-review", Type: interfaces.StateTypeProcessing},
+			{Name: "complete", Type: interfaces.StateTypeTerminal},
+		},
+	}}
+	outputRoute := []interfaces.IOConfig{{WorkTypeName: "task", StateName: "in-review"}}
+	workers := []interfaces.WorkerConfig{{Name: "worker-a"}}
+
+	cases := []struct {
+		name        string
+		workstation interfaces.FactoryWorkstationConfig
+	}{
+		{
+			name: "standard_workstation_with_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "process",
+				Kind:           interfaces.WorkstationKindStandard,
+				WorkerTypeName: "worker-a",
+				Outputs:        outputRoute,
+			},
+		},
+		{
+			name: "repeater_with_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "repeater",
+				Kind:           interfaces.WorkstationKindRepeater,
+				WorkerTypeName: "worker-a",
+				Outputs:        outputRoute,
+			},
+		},
+		{
+			name: "classifier_with_classification_route_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "classifier",
+				Type:           interfaces.WorkstationTypeClassify,
+				WorkerTypeName: "worker-a",
+				ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+					{Label: "approved", Outputs: outputRoute},
+				},
+			},
+		},
+		{
+			name: "poller_with_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "ingress",
+				Kind:           interfaces.WorkstationKindPoller,
+				WorkerTypeName: "worker-a",
+				Outputs:        outputRoute,
+			},
+		},
+		{
+			name: "cron_with_worker_and_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "scheduled-worker",
+				Kind:           interfaces.WorkstationKindCron,
+				WorkerTypeName: "worker-a",
+				Cron:           &interfaces.CronConfig{Schedule: "0 * * * *"},
+				Outputs:        outputRoute,
+			},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &interfaces.FactoryConfig{
+				WorkTypes:    workTypesWithoutDefaultableFailure,
+				Workers:      workers,
+				Workstations: []interfaces.FactoryWorkstationConfig{tt.workstation},
+			}
+			result := factoryvalidation.Validate(cfg)
+			assertWorkstationTarget(
+				t,
+				result.Targets,
+				tt.workstation.Name,
+				factoryvalidation.CodeWorkstationMissingFailureRoute,
+				factoryvalidation.SubjectLocationOnFailure,
+				"factory.workstations[0].onFailure",
+			)
+			assertWorkstationTargetAbsent(
+				t,
+				result.Targets,
+				tt.workstation.Name,
+				factoryvalidation.CodeWorkstationMissingOutputRoutes,
+				factoryvalidation.SubjectLocationOutputs,
+			)
+		})
+	}
+}
+
 func TestValidate_LogicalMoveOutcomeRouteExemption(t *testing.T) {
 	t.Parallel()
 
