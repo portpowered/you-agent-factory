@@ -28,10 +28,6 @@ import {
   IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN,
 } from "../messages/import-preview-dialog";
 
-const IMPORT_DIALOG_CONTENT_CLASS =
-  "w-full max-w-5xl gap-6 p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:p-5";
-const IMPORT_DIALOG_TITLE_CLASS = cn("m-0", DASHBOARD_SECTION_HEADING_CLASS);
-const IMPORT_DIALOG_DESCRIPTION_CLASS = cn("m-0", DASHBOARD_BODY_TEXT_CLASS);
 const IMPORT_DIALOG_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
 const IMPORT_DIALOG_LABEL_CLASS = cn(
   "text-[0.7rem] font-bold uppercase tracking-[0.14em] text-af-accent",
@@ -311,7 +307,7 @@ export function FactoryImportPreviewDialog({
   return (
     <Dialog onOpenChange={handleOpenChange} open={true}>
       <DialogContent
-        className={IMPORT_DIALOG_CONTENT_CLASS}
+        className="w-full max-w-5xl gap-6 p-4 md:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] md:p-5"
         closeDisabled={isSubmitting}
         closeLabel={messages.closeLabel}
         onEscapeKeyDown={(event) => {
@@ -336,10 +332,14 @@ export function FactoryImportPreviewDialog({
           <DialogHeader className="grid gap-3">
             <p className={IMPORT_DIALOG_LABEL_CLASS}>{messages.flowLabel}</p>
             <div className="grid gap-2">
-              <DialogTitle className={IMPORT_DIALOG_TITLE_CLASS}>
+              <DialogTitle
+                className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)}
+              >
                 {messages.title}
               </DialogTitle>
-              <DialogDescription className={IMPORT_DIALOG_DESCRIPTION_CLASS}>
+              <DialogDescription
+                className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}
+              >
                 {renderImportPreviewCurrentFactoryDescription(
                   messages.descriptionTemplate,
                   currentSessionFactoryName,
