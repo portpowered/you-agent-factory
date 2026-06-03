@@ -78,7 +78,6 @@ export interface SubmitWorkCardProps {
 }
 
 const FIELD_GROUP_CLASS = "grid gap-2";
-const ACTION_ROW_CLASS = "grid gap-3";
 const HELP_TEXT_CLASS = cn(
   "max-w-xl leading-relaxed text-af-text-muted",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
@@ -225,7 +224,7 @@ export function SubmitWorkCard({
           </div>
         </div>
 
-        <div className={ACTION_ROW_CLASS}>
+        <div className="grid gap-3">
           {shouldRenderStatus ? (
             <p
               className={cn(
