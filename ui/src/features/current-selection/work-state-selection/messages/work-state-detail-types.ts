@@ -10,8 +10,12 @@ export interface WorkStateDetailMessages {
   editableConfigurationDraftNote: string;
   editableConfigurationEmpty: string;
   editableConfigurationErrorPrefix: string;
+  collapseAction: string;
+  editableConfigurationCollapseActionLabel: string;
+  editableConfigurationExpandActionLabel: string;
   editableConfigurationHeading: string;
   editableConfigurationLoading: string;
+  expandAction: string;
   editableConfigurationNameDuplicate: (stateName: string) => string;
   editableConfigurationNameRequired: string;
   editableConfigurationSaveAction: string;

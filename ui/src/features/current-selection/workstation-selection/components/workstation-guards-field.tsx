@@ -18,7 +18,7 @@ import {
   type WorkstationLevelGuard,
   type WorkstationLevelGuardType,
 } from "../../../current-factory-definition/lib/workstation-guards";
-import { CURRENT_SELECTION_FIELD_PANEL_CLASS } from "../../base/components/detail-card-shared";
+import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
 import type { EditableWorkstationWorkstationOptionsState } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
@@ -39,7 +39,7 @@ export function EditableConfigurationWorkstationGuardsField({
   const addGuardFieldId = `${sectionId}-add-guard`;
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.workstationGuardsHeading}
       </h5>

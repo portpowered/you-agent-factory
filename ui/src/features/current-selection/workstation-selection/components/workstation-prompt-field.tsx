@@ -19,7 +19,7 @@ import {
 import { cn } from "../../../../lib/cn";
 import {
   CURRENT_SELECTION_CODE_SUBTLE_CLASS,
-  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_FORM_FIELD_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
 } from "../../base/components/detail-card-shared";
 import type {
@@ -120,7 +120,7 @@ function EditableConfigurationPromptFeedback({
 
   if (state.promptHelpState.status !== "ready") {
     return (
-      <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+      <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
         <EditableConfigurationNonReadyPromptHelpMessage
           messages={messages}
           promptHelpState={state.promptHelpState}
@@ -259,7 +259,7 @@ function EditableConfigurationReadyPromptFeedback({
   }, [state.promptDiagnostics.length]);
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <div className="flex flex-wrap items-start justify-between gap-2">
         <p
           className={cn(

@@ -5,10 +5,7 @@ import type {
   DashboardScriptResponse,
 } from "../../../../api/dashboard/types";
 import { ExpandablePanelTrigger } from "../../../../components/ui";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
@@ -18,8 +15,9 @@ import {
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
 import {
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
+  CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
-  HISTORY_HEADER_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   InferenceAttemptDetail,
   PROVIDER_SESSION_CARD_CLASS,
@@ -135,21 +133,29 @@ function CollapsibleDispatchAttemptSection({
       aria-labelledby={headingId}
       className="mt-3 grid gap-2.5 border-t border-af-border pt-3"
     >
-      <div className={HISTORY_HEADER_CLASS}>
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
-          {title}
-        </h4>
-        <ExpandablePanelTrigger
-          controlsID={panelId}
-          expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-          variant="section"
+      <CurrentSelectionSectionHeader
+        action={
+          <ExpandablePanelTrigger
+            controlsID={panelId}
+            expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+            variant="section"
+          >
+            {expanded ? messages.collapseAction : messages.expandAction}
+          </ExpandablePanelTrigger>
+        }
+        headingId={headingId}
+        title={title}
+      />
+      {expanded ? (
+        <div
+          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+          id={panelId}
         >
-          {expanded ? messages.collapseAction : messages.expandAction}
-        </ExpandablePanelTrigger>
-      </div>
-      {expanded ? <div id={panelId}>{children}</div> : null}
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }
