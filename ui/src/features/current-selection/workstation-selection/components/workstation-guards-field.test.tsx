@@ -1,34 +1,48 @@
-import { render, screen, within } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type ComponentProps, useState } from "react";
 
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationWorkstationGuardsField } from "./workstation-guards-field";
 
 const messages = getWorkstationDetailMessages("en");
+const readyWorkstationOptions = {
+  options: ["Plan", "Review"],
+  status: "ready" as const,
+};
+
+function renderWorkstationGuardsField(
+  props: Partial<
+    ComponentProps<typeof EditableConfigurationWorkstationGuardsField>
+  > = {},
+) {
+  return render(
+    <EditableConfigurationWorkstationGuardsField
+      guards={[]}
+      messages={messages}
+      onGuardsChange={vi.fn()}
+      workstationOptionsState={readyWorkstationOptions}
+      {...props}
+    />,
+  );
+}
 
 describe("EditableConfigurationWorkstationGuardsField", () => {
   it("renders guard rows with type and summary", () => {
-    render(
-      <EditableConfigurationWorkstationGuardsField
-        guards={[
-          {
-            maxVisits: 2,
-            type: "VISIT_COUNT",
-            workstation: "Review",
-          },
-          {
-            matchConfig: { inputKey: ".Name" },
-            type: "MATCHES_FIELDS",
-          },
-        ]}
-        messages={messages}
-        onGuardsChange={vi.fn()}
-        workstationOptionsState={{
-          options: ["Plan", "Review"],
-          status: "ready",
-        }}
-      />,
-    );
+    renderWorkstationGuardsField({
+      guards: [
+        {
+          maxVisits: 2,
+          type: "VISIT_COUNT",
+          workstation: "Review",
+        },
+        {
+          matchConfig: { inputKey: ".Name" },
+          type: "MATCHES_FIELDS",
+        },
+      ],
+    });
 
     expect(
       screen.getByRole("heading", { name: "Workstation guards" }),
@@ -48,17 +62,9 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
     const user = userEvent.setup();
     const onGuardsChange = vi.fn();
 
-    const { rerender } = render(
-      <EditableConfigurationWorkstationGuardsField
-        guards={[]}
-        messages={messages}
-        onGuardsChange={onGuardsChange}
-        workstationOptionsState={{
-          options: ["Plan", "Review"],
-          status: "ready",
-        }}
-      />,
-    );
+    const { rerender } = renderWorkstationGuardsField({
+      onGuardsChange,
+    });
 
     await user.selectOptions(screen.getByLabelText("Add guard"), "VISIT_COUNT");
 
@@ -82,10 +88,7 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
         ]}
         messages={messages}
         onGuardsChange={onGuardsChange}
-        workstationOptionsState={{
-          options: ["Plan", "Review"],
-          status: "ready",
-        }}
+        workstationOptionsState={readyWorkstationOptions}
       />,
     );
 
@@ -100,29 +103,57 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
     expect(onGuardsChange).toHaveBeenCalledWith([]);
   });
 
+  it("keeps MATCHES_FIELDS selector focused while typing multiple characters", async () => {
+    const user = userEvent.setup();
+
+    function Harness() {
+      const [guards, setGuards] = useState([
+        {
+          matchConfig: { inputKey: "" },
+          type: "MATCHES_FIELDS" as const,
+        },
+      ]);
+
+      return (
+        <EditableConfigurationWorkstationGuardsField
+          guards={guards}
+          messages={messages}
+          onGuardsChange={setGuards}
+          workstationOptionsState={readyWorkstationOptions}
+        />
+      );
+    }
+
+    render(<Harness />);
+
+    const selectorInput = screen.getByLabelText("Field selector");
+    const targetValue = '.Tags["_last_output"]';
+    await user.click(selectorInput);
+    let draftValue = "";
+    for (const character of targetValue) {
+      draftValue += character;
+      fireEvent.change(selectorInput, { target: { value: draftValue } });
+    }
+
+    expect(selectorInput).toHaveFocus();
+    expect(selectorInput).toHaveValue(targetValue);
+  });
+
   it("renders guard field validation errors with role=alert", () => {
-    render(
-      <EditableConfigurationWorkstationGuardsField
-        fieldErrors={{
-          "guards[0].maxVisits": "Max visits must be a positive whole number.",
-          "guards[0].workstation":
-            "Select the workstation whose visits are counted.",
-        }}
-        guards={[
-          {
-            maxVisits: 0,
-            type: "VISIT_COUNT",
-            workstation: "",
-          },
-        ]}
-        messages={messages}
-        onGuardsChange={vi.fn()}
-        workstationOptionsState={{
-          options: ["Plan", "Review"],
-          status: "ready",
-        }}
-      />,
-    );
+    renderWorkstationGuardsField({
+      fieldErrors: {
+        "guards[0].maxVisits": "Max visits must be a positive whole number.",
+        "guards[0].workstation":
+          "Select the workstation whose visits are counted.",
+      },
+      guards: [
+        {
+          maxVisits: 0,
+          type: "VISIT_COUNT",
+          workstation: "",
+        },
+      ],
+    });
 
     expect(screen.getAllByRole("alert")).toHaveLength(2);
     expect(

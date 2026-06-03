@@ -20,6 +20,7 @@ import {
 } from "../../../current-factory-definition/lib/workstation-guards";
 import { CURRENT_SELECTION_FIELD_PANEL_CLASS } from "../../base/components/detail-card-shared";
 import type { EditableWorkstationWorkstationOptionsState } from "../lib/detail-card-types";
+import { useStableWorkstationGuardRowKeys } from "../lib/workstation-guard-row-keys";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationGuardsField({
@@ -37,6 +38,7 @@ export function EditableConfigurationWorkstationGuardsField({
 }) {
   const sectionId = useId();
   const addGuardFieldId = `${sectionId}-add-guard`;
+  const guardRowKeys = useStableWorkstationGuardRowKeys(guards);
 
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
@@ -50,10 +52,7 @@ export function EditableConfigurationWorkstationGuardsField({
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {guards.map((guard, index) => (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: guard rows have no stable server id until save
-              key={`${guard.type}-${formatWorkstationGuardSummary(guard)}-${index}`}
-            >
+            <li key={guardRowKeys[index]}>
               <WorkstationGuardRow
                 fieldErrors={fieldErrors}
                 guard={guard}
