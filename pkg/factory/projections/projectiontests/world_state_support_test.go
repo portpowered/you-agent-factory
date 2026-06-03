@@ -523,7 +523,7 @@ func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.
 		SelectedClassificationLabel: stringPtrForProjectionTest(payload.Result.SelectedClassificationLabel),
 		FailureReason:               stringPtrForProjectionTest(payload.Result.FailureReason),
 		FailureMessage:              stringPtrForProjectionTest(payload.Result.FailureMessage),
-		ProviderFailure:             generatedProviderFailureForProjectionTest(payload.Result.ProviderFailure),
+		ProviderFailure:             interfaces.PublishedProviderFailureMetadata(payload.Result.FailureMetadata, payload.Result.ProviderFailure),
 		DurationMillis:              int64PtrForProjectionTest(payload.DurationMillis),
 		OutputWork:                  &outputWork,
 		OutputResources:             generatedResourcesForProjectionTest(payload.OutputResources),
@@ -743,16 +743,6 @@ func generatedProviderSessionForProjectionTest(session *interfaces.ProviderSessi
 	}
 }
 
-func generatedProviderFailureForProjectionTest(failure *interfaces.WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	if failure == nil {
-		return nil
-	}
-	return &factoryapi.ProviderFailureMetadata{
-		Family: workFailureFamilyPtrForProjectionTest(failure.Family),
-		Type:   workFailureTypePtrForProjectionTest(failure.Type),
-	}
-}
-
 func generatedWorkDiagnosticsForProjectionTest(diagnostics *interfaces.SafeWorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
 	return interfaces.GeneratedSafeWorkDiagnostics(diagnostics)
 }
@@ -790,22 +780,6 @@ func stringPtrForProjectionTest(value string) *string {
 		return nil
 	}
 	return &value
-}
-
-func workFailureFamilyPtrForProjectionTest(value interfaces.WorkFailureFamily) *factoryapi.WorkFailureFamily {
-	if value == "" {
-		return nil
-	}
-	typed := factoryapi.WorkFailureFamily(value)
-	return &typed
-}
-
-func workFailureTypePtrForProjectionTest(value interfaces.WorkFailureType) *factoryapi.WorkFailureType {
-	if value == "" {
-		return nil
-	}
-	typed := factoryapi.WorkFailureType(value)
-	return &typed
 }
 
 func stringValueForProjectionTest(value *string) string {

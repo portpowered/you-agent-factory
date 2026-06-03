@@ -406,12 +406,15 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 	if completion.ProviderSession == nil || completion.ProviderSession.ID != "sess-1" {
 		t.Fatalf("completion provider session = %#v, want sess-1", completion.ProviderSession)
 	}
-	if completion.Result.ProviderFailure == nil {
-		t.Fatal("completion provider failure is nil, want canonical metadata")
+	if completion.Result.FailureMetadata == nil {
+		t.Fatal("completion failure metadata is nil, want canonical metadata")
 	}
-	if completion.Result.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable ||
-		completion.Result.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("completion provider failure = %#v, want retryable/timeout", completion.Result.ProviderFailure)
+	if completion.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable ||
+		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("completion failure metadata = %#v, want retryable/timeout", completion.Result.FailureMetadata)
+	}
+	if completion.Result.ProviderFailure != nil {
+		t.Fatalf("completion provider failure = %#v, want nil internal field", completion.Result.ProviderFailure)
 	}
 	if len(state.ProviderSessions) != 1 || state.ProviderSessions[0].ProviderSession.ID != "sess-1" {
 		t.Fatalf("provider sessions = %#v, want sess-1", state.ProviderSessions)

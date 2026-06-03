@@ -70,7 +70,6 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 			Model:           g.Model,
 			OccurredAt:      record.EndTime,
 			FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
-			ProviderFailure: interfaces.CloneWorkFailureMetadata(failureMetadata),
 		})
 	}
 	return factorythrottle.DeriveActiveThrottlePauses(history, g.RefreshWindow, ctx.Now)

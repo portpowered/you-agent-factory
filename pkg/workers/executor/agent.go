@@ -106,7 +106,6 @@ func inferenceErrorWorkResult(dispatch interfaces.WorkDispatch, err error, diagn
 		Outcome:         interfaces.OutcomeFailed,
 		Error:           formatAgentProviderError(err),
 		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
-		ProviderFailure: interfaces.CloneWorkFailureMetadata(failureMetadata),
 		ProviderSession: providerSessionFromError(providerErr),
 		Diagnostics:     mergeWorkDiagnostics(withInferenceErrorDiagnostics(diagnostics, err, retryCount), providerDiagnosticsFromError(providerErr)),
 		Metrics:         agentWorkMetrics(start, retryCount),

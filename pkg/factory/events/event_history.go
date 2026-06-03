@@ -356,7 +356,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfa
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
 			OutputWork:                  generatedWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
 			OutputResources:             h.generatedOutputResourcesPtr(completed.OutputMutations),
-			ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
+			ProviderFailure:             interfaces.PublishedProviderFailureMetadata(result.FailureMetadata, result.ProviderFailure),
 		},
 	))
 }

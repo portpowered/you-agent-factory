@@ -249,6 +249,58 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 	}
 }
 
+func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.T) {
+	artifact := testReplayArtifact(
+		t,
+		replayDispatchCreatedEvent(t, interfaces.WorkDispatch{
+			DispatchID:      "dispatch-failure-metadata",
+			TransitionID:    "process",
+			WorkerType:      "worker-a",
+			WorkstationName: "process",
+			Execution: interfaces.ExecutionMetadata{
+				ReplayKey: "process/trace-failure/work-failure",
+				TraceID:   "trace-failure",
+				WorkIDs:   []string{"work-failure"},
+			},
+		}, 2),
+		replayDispatchCompletedEvent(t, "completion-failure-metadata", interfaces.WorkResult{
+			DispatchID:   "dispatch-failure-metadata",
+			TransitionID: "process",
+			Outcome:      interfaces.OutcomeFailed,
+			Error:        "provider throttled",
+			FailureMetadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyThrottle,
+				Type:   interfaces.WorkFailureTypeThrottled,
+			},
+		}, 3),
+	)
+	assignEventSequences(artifact.Events)
+	sideEffects, err := NewSideEffects(artifact)
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+
+	_, err = sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch: interfaces.WorkDispatch{
+			WorkerType: "worker-a",
+			Execution: interfaces.ExecutionMetadata{
+				ReplayKey: "process/trace-failure/work-failure",
+				TraceID:   "trace-failure",
+				WorkIDs:   []string{"work-failure"},
+			},
+		},
+		WorkstationType: "process",
+		SystemPrompt:    "system prompt",
+		UserMessage:     "user prompt",
+	})
+	if err == nil {
+		t.Fatal("expected recorded failure_metadata-only completion to surface provider error")
+	}
+	if !strings.Contains(err.Error(), "throttled") {
+		t.Fatalf("Infer error = %v, want throttled failure from canonical metadata", err)
+	}
+}
+
 func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 	artifact := replaySideEffectArtifact(t)
 	artifact.Events = append(artifact.Events, replayDispatchCreatedEvent(t, interfaces.WorkDispatch{

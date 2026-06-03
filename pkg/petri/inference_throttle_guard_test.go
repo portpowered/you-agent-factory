@@ -8,6 +8,38 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
+func TestInferenceThrottleGuard_ActivePausesResolveLegacyProviderFailureOnlyDispatch(t *testing.T) {
+	now := time.Date(2026, time.May, 2, 15, 0, 0, 0, time.UTC)
+	guard := &InferenceThrottleGuard{
+		Provider:      "claude",
+		Model:         "claude-sonnet",
+		WorkerName:    "writer",
+		RefreshWindow: 10 * time.Minute,
+	}
+
+	active := guard.ActivePauses(RuntimeGuardContext{
+		Now: now,
+		DispatchHistory: []interfaces.CompletedDispatch{
+			completedLegacyThrottleFailure("dispatch-match", "t-claude", now.Add(-4*time.Minute)),
+		},
+		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"writer": {Name: "writer", ModelProvider: "claude", Model: "claude-sonnet"},
+			},
+		},
+		TransitionWorkers: map[string]string{
+			"t-claude": "writer",
+		},
+	})
+
+	if len(active) != 1 {
+		t.Fatalf("active pause count = %d, want 1", len(active))
+	}
+	if active[0].LaneID != "claude/claude-sonnet" {
+		t.Fatalf("active pause identity = %#v, want claude/claude-sonnet lane", active[0])
+	}
+}
+
 func TestInferenceThrottleGuard_ActivePausesDeriveFromCompletedDispatchHistoryAndClock(t *testing.T) {
 	now := time.Date(2026, time.May, 2, 15, 0, 0, 0, time.UTC)
 	guard := &InferenceThrottleGuard{
@@ -158,8 +190,21 @@ func completedThrottleFailure(dispatchID, transitionID string, endedAt time.Time
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
+		FailureMetadata: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
+		},
+	}
+}
+
+func completedLegacyThrottleFailure(dispatchID, transitionID string, endedAt time.Time) interfaces.CompletedDispatch {
+	return interfaces.CompletedDispatch{
+		DispatchID:   dispatchID,
+		TransitionID: transitionID,
+		EndTime:      endedAt,
 		ProviderFailure: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	}
 }

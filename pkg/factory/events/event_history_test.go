@@ -387,6 +387,9 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	}
+	if result.ProviderFailure != nil {
+		t.Fatal("internal WorkResult must leave ProviderFailure nil; emission maps FailureMetadata at boundary")
+	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-failed",
 		TransitionID:    "build",
@@ -483,6 +486,9 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 			Type:   interfaces.WorkFailureTypeInternalServerError,
 		},
 	}
+	if result.FailureMetadata != nil {
+		t.Fatal("legacy fixture must use ProviderFailure only to assert boundary fallback")
+	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      result.DispatchID,
 		TransitionID:    result.TransitionID,
@@ -518,6 +524,19 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 	if stringValueForEventHistoryTest(payload.ProviderFailure.Type) != string(interfaces.WorkFailureTypeInternalServerError) {
 		t.Fatalf("provider failure type = %q, want %q", stringValueForEventHistoryTest(payload.ProviderFailure.Type), interfaces.WorkFailureTypeInternalServerError)
 	}
+
+	data, err := json.Marshal(events[0])
+	if err != nil {
+		t.Fatalf("marshal event: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal event: %v", err)
+	}
+	payloadObject := assertJSONObject(t, decoded, "payload")
+	providerFailure := assertJSONObject(t, payloadObject, "providerFailure")
+	assertJSONField(t, providerFailure, "family", "retryable")
+	assertJSONField(t, providerFailure, "type", "internal_server_error")
 }
 
 func TestFactoryEventHistory_RecordWorkstationResponse_OmitsRetiredProviderAttemptFields(t *testing.T) {

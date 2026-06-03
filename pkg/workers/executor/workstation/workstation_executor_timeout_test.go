@@ -78,8 +78,8 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
 	}
-	if result.ProviderFailure == nil || result.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("ProviderFailure = %#v, want timeout metadata", result.ProviderFailure)
+	if result.ProviderFailure != nil {
+		t.Fatalf("ProviderFailure = %#v, want nil on internal WorkResult", result.ProviderFailure)
 	}
 }
 
@@ -447,7 +447,10 @@ func TestWorkstationExecutor_ModelWorkerTimeoutCancelsLongRunningExecutor(t *tes
 	if result.Error != "execution timeout" {
 		t.Fatalf("Error = %q, want execution timeout", result.Error)
 	}
-	if result.ProviderFailure == nil || result.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("ProviderFailure = %#v, want timeout metadata", result.ProviderFailure)
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
+	}
+	if result.ProviderFailure != nil {
+		t.Fatalf("ProviderFailure = %#v, want nil on internal WorkResult", result.ProviderFailure)
 	}
 }

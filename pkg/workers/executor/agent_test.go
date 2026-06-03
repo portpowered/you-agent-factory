@@ -734,18 +734,21 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	if len(sleeps) != 2 {
 		t.Fatalf("sleep count = %d, want 2", len(sleeps))
 	}
-	if result.ProviderFailure == nil {
-		t.Fatal("expected provider failure metadata on failed result")
+	if result.ProviderFailure != nil {
+		t.Fatal("ProviderFailure should be nil on internal WorkResult; use FailureMetadata")
 	}
-	if result.ProviderFailure.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("provider failure type = %q, want %q", result.ProviderFailure.Type, interfaces.WorkFailureTypeInternalServerError)
+	if result.FailureMetadata == nil {
+		t.Fatal("expected failure metadata on failed result")
 	}
-	if result.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("provider failure family = %q, want %q", result.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
+	if result.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("failure metadata type = %q, want %q", result.FailureMetadata.Type, interfaces.WorkFailureTypeInternalServerError)
 	}
-	decision := workerprovider.WorkFailureDecisionFromMetadata(result.ProviderFailure)
+	if result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("failure metadata family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	}
+	decision := workerprovider.WorkFailureDecisionFromMetadata(result.FailureMetadata)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
-		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", result.ProviderFailure, decision)
+		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", result.FailureMetadata, decision)
 	}
 	if result.ProviderSession == nil {
 		t.Fatal("expected provider session metadata on failed result")
@@ -970,13 +973,7 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 	if result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
 		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
-	if result.ProviderFailure == nil {
-		t.Fatal("ProviderFailure = nil, want timeout metadata")
-	}
-	if result.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("ProviderFailure.Type = %q, want %q", result.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
-	}
-	if result.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("ProviderFailure.Family = %q, want %q", result.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
+	if result.ProviderFailure != nil {
+		t.Fatal("ProviderFailure should be nil on internal WorkResult; use FailureMetadata")
 	}
 }

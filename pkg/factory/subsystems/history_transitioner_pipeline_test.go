@@ -286,11 +286,8 @@ func assertTimeoutFailureRequeueResult(t *testing.T, result *interfaces.TickResu
 	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
 		t.Fatalf("completed dispatch FailureMetadata.Family = %q, want %q", completed.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
-	if completed.ProviderFailure == nil {
-		t.Fatal("completed dispatch ProviderFailure = nil, want mirrored timeout metadata")
-	}
-	if completed.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("completed dispatch ProviderFailure.Type = %q, want %q", completed.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
+	if completed.ProviderFailure != nil {
+		t.Fatalf("completed dispatch ProviderFailure = %#v, want nil on internal CompletedDispatch", completed.ProviderFailure)
 	}
 }
 
@@ -476,26 +473,29 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	if completed.Reason != errorText {
 		t.Fatalf("completed dispatch reason = %q, want %q", completed.Reason, errorText)
 	}
-	if completed.ProviderFailure == nil {
-		t.Fatal("expected completed dispatch provider failure metadata")
+	if completed.FailureMetadata == nil {
+		t.Fatal("expected completed dispatch failure metadata")
 	}
-	if completed.ProviderFailure.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("completed dispatch provider failure type = %q, want %q", completed.ProviderFailure.Type, interfaces.WorkFailureTypeInternalServerError)
+	if completed.ProviderFailure != nil {
+		t.Fatalf("completed dispatch ProviderFailure = %#v, want nil on internal CompletedDispatch", completed.ProviderFailure)
 	}
-	if completed.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("completed dispatch provider failure family = %q, want %q", completed.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
+	if completed.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("completed dispatch failure type = %q, want %q", completed.FailureMetadata.Type, interfaces.WorkFailureTypeInternalServerError)
 	}
-	decision := workerprovider.WorkFailureDecisionFromMetadata(completed.ProviderFailure)
+	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("completed dispatch failure family = %q, want %q", completed.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	}
+	decision := workerprovider.WorkFailureDecisionFromMetadata(completed.FailureMetadata)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
-		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", completed.ProviderFailure, decision)
+		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", completed.FailureMetadata, decision)
 	}
 	providerFailure.Type = interfaces.WorkFailureTypeAuthFailure
 	providerFailure.Family = interfaces.WorkFailureFamilyTerminal
-	if completed.ProviderFailure.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("completed dispatch provider failure type after source mutation = %q, want detached original", completed.ProviderFailure.Type)
+	if completed.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("completed dispatch failure type after source mutation = %q, want detached original", completed.FailureMetadata.Type)
 	}
-	if completed.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("completed dispatch provider failure family after source mutation = %q, want detached original", completed.ProviderFailure.Family)
+	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("completed dispatch failure family after source mutation = %q, want detached original", completed.FailureMetadata.Family)
 	}
 }
 
