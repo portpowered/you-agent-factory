@@ -152,16 +152,6 @@ type WorkFailureMetadata struct {
 	Type   WorkFailureType   `json:"type"`
 }
 
-// CanonicalWorkFailureMetadata returns the generalized failure metadata from
-// the runtime result, falling back to the legacy provider-named field while
-// older callers are still being migrated.
-func CanonicalWorkFailureMetadata(failure *WorkFailureMetadata, providerFailure *WorkFailureMetadata) *WorkFailureMetadata {
-	if failure != nil {
-		return failure
-	}
-	return providerFailure
-}
-
 // ReplayArtifact is the versioned, self-contained recording used to replay a
 // factory run without requiring the original customer files or live side
 // effects.

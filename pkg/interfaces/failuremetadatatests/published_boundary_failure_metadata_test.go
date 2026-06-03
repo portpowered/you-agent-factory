@@ -56,3 +56,27 @@ func TestWorkFailureMetadataFromGenerated_ReturnsNilForNilWire(t *testing.T) {
 		t.Fatalf("ingress failure metadata = %#v, want nil", got)
 	}
 }
+
+func TestGeneratedWorkFailureMetadata_MapsFailureMetadataToPublishedWire(t *testing.T) {
+	failure := &interfaces.WorkFailureMetadata{
+		Family: interfaces.WorkFailureFamilyThrottle,
+		Type:   interfaces.WorkFailureTypeThrottled,
+	}
+
+	got := interfaces.GeneratedWorkFailureMetadata(failure)
+	if got == nil {
+		t.Fatal("published provider failure = nil, want throttle/throttled metadata")
+	}
+	if got.Family == nil || string(*got.Family) != string(interfaces.WorkFailureFamilyThrottle) {
+		t.Fatalf("published family = %#v, want throttle", got.Family)
+	}
+	if got.Type == nil || string(*got.Type) != string(interfaces.WorkFailureTypeThrottled) {
+		t.Fatalf("published type = %#v, want throttled", got.Type)
+	}
+}
+
+func TestGeneratedWorkFailureMetadata_OmitsWhenFailureMetadataUnset(t *testing.T) {
+	if got := interfaces.GeneratedWorkFailureMetadata(nil); got != nil {
+		t.Fatalf("published provider failure = %#v, want nil", got)
+	}
+}
