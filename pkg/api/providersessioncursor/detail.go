@@ -1,4 +1,4 @@
-package api
+package providersessioncursor
 
 import (
 	"errors"
@@ -11,23 +11,25 @@ import (
 )
 
 const (
-	loadableProviderSessionProviderCursor = "cursor"
+	loadableProviderSessionProvider = "cursor"
+	loadableProviderSessionKind     = "session_id"
 )
 
-func loadCursorProviderSessionDetails(root cursorstorage.AgentStorageRoot, id string) (factoryapi.ProviderSessionDetailResponse, error) {
+// LoadDetails resolves a Cursor session_id from server-configured cursor-agent storage.
+func LoadDetails(root cursorstorage.AgentStorageRoot, id string) (factoryapi.ProviderSessionDetailResponse, error) {
 	if err := cursorstorage.ValidateSessionID(id); err != nil {
-		return factoryapi.ProviderSessionDetailResponse{}, errInvalidProviderSessionIdentifier
+		return factoryapi.ProviderSessionDetailResponse{}, ErrInvalidProviderSessionIdentifier
 	}
 
 	resolved, err := cursorstorage.ResolveStoreDB(root, id)
 	if err != nil {
 		switch {
 		case errors.Is(err, cursorstorage.ErrInvalidSessionID):
-			return factoryapi.ProviderSessionDetailResponse{}, errInvalidProviderSessionIdentifier
+			return factoryapi.ProviderSessionDetailResponse{}, ErrInvalidProviderSessionIdentifier
 		case errors.Is(err, cursorstorage.ErrSessionNotFound):
-			return factoryapi.ProviderSessionDetailResponse{}, errProviderSessionNotFound
+			return factoryapi.ProviderSessionDetailResponse{}, ErrProviderSessionNotFound
 		case errors.Is(err, cursorstorage.ErrAmbiguousSession):
-			return factoryapi.ProviderSessionDetailResponse{}, errAmbiguousProviderSessionFile
+			return factoryapi.ProviderSessionDetailResponse{}, ErrAmbiguousProviderSessionFile
 		default:
 			return factoryapi.ProviderSessionDetailResponse{}, fmt.Errorf("resolve cursor session store: %w", err)
 		}
@@ -44,11 +46,10 @@ func loadCursorProviderSessionDetails(root cursorstorage.AgentStorageRoot, id st
 	}
 	modifiedAt := info.ModTime().UTC()
 
-	parsed := mapCursorSessionToProviderSessionDetail(id, resolved.RelativePath, info.Size(), &modifiedAt, session)
-	return parsed, nil
+	return mapSessionToProviderSessionDetail(id, resolved.RelativePath, info.Size(), &modifiedAt, session), nil
 }
 
-func mapCursorSessionToProviderSessionDetail(
+func mapSessionToProviderSessionDetail(
 	id string,
 	relativePath string,
 	sizeBytes int64,
@@ -64,14 +65,14 @@ func mapCursorSessionToProviderSessionDetail(
 		Turns:              []factoryapi.ProviderSessionTurnSummary{},
 		FunctionCalls:      []factoryapi.ProviderSessionFunctionCallSummary{},
 		Reasoning:          []factoryapi.ProviderSessionReasoningSummary{},
-		ParseErrors:        cursorParseErrorsFromStats(stats),
-		UnknownEvents:      cursorUnknownEventsFromStats(stats),
-		TokenUsage:         mapCursorTokenUsage(session.TokenUsage),
+		ParseErrors:        parseErrorsFromStats(stats),
+		UnknownEvents:      unknownEventsFromStats(stats),
+		TokenUsage:         mapTokenUsage(session.TokenUsage),
 	}
 
 	return factoryapi.ProviderSessionDetailResponse{
 		ProviderSession: factoryapi.LoadableProviderSessionRef{
-			Provider: factoryapi.LoadableProviderSessionProvider(loadableProviderSessionProviderCursor),
+			Provider: factoryapi.LoadableProviderSessionProvider(loadableProviderSessionProvider),
 			Kind:     factoryapi.LoadableProviderSessionKind(loadableProviderSessionKind),
 			Id:       id,
 		},
@@ -81,11 +82,11 @@ func mapCursorSessionToProviderSessionDetail(
 			ModifiedAt:   modifiedAt,
 		},
 		Parse:      summary,
-		Transcript: cursorTranscriptFromSession(session),
+		Transcript: transcriptFromSession(session),
 	}
 }
 
-func mapCursorTokenUsage(usage cursorstorage.SessionTokenUsage) *factoryapi.ProviderSessionTokenUsage {
+func mapTokenUsage(usage cursorstorage.SessionTokenUsage) *factoryapi.ProviderSessionTokenUsage {
 	if usage.InputTokens == nil && usage.OutputTokens == nil &&
 		usage.CacheReadTokens == nil && usage.CacheWriteTokens == nil {
 		return nil
@@ -96,11 +97,11 @@ func mapCursorTokenUsage(usage cursorstorage.SessionTokenUsage) *factoryapi.Prov
 		CachedInputTokens: usage.CacheReadTokens,
 		CacheWriteTokens:  usage.CacheWriteTokens,
 	}
-	mapped.TotalTokens = cursorTotalTokens(usage)
+	mapped.TotalTokens = totalTokens(usage)
 	return mapped
 }
 
-func cursorTotalTokens(usage cursorstorage.SessionTokenUsage) *int {
+func totalTokens(usage cursorstorage.SessionTokenUsage) *int {
 	total := 0
 	present := false
 	if usage.InputTokens != nil {
@@ -125,7 +126,7 @@ func cursorTotalTokens(usage cursorstorage.SessionTokenUsage) *int {
 	return &total
 }
 
-func cursorTranscriptFromSession(session *cursorstorage.SessionData) []factoryapi.ProviderSessionTranscriptEntry {
+func transcriptFromSession(session *cursorstorage.SessionData) []factoryapi.ProviderSessionTranscriptEntry {
 	if session == nil {
 		return []factoryapi.ProviderSessionTranscriptEntry{}
 	}
@@ -153,7 +154,7 @@ func cursorTranscriptFromSession(session *cursorstorage.SessionData) []factoryap
 	return transcript
 }
 
-func cursorParseErrorsFromStats(stats cursorstorage.SessionParseStats) []factoryapi.ProviderSessionLineError {
+func parseErrorsFromStats(stats cursorstorage.SessionParseStats) []factoryapi.ProviderSessionLineError {
 	if stats.MalformedBlobCount+stats.MalformedMetaCount == 0 {
 		return []factoryapi.ProviderSessionLineError{}
 	}
@@ -165,7 +166,7 @@ func cursorParseErrorsFromStats(stats cursorstorage.SessionParseStats) []factory
 	}
 }
 
-func cursorUnknownEventsFromStats(stats cursorstorage.SessionParseStats) []factoryapi.ProviderSessionUnknownEvent {
+func unknownEventsFromStats(stats cursorstorage.SessionParseStats) []factoryapi.ProviderSessionUnknownEvent {
 	if stats.UnavailableBlobCount == 0 {
 		return []factoryapi.ProviderSessionUnknownEvent{}
 	}
@@ -177,4 +178,19 @@ func cursorUnknownEventsFromStats(stats cursorstorage.SessionParseStats) []facto
 		})
 	}
 	return events
+}
+
+func truncateSessionText(value string) string {
+	const maxSessionSummaryTextLength = 1000
+	if len(value) <= maxSessionSummaryTextLength {
+		return value
+	}
+	return value[:maxSessionSummaryTextLength] + "..."
+}
+
+func stringPtrIfNotEmpty(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }

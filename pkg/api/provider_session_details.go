@@ -16,6 +16,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/api/providersessioncursor"
 	"go.uber.org/zap"
 )
 
@@ -51,21 +52,24 @@ func (s *Server) GetProviderSessionDetails(
 	case factoryapi.Codex:
 		details, err = loadProviderSessionDetails(s.codexSessionsRoot, string(params.Id))
 	case factoryapi.Cursor:
-		details, err = loadCursorProviderSessionDetails(s.cursorSessionsRoot, string(params.Id))
+		details, err = providersessioncursor.LoadDetails(s.cursorSessionsRoot, string(params.Id))
 	default:
 		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
 		return
 	}
 	if err != nil {
 		switch {
-		case errors.Is(err, errInvalidProviderSessionIdentifier):
+		case errors.Is(err, errInvalidProviderSessionIdentifier),
+			errors.Is(err, providersessioncursor.ErrInvalidProviderSessionIdentifier):
 			message := invalidProviderSessionIdentifierMessage(params.Provider)
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
-		case errors.Is(err, errProviderSessionNotFound):
+		case errors.Is(err, errProviderSessionNotFound),
+			errors.Is(err, providersessioncursor.ErrProviderSessionNotFound):
 			s.writeError(w, http.StatusNotFound, "provider session not found", "NOT_FOUND")
 			return
-		case errors.Is(err, errAmbiguousProviderSessionFile):
+		case errors.Is(err, errAmbiguousProviderSessionFile),
+			errors.Is(err, providersessioncursor.ErrAmbiguousProviderSessionFile):
 			s.writeError(w, http.StatusInternalServerError, "multiple provider session files match session identifier", "INTERNAL_ERROR")
 			return
 		default:

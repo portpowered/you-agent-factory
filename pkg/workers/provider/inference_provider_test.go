@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
 // --- NewScriptWrapProvider ---
@@ -491,7 +492,7 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 }
 
 func TestScriptWrapProvider_Infer_CursorParsesJSONResult(t *testing.T) {
-	stdout := cursorSuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
+	stdout := cursorpkg.SuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
 	stdout = append(stdout, '\n')
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: stdout},
@@ -603,10 +604,10 @@ func assertCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagn
 		t.Fatal("expected provider diagnostics with failure excerpts")
 	}
 	metadata := diagnostics.Provider.ResponseMetadata
-	if got := metadata[cursorResponseMetadataStdoutExcerpt]; got != wantStdout {
+	if got := metadata[cursorpkg.ResponseMetadataStdoutExcerpt]; got != wantStdout {
 		t.Fatalf("stdout excerpt = %q, want %q", got, wantStdout)
 	}
-	if got := metadata[cursorResponseMetadataStderrExcerpt]; got != wantStderr {
+	if got := metadata[cursorpkg.ResponseMetadataStderrExcerpt]; got != wantStderr {
 		t.Fatalf("stderr excerpt = %q, want %q", got, wantStderr)
 	}
 }
@@ -617,10 +618,10 @@ func assertSafeCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkD
 	if safe == nil || safe.Provider == nil {
 		t.Fatal("expected safe provider diagnostics")
 	}
-	if safe.Provider.ResponseMetadata[cursorResponseMetadataStdoutExcerpt] == "" {
+	if safe.Provider.ResponseMetadata[cursorpkg.ResponseMetadataStdoutExcerpt] == "" {
 		t.Fatal("expected safe stdout excerpt")
 	}
-	if safe.Provider.ResponseMetadata[cursorResponseMetadataStderrExcerpt] == "" {
+	if safe.Provider.ResponseMetadata[cursorpkg.ResponseMetadataStderrExcerpt] == "" {
 		t.Fatal("expected safe stderr excerpt")
 	}
 	if safe.Provider.ResponseMetadata["raw_body"] != "" {
@@ -633,7 +634,7 @@ func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNo
 		t.Run(tc.name, func(t *testing.T) {
 			stdout := []byte(strings.ToLower(tc.name) + " output")
 			if tc.req.ModelProvider == string(interfaces.ModelProviderCursor) {
-				stdout = cursorSuccessStdoutJSON(strings.ToLower(tc.name)+" output", "cursor-session-from-json")
+				stdout = cursorpkg.SuccessStdoutJSON(strings.ToLower(tc.name)+" output", "cursor-session-from-json")
 			}
 			fakeExec := &recordingProviderExec{
 				result: CommandResult{Stdout: stdout},

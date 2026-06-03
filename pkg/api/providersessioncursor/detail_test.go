@@ -1,31 +1,25 @@
-package api
+package providersessioncursor
 
 import (
 	"database/sql"
-	"net/http"
-	"net/http/httptest"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	_ "modernc.org/sqlite"
 )
 
-// pkgmaintcheck:ignore-cyclomatic-complexity fixture-backed HTTP test keeps cursor detail response assertions together.
-func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testing.T) {
+// pkgmaintcheck:ignore-cyclomatic-complexity fixture-backed test keeps cursor detail response assertions together.
+func TestLoadDetails_ReadsReadableSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeReadableCursorAgentStorageFixture(t)
-	srv := newTestServerWithCursorRoot(root)
 
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+sessionID, nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	resp, err := LoadDetails(cursorstorage.AgentStorageRoot(root), sessionID)
+	if err != nil {
+		t.Fatalf("LoadDetails: %v", err)
 	}
-	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
 	if string(resp.ProviderSession.Provider) != "cursor" || string(resp.ProviderSession.Kind) != "session_id" || resp.ProviderSession.Id != sessionID {
 		t.Fatalf("provider session = %#v, want cursor session_id %s", resp.ProviderSession, sessionID)
 	}
@@ -49,18 +43,13 @@ func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testi
 	}
 }
 
-func TestGetProviderSessionDetails_CursorUnavailableContentHasNoPlaintextTranscript(t *testing.T) {
+func TestLoadDetails_UnavailableContentHasNoPlaintextTranscript(t *testing.T) {
 	root, sessionID := writeUnavailableCursorAgentStorageFixture(t)
-	srv := newTestServerWithCursorRoot(root)
 
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+sessionID, nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	resp, err := LoadDetails(cursorstorage.AgentStorageRoot(root), sessionID)
+	if err != nil {
+		t.Fatalf("LoadDetails: %v", err)
 	}
-	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
 	if len(resp.Transcript) != 0 {
 		t.Fatalf("transcript = %#v, want no decrypted plaintext", resp.Transcript)
 	}
@@ -69,26 +58,20 @@ func TestGetProviderSessionDetails_CursorUnavailableContentHasNoPlaintextTranscr
 	}
 }
 
-func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {
-	srv := newTestServerWithCursorRoot(t.TempDir())
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+func TestLoadDetails_NotFoundIsDistinguishable(t *testing.T) {
+	_, err := LoadDetails(cursorstorage.AgentStorageRoot(t.TempDir()), "missing-session")
+	if !errors.Is(err, ErrProviderSessionNotFound) {
+		t.Fatalf("err = %v, want ErrProviderSessionNotFound", err)
+	}
 }
 
-func TestGetProviderSessionDetails_RejectsPathLikeCursorIdentifiers(t *testing.T) {
-	for _, target := range []string{
-		"/provider-sessions/detail?provider=cursor&kind=session_id&id=../secret",
-		"/provider-sessions/detail?provider=cursor&kind=session_id&id=/tmp/store.db",
-		"/provider-sessions/detail?provider=cursor&kind=session_id&id=session.with.dot",
-	} {
-		t.Run(target, func(t *testing.T) {
-			srv := newTestServerWithCursorRoot(t.TempDir())
-			req := httptest.NewRequest("GET", target, nil)
-			rec := httptest.NewRecorder()
-			srv.Handler().ServeHTTP(rec, req)
-			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a cursor session_id identifier without path separators")
+func TestLoadDetails_RejectsPathLikeIdentifiers(t *testing.T) {
+	for _, id := range []string{"../secret", "/tmp/store.db", "session.with.dot"} {
+		t.Run(id, func(t *testing.T) {
+			_, err := LoadDetails(cursorstorage.AgentStorageRoot(t.TempDir()), id)
+			if !errors.Is(err, ErrInvalidProviderSessionIdentifier) {
+				t.Fatalf("err = %v, want ErrInvalidProviderSessionIdentifier", err)
+			}
 		})
 	}
 }
