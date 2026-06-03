@@ -115,7 +115,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
           aria-describedby={tickStatusID}
           aria-label={messages.sliderAriaLabel}
           aria-valuetext={sliderValueText}
-          className="h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:accent-af-text-disabled"
+          className="af-tick-slider h-4 min-w-32 flex-1 cursor-pointer disabled:cursor-not-allowed"
           disabled={isDisabled}
           max={bounds.maxTick}
           min={bounds.minTick}

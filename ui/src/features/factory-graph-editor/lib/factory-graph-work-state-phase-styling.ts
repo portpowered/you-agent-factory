@@ -19,14 +19,13 @@ export const WORK_STATE_PHASE_LEGEND_ORDER = [
   "FAILED",
 ] as const satisfies readonly FactoryGraphWorkStateType[];
 
-const NEUTRAL_WORK_STATE_SURFACE =
-  "border-af-border-strong bg-af-surface-raised";
+const NEUTRAL_WORK_STATE_SURFACE = "af-current-activity-node-surface-neutral";
 
 const WORK_STATE_PHASE_SURFACE: Record<FactoryGraphWorkStateType, string> = {
-  INITIAL: "border-af-info-border bg-af-info-surface",
-  PROCESSING: "border-af-warning-border bg-af-warning-surface",
-  TERMINAL: "border-af-success-border bg-af-success-surface",
-  FAILED: "border-af-danger-border bg-af-danger-surface",
+  INITIAL: "af-current-activity-node-surface-info",
+  PROCESSING: "af-current-activity-node-surface-warning",
+  TERMINAL: "af-current-activity-node-surface-success",
+  FAILED: "af-current-activity-node-surface-danger",
 };
 
 const WORK_STATE_PHASE_ICON_KIND: Record<

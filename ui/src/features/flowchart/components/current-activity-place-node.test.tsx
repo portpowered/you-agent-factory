@@ -108,8 +108,12 @@ describe("CurrentActivity place node work-state phase styling", () => {
       "[data-current-activity-node-type='resource']",
     );
 
-    expect(shell?.className).toContain("bg-af-surface");
-    expect(shell?.className).not.toContain("bg-af-info-surface");
+    expect(shell?.className).toContain(
+      "af-current-activity-node-surface-resource",
+    );
+    expect(shell?.className).not.toContain(
+      "af-current-activity-node-surface-info",
+    );
   });
 
   it("applies lifecycle icon tone from shared phase styling", () => {

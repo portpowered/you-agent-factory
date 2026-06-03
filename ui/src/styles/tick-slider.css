@@ -1,0 +1,79 @@
+.af-tick-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+.af-tick-slider::-webkit-slider-runnable-track {
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    rgb(from var(--color-af-foundation-overlay) r g b / 0.12),
+    rgb(from var(--color-af-foundation-overlay) r g b / 0.2)
+  );
+}
+
+.af-tick-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -0.3125rem;
+  height: 1rem;
+  width: 1rem;
+  border: 1px solid rgb(from var(--color-af-foundation-overlay) r g b / 0.2);
+  border-radius: 9999px;
+  background: rgb(from var(--color-af-foundation-surface) r g b / 0.98);
+  box-shadow: 0 0 0 1px rgb(from var(--color-af-shadow) r g b / 0.12);
+}
+
+.af-tick-slider::-moz-range-track {
+  height: 0.375rem;
+  border: 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    rgb(from var(--color-af-foundation-overlay) r g b / 0.12),
+    rgb(from var(--color-af-foundation-overlay) r g b / 0.2)
+  );
+}
+
+.af-tick-slider::-moz-range-thumb {
+  height: 1rem;
+  width: 1rem;
+  border: 1px solid rgb(from var(--color-af-foundation-overlay) r g b / 0.2);
+  border-radius: 9999px;
+  background: rgb(from var(--color-af-foundation-surface) r g b / 0.98);
+  box-shadow: 0 0 0 1px rgb(from var(--color-af-shadow) r g b / 0.12);
+}
+
+.af-tick-slider:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 1px rgb(from var(--color-af-shadow) r g b / 0.12),
+    0 0 0 4px var(--color-af-focus-ring);
+}
+
+.af-tick-slider:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 1px rgb(from var(--color-af-shadow) r g b / 0.12),
+    0 0 0 4px var(--color-af-focus-ring);
+}
+
+.af-tick-slider:disabled::-webkit-slider-runnable-track {
+  background: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
+}
+
+.af-tick-slider:disabled::-webkit-slider-thumb {
+  border-color: rgb(from var(--color-af-foundation-overlay) r g b / 0.12);
+  background: rgb(from var(--color-af-foundation-surface) r g b / 0.72);
+  box-shadow: none;
+}
+
+.af-tick-slider:disabled::-moz-range-track {
+  background: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
+}
+
+.af-tick-slider:disabled::-moz-range-thumb {
+  border-color: rgb(from var(--color-af-foundation-overlay) r g b / 0.12);
+  background: rgb(from var(--color-af-foundation-surface) r g b / 0.72);
+  box-shadow: none;
+}
