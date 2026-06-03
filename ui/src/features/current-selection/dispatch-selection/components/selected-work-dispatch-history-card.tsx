@@ -237,7 +237,7 @@ function DispatchHistoryHeader({
         </strong>
         <div className="flex flex-wrap items-center gap-2">
           <p
-            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
           >
             {outcome
               ? enumMessages.localizeOutcome(outcome)

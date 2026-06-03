@@ -181,8 +181,8 @@ describe("factory graph editor mode toggle controls", () => {
     });
 
     expect(toggle.className).toContain("border-af-warning-border");
-    expect(toggle.className).toContain("bg-af-warning-surface");
-    expect(toggle.className).toContain("text-af-warning-text");
+    expect(toggle.className).toContain("bg-warning-container");
+    expect(toggle.className).toContain("text-on-warning-container");
   });
 
   it("keeps default enter and leave tones when there are no unsaved changes", () => {
@@ -193,7 +193,7 @@ describe("factory graph editor mode toggle controls", () => {
     const enterToggle = screen.getByRole("button", {
       name: "Edit mode",
     });
-    expect(enterToggle.className).toContain("border-af-border");
+    expect(enterToggle.className).toContain("border-outline");
     expect(enterToggle.className).not.toContain("border-af-warning-border");
 
     rerender(
@@ -203,7 +203,7 @@ describe("factory graph editor mode toggle controls", () => {
     const leaveToggle = screen.getByRole("button", {
       name: "Leave editor",
     });
-    expect(leaveToggle.className).toContain("border-af-border-strong");
+    expect(leaveToggle.className).toContain("border-outline-variant");
     expect(leaveToggle.className).not.toContain("border-af-warning-border");
   });
 
@@ -219,9 +219,9 @@ describe("factory graph editor mode toggle controls", () => {
       name: "Edit mode",
     });
     expect(tooltip).toBeTruthy();
-    expect(tooltip.className).toContain("border-af-border-strong");
-    expect(tooltip.className).toContain("bg-af-surface-raised");
-    expect(tooltip.className).toContain("text-af-text");
+    expect(tooltip.className).toContain("border-outline-variant");
+    expect(tooltip.className).toContain("bg-surface-container-high");
+    expect(tooltip.className).toContain("text-on-surface");
   });
 
   it("keeps the mode-toggle tooltip below the trigger button", async () => {

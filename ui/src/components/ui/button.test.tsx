@@ -16,11 +16,11 @@ describe("Button", () => {
     });
     const destructiveButton = screen.getByRole("button", { name: "Delete" });
 
-    expect(primaryButton.className.includes("hover:bg-af-accent-hover")).toBe(
-      true,
-    );
     expect(
-      primaryButton.className.includes("hover:border-af-accent-hover"),
+      primaryButton.className.includes("hover:bg-on-primary-container"),
+    ).toBe(true);
+    expect(
+      primaryButton.className.includes("hover:border-on-primary-container"),
     ).toBe(true);
     expect(primaryButton.className.includes("brightness-")).toBe(false);
     expect(

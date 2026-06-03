@@ -104,7 +104,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
           />
         </div>
         <div className="flex min-w-0">
-          <div className="relative flex min-w-0 w-full rounded-sm items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2 px-2 pt-1">
+          <div className="relative flex min-w-0 w-full rounded-sm items-center gap-1.5 rounded-t-2xl bg-surface-container-low pb-2 px-2 pt-1">
             <TickSliderControl locale={resolvedLocale} />
             <div className="ml-auto flex shrink-0 items-center gap-1.5">
               {sessionTabsState.activeSession ? (
@@ -302,7 +302,7 @@ function DashboardLocaleMenuList({
   return (
     <div
       aria-label={label}
-      className="absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg"
+      className="absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-outline bg-surface-container-high p-1 text-on-surface shadow-af-panel backdrop-blur-lg"
       id={id}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -326,8 +326,8 @@ function DashboardLocaleMenuList({
             className={cn(
               LOCALE_MENU_ITEM_CLASS,
               isSelected
-                ? "border-af-accent-border bg-af-accent-surface text-af-text"
-                : "text-af-text-muted",
+                ? "border-primary bg-primary-container text-on-surface"
+                : "text-on-surface-variant",
             )}
             onClick={() => {
               onChangeLocale(option.value);

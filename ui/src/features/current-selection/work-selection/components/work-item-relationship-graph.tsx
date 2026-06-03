@@ -75,12 +75,12 @@ export function WorkRelationshipsSection({
       ) : relationshipGraph?.status === "error" ? (
         <div className={CURRENT_SELECTION_ALERT_PANEL_CLASS} role="alert">
           <p className="m-0">{messages.workRelationshipsError}</p>
-          <p className="m-0 text-sm text-af-danger">
+          <p className="m-0 text-sm text-error">
             {relationshipGraph.message}
           </p>
         </div>
       ) : relationships.length > 0 ? (
-        <div className="grid gap-3 rounded-xl border border-af-border bg-af-surface-raised p-3">
+        <div className="grid gap-3 rounded-xl border border-outline bg-surface-container-high p-3">
           <RelationshipLegend messages={messages} />
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,16rem)_minmax(0,1fr)] md:grid-rows-[auto_auto_auto] md:items-start">
             <RelationshipLane
@@ -237,7 +237,7 @@ function RelationshipLane({
     <section
       aria-label={messages.relationshipLaneAriaLabel(label)}
       className={cn(
-        "grid gap-2 rounded-xl border border-af-border bg-af-surface-raised p-3",
+        "grid gap-2 rounded-xl border border-outline bg-surface-container-high p-3",
         className,
       )}
     >
@@ -256,7 +256,7 @@ function RelationshipLane({
       <ul className="m-0 grid list-none gap-2 p-0">
         {items.map((relationship) => (
           <li
-            className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
+            className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
             key={relationship.key}
           >
             <div className="flex items-center gap-2">
@@ -293,7 +293,7 @@ function RelationshipLegend({
   return (
     <section
       aria-label={messages.relationshipLegendHeading}
-      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
+      className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
     >
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.relationshipLegendHeading}
@@ -339,8 +339,8 @@ function RelationshipNodeCard({
       className={cn(
         "grid min-w-0 gap-2 rounded-xl border p-3",
         isSelected
-          ? "border-af-accent-border bg-af-accent-surface"
-          : "border-af-border bg-af-surface-raised",
+          ? "border-primary bg-primary-container"
+          : "border-outline bg-surface-container-high",
         className,
       )}
       data-selected-work-relationship-node={isSelected ? "selected" : "related"}
@@ -365,7 +365,7 @@ function RelationshipNodeCard({
           </span>
         </button>
       ) : (
-        <code className="min-w-0 break-words text-sm leading-5 text-af-text">
+        <code className="min-w-0 break-words text-sm leading-5 text-on-surface">
           {label}
         </code>
       )}
@@ -479,16 +479,16 @@ function relationshipDirectionBadgeClass(
     case messages.relationshipParentLabel:
     case messages.relationshipChildLabel:
       // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-af-accent-border bg-af-accent-surface text-af-text";
+      return "border-primary bg-primary-container text-on-surface";
     case messages.relationshipDependsOnLabel:
       // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-af-warning-border bg-af-warning-surface text-af-warning-text";
+      return "border-af-warning-border bg-warning-container text-on-warning-container";
     case messages.relationshipRequiredByLabel:
       // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-af-border bg-af-overlay text-af-text";
+      return "border-outline bg-af-overlay text-on-surface";
     default:
       // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-af-border bg-af-surface-raised text-af-text-muted";
+      return "border-outline bg-surface-container-high text-on-surface-variant";
   }
 }
 

@@ -24,20 +24,20 @@ export function WorkerDetailCard({
         <p className={WIDGET_SUBTITLE_CLASS}>{workerName}</p>
       ) : null}
       {detailState.status === "loading" ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.configurationLoading}
         </p>
       ) : null}
       {detailState.status === "error" ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
           role="alert"
         >
           {messages.configurationErrorPrefix} {detailState.errorMessage}
         </p>
       ) : null}
       {detailState.status === "empty" ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.configurationEmpty}
         </p>
       ) : null}

@@ -73,7 +73,7 @@ export function ActivityGraphNodeShell({
   return (
     <article
       className={cn(
-        "flex h-full min-w-0 w-full flex-col gap-1 overflow-visible rounded-lg border border-af-border bg-af-surface p-3 text-af-text",
+        "flex h-full min-w-0 w-full flex-col gap-1 overflow-visible rounded-lg border border-outline bg-surface p-3 text-on-surface",
         className,
       )}
       data-current-activity-node-type={nodeType}
@@ -150,7 +150,7 @@ function ZAxisIncompleteHintOrb({
     >
       <span
         aria-hidden="true"
-        className="block h-2.5 w-2.5 rounded-full border border-af-danger-border bg-af-danger shadow-[0_0_0_3px_var(--color-af-danger-surface)] motion-safe:animate-pulse"
+        className="block h-2.5 w-2.5 rounded-full border border-af-danger-border bg-error shadow-[0_0_0_3px_var(--color-error-container)] motion-safe:animate-pulse"
       />
     </span>
   );
@@ -204,7 +204,7 @@ function NodeHandleBadge({
         aria-label={handle.buttonAriaLabel}
         aria-pressed={handle.buttonPressed}
         className={cn(
-          "pointer-events-auto -m-1 grid h-5 w-5 place-items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
+          "pointer-events-auto -m-1 grid h-5 w-5 place-items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:bg-surface-container-low disabled:text-on-surface-disabled",
           handle.validationError &&
             "ring-2 ring-af-danger-border motion-safe:animate-pulse",
         )}
@@ -215,14 +215,14 @@ function NodeHandleBadge({
         <span
           aria-hidden="true"
           className={cn(
-            "block h-2.5 w-2.5 rounded-full border border-af-surface shadow-sm transition",
+            "block h-2.5 w-2.5 rounded-full border border-surface shadow-sm transition",
             dotClassName,
             handle.variant === "selected" &&
-              "scale-125 shadow-[0_0_0_3px_var(--color-af-accent-surface)]",
+              "scale-125 shadow-[0_0_0_3px_var(--color-primary-container)]",
             handle.variant === "valid-target" &&
-              "scale-125 shadow-[0_0_0_3px_var(--color-af-success-surface)]",
+              "scale-125 shadow-[0_0_0_3px_var(--color-success-container)]",
             handle.variant === "error" &&
-              "scale-125 border-af-danger-border bg-af-danger-surface shadow-[0_0_0_3px_var(--color-af-danger-surface)] motion-safe:animate-pulse",
+              "scale-125 border-af-danger-border bg-error-container shadow-[0_0_0_3px_var(--color-error-container)] motion-safe:animate-pulse",
           )}
           style={dotStyle}
         />
@@ -239,8 +239,8 @@ function handleDotStyle(
     handle.id === "workstation-resource-target"
   ) {
     return {
-      backgroundColor: "var(--color-af-text-inverse)",
-      borderColor: "var(--color-af-text)",
+      backgroundColor: "var(--color-on-inverse)",
+      borderColor: "var(--color-on-surface)",
     };
   }
 
@@ -249,11 +249,11 @@ function handleDotStyle(
 
 function handleDotClassName(handle: ActivityGraphNodeHandle): string {
   if (handle.variant === "error") {
-    return "bg-af-danger";
+    return "bg-error";
   }
 
   if (handle.variant === "muted") {
-    return "bg-af-border-strong";
+    return "bg-outline-variant";
   }
 
   if (
@@ -263,24 +263,24 @@ function handleDotClassName(handle: ActivityGraphNodeHandle): string {
     return "";
   }
   if (handle.id.includes("on-continue")) {
-    return "bg-af-info";
+    return "bg-info";
   }
   if (handle.id.includes("on-failure")) {
-    return "bg-af-danger";
+    return "bg-error";
   }
   if (handle.id.includes("on-rejection")) {
-    return "bg-af-warning";
+    return "bg-warning";
   }
   if (handle.id.includes("worker")) {
-    return "bg-af-worker";
+    return "bg-tertiary";
   }
   if (
     handle.id.includes("input") ||
     handle.id.includes("output") ||
     handle.id.includes("resource")
   ) {
-    return "bg-af-success";
+    return "bg-success";
   }
 
-  return "bg-af-border-strong";
+  return "bg-outline-variant";
 }

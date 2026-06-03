@@ -447,7 +447,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       screen
         .getByTestId("graph-background")
         .getAttribute("data-background-color"),
-    ).toBe("var(--color-af-edge-muted-soft)");
+    ).toBe("var(--color-outline)");
     expect(
       screen
         .getByTestId("graph-background")
@@ -460,12 +460,12 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     ).toBe("1");
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
-    ).toContain('"backgroundColor":"var(--color-af-graph-controls-surface)"');
+    ).toContain('"backgroundColor":"var(--color-surface)"');
     expect(
       screen.getByTestId("graph-controls").getAttribute("data-controls-style"),
     ).toContain('"borderRadius":8');
     expect(screen.getByTestId("connection-line-style").textContent).toContain(
-      '"stroke":"var(--color-af-accent)"',
+      '"stroke":"var(--color-primary)"',
     );
   });
 

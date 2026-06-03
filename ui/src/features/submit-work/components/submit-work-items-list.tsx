@@ -17,11 +17,11 @@ import { FileSubmissionItemEditor } from "./submit-work-file-input";
 
 const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const HELP_TEXT_CLASS = cn(
-  "max-w-xl leading-relaxed text-af-text-muted",
+  "max-w-xl leading-relaxed text-on-surface-variant",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const VALIDATION_TEXT_CLASS = cn(
-  "text-af-danger-text",
+  "text-on-error-container",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export function SubmissionItemsList({
@@ -56,7 +56,7 @@ export function SubmissionItemsList({
             headerActions={
               <DashboardIconButtonShell
                 aria-label={messages.removeItemLabel(typeLabel, index + 1)}
-                className="text-af-text-subtle hover:border-af-danger-border hover:bg-af-danger-surface hover:text-af-danger-text"
+                className="text-on-surface-subtle hover:border-af-danger-border hover:bg-error-container hover:text-on-error-container"
                 disabled={controlsDisabled}
                 onClick={() => {
                   if (controlsDisabled) {

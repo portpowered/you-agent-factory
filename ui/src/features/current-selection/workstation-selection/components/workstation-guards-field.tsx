@@ -44,7 +44,7 @@ export function EditableConfigurationWorkstationGuardsField({
         {messages.workstationGuardsHeading}
       </h5>
       {guards.length === 0 ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.workstationGuardsEmpty}
         </p>
       ) : (
@@ -139,16 +139,16 @@ function WorkstationGuardRow({
   return (
     <article
       aria-labelledby={`${rowId}-heading`}
-      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
+      className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid min-w-0 gap-1">
-          <h6 className="m-0 text-sm text-af-text" id={`${rowId}-heading`}>
+          <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
             {messages.localizeWorkstationGuardType(guard.type)}
           </h6>
           <p
             className={cn(
-              "m-0 text-af-text-subtle",
+              "m-0 text-on-surface-subtle",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -215,7 +215,7 @@ function VisitCountGuardFields({
         </label>
         {workstationOptionsState.status === "error" ? (
           <p
-            className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
             role="alert"
           >
             {messages.editableConfigurationWorkstationUnavailablePrefix}{" "}
@@ -224,7 +224,7 @@ function VisitCountGuardFields({
         ) : null}
         {workstationOptionsState.status === "empty" ? (
           <p
-            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
           >
             {workstationOptionsState.message}
           </p>
@@ -365,7 +365,7 @@ function MatchesFieldsGuardFields({
 function GuardFieldError({ message }: { message: string }) {
   return (
     <p
-      className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn("m-0 text-on-error-container", DASHBOARD_SUPPORTING_TEXT_CLASS)}
       role="alert"
     >
       {message}

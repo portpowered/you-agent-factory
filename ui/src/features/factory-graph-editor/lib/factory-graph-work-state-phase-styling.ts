@@ -19,13 +19,13 @@ export const WORK_STATE_PHASE_LEGEND_ORDER = [
   "FAILED",
 ] as const satisfies readonly FactoryGraphWorkStateType[];
 
-const NEUTRAL_WORK_STATE_SURFACE = "border-af-border-strong bg-af-surface-raised";
+const NEUTRAL_WORK_STATE_SURFACE = "border-outline-variant bg-surface-container-high";
 
 const WORK_STATE_PHASE_SURFACE: Record<FactoryGraphWorkStateType, string> = {
-  INITIAL: "border-af-info-border bg-af-info-surface",
-  PROCESSING: "border-af-warning-border bg-af-warning-surface",
-  TERMINAL: "border-af-success-border bg-af-success-surface",
-  FAILED: "border-af-danger-border bg-af-danger-surface",
+  INITIAL: "border-info-border bg-info-container",
+  PROCESSING: "border-af-warning-border bg-warning-container",
+  TERMINAL: "border-af-success-border bg-success-container",
+  FAILED: "border-af-danger-border bg-error-container",
 };
 
 const WORK_STATE_PHASE_ICON_KIND: Record<
@@ -39,10 +39,10 @@ const WORK_STATE_PHASE_ICON_KIND: Record<
 };
 
 const WORK_STATE_PHASE_ICON_CLASS: Record<FactoryGraphWorkStateType, string> = {
-  INITIAL: "text-af-info",
-  PROCESSING: "text-af-warning",
-  TERMINAL: "text-af-success",
-  FAILED: "text-af-danger",
+  INITIAL: "text-info",
+  PROCESSING: "text-warning",
+  TERMINAL: "text-success",
+  FAILED: "text-error",
 };
 
 export function workStatePhaseSwatchClassName(
@@ -75,7 +75,7 @@ export function workStatePhaseSemanticIconClassName(
   workStateType: FactoryGraphWorkStateType | undefined,
 ): string {
   if (!workStateType) {
-    return "text-af-text-muted";
+    return "text-on-surface-variant";
   }
 
   return WORK_STATE_PHASE_ICON_CLASS[workStateType];

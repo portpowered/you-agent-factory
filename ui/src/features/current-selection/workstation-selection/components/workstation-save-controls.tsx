@@ -68,8 +68,8 @@ export function EditableWorkstationSaveHeaderAction({
       className={
         emphasizeSave
           ? cn(
-              "border-af-warning-border bg-af-warning-surface text-af-warning-text",
-              "hover:border-af-warning hover:bg-af-warning hover:text-af-on-warning",
+              "border-af-warning-border bg-warning-container text-on-warning-container",
+              "hover:border-af-warning hover:bg-warning hover:text-on-warning",
             )
           : undefined
       }

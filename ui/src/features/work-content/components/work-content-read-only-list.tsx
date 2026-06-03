@@ -102,7 +102,7 @@ function StatusMessage({
     <p
       className={cn(
         "m-0",
-        tone === "warning" ? "text-af-warning-text" : "text-af-text-muted",
+        tone === "warning" ? "text-on-warning-container" : "text-on-surface-variant",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
     >

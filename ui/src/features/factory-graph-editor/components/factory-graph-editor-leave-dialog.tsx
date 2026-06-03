@@ -55,7 +55,7 @@ export function FactoryGraphEditorLeaveDialog({
             {messages.leaveDialogDescription}
           </DialogDescription>
         </DialogHeader>
-        <p className="m-0 text-sm text-af-text-muted">
+        <p className="m-0 text-sm text-on-surface-variant">
           {messages.leaveDialogBody}
         </p>
         <DialogFooter>

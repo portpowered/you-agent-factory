@@ -75,7 +75,7 @@ export function ResourceEditableConfigurationSection({
             {state?.status === "loading" ? (
               <p
                 className={cn(
-                  "m-0 text-af-text-muted",
+                  "m-0 text-on-surface-variant",
                   DASHBOARD_BODY_TEXT_CLASS,
                 )}
               >
@@ -85,7 +85,7 @@ export function ResourceEditableConfigurationSection({
             {state?.status === "error" ? (
               <p
                 className={cn(
-                  "m-0 text-af-danger-text",
+                  "m-0 text-on-error-container",
                   DASHBOARD_BODY_TEXT_CLASS,
                 )}
                 role="alert"
@@ -96,7 +96,7 @@ export function ResourceEditableConfigurationSection({
             {state?.status === "empty" ? (
               <p
                 className={cn(
-                  "m-0 text-af-text-muted",
+                  "m-0 text-on-surface-variant",
                   DASHBOARD_BODY_TEXT_CLASS,
                 )}
               >
@@ -153,7 +153,7 @@ function ResourceEditableConfigurationReadyForm({
       />
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
           role="alert"
         >
           {validationErrors.contract}
@@ -172,7 +172,7 @@ function ResourceEditableConfigurationReadyForm({
               validationErrors.name ? "editable-resource-name-error" : undefined
             }
             aria-invalid={validationErrors.name ? "true" : undefined}
-            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-resource-name"
             onChange={(event) => state.onNameChange(event.target.value)}
             type="text"
@@ -200,7 +200,7 @@ function ResourceEditableConfigurationReadyForm({
                   : undefined
               }
               aria-invalid={validationErrors.capacity ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-capacity"
               inputMode="numeric"
               onChange={(event) => state.onCapacityChange(event.target.value)}
@@ -293,7 +293,7 @@ function ResourceTypeSpecificFields({
                   : undefined
               }
               aria-invalid={validationErrors.model ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-model"
               onChange={(event) => state.onModelChange(event.target.value)}
               type="text"
@@ -320,7 +320,7 @@ function ResourceTypeSpecificFields({
                   : undefined
               }
               aria-invalid={validationErrors.backend ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-backend"
               onChange={(event) => state.onBackendChange(event.target.value)}
               type="text"
@@ -347,7 +347,7 @@ function ResourceTypeSpecificFields({
                   : undefined
               }
               aria-invalid={validationErrors.loadPolicy ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-load-policy"
               onChange={(event) => state.onLoadPolicyChange(event.target.value)}
               type="text"
@@ -380,7 +380,7 @@ function ResourceTypeSpecificFields({
                 : undefined
             }
             aria-invalid={validationErrors.provider ? "true" : undefined}
-            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-resource-provider"
             onChange={(event) => state.onProviderChange(event.target.value)}
             type="text"
@@ -428,7 +428,7 @@ function ResourceRuntimeContextSection({
             <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
               {messages.tokenCountFieldLabel}
             </span>
-            <span className={cn("m-0 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+            <span className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
               {String(tokenCount)}
             </span>
           </div>
@@ -444,13 +444,13 @@ function ResourceRuntimeContextSection({
           title={messages.referencingWorkersHeading}
         />
         {workerNames.length > 0 ? (
-          <p className={cn("m-0 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
             {formatList(workerNames)}
           </p>
         ) : (
           <p
             className={cn(
-              "m-0 text-af-text-muted",
+              "m-0 text-on-surface-variant",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -468,13 +468,13 @@ function ResourceRuntimeContextSection({
           title={messages.referencingWorkstationsHeading}
         />
         {workstationNames.length > 0 ? (
-          <p className={cn("m-0 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
             {formatList(workstationNames)}
           </p>
         ) : (
           <p
             className={cn(
-              "m-0 text-af-text-muted",
+              "m-0 text-on-surface-variant",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -505,14 +505,14 @@ function ResourceEditableConfigurationOverwriteWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-on-warning-container", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -538,7 +538,7 @@ function ResourceEditableConfigurationServerChangedHint({
   return (
     <p
       className={cn(
-        "m-0 text-af-warning-text",
+        "m-0 text-on-warning-container",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
     >
@@ -565,7 +565,7 @@ function ResourceEditableConfigurationSharedImpactWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-af-warning-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-on-warning-container", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationSharedImpactWarning(
@@ -576,7 +576,7 @@ function ResourceEditableConfigurationSharedImpactWarning({
       </p>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -600,14 +600,14 @@ function ResourceEditableConfigurationDraftStatus({
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationValidationStatus}
       </p>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -640,7 +640,7 @@ function ResourceEditableConfigurationField({
       {errorMessage ? (
         <p
           className={cn(
-            "m-0 text-af-danger-text",
+            "m-0 text-on-error-container",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}

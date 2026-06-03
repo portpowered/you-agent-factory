@@ -309,7 +309,7 @@ describe("TraceWorkstationPath explicit lineage", () => {
       screen
         .getByTestId("trace-react-flow-background")
         .getAttribute("data-background-color"),
-    ).toBe("var(--color-af-edge-muted-soft)");
+    ).toBe("var(--color-outline)");
     expect(
       screen
         .getByTestId("trace-react-flow-background")
@@ -324,7 +324,7 @@ describe("TraceWorkstationPath explicit lineage", () => {
       screen
         .getByTestId("trace-react-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain('"backgroundColor":"var(--color-af-graph-controls-surface)"');
+    ).toContain('"backgroundColor":"var(--color-surface)"');
     expect(
       screen
         .getByTestId("trace-react-flow-controls")
@@ -525,16 +525,16 @@ describe("TraceWorkstationPath semantics", () => {
       throw new Error("Expected accepted workstation node to render.");
     }
     expect(acceptedNode.className).toContain("border-af-success-border");
-    expect(acceptedNode.className).toContain("bg-af-success-surface");
+    expect(acceptedNode.className).toContain("bg-success-container");
 
     const failedNode = screen.getByText("dispatch-repair").closest("article");
     if (!failedNode) {
       throw new Error("Expected failed workstation node to render.");
     }
     expect(failedNode.className).toContain("border-af-danger-border");
-    expect(failedNode.className).toContain("bg-af-danger-surface");
+    expect(failedNode.className).toContain("bg-error-container");
 
     const inputSummary = screen.getAllByText(/^In:/)[0];
-    expect(inputSummary.className).toContain("text-af-text-muted");
+    expect(inputSummary.className).toContain("text-on-surface-variant");
   });
 });

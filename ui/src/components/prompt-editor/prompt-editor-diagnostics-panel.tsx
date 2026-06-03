@@ -9,7 +9,7 @@ import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-messag
 import type { PromptEditorDiagnostic } from "./prompt-editor-types";
 
 const PROMPT_EDITOR_CODE_SUBTLE_CLASS = cn(
-  "text-xs text-af-text-muted",
+  "text-xs text-on-surface-variant",
   DASHBOARD_BODY_CODE_CLASS,
 );
 const PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS =
@@ -131,7 +131,7 @@ export function PromptEditorDiagnosticsPanel({
                 </code>
               ) : null}
               {diagnostic.sourceText ? (
-                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-af-border bg-af-surface-subtle p-2 text-xs text-af-text-muted [overflow-wrap:anywhere]">
+                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-outline bg-surface-container-low p-2 text-xs text-on-surface-variant [overflow-wrap:anywhere]">
                   {diagnostic.sourceText}
                 </pre>
               ) : null}

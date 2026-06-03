@@ -1105,9 +1105,9 @@ describe("DashboardSessionTabs", () => {
       name: "Close beta session",
     });
 
-    expect(betaCloseButton.className).toContain("text-af-text-disabled");
+    expect(betaCloseButton.className).toContain("text-on-surface-disabled");
     expect(betaCloseButton.className).toContain(
-      "group-hover:text-af-text-muted",
+      "group-hover:text-on-surface-variant",
     );
     expect(betaCloseButton.className).toContain(
       "focus-visible:ring-af-focus-ring",
@@ -1320,21 +1320,21 @@ function sessionTabShell(tab: HTMLElement): HTMLElement {
 }
 
 function expectSubtleActiveSessionTabShell(shell: HTMLElement) {
-  expect(shell.className).toContain("bg-af-surface-subtle");
-  expect(shell.className).toContain("text-af-text");
-  expect(shell.className.includes("border-af-border-strong")).toBe(false);
-  expect(shell.className.includes("bg-af-surface-raised")).toBe(false);
-  expect(shell.className.includes("bg-af-accent")).toBe(false);
-  expect(shell.className.includes("bg-af-accent-surface")).toBe(false);
+  expect(shell.className).toContain("bg-surface-container-low");
+  expect(shell.className).toContain("text-on-surface");
+  expect(shell.className.includes("border-outline-variant")).toBe(false);
+  expect(shell.className.includes("bg-surface-container-high")).toBe(false);
+  expect(shell.className.includes("bg-primary")).toBe(false);
+  expect(shell.className.includes("bg-primary-container")).toBe(false);
 }
 
 function expectMutedInactiveSessionTabShell(shell: HTMLElement) {
-  expect(shell.className).toContain("text-af-text-muted");
-  expect(shell.className.includes("bg-af-surface-subtle")).toBe(false);
-  expect(shell.className.includes("bg-af-surface-raised")).toBe(false);
-  expect(shell.className.includes("bg-af-accent")).toBe(false);
-  expect(shell.className.includes("bg-af-accent-surface")).toBe(false);
-  expect(shell.className.includes("hover:border-af-border")).toBe(false);
+  expect(shell.className).toContain("text-on-surface-variant");
+  expect(shell.className.includes("bg-surface-container-low")).toBe(false);
+  expect(shell.className.includes("bg-surface-container-high")).toBe(false);
+  expect(shell.className.includes("bg-primary")).toBe(false);
+  expect(shell.className.includes("bg-primary-container")).toBe(false);
+  expect(shell.className.includes("hover:border-outline")).toBe(false);
 }
 
 function renderWithQueryClient(view: React.ReactElement) {

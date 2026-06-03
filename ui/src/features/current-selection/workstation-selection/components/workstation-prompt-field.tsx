@@ -139,7 +139,7 @@ function EditableConfigurationPromptFeedback({
     return (
       <p
         className={cn(
-          "m-0 text-af-danger-text",
+          "m-0 text-on-error-container",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
         role="alert"
@@ -314,7 +314,7 @@ function EditableConfigurationPromptAutocompleteDetails({
     <>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -370,7 +370,7 @@ function PromptContractList({
       <ul className="m-0 grid list-none gap-1 p-0">
         {items.map((item) => (
           <li
-            className="grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-raised p-2"
+            className="grid min-w-0 gap-1 rounded-lg border border-outline bg-surface-container-high p-2"
             key={item.key}
           >
             <code
@@ -383,7 +383,7 @@ function PromptContractList({
             </code>
             <p
               className={cn(
-                "m-0 text-af-text-subtle [overflow-wrap:anywhere]",
+                "m-0 text-on-surface-subtle [overflow-wrap:anywhere]",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
             >

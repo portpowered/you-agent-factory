@@ -42,7 +42,7 @@ export function ExportFactoryDialogImageField({
           ) : null}
           {imageValidationMessage ? (
             <p
-              className="m-0 text-sm font-medium text-af-danger-text"
+              className="m-0 text-sm font-medium text-on-error-container"
               id={imageValidationId}
             >
               {imageValidationMessage}
@@ -79,7 +79,7 @@ export function ExportFactoryDialogImageField({
       label={
         <label
           className={cn(
-            "block text-sm font-semibold text-af-text",
+            "block text-sm font-semibold text-on-surface",
             DASHBOARD_SUPPORTING_LABELS_CLASS,
           )}
           htmlFor="export-factory-image"

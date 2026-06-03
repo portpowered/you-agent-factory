@@ -26,7 +26,7 @@ function OperationKindBadge({ label }: { label: string }) {
     <span
       className={cn(
         CURRENT_SELECTION_BADGE_CLASS,
-        "border-af-info-border bg-af-info-surface text-af-info",
+        "border-info-border bg-info-container text-info",
       )}
     >
       {label}
@@ -39,7 +39,7 @@ export function WorkstationOperationKindBadge({ label }: { label: string }) {
     <span
       className={cn(
         CURRENT_SELECTION_BADGE_CLASS,
-        "border-af-border bg-af-surface-raised text-af-text-muted",
+        "border-outline bg-surface-container-high text-on-surface-variant",
       )}
     >
       {label}
@@ -135,7 +135,7 @@ export function LogicalMoveDispatchHistoryCard({
       className={cn(
         PROVIDER_SESSION_CARD_CLASS,
         isCurrentDispatch &&
-          "border-af-accent-border bg-af-accent-surface text-af-text",
+          "border-primary bg-primary-container text-on-surface",
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -146,7 +146,7 @@ export function LogicalMoveDispatchHistoryCard({
           <div className="flex flex-wrap items-center gap-2">
             <p
               className={cn(
-                "m-0 text-af-text-muted",
+                "m-0 text-on-surface-variant",
                 DASHBOARD_BODY_TEXT_CLASS,
               )}
             >

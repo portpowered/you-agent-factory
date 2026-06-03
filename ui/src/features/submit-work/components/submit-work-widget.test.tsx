@@ -183,7 +183,7 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(
       screen.queryByText("Ready to submit. Request details are optional."),
     ).toBeNull();
-    expect(submitButton.className).toContain("bg-af-accent");
+    expect(submitButton.className).toContain("bg-primary");
   });
 
   it("shows inline validation and skips the network request when the draft is incomplete", async () => {
@@ -382,10 +382,10 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       throw new Error("expected image upload dropzone label");
     }
     expect(dropzone.className).toContain("border-dashed");
-    expect(dropzone.className).toContain("border-af-border-strong");
-    expect(dropzone.className).toContain("bg-af-surface-subtle");
-    expect(dropzone.className).not.toContain("bg-af-accent-surface");
-    expect(dropzone.className).not.toContain("border-af-accent-border");
+    expect(dropzone.className).toContain("border-outline-variant");
+    expect(dropzone.className).toContain("bg-surface-container-low");
+    expect(dropzone.className).not.toContain("bg-primary-container");
+    expect(dropzone.className).not.toContain("border-primary");
 
     fireEvent.dragOver(dropzone, {
       dataTransfer: {
@@ -396,8 +396,8 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     });
     expect(screen.getByText("Drop the image file to stage it.")).toBeTruthy();
     expect(dropzone.className).toContain("bg-af-overlay");
-    expect(dropzone.className).not.toContain("bg-af-accent-surface");
-    expect(dropzone.className).not.toContain("border-af-accent-border");
+    expect(dropzone.className).not.toContain("bg-primary-container");
+    expect(dropzone.className).not.toContain("border-primary");
 
     view.unmount();
     render(
@@ -1185,7 +1185,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "Sending your request...",
     );
-    expect(submittingStatus.className).toContain("text-af-text");
+    expect(submittingStatus.className).toContain("text-on-surface");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,

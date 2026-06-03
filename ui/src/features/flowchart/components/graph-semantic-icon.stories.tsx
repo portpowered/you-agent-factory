@@ -15,21 +15,21 @@ export default {
 
 export const Vocabulary = {
   render: () => (
-    <div className="grid max-w-3xl grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 bg-af-bg p-4 text-af-ink">
+    <div className="grid max-w-3xl grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 bg-background p-4 text-on-surface">
       {GRAPH_SEMANTIC_ICON_KINDS.map((kind) => (
         <div
-          className="flex items-center gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
+          className="flex items-center gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
           key={kind}
         >
-          <GraphSemanticIcon className="h-5 w-5 text-af-info" kind={kind} />
+          <GraphSemanticIcon className="h-5 w-5 text-info" kind={kind} />
           <span className="text-sm font-bold">
             {graphSemanticIconLabel(kind)}
           </span>
         </div>
       ))}
-      <div className="flex items-center gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3">
+      <div className="flex items-center gap-2 rounded-lg border border-outline bg-surface-container-high p-3">
         <GraphSemanticIcon
-          className="h-5 w-5 text-af-accent"
+          className="h-5 w-5 text-primary"
           kind="future-node-kind"
         />
         <span className="text-sm font-bold">Fallback</span>

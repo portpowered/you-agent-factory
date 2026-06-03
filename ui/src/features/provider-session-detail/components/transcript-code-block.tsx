@@ -33,7 +33,7 @@ export function ExpandableCodeBlock({
             aria-controls={panelID}
             aria-expanded={expanded}
             className={cn(
-              "inline-flex w-fit rounded-lg border border-af-border bg-af-surface-raised px-2.5 py-2 text-af-text-muted transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
+              "inline-flex w-fit rounded-lg border border-outline bg-surface-container-high px-2.5 py-2 text-on-surface-variant transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
             onClick={() => setExpanded((current) => !current)}
@@ -60,7 +60,7 @@ export function CodePanel({ value }: { value: string }) {
   return (
     <pre
       className={cn(
-        "m-0 whitespace-pre-wrap rounded-lg border border-af-border bg-af-surface-subtle p-3 [overflow-wrap:anywhere]",
+        "m-0 whitespace-pre-wrap rounded-lg border border-outline bg-surface-container-low p-3 [overflow-wrap:anywhere]",
         DASHBOARD_BODY_CODE_CLASS,
       )}
     >

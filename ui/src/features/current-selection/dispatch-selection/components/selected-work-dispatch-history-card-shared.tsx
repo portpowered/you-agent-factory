@@ -69,7 +69,7 @@ export function DispatchDetailSection({
   return (
     <section
       aria-label={title}
-      className="mt-3 grid gap-2 border-t border-af-border pt-3"
+      className="mt-3 grid gap-2 border-t border-outline pt-3"
     >
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{title}</span>
       {children}
@@ -139,7 +139,7 @@ export function WorkItemActionGroup({
             className={cn(
               WORK_SELECTION_BUTTON_CLASS,
               selectedWorkID === workItem.work_id &&
-                "border-af-accent-border bg-af-accent-surface text-af-text",
+                "border-primary bg-primary-container text-on-surface",
             )}
             key={`${label}-${workItem.work_id}`}
             onClick={() => onSelectWorkID?.(workItem.work_id)}

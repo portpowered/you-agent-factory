@@ -13,10 +13,10 @@ import {
   type HandleAssignments,
 } from "./react-flow-current-activity-card-graph";
 
-const EDGE_STROKE_MUTED = "var(--color-af-edge-muted)";
-const EDGE_STROKE_SOFT = "var(--color-af-edge-muted-soft)";
+const EDGE_STROKE_MUTED = "var(--color-outline-variant)";
+const EDGE_STROKE_SOFT = "var(--color-outline)";
 const EDGE_STROKE_DANGER_MUTED = "var(--color-af-edge-danger-muted)";
-const EDGE_STROKE_ACTIVE = "var(--color-af-success)";
+const EDGE_STROKE_ACTIVE = "var(--color-success)";
 
 function edgeIsFailure(edge: PositionedEdge): boolean {
   return edge.outcomeKind === "failed" || edge.stateCategory === "FAILED";
@@ -127,13 +127,13 @@ export function buildGraphEdges(
       id: edge.edgeId,
       label: edgeLabel(edge, activeFlow),
       labelBgStyle: {
-        fill: "var(--color-af-surface)",
+        fill: "var(--color-surface)",
         fillOpacity: activeFlow || semantic ? 0.92 : 0,
       },
-      labelStyle: { fill: "var(--color-af-text)" },
+      labelStyle: { fill: "var(--color-on-surface)" },
       markerEnd: {
         color: pendingAddition
-          ? "var(--color-af-warning-text)"
+          ? "var(--color-on-warning-container)"
           : edgeMarkerColor(edge, activeFlow),
         type: MarkerType.ArrowClosed,
       },
@@ -141,7 +141,7 @@ export function buildGraphEdges(
       sourceHandle: handleAssignments.sourceHandlesByEdgeId.get(edge.edgeId),
       style: pendingAddition
         ? {
-            stroke: "var(--color-af-warning-text)",
+            stroke: "var(--color-on-warning-container)",
             strokeDasharray: "9 4",
             strokeWidth: 2,
           }

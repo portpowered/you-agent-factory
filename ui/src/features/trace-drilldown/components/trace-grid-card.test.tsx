@@ -220,8 +220,8 @@ describe("TraceGridBentoCard ready state", () => {
       );
     }
     expect(dispatchPill.className).toContain(DASHBOARD_SUPPORTING_CODE_CLASS);
-    expect(dispatchPill.className).toContain("border-af-info-border");
-    expect(dispatchPill.className).toContain("bg-af-info-surface");
+    expect(dispatchPill.className).toContain("border-info-border");
+    expect(dispatchPill.className).toContain("bg-info-container");
     expect(dispatchPill.className).toContain("py-0.5");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
@@ -305,7 +305,7 @@ describe("TraceGridBentoCard work item selection", () => {
       name: "(story):Active Story",
     });
     expect(activeStoryButtons[0]?.className).toContain(
-      "border-af-accent-border",
+      "border-primary",
     );
 
     fireEvent.click(activeStoryButtons[0]);

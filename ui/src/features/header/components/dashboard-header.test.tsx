@@ -190,7 +190,7 @@ describe("DashboardHeader", () => {
       "rounded-t-2xl",
     );
     expect(slider.closest("div")?.parentElement?.className).toContain(
-      "bg-af-surface-subtle",
+      "bg-surface-container-low",
     );
     expect(slider.closest("div")?.parentElement?.className).toContain("w-full");
     expect(slider.closest("div")?.className).toContain("md:flex-nowrap");

@@ -49,7 +49,7 @@ function renderWorkContentPart(part: WorkContentPart, index: number) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-af-border bg-af-surface-raised p-3 text-af-text-muted",
+        "rounded-lg border border-outline bg-surface-container-high p-3 text-on-surface-variant",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
       key={`work-content-part-${index}`}

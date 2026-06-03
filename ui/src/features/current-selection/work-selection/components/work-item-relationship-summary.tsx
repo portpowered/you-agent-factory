@@ -26,13 +26,13 @@ export function FocusedRelationshipSummary({
   return (
     <section
       aria-label={messages.relationshipFocusSummaryHeading}
-      className="grid gap-3 rounded-xl border border-af-border bg-af-surface-raised p-3"
+      className="grid gap-3 rounded-xl border border-outline bg-surface-container-high p-3"
     >
       <div className="grid gap-1">
         <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.relationshipFocusSummaryHeading}
         </span>
-        <code className="min-w-0 break-words text-sm leading-5 text-af-text">
+        <code className="min-w-0 break-words text-sm leading-5 text-on-surface">
           {node.label}
         </code>
       </div>

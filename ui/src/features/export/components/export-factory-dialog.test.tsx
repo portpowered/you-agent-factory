@@ -112,11 +112,11 @@ describe("ExportFactoryDialog", () => {
     expect(screen.getByText(messages.hint)).toBeTruthy();
     expect(screen.getByText(messages.nameDescription)).toBeTruthy();
     const imageInput = screen.getByLabelText(messages.imageLabel);
-    expect(imageInput.className).toContain("border-af-border-strong");
-    expect(imageInput.className).toContain("bg-af-surface-subtle");
-    expect(imageInput.className).toContain("file:bg-af-surface-raised");
-    expect(imageInput.className).not.toContain("file:bg-af-accent-surface");
-    expect(imageInput.className).not.toContain("file:text-af-accent");
+    expect(imageInput.className).toContain("border-outline-variant");
+    expect(imageInput.className).toContain("bg-surface-container-low");
+    expect(imageInput.className).toContain("file:bg-surface-container-high");
+    expect(imageInput.className).not.toContain("file:bg-primary-container");
+    expect(imageInput.className).not.toContain("file:text-primary");
   });
 
   it("renders the export cover-image choose-file shell with neutral tokens only", () => {
@@ -125,10 +125,10 @@ describe("ExportFactoryDialog", () => {
 
     const imageInput = screen.getByLabelText(messages.imageLabel);
     expect(imageInput.className).toContain("border-dashed");
-    expect(imageInput.className).toContain("border-af-border-strong");
-    expect(imageInput.className).toContain("bg-af-surface-subtle");
-    expect(imageInput.className).not.toContain("bg-af-accent-surface");
-    expect(imageInput.className).not.toContain("border-af-accent-border");
+    expect(imageInput.className).toContain("border-outline-variant");
+    expect(imageInput.className).toContain("bg-surface-container-low");
+    expect(imageInput.className).not.toContain("bg-primary-container");
+    expect(imageInput.className).not.toContain("border-primary");
   });
 
   it("shows the selected cover image hint and ignores file changes while exporting", async () => {
@@ -299,7 +299,7 @@ describe("ExportFactoryDialog", () => {
     const errorPanel = await screen.findByRole("alert");
     expect(errorPanel.textContent).toContain("PNG encoding failed");
     expect(errorPanel.className).toContain("border-af-danger-border");
-    expect(errorPanel.className).toContain("bg-af-danger-surface");
+    expect(errorPanel.className).toContain("bg-error-container");
     expect(screen.getByRole("dialog", { name: messages.title })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: messages.cancelAction }),

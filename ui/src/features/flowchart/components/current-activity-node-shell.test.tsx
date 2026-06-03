@@ -47,7 +47,7 @@ describe("ActivityGraphNodeShell z-axis incomplete hints", () => {
       expect(hint.getAttribute("title")).toBe(Z_AXIS_HINT.title);
       expect(hint.className).toContain("pointer-events-none");
       const orb = hint.querySelector("span[aria-hidden='true']");
-      expect(orb?.className).toContain("bg-af-danger");
+      expect(orb?.className).toContain("bg-error");
       expect(orb?.className).toContain("animate-pulse");
       expect(orb?.className).toContain("border-af-danger-border");
     }

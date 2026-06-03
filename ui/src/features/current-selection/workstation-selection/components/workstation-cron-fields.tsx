@@ -150,7 +150,7 @@ function EditableConfigurationCronField({
       {input}
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
         id={`${fieldId}-hint`}
@@ -165,7 +165,7 @@ function EditableConfigurationCronField({
       {errorMessage ? (
         <p
           className={cn(
-            "m-0 text-af-danger-text",
+            "m-0 text-on-error-container",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}
@@ -196,14 +196,14 @@ function EditableConfigurationCronTriggerAtStartField({
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
       <label
         className={cn(
-          "inline-flex items-center gap-2 text-af-text",
+          "inline-flex items-center gap-2 text-on-surface",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
         htmlFor={fieldId}
       >
         <input
           checked={cron.triggerAtStart}
-          className="size-4 rounded border border-af-border"
+          className="size-4 rounded border border-outline"
           id={fieldId}
           onChange={(event) =>
             state.onCronTriggerAtStartChange(event.target.checked)
@@ -220,7 +220,7 @@ function EditableConfigurationCronTriggerAtStartField({
       {state.validationErrors.cronTriggerAtStart ? (
         <p
           className={cn(
-            "m-0 text-af-danger-text",
+            "m-0 text-on-error-container",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}

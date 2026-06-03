@@ -34,8 +34,8 @@ describe("EditableConfigurationSaveRow", () => {
     const saveButton = screen.getByRole("button", { name: "Save changes" });
     expect(saveButton).toBeEnabled();
     expect(saveButton.className).toContain("border-af-warning-border");
-    expect(saveButton.className).toContain("bg-af-warning-surface");
-    expect(saveButton.className).toContain("text-af-warning-text");
+    expect(saveButton.className).toContain("bg-warning-container");
+    expect(saveButton.className).toContain("text-on-warning-container");
   });
 
   it("shows busy label text and aria-busy while saving", () => {

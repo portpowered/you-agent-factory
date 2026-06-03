@@ -469,7 +469,7 @@ function buildPlaceNodeShell(
   input: BuildCurrentActivityNodesInput,
 ) {
   return {
-    className: "border-0 bg-transparent p-0 text-af-text",
+    className: "border-0 bg-transparent p-0 text-on-surface",
     draggable: true,
     height: positionedNode.height,
     id: positionedNode.nodeId,
@@ -692,7 +692,7 @@ function buildWorkstationNode(
   );
 
   return {
-    className: "border-0 bg-transparent p-0 text-af-text",
+    className: "border-0 bg-transparent p-0 text-on-surface",
     data: {
       active: executions.length > 0,
       activeFlow: input.activeGraphHighlights.activeWorkstationNodeIds.has(

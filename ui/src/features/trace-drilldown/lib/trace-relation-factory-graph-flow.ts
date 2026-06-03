@@ -151,20 +151,20 @@ function relationEdgeStroke(relation: DashboardWorkRelation): string {
   if (relation.required_state) {
     const tone = relationStateToneClassName(relation.required_state);
     if (tone === "danger") {
-      return "var(--color-af-danger-text)";
+      return "var(--color-on-error-container)";
     }
     if (tone === "success") {
-      return "var(--color-af-success)";
+      return "var(--color-success)";
     }
 
-    return "var(--color-af-warning-text)";
+    return "var(--color-on-warning-container)";
   }
 
   if (relation.type === "PARENT_CHILD") {
-    return "var(--color-af-accent)";
+    return "var(--color-primary)";
   }
 
-  return "var(--color-af-edge-muted)";
+  return "var(--color-outline-variant)";
 }
 
 function relationEdgeStyle(relation: DashboardWorkRelation) {

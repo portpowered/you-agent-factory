@@ -70,7 +70,7 @@ function LoadedProviderSessionDetailPanel({
     <section
       aria-label={messages.selectedSessionHeading}
       className={cn(
-        "mt-4 grid gap-3 border-t border-af-border pt-4",
+        "mt-4 grid gap-3 border-t border-outline pt-4",
         PROVIDER_SESSION_SANS_CLASS,
       )}
     >
@@ -227,8 +227,8 @@ function StatusNotice({
       className={cn(
         "m-0 rounded-lg border px-3 py-2.5",
         tone === "error"
-          ? "border-af-danger-border bg-af-danger-surface text-af-danger-text"
-          : "border-af-border bg-af-surface-subtle text-af-text-muted",
+          ? "border-af-danger-border bg-error-container text-on-error-container"
+          : "border-outline bg-surface-container-low text-on-surface-variant",
         DASHBOARD_BODY_TEXT_CLASS,
       )}
       role={tone === "error" ? "alert" : "status"}
@@ -365,7 +365,7 @@ function TurnsSection({
                 <strong>{messages.turnLabel({ index: turn.index })}</strong>
                 <div
                   className={cn(
-                    "text-af-text-subtle",
+                    "text-on-surface-subtle",
                     DASHBOARD_SUPPORTING_TEXT_CLASS,
                   )}
                 >
@@ -455,7 +455,7 @@ function ParseDiagnosticsSection({
               </strong>
               <p
                 className={cn(
-                  "m-0 mt-1.5 text-af-text-subtle",
+                  "m-0 mt-1.5 text-on-surface-subtle",
                   DASHBOARD_SUPPORTING_TEXT_CLASS,
                 )}
               >
@@ -484,12 +484,12 @@ function SecondarySection({
   heading: string;
 }) {
   return (
-    <section className="grid gap-4 rounded-xl border border-af-border bg-af-surface-subtle p-4">
+    <section className="grid gap-4 rounded-xl border border-outline bg-surface-container-low p-4">
       <div className="grid gap-1">
         <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{heading}</h5>
         <p
           className={cn(
-            "m-0 text-af-text-subtle",
+            "m-0 text-on-surface-subtle",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
         >
@@ -563,7 +563,7 @@ function TimestampMetricValue({
       <details className="grid gap-1">
         <summary
           className={cn(
-            "w-fit cursor-pointer text-af-text-subtle underline decoration-dotted underline-offset-2",
+            "w-fit cursor-pointer text-on-surface-subtle underline decoration-dotted underline-offset-2",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
         >
@@ -571,7 +571,7 @@ function TimestampMetricValue({
         </summary>
         <code
           className={cn(
-            "w-fit rounded-md border border-af-border bg-af-surface-subtle px-2 py-1",
+            "w-fit rounded-md border border-outline bg-surface-container-low px-2 py-1",
             DASHBOARD_BODY_CODE_CLASS,
           )}
         >

@@ -24,11 +24,11 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 const SESSION_DIALOG_ERROR_CLASS =
-  "rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text";
+  "rounded-xl border border-af-danger-border bg-error-container px-3 py-2 text-sm text-on-error-container";
 const SESSION_DIALOG_STATUS_CLASS =
-  "rounded-xl border border-af-accent-border bg-af-accent-surface px-3 py-2 text-sm text-af-text";
+  "rounded-xl border border-primary bg-primary-container px-3 py-2 text-sm text-on-surface";
 const SESSION_TARGET_PICKER_CLASS =
-  "grid gap-3 rounded-2xl border border-af-border bg-af-surface-subtle p-4";
+  "grid gap-3 rounded-2xl border border-outline bg-surface-container-low p-4";
 
 export function OpenSessionDialog({
   dialogError,
@@ -81,7 +81,7 @@ export function OpenSessionDialog({
         <DialogTitle>{messages.openSessionDialogTitle}</DialogTitle>
         <p
           className={cn(
-            "text-sm leading-6 text-af-text-muted",
+            "text-sm leading-6 text-on-surface-variant",
             DASHBOARD_BODY_TEXT_CLASS,
           )}
           id={dialogDescriptionID}
@@ -92,7 +92,7 @@ export function OpenSessionDialog({
       <form className="grid gap-4" onSubmit={onInspectFolder}>
         <div className="grid gap-2">
           <label
-            className="text-xs uppercase tracking-[0.18em] text-af-text-subtle"
+            className="text-xs uppercase tracking-[0.18em] text-on-surface-subtle"
             htmlFor={folderFieldID}
           >
             {messages.sessionFolderFieldLabel}
@@ -113,7 +113,7 @@ export function OpenSessionDialog({
           </div>
           <p
             className={cn(
-              "text-sm text-af-text-muted",
+              "text-sm text-on-surface-variant",
               DASHBOARD_BODY_TEXT_CLASS,
             )}
             id={folderHelperTextID}
@@ -199,7 +199,7 @@ function InitNewFactoryConfirmation({
     >
       <p
         className={cn(
-          "text-sm leading-6 text-af-text",
+          "text-sm leading-6 text-on-surface",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
         id="init-new-factory-confirmation-title"
@@ -208,7 +208,7 @@ function InitNewFactoryConfirmation({
       </p>
       <p
         className={cn(
-          "break-all font-mono text-xs text-af-text-subtle",
+          "break-all font-mono text-xs text-on-surface-subtle",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
       >
@@ -274,10 +274,10 @@ function SessionTargetPicker({
               selected={isSelected}
             >
               <span className="flex min-h-16 w-full flex-col items-start justify-center px-1 py-1 text-sm">
-                <span className="font-semibold text-af-text">
+                <span className="font-semibold text-on-surface">
                   {target.label}
                 </span>
-                <span className="truncate text-xs text-af-text-subtle">
+                <span className="truncate text-xs text-on-surface-subtle">
                   {target.factoryDir}
                 </span>
               </span>

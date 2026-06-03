@@ -79,19 +79,19 @@ export interface SubmitWorkCardProps {
 
 const FIELD_GROUP_CLASS = "grid gap-2";
 const HELP_TEXT_CLASS = cn(
-  "max-w-xl leading-relaxed text-af-text-muted",
+  "max-w-xl leading-relaxed text-on-surface-variant",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const VALIDATION_TEXT_CLASS = cn(
-  "text-af-danger-text",
+  "text-on-error-container",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
-  error: "text-af-danger-text",
-  guidance: "text-af-text-subtle",
-  submitting: "text-af-text",
-  success: "text-af-success-text",
-  "validation-error": "text-af-danger-text",
+  error: "text-on-error-container",
+  guidance: "text-on-surface-subtle",
+  submitting: "text-on-surface",
+  success: "text-on-success-container",
+  "validation-error": "text-on-error-container",
 };
 const ADDABLE_ITEM_TYPES: SubmitWorkDraftItemType[] = [
   "text",
@@ -378,7 +378,7 @@ function AddSubmissionItemMenu({
             return (
               <Button
                 aria-label={typeLabel}
-                className="justify-start border-af-border text-left font-medium"
+                className="justify-start border-outline text-left font-medium"
                 key={itemType}
                 onClick={() => {
                   onAddItem(itemType);

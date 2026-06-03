@@ -6,12 +6,12 @@ import { Input, Select, Textarea } from "../../../components/ui";
 
 export const FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS = "grid gap-2";
 export const FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS =
-  "text-sm font-semibold text-af-text";
+  "text-sm font-semibold text-on-surface";
 export const FACTORY_GRAPH_ADD_FIELD_HELP_CLASS =
-  "m-0 text-xs leading-5 text-af-text-muted";
+  "m-0 text-xs leading-5 text-on-surface-variant";
 export const FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS =
-  "m-0 text-sm text-af-danger-text";
-export const FACTORY_GRAPH_ADD_INPUT_CLASS = "bg-af-surface";
+  "m-0 text-sm text-on-error-container";
+export const FACTORY_GRAPH_ADD_INPUT_CLASS = "bg-surface";
 
 export function FactoryGraphEditorTextareaField({
   error,

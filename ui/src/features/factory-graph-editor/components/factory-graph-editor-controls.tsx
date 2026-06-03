@@ -49,12 +49,12 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 }
 
 const TOOLBAR_ACTIONS_CLASS =
-  "flex items-center gap-2 border-l border-af-border pl-2 max-md:ml-auto";
+  "flex items-center gap-2 border-l border-outline pl-2 max-md:ml-auto";
 const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
+  danger: "border-af-danger-border bg-error-container text-on-error-container",
+  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
   warning:
-    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+    "border-af-warning-border bg-warning-container text-on-warning-container",
 };
 
 export function FactoryGraphEditorToolbar({
@@ -111,7 +111,7 @@ export function FactoryGraphEditorToolbar({
   return (
     <section
       aria-label={messages.toolbarAriaLabel}
-      className="pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0"
+      className="pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-outline bg-surface-container-high px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0"
     >
       {hideShowVisible && onToggleHiddenNodeClass ? (
         <FactoryGraphEditorHideShowMenu
@@ -215,7 +215,7 @@ export function FactoryGraphEditorVisibilityPanel({
   return (
     <section
       aria-label={messages.visibilityPresetsAriaLabel}
-      className="pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
+      className="pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-outline bg-surface-container-high px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
     >
       {options.map((option) => (
         <DashboardActionButton
@@ -324,10 +324,10 @@ function FactoryGraphEditorAddMenu({
         sideOffset={12}
       >
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-text">
+          <p className="m-0 text-sm font-semibold text-on-surface">
             {messages.toolbarVisibilityMenuTitle}
           </p>
-          <p className="m-0 text-xs leading-5 text-af-text-muted">
+          <p className="m-0 text-xs leading-5 text-on-surface-variant">
             {messages.toolbarVisibilityMenuDescription}
           </p>
         </div>
@@ -345,11 +345,11 @@ function FactoryGraphEditorAddMenu({
               tone="ghost"
               type="button"
             >
-              <span className="text-sm font-semibold text-af-text">
+              <span className="text-sm font-semibold text-on-surface">
                 {action.label}
               </span>
               {action.description ? (
-                <span className="text-xs leading-5 text-af-text-muted">
+                <span className="text-xs leading-5 text-on-surface-variant">
                   {action.description}
                 </span>
               ) : null}
@@ -444,9 +444,9 @@ export function FactoryGraphEditorActionPopover({
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="grid gap-3" sideOffset={12}>
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-text">{title}</p>
+          <p className="m-0 text-sm font-semibold text-on-surface">{title}</p>
           {description ? (
-            <p className="m-0 text-xs leading-5 text-af-text-muted">
+            <p className="m-0 text-xs leading-5 text-on-surface-variant">
               {description}
             </p>
           ) : null}

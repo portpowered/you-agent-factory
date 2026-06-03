@@ -130,16 +130,16 @@ const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
   "work-state": 4,
 };
 const EDGE_COLOR_BY_KIND = {
-  "worker-assignment": "var(--color-af-info)",
-  "worker-resource": "var(--color-af-success)",
+  "worker-assignment": "var(--color-info)",
+  "worker-resource": "var(--color-success)",
   "work-type-state": "var(--color-af-overlay)",
-  "workstation-input": "var(--color-af-accent)",
-  "workstation-on-continue": "var(--color-af-info)",
-  "workstation-on-failure": "var(--color-af-danger-text)",
-  "workstation-on-rejection": "var(--color-af-warning-text)",
-  "workstation-output": "var(--color-af-accent)",
-  "workstation-resource": "var(--color-af-success)",
-  "work-state-visibility-bypass": "var(--color-af-accent)",
+  "workstation-input": "var(--color-primary)",
+  "workstation-on-continue": "var(--color-info)",
+  "workstation-on-failure": "var(--color-on-error-container)",
+  "workstation-on-rejection": "var(--color-on-warning-container)",
+  "workstation-output": "var(--color-primary)",
+  "workstation-resource": "var(--color-success)",
+  "work-state-visibility-bypass": "var(--color-primary)",
 } as const;
 const COLUMN_X = 232;
 const ROW_Y = 118;
@@ -376,11 +376,11 @@ function buildFactoryGraphReactFlowEdge(
     interactionWidth: 24,
     markerEnd: {
       color: pendingRemoval
-        ? "var(--color-af-danger-text)"
+        ? "var(--color-on-error-container)"
         : pendingAddition
-          ? "var(--color-af-warning-text)"
+          ? "var(--color-on-warning-container)"
           : active
-            ? "var(--color-af-success)"
+            ? "var(--color-success)"
             : color,
       type: MarkerType.ArrowClosed,
     },
@@ -389,11 +389,11 @@ function buildFactoryGraphReactFlowEdge(
     style: {
       opacity: pendingRemoval ? 0.48 : undefined,
       stroke: pendingRemoval
-        ? "var(--color-af-danger-text)"
+        ? "var(--color-on-error-container)"
         : pendingAddition
-          ? "var(--color-af-warning-text)"
+          ? "var(--color-on-warning-container)"
           : active
-            ? "var(--color-af-success)"
+            ? "var(--color-success)"
             : color,
       strokeDasharray: pendingRemoval
         ? "7 5"

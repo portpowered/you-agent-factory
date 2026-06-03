@@ -54,12 +54,12 @@ interface TimingTrendCardProps {
 }
 
 const TREND_SUMMARY_CLASS = cn(
-  "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-af-border [&_div]:bg-af-surface-subtle [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
+  "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-outline [&_div]:bg-surface-container-low [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
 );
 const TREND_CHART_CLASS = cn(
   DASHBOARD_CHART_SURFACE_CLASS,
-  "min-h-44 border border-af-border",
+  "min-h-44 border border-outline",
 );
 const TREND_SUMMARY_TERM_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
 const TREND_SUMMARY_VALUE_CLASS = WIDGET_SUBTITLE_CLASS;
@@ -98,7 +98,7 @@ export function FailureTrendCard({
           <select
             aria-label={messages.rangeLabel}
             className={cn(
-              "rounded-lg border border-af-accent-border bg-af-surface-raised px-2 py-2 text-af-text",
+              "rounded-lg border border-primary bg-surface-container-high px-2 py-2 text-on-surface",
               DASHBOARD_BODY_TEXT_CLASS,
             )}
             value={rangeID}
@@ -175,18 +175,18 @@ export function FailureTrendCard({
         >
           {model.groups.map((group) => (
             <li
-              className="flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2.5"
+              className="flex items-center justify-between gap-3 rounded-lg border border-outline bg-surface-container-low px-3 py-2.5"
               key={group.label}
             >
               <span
                 className={cn(
-                  "min-w-0 text-af-text-muted [overflow-wrap:anywhere]",
+                  "min-w-0 text-on-surface-variant [overflow-wrap:anywhere]",
                   DASHBOARD_BODY_TEXT_CLASS,
                 )}
               >
                 {group.label}
               </span>
-              <strong className="shrink-0 text-af-danger-text">
+              <strong className="shrink-0 text-on-error-container">
                 {group.count}
               </strong>
             </li>

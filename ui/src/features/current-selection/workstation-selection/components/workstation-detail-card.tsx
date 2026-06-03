@@ -375,7 +375,7 @@ function renderWorkstationRequestStatusPill({
         className={cn(
           "min-h-0",
           !hasFailedOutcome &&
-            "border-af-success-border bg-af-success-surface text-af-success",
+            "border-af-success-border bg-success-container text-success",
         )}
         tone={hasFailedOutcome ? "danger" : undefined}
       >
@@ -483,7 +483,7 @@ function WorkstationActiveWorkList({
               return (
                 <li
                   className={cn(
-                    "grid min-w-0 gap-2 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2",
+                    "grid min-w-0 gap-2 rounded-lg border border-outline bg-surface-container-high px-3 py-2",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
                   key={`${execution.dispatch_id}-${workIdentifier}`}

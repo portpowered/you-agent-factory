@@ -19,7 +19,7 @@ describe("DashboardStatusPanel", () => {
     expect(heading).toBeTruthy();
     expect(screen.getByText("U").className).not.toContain("sr-only");
     expect(headerEyebrow?.textContent).toContain("U");
-    expect(headerEyebrow?.className).toContain("text-af-accent");
+    expect(headerEyebrow?.className).toContain("text-primary");
     expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
     expect(section?.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
@@ -42,7 +42,7 @@ describe("DashboardStatusPanel", () => {
       DASHBOARD_PANEL_SHELL_CLASS,
     );
     expect(detail.className).toContain("max-w-80");
-    expect(detail.className).toContain("text-af-danger-text");
+    expect(detail.className).toContain("text-on-error-container");
   });
 
   it("resolves brand copy from the requested locale catalog", () => {

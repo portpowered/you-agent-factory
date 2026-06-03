@@ -115,7 +115,7 @@ function DashboardPaletteMenuList({
   return (
     <div
       aria-label={label}
-      className="absolute right-0 top-full z-10 mt-2 min-w-52 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg"
+      className="absolute right-0 top-full z-10 mt-2 min-w-52 overflow-hidden rounded-2xl border border-outline bg-surface-container-high p-1 text-on-surface shadow-af-panel backdrop-blur-lg"
       id={id}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -139,8 +139,8 @@ function DashboardPaletteMenuList({
             className={cn(
               PALETTE_MENU_ITEM_CLASS,
               isSelected
-                ? "border-af-accent-border bg-af-accent-surface text-af-text"
-                : "text-af-text-muted",
+                ? "border-primary bg-primary-container text-on-surface"
+                : "text-on-surface-variant",
             )}
             onClick={() => {
               onChangePalette(option.id);

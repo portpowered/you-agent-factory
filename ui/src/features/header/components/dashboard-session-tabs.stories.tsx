@@ -102,13 +102,13 @@ export const OpenFlowVerification = {
     await expect(betaTab).toBeVisible();
     const activeShellClassName = sessionTabShell(rootTab).className;
     const inactiveShellClassName = sessionTabShell(betaTab).className;
-    expect(activeShellClassName).toContain("bg-af-surface-subtle");
-    expect(activeShellClassName).not.toContain("border-af-border-strong");
-    expect(activeShellClassName).not.toContain("bg-af-surface-raised");
-    expect(activeShellClassName).not.toContain("bg-af-accent");
-    expect(activeShellClassName).not.toContain("bg-af-accent-surface");
-    expect(inactiveShellClassName).toContain("text-af-text-muted");
-    expect(inactiveShellClassName).not.toContain("hover:border-af-border");
+    expect(activeShellClassName).toContain("bg-surface-container-low");
+    expect(activeShellClassName).not.toContain("border-outline-variant");
+    expect(activeShellClassName).not.toContain("bg-surface-container-high");
+    expect(activeShellClassName).not.toContain("bg-primary");
+    expect(activeShellClassName).not.toContain("bg-primary-container");
+    expect(inactiveShellClassName).toContain("text-on-surface-variant");
+    expect(inactiveShellClassName).not.toContain("hover:border-outline");
     await expect(
       canvas.getByRole("button", { name: "Close beta session" }),
     ).toBeVisible();

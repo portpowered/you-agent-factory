@@ -110,7 +110,7 @@ export function TraceWorkstationPath({
   return (
     <DashboardGraphFrame
       aria-label={messages.dispatchPathGraphLabel}
-      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle"
+      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-surface-container-low"
       data-trace-workstation-path
       style={GRAPH_SHELL_STYLE}
     >

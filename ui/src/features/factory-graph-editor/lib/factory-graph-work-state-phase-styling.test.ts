@@ -11,27 +11,27 @@ describe("factory graph work state phase styling", () => {
   it.each([
     [
       "INITIAL",
-      "border-af-info-border bg-af-info-surface",
+      "border-info-border bg-info-container",
       "queue",
-      "text-af-info",
+      "text-info",
     ],
     [
       "PROCESSING",
-      "border-af-warning-border bg-af-warning-surface",
+      "border-af-warning-border bg-warning-container",
       "processing",
-      "text-af-warning",
+      "text-warning",
     ],
     [
       "TERMINAL",
-      "border-af-success-border bg-af-success-surface",
+      "border-af-success-border bg-success-container",
       "terminal",
-      "text-af-success",
+      "text-success",
     ],
     [
       "FAILED",
-      "border-af-danger-border bg-af-danger-surface",
+      "border-af-danger-border bg-error-container",
       "failed",
-      "text-af-danger",
+      "text-error",
     ],
   ] as const)("maps %s to phase surface and icon styling", (type, surfaceClass, iconKind, iconClass) => {
     expect(workStatePhaseSurfaceClassName(type)).toBe(surfaceClass);
@@ -42,11 +42,11 @@ describe("factory graph work state phase styling", () => {
 
   it("falls back to neutral styling when workStateType is missing", () => {
     expect(workStatePhaseSurfaceClassName(undefined)).toBe(
-      "border-af-border-strong bg-af-surface-raised",
+      "border-outline-variant bg-surface-container-high",
     );
     expect(workStatePhaseSemanticIconKind(undefined)).toBe("queue");
     expect(workStatePhaseSemanticIconClassName(undefined)).toBe(
-      "text-af-text-muted",
+      "text-on-surface-variant",
     );
   });
 });

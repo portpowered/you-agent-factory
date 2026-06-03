@@ -23,13 +23,13 @@ export function WorkTypeDetailCard({
         <p className={WIDGET_SUBTITLE_CLASS}>{workTypeName}</p>
       ) : null}
       {editableConfigurationState?.status === "loading" ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.configurationLoading}
         </p>
       ) : null}
       {editableConfigurationState?.status === "error" ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
           role="alert"
         >
           {messages.configurationErrorPrefix}{" "}
@@ -37,7 +37,7 @@ export function WorkTypeDetailCard({
         </p>
       ) : null}
       {editableConfigurationState?.status === "empty" ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
           {editableConfigurationState.message ?? messages.configurationEmpty}
         </p>
       ) : null}

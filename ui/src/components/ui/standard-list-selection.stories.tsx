@@ -11,8 +11,8 @@ import {
 } from "./standard-list-selection";
 
 const SOLID_ACCENT_SELECTED_TOKENS = [
-  "bg-af-accent",
-  "border-af-accent",
+  "bg-primary",
+  "border-primary",
   "shadow-af-accent-selected",
 ] as const;
 

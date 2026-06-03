@@ -515,7 +515,7 @@ export const SemanticWorkflow = {
       edgeStyles.some((style) => style.includes("var(--color-af-edge-muted")),
     ).toBe(true);
     await expect(
-      edgeStyles.some((style) => style.includes("var(--color-af-success)")),
+      edgeStyles.some((style) => style.includes("var(--color-success)")),
     ).toBe(true);
     await expect(activeStateButton.closest("article")?.className).toContain(
       "border-af-success-border",
@@ -672,7 +672,7 @@ export const WorkstationSelected = {
     const article = reviewButton.closest("article");
 
     await expect(reviewButton).toHaveAttribute("aria-pressed", "true");
-    await expect(article?.className).toContain("border-af-accent-border");
+    await expect(article?.className).toContain("border-primary");
     expectFixedWorkstationDimensions(workstationNode(reviewButton));
   },
 };
@@ -922,7 +922,7 @@ export const StatePositionSelected = {
     await expect(
       within(article).getByLabelText("3 active items"),
     ).toBeVisible();
-    await expect(article.className).toContain("border-af-accent-border");
+    await expect(article.className).toContain("border-primary");
     expectNoImplementationLabels(canvasElement);
   },
 };

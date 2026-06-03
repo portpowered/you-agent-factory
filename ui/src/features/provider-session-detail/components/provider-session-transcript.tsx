@@ -18,12 +18,12 @@ type SessionDetail = ProviderSessionDetailResponse;
 type TranscriptEntry = SessionDetail["transcript"][number];
 
 const TRANSCRIPT_ENTRY_CLASS_NAMES: Record<TranscriptEntry["type"], string> = {
-  assistant_message: "border-af-border",
-  reasoning: "border-af-border",
-  system_event: "border-af-border",
-  tool_call: "border-af-border",
-  tool_output: "border-af-border",
-  user_message: "border-af-border",
+  assistant_message: "border-outline",
+  reasoning: "border-outline",
+  system_event: "border-outline",
+  tool_call: "border-outline",
+  tool_output: "border-outline",
+  user_message: "border-outline",
 };
 
 export function TranscriptSection({
@@ -67,19 +67,19 @@ export function EncryptedReasoningNotice({
   return (
     <div
       className={cn(
-        "grid gap-2 rounded-lg border border-af-info-border bg-af-info-surface p-3",
+        "grid gap-2 rounded-lg border border-info-border bg-info-container p-3",
         className,
       )}
     >
       <span
         className={cn(
-          "inline-flex w-fit rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
+          "inline-flex w-fit rounded-full border border-info-border bg-info-container px-2 py-0.5 text-on-info-container",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
         {messages.encryptedReasoningStateLabel}
       </span>
-      <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
         {messages.encryptedReasoningDescription}
       </p>
     </div>
@@ -121,7 +121,7 @@ function TranscriptEntryCard({
             {entry.status ? (
               <span
                 className={cn(
-                  "inline-flex rounded-full border border-af-border bg-af-surface-raised px-2 py-0.5 text-af-text-subtle",
+                  "inline-flex rounded-full border border-outline bg-surface-container-high px-2 py-0.5 text-on-surface-subtle",
                   DASHBOARD_SUPPORTING_TEXT_CLASS,
                 )}
               >
@@ -133,7 +133,7 @@ function TranscriptEntryCard({
             <div className="grid gap-1">
               <div
                 className={cn(
-                  "flex flex-wrap items-center gap-x-2 gap-y-1 text-af-text-subtle",
+                  "flex flex-wrap items-center gap-x-2 gap-y-1 text-on-surface-subtle",
                   DASHBOARD_SUPPORTING_TEXT_CLASS,
                 )}
               >
@@ -202,7 +202,7 @@ function TranscriptEntryBody({
           {entry.encrypted && !entry.text && !encryptedContent ? (
             <p
               className={cn(
-                "m-0 text-af-text-subtle",
+                "m-0 text-on-surface-subtle",
                 DASHBOARD_SUPPORTING_TEXT_CLASS,
               )}
             >

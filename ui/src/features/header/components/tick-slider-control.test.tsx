@@ -132,8 +132,8 @@ describe("TickSliderControl", () => {
     expect(sliderShell?.className).toContain("gap-1.5");
     expect(sliderShell?.className).toContain("px-1");
     expect(sliderShell?.className).toContain("py-1");
-    expect(sliderShell?.className).not.toContain("border-af-border");
-    expect(sliderShell?.className).not.toContain("bg-af-surface-subtle");
+    expect(sliderShell?.className).not.toContain("border-outline");
+    expect(sliderShell?.className).not.toContain("bg-surface-container-low");
     expect(sliderShell?.className).not.toContain("rounded-lg");
     expect(sliderShell?.className).not.toContain("md:w-auto");
     expect(sliderShell?.className).not.toContain("md:max-w-lg");

@@ -29,13 +29,13 @@ export const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
   "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
 
 export const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
-  "border-af-accent-border bg-af-accent-surface text-af-on-accent";
+  "border-primary bg-primary-container text-on-primary";
 
 export const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
-  "border-af-success-border bg-af-success-surface text-af-success-text";
+  "border-af-success-border bg-success-container text-on-success-container";
 
 export const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
-  "border-af-danger-border bg-af-danger-surface text-af-on-danger";
+  "border-af-danger-border bg-error-container text-on-error";
 
 export const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
   "border-outline-variant bg-surface-container-low text-on-surface";

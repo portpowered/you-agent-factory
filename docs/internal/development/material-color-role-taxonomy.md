@@ -117,6 +117,20 @@ Tokens without a direct role yet (for example `af-text-subtle`, `af-overlay`, se
 
 Neutral and accent/semantic roles register in Tailwind v4 `@theme` as `--color-<role-name>`, enabling utilities such as `bg-primary`, `text-on-surface`, and `border-outline-variant`.
 
+### Feature and graph surfaces (US-009)
+
+Dashboard feature modules under `ui/src/features/` consume role utilities directly for neutral chrome and accent emphasis. Semantic `*-border`, overlay, shadow, chart, and graph-edge tokens that have no role equivalent yet remain on transitional `af-*` product keys in `ui/src/styles.css`.
+
+| Area | Role usage |
+| --- | --- |
+| Header, session tabs, palette menu | `bg-surface-container-*`, `border-outline`, `text-on-surface`, `border-primary` for selected menu rows |
+| Flowchart / factory graph nodes | `bg-surface`, `border-outline`, accent `border-primary` / `bg-primary-container`; semantic borders for phase/state meaning |
+| Trace drilldown graph nodes | Same pattern; `info` / `success` / `warning` / `error` containers for dispatch and outcome chrome |
+| Charts (`work-outcome`) | Series colors stay on `af-chart-*` keys; grid/label utilities use `stroke-outline-variant`, `fill-on-surface-subtle` |
+| Mutation dialog | `gap-layout-block`; role surfaces for shell and message panels |
+
+Contract: `ui/src/features/feature-surface-color-roles.test.ts`. One-shot migrator: `ui/scripts/migrate-feature-color-roles.mjs`.
+
 ## Related layout system (US-007)
 
 Layout spacing roles and shared primitives are documented in `material-layout-role-taxonomy.md`. Storybook: `Agent Factory/UI/Layout Role Primitives`.
