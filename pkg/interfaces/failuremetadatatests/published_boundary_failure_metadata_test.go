@@ -56,3 +56,26 @@ func TestGeneratedWorkFailureMetadata_OmitsWhenFailureMetadataUnset(t *testing.T
 		t.Fatalf("published provider failure = %#v, want nil", got)
 	}
 }
+
+func TestGeneratedWorkFailureMetadataAndWorkFailureMetadataFromGenerated_RoundTripPreservesFamilyAndType(t *testing.T) {
+	original := &interfaces.WorkFailureMetadata{
+		Family: interfaces.WorkFailureFamilyRetryable,
+		Type:   interfaces.WorkFailureTypeInternalServerError,
+	}
+
+	wire := interfaces.GeneratedWorkFailureMetadata(original)
+	if wire == nil {
+		t.Fatal("published provider failure = nil, want retryable/internal_server_error wire")
+	}
+
+	got := interfaces.WorkFailureMetadataFromGenerated(wire)
+	if got == nil {
+		t.Fatal("ingress failure metadata = nil, want retryable/internal_server_error")
+	}
+	if got.Family != original.Family {
+		t.Fatalf("round-trip family = %q, want %q", got.Family, original.Family)
+	}
+	if got.Type != original.Type {
+		t.Fatalf("round-trip type = %q, want %q", got.Type, original.Type)
+	}
+}
