@@ -105,10 +105,8 @@ describe("CurrentSelectionWidget work-type selection", () => {
       status: "success",
     } as never);
     vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({
-      beginSaveConfirmation: vi.fn(),
       canSave: false,
-      cancelSaveConfirmation: vi.fn(),
-      confirmSave: vi.fn(),
+      save: vi.fn(),
       saveState: { status: "idle" },
     });
     vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue({

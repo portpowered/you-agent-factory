@@ -1,10 +1,10 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,
   PromptEditorDiagnosticsPanel,
 } from "../../../../components/prompt-editor";
-import { HorizontalResizableWidth } from "../../../../components/prompt-editor/horizontal-resizable-width";
+import { VerticalResizableWidth } from "../../../../components/prompt-editor/vertical-resizable-width";
 import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
   Collapsible,
@@ -48,7 +48,7 @@ export function EditableConfigurationPromptInput({
 
   return (
     <div className="grid min-w-0 gap-2">
-      <HorizontalResizableWidth
+      <VerticalResizableWidth
         resizeHandleLabel={
           messages.editableConfigurationPromptResizeHandleLabel
         }
@@ -67,18 +67,15 @@ export function EditableConfigurationPromptInput({
           )}
           diagnostics={state.promptDiagnostics}
           hasDiagnostics={state.promptDiagnostics.length > 0}
+          height="100%"
           loadingMessage={messages.editableConfigurationPromptEditorLoading}
           modelPath={CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH}
           onChange={state.onPromptChange}
           startupErrorMessage={messages.editableConfigurationPromptEditorError}
           value={state.draft.prompt}
         />
-      </HorizontalResizableWidth>
-      <EditableConfigurationPromptAutocompleteFeedback
-        messages={messages}
-        state={state}
-      />
-      <EditableConfigurationPromptValidationFeedback
+      </VerticalResizableWidth>
+      <EditableConfigurationPromptFeedback
         diagnosticsId={diagnosticsId}
         messages={messages}
         state={state}
@@ -87,16 +84,49 @@ export function EditableConfigurationPromptInput({
   );
 }
 
-function EditableConfigurationPromptAutocompleteFeedback({
+function EditableConfigurationPromptFeedback({
+  diagnosticsId,
   messages,
   state,
 }: {
+  diagnosticsId: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   state: Extract<
     NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
     { status: "ready" }
   >;
 }) {
+  const hasSyntaxDiagnostics = state.promptDiagnostics.some(
+    (diagnostic) => diagnostic.kind === "SYNTAX_ERROR",
+  );
+
+  if (
+    state.promptHelpState.status !== "ready" &&
+    (state.promptValidationState.status === "error" ||
+      hasSyntaxDiagnostics ||
+      state.promptDiagnostics.length > 0)
+  ) {
+    return (
+      <PromptEditorDiagnosticsPanel
+        diagnostics={state.promptDiagnostics}
+        id={diagnosticsId}
+        labels={{
+          diagnosticsHeading:
+            messages.editableConfigurationPromptDiagnosticsHeading,
+          diagnosticsSummary:
+            messages.editableConfigurationPromptDiagnosticsSummary,
+          validationErrorPrefix:
+            messages.editableConfigurationPromptValidationErrorPrefix,
+          validationLoading:
+            messages.editableConfigurationPromptValidationLoading,
+          variableDiagnosticLabel:
+            messages.editableConfigurationPromptVariableDiagnosticLabel,
+        }}
+        validationState={state.promptValidationState}
+      />
+    );
+  }
+
   if (state.promptHelpState.status === "loading") {
     return (
       <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
@@ -128,27 +158,67 @@ function EditableConfigurationPromptAutocompleteFeedback({
     );
   }
 
+  const readyPromptState: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  > & {
+    promptHelpState: Extract<
+      EditableWorkstationPromptHelpState,
+      { status: "ready" }
+    >;
+  } = {
+    ...state,
+    promptHelpState: state.promptHelpState,
+  };
+
   return (
-    <EditableConfigurationReadyPromptHelp
+    <EditableConfigurationReadyPromptFeedback
+      diagnosticsId={diagnosticsId}
       messages={messages}
-      promptHelpState={state.promptHelpState}
+      state={readyPromptState}
     />
   );
 }
 
-function EditableConfigurationReadyPromptHelp({
+function EditableConfigurationReadyPromptFeedback({
+  diagnosticsId,
   messages,
-  promptHelpState,
+  state,
 }: {
+  diagnosticsId: string;
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  promptHelpState: Extract<
-    EditableWorkstationPromptHelpState,
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
     { status: "ready" }
-  >;
+  > & {
+    promptHelpState: Extract<
+      EditableWorkstationPromptHelpState,
+      { status: "ready" }
+    >;
+  };
 }) {
   const [expanded, setExpanded] = useState(false);
+  const previousDiagnosticsCountRef = useRef(state.promptDiagnostics.length);
   const sectionId = useId();
-  const contentId = `${sectionId}-prompt-help-content`;
+  const contentId = `${sectionId}-prompt-feedback-content`;
+  const promptHelpState = state.promptHelpState;
+  const hasSyntaxDiagnostics = state.promptDiagnostics.some(
+    (diagnostic) => diagnostic.kind === "SYNTAX_ERROR",
+  );
+  const showInlineValidationPanel =
+    !expanded &&
+    (hasSyntaxDiagnostics || state.promptValidationState.status === "error");
+
+  useEffect(() => {
+    if (
+      previousDiagnosticsCountRef.current === 0 &&
+      state.promptDiagnostics.length > 0
+    ) {
+      setExpanded(true);
+    }
+
+    previousDiagnosticsCountRef.current = state.promptDiagnostics.length;
+  }, [state.promptDiagnostics.length]);
 
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
@@ -179,49 +249,106 @@ function EditableConfigurationReadyPromptHelp({
           {expanded ? messages.collapseAction : messages.expandAction}
         </ExpandablePanelTrigger>
       </div>
+      {showInlineValidationPanel ? (
+        <PromptEditorDiagnosticsPanel
+          diagnostics={state.promptDiagnostics}
+          id={diagnosticsId}
+          labels={{
+            diagnosticsHeading:
+              messages.editableConfigurationPromptDiagnosticsHeading,
+            diagnosticsSummary:
+              messages.editableConfigurationPromptDiagnosticsSummary,
+            validationErrorPrefix:
+              messages.editableConfigurationPromptValidationErrorPrefix,
+            validationLoading:
+              messages.editableConfigurationPromptValidationLoading,
+            variableDiagnosticLabel:
+              messages.editableConfigurationPromptVariableDiagnosticLabel,
+          }}
+          validationState={state.promptValidationState}
+        />
+      ) : null}
+      {!expanded && !showInlineValidationPanel && state.promptDiagnostics.length > 0 ? (
+        <div aria-hidden="true" className="sr-only" id={diagnosticsId} />
+      ) : null}
       <Collapsible onOpenChange={setExpanded} open={expanded}>
         <CollapsibleContent className="grid gap-2 pt-2" id={contentId}>
-          <p
-            className={cn(
-              "m-0 text-af-text-subtle",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
-            {messages.editableConfigurationPromptAutocompleteDetail}
-          </p>
-          {promptHelpState.contract.availableVariables.length > 0 ? (
-            <PromptContractList
-              heading={
-                messages.editableConfigurationPromptAvailableVariablesHeading
-              }
-              items={promptHelpState.contract.availableVariables.map(
-                (variable) => ({
-                  detail: variable.description,
-                  example: variable.example,
-                  key: `${variable.category}:${variable.path}:${variable.example}`,
-                  label: variable.path,
-                }),
-              )}
-            />
-          ) : null}
-          {promptHelpState.contract.unavailableAccessPatterns.length > 0 ? (
-            <PromptContractList
-              heading={
-                messages.editableConfigurationPromptUnavailableAccessHeading
-              }
-              items={promptHelpState.contract.unavailableAccessPatterns.map(
-                (pattern) => ({
-                  detail: pattern.reason,
-                  example: pattern.example,
-                  key: `${pattern.path}:${pattern.example}:${pattern.reason}`,
-                  label: pattern.path,
-                }),
-              )}
-            />
-          ) : null}
+          <EditableConfigurationPromptAutocompleteDetails
+            messages={messages}
+            promptHelpState={promptHelpState}
+          />
+          <PromptEditorDiagnosticsPanel
+            diagnostics={state.promptDiagnostics}
+            id={diagnosticsId}
+            labels={{
+              diagnosticsHeading:
+                messages.editableConfigurationPromptDiagnosticsHeading,
+              diagnosticsSummary:
+                messages.editableConfigurationPromptDiagnosticsSummary,
+              validationErrorPrefix:
+                messages.editableConfigurationPromptValidationErrorPrefix,
+              validationLoading:
+                messages.editableConfigurationPromptValidationLoading,
+              variableDiagnosticLabel:
+                messages.editableConfigurationPromptVariableDiagnosticLabel,
+            }}
+            validationState={state.promptValidationState}
+          />
         </CollapsibleContent>
       </Collapsible>
     </div>
+  );
+}
+
+function EditableConfigurationPromptAutocompleteDetails({
+  messages,
+  promptHelpState,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  promptHelpState: Extract<
+    EditableWorkstationPromptHelpState,
+    { status: "ready" }
+  >;
+}) {
+  return (
+    <>
+      <p
+        className={cn(
+          "m-0 text-af-text-subtle",
+          DASHBOARD_SUPPORTING_TEXT_CLASS,
+        )}
+      >
+        {messages.editableConfigurationPromptAutocompleteDetail}
+      </p>
+      {promptHelpState.contract.availableVariables.length > 0 ? (
+        <PromptContractList
+          heading={
+            messages.editableConfigurationPromptAvailableVariablesHeading
+          }
+          items={promptHelpState.contract.availableVariables.map(
+            (variable) => ({
+              detail: variable.description,
+              example: variable.example,
+              key: `${variable.category}:${variable.path}:${variable.example}`,
+              label: variable.path,
+            }),
+          )}
+        />
+      ) : null}
+      {promptHelpState.contract.unavailableAccessPatterns.length > 0 ? (
+        <PromptContractList
+          heading={messages.editableConfigurationPromptUnavailableAccessHeading}
+          items={promptHelpState.contract.unavailableAccessPatterns.map(
+            (pattern) => ({
+              detail: pattern.reason,
+              example: pattern.example,
+              key: `${pattern.path}:${pattern.example}:${pattern.reason}`,
+              label: pattern.path,
+            }),
+          )}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -274,38 +401,5 @@ function PromptContractList({
         ))}
       </ul>
     </div>
-  );
-}
-
-function EditableConfigurationPromptValidationFeedback({
-  diagnosticsId,
-  messages,
-  state,
-}: {
-  diagnosticsId: string;
-  messages: ReturnType<typeof getWorkstationDetailMessages>;
-  state: Extract<
-    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
-    { status: "ready" }
-  >;
-}) {
-  return (
-    <PromptEditorDiagnosticsPanel
-      diagnostics={state.promptDiagnostics}
-      id={diagnosticsId}
-      labels={{
-        diagnosticsHeading:
-          messages.editableConfigurationPromptDiagnosticsHeading,
-        diagnosticsSummary:
-          messages.editableConfigurationPromptDiagnosticsSummary,
-        validationErrorPrefix:
-          messages.editableConfigurationPromptValidationErrorPrefix,
-        validationLoading:
-          messages.editableConfigurationPromptValidationLoading,
-        variableDiagnosticLabel:
-          messages.editableConfigurationPromptVariableDiagnosticLabel,
-      }}
-      validationState={state.promptValidationState}
-    />
   );
 }

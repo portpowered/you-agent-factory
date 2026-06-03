@@ -1,12 +1,10 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: save-hook coverage includes invalid-to-valid prompt validation regressions alongside confirmation wiring.
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: save-hook coverage includes invalid-to-valid prompt validation regressions alongside scoped save wiring.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
-import {
-  mockFactoryDocumentSave,
-} from "../../../../testing/factory-document-save-mocks";
+import { mockFactoryDocumentSave } from "../../../../testing/factory-document-save-mocks";
 import { staleFactoryVersionTarget } from "../../../../testing/factory-validation-target-fixtures";
 import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
@@ -41,12 +39,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
     await act(async () => {
-      await result.current.confirmSave();
+      await result.current.save();
     });
 
     await waitFor(() => {
@@ -68,7 +62,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     });
   });
 
-  it("does not open save confirmation when canSave is false after prompt validation errors", () => {
+  it("does not save when canSave is false after prompt validation errors", async () => {
     const { result } = renderHook(
       () =>
         useSaveEditableWorkstationConfiguration({
@@ -104,14 +98,14 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
     expect(result.current.canSave).toBe(false);
 
-    act(() => {
-      result.current.beginSaveConfirmation();
+    await act(async () => {
+      await result.current.save();
     });
 
     expect(result.current.saveState).toEqual({ status: "idle" });
   });
 
-  it("opens save confirmation after prompt validation recovers for a dirty draft", () => {
+  it("allows save after prompt validation recovers for a dirty draft", () => {
     const { result } = renderHook(
       () =>
         useSaveEditableWorkstationConfiguration({
@@ -125,11 +119,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
     expect(result.current.canSave).toBe(true);
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
-    expect(result.current.saveState).toEqual({ status: "confirming" });
+    expect(result.current.saveState).toEqual({ status: "idle" });
   });
 
   it("allows empty-body pollers to stay saveable", () => {
@@ -184,12 +174,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
     await act(async () => {
-      await result.current.confirmSave();
+      await result.current.save();
     });
 
     await waitFor(() => {
@@ -258,19 +244,15 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
     await act(async () => {
-      await result.current.confirmSave();
+      await result.current.save();
     });
 
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
     expect(onWorkstationRenamed).toHaveBeenCalledWith("review");
   });
 
-  it("ignores repeated save confirmations while the current save is still in flight", async () => {
+  it("ignores repeated saves while the current save is still in flight", async () => {
     const deferredSave = createDeferredPromise<unknown>();
     const saveAsync = vi.fn().mockReturnValue(deferredSave.promise);
     vi.spyOn(
@@ -290,15 +272,11 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
     let firstSave: Promise<void> | undefined;
     await act(async () => {
-      firstSave = result.current.confirmSave();
+      firstSave = result.current.save();
       await Promise.resolve();
-      await result.current.confirmSave();
+      await result.current.save();
     });
 
     expect(saveAsync).toHaveBeenCalledTimes(1);
@@ -351,12 +329,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
     await act(async () => {
-      await result.current.confirmSave();
+      await result.current.save();
     });
 
     await waitFor(() => {
@@ -369,7 +343,7 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     expect(result.current.canSave).toBe(true);
   });
 
-  it("does not open save confirmation when cron validation errors block save", () => {
+  it("does not save when cron validation errors block save", async () => {
     const { result } = renderHook(
       () =>
         useSaveEditableWorkstationConfiguration({
@@ -393,8 +367,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
 
     expect(result.current.canSave).toBe(false);
 
-    act(() => {
-      result.current.beginSaveConfirmation();
+    await act(async () => {
+      await result.current.save();
     });
 
     expect(result.current.saveState).toEqual({ status: "idle" });
@@ -477,12 +451,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
     await act(async () => {
-      await result.current.confirmSave();
+      await result.current.save();
     });
 
     expect(saveAsync).toHaveBeenCalledWith({
@@ -556,12 +526,8 @@ describe("useSaveEditableWorkstationConfiguration", () => {
       { wrapper: createQueryClientWrapper() },
     );
 
-    act(() => {
-      result.current.beginSaveConfirmation();
-    });
-
     await act(async () => {
-      await result.current.confirmSave();
+      await result.current.save();
     });
 
     await waitFor(() => {

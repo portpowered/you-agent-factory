@@ -85,7 +85,7 @@ export function WorkstationNodeView({
     data.workstation.transition_id ||
     data.workstation.node_id;
   const nodeClassName = cn(
-    "min-w-0 w-full justify-start overflow-hidden border-2 bg-af-surface-raised",
+    "af-current-activity-node-surface-neutral min-w-0 w-full justify-start overflow-hidden border-2",
     exhaustionRule
       ? "border-dashed border-af-danger-border"
       : "border-af-info-border",

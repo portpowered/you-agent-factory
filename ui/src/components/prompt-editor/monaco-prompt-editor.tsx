@@ -78,6 +78,7 @@ interface MonacoPromptEditorProps {
   className?: string;
   diagnostics?: PromptEditorDiagnostic[];
   hasDiagnostics?: boolean;
+  height?: string;
   loadingMessage: string;
   modelPath: string;
   onChange: (value: string) => void;
@@ -99,6 +100,7 @@ export function MonacoPromptEditor({
   className,
   diagnostics = [],
   hasDiagnostics = false,
+  height = "13.5rem",
   loadingMessage,
   modelPath,
   onChange,
@@ -160,6 +162,7 @@ export function MonacoPromptEditor({
       <PromptEditorFallbackState
         ariaDescribedBy={ariaDescribedBy}
         ariaInvalid={ariaInvalid}
+        height={height}
         message={
           startupState === "error" ? startupErrorMessage : loadingMessage
         }
@@ -178,7 +181,7 @@ export function MonacoPromptEditor({
           : undefined,
         className,
       )}
-      height="13.5rem"
+      height={height}
       language={WORKSTATION_PROMPT_LANGUAGE_ID}
       onChange={(nextValue) => onChange(nextValue ?? "")}
       onMount={createPromptEditorMountHandler({
@@ -293,12 +296,14 @@ function createPromptEditorMountHandler({
 function PromptEditorFallbackState({
   ariaDescribedBy,
   ariaInvalid,
+  height,
   message,
   status,
   value,
 }: {
   ariaDescribedBy?: string;
   ariaInvalid: boolean;
+  height: string;
   message: string;
   status: "alert" | "status";
   value: string;
@@ -307,9 +312,10 @@ function PromptEditorFallbackState({
     <div
       aria-describedby={ariaDescribedBy}
       aria-invalid={ariaInvalid ? "true" : undefined}
-      className="grid min-h-56 gap-2 rounded-xl border border-af-border bg-transparent px-3 py-3"
+      className="grid h-full min-h-0 gap-2 overflow-auto rounded-xl border border-af-border bg-transparent px-3 py-3"
       data-monaco-editor-fallback="workstation-prompt"
       role={status}
+      style={{ height }}
     >
       <p
         className={cn(

@@ -211,6 +211,30 @@ describe("buildReadyEditableWorkstationConfigurationState save projection", () =
     expect(invalidReady.pendingFactoryDefinition).toBeNull();
     expect(invalidReady.hasValidationErrors).toBe(true);
   });
+
+  it("omits pendingFactoryDefinition while prompt validation is loading without marking the draft invalid", () => {
+    const { buildReady, getSessionState, selectedEditableValues } =
+      buildReadyHarness();
+    const readyState = buildReady();
+
+    readyState.onBehaviorChange("STANDARD");
+    readyState.onPromptChange("Review {{ .WorkID }}");
+
+    const loadingReady = buildReadyEditableWorkstationConfigurationState({
+      editableDefinition: cronFactory,
+      messages,
+      promptHelpState: { status: "empty", message: "No prompt help." },
+      promptValidationState: { status: "loading" },
+      resolvedValidationErrors: {},
+      selectedEditableValues,
+      selectedNode: cronWorkstationNode,
+      sessionState: getSessionState(),
+      setSessionState: vi.fn(),
+    });
+
+    expect(loadingReady.pendingFactoryDefinition).toBeNull();
+    expect(loadingReady.hasValidationErrors).toBe(false);
+  });
 });
 
 describe("buildReadyEditableWorkstationConfigurationState workstation options", () => {

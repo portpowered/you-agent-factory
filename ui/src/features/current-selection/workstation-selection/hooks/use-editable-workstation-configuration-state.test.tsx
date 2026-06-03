@@ -644,7 +644,7 @@ describe("useEditableWorkstationConfigurationState", () => {
     ).toBeNull();
   });
 
-  it("formats loading and error prompt validation states into observable prompt errors", () => {
+  it("keeps loading prompt validation out of observable prompt errors", () => {
     const selectedEditableValues = {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
@@ -686,9 +686,7 @@ describe("useEditableWorkstationConfigurationState", () => {
         selectedEditableValues,
         { status: "loading" },
       ),
-    ).toEqual({
-      prompt: "Validating prompt variables for the current draft.",
-    });
+    ).toEqual({});
 
     expect(
       validateEditableWorkstationDraft(

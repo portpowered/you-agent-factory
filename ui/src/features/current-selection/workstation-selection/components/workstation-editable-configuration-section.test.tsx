@@ -49,61 +49,6 @@ describe("EditableConfigurationSection async states", () => {
   });
 });
 
-describe("EditableConfigurationSection footer save controls", () => {
-  it("renders footer save and reset controls when onSaveConfiguration is provided", async () => {
-    const user = userEvent.setup();
-    const onSaveConfiguration = vi.fn();
-    const onResetToLatest = vi.fn();
-
-    render(
-      <EditableConfigurationSection
-        messages={messages}
-        onSaveConfiguration={onSaveConfiguration}
-        state={{
-          ...buildEditableConfigurationSectionReadyState({ isDirty: true }),
-          onResetToLatest,
-        }}
-      />,
-    );
-
-    expandEditableConfigurationSection();
-
-    const saveButton = screen.getByRole("button", { name: "Save changes" });
-    expect(saveButton).toBeEnabled();
-
-    await user.click(saveButton);
-    expect(onSaveConfiguration).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByRole("button", { name: "Reset to latest" }));
-    expect(onResetToLatest).toHaveBeenCalledTimes(1);
-  });
-
-  it("disables footer save when validation errors exist or the draft is clean", () => {
-    const { rerender } = render(
-      <EditableConfigurationSection
-        messages={messages}
-        onSaveConfiguration={() => undefined}
-        state={buildEditableConfigurationSectionReadyState({
-          hasValidationErrors: true,
-          isDirty: true,
-        })}
-      />,
-    );
-
-    expandEditableConfigurationSection();
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-
-    rerender(
-      <EditableConfigurationSection
-        messages={messages}
-        onSaveConfiguration={() => undefined}
-        state={buildEditableConfigurationSectionReadyState({ isDirty: false })}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  });
-});
-
 describe("EditableConfigurationSection worker options", () => {
   it("surfaces worker option empty state inside the ready form", () => {
     render(
@@ -197,7 +142,6 @@ describe("EditableConfigurationSection workstation name field", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        onSaveConfiguration={() => undefined}
         state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           isDirty: true,
@@ -219,24 +163,6 @@ describe("EditableConfigurationSection workstation name field", () => {
         'A workstation named "Plan" already exists in the running factory definition.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-  });
-
-  it("enables save when only the name is dirty and validation passes", () => {
-    render(
-      <EditableConfigurationSection
-        messages={messages}
-        onSaveConfiguration={() => undefined}
-        state={buildEditableConfigurationSectionReadyState({
-          draft: { name: "Renamed" },
-          isDirty: true,
-        })}
-      />,
-    );
-
-    expandEditableConfigurationSection();
-
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
   });
 
   it("shows server-changed hint for overwritten name field", () => {
@@ -355,7 +281,9 @@ describe("EditableConfigurationSection model workstation fields", () => {
     expandEditableConfigurationSection();
 
     expect(
-      screen.queryByText(/updates every workstation that references this worker/i),
+      screen.queryByText(
+        /updates every workstation that references this worker/i,
+      ),
     ).toBeNull();
   });
 
@@ -382,7 +310,6 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     render(
       <EditableConfigurationSection
         messages={messages}
-        onSaveConfiguration={() => undefined}
         state={buildEditableConfigurationSectionReadyState({
           hasValidationErrors: true,
           validationErrors: { workerName: "Select a worker." },
@@ -401,7 +328,6 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     const { container, rerender } = render(
       <EditableConfigurationSection
         messages={messages}
-        onSaveConfiguration={() => undefined}
         saveState={{
           status: "success",
           message: messages.editableConfigurationSaveSuccess("Review"),
@@ -421,7 +347,6 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
     rerender(
       <EditableConfigurationSection
         messages={messages}
-        onSaveConfiguration={() => undefined}
         saveState={{
           errorMessage: "The current factory rejected the workstation update.",
           status: "error",
@@ -464,23 +389,5 @@ describe("EditableConfigurationSection model workstation save feedback", () => {
       screen.queryByText(messages.editableConfigurationValidationStatus),
     ).not.toBeInTheDocument();
     expect(screen.getByText("Resolve prompt diagnostics.")).toBeInTheDocument();
-  });
-
-  it("disables footer save and reset while submitting", () => {
-    render(
-      <EditableConfigurationSection
-        messages={messages}
-        onSaveConfiguration={() => undefined}
-        saveState={{ status: "submitting" }}
-        state={buildEditableConfigurationSectionReadyState({ isDirty: true })}
-      />,
-    );
-
-    expandEditableConfigurationSection();
-
-    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Reset to latest" }),
-    ).toBeDisabled();
   });
 });

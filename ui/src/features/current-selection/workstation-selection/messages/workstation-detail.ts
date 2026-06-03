@@ -105,7 +105,7 @@ const workstationDetailMessagesByLocale = {
       "Close prompt variable help",
     editableConfigurationPromptAvailableVariablesHeading: "Available variables",
     editableConfigurationPromptUnavailableAccessHeading: "Unavailable access",
-    editableConfigurationPromptResizeHandleLabel: "Resize prompt editor width",
+    editableConfigurationPromptResizeHandleLabel: "Resize prompt editor height",
     editableConfigurationSaveFallbackError:
       "The running factory could not be saved.",
     editableConfigurationWorkerMissing:
@@ -352,7 +352,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptAvailableVariablesHeading: "利用可能な変数",
     editableConfigurationPromptUnavailableAccessHeading: "利用できないアクセス",
     editableConfigurationPromptResizeHandleLabel:
-      "プロンプトエディターの幅を変更",
+      "プロンプトエディターの高さを変更",
     editableConfigurationSaveFallbackError:
       "実行中ファクトリーを保存できませんでした。",
     editableConfigurationWorkerMissing:
@@ -597,7 +597,7 @@ const workstationDetailMessagesByLocale = {
       "프롬프트 변수 도움말 닫기",
     editableConfigurationPromptAvailableVariablesHeading: "사용 가능한 변수",
     editableConfigurationPromptUnavailableAccessHeading: "사용할 수 없는 접근",
-    editableConfigurationPromptResizeHandleLabel: "프롬프트 편집기 너비 조절",
+    editableConfigurationPromptResizeHandleLabel: "프롬프트 편집기 높이 조절",
     editableConfigurationSaveFallbackError:
       "실행 중인 팩토리를 저장할 수 없습니다.",
     editableConfigurationWorkerMissing:
@@ -829,7 +829,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationPromptHelpCollapseActionLabel: "关闭提示词变量帮助",
     editableConfigurationPromptAvailableVariablesHeading: "可用变量",
     editableConfigurationPromptUnavailableAccessHeading: "不可用访问",
-    editableConfigurationPromptResizeHandleLabel: "调整提示词编辑器宽度",
+    editableConfigurationPromptResizeHandleLabel: "调整提示词编辑器高度",
     editableConfigurationSaveFallbackError: "无法保存运行中的工厂。",
     editableConfigurationWorkerMissing:
       "所选工作站引用的工作器已不在当前工厂定义中。请重新加载当前选择并选择其他工作器。",

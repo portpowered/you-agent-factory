@@ -19,8 +19,7 @@ export const WORK_STATE_PHASE_LEGEND_ORDER = [
   "FAILED",
 ] as const satisfies readonly FactoryGraphWorkStateType[];
 
-const NEUTRAL_WORK_STATE_SURFACE =
-  "border-af-border-strong bg-af-surface-raised";
+const NEUTRAL_WORK_STATE_SURFACE = "border-af-border-strong bg-af-surface-raised";
 
 const WORK_STATE_PHASE_SURFACE: Record<FactoryGraphWorkStateType, string> = {
   INITIAL: "border-af-info-border bg-af-info-surface",

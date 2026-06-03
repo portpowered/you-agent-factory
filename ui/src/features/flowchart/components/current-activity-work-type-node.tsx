@@ -97,7 +97,7 @@ export function WorkTypeNodeView({
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "justify-center border-dashed border-af-info-border bg-af-info-surface text-left text-af-text",
+        "af-current-activity-node-surface-info justify-center border-dashed text-left text-af-text",
         data.activeFlow && "border-af-info shadow-af-info-chip",
         data.muted && "opacity-[0.45]",
         data.validationError &&

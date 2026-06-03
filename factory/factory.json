@@ -1,5 +1,41 @@
 {
-  "name": "factory",
+  "name": "UNDEFINED",
+  "resources": [
+    {
+      "capacity": 10,
+      "name": "executor-slot"
+    }
+  ],
+  "supportingFiles": {
+    "bundledFiles": [
+      {
+        "content": {
+          "encoding": "utf-8",
+          "inline": "asda"
+        },
+        "targetPath": "Makefile",
+        "type": "ROOT_HELPER"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/docs/overview.md",
+        "type": "DOC"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/scripts/setup-workspace.py",
+        "type": "SCRIPT"
+      }
+    ]
+  },
+  "version": {
+    "logical": 1780219232503513601,
+    "physical": "2026-06-03T06:22:52.292237Z"
+  },
   "workTypes": [
     {
       "name": "thoughts",
@@ -99,287 +135,312 @@
       ]
     }
   ],
-  "resources": [
-    {
-      "name": "executor-slot",
-      "capacity": 10
-    }
-  ],
   "workers": [
     {
-      "name": "processor"
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "CURSOR",
+      "name": "processor",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "type": "MODEL_WORKER"
     },
     {
-      "name": "workspace-setup"
+      "args": [
+        "factory/scripts/setup-workspace.py",
+        "{{ (index .Inputs 0).Name }}"
+      ],
+      "command": "python3",
+      "name": "workspace-setup",
+      "type": "SCRIPT_WORKER"
     }
   ],
   "workstations": [
     {
-      "name": "ideafy",
-      "worker": "processor",
       "inputs": [
         {
-          "workType": "thoughts",
-          "state": "init"
+          "state": "init",
+          "workType": "thoughts"
         }
       ],
-      "outputs": [
-        {
-          "workType": "thoughts",
-          "state": "complete"
-        }
-      ],
+      "name": "ideafy",
       "onFailure": [
         {
-        "workType": "thoughts",
-        "state": "failed"
-        }
-      ],
-      "resources": [
-        {
-          "name": "executor-slot",
-          "capacity": 1
-        }
-      ]
-    },
-    {
-      "name": "plan",
-      "worker": "processor",
-      "inputs": [
-        {
-          "workType": "idea",
-          "state": "init"
+          "state": "failed",
+          "workType": "thoughts"
         }
       ],
       "outputs": [
         {
-          "workType": "idea",
-          "state": "to-complete"
-        },
-        {
-          "workType": "plan",
-          "state": "init"
+          "state": "complete",
+          "workType": "thoughts"
         }
       ],
       "resources": [
         {
-          "name": "executor-slot",
-          "capacity": 1
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "processor"
+    },
+    {
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "idea"
+        }
+      ],
+      "name": "plan",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "idea"
         }
       ],
       "onRejection": [
         {
-        "workType": "idea",
-        "state": "failed"
+          "state": "failed",
+          "workType": "idea"
         }
       ],
-      "onFailure": [
+      "outputs": [
         {
-        "workType": "idea",
-        "state": "failed"
+          "state": "to-complete",
+          "workType": "idea"
+        },
+        {
+          "state": "init",
+          "workType": "plan"
         }
-      ]
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "processor"
     },
     {
-      "name": "consume",
-      "type": "LOGICAL_MOVE",
       "inputs": [
         {
-          "workType": "idea",
-          "state": "to-complete",
           "guards": [
             {
-              "type": "SAME_NAME",
-              "matchInput": "task"
+              "matchInput": "task",
+              "type": "SAME_NAME"
             }
-          ]
+          ],
+          "state": "to-complete",
+          "workType": "idea"
         },
         {
-          "workType": "task",
-          "state": "to-complete"
+          "state": "to-complete",
+          "workType": "task"
         }
       ],
+      "name": "consume",
       "outputs": [
         {
-          "workType": "idea",
-          "state": "complete"
+          "state": "complete",
+          "workType": "idea"
         },
         {
-          "workType": "task",
-          "state": "complete"
+          "state": "complete",
+          "workType": "task"
         }
-      ]
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
     },
     {
-      "name": "setup-workspace",
-      "type": "MODEL_WORKSTATION",
-      "worker": "workspace-setup",
       "inputs": [
         {
-          "workType": "plan",
-          "state": "init"
+          "state": "init",
+          "workType": "plan"
         }
       ],
-      "outputs": [
-        {
-          "workType": "plan",
-          "state": "complete"
-        },
-        {
-          "workType": "task",
-          "state": "init"
-        }
-      ],
+      "name": "setup-workspace",
       "onFailure": [
         {
-        "workType": "plan",
-        "state": "failed"
-        }
-      ]
-    },
-    {
-      "name": "process",
-      "behavior": "REPEATER",
-      "worker": "processor",
-      "inputs": [
-        {
-          "workType": "task",
-          "state": "init"
+          "state": "failed",
+          "workType": "plan"
         }
       ],
       "outputs": [
         {
-          "workType": "task",
-          "state": "in-review"
+          "state": "complete",
+          "workType": "plan"
+        },
+        {
+          "state": "init",
+          "workType": "task"
         }
       ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "workspace-setup"
+    },
+    {
+      "behavior": "REPEATER",
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "name": "process",
       "onContinue": [
         {
-        "workType": "task",
-        "state": "init"
-        }
-      ],
-      "onRejection": [
-        {
-        "workType": "task",
-        "state": "init"
+          "state": "init",
+          "workType": "task"
         }
       ],
       "onFailure": [
         {
-        "workType": "task",
-        "state": "failed"
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
         }
       ],
       "resources": [
         {
-          "name": "executor-slot",
-          "capacity": 1
+          "capacity": 1,
+          "name": "executor-slot"
         }
       ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "processor",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
-      "name": "review",
-      "worker": "processor",
       "inputs": [
         {
-          "workType": "task",
-          "state": "in-review"
+          "state": "in-review",
+          "workType": "task"
         }
       ],
-      "outputs": [
+      "name": "review",
+      "onFailure": [
         {
-          "workType": "task",
-          "state": "to-complete"
+          "state": "failed",
+          "workType": "task"
         }
       ],
       "onRejection": [
         {
-        "workType": "task",
-        "state": "init"
-        }
-      ],
-      "onFailure": [
-        {
-        "workType": "task",
-        "state": "failed"
-        }
-      ],
-      "resources": [
-        {
-          "name": "executor-slot",
-          "capacity": 1
-        }
-      ],
-      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
-    },
-    {
-      "name": "cleaner",
-      "behavior": "CRON",
-      "worker": "processor",
-      "resources": [
-        {
-          "name": "executor-slot",
-          "capacity": 1
+          "state": "init",
+          "workType": "task"
         }
       ],
       "outputs": [
         {
-          "workType": "cron-triggers",
-          "state": "complete"
+          "state": "to-complete",
+          "workType": "task"
         }
       ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "processor",
+      "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
+    },
+    {
+      "behavior": "CRON",
       "cron": {
         "schedule": "0 */1 * * *"
-      }
+      },
+      "inputs": [],
+      "name": "cleaner",
+      "onFailure": [
+        {
+          "state": "failed",
+          "workType": "cron-triggers"
+        }
+      ],
+      "onRejection": [
+        {
+          "state": "failed",
+          "workType": "cron-triggers"
+        }
+      ],
+      "outputs": [
+        {
+          "state": "complete",
+          "workType": "cron-triggers"
+        }
+      ],
+      "resources": [
+        {
+          "capacity": 1,
+          "name": "executor-slot"
+        }
+      ],
+      "type": "MODEL_WORKSTATION",
+      "worker": "processor"
     },
     {
+      "guards": [
+        {
+          "maxVisits": 50,
+          "type": "VISIT_COUNT",
+          "workstation": "process"
+        }
+      ],
+      "inputs": [
+        {
+          "state": "init",
+          "workType": "task"
+        }
+      ],
       "name": "executor-loop-breaker",
-      "type": "LOGICAL_MOVE",
-      "inputs": [
-        {
-          "workType": "task",
-          "state": "init"
-        }
-      ],
       "outputs": [
         {
-          "workType": "task",
-          "state": "failed"
+          "state": "failed",
+          "workType": "task"
         }
       ],
-      "guards": [
-        {
-          "type": "VISIT_COUNT",
-          "workstation": "process",
-          "maxVisits": 50
-        }
-      ]
+      "type": "LOGICAL_MOVE",
+      "worker": ""
     },
     {
-      "name": "review-loop-breaker",
-      "type": "LOGICAL_MOVE",
-      "inputs": [
-        {
-          "workType": "task",
-          "state": "in-review"
-        }
-      ],
-      "outputs": [
-        {
-          "workType": "task",
-          "state": "failed"
-        }
-      ],
       "guards": [
         {
+          "maxVisits": 10,
           "type": "VISIT_COUNT",
-          "workstation": "review",
-          "maxVisits": 10
+          "workstation": "review"
         }
-      ]
+      ],
+      "inputs": [
+        {
+          "state": "in-review",
+          "workType": "task"
+        }
+      ],
+      "name": "review-loop-breaker",
+      "outputs": [
+        {
+          "state": "failed",
+          "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
     }
   ]
 }
-

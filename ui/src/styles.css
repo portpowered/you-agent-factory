@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "./styles/current-activity-graph-nodes.css";
+@import "./styles/tick-slider.css";
 
 @source "./**/*.{ts,tsx}";
 
@@ -7,8 +9,8 @@
   --font-display: "Space Grotesk", "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", "Consolas", monospace;
   --color-af-foundation-background: #0a1117;
-  --color-af-foundation-background-start: #101c23;
-  --color-af-foundation-background-mid: #132c37;
+  --color-af-foundation-background-start: #0d181f;
+  --color-af-foundation-background-mid: #10252f;
   --color-af-foundation-canvas: #050b10;
   --color-af-foundation-surface: #091117;
   --color-af-foundation-ink: #f7f2e8;
@@ -79,10 +81,7 @@
     from var(--color-af-foundation-accent) r g b /
     0.18
   );
-  --color-af-accent-border: rgb(
-    from var(--color-af-foundation-accent) r g b /
-    0.28
-  );
+  --color-af-accent-border: var(--color-af-foundation-accent);
   --color-af-on-accent: var(--color-af-text-inverse);
   --color-af-success: var(--color-af-foundation-success);
   --color-af-success-surface: rgb(

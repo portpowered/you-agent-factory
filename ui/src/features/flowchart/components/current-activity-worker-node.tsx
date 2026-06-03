@@ -42,7 +42,7 @@ export function WorkerNodeView({ data }: NodeProps<CurrentActivityWorkerNode>) {
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "justify-center border-af-border-strong bg-af-surface text-left text-af-text",
+        "af-current-activity-node-surface-worker justify-center text-left text-af-text",
         data.activeFlow &&
           !data.selectedWorker &&
           "border-af-success-border shadow-af-success-chip",

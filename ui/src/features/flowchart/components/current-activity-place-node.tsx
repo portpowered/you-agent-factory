@@ -156,11 +156,11 @@ function placeNodeClassName(place: DashboardPlaceRef): string {
 
   if (place.kind === "resource") {
     // hardcoded-ui-copy-exception: non-product-diagnostic
-    return "border-af-border-strong bg-af-surface text-af-text";
+    return "af-current-activity-node-surface-resource text-af-text";
   }
 
   // hardcoded-ui-copy-exception: non-product-diagnostic
-  return "border-dashed border-af-info-border bg-af-surface-subtle text-af-text";
+  return "border-dashed af-current-activity-node-surface-info text-af-text";
 }
 
 function placeSemanticIconKind(
