@@ -77,9 +77,6 @@ export interface SubmitWorkCardProps {
   widgetId?: string;
 }
 
-const FORM_CLASS = "grid h-full min-h-0 content-start gap-3";
-const FORM_FIELDS_CLASS =
-  "grid min-h-0 content-start gap-4 overflow-y-auto pr-1";
 const FIELD_GROUP_CLASS = "grid gap-2";
 const ACTION_ROW_CLASS = "grid gap-3";
 const HELP_TEXT_CLASS = cn(
@@ -171,13 +168,13 @@ export function SubmitWorkCard({
       widgetId={widgetId}
     >
       <form
-        className={FORM_CLASS}
+        className="grid h-full min-h-0 content-start gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
       >
-        <div className={FORM_FIELDS_CLASS}>
+        <div className="grid min-h-0 content-start gap-4 overflow-y-auto pr-1">
           <div className={FIELD_GROUP_CLASS}>
             <label
               className={DASHBOARD_SUPPORTING_LABEL_CLASS}
