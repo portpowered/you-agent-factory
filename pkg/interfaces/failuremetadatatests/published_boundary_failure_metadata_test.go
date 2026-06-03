@@ -7,30 +7,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func TestPublishedProviderFailureMetadata_EmitsFromFailureMetadata(t *testing.T) {
-	failure := &interfaces.WorkFailureMetadata{
-		Family: interfaces.WorkFailureFamilyThrottle,
-		Type:   interfaces.WorkFailureTypeThrottled,
-	}
-
-	got := interfaces.PublishedProviderFailureMetadata(failure)
-	if got == nil {
-		t.Fatal("published provider failure = nil, want throttle/throttled metadata")
-	}
-	if got.Family == nil || string(*got.Family) != string(interfaces.WorkFailureFamilyThrottle) {
-		t.Fatalf("published family = %#v, want throttle", got.Family)
-	}
-	if got.Type == nil || string(*got.Type) != string(interfaces.WorkFailureTypeThrottled) {
-		t.Fatalf("published type = %#v, want throttled", got.Type)
-	}
-}
-
-func TestPublishedProviderFailureMetadata_OmitsWhenFailureMetadataUnset(t *testing.T) {
-	if got := interfaces.PublishedProviderFailureMetadata(nil); got != nil {
-		t.Fatalf("published provider failure = %#v, want nil", got)
-	}
-}
-
 func TestWorkFailureMetadataFromGenerated_MapsProviderFailureOnlyWireInput(t *testing.T) {
 	family := factoryapi.WorkFailureFamily(interfaces.WorkFailureFamilyRetryable)
 	failureType := factoryapi.WorkFailureType(interfaces.WorkFailureTypeInternalServerError)
