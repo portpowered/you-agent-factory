@@ -59,8 +59,6 @@ const WORK_CHART_STATUS_PANEL_CLASS =
   "flex h-full min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center";
 const WORK_CHART_SHELL_CLASS =
   "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
-const WORK_CHART_TOOLBAR_CLASS =
-  "flex flex-wrap items-center justify-end gap-2";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
 
 export type WorkChartState =
@@ -216,7 +214,7 @@ function ReadyWorkChart({
     <div className={cn(WORK_CHART_SHELL_CLASS, className)}>
       {zoomRange === null ? null : (
         <div
-          className={WORK_CHART_TOOLBAR_CLASS}
+          className="flex flex-wrap items-center justify-end gap-2"
           data-work-chart-toolbar="true"
         >
           <Button
