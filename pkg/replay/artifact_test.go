@@ -195,9 +195,9 @@ func safeDiagnosticsReplayArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			TransitionID: "transition-safe",
 			Outcome:      interfaces.OutcomeAccepted,
 			Output:       "completed",
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyRetryable,
-				Type:   interfaces.ProviderErrorTypeThrottled,
+			ProviderFailure: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyRetryable,
+				Type:   interfaces.WorkFailureTypeThrottled,
 			},
 		}, 3),
 	)
@@ -254,7 +254,7 @@ func assertStoredReplayDiagnosticsAreSafe(t *testing.T, loaded *interfaces.Repla
 		t.Fatalf("provider session id = %q, want resp-safe-123", got)
 	}
 	completionPayload := requireReplayDispatchCompleted(t, loaded.Events, "dispatch-safe")
-	if got := stringValue(completionPayload.ProviderFailure.Type); got != string(interfaces.ProviderErrorTypeThrottled) {
+	if got := stringValue(completionPayload.ProviderFailure.Type); got != string(interfaces.WorkFailureTypeThrottled) {
 		t.Fatalf("provider failure type = %q, want throttled", got)
 	}
 }
