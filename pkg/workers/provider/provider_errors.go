@@ -60,6 +60,12 @@ func ClassifyProviderFailure(err *ProviderError) interfaces.WorkFailureDecision 
 	return providerFailureDecisionForFamily(err.Family)
 }
 
+// WorkFailureDecisionFromProviderError resolves retry behavior from a normalized
+// provider error using the same FailureMetadata projection as WorkResult.
+func WorkFailureDecisionFromProviderError(err *ProviderError) interfaces.WorkFailureDecision {
+	return WorkFailureDecisionFromMetadata(WorkFailureMetadataFromError(err))
+}
+
 // WorkFailureDecisionFromMetadata resolves retry behavior from durable
 // generalized failure metadata carried across runtime boundaries.
 // The normalized type is canonical when present; family remains a fallback for
@@ -101,7 +107,7 @@ func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces
 }
 
 // WorkFailureMetadataFromError projects a provider-shaped execution error onto
-// the generalized runtime failure contract.
+// the in-process failure contract carried on WorkResult.FailureMetadata.
 func WorkFailureMetadataFromError(err *ProviderError) *interfaces.WorkFailureMetadata {
 	if err == nil {
 		return nil

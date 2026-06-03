@@ -204,6 +204,16 @@ func TestWorkFailureMetadataFromError_ProducesGeneralizedFailureMetadata(t *test
 	}
 }
 
+func TestWorkFailureDecisionFromProviderError_UsesFailureMetadataProjection(t *testing.T) {
+	providerErr := NewProviderError(interfaces.WorkFailureTypeInternalServerError, "high demand", nil)
+	providerErr.Family = interfaces.WorkFailureFamilyTerminal
+
+	decision := WorkFailureDecisionFromProviderError(providerErr)
+	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
+		t.Fatalf("WorkFailureDecisionFromProviderError() = %#v, want retryable non-terminal non-throttle", decision)
+	}
+}
+
 func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpectedRuntimeDecisions(t *testing.T) {
 	testCases := []ProviderErrorCorpusEntry{
 		providerErrorCorpusEntryForTest(t, "codex_status_429_too_many_requests"),
@@ -229,7 +239,7 @@ func TestClassifyProviderFailure_SharedCodexAndCursorCorpusEntriesFollowExpected
 				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
 			}
 
-			decision := ClassifyProviderFailure(providerErr)
+			decision := WorkFailureDecisionFromProviderError(providerErr)
 			wantTerminal := !entry.Retryable
 			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
 				t.Fatalf(
@@ -270,7 +280,7 @@ func TestNormalizeProviderExitFailure_CleanupHeavyCodexCorpusEntriesKeepTheDecis
 				t.Fatalf("%s normalized family = %q, want %q", providerErrorCorpusEntryLabel(entry), providerErr.Family, entry.ExpectedFamily)
 			}
 
-			decision := ClassifyProviderFailure(providerErr)
+			decision := WorkFailureDecisionFromProviderError(providerErr)
 			wantTerminal := !entry.Retryable
 			if decision.Retryable != entry.Retryable || decision.Terminal != wantTerminal || decision.TriggersThrottlePause != entry.TriggersThrottlePause {
 				t.Fatalf(

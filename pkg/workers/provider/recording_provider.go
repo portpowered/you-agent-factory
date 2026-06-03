@@ -205,7 +205,7 @@ func isRetryableProviderFailure(err error) bool {
 	if !errors.As(err, &providerErr) {
 		return false
 	}
-	return ClassifyProviderFailure(providerErr).Retryable
+	return WorkFailureDecisionFromProviderError(providerErr).Retryable
 }
 
 func providerErrorClass(err error) string {
