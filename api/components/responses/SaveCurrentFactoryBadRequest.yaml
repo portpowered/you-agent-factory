@@ -5,7 +5,7 @@ content:
       $ref: '../schemas/api/ErrorResponse.yaml'
     examples:
       invalidFactory:
-        summary: Factory payload failed validation.
+        summary: Factory payload failed validation because a workstation has outputs but no failure route.
         value:
           message: Factory payload is not a valid Agent Factory definition.
           family: BAD_REQUEST
@@ -18,3 +18,17 @@ content:
                 type: WORKSTATION
                 id: bob
                 location: ON_FAILURE
+      routelessWorkstation:
+        summary: Factory payload failed validation because a workstation has no output routes.
+        value:
+          message: Factory payload is not a valid Agent Factory definition.
+          family: BAD_REQUEST
+          code: INVALID_FACTORY
+          targets:
+            - code: factory.workstation.missingOutputRoutes
+              severity: error
+              message: workstation "bob" must define output routes.
+              subject:
+                type: WORKSTATION
+                id: bob
+                location: OUTPUTS

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, type Mock, vi } from "vitest";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, type Mock, vi } from "vitest";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
@@ -196,8 +196,28 @@ export const importedFactorySnapshot = (() => {
   return snapshot;
 })();
 
+export async function settleAppShellDashboardEffects(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
+export async function waitForAppShellWorkGraphReady(): Promise<void> {
+  const graphViewport = await screen.findByRole("region", {
+    name: "Work graph viewport",
+  });
+  await waitFor(
+    () => {
+      expect(graphViewport.querySelector(".react-flow__node")).toBeTruthy();
+    },
+    { timeout: 15_000 },
+  );
+  await settleAppShellDashboardEffects();
+}
+
 export async function waitForDashboardShell(): Promise<void> {
   await screen.findByRole("heading", { name: "U" });
+  await settleAppShellDashboardEffects();
 }
 
 export function renderApp({

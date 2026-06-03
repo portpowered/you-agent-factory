@@ -36,7 +36,7 @@ type WorkResult struct {
 	Feedback                    string                   `json:"feedback,omitempty"`
 	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
 	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderFailure             *ProviderFailureMetadata `json:"provider_failure,omitempty"`
+	ProviderFailure             *WorkFailureMetadata `json:"provider_failure,omitempty"`
 	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics                 *WorkDiagnostics         `json:"diagnostics,omitempty"`
 	Metrics                     WorkMetrics              `json:"metrics"`
@@ -124,16 +124,6 @@ const (
 	WorkFailureFamilyThrottle  WorkFailureFamily = "throttle"
 )
 
-// ProviderErrorFamily remains as a compatibility alias while runtime paths
-// transition to generalized work-failure naming.
-type ProviderErrorFamily = WorkFailureFamily
-
-const (
-	ProviderErrorFamilyTerminal  ProviderErrorFamily = WorkFailureFamilyTerminal
-	ProviderErrorFamilyRetryable ProviderErrorFamily = WorkFailureFamilyRetryable
-	ProviderErrorFamilyThrottle  ProviderErrorFamily = WorkFailureFamilyThrottle
-)
-
 // WorkFailureType is the stable customer-facing normalized failure type for
 // scoped runtime work execution paths.
 type WorkFailureType string
@@ -148,20 +138,6 @@ const (
 	WorkFailureTypeMisconfigured       WorkFailureType = "misconfigured"
 )
 
-// ProviderErrorType remains as a compatibility alias while runtime paths
-// transition to generalized work-failure naming.
-type ProviderErrorType = WorkFailureType
-
-const (
-	ProviderErrorTypeAuthFailure         ProviderErrorType = WorkFailureTypeAuthFailure
-	ProviderErrorTypePermanentBadRequest ProviderErrorType = WorkFailureTypePermanentBadRequest
-	ProviderErrorTypeThrottled           ProviderErrorType = WorkFailureTypeThrottled
-	ProviderErrorTypeInternalServerError ProviderErrorType = WorkFailureTypeInternalServerError
-	ProviderErrorTypeTimeout             ProviderErrorType = WorkFailureTypeTimeout
-	ProviderErrorTypeUnknown             ProviderErrorType = WorkFailureTypeUnknown
-	ProviderErrorTypeMisconfigured       ProviderErrorType = WorkFailureTypeMisconfigured
-)
-
 // WorkFailureDecision is the normalized behavior contract consumed by
 // downstream retry, termination, and throttle-pause logic.
 type WorkFailureDecision struct {
@@ -170,10 +146,6 @@ type WorkFailureDecision struct {
 	TriggersThrottlePause bool
 }
 
-// ProviderFailureDecision remains as a compatibility alias while runtime paths
-// transition to generalized work-failure naming.
-type ProviderFailureDecision = WorkFailureDecision
-
 // WorkFailureMetadata carries the normalized failure contract
 // across runtime boundaries after the original error has been rendered.
 type WorkFailureMetadata struct {
@@ -181,14 +153,10 @@ type WorkFailureMetadata struct {
 	Type   WorkFailureType   `json:"type"`
 }
 
-// ProviderFailureMetadata remains as a compatibility alias while runtime paths
-// transition to generalized work-failure naming.
-type ProviderFailureMetadata = WorkFailureMetadata
-
 // CanonicalWorkFailureMetadata returns the generalized failure metadata from
 // the runtime result, falling back to the legacy provider-named field while
 // older callers are still being migrated.
-func CanonicalWorkFailureMetadata(failure *WorkFailureMetadata, providerFailure *ProviderFailureMetadata) *WorkFailureMetadata {
+func CanonicalWorkFailureMetadata(failure *WorkFailureMetadata, providerFailure *WorkFailureMetadata) *WorkFailureMetadata {
 	if failure != nil {
 		return failure
 	}

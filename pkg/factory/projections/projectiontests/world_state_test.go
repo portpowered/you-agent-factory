@@ -372,7 +372,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     900,
-			ErrorClass:         stringPtrForProjectionTest(string(interfaces.ProviderErrorTypeTimeout)),
+			ErrorClass:         stringPtrForProjectionTest(string(interfaces.WorkFailureTypeTimeout)),
 			ProviderSession: generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
@@ -383,7 +383,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			DispatchID:     "dispatch-1",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "FAILED", ProviderFailure: &interfaces.ProviderFailureMetadata{Family: interfaces.ProviderErrorFamilyRetryable, Type: interfaces.ProviderErrorTypeTimeout}},
+			Result:         interfaces.WorkstationResult{Outcome: "FAILED", ProviderFailure: &interfaces.WorkFailureMetadata{Family: interfaces.WorkFailureFamilyRetryable, Type: interfaces.WorkFailureTypeTimeout}},
 			DurationMillis: 900,
 			TraceData:      &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 			ProviderSession: &interfaces.ProviderSessionMetadata{
@@ -406,12 +406,15 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 	if completion.ProviderSession == nil || completion.ProviderSession.ID != "sess-1" {
 		t.Fatalf("completion provider session = %#v, want sess-1", completion.ProviderSession)
 	}
-	if completion.Result.ProviderFailure == nil {
-		t.Fatal("completion provider failure is nil, want canonical metadata")
+	if completion.Result.FailureMetadata == nil {
+		t.Fatal("completion failure metadata is nil, want canonical metadata")
 	}
-	if completion.Result.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable ||
-		completion.Result.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("completion provider failure = %#v, want retryable/timeout", completion.Result.ProviderFailure)
+	if completion.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable ||
+		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("completion failure metadata = %#v, want retryable/timeout", completion.Result.FailureMetadata)
+	}
+	if completion.Result.ProviderFailure != nil {
+		t.Fatalf("completion provider failure = %#v, want nil internal field", completion.Result.ProviderFailure)
 	}
 	if len(state.ProviderSessions) != 1 || state.ProviderSessions[0].ProviderSession.ID != "sess-1" {
 		t.Fatalf("provider sessions = %#v, want sess-1", state.ProviderSessions)

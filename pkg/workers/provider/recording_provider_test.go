@@ -101,7 +101,7 @@ func TestRecordingProvider_Infer_NormalizesEventTimesToUTC(t *testing.T) {
 }
 
 func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t *testing.T) {
-	providerErr := NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timed out", nil)
+	providerErr := NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", nil)
 	providerErr.Diagnostics = &interfaces.WorkDiagnostics{
 		Command: &interfaces.CommandDiagnostic{ExitCode: 124},
 	}
@@ -128,7 +128,7 @@ func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t
 	if response.Outcome != factoryapi.InferenceOutcomeFailed {
 		t.Fatalf("response outcome = %s, want FAILED", response.Outcome)
 	}
-	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.ProviderErrorTypeTimeout) {
+	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.WorkFailureTypeTimeout) {
 		t.Fatalf("errorClass = %#v, want timeout", response.ErrorClass)
 	}
 	if response.ExitCode == nil || *response.ExitCode != 124 {
@@ -171,7 +171,7 @@ func TestRecordingProvider_Infer_FailureExitCodeEmissionMatchesDiagnosticPolicy(
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			providerErr := NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timed out", nil)
+			providerErr := NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", nil)
 			providerErr.Diagnostics = tc.diagnostics
 			fake := &recordingProviderFake{errors: []error{providerErr}}
 			events := &recordingEvents{}
@@ -263,7 +263,7 @@ func TestRecordingProvider_Infer_SuccessPreservesProviderSessionAndSafeDiagnosti
 
 func TestRecordingProvider_Infer_FailureZeroExitCodeStillPreservesProviderSessionAndSafeDiagnostics(t *testing.T) {
 	providerErr := NewProviderErrorWithSession(
-		interfaces.ProviderErrorTypeTimeout,
+		interfaces.WorkFailureTypeTimeout,
 		"provider timed out",
 		nil,
 		&interfaces.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "sess-456"},
@@ -317,8 +317,8 @@ func TestRecordingProvider_Infer_MultipleAttemptsIncrementAndKeepUniqueRequestID
 	start := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	fake := &recordingProviderFake{
 		errors: []error{
-			NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
-			NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timeout", nil),
+			NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
+			NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timeout", nil),
 			nil,
 		},
 		responses: []interfaces.InferenceResponse{
@@ -366,8 +366,8 @@ func TestRecordingProvider_Infer_RetryableFailureKeepsAttemptCounterUntilTermina
 	start := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	fake := &recordingProviderFake{
 		errors: []error{
-			NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timed out", nil),
-			NewProviderError(interfaces.ProviderErrorTypePermanentBadRequest, "prompt invalid", nil),
+			NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", nil),
+			NewProviderError(interfaces.WorkFailureTypePermanentBadRequest, "prompt invalid", nil),
 			nil,
 		},
 		responses: []interfaces.InferenceResponse{
@@ -401,10 +401,10 @@ func TestRecordingProvider_Infer_RetryableFailureKeepsAttemptCounterUntilTermina
 	if firstFailure.Attempt != 1 || secondFailure.Attempt != 2 || finalSuccess.Attempt != 1 {
 		t.Fatalf("attempt sequence = [%d %d %d], want [1 2 1]", firstFailure.Attempt, secondFailure.Attempt, finalSuccess.Attempt)
 	}
-	if firstFailure.ErrorClass == nil || *firstFailure.ErrorClass != string(interfaces.ProviderErrorTypeTimeout) {
+	if firstFailure.ErrorClass == nil || *firstFailure.ErrorClass != string(interfaces.WorkFailureTypeTimeout) {
 		t.Fatalf("first failure errorClass = %#v, want timeout", firstFailure.ErrorClass)
 	}
-	if secondFailure.ErrorClass == nil || *secondFailure.ErrorClass != string(interfaces.ProviderErrorTypePermanentBadRequest) {
+	if secondFailure.ErrorClass == nil || *secondFailure.ErrorClass != string(interfaces.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("second failure errorClass = %#v, want permanent bad request", secondFailure.ErrorClass)
 	}
 	if finalSuccess.Outcome != factoryapi.InferenceOutcomeSucceeded {
@@ -430,8 +430,8 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
-	if providerErr.Type != interfaces.ProviderErrorTypeMisconfigured {
-		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.ProviderErrorTypeMisconfigured)
+	if providerErr.Type != interfaces.WorkFailureTypeMisconfigured {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypeMisconfigured)
 	}
 	if providerErr.Message != "recording provider requires an inner provider" {
 		t.Fatalf("provider error message = %q", providerErr.Message)
@@ -444,7 +444,7 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 	if response.Outcome != factoryapi.InferenceOutcomeFailed {
 		t.Fatalf("response outcome = %s, want FAILED", response.Outcome)
 	}
-	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.ProviderErrorTypeMisconfigured) {
+	if response.ErrorClass == nil || *response.ErrorClass != string(interfaces.WorkFailureTypeMisconfigured) {
 		t.Fatalf("errorClass = %#v, want misconfigured", response.ErrorClass)
 	}
 	if response.ExitCode != nil {

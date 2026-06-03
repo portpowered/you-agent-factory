@@ -166,8 +166,8 @@ func TestScriptExecutor_CancellationReturnsFailedResult(t *testing.T) {
 	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
 	}
-	if result.ProviderFailure == nil || result.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("ProviderFailure = %#v, want timeout metadata", result.ProviderFailure)
+	if result.ProviderFailure != nil {
+		t.Fatalf("ProviderFailure = %#v, want nil on internal WorkResult", result.ProviderFailure)
 	}
 }
 
@@ -832,8 +832,8 @@ func TestScriptExecutor_TimeoutStopsProcessBeforeItCanFinish(t *testing.T) {
 	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
 	}
-	if result.ProviderFailure == nil || result.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("ProviderFailure = %#v, want timeout metadata", result.ProviderFailure)
+	if result.ProviderFailure != nil {
+		t.Fatalf("ProviderFailure = %#v, want nil on internal WorkResult", result.ProviderFailure)
 	}
 
 	time.Sleep(350 * time.Millisecond)

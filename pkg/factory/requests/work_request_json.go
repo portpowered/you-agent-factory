@@ -60,17 +60,17 @@ func ValidateCanonicalWorkRequestJSON(data []byte) error {
 
 func validateRetiredWorkRequestFieldAliases(raw canonicalWorkRequestJSON) error {
 	if raw.WorkTypeID != nil {
-		return fmt.Errorf("work request batch uses retired work_type_id field; use workTypeName")
+		return fmt.Errorf("work_type_id is not supported; use workTypeName")
 	}
 	if raw.TargetState != nil {
-		return fmt.Errorf("work request batch uses retired target_state field; use state")
+		return fmt.Errorf("target_state is not supported; use state")
 	}
 	for i := range raw.Works {
 		if raw.Works[i].WorkTypeID != nil {
-			return fmt.Errorf("work request batch works[%d] uses retired work_type_id field; use workTypeName", i)
+			return fmt.Errorf("works[%d].work_type_id is not supported; use workTypeName", i)
 		}
 		if raw.Works[i].TargetState != nil {
-			return fmt.Errorf("work request batch works[%d] uses retired target_state field; use state", i)
+			return fmt.Errorf("works[%d].target_state is not supported; use state", i)
 		}
 	}
 	return nil
@@ -83,7 +83,7 @@ func validateConflictingWorkRequestTraceFields(raw canonicalWorkRequestJSON) err
 		raw.TraceID,
 		raw.LegacyTraceID,
 	); err != nil {
-		return fmt.Errorf("work request batch %w", err)
+		return err
 	}
 	for i := range raw.Works {
 		if err := ValidateWorkRequestTraceFieldAliases(
@@ -92,7 +92,7 @@ func validateConflictingWorkRequestTraceFields(raw canonicalWorkRequestJSON) err
 			raw.Works[i].TraceID,
 			raw.Works[i].LegacyTraceID,
 		); err != nil {
-			return fmt.Errorf("work request batch works[%d] %w", i, err)
+			return fmt.Errorf("works[%d].%w", i, err)
 		}
 	}
 	return nil

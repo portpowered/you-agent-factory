@@ -653,9 +653,9 @@ func TestConfigMapping_FactoryInferenceThrottleGuardBlocksOnlyMatchingLaneAtRunt
 			{
 				DispatchID:   "d-throttle",
 				TransitionID: "claude-step",
-				ProviderFailure: &interfaces.ProviderFailureMetadata{
-					Family: interfaces.ProviderErrorFamilyThrottle,
-					Type:   interfaces.ProviderErrorTypeThrottled,
+				ProviderFailure: &interfaces.WorkFailureMetadata{
+					Family: interfaces.WorkFailureFamilyThrottle,
+					Type:   interfaces.WorkFailureTypeThrottled,
 				},
 				EndTime: time.Date(2026, time.May, 1, 10, 0, 0, 0, time.UTC),
 			},

@@ -1,4 +1,5 @@
 node_modules/
+.warning-inventory/
 storybook-static/
 *.tsbuildinfo
 *.exe

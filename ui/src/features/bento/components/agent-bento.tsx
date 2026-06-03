@@ -77,17 +77,11 @@ const BENTO_DRAG_HANDLE_SELECTOR = "[data-bento-drag-handle='true']";
 const BENTO_DRAG_CANCEL_SELECTOR =
   "button,a,input,select,textarea,.react-resizable-handle";
 const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-hidden";
-const BENTO_GRID_CLASS = "min-h-px";
-const BENTO_ITEM_CLASS = "min-w-0";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "flex min-h-13 cursor-grab items-center justify-between gap-3 border-af-border px-3.5 py-3 active:cursor-grabbing";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
   "min-h-11 flex-wrap items-start gap-2 px-3 py-2.5";
-const BENTO_CARD_TITLE_CLASS = cn(
-  "m-0 min-w-0 flex-1 [overflow-wrap:anywhere]",
-  DASHBOARD_SECTION_HEADING_CLASS,
-);
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
@@ -262,7 +256,7 @@ export function AgentBentoLayout({
     >
       <GridLayout
         autoSize
-        className={BENTO_GRID_CLASS}
+        className="min-h-px"
         dragConfig={{
           cancel: BENTO_DRAG_CANCEL_SELECTOR,
           enabled: allowsInteractiveGrid,
@@ -284,7 +278,7 @@ export function AgentBentoLayout({
       >
         {cards.map((card) => (
           <div
-            className={BENTO_ITEM_CLASS}
+            className="min-w-0"
             data-bento-card-id={card.widgetType}
             data-bento-instance-id={card.id}
             data-layout-signature={layoutSignature(
@@ -371,7 +365,14 @@ export function AgentBentoCardHeader({
       data-bento-drag-handle="true"
     >
       <div className="min-w-0 flex-1">
-        <h3 className={BENTO_CARD_TITLE_CLASS}>{title}</h3>
+        <h3
+          className={cn(
+            "m-0 min-w-0 flex-1 [overflow-wrap:anywhere]",
+            DASHBOARD_SECTION_HEADING_CLASS,
+          )}
+        >
+          {title}
+        </h3>
       </div>
       {headerAction ? (
         <div

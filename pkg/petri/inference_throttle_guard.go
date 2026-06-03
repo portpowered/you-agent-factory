@@ -59,7 +59,7 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 	for i := range ctx.DispatchHistory {
 		record := ctx.DispatchHistory[i]
 		failureMetadata := interfaces.CanonicalWorkFailureMetadata(record.FailureMetadata, record.ProviderFailure)
-		if failureMetadata == nil || failureMetadata.Family != interfaces.ProviderErrorFamilyThrottle {
+		if failureMetadata == nil || failureMetadata.Family != interfaces.WorkFailureFamilyThrottle {
 			continue
 		}
 		if !g.historyDispatchMatchesLane(ctx, record.TransitionID) {
@@ -70,7 +70,6 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 			Model:           g.Model,
 			OccurredAt:      record.EndTime,
 			FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
-			ProviderFailure: interfaces.CloneProviderFailureMetadata(failureMetadata),
 		})
 	}
 	return factorythrottle.DeriveActiveThrottlePauses(history, g.RefreshWindow, ctx.Now)

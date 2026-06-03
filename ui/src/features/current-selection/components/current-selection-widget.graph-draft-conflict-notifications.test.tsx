@@ -1,8 +1,12 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: graph-draft conflict notification regressions share one mocked save/notify harness.
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
+import { useStrictConsoleGuard } from "../../../testing/strict-console-guard";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { settleCurrentSelectionEffects } from "../../../testing/current-selection-test-utils";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphTopologyEditorBridge } from "../../workflow-activity/state/factory-graph-topology-editor-bridge";
@@ -18,11 +22,11 @@ import {
   buildDetailCardFactoryDocumentSaveHookReturn,
   buildDetailCardMultiResourceFactoryDocument,
   buildDetailCardWorkStateFactoryDocument,
-  clickWorkstationSave,
   DETAIL_CARD_NOW,
   expandDetailCardResourceConfiguration,
   expandDetailCardWorkerConfiguration,
   expandDetailCardWorkstationConfiguration,
+  workstationFooterSaveButton,
 } from "../base/components/detail-card-test-helpers";
 import { resetSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { useCurrentWorkstationPromptTemplateValidation } from "../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
@@ -119,11 +123,11 @@ function buildDetailCardWorkTypeFactoryDocument(): CurrentFactoryDocument {
   };
 }
 
-function renderWorkstationSelection() {
+async function renderWorkstationSelection() {
   const selectedNode =
     semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review;
 
-  return renderWithQueryClient(
+  const result = renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
         selectedNode,
@@ -133,10 +137,12 @@ function renderWorkstationSelection() {
       selectedWorkExecutionDetails={null}
     />,
   );
+  await settleCurrentSelectionEffects();
+  return result;
 }
 
-function renderWorkerSelection() {
-  return renderWithQueryClient(
+async function renderWorkerSelection() {
+  const result = renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
         selectedWorkerName: "reviewer",
@@ -146,10 +152,12 @@ function renderWorkerSelection() {
       selectedWorkExecutionDetails={null}
     />,
   );
+  await settleCurrentSelectionEffects();
+  return result;
 }
 
-function renderResourceSelection(resourceName = "agent-slot") {
-  return renderWithQueryClient(
+async function renderResourceSelection(resourceName = "agent-slot") {
+  const result = renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
         selectedResourceName: resourceName,
@@ -159,10 +167,12 @@ function renderResourceSelection(resourceName = "agent-slot") {
       selectedWorkExecutionDetails={null}
     />,
   );
+  await settleCurrentSelectionEffects();
+  return result;
 }
 
-function renderWorkTypeSelection() {
-  return renderWithQueryClient(
+async function renderWorkTypeSelection() {
+  const result = renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
         selectedWorkTypeName: "story",
@@ -172,9 +182,11 @@ function renderWorkTypeSelection() {
       selectedWorkExecutionDetails={null}
     />,
   );
+  await settleCurrentSelectionEffects();
+  return result;
 }
 
-function renderWorkStateSelection() {
+async function renderWorkStateSelection() {
   const selectedStatePlace =
     semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review.input_places?.find(
       (place) => place.place_id === "story:implemented",
@@ -184,7 +196,7 @@ function renderWorkStateSelection() {
     throw new Error("expected implemented state fixture");
   }
 
-  return renderWithQueryClient(
+  const result = renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
         selectedStatePlace,
@@ -197,10 +209,24 @@ function renderWorkStateSelection() {
       selectedWorkExecutionDetails={null}
     />,
   );
+  await settleCurrentSelectionEffects();
+  return result;
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: cross-entity graph-draft conflict regressions share one mocked save seam.
 describe("CurrentSelectionWidget graph draft conflict warning boundaries", () => {
+  useStrictConsoleGuard({
+    allowlist: [
+      {
+        name: "widget-save-notifications-mutation-settle",
+        level: "error",
+        match: "CurrentSelectionWidgetSaveNotifications",
+        reason:
+          "Mocked document-save mutations resolve after userEvent; the save-notification subtree re-renders before the enclosing act scope closes.",
+      },
+    ],
+  });
+
   beforeEach(() => {
     resetSelectionHistoryStore();
     resetGraphDraftBridge();
@@ -249,16 +275,23 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       );
       markGraphDraftDirty();
 
-      renderWorkstationSelection();
+      await renderWorkstationSelection();
+      const user = userEvent.setup();
       expandDetailCardWorkstationConfiguration();
       fireEvent.change(screen.getByLabelText("Worker"), {
         target: { value: "planner" },
       });
-      clickWorkstationSave();
-      fireEvent.click(
+      await settleCurrentSelectionEffects();
+      await user.click(workstationFooterSaveButton());
+      await waitFor(() => {
+        expect(
+          screen.getByRole("button", { name: "Overwrite factory" }),
+        ).toBeTruthy();
+      });
+      await settleCurrentSelectionEffects();
+      await user.click(
         screen.getByRole("button", { name: "Overwrite factory" }),
       );
-
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -275,18 +308,19 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       );
       markGraphDraftDirty();
 
-      renderWorkerSelection();
+      await renderWorkerSelection();
       expandDetailCardWorkerConfiguration();
       fireEvent.change(screen.getByLabelText("Worker name"), {
         target: { value: "senior-reviewer" },
       });
+      await settleCurrentSelectionEffects();
       const saveWorkerButtons = screen.getAllByRole("button", {
         name: "Save worker",
       });
-      fireEvent.click(
-        saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0],
+      await userEvent.setup().click(
+        saveWorkerButtons[saveWorkerButtons.length - 1] ??
+          saveWorkerButtons[0],
       );
-
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -335,13 +369,15 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       });
       markGraphDraftDirty();
 
-      renderResourceSelection();
+      await renderResourceSelection();
       expandDetailCardResourceConfiguration();
       fireEvent.change(screen.getByLabelText("Name"), {
         target: { value: "expanded-slot" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Save resource" }));
-
+      await settleCurrentSelectionEffects();
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "Save resource" }));
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -371,15 +407,17 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       });
       markGraphDraftDirty();
 
-      renderWorkTypeSelection();
+      await renderWorkTypeSelection();
       fireEvent.change(screen.getByLabelText("Work type"), {
         target: { value: "feature" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
-      fireEvent.click(
+      await settleCurrentSelectionEffects();
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Save changes" }));
+      await settleCurrentSelectionEffects();
+      await user.click(
         screen.getByRole("button", { name: "Overwrite factory" }),
       );
-
       await expectGraphDraftConflictWarningToast();
     });
 
@@ -405,15 +443,17 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       );
       markGraphDraftDirty();
 
-      renderWorkStateSelection();
+      await renderWorkStateSelection();
       await waitFor(() => {
         expect(screen.getByLabelText("State name")).toBeTruthy();
       });
       fireEvent.change(screen.getByLabelText("State name"), {
         target: { value: "ready" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Save work state" }));
-
+      await settleCurrentSelectionEffects();
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "Save work state" }));
       await expectGraphDraftConflictWarningToast();
     });
   });
@@ -430,17 +470,18 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       );
       markGraphDraftDirty();
 
-      renderWorkerSelection();
+      await renderWorkerSelection();
       fireEvent.change(screen.getByLabelText("Model"), {
         target: { value: "gpt-5.9" },
       });
+      await settleCurrentSelectionEffects();
       const saveWorkerButtons = screen.getAllByRole("button", {
         name: "Save worker",
       });
-      fireEvent.click(
-        saveWorkerButtons[saveWorkerButtons.length - 1] ?? saveWorkerButtons[0],
+      await userEvent.setup().click(
+        saveWorkerButtons[saveWorkerButtons.length - 1] ??
+          saveWorkerButtons[0],
       );
-
       await expectWorkerSaveSuccessToast("reviewer");
       await expectNoGraphDraftConflictWarningToast();
     });
@@ -468,14 +509,16 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
         }),
       );
 
-      renderWorkStateSelection();
+      await renderWorkStateSelection();
       await waitFor(() => {
         expect(screen.getByLabelText("State name")).toBeTruthy();
       });
       fireEvent.change(screen.getByLabelText("State name"), {
         target: { value: "ready" },
       });
-      fireEvent.click(screen.getByRole("button", { name: "Save work state" }));
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "Save work state" }));
 
       await expectNoGraphDraftConflictWarningToast();
     });

@@ -189,11 +189,11 @@ func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T, timeoutE
 	if dispatch.ProviderFailure == nil {
 		t.Fatal("ProviderFailure is nil, want timeout metadata")
 	}
-	if dispatch.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	if dispatch.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
 	}
-	if dispatch.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
-		t.Fatalf("provider failure family = %s, want %s", dispatch.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
+	if dispatch.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("provider failure family = %s, want %s", dispatch.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 	assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", conciseError})
 	for _, reject := range timeoutEntry.RejectMessageContains {
@@ -299,17 +299,17 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 	if completion.Outcome != factoryapi.WorkOutcomeFailed {
 		t.Fatalf("DISPATCH_COMPLETED outcome = %s, want %s", completion.Outcome, factoryapi.WorkOutcomeFailed)
 	}
-	if got := stringPointerValue(completion.FailureReason); got != string(interfaces.ProviderErrorTypeInternalServerError) {
-		t.Fatalf("DISPATCH_COMPLETED failureReason = %q, want %q", got, interfaces.ProviderErrorTypeInternalServerError)
+	if got := stringPointerValue(completion.FailureReason); got != string(interfaces.WorkFailureTypeInternalServerError) {
+		t.Fatalf("DISPATCH_COMPLETED failureReason = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
 	}
 	if completion.ProviderFailure == nil {
 		t.Fatal("DISPATCH_COMPLETED providerFailure is nil, want canonical metadata")
 	}
-	if got := stringPointerValue(completion.ProviderFailure.Type); got != string(interfaces.ProviderErrorTypeInternalServerError) {
-		t.Fatalf("DISPATCH_COMPLETED providerFailure.type = %q, want %q", got, interfaces.ProviderErrorTypeInternalServerError)
+	if got := stringPointerValue(completion.ProviderFailure.Type); got != string(interfaces.WorkFailureTypeInternalServerError) {
+		t.Fatalf("DISPATCH_COMPLETED providerFailure.type = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if got := stringPointerValue(completion.ProviderFailure.Family); got != string(interfaces.ProviderErrorFamilyRetryable) {
-		t.Fatalf("DISPATCH_COMPLETED providerFailure.family = %q, want %q", got, interfaces.ProviderErrorFamilyRetryable)
+	if got := stringPointerValue(completion.ProviderFailure.Family); got != string(interfaces.WorkFailureFamilyRetryable) {
+		t.Fatalf("DISPATCH_COMPLETED providerFailure.family = %q, want %q", got, interfaces.WorkFailureFamilyRetryable)
 	}
 	assertContainsAll(
 		t,

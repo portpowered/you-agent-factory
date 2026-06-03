@@ -1,3 +1,6 @@
+import "./testing/app-shell-work-outcome-stub";
+import "./testing/app-shell-workflow-activity-stub";
+
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ImportFactoryValue } from "./api/session-factory";
@@ -17,6 +20,7 @@ import {
   jsonResponse,
   registerAppDashboardTestLifecycle,
   renderApp,
+  settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
 
 const currentFactoryWithBundledFiles = {
@@ -226,6 +230,7 @@ describe("App shell export submission flows", () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(currentFactoryWithBundledFilesAPIResponse),
     );
+    await settleAppShellDashboardEffects();
 
     try {
       fireEvent.click(
@@ -280,6 +285,7 @@ describe("App shell export submission flows", () => {
           "semantic-workflow.png",
         );
       });
+      await settleAppShellDashboardEffects();
 
       const downloadedBlob = exportProbe.getDownloadedBlob();
       if (!downloadedBlob) {

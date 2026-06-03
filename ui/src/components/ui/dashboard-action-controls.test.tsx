@@ -40,7 +40,35 @@ describe("DashboardActionButton", () => {
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toBeDisabled();
     expect(button.className).toContain("min-h-10");
-    expect(button.querySelector(".animate-spin")).toBeTruthy();
+    const spinner = button.querySelector("svg.animate-spin");
+    expect(spinner).toBeTruthy();
+    expect(spinner?.classList.contains("size-4")).toBe(true);
+    expect(spinner?.classList.contains("animate-spin")).toBe(true);
+    const overlay = button.querySelector(
+      "span.pointer-events-none.absolute.inset-0",
+    );
+    expect(overlay).toBeTruthy();
+    expect(overlay?.className).toContain("inline-flex");
+    expect(overlay?.className).toContain("items-center");
+    expect(overlay?.className).toContain("justify-center");
+  });
+
+  it("renders executing overlay for icon-only buttons", () => {
+    render(
+      <DashboardActionButton aria-label="Export" executing iconOnly>
+        <svg aria-hidden="true" viewBox="0 0 16 16" />
+      </DashboardActionButton>,
+    );
+
+    const button = screen.getByRole("button", { name: "Export" });
+    const overlay = button.querySelector(
+      "span.pointer-events-none.absolute.inset-0",
+    );
+    expect(overlay).toBeTruthy();
+    const spinner = overlay?.querySelector("svg.animate-spin");
+    expect(spinner).toBeTruthy();
+    expect(spinner?.classList.contains("size-4")).toBe(true);
+    expect(spinner?.classList.contains("animate-spin")).toBe(true);
   });
 
   it("keeps disabled and pressed semantics available for migrated surfaces", () => {

@@ -89,7 +89,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsRequestLevelConflictingCurrentChai
 			}
 		]
 	}`))
-	if err == nil || err.Error() != "work request batch currentChainingTraceId and traceId must match when both are provided" {
+	if err == nil || err.Error() != "currentChainingTraceId and traceId must match when both are provided" {
 		t.Fatalf("ParseCanonicalWorkRequestJSON error = %v, want request-level conflict rejection", err)
 	}
 }
@@ -107,7 +107,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsLegacyConflictingCurrentChainingTr
 			}
 		]
 	}`))
-	if err == nil || err.Error() != "work request batch works[0] currentChainingTraceId and traceId must match when both are provided" {
+	if err == nil || err.Error() != "works[0].currentChainingTraceId and traceId must match when both are provided" {
 		t.Fatalf("ParseCanonicalWorkRequestJSON error = %v, want legacy conflict rejection", err)
 	}
 }
@@ -126,7 +126,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsRetiredAliases(t *testing.T) {
 				"work_type_id": "task",
 				"works": [{"name": "draft", "workTypeName": "task"}]
 			}`,
-			wantErr: "work request batch uses retired work_type_id field; use workTypeName",
+			wantErr: "work_type_id is not supported; use workTypeName",
 		},
 		{
 			name: "nested work type id",
@@ -135,7 +135,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsRetiredAliases(t *testing.T) {
 				"type": "FACTORY_REQUEST_BATCH",
 				"works": [{"name": "draft", "work_type_id": "task"}]
 			}`,
-			wantErr: "work request batch works[0] uses retired work_type_id field; use workTypeName",
+			wantErr: "works[0].work_type_id is not supported; use workTypeName",
 		},
 		{
 			name: "top level target state",
@@ -144,7 +144,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsRetiredAliases(t *testing.T) {
 				"workTypeName": "task",
 				"target_state": "queued"
 			}`,
-			wantErr: "work request batch uses retired target_state field; use state",
+			wantErr: "target_state is not supported; use state",
 		},
 		{
 			name: "nested target state",
@@ -153,7 +153,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsRetiredAliases(t *testing.T) {
 				"type": "FACTORY_REQUEST_BATCH",
 				"works": [{"name": "draft", "workTypeName": "task", "target_state": "queued"}]
 			}`,
-			wantErr: "work request batch works[0] uses retired target_state field; use state",
+			wantErr: "works[0].target_state is not supported; use state",
 		},
 	}
 

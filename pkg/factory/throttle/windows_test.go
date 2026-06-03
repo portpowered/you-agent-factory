@@ -7,6 +7,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestDeriveActiveThrottlePauses_ResolvesFailureMetadataOnlyRecord(t *testing.T) {
+	now := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
+
+	pauses := DeriveActiveThrottlePauses([]FailureRecord{{
+		Provider:        "claude",
+		Model:           "claude-sonnet",
+		OccurredAt:      now.Add(-5 * time.Minute),
+		FailureMetadata: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
+		},
+	}}, 30*time.Minute, now)
+
+	if len(pauses) != 1 {
+		t.Fatalf("pause count = %d, want 1", len(pauses))
+	}
+	if pauses[0].LaneID != "claude/claude-sonnet" {
+		t.Fatalf("lane ID = %q, want claude/claude-sonnet", pauses[0].LaneID)
+	}
+}
+
 func TestDeriveActiveThrottlePauses_CreatesOneActiveLaneForThrottleFailure(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
 
@@ -14,9 +35,9 @@ func TestDeriveActiveThrottlePauses_CreatesOneActiveLaneForThrottleFailure(t *te
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-5 * time.Minute),
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyThrottle,
-			Type:   interfaces.ProviderErrorTypeThrottled,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	}}, 30*time.Minute, now)
 
@@ -38,18 +59,18 @@ func TestDeriveActiveThrottlePauses_LaterFailureExtendsLaneExpiry(t *testing.T) 
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: first,
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyThrottle,
-				Type:   interfaces.ProviderErrorTypeThrottled,
+			ProviderFailure: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyThrottle,
+				Type:   interfaces.WorkFailureTypeThrottled,
 			},
 		},
 		{
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: second,
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyThrottle,
-				Type:   interfaces.ProviderErrorTypeThrottled,
+			ProviderFailure: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyThrottle,
+				Type:   interfaces.WorkFailureTypeThrottled,
 			},
 		},
 	}, 15*time.Minute, now)
@@ -72,9 +93,9 @@ func TestDeriveActiveThrottlePauses_OmitsExpiredWindows(t *testing.T) {
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-45 * time.Minute),
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyThrottle,
-			Type:   interfaces.ProviderErrorTypeThrottled,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	}}, 15*time.Minute, now)
 
@@ -91,18 +112,18 @@ func TestDeriveActiveThrottlePauses_KeepsProviderOnlyAndProviderModelLanesIsolat
 			Provider:   "claude",
 			Model:      "",
 			OccurredAt: now.Add(-5 * time.Minute),
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyThrottle,
-				Type:   interfaces.ProviderErrorTypeThrottled,
+			ProviderFailure: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyThrottle,
+				Type:   interfaces.WorkFailureTypeThrottled,
 			},
 		},
 		{
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: now.Add(-4 * time.Minute),
-			ProviderFailure: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyThrottle,
-				Type:   interfaces.ProviderErrorTypeThrottled,
+			ProviderFailure: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyThrottle,
+				Type:   interfaces.WorkFailureTypeThrottled,
 			},
 		},
 	}, 30*time.Minute, now)
@@ -122,9 +143,9 @@ func TestDeriveActiveThrottlePauses_IgnoresRetryableNonThrottleFailures(t *testi
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-5 * time.Minute),
-		ProviderFailure: &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeInternalServerError,
+		ProviderFailure: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeInternalServerError,
 		},
 	}}, 30*time.Minute, now)
 

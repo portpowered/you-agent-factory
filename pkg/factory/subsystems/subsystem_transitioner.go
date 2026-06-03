@@ -235,14 +235,16 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 	endTime time.Time,
 ) interfaces.CompletedDispatch {
 	dispatchEntry := completedDispatchEntry(snapshot, result.DispatchID)
+	failureMetadata := interfaces.CloneWorkFailureMetadata(
+		interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure),
+	)
 	completed := interfaces.CompletedDispatch{
 		DispatchID:                  result.DispatchID,
 		TransitionID:                result.TransitionID,
 		Outcome:                     resolved.outcome,
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
-		FailureMetadata:             interfaces.CloneWorkFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
-		ProviderFailure:             interfaces.CloneProviderFailureMetadata(interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)),
+		FailureMetadata:             failureMetadata,
 		ProviderSession:             interfaces.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:                     endTime,
 		ConsumedTokens:              interfaces.CloneTokens(consumedTokens),

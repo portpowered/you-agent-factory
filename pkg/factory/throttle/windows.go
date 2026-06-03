@@ -12,7 +12,7 @@ type FailureRecord struct {
 	Model           string
 	OccurredAt      time.Time
 	FailureMetadata *interfaces.WorkFailureMetadata
-	ProviderFailure *interfaces.ProviderFailureMetadata
+	ProviderFailure *interfaces.WorkFailureMetadata
 }
 
 type laneKey struct {
@@ -91,5 +91,5 @@ func laneID(key laneKey) string {
 }
 
 func triggersThrottlePause(failure *interfaces.WorkFailureMetadata) bool {
-	return failure != nil && failure.Family == interfaces.ProviderErrorFamilyThrottle
+	return failure != nil && failure.Family == interfaces.WorkFailureFamilyThrottle
 }

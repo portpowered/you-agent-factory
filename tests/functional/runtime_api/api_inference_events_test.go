@@ -90,8 +90,8 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 			{Content: "Step two done. COMPLETE"},
 		},
 		[]error{
-			workers.NewProviderError(interfaces.ProviderErrorTypeTimeout, "provider timeout", nil),
-			workers.NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "provider 500", nil),
+			workers.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timeout", nil),
+			workers.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
 			nil,
 			nil,
 		},

@@ -148,6 +148,47 @@ const onRejectionValidationProjection = projectFactoryValidationTargets([
   },
 ]);
 
+const routelessCronWorkstation: FactoryWorkstation = {
+  behavior: "CRON",
+  body: "",
+  cron: {
+    schedule: "0 * * * *",
+    triggerAtStart: true,
+  },
+  inputs: [],
+  name: "cron",
+  outputs: [],
+  type: "MODEL_WORKSTATION",
+  worker: "writer",
+};
+
+const routelessCronTopology: FactoryGraphTopology = {
+  edges: [],
+  nodes: [
+    {
+      id: "workstation:cron",
+      key: { kind: "workstation", name: "cron" },
+      kind: "workstation",
+      label: "cron",
+    },
+  ],
+};
+
+const missingOutputRoutesValidationProjection = projectFactoryValidationTargets(
+  [
+    {
+      code: "factory.workstation.missingOutputRoutes",
+      message: "missing output routes",
+      severity: "error",
+      subject: {
+        id: "cron",
+        location: "OUTPUTS",
+        type: "WORKSTATION",
+      },
+    },
+  ],
+);
+
 function renderProgressOutcomeRouteFlow(
   input:
     | {
@@ -287,6 +328,30 @@ describe("factory graph editor progress outcome route handles", () => {
     expect(
       container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
     ).toHaveLength(0);
+  });
+
+  it("shows missingOutputRoutes validation on the output handle for routeless CRON workstations", async () => {
+    const { container } = renderProgressOutcomeRouteFlow(
+      { workstations: [routelessCronWorkstation] },
+      {
+        topology: routelessCronTopology,
+        validationProjection: missingOutputRoutesValidationProjection,
+      },
+    );
+
+    const outputHandle = await screen.findByRole("button", {
+      name: "missing output routes",
+    });
+    expect(outputHandle.className).toContain("ring-af-danger-border");
+    expect(outputHandle.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.queryByRole("button", {
+        name: /missing output routes|missing failure route/i,
+      }),
+    ).toBe(outputHandle);
+    expect(
+      container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
+    ).toHaveLength(1);
   });
 
   it("shows API validation on rendered reject handle when stopWords are configured", async () => {

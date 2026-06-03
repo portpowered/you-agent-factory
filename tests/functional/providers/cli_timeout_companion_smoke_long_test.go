@@ -70,11 +70,11 @@ Execute the script.
 	if first.ProviderFailure == nil {
 		t.Fatal("first timeout dispatch ProviderFailure is nil, want timeout metadata")
 	}
-	if first.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("first timeout dispatch provider failure type = %s, want %s", first.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	if first.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("first timeout dispatch provider failure type = %s, want %s", first.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
 	}
-	if first.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
-		t.Fatalf("first timeout dispatch provider failure family = %s, want %s", first.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
+	if first.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("first timeout dispatch provider failure family = %s, want %s", first.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 	if len(first.OutputMutations) == 0 || first.OutputMutations[0].ToPlace != "task:init" {
 		t.Fatalf("first timeout dispatch mutations = %#v, want requeue to task:init", first.OutputMutations)

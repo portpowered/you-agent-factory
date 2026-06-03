@@ -28,7 +28,7 @@ type exitFailureInferenceTestCase struct {
 	provider    string
 	result      CommandResult
 	wantMessage string
-	wantType    interfaces.ProviderErrorType
+	wantType    interfaces.WorkFailureType
 }
 
 func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
@@ -38,21 +38,21 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 			provider:    string(interfaces.ModelProviderGemini),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("resource exhausted by 429 quota")},
 			wantMessage: "resource exhausted by 429 quota",
-			wantType:    interfaces.ProviderErrorTypeThrottled,
+			wantType:    interfaces.WorkFailureTypeThrottled,
 		},
 		{
 			name:        "KiroFallsBackToProviderExitCodeWhenOutputMissing",
 			provider:    string(interfaces.ModelProviderKiro),
 			result:      CommandResult{ExitCode: 9},
 			wantMessage: "kiro-cli exited with code 9",
-			wantType:    interfaces.ProviderErrorTypeUnknown,
+			wantType:    interfaces.WorkFailureTypeUnknown,
 		},
 		{
 			name:        "OpenCodeClassifiesAuthenticationOutput",
 			provider:    string(interfaces.ModelProviderOpenCode),
 			result:      CommandResult{ExitCode: 1, Stdout: []byte("login required before continuing")},
 			wantMessage: "login required before continuing",
-			wantType:    interfaces.ProviderErrorTypeAuthFailure,
+			wantType:    interfaces.WorkFailureTypeAuthFailure,
 		},
 	}
 }
@@ -64,14 +64,14 @@ func codexDerivedExitFailureTestCases() []exitFailureInferenceTestCase {
 			provider:    string(interfaces.ModelProviderCursor),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
 			wantMessage: "ERROR: unexpected status 500 from cursor upstream",
-			wantType:    interfaces.ProviderErrorTypeInternalServerError,
+			wantType:    interfaces.WorkFailureTypeInternalServerError,
 		},
 		{
 			name:        "CodexUsesCodexErrorExtraction",
 			provider:    string(interfaces.ModelProviderCodex),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from codex upstream")},
 			wantMessage: "ERROR: unexpected status 500 from codex upstream",
-			wantType:    interfaces.ProviderErrorTypeInternalServerError,
+			wantType:    interfaces.WorkFailureTypeInternalServerError,
 		},
 	}
 }

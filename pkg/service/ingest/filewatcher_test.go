@@ -539,8 +539,9 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsWorkTypeIDAlias(t *testing.T)
 	if err == nil {
 		t.Fatal("expected retired work_type_id alias to fail")
 	}
-	if !strings.Contains(err.Error(), "work_type_id") || !strings.Contains(err.Error(), "workTypeName") {
-		t.Fatalf("error = %q, want work_type_id rejection with workTypeName guidance", err.Error())
+	want := "works[0].work_type_id is not supported; use workTypeName"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 	if submitted := mf.getSubmitted(); len(submitted) != 0 {
 		t.Fatalf("expected no partial submissions, got %d", len(submitted))
@@ -572,8 +573,9 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsTargetStateAlias(t *testing.T
 	if err == nil {
 		t.Fatal("expected retired target_state alias to fail")
 	}
-	if !strings.Contains(err.Error(), "target_state") || !strings.Contains(err.Error(), "state") {
-		t.Fatalf("error = %q, want target_state rejection with state guidance", err.Error())
+	want := "works[0].target_state is not supported; use state"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 	if submitted := mf.getSubmitted(); len(submitted) != 0 {
 		t.Fatalf("expected no partial submissions, got %d", len(submitted))

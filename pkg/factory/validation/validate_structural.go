@@ -262,24 +262,50 @@ func conflictingRouteTargets(workstation string, inputCounts map[string]int, rou
 	return targets
 }
 
+func workstationHasEffectiveOutputs(workstation interfaces.FactoryWorkstationConfig) bool {
+	if len(workstation.Outputs) > 0 {
+		return true
+	}
+	for _, route := range workstation.ClassificationRoutes {
+		if len(route.Outputs) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 	failedWorkTypes := failedWorkTypeSet(cfg)
 	var targets []Target
 	for workstationIndex, workstation := range cfg.Workstations {
-		hasFailureRoute := len(workstation.OnFailure) > 0 ||
-			workstationCanDefaultFailureRoute(workstation, failedWorkTypes)
-		if !hasFailureRoute {
+		if !workstationHasEffectiveOutputs(workstation) {
 			targets = append(targets, Target{
-				Code:     CodeWorkstationMissingFailureRoute,
+				Code:     CodeWorkstationMissingOutputRoutes,
 				Severity: SeverityError,
-				Message:  fmt.Sprintf("workstation %q must define a failure route.", workstation.Name),
+				Message:  fmt.Sprintf("workstation %q must define output routes.", workstation.Name),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,
 					ID:       workstation.Name,
-					Location: SubjectLocationOnFailure,
+					Location: SubjectLocationOutputs,
 				},
-				Path: fmt.Sprintf("%s.workstations[%d].onFailure", validationRoot, workstationIndex),
+				Path: fmt.Sprintf("%s.workstations[%d].outputs", validationRoot, workstationIndex),
 			})
+		} else {
+			hasFailureRoute := len(workstation.OnFailure) > 0 ||
+				workstationCanDefaultFailureRoute(workstation, failedWorkTypes)
+			if !hasFailureRoute {
+				targets = append(targets, Target{
+					Code:     CodeWorkstationMissingFailureRoute,
+					Severity: SeverityError,
+					Message:  fmt.Sprintf("workstation %q must define a failure route.", workstation.Name),
+					Subject: Subject{
+						Type:     SubjectTypeWorkstation,
+						ID:       workstation.Name,
+						Location: SubjectLocationOnFailure,
+					},
+					Path: fmt.Sprintf("%s.workstations[%d].onFailure", validationRoot, workstationIndex),
+				})
+			}
 		}
 		if !workstationNeedsExplicitRejectionRoute(workstation) {
 			continue

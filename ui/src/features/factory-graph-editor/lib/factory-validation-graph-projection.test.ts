@@ -215,4 +215,105 @@ describe("factory-validation-graph-projection", () => {
       validationTargetIsRenderedForWorkstation(targets[0], repeaterWorkstation),
     ).toBe(true);
   });
+
+  it("projects missingOutputRoutes for routeless CRON onto workstation-output-source", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workstation.missingOutputRoutes",
+        message: 'Workstation "cron" must define at least one output route.',
+        severity: "error",
+        subject: {
+          id: "cron",
+          location: "OUTPUTS",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+    const routelessCron = {
+      type: "MODEL_WORKSTATION" as const,
+      behavior: "CRON" as const,
+    };
+    const projection = projectFactoryValidationTargets(targets);
+    const cronNodeId = factoryGraphNodeIdForWorkstation("cron");
+
+    expect(
+      validationHandleErrorsForNode(projection, cronNodeId)?.get(
+        "workstation-output-source",
+      ),
+    ).toEqual({
+      code: "factory.workstation.missingOutputRoutes",
+      message: 'Workstation "cron" must define at least one output route.',
+    });
+    expect(
+      validationHandleErrorsForNode(projection, cronNodeId)?.has(
+        "workstation-on-failure-source",
+      ),
+    ).toBe(false);
+
+    const handleErrors = validationHandleErrorsForNode(projection, cronNodeId);
+    if (!handleErrors) {
+      throw new Error("expected validation handle errors for cron workstation");
+    }
+    expect([
+      ...filterValidationHandleErrorsForWorkstation(
+        handleErrors,
+        routelessCron,
+      ).keys(),
+    ]).toEqual(["workstation-output-source"]);
+    expect(
+      validationTargetIsRenderedForWorkstation(targets[0], routelessCron),
+    ).toBe(true);
+  });
+
+  it("projects missingOutputRoutes for routeless LOGICAL_MOVE onto output handle only", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workstation.missingOutputRoutes",
+        message: 'Workstation "router" must define at least one output route.',
+        severity: "error",
+        subject: {
+          id: "router",
+          location: "OUTPUTS",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+    const routelessLogicalMove = {
+      type: "LOGICAL_MOVE" as const,
+      behavior: "CRON" as const,
+    };
+    const projection = projectFactoryValidationTargets(targets);
+    const routerNodeId = factoryGraphNodeIdForWorkstation("router");
+    const handleErrors = validationHandleErrorsForNode(
+      projection,
+      routerNodeId,
+    );
+    if (!handleErrors) {
+      throw new Error(
+        "expected validation handle errors for logical-move workstation",
+      );
+    }
+
+    expect(
+      filterValidationHandleErrorsForWorkstation(
+        handleErrors,
+        routelessLogicalMove,
+      ).get("workstation-output-source"),
+    ).toEqual({
+      code: "factory.workstation.missingOutputRoutes",
+      message: 'Workstation "router" must define at least one output route.',
+    });
+    expect(
+      filterValidationHandleErrorsForWorkstation(
+        handleErrors,
+        routelessLogicalMove,
+      ).has("workstation-on-failure-source"),
+    ).toBe(false);
+    expect(
+      validationTargetIsRenderedForWorkstation(
+        targets[0],
+        routelessLogicalMove,
+      ),
+    ).toBe(true);
+  });
 });

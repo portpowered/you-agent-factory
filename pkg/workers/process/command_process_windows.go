@@ -4,10 +4,26 @@ package process
 
 import (
 	"os/exec"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
+
+// commandProcessJobGracePeriod is the default bounded wait for job members to exit
+// after the parent command completes before force-terminating the job (post-run cleanup).
+const commandProcessJobGracePeriod = 2 * time.Second
+
+// jobobjectBasicAccountingInformation mirrors JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
+// (see golang.org/x/sys/windows JobObjectBasicAccountingInformation).
+type jobobjectBasicAccountingInformation struct {
+	TotalUserTime            int64
+	TotalKernelTime          int64
+	TotalPageFaultCount      uint32
+	TotalProcesses           uint32
+	ActiveProcesses          uint32
+	TotalTerminatedProcesses uint32
+}
 
 type commandProcessTree struct {
 	job windows.Handle
@@ -54,20 +70,100 @@ func attachCommandProcessTree(cmd *exec.Cmd) (*commandProcessTree, error) {
 	return &commandProcessTree{job: job}, nil
 }
 
-func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree) error {
-	if tree != nil && tree.job != 0 {
-		return windows.TerminateJobObject(tree.job, 1)
-	}
-	if cmd.Process == nil {
+// terminateCommandJobGroup waits up to grace for job members to exit, then
+// force-terminates remaining members. When grace is zero, TerminateJobObject runs
+// immediately so cancel/timeout behavior matches the prior path.
+//
+// Post-run cleanup closes the job handle after this call; JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+// terminates any survivors when the handle is released. Children started with
+// CREATE_BREAKAWAY_FROM_JOB or that detach to a new job may escape cleanup.
+func terminateCommandJobGroup(job windows.Handle, grace time.Duration, logCtx commandProcessCleanupContext) error {
+	if job == 0 {
+		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "job handle not attached")
 		return nil
 	}
-	return cmd.Process.Kill()
+	supervisorID := int(job)
+	if commandJobActiveProcesses(job) == 0 {
+		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, supervisorID, nil, "job has no active processes")
+		return nil
+	}
+
+	logCtx.logStarted(supervisorID)
+
+	if grace > 0 {
+		logCtx.logGraceful(supervisorID)
+		deadline := time.Now().Add(grace)
+		for time.Now().Before(deadline) {
+			if commandJobActiveProcesses(job) == 0 {
+				logCtx.logCompleted(commandProcessCleanupOutcomeGracefulSuccess, supervisorID, nil, "")
+				return nil
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+
+	logCtx.logForceKill(supervisorID)
+	if commandJobActiveProcesses(job) == 0 {
+		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, supervisorID, nil, "job members exited before force kill")
+		return nil
+	}
+	if err := windows.TerminateJobObject(job, 1); err != nil {
+		logCtx.logCompleted(commandProcessCleanupOutcomeFailure, supervisorID, err, "TerminateJobObject failed")
+		return err
+	}
+	if active := commandJobActiveProcesses(job); active > 0 {
+		logCtx.logCompleted(
+			commandProcessCleanupOutcomePartialFailure,
+			supervisorID,
+			nil,
+			"job still has active processes after TerminateJobObject",
+		)
+		return errCommandProcessCleanupPartialFailure
+	}
+	logCtx.logCompleted(commandProcessCleanupOutcomeForceKillSuccess, supervisorID, nil, "")
+	return nil
 }
 
-func closeCommandProcessTree(tree *commandProcessTree) {
+func terminateCommandProcessTree(cmd *exec.Cmd, tree *commandProcessTree, logCtx commandProcessCleanupContext) error {
+	if tree != nil && tree.job != 0 {
+		return terminateCommandJobGroup(tree.job, 0, logCtx)
+	}
+	if cmd == nil || cmd.Process == nil {
+		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "process already exited")
+		return nil
+	}
+	supervisorID := cmd.Process.Pid
+	logCtx.logStarted(supervisorID)
+	logCtx.logForceKill(supervisorID)
+	if err := cmd.Process.Kill(); err != nil {
+		logCtx.logCompleted(commandProcessCleanupOutcomeFailure, supervisorID, err, "parent process kill failed")
+		return err
+	}
+	logCtx.logCompleted(commandProcessCleanupOutcomeForceKillSuccess, supervisorID, nil, "")
+	return nil
+}
+
+func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree, logCtx commandProcessCleanupContext) {
 	if tree == nil || tree.job == 0 {
+		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "job handle not attached")
 		return
 	}
+	_ = terminateCommandJobGroup(tree.job, commandProcessJobGracePeriod, logCtx)
 	windows.CloseHandle(tree.job)
 	tree.job = 0
+}
+
+func commandJobActiveProcesses(job windows.Handle) uint32 {
+	var info jobobjectBasicAccountingInformation
+	err := windows.QueryInformationJobObject(
+		job,
+		windows.JobObjectBasicAccountingInformation,
+		uintptr(unsafe.Pointer(&info)),
+		uint32(unsafe.Sizeof(info)),
+		nil,
+	)
+	if err != nil {
+		return 0
+	}
+	return info.ActiveProcesses
 }

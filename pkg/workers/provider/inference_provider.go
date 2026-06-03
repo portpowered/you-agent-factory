@@ -171,7 +171,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 				"dispatcher", string(req.ModelProvider),
 				"error", err.Error())...)
 		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
-			interfaces.ProviderErrorTypePermanentBadRequest,
+			interfaces.WorkFailureTypePermanentBadRequest,
 			err.Error(),
 			err,
 			nil,
@@ -256,17 +256,17 @@ func normalizeProviderExecutionError(provider string, result CommandResult, err 
 			diagnostics.Command.TimedOut = true
 		}
 		message := formatProviderTimeoutFailure(provider, result)
-		return newProviderErrorWithDiagnostics(interfaces.ProviderErrorTypeTimeout, message, err, session, diagnostics)
+		return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeTimeout, message, err, session, diagnostics)
 	case errors.Is(err, exec.ErrNotFound):
 		message := formatProviderCommandFailure(provider, result, err)
-		return newProviderErrorWithDiagnostics(interfaces.ProviderErrorTypeMisconfigured, message, err, session, diagnostics)
+		return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeMisconfigured, message, err, session, diagnostics)
 	default:
 		message := formatProviderCommandFailure(provider, result, err)
 		var execErr *exec.Error
 		if errors.As(err, &execErr) {
-			return newProviderErrorWithDiagnostics(interfaces.ProviderErrorTypeMisconfigured, message, err, session, diagnostics)
+			return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeMisconfigured, message, err, session, diagnostics)
 		}
-		return newProviderErrorWithDiagnostics(interfaces.ProviderErrorTypeUnknown, message, err, session, diagnostics)
+		return newProviderErrorWithDiagnostics(interfaces.WorkFailureTypeUnknown, message, err, session, diagnostics)
 	}
 }
 
@@ -282,7 +282,7 @@ func NormalizeProviderExitFailure(provider string, result CommandResult, session
 	return normalizeProviderExitFailure(provider, result, session, diagnostics)
 }
 
-func classifyProviderExitFailure(provider string, result CommandResult) interfaces.ProviderErrorType {
+func classifyProviderExitFailure(provider string, result CommandResult) interfaces.WorkFailureType {
 	return providerBehaviorForErrorClassification(provider).ClassifyExitFailure(result)
 }
 

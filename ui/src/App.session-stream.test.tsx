@@ -1,8 +1,11 @@
+import "./testing/app-shell-work-outcome-stub";
+import "./testing/app-shell-workflow-activity-stub";
+
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   buildBetaSessionSnapshot,
-  emitTimelineMessages,
+  emitTimelineMessagesAct,
   requireEventStream,
   resetTimelineForInitialStreamLoad,
 } from "./App.session-stream.test-helpers";
@@ -20,6 +23,7 @@ import {
   registerAppDashboardTestLifecycle,
   renderApp,
   renderAppWithDashboardShell,
+  settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
 import { selectedTickTimelineEvents } from "./testing/app-shell-timeline-test-utils";
 
@@ -52,26 +56,25 @@ describe("App dashboard session stream loading", () => {
   it("shows the loading shell before the first streamed event, then clears after the first message", async () => {
     const messages = getHeaderControlsMessages("en");
 
+    resetTimelineForInitialStreamLoad();
     renderApp({
       seedTimelineFromSnapshot: false,
       snapshot: activeSnapshot,
     });
-    resetTimelineForInitialStreamLoad();
 
     await waitFor(() => {
       expect(MockEventSource.instances.length).toBeGreaterThan(0);
     });
-
-    expect(
-      screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
+      ).toBeTruthy();
+    });
     expect(screen.queryByRole("slider", { name: "Timeline tick" })).toBeNull();
 
-    act(() => {
-      emitTimelineMessages(requireEventStream(MockEventSource.instances), [
-        selectedTickTimelineEvents[0],
-      ]);
-    });
+    await emitTimelineMessagesAct(requireEventStream(MockEventSource.instances), [
+      selectedTickTimelineEvents[0],
+    ]);
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -82,6 +85,7 @@ describe("App dashboard session stream loading", () => {
       ).toBeNull();
       expect(slider.value).toBe("1");
     });
+    await settleAppShellDashboardEffects();
   });
 });
 
@@ -211,20 +215,18 @@ describe("App dashboard session stream refresh", () => {
   it("shows the loading shell and reopens the stream when the bento refresh token increments", async () => {
     const messages = getHeaderControlsMessages("en");
 
+    resetTimelineForInitialStreamLoad();
     renderApp({
       seedTimelineFromSnapshot: false,
       snapshot: activeSnapshot,
     });
-    resetTimelineForInitialStreamLoad();
 
     await waitFor(() => {
       expect(MockEventSource.instances.length).toBeGreaterThan(0);
     });
 
     const initialStream = requireEventStream(MockEventSource.instances);
-    act(() => {
-      emitTimelineMessages(initialStream, [selectedTickTimelineEvents[0]]);
-    });
+    await emitTimelineMessagesAct(initialStream, [selectedTickTimelineEvents[0]]);
 
     await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -234,6 +236,7 @@ describe("App dashboard session stream refresh", () => {
         screen.queryByRole("heading", { name: messages.loadingDashboardTitle }),
       ).toBeNull();
     });
+    await settleAppShellDashboardEffects();
 
     const streamCountBeforeRefresh = MockEventSource.instances.length;
 
@@ -257,14 +260,15 @@ describe("App dashboard session stream refresh", () => {
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
 
-    act(() => {
-      emitTimelineMessages(refreshedStream, [selectedTickTimelineEvents[0]]);
-    });
+    await emitTimelineMessagesAct(refreshedStream, [
+      selectedTickTimelineEvents[0],
+    ]);
 
     await waitFor(() => {
       expect(
         screen.queryByRole("heading", { name: messages.loadingDashboardTitle }),
       ).toBeNull();
     });
+    await settleAppShellDashboardEffects();
   });
 });

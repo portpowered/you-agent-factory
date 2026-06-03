@@ -20,8 +20,8 @@ type ProviderErrorCorpusEntry struct {
 	ExitCode              int                            `json:"exit_code"`
 	Stdout                string                         `json:"stdout"`
 	Stderr                string                         `json:"stderr"`
-	ExpectedType          interfaces.ProviderErrorType   `json:"expected_type"`
-	ExpectedFamily        interfaces.ProviderErrorFamily `json:"expected_family"`
+	ExpectedType          interfaces.WorkFailureType   `json:"expected_type"`
+	ExpectedFamily        interfaces.WorkFailureFamily `json:"expected_family"`
 	Retryable             bool                           `json:"retryable"`
 	TriggersThrottlePause bool                           `json:"triggers_throttle_pause"`
 	Supported             bool                           `json:"supported"`
@@ -142,7 +142,7 @@ func validateProviderErrorCorpusEntry(entry ProviderErrorCorpusEntry) error {
 	if entry.ExpectedFamily == "" {
 		return fmt.Errorf("decode provider error corpus: entry %q missing expected family", entry.Name)
 	}
-	if entry.ExpectedFamily == interfaces.ProviderErrorFamilyThrottle && !entry.TriggersThrottlePause {
+	if entry.ExpectedFamily == interfaces.WorkFailureFamilyThrottle && !entry.TriggersThrottlePause {
 		return fmt.Errorf("decode provider error corpus: entry %q throttle family must trigger throttle pause", entry.Name)
 	}
 	if entry.TriggersThrottlePause && !entry.Retryable {

@@ -264,17 +264,17 @@ func assertRetryableInternalServerRequeueOutcome(
 	}
 }
 
-func assertProviderFailureIsRetryableInternalServer(t *testing.T, failure *interfaces.ProviderFailureMetadata) {
+func assertProviderFailureIsRetryableInternalServer(t *testing.T, failure *interfaces.WorkFailureMetadata) {
 	t.Helper()
 
 	if failure == nil {
 		t.Fatal("ProviderFailure is nil, want normalized internal_server_error metadata")
 	}
-	if failure.Type != interfaces.ProviderErrorTypeInternalServerError {
-		t.Fatalf("provider failure type = %s, want %s", failure.Type, interfaces.ProviderErrorTypeInternalServerError)
+	if failure.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("provider failure type = %s, want %s", failure.Type, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if failure.Family != interfaces.ProviderErrorFamilyRetryable {
-		t.Fatalf("provider failure family = %s, want %s", failure.Family, interfaces.ProviderErrorFamilyRetryable)
+	if failure.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("provider failure family = %s, want %s", failure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 }
 

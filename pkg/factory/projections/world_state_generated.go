@@ -31,8 +31,7 @@ func workstationResultFromGenerated(payload factoryapi.DispatchResponseEventPayl
 		SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 		FailureReason:               stringValue(payload.FailureReason),
 		FailureMessage:              stringValue(payload.FailureMessage),
-		FailureMetadata:             interfaces.CloneWorkFailureMetadata(failureMetadata),
-		ProviderFailure:             interfaces.CloneProviderFailureMetadata(failureMetadata),
+		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
 	}
 }
 

@@ -1,9 +1,4 @@
 export const allowlistedInlineComponentClassUsage = [
-  "src/components/ui/dashboard-action-button.tsx#DASHBOARD_ACTION_BUTTON_EXECUTING_OVERLAY_CLASS",
-  "src/components/ui/dashboard-action-button.tsx#DASHBOARD_ACTION_BUTTON_SPINNER_CLASS",
-  "src/features/bento/components/agent-bento.tsx#BENTO_GRID_CLASS",
-  "src/features/bento/components/agent-bento.tsx#BENTO_ITEM_CLASS",
-  "src/features/bento/components/agent-bento.tsx#BENTO_CARD_TITLE_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_TOOLBAR_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_HEADER_ROWS_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_PRIMARY_ROW_CLASS",
@@ -15,13 +10,5 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_HEADER_ACTION_ROW_CLASS",
   "src/features/header/components/dashboard-header.tsx#DASHBOARD_TIMELINE_ACTIONS_CLASS",
   "src/features/header/components/dashboard-header.tsx#LOCALE_MENU_PANEL_CLASS",
-  "src/features/header/components/tick-slider-control.tsx#TICK_SLIDER_SHELL_CLASS",
-  "src/features/header/components/tick-slider-control.tsx#TICK_SLIDER_LABEL_CLASS",
-  "src/features/header/components/tick-slider-control.tsx#TICK_SLIDER_INPUT_CLASS",
-  "src/features/header/components/tick-slider-control.tsx#TICK_SLIDER_META_CLASS",
-  "src/features/header/components/tick-slider-control.tsx#TICK_SLIDER_STATUS_CLASS",
-  "src/features/import/components/dashboard-import-preview-dialog.tsx#IMPORT_DIALOG_CONTENT_CLASS",
-  "src/features/import/components/dashboard-import-preview-dialog.tsx#IMPORT_DIALOG_TITLE_CLASS",
-  "src/features/import/components/dashboard-import-preview-dialog.tsx#IMPORT_DIALOG_DESCRIPTION_CLASS",
   "src/features/work-outcome/components/work-chart.tsx#WORK_CHART_TOOLBAR_CLASS",
 ];

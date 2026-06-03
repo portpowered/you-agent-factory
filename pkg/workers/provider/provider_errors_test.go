@@ -12,16 +12,16 @@ import (
 func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 	testCases := []struct {
 		name       string
-		errorType  interfaces.ProviderErrorType
-		wantFamily interfaces.ProviderErrorFamily
+		errorType  interfaces.WorkFailureType
+		wantFamily interfaces.WorkFailureFamily
 	}{
-		{name: "AuthFailure_IsTerminal", errorType: interfaces.ProviderErrorTypeAuthFailure, wantFamily: interfaces.ProviderErrorFamilyTerminal},
-		{name: "PermanentBadRequest_IsTerminal", errorType: interfaces.ProviderErrorTypePermanentBadRequest, wantFamily: interfaces.ProviderErrorFamilyTerminal},
-		{name: "Throttled_IsThrottle", errorType: interfaces.ProviderErrorTypeThrottled, wantFamily: interfaces.ProviderErrorFamilyThrottle},
-		{name: "InternalServerError_IsRetryable", errorType: interfaces.ProviderErrorTypeInternalServerError, wantFamily: interfaces.ProviderErrorFamilyRetryable},
-		{name: "Timeout_IsRetryable", errorType: interfaces.ProviderErrorTypeTimeout, wantFamily: interfaces.ProviderErrorFamilyRetryable},
-		{name: "Unknown_IsTerminal", errorType: interfaces.ProviderErrorTypeUnknown, wantFamily: interfaces.ProviderErrorFamilyTerminal},
-		{name: "Misconfigured_IsTerminal", errorType: interfaces.ProviderErrorTypeMisconfigured, wantFamily: interfaces.ProviderErrorFamilyTerminal},
+		{name: "AuthFailure_IsTerminal", errorType: interfaces.WorkFailureTypeAuthFailure, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "PermanentBadRequest_IsTerminal", errorType: interfaces.WorkFailureTypePermanentBadRequest, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "Throttled_IsThrottle", errorType: interfaces.WorkFailureTypeThrottled, wantFamily: interfaces.WorkFailureFamilyThrottle},
+		{name: "InternalServerError_IsRetryable", errorType: interfaces.WorkFailureTypeInternalServerError, wantFamily: interfaces.WorkFailureFamilyRetryable},
+		{name: "Timeout_IsRetryable", errorType: interfaces.WorkFailureTypeTimeout, wantFamily: interfaces.WorkFailureFamilyRetryable},
+		{name: "Unknown_IsTerminal", errorType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal},
+		{name: "Misconfigured_IsTerminal", errorType: interfaces.WorkFailureTypeMisconfigured, wantFamily: interfaces.WorkFailureFamilyTerminal},
 	}
 
 	for _, tc := range testCases {
@@ -39,7 +39,7 @@ func TestNewProviderError_AssignsDeterministicFamilyFromType(t *testing.T) {
 
 func TestProviderError_Error_PrefersMessageThenCauseThenType(t *testing.T) {
 
-	if got := NewProviderError(interfaces.ProviderErrorTypeUnknown, "", nil).Error(); got != "provider error: unknown" {
+	if got := NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil).Error(); got != "provider error: unknown" {
 		t.Fatalf("expected fallback type-based message, got %q", got)
 	}
 }
@@ -51,7 +51,7 @@ func TestNewProviderErrorWithSession_ClonesProviderSessionMetadata(t *testing.T)
 		ID:       "sess_codex_123",
 	}
 
-	providerErr := NewProviderErrorWithSession(interfaces.ProviderErrorTypeAuthFailure, "auth failed", nil, session)
+	providerErr := NewProviderErrorWithSession(interfaces.WorkFailureTypeAuthFailure, "auth failed", nil, session)
 	session.ID = "mutated-session"
 
 	if providerErr.ProviderSession == nil {
@@ -72,38 +72,38 @@ func TestClassifyProviderFailure_ReturnsDeterministicBehavior(t *testing.T) {
 	}{
 		{
 			name:         "AuthFailure_Terminates",
-			err:          NewProviderError(interfaces.ProviderErrorTypeAuthFailure, "", nil),
+			err:          NewProviderError(interfaces.WorkFailureTypeAuthFailure, "", nil),
 			wantTerminal: true,
 		},
 		{
 			name:         "PermanentBadRequest_Terminates",
-			err:          NewProviderError(interfaces.ProviderErrorTypePermanentBadRequest, "", nil),
+			err:          NewProviderError(interfaces.WorkFailureTypePermanentBadRequest, "", nil),
 			wantTerminal: true,
 		},
 		{
 			name:              "Throttled_RetriesAndPauses",
-			err:               NewProviderError(interfaces.ProviderErrorTypeThrottled, "", nil),
+			err:               NewProviderError(interfaces.WorkFailureTypeThrottled, "", nil),
 			wantRetryable:     true,
 			wantThrottlePause: true,
 		},
 		{
 			name:          "InternalServerError_Retries",
-			err:           NewProviderError(interfaces.ProviderErrorTypeInternalServerError, "", nil),
+			err:           NewProviderError(interfaces.WorkFailureTypeInternalServerError, "", nil),
 			wantRetryable: true,
 		},
 		{
 			name:          "Timeout_Retries",
-			err:           NewProviderError(interfaces.ProviderErrorTypeTimeout, "", nil),
+			err:           NewProviderError(interfaces.WorkFailureTypeTimeout, "", nil),
 			wantRetryable: true,
 		},
 		{
 			name:         "Unknown_Terminates",
-			err:          NewProviderError(interfaces.ProviderErrorTypeUnknown, "", nil),
+			err:          NewProviderError(interfaces.WorkFailureTypeUnknown, "", nil),
 			wantTerminal: true,
 		},
 		{
 			name:         "Misconfigured_Terminates",
-			err:          NewProviderError(interfaces.ProviderErrorTypeMisconfigured, "", nil),
+			err:          NewProviderError(interfaces.WorkFailureTypeMisconfigured, "", nil),
 			wantTerminal: true,
 		},
 	}
@@ -124,49 +124,49 @@ func TestClassifyProviderFailure_ReturnsDeterministicBehavior(t *testing.T) {
 	}
 }
 
-func TestProviderFailureDecisionFromMetadata_UsesNormalizedTypeAsCanonicalRetryClass(t *testing.T) {
+func TestWorkFailureDecisionFromMetadata_UsesNormalizedTypeAsCanonicalRetryClass(t *testing.T) {
 	testCases := []struct {
 		name              string
-		metadata          *interfaces.ProviderFailureMetadata
+		metadata          *interfaces.WorkFailureMetadata
 		wantRetryable     bool
 		wantTerminal      bool
 		wantThrottlePause bool
 	}{
 		{
 			name: "InternalServerErrorWithoutFamily_Retries",
-			metadata: &interfaces.ProviderFailureMetadata{
-				Type: interfaces.ProviderErrorTypeInternalServerError,
+			metadata: &interfaces.WorkFailureMetadata{
+				Type: interfaces.WorkFailureTypeInternalServerError,
 			},
 			wantRetryable: true,
 		},
 		{
 			name: "InternalServerErrorWithStaleTerminalFamily_StillRetries",
-			metadata: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyTerminal,
-				Type:   interfaces.ProviderErrorTypeInternalServerError,
+			metadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyTerminal,
+				Type:   interfaces.WorkFailureTypeInternalServerError,
 			},
 			wantRetryable: true,
 		},
 		{
 			name: "CodexWindowsExitCode4294967295WithStaleTerminalFamily_StillRetriesWithoutThrottlePause",
-			metadata: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyTerminal,
-				Type:   interfaces.ProviderErrorTypeInternalServerError,
+			metadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyTerminal,
+				Type:   interfaces.WorkFailureTypeInternalServerError,
 			},
 			wantRetryable: true,
 		},
 		{
 			name: "AuthFailureWithStaleRetryableFamily_StillTerminates",
-			metadata: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyRetryable,
-				Type:   interfaces.ProviderErrorTypeAuthFailure,
+			metadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyRetryable,
+				Type:   interfaces.WorkFailureTypeAuthFailure,
 			},
 			wantTerminal: true,
 		},
 		{
 			name: "ThrottleFamilyWithoutType_UsesFamilyFallback",
-			metadata: &interfaces.ProviderFailureMetadata{
-				Family: interfaces.ProviderErrorFamilyThrottle,
+			metadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyThrottle,
 			},
 			wantRetryable:     true,
 			wantThrottlePause: true,
@@ -175,7 +175,7 @@ func TestProviderFailureDecisionFromMetadata_UsesNormalizedTypeAsCanonicalRetryC
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := ProviderFailureDecisionFromMetadata(tc.metadata)
+			got := WorkFailureDecisionFromMetadata(tc.metadata)
 			if got.Retryable != tc.wantRetryable {
 				t.Fatalf("expected Retryable=%t, got %t", tc.wantRetryable, got.Retryable)
 			}
@@ -190,7 +190,7 @@ func TestProviderFailureDecisionFromMetadata_UsesNormalizedTypeAsCanonicalRetryC
 }
 
 func TestWorkFailureMetadataFromError_ProducesGeneralizedFailureMetadata(t *testing.T) {
-	providerErr := NewProviderError(interfaces.ProviderErrorTypeTimeout, "execution timeout", nil)
+	providerErr := NewProviderError(interfaces.WorkFailureTypeTimeout, "execution timeout", nil)
 
 	metadata := WorkFailureMetadataFromError(providerErr)
 	if metadata == nil {
@@ -306,11 +306,11 @@ func TestCodexProviderBehavior_ClassifiesUsageLimitAsThrottled(t *testing.T) {
 	result := providerErrorCorpusEntryForTest(t, "codex_usage_limit_reached").CommandResult()
 
 	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
-	if providerErr.Type != interfaces.ProviderErrorTypeThrottled {
-		t.Fatalf("expected usage limit to classify as %q, got %q", interfaces.ProviderErrorTypeThrottled, providerErr.Type)
+	if providerErr.Type != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("expected usage limit to classify as %q, got %q", interfaces.WorkFailureTypeThrottled, providerErr.Type)
 	}
-	if providerErr.Family != interfaces.ProviderErrorFamilyThrottle {
-		t.Fatalf("expected usage limit to be in family %q, got %q", interfaces.ProviderErrorFamilyThrottle, providerErr.Family)
+	if providerErr.Family != interfaces.WorkFailureFamilyThrottle {
+		t.Fatalf("expected usage limit to be in family %q, got %q", interfaces.WorkFailureFamilyThrottle, providerErr.Family)
 	}
 	if !strings.Contains(providerErr.Message, "usage limit") {
 		t.Fatalf("expected normalized error to preserve usage limit message, got %q", providerErr.Message)

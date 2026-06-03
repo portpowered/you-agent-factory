@@ -1,3 +1,6 @@
+import "./testing/app-shell-work-outcome-stub";
+import "./testing/app-shell-workflow-activity-stub";
+
 import {
   act,
   fireEvent,
