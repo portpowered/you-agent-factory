@@ -1619,7 +1619,78 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(
       document.getElementById("editable-workstation-prompt-diagnostics"),
     ).toBeTruthy();
-    expect(screen.queryByText("Prompt diagnostics")).toBeNull();
+    expect(
+      screen.getByText("Prompt diagnostics").closest(".invisible"),
+    ).toBeTruthy();
+    expect(
+      editableConfigurationSection().querySelector(
+        "[data-prompt-diagnostics-reserved='true']",
+      )?.className,
+    ).toContain("min-h-24");
+  });
+
+  it("keeps a reserved prompt diagnostics region mounted across validation transitions", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptValidationState: { status: "loading" },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    const reservedRegion = () =>
+      editableConfigurationSection().querySelector(
+        "[data-prompt-diagnostics-reserved='true']",
+      );
+
+    expect(reservedRegion()?.className).toContain("min-h-24");
+    expect(
+      document.getElementById("editable-workstation-prompt-diagnostics"),
+    ).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ (index .Inputs 1).Payload }} now.",
+          promptDiagnostics: [
+            {
+              endOffset: 33,
+              kind: "UNAVAILABLE_VARIABLE",
+              message: "Only input 0 is available.",
+              path: ".Inputs[1]",
+              sourceText: "(index .Inputs 1)",
+              startOffset: 7,
+            },
+          ],
+          promptValidationState: { status: "ready" },
+          validationErrors: {
+            prompt: "See prompt diagnostics below.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(reservedRegion()?.className).toContain("min-h-24");
+    expect(
+      document.getElementById("editable-workstation-prompt-diagnostics"),
+    ).toBeTruthy();
+    expect(
+      editableConfigurationSection().querySelectorAll(
+        "#editable-workstation-prompt-diagnostics",
+      ),
+    ).toHaveLength(1);
   });
 
   it("merges overlapping diagnostic ranges into one visible squiggle", () => {
