@@ -26,9 +26,5 @@ export const allowlistedInlineComponentClassUsage = [
   "src/features/submit-work/components/submit-work-card.tsx#FORM_CLASS",
   "src/features/submit-work/components/submit-work-card.tsx#FORM_FIELDS_CLASS",
   "src/features/submit-work/components/submit-work-card.tsx#ACTION_ROW_CLASS",
-  "src/features/trace-drilldown/components/trace-grid-card.tsx#TRACE_EXPANDER_HEADER_CLASS",
-  "src/features/trace-drilldown/components/trace-grid-card.tsx#TRACE_WORK_ITEM_BUTTON_CLASS",
-  "src/features/trace-drilldown/components/trace-relation-flow.tsx#GRAPH_SHELL_CLASS",
-  "src/features/trace-drilldown/components/trace-workstation-path.tsx#GRAPH_SHELL_CLASS",
   "src/features/work-outcome/components/work-chart.tsx#WORK_CHART_TOOLBAR_CLASS",
 ];
