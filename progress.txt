@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Guard list rows in `EditableConfigurationWorkstationGuardsField` use `useStableWorkstationGuardRowKeys` so React keys do not depend on `formatWorkstationGuardSummary(guard)` (which embeds live `inputKey`).
+- `MATCHES_FIELDS` `matchConfig.inputKey` uses `MonacoGuardSelectorEditor` (`data-monaco-editor="workstation-guard-selector"`) with static completions from `buildWorkstationGuardSelectorCompletionItems()` (`.Name`, `.WorkID`, `.Tags["key"]`); do not reuse prompt-template completion providers.
 - When testing bracket-heavy selector typing with `@testing-library/user-event`, prefer incremental `fireEvent.change` loops over `user.type`/`user.keyboard` because `[` and `"` are parsed as key descriptors.
 - `applyEditableWorkstationDraft` copies `draft.guards` verbatim onto the workstation; `normalizeFactoryDefinition` and `saveFactoryForSessionDocument` preserve `matchConfig.inputKey` without trimming (trim is validation-only in `workstation-editable-validation.ts`).
 
@@ -26,4 +27,24 @@
   - Patterns discovered: No production code changes were required; story 001’s draft path already preserved exact `inputKey` strings end-to-end.
   - Gotchas encountered: Parse `saveFetch.mock.calls[0][1].body` when asserting save payload shape in round-trip tests.
   - Useful context: Required-field validation trims only for emptiness checks; saved factory JSON keeps the operator’s raw selector string.
+---
+
+## 2026-06-04T00:52:00Z - prd-workstation-guard-selector-autocomplete-003
+- What was implemented: Replaced the plain `Input` for `MATCHES_FIELDS` `matchConfig.inputKey` with compact `MonacoGuardSelectorEditor`, a dedicated Monaco language/theme, and a guard-scoped completion provider for `.Name`, `.WorkID`, and `.Tags["key"]`. Wired accessible label/error association and localized loading/error copy.
+- Files changed:
+  - `ui/src/components/prompt-editor/monaco-guard-selector-editor.tsx`
+  - `ui/src/components/prompt-editor/monaco-guard-selector-editor.test.tsx`
+  - `ui/src/components/prompt-editor/monaco-guard-selector-language.ts`
+  - `ui/src/components/prompt-editor/monaco-guard-selector-setup.ts`
+  - `ui/src/components/prompt-editor/monaco-guard-selector-setup.test.ts`
+  - `ui/src/components/prompt-editor/index.ts`
+  - `ui/src/features/current-selection/workstation-selection/components/workstation-guards-field.tsx`
+  - `ui/src/features/current-selection/workstation-selection/components/workstation-guards-field.test.tsx`
+  - `ui/src/features/current-selection/workstation-selection/messages/workstation-detail.ts`
+  - `ui/src/features/current-selection/workstation-selection/messages/workstation-detail-types.ts`
+  - `ui/src/testing/vitest.setup.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use per-row `inmemory://model/.../${inputKeyFieldId}` model paths when multiple guard selector editors can appear on one form; vitest Monaco mock reads `wrapperProps["data-monaco-editor"]` for surface-specific assertions.
+  - Gotchas encountered: Summary text and editor value both show `.Name`, so guard-row summary assertions must scope to the header block, not `getByText` on the whole article.
+  - Useful context: Browser suggestion-widget verification remains manual; component/setup tests cover completion catalog, filtering, and draft updates.
 ---
