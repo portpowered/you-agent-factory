@@ -60,10 +60,6 @@ export function TerminalWorkSummaryCard({
         <p className={DETAIL_COPY_CLASS}>
           {messages.failureDetailsUnavailable}
         </p>
-      ) : status === "completed" ? (
-        <p className={DETAIL_COPY_CLASS}>
-          {messages.completedTerminalWorkSummary}
-        </p>
       ) : null}
       {executionDetails ? (
         <ExecutionDetailsSection

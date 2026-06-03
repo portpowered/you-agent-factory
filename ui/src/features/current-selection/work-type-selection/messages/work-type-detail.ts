@@ -26,6 +26,13 @@ const workTypeDetailMessagesByLocale = {
     configurationErrorPrefix: "Work type definition unavailable.",
     configurationLoading:
       "Loading the current factory definition for this work type.",
+    collapseAction: "Collapse",
+    editableConfigurationCollapseActionLabel:
+      "Collapse work type configuration editor",
+    editableConfigurationExpandActionLabel:
+      "Expand work type configuration editor",
+    editableConfigurationHeading: "Work type configuration",
+    expandAction: "Expand",
     editableConfigurationContractInvalidPrefix:
       "Work type configuration is invalid.",
     editableConfigurationHandlingBehaviorMultipleDefault:
@@ -52,7 +59,7 @@ const workTypeDetailMessagesByLocale = {
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this work type.",
     handlingBehaviorDefaultHelper:
-      "When marked default, this work type receives prompt text from simplified you run --factory flows.",
+      "Default work type supplies prompt text for simplified factory runs.",
     handlingBehaviorDefaultLabel: "Mark as default work type",
     handlingBehaviorDefaultStatusLabel: "Default work type",
     localizeWorkStateType: localizeEnglishWorkStateType,
@@ -70,6 +77,12 @@ const workTypeDetailMessagesByLocale = {
     configurationErrorPrefix: "ワークタイプ定義を利用できません。",
     configurationLoading:
       "このワークタイプの現在のファクトリ定義を読み込んでいます。",
+    collapseAction: "折りたたむ",
+    editableConfigurationCollapseActionLabel:
+      "ワークタイプ構成エディターを折りたたむ",
+    editableConfigurationExpandActionLabel: "ワークタイプ構成エディターを展開",
+    editableConfigurationHeading: "ワークタイプ構成",
+    expandAction: "展開",
     editableConfigurationContractInvalidPrefix: "ワークタイプ設定が無効です。",
     editableConfigurationHandlingBehaviorMultipleDefault:
       "既定のファクトリワークタイプは 1 つだけにできます。",
@@ -124,6 +137,11 @@ const workTypeDetailMessagesByLocale = {
     configurationErrorPrefix: "작업 유형 정의를 사용할 수 없습니다.",
     configurationLoading:
       "이 작업 유형의 현재 팩토리 정의를 불러오는 중입니다.",
+    collapseAction: "접기",
+    editableConfigurationCollapseActionLabel: "작업 유형 구성 편집기 접기",
+    editableConfigurationExpandActionLabel: "작업 유형 구성 편집기 펼치기",
+    editableConfigurationHeading: "작업 유형 구성",
+    expandAction: "펼치기",
     editableConfigurationContractInvalidPrefix:
       "작업 유형 구성이 유효하지 않습니다.",
     editableConfigurationHandlingBehaviorMultipleDefault:
@@ -177,6 +195,11 @@ const workTypeDetailMessagesByLocale = {
     configurationEmpty: "运行中的工厂定义不包含所选工作类型。",
     configurationErrorPrefix: "工作类型定义不可用。",
     configurationLoading: "正在加载此工作类型的当前工厂定义。",
+    collapseAction: "收起",
+    editableConfigurationCollapseActionLabel: "收起工作类型配置编辑器",
+    editableConfigurationExpandActionLabel: "展开工作类型配置编辑器",
+    editableConfigurationHeading: "工作类型配置",
+    expandAction: "展开",
     editableConfigurationContractInvalidPrefix: "工作类型配置无效。",
     editableConfigurationHandlingBehaviorMultipleDefault:
       "只能将一个工作类型设为工厂默认类型。",

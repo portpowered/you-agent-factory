@@ -18,7 +18,7 @@ import {
   resolvePeerInputWorkTypes,
   setEditableInputSlotGuard,
 } from "../../../current-factory-definition/lib/workstation-guards";
-import { CURRENT_SELECTION_FIELD_PANEL_CLASS } from "../../base/components/detail-card-shared";
+import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationInputGuardsField({
@@ -36,7 +36,7 @@ export function EditableConfigurationWorkstationInputGuardsField({
 
   if (inputs.length === 0) {
     return (
-      <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+      <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
         <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.workstationInputGuardsHeading}
         </h5>
@@ -53,7 +53,7 @@ export function EditableConfigurationWorkstationInputGuardsField({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.workstationInputGuardsHeading}
       </h5>

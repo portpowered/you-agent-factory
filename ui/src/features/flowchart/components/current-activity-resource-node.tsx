@@ -4,6 +4,7 @@ import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
@@ -46,6 +47,11 @@ export function ResourceNodeView({
     <ActivityGraphNodeShell
       className={cn(
         "af-current-activity-node-surface-resource border-outline-variant justify-center text-left text-on-surface",
+        currentActivityGraphNodeHoverClassName({
+          activeFlow: data.activeFlow,
+          muted: data.muted,
+          selected: data.selectedResource,
+        }),
         data.activeFlow &&
           !data.selectedResource &&
           "border-af-success-border shadow-af-success-chip",

@@ -4,7 +4,7 @@ import { cn } from "../../../../lib/cn";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import type { WorkTypeDetailCardProps } from "../lib/detail-card-types";
 import { getWorkTypeDetailMessages } from "../messages/work-type-detail";
-import { WorkTypeReadySection } from "./work-type-ready-section";
+import { WorkTypeEditableConfigurationSection } from "./work-type-ready-section";
 
 export function WorkTypeDetailCard({
   editableConfigurationState,
@@ -55,7 +55,7 @@ export function WorkTypeDetailCard({
         </p>
       ) : null}
       {editableConfigurationState?.status === "ready" ? (
-        <WorkTypeReadySection
+        <WorkTypeEditableConfigurationSection
           messages={messages}
           onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
           saveState={saveState}

@@ -207,19 +207,29 @@ function workstationRouteIOs(
   return Array.isArray(routes) ? routes : [routes];
 }
 
-function placeForFactoryGraphNode(node: FactoryGraphNode): DashboardPlaceRef {
+function placeForFactoryGraphNode(
+  node: FactoryGraphNode,
+  categories: ReadonlyMap<string, StateCategory>,
+): DashboardPlaceRef {
   switch (node.key.kind) {
     case "resource":
       return factoryEntityPlace("resource", "resource", node.key.name);
     case "worker":
       return factoryEntityPlace("constraint", "worker", node.key.name);
-    case "work-state":
+    case "work-state": {
+      const placeId = workStatePlaceId(
+        node.key.workTypeName,
+        node.key.stateName,
+      );
+
       return {
         kind: "work_state",
-        place_id: workStatePlaceId(node.key.workTypeName, node.key.stateName),
+        place_id: placeId,
+        state_category: categories.get(placeId),
         state_value: node.key.stateName,
         type_id: node.key.workTypeName,
       };
+    }
     case "work-type":
       return factoryEntityPlace("constraint", "work-type", node.key.name);
     case "workstation":
@@ -259,6 +269,7 @@ function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
 
 function seedNodeFromFactoryGraphNode(
   node: FactoryGraphNode,
+  categories: ReadonlyMap<string, StateCategory>,
 ): FactoryGraphSeedNode {
   const dimensions = nodeDimensionsForFactoryGraphNode(node);
   if (node.kind === "workstation") {
@@ -277,7 +288,7 @@ function seedNodeFromFactoryGraphNode(
     id: node.id,
     nodeId: node.id,
     nodeKind: nodeKindForFactoryGraphNode(node),
-    place: placeForFactoryGraphNode(node),
+    place: placeForFactoryGraphNode(node, categories),
     width: dimensions.width,
   };
 }
@@ -577,7 +588,7 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
     ) {
       continue;
     }
-    nodes.set(node.id, seedNodeFromFactoryGraphNode(node));
+    nodes.set(node.id, seedNodeFromFactoryGraphNode(node, categories));
   }
 
   for (const edge of topology.edges) {

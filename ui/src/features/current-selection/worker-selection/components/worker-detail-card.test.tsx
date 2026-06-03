@@ -467,7 +467,7 @@ describe("WorkerDetailCard", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Saving reviewer updates every workstation",
+      "Saving reviewer updates workstations",
     );
 
     const headerActions = workerDetailHeaderActionSection();
@@ -1203,13 +1203,11 @@ describe("WorkerDetailCard", () => {
 
     expect(
       screen.getByText(
-        "Required for model workers. The provider selects routing and default model behavior.",
+        "Required for model workers; sets routing and default model.",
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText(
-        "Optional. Leave blank to use the provider default model identifier.",
-      ),
+      screen.getByText("Blank uses the provider default model."),
     ).toBeTruthy();
     expect(
       screen.queryByText("Enter a model before saving this worker."),

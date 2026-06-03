@@ -97,10 +97,10 @@ describe("ExecutionDetailsSection", () => {
       within(workstationRequest).getByText("Provider timed out."),
     ).toBeTruthy();
     expect(
-      within(workstationRequest).getByText(
+      within(workstationRequest).queryByText(
         "Prompt, provider-session, and response-body details are shown under Inference attempts.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(section).getByText(
         "No inference events are available for this selected work item.",
@@ -193,10 +193,10 @@ describe("ExecutionDetailsSection", () => {
       within(section).getByText("当前所选运行暂时没有工作站详情。"),
     ).toBeTruthy();
     expect(
-      within(section).getByText(
+      within(section).queryByText(
         "打开追踪以查看该工作项的分派、重试和工作站输出。",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
     expect(
       within(section).getByRole("link", { name: "trace-alpha（已选中）" }),
     ).toBeTruthy();

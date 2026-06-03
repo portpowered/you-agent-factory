@@ -17,6 +17,7 @@ import {
   REPEATER_WORKSTATION_KIND,
   workstationIconMetadata,
 } from "../lib/workstation-icon-metadata";
+import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import {
   ActivityGraphNodeBadge,
@@ -86,6 +87,11 @@ export function WorkstationNodeView({
     data.workstation.node_id;
   const nodeClassName = cn(
     "af-current-activity-node-surface-neutral min-w-0 w-full justify-start overflow-hidden border-2",
+    currentActivityGraphNodeHoverClassName({
+      activeFlow: data.activeFlow,
+      muted: data.muted,
+      selected: data.selectedWorkstation || selectedWork,
+    }),
     exhaustionRule
       ? "border-dashed border-af-danger-border"
       : "border-info-border",

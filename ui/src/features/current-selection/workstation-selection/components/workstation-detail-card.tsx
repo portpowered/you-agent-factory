@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: workstation detail card coordinates summary, editable configuration, active work, and history disclosures in one selection surface.
 import { useEffect, useState } from "react";
 import type { DashboardWorkstationRequest } from "../../../../api/dashboard/types";
 import {
@@ -19,6 +20,7 @@ import {
 import { cn } from "../../../../lib/cn";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
   CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
@@ -185,7 +187,10 @@ function CollapsibleWorkstationRequests({
         title={messages.requestHistoryHeading}
       />
       {expanded ? (
-        <div className="grid gap-3" id={historyID}>
+        <div
+          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+          id={historyID}
+        >
           {requests.length > 0 ? (
             requests.map((request) => {
               return (

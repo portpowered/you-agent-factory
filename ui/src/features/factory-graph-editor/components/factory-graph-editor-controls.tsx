@@ -14,7 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
@@ -28,7 +27,6 @@ import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
-export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
 export type FactoryGraphEditorVisibilityPreset =
   | "all"
   | "workflow"
@@ -50,13 +48,6 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 
 const TOOLBAR_ACTIONS_CLASS =
   "flex items-center gap-2 border-l border-outline pl-2 max-md:ml-auto";
-const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger-border bg-error-container text-on-error-container",
-  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
-  warning:
-    "border-af-warning-border bg-warning-container text-on-warning-container",
-};
-
 export function FactoryGraphEditorToolbar({
   activeTool,
   addMenuActions = [],
@@ -291,10 +282,12 @@ function FactoryGraphEditorAddMenu({
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>
-        <DashboardActionButton
+        <FactoryGraphEditorTooltipActionButton
           aria-label={messages.toolbarOpenAddMenuLabel}
           disabled={!canInteract}
           iconOnly
+          placement="above"
+          tooltip={messages.toolbarAddDescription}
           tone={open ? "secondary" : "outline"}
           type="button"
         >
@@ -312,7 +305,7 @@ function FactoryGraphEditorAddMenu({
             <path d="M12 5v14" />
             <path d="M5 12h14" />
           </svg>
-        </DashboardActionButton>
+        </FactoryGraphEditorTooltipActionButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -457,28 +450,10 @@ export function FactoryGraphEditorActionPopover({
   );
 }
 
-export function FactoryGraphEditorNotice({
-  children,
-  title,
-  tone = "neutral",
-}: {
-  children: ReactNode;
-  title: string;
-  tone?: FactoryGraphEditorNoticeTone;
-}) {
-  return (
-    <section
-      className={cn(
-        "grid gap-1 rounded-2xl border p-4",
-        NOTICE_TONE_CLASS[tone],
-      )}
-      role={tone === "danger" ? "alert" : "status"}
-    >
-      <h3 className="m-0 text-sm font-semibold">{title}</h3>
-      <p className="m-0 text-sm leading-6">{children}</p>
-    </section>
-  );
-}
+export {
+  FactoryGraphEditorNotice,
+  type FactoryGraphEditorNoticeTone,
+} from "./factory-graph-editor-notice";
 
 export function FactoryGraphEditorConfirmationDialog({
   cancelLabel,

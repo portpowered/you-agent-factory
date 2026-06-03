@@ -7,7 +7,7 @@ import {
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
-import { CURRENT_SELECTION_FIELD_PANEL_CLASS } from "../../base/components/detail-card-shared";
+import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkstationOverwriteField,
   WorkstationDetailCardProps,
@@ -143,7 +143,7 @@ function EditableConfigurationCronField({
   state: ReadyEditableConfigurationState;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
         {label}
       </label>
@@ -193,7 +193,7 @@ function EditableConfigurationCronTriggerAtStartField({
   const fieldId = "editable-workstation-cron-trigger-at-start";
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <label
         className={cn(
           "inline-flex items-center gap-2 text-on-surface",

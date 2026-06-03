@@ -103,7 +103,6 @@ export function ExecutionDetailsSection({
       </dl>
       {hasTraceIDs ? (
         <div className="grid gap-2">
-          <p className={DETAIL_COPY_CLASS}>{messages.traceGuidance}</p>
           <a
             className={TRACE_ACTION_LINK_CLASS}
             href={`#${traceTargetId}`}
@@ -228,7 +227,6 @@ function WorkstationRequestProjectionSection({
           value={response?.failureMessage ?? response?.failure_message}
         />
       </dl>
-      <p className={DETAIL_COPY_CLASS}>{messages.workstationRequestGuidance}</p>
     </section>
   );
 }

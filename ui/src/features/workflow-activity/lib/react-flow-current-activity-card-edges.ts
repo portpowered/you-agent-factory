@@ -6,6 +6,7 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
+import { currentActivityGraphEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
   type ActiveGraphHighlights,
@@ -87,6 +88,19 @@ function edgeLabel(
   return activeFlow ? edge.label || undefined : undefined;
 }
 
+function withHoverableEdgeStroke(style: Edge["style"]): Edge["style"] {
+  const stroke = style?.stroke;
+  if (typeof stroke !== "string") {
+    return style;
+  }
+
+  return {
+    ...style,
+    stroke: "var(--af-graph-edge-stroke)",
+    "--af-graph-edge-stroke": stroke,
+  } as Edge["style"];
+}
+
 export function buildGraphEdges(
   activeGraphHighlights: ActiveGraphHighlights,
   handleAssignments: HandleAssignments,
@@ -113,6 +127,22 @@ export function buildGraphEdges(
       !semantic &&
       (!activeGraphHighlights.relatedNodeIds.has(edge.fromNodeId) ||
         !activeGraphHighlights.relatedNodeIds.has(edge.toNodeId));
+    const hoverClassName = currentActivityGraphEdgeHoverClassName({
+      activeFlow,
+      muted,
+      pendingAddition,
+      semantic,
+    });
+    const resolvedStyle = pendingAddition
+      ? {
+          stroke: "var(--color-af-warning-text)",
+          strokeDasharray: "9 4",
+          strokeWidth: 2,
+        }
+      : edgeStyle(edge, activeFlow, muted);
+    const style = hoverClassName
+      ? withHoverableEdgeStroke(resolvedStyle)
+      : resolvedStyle;
 
     return {
       animated: activeFlow,
@@ -121,6 +151,7 @@ export function buildGraphEdges(
         semantic ? "agent-flow-edge--semantic" : "",
         muted ? "agent-flow-edge--muted" : "",
         pendingAddition ? "agent-flow-edge--pending-addition" : "",
+        hoverClassName ?? "",
       ]
         .filter(Boolean)
         .join(" "),
@@ -139,13 +170,7 @@ export function buildGraphEdges(
       },
       source: edge.fromNodeId,
       sourceHandle: handleAssignments.sourceHandlesByEdgeId.get(edge.edgeId),
-      style: pendingAddition
-        ? {
-            stroke: "var(--color-on-warning-container)",
-            strokeDasharray: "9 4",
-            strokeWidth: 2,
-          }
-        : edgeStyle(edge, activeFlow, muted),
+      style,
       target: edge.toNodeId,
       targetHandle: handleAssignments.targetHandlesByEdgeId.get(edge.edgeId),
       type: "default",

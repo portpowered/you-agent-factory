@@ -19,6 +19,7 @@ import { useCurrentSelectionOperationalEnumMessages } from "../../base/component
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   CURRENT_SELECTION_BADGE_CLASS,
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
   CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
@@ -129,7 +130,10 @@ export function CollapsibleProviderSessionAttempts({
         title={resolvedTitle}
       />
       {expanded ? (
-        <div id={historyID}>
+        <div
+          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+          id={historyID}
+        >
           <ProviderSessionAttemptList
             attempts={attempts}
             currentDispatchID={currentDispatchID}

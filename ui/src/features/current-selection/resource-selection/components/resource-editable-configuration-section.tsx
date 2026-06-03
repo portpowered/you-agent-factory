@@ -11,7 +11,8 @@ import { cn } from "../../../../lib/cn";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
+  CURRENT_SELECTION_FORM_FIELD_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
@@ -71,7 +72,10 @@ export function ResourceEditableConfigurationSection({
           title={messages.editableConfigurationHeading}
         />
         {expanded ? (
-          <div className="grid gap-2.5" id={contentId}>
+          <div
+            className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+            id={contentId}
+          >
             {state?.status === "loading" ? (
               <p
                 className={cn(
@@ -518,14 +522,6 @@ function ResourceEditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationOverwriteWarningDetail}
-      </p>
     </div>
   );
 }
@@ -585,14 +581,6 @@ function ResourceEditableConfigurationSharedImpactWarning({
           formatList(workstationNames),
         )}
       </p>
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationSharedImpactWarningDetail}
-      </p>
     </div>
   );
 }
@@ -609,7 +597,7 @@ function ResourceEditableConfigurationDraftStatus({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <p
         className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
@@ -642,7 +630,7 @@ function ResourceEditableConfigurationField({
   supportingContent?: ReactNode;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
         {label}
       </label>

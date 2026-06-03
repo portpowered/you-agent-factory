@@ -259,13 +259,13 @@ export const EditorMode = {
       name: "Factory graph editor tools",
     });
     const addMenuButton = within(toolbar).getByRole("button", {
-      name: "Add tool",
+      name: "Add",
     });
 
     await expect(addMenuButton).toHaveAttribute("aria-expanded", "false");
     await expect(addMenuButton).toBeVisible();
     await expect(
-      within(toolbar).getByRole("button", { name: "Connect tool" }),
+      within(toolbar).getByRole("button", { name: "Connect" }),
     ).toHaveAttribute("aria-pressed", "true");
     await expect(
       within(toolbar).getByRole("button", { name: "Discard changes" }),

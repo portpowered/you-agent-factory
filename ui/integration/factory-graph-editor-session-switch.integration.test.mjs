@@ -224,7 +224,7 @@ async function addUnsavedWorkType(page, identifier) {
   const toolbar = graphCard.getByRole("region", {
     name: "Factory graph editor tools",
   });
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Work type" })
@@ -263,7 +263,7 @@ async function expectEditorModeOff(page) {
     .poll(
       async () => {
         const addMenuCount = await toolbar
-          .getByRole("button", { name: "Add tool" })
+          .getByRole("button", { name: "Add" })
           .count();
         const unsavedCount = await graphCard
           .getByText("Unsaved changes")
@@ -278,7 +278,7 @@ async function expectEditorModeOff(page) {
     .toBe(0);
   await graphCard
     .getByRole("button", {
-      name: "Open hide or show node classes menu",
+      name: "Show or hide",
     })
     .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 }

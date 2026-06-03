@@ -17,6 +17,21 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
+      "src/features/current-selection/resource-selection/components/resource-editable-configuration-section.tsx",
+  },
+  {
+    owner: "expandable-panel-trigger",
+    relativeFilePath:
+      "src/features/current-selection/work-state-selection/components/work-state-editable-configuration-section.tsx",
+  },
+  {
+    owner: "expandable-panel-trigger",
+    relativeFilePath:
+      "src/features/current-selection/work-type-selection/components/work-type-ready-section.tsx",
+  },
+  {
+    owner: "expandable-panel-trigger",
+    relativeFilePath:
       "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx",
   },
   {

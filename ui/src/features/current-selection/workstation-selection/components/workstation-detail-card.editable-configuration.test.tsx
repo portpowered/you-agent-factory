@@ -1010,9 +1010,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText(
-        "Worker reviewer is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
-      ),
+      screen.getByText("Worker reviewer is also used by Plan, Code."),
     ).toBeTruthy();
     expect(
       screen.queryByText(
@@ -1046,9 +1044,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText(
-        "Worker planner is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
-      ),
+      screen.getByText("Worker planner is also used by Plan, Code."),
     ).toBeTruthy();
     expect(
       screen.queryByText(
@@ -1259,10 +1255,13 @@ describe("WorkstationDetailCard editable configuration", () => {
     fireEvent.click(promptVariableHelpToggle());
 
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Suggestions appear only while typing inside {{ ... }}.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
+    expect(
+      screen.queryByText("Type inside {{ ... }} for suggestions."),
+    ).toBeNull();
     expect(screen.getByText("Available variables")).toBeTruthy();
     expect(screen.getByText(".WorkID")).toBeTruthy();
     expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();
@@ -1619,7 +1618,78 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(
       document.getElementById("editable-workstation-prompt-diagnostics"),
     ).toBeTruthy();
-    expect(screen.queryByText("Prompt diagnostics")).toBeNull();
+    expect(
+      screen.getByText("Prompt diagnostics").closest(".invisible"),
+    ).toBeTruthy();
+    expect(
+      editableConfigurationSection().querySelector(
+        "[data-prompt-diagnostics-reserved='true']",
+      )?.className,
+    ).toContain("min-h-24");
+  });
+
+  it("keeps a reserved prompt diagnostics region mounted across validation transitions", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          promptValidationState: { status: "loading" },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+
+    const reservedRegion = () =>
+      editableConfigurationSection().querySelector(
+        "[data-prompt-diagnostics-reserved='true']",
+      );
+
+    expect(reservedRegion()?.className).toContain("min-h-24");
+    expect(
+      document.getElementById("editable-workstation-prompt-diagnostics"),
+    ).toBeTruthy();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ (index .Inputs 1).Payload }} now.",
+          promptDiagnostics: [
+            {
+              endOffset: 33,
+              kind: "UNAVAILABLE_VARIABLE",
+              message: "Only input 0 is available.",
+              path: ".Inputs[1]",
+              sourceText: "(index .Inputs 1)",
+              startOffset: 7,
+            },
+          ],
+          promptValidationState: { status: "ready" },
+          validationErrors: {
+            prompt: "See prompt diagnostics below.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expect(reservedRegion()?.className).toContain("min-h-24");
+    expect(
+      document.getElementById("editable-workstation-prompt-diagnostics"),
+    ).toBeTruthy();
+    expect(
+      editableConfigurationSection().querySelectorAll(
+        "#editable-workstation-prompt-diagnostics",
+      ),
+    ).toHaveLength(1);
   });
 
   it("merges overlapping diagnostic ranges into one visible squiggle", () => {

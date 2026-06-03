@@ -13,7 +13,8 @@ import type { WorkstationLevelGuard } from "../../../current-factory-definition/
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
+  CURRENT_SELECTION_FORM_FIELD_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CURRENT_SELECTION_WARNING_PANEL_CLASS,
   CurrentSelectionSectionHeader,
@@ -83,7 +84,10 @@ export function EditableConfigurationSection({
         title={messages.editableConfigurationHeading}
       />
       {expanded ? (
-        <div className="grid gap-2.5" id={contentId}>
+        <div
+          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+          id={contentId}
+        >
           {state?.status === "loading" ? (
             <p
               className={cn(
@@ -331,14 +335,12 @@ function EditableConfigurationDraftStatus({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
-      <p
-        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
-        {messages.editableConfigurationValidationStatus}
-      </p>
-    </div>
+    <p
+      className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+      role="alert"
+    >
+      {messages.editableConfigurationValidationStatus}
+    </p>
   );
 }
 
@@ -368,14 +370,6 @@ function EditableConfigurationOverwriteWarning({
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationOverwriteWarningDetail}
       </p>
     </div>
   );
@@ -606,7 +600,7 @@ function EditableConfigurationField({
   supportingContent?: ReactNode;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
         {label}
       </label>
