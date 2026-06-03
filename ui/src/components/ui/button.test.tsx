@@ -42,6 +42,6 @@ describe("Button", () => {
     const projectedLabel = screen.getByText("Projected button label");
 
     expect(projectedLabel.className).toContain("min-h-9");
-    expect(projectedLabel.className).toContain("border-af-border");
+    expect(projectedLabel.className).toContain("border-outline");
   });
 });

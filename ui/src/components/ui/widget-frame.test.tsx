@@ -49,16 +49,16 @@ describe("DashboardWidgetFrame", () => {
     expect(card.className).toContain("min-w-0");
     expect(card.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
     expect(card.className).toContain(DETAIL_CARD_CLASS);
-    expect(card.className).toContain("border-af-border");
-    expect(card.className).toContain("bg-af-surface-raised");
+    expect(card.className).toContain("border-outline");
+    expect(card.className).toContain("bg-surface-container-high");
     expect(subtitle.className).toContain(WIDGET_SUBTITLE_CLASS);
     expect(bodyCopy.className).toContain(DETAIL_COPY_CLASS);
     expect(emptyHeading.parentElement?.className).toContain(EMPTY_STATE_CLASS);
     expect(emptyHeading.parentElement?.className).toContain(
-      "border-af-border-strong",
+      "border-outline-variant",
     );
     expect(emptyHeading.parentElement?.className).toContain(
-      "bg-af-surface-subtle",
+      "bg-surface-container-low",
     );
   });
 

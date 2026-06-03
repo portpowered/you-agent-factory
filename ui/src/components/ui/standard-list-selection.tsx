@@ -26,7 +26,7 @@ const STANDARD_LIST_SELECTION_ROW_BASE_CLASS =
   "h-auto min-h-0 w-full justify-start gap-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 
 export const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
-  "border-af-border bg-af-surface-raised text-af-text hover:border-af-border-strong hover:bg-af-overlay";
+  "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
 
 export const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
   "border-af-accent-border bg-af-accent-surface text-af-on-accent";
@@ -38,7 +38,7 @@ export const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
   "border-af-danger-border bg-af-danger-surface text-af-on-danger";
 
 export const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
-  "border-af-border-strong bg-af-surface-subtle text-af-text";
+  "border-outline-variant bg-surface-container-low text-on-surface";
 
 const STANDARD_LIST_SELECTION_TONE_CLASS: Record<
   StandardListSelectionTone,

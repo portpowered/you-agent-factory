@@ -55,6 +55,22 @@ Separate from accent roles. Use only when communicating outcome or state meaning
 
 Each semantic family includes `on-*` and `*-container` / `on-*-container` pairs matching accent structure.
 
+### Shared primitives — neutral surfaces (US-005)
+
+Shared primitives in `ui/src/components/ui/` use role utilities directly for neutral chrome:
+
+| Transitional `af-*` | Role utility | Typical use |
+| --- | --- | --- |
+| `af-background` | `bg-background` | Page/shell backdrop (fixtures) |
+| `af-surface-subtle` | `bg-surface-container-low` | Tables, charts, empty states, selected list rows |
+| `af-surface-raised` | `bg-surface-container-high` | Cards, inputs, dialogs, popovers |
+| `af-border` | `border-outline` | Default borders and row dividers |
+| `af-border-strong` | `border-outline-variant` | Stronger borders, selected outlines |
+| `af-text` | `text-on-surface` | Primary text on surfaces |
+| `af-text-muted` | `text-on-surface-variant` | Secondary text |
+
+Dashboard typography classes (`af-dashboard-*` in `styles.css`) apply `text-on-surface` / `text-on-surface-variant` for headings and body copy. Visual review: Storybook `Agent Factory/UI/Color Role Neutral Surfaces`.
+
 ### Shared primitives (US-004)
 
 | Component | Accent / brand emphasis | Semantic tones |

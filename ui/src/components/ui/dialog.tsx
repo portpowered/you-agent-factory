@@ -45,7 +45,7 @@ export function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed inset-x-4 top-1/2 z-50 mx-auto grid max-w-2xl -translate-y-1/2 gap-4 rounded-2xl border border-af-border bg-af-surface-raised p-6 text-af-text shadow-af-panel",
+          "fixed inset-x-4 top-1/2 z-50 mx-auto grid max-w-2xl -translate-y-1/2 gap-4 rounded-2xl border border-outline bg-surface-container-high p-6 text-on-surface shadow-af-panel",
           className,
         )}
         {...props}
@@ -135,7 +135,7 @@ export function DialogTitle({
   return (
     <DialogPrimitive.Title
       className={cn(
-        "font-display text-2xl leading-tight tracking-[-0.03em] text-af-text",
+        "font-display text-2xl leading-tight tracking-[-0.03em] text-on-surface",
         className,
       )}
       {...props}
@@ -149,7 +149,7 @@ export function DialogDescription({
 }: ComponentProps<typeof DialogPrimitive.Description>) {
   return (
     <DialogPrimitive.Description
-      className={cn("text-sm leading-6 text-af-text-muted", className)}
+      className={cn("text-sm leading-6 text-on-surface-variant", className)}
       {...props}
     />
   );

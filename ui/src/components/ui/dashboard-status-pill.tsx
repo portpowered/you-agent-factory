@@ -7,10 +7,10 @@ const DASHBOARD_STATUS_PILL_BASE_CLASS =
 
 /** Non-interactive status labels. Use accent tones for brand emphasis, semantic tones for state meaning only. */
 const DASHBOARD_STATUS_PILL_TONE_CLASS = {
-  active: "border-af-accent-border bg-af-accent-surface text-af-text",
+  active: "border-af-accent-border bg-af-accent-surface text-on-surface",
   danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
   info: "border-af-info-border bg-af-info-surface text-af-info-text",
-  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
+  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
   success:
     "border-af-success-border bg-af-success-surface text-af-success-text",
   warning:

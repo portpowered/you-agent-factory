@@ -192,19 +192,19 @@
   }
 
   .af-dashboard-page-heading {
-    @apply font-display text-[clamp(1.85rem,4vw,3rem)] leading-none tracking-[-0.035em] text-af-text;
+    @apply font-display text-[clamp(1.85rem,4vw,3rem)] leading-none tracking-[-0.035em] text-on-surface;
   }
 
   .af-dashboard-section-heading {
-    @apply text-[1.02rem] font-semibold leading-tight text-af-text;
+    @apply text-[1.02rem] font-semibold leading-tight text-on-surface;
   }
 
   .af-dashboard-body-text {
-    @apply text-[0.9rem] leading-[1.55] text-af-text-muted;
+    @apply text-[0.9rem] leading-[1.55] text-on-surface-variant;
   }
 
   .af-dashboard-supporting-text {
-    @apply text-[0.8rem] leading-[1.45] text-af-text-muted;
+    @apply text-[0.8rem] leading-[1.45] text-on-surface-variant;
   }
 
   .af-dashboard-supporting-label {
@@ -231,7 +231,7 @@
   }
 
   .af-dashboard-widget-subtitle {
-    @apply font-mono text-2xl text-af-text-muted;
+    @apply font-mono text-2xl text-on-surface-variant;
     overflow-wrap: anywhere;
   }
 

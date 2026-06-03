@@ -16,7 +16,7 @@ export function LocalizedTimezoneNote({
   return (
     <div
       className={cn(
-        "grid gap-1 rounded-lg border border-af-border bg-af-surface-subtle px-3 py-2 text-af-text-subtle",
+        "grid gap-1 rounded-lg border border-outline bg-surface-container-low px-3 py-2 text-af-text-subtle",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
         className,
       )}

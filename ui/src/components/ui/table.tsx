@@ -20,7 +20,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
   return (
     <div
       className={cn(
-        "w-full overflow-x-auto overflow-y-clip rounded-2xl border border-af-border bg-af-surface-subtle",
+        "w-full overflow-x-auto overflow-y-clip rounded-2xl border border-outline bg-surface-container-low",
         containerClassName,
       )}
       {...containerProps}
@@ -40,7 +40,7 @@ export const TableHeader = forwardRef<
 >(function TableHeader({ className, ...props }, ref) {
   return (
     <thead
-      className={cn("[&_tr]:border-b [&_tr]:border-af-border", className)}
+      className={cn("[&_tr]:border-b [&_tr]:border-outline", className)}
       ref={ref}
       {...props}
     />
@@ -54,7 +54,7 @@ export const TableBody = forwardRef<
   return (
     <tbody
       className={cn(
-        "[&_tr:last-child]:border-0 [&_tr]:border-b [&_tr]:border-af-border",
+        "[&_tr:last-child]:border-0 [&_tr]:border-b [&_tr]:border-outline",
         className,
       )}
       ref={ref}
@@ -101,7 +101,7 @@ export const TableCell = forwardRef<
 >(function TableCell({ className, ...props }, ref) {
   return (
     <td
-      className={cn("px-4 py-3 align-middle text-af-text", className)}
+      className={cn("px-4 py-3 align-middle text-on-surface", className)}
       ref={ref}
       {...props}
     />

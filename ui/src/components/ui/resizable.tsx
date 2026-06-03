@@ -13,13 +13,13 @@ export function ResizableHandle({
   return (
     <Separator
       className={cn(
-        "relative flex w-px items-center justify-center bg-af-border outline-none transition-colors focus-visible:bg-af-border-strong data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full",
+        "relative flex w-px items-center justify-center bg-outline outline-none transition-colors focus-visible:bg-outline-variant data-[panel-group-direction=vertical]:h-px data-[panel-group-direction=vertical]:w-full",
         className,
       )}
       {...props}
     >
       {withHandle ? (
-        <div className="flex h-10 w-5 items-center justify-center rounded-full border border-af-border bg-af-surface-raised text-af-text-subtle">
+        <div className="flex h-10 w-5 items-center justify-center rounded-full border border-outline bg-surface-container-high text-af-text-subtle">
           <GripVerticalIcon className="h-4 w-4" />
         </div>
       ) : null}
