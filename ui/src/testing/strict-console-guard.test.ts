@@ -64,6 +64,102 @@ describe("strict-console-guard", () => {
     ).toThrow(/broad wildcard/);
   });
 
+  it("rejects invalid allowlist metadata at install time", () => {
+    expect(() =>
+      installStrictConsoleGuard({
+        allowlist: [
+          {
+            name: " ",
+            level: "warn",
+            match: "valid-match",
+            reason: "Missing name.",
+          },
+        ],
+      }),
+    ).toThrow(/non-empty name/);
+
+    expect(() =>
+      installStrictConsoleGuard({
+        allowlist: [
+          {
+            name: "missing-reason",
+            level: "warn",
+            match: "valid-match",
+            reason: " ",
+          },
+        ],
+      }),
+    ).toThrow(/requires a reason/);
+
+    expect(() =>
+      installStrictConsoleGuard({
+        allowlist: [
+          {
+            name: "too-short",
+            level: "warn",
+            match: "ab",
+            reason: "Substring match must be specific.",
+          },
+        ],
+      }),
+    ).toThrow(/at least 3 characters/);
+  });
+
+  it("rejects installing a second guard in the same worker", () => {
+    const dispose = installStrictConsoleGuard();
+    try {
+      expect(() => installStrictConsoleGuard()).toThrow(/already installed/);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("requires an installed guard before asserting cleanliness", () => {
+    expect(() => assertStrictConsoleClean()).toThrow(/not installed/);
+  });
+
+  it("matches allowlisted console output via RegExp entries", async () => {
+    await withStrictConsole(
+      {
+        allowlist: [
+          {
+            name: "tick-slider-act",
+            level: "error",
+            match: /TickSliderControl inside a test/,
+            reason:
+              "Timeline slider async updates can flush after renderApp in replay smoke tests.",
+          },
+        ],
+      },
+      () => {
+        console.error(
+          "An update to TickSliderControl inside a test was not wrapped in act(...).",
+        );
+      },
+    );
+  });
+
+  it("formats non-string console arguments when recording violations", () => {
+    const dispose = installStrictConsoleGuard();
+    try {
+      console.error(new Error("wrapped act warning"));
+      console.warn({ code: "WARN_ACT", detail: "AgentBentoLayout" });
+
+      let failureMessage = "";
+      try {
+        assertStrictConsoleClean();
+      } catch (error) {
+        failureMessage = error instanceof Error ? error.message : String(error);
+      }
+
+      expect(failureMessage).toMatch(/wrapped act warning/);
+      expect(failureMessage).toMatch(/console\.warn/);
+      expect(failureMessage).toMatch(/AgentBentoLayout/);
+    } finally {
+      dispose();
+    }
+  });
+
   describe("useStrictConsoleGuard", () => {
     useStrictConsoleGuard();
 

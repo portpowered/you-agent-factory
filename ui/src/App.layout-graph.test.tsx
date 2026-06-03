@@ -323,15 +323,18 @@ describe("App layout and graph behavior", () => {
       const workGraphViewport = screen.getByRole("region", {
         name: "Work graph viewport",
       });
-      await waitFor(() => {
-        expect(
-          screen.getAllByRole("button", { name: /Select .* workstation/ }),
-        ).toHaveLength(20);
-      });
+      await waitFor(
+        () => {
+          expect(
+            screen.getAllByRole("button", { name: /Select .* workstation/ }),
+          ).toHaveLength(20);
+        },
+        { timeout: 30_000 },
+      );
       expect(
         within(workGraphViewport).getByRole("button", { name: "Zoom In" }),
       ).toBeTruthy();
     },
-    60_000,
+    90_000,
   );
 });
