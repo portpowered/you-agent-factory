@@ -161,7 +161,7 @@ func assertProviderOutcome(
 			HasNoTokenInPlace("task:complete")
 		dispatch := outcome.Dispatches[len(outcome.Dispatches)-1]
 		assertDispatchHistoryMatchesWork(t, dispatch, work)
-		assertDispatchProviderFailureMatchesExpected(t, dispatch, wantType, wantFamily)
+		assertDispatchFailureMetadataMatchesExpected(t, dispatch, wantType, wantFamily)
 	default:
 		t.Fatalf("unsupported wantPlace %q", tc.wantPlace)
 	}
@@ -201,7 +201,7 @@ func assertProviderRequeueOutcome(
 		t.Fatalf("DispatchHistory outcome = %s, want %s", dispatch.Outcome, interfaces.OutcomeFailed)
 	}
 	assertDispatchHistoryMatchesWork(t, dispatch, work)
-	assertDispatchProviderFailureMatchesExpected(t, dispatch, wantType, wantFamily)
+	assertDispatchFailureMetadataMatchesExpected(t, dispatch, wantType, wantFamily)
 	if tc.wantThrottlePause {
 		assertActiveThrottlePause(t, outcome.EngineState, tc.provider, tc.model)
 		return
@@ -211,7 +211,7 @@ func assertProviderRequeueOutcome(
 	}
 }
 
-func assertDispatchProviderFailureMatchesExpected(
+func assertDispatchFailureMetadataMatchesExpected(
 	t *testing.T,
 	dispatch interfaces.CompletedDispatch,
 	wantType interfaces.WorkFailureType,

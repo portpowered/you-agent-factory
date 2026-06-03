@@ -197,7 +197,7 @@ func assertRetryableInternalServerRequeueDispatch(
 	t.Helper()
 
 	assertDispatchHistoryMatchesWork(t, dispatch, work)
-	assertProviderFailureIsRetryableInternalServer(t, dispatch.FailureMetadata)
+	assertFailureMetadataIsRetryableInternalServer(t, dispatch.FailureMetadata)
 	if !dispatchHasOutputMutationToPlace(dispatch, work.WorkTypeID+":init", work.WorkID) {
 		t.Fatalf(
 			"%s dispatch mutations = %#v, want retryable requeue to %s:init",
@@ -246,7 +246,7 @@ func assertRetryableInternalServerRequeueOutcome(
 		t.Fatalf("dispatch outcome = %s, want %s", dispatch.Outcome, interfaces.OutcomeFailed)
 	}
 	assertDispatchHistoryMatchesWork(t, dispatch, work)
-	assertProviderFailureIsRetryableInternalServer(t, dispatch.FailureMetadata)
+	assertFailureMetadataIsRetryableInternalServer(t, dispatch.FailureMetadata)
 	if !dispatchHasOutputMutationToPlace(dispatch, work.WorkTypeID+":init", work.WorkID) {
 		t.Fatalf("dispatch mutations = %#v, want requeue to %s:init", dispatch.OutputMutations, work.WorkTypeID)
 	}
@@ -264,17 +264,17 @@ func assertRetryableInternalServerRequeueOutcome(
 	}
 }
 
-func assertProviderFailureIsRetryableInternalServer(t *testing.T, failure *interfaces.WorkFailureMetadata) {
+func assertFailureMetadataIsRetryableInternalServer(t *testing.T, failure *interfaces.WorkFailureMetadata) {
 	t.Helper()
 
 	if failure == nil {
-		t.Fatal("ProviderFailure is nil, want normalized internal_server_error metadata")
+		t.Fatal("FailureMetadata is nil, want normalized internal_server_error metadata")
 	}
 	if failure.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("provider failure type = %s, want %s", failure.Type, interfaces.WorkFailureTypeInternalServerError)
+		t.Fatalf("FailureMetadata type = %s, want %s", failure.Type, interfaces.WorkFailureTypeInternalServerError)
 	}
 	if failure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("provider failure family = %s, want %s", failure.Family, interfaces.WorkFailureFamilyRetryable)
+		t.Fatalf("FailureMetadata family = %s, want %s", failure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 }
 
