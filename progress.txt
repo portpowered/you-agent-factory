@@ -1,0 +1,29 @@
+## Codebase Patterns
+- Guard list rows in `EditableConfigurationWorkstationGuardsField` use `useStableWorkstationGuardRowKeys` so React keys do not depend on `formatWorkstationGuardSummary(guard)` (which embeds live `inputKey`).
+- When testing bracket-heavy selector typing with `@testing-library/user-event`, prefer incremental `fireEvent.change` loops over `user.type`/`user.keyboard` because `[` and `"` are parsed as key descriptors.
+- `applyEditableWorkstationDraft` copies `draft.guards` verbatim onto the workstation; `normalizeFactoryDefinition` and `saveFactoryForSessionDocument` preserve `matchConfig.inputKey` without trimming (trim is validation-only in `workstation-editable-validation.ts`).
+
+## 2026-06-04T00:40:00Z - prd-workstation-guard-selector-autocomplete-001
+- What was implemented: Stable client-side guard row keys via `useStableWorkstationGuardRowKeys`; removed summary-based list keys that remounted rows on each `inputKey` keystroke. Added hook/unit tests and a component test proving multi-character selector edits keep focus and update the draft value.
+- Files changed:
+  - `ui/src/features/current-selection/workstation-selection/components/workstation-guards-field.tsx`
+  - `ui/src/features/current-selection/workstation-selection/components/workstation-guards-field.test.tsx`
+  - `ui/src/features/current-selection/workstation-selection/lib/workstation-guard-row-keys.ts`
+  - `ui/src/features/current-selection/workstation-selection/lib/workstation-guard-row-keys.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: Reconcile stable list keys on add (append) and remove (`findRemovedWorkstationGuardIndex` + `guardsDraftEqual`) while leaving keys unchanged for in-place guard edits.
+  - Gotchas encountered: `userEvent.type`/`keyboard` treat `[` and `"` as special key descriptors; use per-character `fireEvent.change` for selector strings with brackets/quotes in tests.
+  - Useful context: `formatWorkstationGuardSummary` remains appropriate for row header summary text, not React list keys.
+---
+
+## 2026-06-04T00:42:00Z - prd-workstation-guard-selector-autocomplete-002
+- What was implemented: Focused tests proving MATCHES_FIELDS `matchConfig.inputKey` updates through `onGuardsChange` with exact selector text (including brackets/quotes), round-trips through `applyEditableWorkstationDraft` and `normalizeFactoryDefinition`, and appears unchanged in the workstation save PUT payload.
+- Files changed:
+  - `ui/src/features/current-selection/workstation-selection/components/workstation-guards-field.test.tsx`
+  - `ui/src/features/current-factory-definition/lib/workstation-editable-values.test.ts`
+  - `ui/src/features/current-factory-definition/lib/workstation-guard-save-roundtrip.test.ts`
+- **Learnings for future iterations:**
+  - Patterns discovered: No production code changes were required; story 001’s draft path already preserved exact `inputKey` strings end-to-end.
+  - Gotchas encountered: Parse `saveFetch.mock.calls[0][1].body` when asserting save payload shape in round-trip tests.
+  - Useful context: Required-field validation trims only for emptiness checks; saved factory JSON keeps the operator’s raw selector string.
+---

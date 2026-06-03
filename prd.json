@@ -1,0 +1,92 @@
+{
+  "project": "Workstation Guard Selector Autocomplete",
+  "branchName": "ralph/workstation-guard-selector-autocomplete",
+  "description": "Fix MATCHES_FIELDS guard selector focus loss caused by unstable guard row keys, and add a compact Monaco-style selector editor with curated suggestions (.Name, .WorkID, .Tags[\"key\"]) while preserving existing required-field validation and exact save payload mapping for matchConfig.inputKey.",
+  "context": {
+    "customerAsk": "Fix the guard selector focus-loss regression and add Monaco-style autocomplete/help for MATCHES_FIELDS matchConfig.inputKey, suggesting .Name, .WorkID, and a .Tags[\"key\"] template. Keep validation behavior unchanged (existing required-field errors only).",
+    "problem": "Typing in the MATCHES_FIELDS selector blurs after each character because guard list rows key off formatWorkstationGuardSummary(guard), which changes as inputKey changes. The field is a plain text input with no suggestions, unlike the workstation prompt Monaco editor.",
+    "solution": "Assign stable client-side row identity for guard rows, replace the plain selector input with a compact Monaco-based editor scoped to guard selector completions, suggest .Name, .WorkID, and .Tags[\"key\"] with short descriptions, allow free-form text, and prove focus stability, draft updates, save payload mapping, and unchanged required-field validation with focused component and validation tests."
+  },
+  "acceptanceCriteria": [
+    "Factory authors can type a full MATCHES_FIELDS selector (for example .Tags[\"_last_output\"]) without the editor losing focus or remounting.",
+    "Draft updates and workstation save payloads preserve the exact edited matchConfig.inputKey string (aside from existing trim used only for emptiness validation).",
+    "The selector editor offers Monaco-style suggestions for .Name, .WorkID, and .Tags[\"key\"] with brief descriptions while accepting arbitrary manual text.",
+    "Empty or whitespace-only inputKey still shows the existing required-field error; non-suggested non-empty values do not block save.",
+    "No new backend or OpenAPI selector syntax validation is introduced; MATCHES_FIELDS runtime matching behavior is unchanged.",
+    "Focused component and validation tests cover focus stability, suggestion acceptance, draft callbacks, and save payload mapping.",
+    "Typecheck, lint, and tests pass for all touched UI packages."
+  ],
+  "userStories": [
+    {
+      "id": "prd-workstation-guard-selector-autocomplete-001",
+      "title": "Stable guard row identity and continuous selector editing",
+      "description": "As a factory operator, I want to type a guard selector continuously so that I can enter values like .Tags[\"_last_output\"] without the field losing focus after each character.",
+      "acceptanceCriteria": [
+        "Guard list rows use stable React identity that does not change when matchConfig.inputKey or other mutable summary fields change",
+        "formatWorkstationGuardSummary(guard) is not used as the guard row list key",
+        "Multi-character typing into MATCHES_FIELDS matchConfig.inputKey does not blur or remount the active editor",
+        "Each typed change updates the editable draft matchConfig.inputKey through onGuardsChange",
+        "Guard summary text updates without remounting the row or losing focus",
+        "Adding, removing, and editing other guard rows still works",
+        "Component tests prove multi-character typing keeps the selector focused and updates the draft with the full string",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-workstation-guard-selector-autocomplete-002",
+      "title": "Preserve save payload mapping for edited selectors",
+      "description": "As a factory operator, I want the selector I typed to save exactly as matchConfig.inputKey so that guard behavior matches what I authored in the dashboard.",
+      "acceptanceCriteria": [
+        "Editing a MATCHES_FIELDS selector updates guards[index].matchConfig.inputKey on the editable workstation draft via onGuardsChange",
+        "The workstation save payload includes the edited selector at guards[index].matchConfig.inputKey with the same string the operator entered",
+        "Selectors with quotes and brackets (for example .Tags[\"_last_output\"]) round-trip unchanged through draft to save payload in focused tests",
+        "No new normalization is introduced beyond existing trim used only for required-field emptiness checks",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-workstation-guard-selector-autocomplete-003",
+      "title": "Monaco-style selector autocomplete for MATCHES_FIELDS",
+      "description": "As a factory operator, I want selector suggestions while editing MATCHES_FIELDS guards so that I can choose common patterns without memorizing exact syntax.",
+      "acceptanceCriteria": [
+        "The MATCHES_FIELDS selector uses a Monaco-style editor/autocomplete pattern consistent with MonacoPromptEditor (compact height, accessible label and error association)",
+        "Autocomplete includes .Name with a short description",
+        "Autocomplete includes .WorkID with a short description",
+        "Autocomplete includes .Tags[\"key\"] or equivalent placeholder with a short description to replace key with a real tag name",
+        "Accepting a suggestion writes the value into matchConfig.inputKey through the same draft path as manual typing",
+        "Operators can type arbitrary selector text without being forced to pick a suggestion",
+        "Completion items are scoped to guard selectors, not prompt template variables",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: edit a MATCHES_FIELDS guard, open suggestions, accept .Name, and type a custom tag selector"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-workstation-guard-selector-autocomplete-004",
+      "title": "Keep existing validation semantics",
+      "description": "As a maintainer, I want selector autocomplete to avoid changing save-time validation so this UX improvement does not introduce a new contract.",
+      "acceptanceCriteria": [
+        "Empty or whitespace-only matchConfig.inputKey continues to show the existing required-field validation error on guards[index].matchConfig.inputKey",
+        "Non-empty selectors that are not in the suggestion list do not add save-blocking editor diagnostics by themselves",
+        "No new backend or OpenAPI validation rule is added for selector syntax",
+        "Existing workstation-editable-validation and guard mapping tests continue to pass for the required-field case",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
