@@ -224,6 +224,9 @@ func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testi
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("Run error = %v, want %v; stdout=%q stderr=%q", err, context.DeadlineExceeded, result.Stdout, result.Stderr)
 	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want zero value for timeout system error", result.ExitCode)
+	}
 
 	childPID := readCommandHelperPID(t, pidFile)
 	t.Cleanup(func() {
@@ -231,6 +234,53 @@ func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testi
 	})
 	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
 		t.Fatalf("spawned child process %d is still running after command timeout", childPID)
+	}
+}
+
+func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(pidFile); err == nil {
+				cancel()
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	result, err := ExecCommandRunner{}.Run(ctx, CommandRequest{
+		Command: os.Args[0],
+		Args: []string{
+			"-test.run=TestExecCommandRunner_HelperProcess",
+			"--",
+			"spawn-child",
+		},
+		Env: append(os.Environ(),
+			"GO_WANT_COMMAND_HELPER=1",
+			"COMMAND_HELPER_PID_FILE="+pidFile,
+		),
+	})
+	if err == nil {
+		t.Fatal("Run error = nil, want context canceled error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run error = %v, want %v; stdout=%q stderr=%q", err, context.Canceled, result.Stdout, result.Stderr)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want zero value for cancel system error", result.ExitCode)
+	}
+
+	childPID := readCommandHelperPID(t, pidFile)
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
+	})
+	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
+		t.Fatalf("spawned child process %d is still running after context cancel", childPID)
 	}
 }
 
