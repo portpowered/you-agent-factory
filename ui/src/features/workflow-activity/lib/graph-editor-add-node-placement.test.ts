@@ -102,6 +102,50 @@ describe("resolveInitialPlacementTopLeft", () => {
 
     expect(topLeft).toEqual({ x: 418, y: 257 });
   });
+
+  it("changes the computed top-left when the viewport center moves for worker and workstation kinds", () => {
+    const workstationDraft: FactoryGraphAddEntityDraft = {
+      behavior: "STANDARD",
+      body: "",
+      kind: "workstation",
+      name: "review",
+      workerName: "writer",
+    };
+    const nearCenter = { x: 500, y: 300 };
+    const farCenter = { x: 1200, y: 900 };
+
+    const workerNear = resolveInitialPlacementTopLeft({
+      draft: workerDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: nearCenter,
+    });
+    const workerFar = resolveInitialPlacementTopLeft({
+      draft: workerDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: farCenter,
+    });
+    const workstationNear = resolveInitialPlacementTopLeft({
+      draft: workstationDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: nearCenter,
+    });
+    const workstationFar = resolveInitialPlacementTopLeft({
+      draft: workstationDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: farCenter,
+    });
+
+    expect(workerNear).not.toEqual(workerFar);
+    expect(workstationNear).not.toEqual(workstationFar);
+    expect(workerNear).not.toBeNull();
+    expect(workerFar).not.toBeNull();
+    expect(workstationNear).not.toBeNull();
+    expect(workstationFar).not.toBeNull();
+  });
 });
 
 describe("occupiedRectsFromRenderedNodes", () => {

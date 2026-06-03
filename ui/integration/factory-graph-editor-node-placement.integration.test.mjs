@@ -519,6 +519,69 @@ describe.sequential("factory graph editor node placement browser integration", (
   );
 
   it(
+    "places a newly added workstation near the visible viewport center after panning",
+    async () => {
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: editableGraphFactoryDefinition,
+        eventLines: editableGraphFactoryReplayLines,
+      });
+      const browserPage = await openBrowserPage();
+
+      try {
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await server.replayCompleted;
+
+        const toolbar = await enterGraphEditor(browserPage.page);
+        await panGraphViewport(browserPage.page, -220, 160);
+
+        await addWorkstation(browserPage.page, toolbar, {
+          body: "Review the drafted story.",
+          name: "review",
+        });
+
+        const workstationNode = browserPage.page.getByTestId(
+          "rf__node-workstation:review",
+        );
+        await workstationNode.waitFor({
+          state: "visible",
+          timeout: uiInteractionTimeoutMs,
+        });
+
+        const viewportMetrics = await viewportScreenMetrics(browserPage.page);
+        const addedWorkstationCenter = await nodeScreenCenter(
+          browserPage.page,
+          "rf__node-workstation:review",
+        );
+
+        expect(
+          isNearViewportCenter(addedWorkstationCenter, viewportMetrics),
+        ).toBe(true);
+
+        const flowPosition = await readNodeFlowPosition(
+          browserPage.page,
+          "rf__node-workstation:review",
+        );
+        expect(flowPosition).not.toBeNull();
+        expect(Number.isFinite(flowPosition.x)).toBe(true);
+        expect(Number.isFinite(flowPosition.y)).toBe(true);
+
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
     "nudges a newly added workstation away from an existing viewport-center worker",
     async () => {
       const server = await startFactoryApiServer({
