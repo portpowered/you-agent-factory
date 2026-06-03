@@ -572,8 +572,9 @@ func TestSubmitBatch_RetiredFieldFailsWithGuidanceBeforeHTTP(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected retired-field validation error")
 	}
-	if !strings.Contains(err.Error(), "retired work_type_id") || !strings.Contains(err.Error(), "workTypeName") {
-		t.Fatalf("error = %v, want retired-field guidance", err)
+	want := "works[0].work_type_id is not supported; use workTypeName"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %v, want %q", err, want)
 	}
 	if called {
 		t.Fatal("expected no HTTP call for retired-field batch")

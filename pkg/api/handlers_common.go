@@ -111,10 +111,7 @@ func decodeStrictJSON[T any](body io.Reader) (T, error) {
 }
 
 func validateCanonicalWorkRequestJSONForAPI(data []byte) error {
-	if err := factoryrequests.ValidateCanonicalWorkRequestJSON(data); err != nil {
-		return translateCanonicalWorkRequestValidationError(err)
-	}
-	return nil
+	return factoryrequests.ValidateCanonicalWorkRequestJSON(data)
 }
 
 func validateWorkContentField(fields map[string]json.RawMessage, prefix string) error {
@@ -340,32 +337,6 @@ func requireOnlyFields(fields map[string]json.RawMessage, prefix string, allowed
 		return requestFieldValidationError{message: fmt.Sprintf("%s%s is not supported", prefix, field)}
 	}
 	return nil
-}
-
-func translateCanonicalWorkRequestValidationError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	message := err.Error()
-	message = strings.TrimPrefix(message, "work request batch ")
-	message = strings.ReplaceAll(message, " uses retired work_type_id field; use workTypeName", ".work_type_id is not supported; use workTypeName")
-	message = strings.ReplaceAll(message, " uses retired target_state field; use state", ".target_state is not supported; use state")
-	if strings.HasPrefix(message, "works[") && strings.Contains(message, "] ") {
-		message = strings.Replace(message, "] ", "].", 1)
-	}
-	if strings.HasSuffix(message, ".work_type_id is not supported; use workTypeName") ||
-		strings.HasSuffix(message, ".target_state is not supported; use state") {
-		return requestFieldValidationError{message: message}
-	}
-	switch message {
-	case "uses retired work_type_id field; use workTypeName":
-		return requestFieldValidationError{message: "work_type_id is not supported; use workTypeName"}
-	case "uses retired target_state field; use state":
-		return requestFieldValidationError{message: "target_state is not supported; use state"}
-	default:
-		return requestFieldValidationError{message: message}
-	}
 }
 
 func stringValue(value *string) string {

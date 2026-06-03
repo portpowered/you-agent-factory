@@ -521,8 +521,9 @@ func TestBuildFactoryService_WorkFileRejectsRetiredTargetStateAlias(t *testing.T
 	if err == nil {
 		t.Fatal("expected retired target_state alias to fail")
 	}
-	if !strings.Contains(err.Error(), "target_state") || !strings.Contains(err.Error(), "state") {
-		t.Fatalf("error = %q, want target_state rejection with state guidance", err.Error())
+	want := "works[0].target_state is not supported; use state"
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("error = %q, want %q", err.Error(), want)
 	}
 }
 
