@@ -6,6 +6,7 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
+import { currentActivityGraphEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
   type ActiveGraphHighlights,
@@ -121,6 +122,12 @@ export function buildGraphEdges(
         semantic ? "agent-flow-edge--semantic" : "",
         muted ? "agent-flow-edge--muted" : "",
         pendingAddition ? "agent-flow-edge--pending-addition" : "",
+        currentActivityGraphEdgeHoverClassName({
+          activeFlow,
+          muted,
+          pendingAddition,
+          semantic,
+        }) ?? "",
       ]
         .filter(Boolean)
         .join(" "),

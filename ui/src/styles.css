@@ -366,12 +366,25 @@
   }
 
   [data-current-activity-flow]
-    .agent-factory-editor-edge:focus-visible
+    .react-flow__edge.agent-flow-edge--hoverable:not(.selected):hover
     .react-flow__edge-path,
   [data-current-activity-flow]
-    .agent-factory-editor-edge:hover
+    .react-flow__edge.agent-factory-editor-edge--hoverable:not(.selected):hover
     .react-flow__edge-path {
-    filter: drop-shadow(0 0 4px rgb(from var(--color-af-accent) r g b / 0.2));
+    stroke: var(--color-af-accent-border) !important;
+    stroke-width: 2px;
+  }
+
+  [data-current-activity-flow]
+    .react-flow__edge.agent-flow-edge--hoverable:not(.selected):hover
+    marker
+    path,
+  [data-current-activity-flow]
+    .react-flow__edge.agent-factory-editor-edge--hoverable:not(.selected):hover
+    marker
+    path {
+    fill: var(--color-af-accent-border);
+    stroke: var(--color-af-accent-border);
   }
 
   [data-current-activity-flow] .agent-factory-editor-edge-label {

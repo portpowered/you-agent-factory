@@ -36,6 +36,7 @@ import {
   type FactoryGraphWorkStateType,
   resolveWorkStateTypeForGraphNode,
 } from "./factory-graph-work-state-type";
+import { factoryGraphEditorEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import {
   type FactoryValidationGraphProjection,
   filterValidationHandleErrorsForWorkstation,
@@ -349,6 +350,11 @@ function buildFactoryGraphReactFlowEdge(
       active ? "agent-factory-editor-edge--active" : "",
       pendingAddition ? "agent-factory-editor-edge--pending-addition" : "",
       pendingRemoval ? "agent-factory-editor-edge--pending-removal" : "",
+      factoryGraphEditorEdgeHoverClassName({
+        active,
+        pendingAddition,
+        pendingRemoval,
+      }) ?? "",
     ]
       .filter(Boolean)
       .join(" "),
