@@ -200,7 +200,8 @@ const (
 
 // Defines values for LoadableProviderSessionProvider.
 const (
-	Codex LoadableProviderSessionProvider = "codex"
+	Codex  LoadableProviderSessionProvider = "codex"
+	Cursor LoadableProviderSessionProvider = "cursor"
 )
 
 // Defines values for ModelInvocationResponseMode.

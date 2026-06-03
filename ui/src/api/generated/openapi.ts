@@ -852,7 +852,7 @@ export interface components {
      * @description Canonical provider value for provider-session detail requests that can be loaded by the API.
      * @enum {string}
      */
-    LoadableProviderSessionProvider: "codex";
+    LoadableProviderSessionProvider: "codex" | "cursor";
     /**
      * @description Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
      * @enum {string}

@@ -878,6 +878,7 @@ func TestGetProviderSessionDetails_RejectsUnsupportedProviderOrKindByContract(t 
 	for _, target := range []string{
 		"/provider-sessions/detail?provider=openai&kind=session_id&id=sess-123",
 		"/provider-sessions/detail?provider=codex&kind=path&id=sess-123",
+		"/provider-sessions/detail?provider=cursor&kind=path&id=sess-123",
 	} {
 		t.Run(target, func(t *testing.T) {
 			srv := newTestServerWithCodexRoot(t.TempDir())
