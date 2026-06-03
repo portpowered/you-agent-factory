@@ -30,7 +30,8 @@ func TestTerminateCommandProcessGroup_GracefulChildExit(t *testing.T) {
 	}
 
 	assertCommandProcessCleanupOutcome(t, logger, commandProcessCleanupOutcomeGracefulSuccess)
-	if !waitForCommandHelperProcessExit(childPID, time.Second) {
+	reapCommandHelperLeader(t, cmd)
+	if !waitForCommandHelperProcessExit(childPID, 3*time.Second) {
 		t.Fatalf("child process %d still running after graceful cleanup", childPID)
 	}
 }
@@ -64,7 +65,8 @@ func TestTerminateCommandProcessGroup_ForceKillAfterGrace(t *testing.T) {
 	}
 
 	assertCommandProcessCleanupOutcome(t, logger, commandProcessCleanupOutcomeForceKillSuccess)
-	if !waitForCommandHelperProcessExit(childPID, time.Second) {
+	reapCommandHelperLeader(t, cmd)
+	if !waitForCommandHelperProcessExit(childPID, 3*time.Second) {
 		t.Fatalf("child process %d still running after force cleanup", childPID)
 	}
 }
@@ -105,6 +107,25 @@ func startCommandHelperInProcessGroup(t *testing.T, mode, pidFile string) (*exec
 	}
 	t.Fatal("helper did not write pid file")
 	return nil, nil
+}
+
+// reapCommandHelperLeader waits for the helper started by startCommandHelperInProcessGroup
+// so zombies are not mistaken for still-running processes by Kill(pid, 0) liveness probes.
+func reapCommandHelperLeader(t *testing.T, cmd *exec.Cmd) {
+	t.Helper()
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out reaping helper process %d", cmd.Process.Pid)
+	}
 }
 
 func assertCommandProcessCleanupOutcome(t *testing.T, logger *recordingCommandLogger, want commandProcessCleanupOutcome) {
