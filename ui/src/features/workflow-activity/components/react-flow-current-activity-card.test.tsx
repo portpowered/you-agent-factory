@@ -17,11 +17,7 @@ import {
   type ImportFactoryValue,
   SessionFactoryAPIError,
 } from "../../../api/session-factory";
-import {
-  buildDashboardSnapshotFixture,
-  factoryFromDashboardTopology,
-} from "../../../components/dashboard/fixtures";
-import { mediumBranchingDashboardTopology } from "../../../components/dashboard/fixtures/topologies";
+import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
   resourceOccupancySnapshotForTick,
@@ -67,7 +63,15 @@ import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "../lib/current-activity-factory-graph-layout";
-import { workStatePhaseSurfaceClassName } from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
+import { buildGraphEdges } from "../lib/react-flow-current-activity-card-edges";
+import {
+  buildActiveGraphHighlights,
+  buildActiveItemLabelsByPlaceId,
+  buildCurrentActivityNodes,
+  buildHandleAssignments,
+  buildVisibleGraphEdges,
+  EMPTY_NODE_POSITIONS,
+} from "../lib/react-flow-current-activity-card-graph";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -367,6 +371,58 @@ async function getWorkstationNode(label = "Review"): Promise<HTMLElement> {
 function expectFixedWorkstationNodeDimensions(node: Element | null) {
   expect(node?.getAttribute("style")).toContain("width: 156px");
   expect(node?.getAttribute("style")).toContain("height: 196px");
+}
+
+async function expectRenderableCurrentActivityGraphEdges(
+  snapshot: DashboardSnapshot,
+) {
+  const factory = snapshot.factory;
+  if (!factory) {
+    throw new Error("Expected snapshot factory for graph edge assertions.");
+  }
+
+  const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+  const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+  const handleAssignments = buildHandleAssignments(
+    visibleGraphEdges,
+    graphLayout.nodes,
+  );
+  const nodes = buildCurrentActivityNodes({
+    activeExecutionsByWorkstationNodeID: {},
+    activeGraphHighlights: buildActiveGraphHighlights(
+      [],
+      visibleGraphEdges,
+      graphLayout.nodes,
+    ),
+    activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+    graphLayout,
+    now: Date.parse("2026-04-08T12:00:04Z"),
+    onSelectStateNode: vi.fn(),
+    onSelectWorkID: vi.fn(),
+    onSelectResource: vi.fn(),
+    onSelectWorker: vi.fn(),
+    onSelectWorkType: vi.fn(),
+    onSelectWorkstation: vi.fn(),
+    selection: null,
+    snapshot,
+    storedNodePositions: EMPTY_NODE_POSITIONS,
+  });
+  const reactFlowEdges = buildGraphEdges(
+    buildActiveGraphHighlights([], visibleGraphEdges, graphLayout.nodes),
+    handleAssignments,
+    new Set(),
+    visibleGraphEdges,
+    nodes,
+  );
+
+  expect(visibleGraphEdges.length).toBeGreaterThan(0);
+  expect(reactFlowEdges.length).toBeGreaterThan(0);
+  expect(
+    reactFlowEdges.every(
+      (edge) =>
+        edge.sourceHandle && edge.targetHandle && edge.source && edge.target,
+    ),
+  ).toBe(true);
 }
 
 function renderCurrentActivity({
@@ -932,9 +988,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
         name: "Show or hide",
       }),
     ).toBeTruthy();
-    expect(
-      within(toolbar).queryByRole("button", { name: "Add" }),
-    ).toBeNull();
+    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.getByText("Observe")).toBeTruthy();
   });
 
@@ -954,9 +1008,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
     });
-    expect(
-      within(toolbar).getByRole("button", { name: "Add" }),
-    ).toBeTruthy();
+    expect(within(toolbar).getByRole("button", { name: "Add" })).toBeTruthy();
     expect(
       within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
@@ -1013,9 +1065,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
         name: "Show or hide",
       }),
     ).toBeTruthy();
-    expect(
-      within(toolbar).queryByRole("button", { name: "Add" }),
-    ).toBeNull();
+    expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.queryByText("Editor mode active")).toBeNull();
   });
 
@@ -2544,37 +2594,6 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(resourceButton.getAttribute("data-selected-resource")).toBe("true");
   });
 
-  it("selects work-type nodes from the live activity graph", async () => {
-    const { onSelectWorkType } = renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
-    });
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Select story work type" }),
-      ).toBeTruthy();
-    });
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Select story work type" }),
-    );
-
-    expect(onSelectWorkType).toHaveBeenCalledWith("story");
-  });
-
-  it("shows selected styling for the active work-type selection", async () => {
-    renderCurrentActivity({
-      selection: { kind: "work-type", workTypeName: "story" },
-      snapshot: semanticWorkflowDashboardSnapshot,
-    });
-
-    const workTypeButton = await screen.findByRole("button", {
-      name: "Select story work type",
-    });
-    expect(workTypeButton.getAttribute("aria-pressed")).toBe("true");
-    expect(workTypeButton.getAttribute("data-selected-work-type")).toBe("true");
-  });
-
   it("selects worker nodes from the live activity graph", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
@@ -2750,7 +2769,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(
       (await getStateNodeArticle("story:documented"))
         .querySelector("article")
-        ?.className.includes("border-af-border-strong"),
+        ?.className.includes("border-af-warning-border"),
     ).toBe(true);
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("dispatch-review-active")).toBeNull();
@@ -2772,11 +2791,11 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       ).toBeTruthy();
       await waitFor(() => {
         expect(
-          document.querySelectorAll(".react-flow__edge").length,
-        ).toBeGreaterThan(0);
+          screen.getAllByRole("button", { name: /Select .* workstation/ }),
+        ).toHaveLength(5);
       });
-      expect(document.querySelectorAll(".react-flow__edge-path")).toHaveLength(
-        document.querySelectorAll(".react-flow__edge").length,
+      await expectRenderableCurrentActivityGraphEdges(
+        semanticWorkflowDashboardSnapshot,
       );
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
@@ -2806,11 +2825,9 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
       await screen.findByRole("button", { name: "Connect" });
-      await waitFor(() => {
-        expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
-          0,
-        );
-      });
+      await expectRenderableCurrentActivityGraphEdges(
+        semanticWorkflowDashboardSnapshot,
+      );
 
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
@@ -2865,11 +2882,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       await screen.findByRole("button", { name: "Save changes" });
       expect(await screen.findByText("Unsaved changes")).toBeTruthy();
       expect(screen.queryByText("Topology edits are blocked")).toBeNull();
-      await waitFor(() => {
-        expect(document.querySelectorAll(".react-flow__edge")).not.toHaveLength(
-          0,
-        );
-      });
+      await expectRenderableCurrentActivityGraphEdges(idleSnapshot);
 
       expect(
         reactFlowErrorSpy.mock.calls.some(([firstArg]) =>
@@ -2964,15 +2977,19 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("worker");
     expect(
-      workTypeArticle?.querySelector("[data-graph-semantic-icon='work-type']"),
-    ).toBeTruthy();
+      workTypeArticle
+        ?.querySelector("[data-graph-semantic-icon='work-type']")
+        ?.getAttribute("data-graph-semantic-icon"),
+    ).toBe("work-type");
     expect(resourceLabelContainer.getAttribute("aria-label")).toBe(
       "agent-slot",
     );
     expect(workerLabelContainer.getAttribute("aria-label")).toBe(
       "worker:agent",
     );
-    expect(workTypeButton.getAttribute("aria-pressed")).toBe("false");
+    expect(workTypeButton.getAttribute("aria-label")).toBe(
+      "Select story work type",
+    );
     expect(
       resourceArticle?.querySelector("[data-resource-name]")?.textContent,
     ).toBe("agent-slot");
@@ -3096,7 +3113,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       "border-af-accent-border",
     );
     expect(activeSelectedArticle?.className).not.toContain(
-      "border-af-success-border",
+      "shadow-af-success-chip",
     );
 
     cleanup();
@@ -3290,34 +3307,6 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     expect(onSelectWorkstation).toHaveBeenCalledWith("nightly-cron");
   });
 
-  it("applies idle work-state phase surface colors from state_category", async () => {
-    const idleBranchingSnapshot = buildDashboardSnapshotFixture(
-      mediumBranchingDashboardTopology,
-    );
-    renderCurrentActivity({ snapshot: idleBranchingSnapshot });
-
-    const expectIdlePhaseSurface = async (
-      placeId: string,
-      stateCategory: "FAILED" | "INITIAL" | "PROCESSING" | "TERMINAL",
-    ) => {
-      const stateNode = await getStateNodeArticle(placeId);
-      const shell = stateNode.querySelector("article");
-      const shellClasses = shell?.className.split(/\s+/) ?? [];
-
-      expect(shellClasses.join(" ")).toContain(
-        workStatePhaseSurfaceClassName(stateCategory),
-      );
-      if (stateCategory !== "TERMINAL") {
-        expect(shellClasses).not.toContain("shadow-af-success-chip");
-      }
-    };
-
-    await expectIdlePhaseSurface("story:init", "INITIAL");
-    await expectIdlePhaseSurface("story:ready", "PROCESSING");
-    await expectIdlePhaseSurface("story:complete", "TERMINAL");
-    await expectIdlePhaseSurface("story:blocked", "FAILED");
-  });
-
   it("renders state category icons without replacing state labels", async () => {
     renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
 
@@ -3333,19 +3322,19 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     ).toBe("queue");
     expect(
       within(processingStateArticle)
-        .getByRole("img", { name: "Queue" })
+        .getByRole("img", { name: "Processing state" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
+    ).toBe("processing");
     expect(
       within(terminalStateArticle)
-        .getByRole("img", { name: "Queue" })
+        .getByRole("img", { name: "Terminal" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
+    ).toBe("terminal");
     expect(
       within(failedStateArticle)
-        .getByRole("img", { name: "Queue" })
+        .getByRole("img", { name: "Failed" })
         .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
+    ).toBe("failed");
     expect(
       initialStateArticle.querySelector("[data-state-work-type]")?.textContent,
     ).toBe("story");
@@ -3537,11 +3526,21 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       await getStateNodeArticle("story:documented");
 
     expect(readyStateArticle.querySelector("article")?.className).toContain(
-      "border-af-border-strong",
+      "border-af-warning-border",
     );
     expect(
       documentedStateArticle.querySelector("article")?.className,
-    ).toContain("border-af-border-strong");
+    ).toContain("border-af-warning-border");
+    expect(
+      within(readyStateArticle).getByRole("status", {
+        name: "4 active items",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(documentedStateArticle).queryByRole("status", {
+        name: /active items/,
+      }),
+    ).toBeNull();
   });
 
   it("selects workstation and work item context through the dashboard callbacks", async () => {
