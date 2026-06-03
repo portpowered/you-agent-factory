@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: workstation detail card coordinates summary, editable configuration, active work, and history disclosures in one selection surface.
 import { useEffect, useState } from "react";
 import type { DashboardWorkstationRequest } from "../../../../api/dashboard/types";
 import {

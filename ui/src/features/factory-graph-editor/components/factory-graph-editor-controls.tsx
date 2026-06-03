@@ -14,7 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 

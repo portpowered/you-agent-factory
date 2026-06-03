@@ -371,7 +371,7 @@
   [data-current-activity-flow]
     .react-flow__edge.agent-factory-editor-edge--hoverable:not(.selected):hover
     .react-flow__edge-path {
-    stroke: var(--color-af-accent-border) !important;
+    --af-graph-edge-stroke: var(--color-af-accent-border);
     stroke-width: 2px;
   }
 
