@@ -12,7 +12,6 @@ const DASHBOARD_ACTION_BUTTON_SIZE_CLASS = {
 const DASHBOARD_ACTION_BUTTON_CONTENT_CLASS =
   "inline-flex items-center justify-center gap-2";
 const DASHBOARD_ACTION_BUTTON_EXECUTING_CONTENT_CLASS = "opacity-0";
-const DASHBOARD_ACTION_BUTTON_SPINNER_CLASS = "size-4 animate-spin";
 
 export interface DashboardActionButtonProps
   extends Omit<ButtonProps, "children" | "size"> {
@@ -95,7 +94,7 @@ function DashboardActionButtonSpinner() {
   return (
     <svg
       aria-hidden="true"
-      className={DASHBOARD_ACTION_BUTTON_SPINNER_CLASS}
+      className="size-4 animate-spin"
       fill="none"
       focusable="false"
       viewBox="0 0 16 16"

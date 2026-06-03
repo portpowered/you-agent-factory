@@ -40,7 +40,10 @@ describe("DashboardActionButton", () => {
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toBeDisabled();
     expect(button.className).toContain("min-h-10");
-    expect(button.querySelector(".animate-spin")).toBeTruthy();
+    const spinner = button.querySelector("svg.animate-spin");
+    expect(spinner).toBeTruthy();
+    expect(spinner?.classList.contains("size-4")).toBe(true);
+    expect(spinner?.classList.contains("animate-spin")).toBe(true);
     const overlay = button.querySelector(
       "span.pointer-events-none.absolute.inset-0",
     );
@@ -62,7 +65,10 @@ describe("DashboardActionButton", () => {
       "span.pointer-events-none.absolute.inset-0",
     );
     expect(overlay).toBeTruthy();
-    expect(overlay?.querySelector(".animate-spin")).toBeTruthy();
+    const spinner = overlay?.querySelector("svg.animate-spin");
+    expect(spinner).toBeTruthy();
+    expect(spinner?.classList.contains("size-4")).toBe(true);
+    expect(spinner?.classList.contains("animate-spin")).toBe(true);
   });
 
   it("keeps disabled and pressed semantics available for migrated surfaces", () => {
