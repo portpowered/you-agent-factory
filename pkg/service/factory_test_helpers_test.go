@@ -841,8 +841,8 @@ func serviceDispatchRequestMetadata(values map[string]string) *factoryapi.Dispat
 	}
 }
 
-func serviceProviderFailurePtr(failure *interfaces.ProviderFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	return interfaces.GeneratedProviderFailureMetadata(failure)
+func serviceProviderFailurePtr(failure *interfaces.WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
+	return interfaces.GeneratedWorkFailureMetadata(failure)
 }
 
 func serviceWorkMetricsPtr(metrics interfaces.WorkMetrics) *factoryapi.WorkMetrics {

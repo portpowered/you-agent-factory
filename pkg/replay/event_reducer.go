@@ -404,7 +404,7 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
 			FailureMetadata:             interfaces.CloneWorkFailureMetadata(failureMetadata),
-			ProviderFailure:             interfaces.CloneProviderFailureMetadata(failureMetadata),
+			ProviderFailure:             interfaces.CloneWorkFailureMetadata(failureMetadata),
 			ProviderSession:             interfaces.CloneProviderSessionMetadata(inference.providerSession),
 			Metrics:                     replayWorkMetricsFromGenerated(payload.Metrics),
 			Diagnostics:                 diagnostics,

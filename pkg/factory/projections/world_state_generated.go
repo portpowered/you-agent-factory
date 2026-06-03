@@ -32,7 +32,7 @@ func workstationResultFromGenerated(payload factoryapi.DispatchResponseEventPayl
 		FailureReason:               stringValue(payload.FailureReason),
 		FailureMessage:              stringValue(payload.FailureMessage),
 		FailureMetadata:             interfaces.CloneWorkFailureMetadata(failureMetadata),
-		ProviderFailure:             interfaces.CloneProviderFailureMetadata(failureMetadata),
+		ProviderFailure:             interfaces.CloneWorkFailureMetadata(failureMetadata),
 	}
 }
 

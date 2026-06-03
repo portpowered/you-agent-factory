@@ -236,12 +236,12 @@ func assertSafeBoundaryWorldState(t *testing.T, worldState interfaces.FactoryWor
 	if got := len(worldState.CompletedDispatches); got != 3 {
 		t.Fatalf("completed dispatch count = %d, want 3", got)
 	}
-	if got := worldState.FailureDetailsByWorkID["work-safe-failure"].FailureReason; got != string(interfaces.ProviderErrorTypeTimeout) {
+	if got := worldState.FailureDetailsByWorkID["work-safe-failure"].FailureReason; got != string(interfaces.WorkFailureTypeTimeout) {
 		t.Fatalf("failed work detail reason = %q, want timeout", got)
 	}
 	windowsDetail := worldState.FailureDetailsByWorkID["work-safe-windows-process-failure"]
-	if windowsDetail.FailureReason != string(interfaces.ProviderErrorTypeInternalServerError) {
-		t.Fatalf("windows failed work detail reason = %q, want %q", windowsDetail.FailureReason, interfaces.ProviderErrorTypeInternalServerError)
+	if windowsDetail.FailureReason != string(interfaces.WorkFailureTypeInternalServerError) {
+		t.Fatalf("windows failed work detail reason = %q, want %q", windowsDetail.FailureReason, interfaces.WorkFailureTypeInternalServerError)
 	}
 	if windowsDetail.FailureMessage != "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)" {
 		t.Fatalf("windows failed work detail message = %q", windowsDetail.FailureMessage)
@@ -260,14 +260,14 @@ func assertSafeBoundaryRequestViews(t *testing.T, worldState interfaces.FactoryW
 	assertSafeBoundaryRequestView(t, worldState, requestViewForWork(t, worldState, "work-safe-success"),
 		"work-safe-success", "resp-safe-success", "", "", "")
 	assertSafeBoundaryRequestView(t, worldState, requestViewForWork(t, worldState, "work-safe-failure"),
-		"work-safe-failure", "sess-safe-failure", string(interfaces.ProviderErrorFamilyRetryable), string(interfaces.ProviderErrorTypeTimeout), "provider timed out")
+		"work-safe-failure", "sess-safe-failure", string(interfaces.WorkFailureFamilyRetryable), string(interfaces.WorkFailureTypeTimeout), "provider timed out")
 
 	windowsRequest := requestViewForWork(t, worldState, "work-safe-windows-process-failure")
 	assertSafeBoundaryRequestView(t, worldState, windowsRequest,
 		"work-safe-windows-process-failure",
 		"sess-safe-windows-4294967295",
-		string(interfaces.ProviderErrorFamilyRetryable),
-		string(interfaces.ProviderErrorTypeInternalServerError),
+		string(interfaces.WorkFailureFamilyRetryable),
+		string(interfaces.WorkFailureTypeInternalServerError),
 		"provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)",
 	)
 	assertNoAuthRemediationText(t, stringValueForRuntimeTest(windowsRequest.Response.FailureMessage))

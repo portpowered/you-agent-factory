@@ -77,7 +77,7 @@ func TestFactoryService_SimpleDashboardRenderInputUsesRenderData(t *testing.T) {
 	submitDashboardWorldViewWork(t, svc, "dashboard-world-failed", "trace-dashboard-failed")
 	provider.nextDispatch(t)
 	provider.respond(interfaces.InferenceResponse{}, workers.NewProviderErrorWithSession(
-		interfaces.ProviderErrorTypePermanentBadRequest,
+		interfaces.WorkFailureTypePermanentBadRequest,
 		"provider rejected dashboard world-view work",
 		errors.New("provider rejected"),
 		&interfaces.ProviderSessionMetadata{

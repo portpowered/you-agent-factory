@@ -748,28 +748,28 @@ func (fs *FactoryService) cronExecutionTimeout(
 }
 
 type cronTriggerFailure struct {
-	Family    interfaces.ProviderErrorFamily
-	Type      interfaces.ProviderErrorType
+	Family    interfaces.WorkFailureFamily
+	Type      interfaces.WorkFailureType
 	retryable bool
 }
 
 func classifyCronTriggerFailure(err error) cronTriggerFailure {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return cronTriggerFailure{
-			Family:    interfaces.ProviderErrorFamilyRetryable,
-			Type:      interfaces.ProviderErrorTypeTimeout,
+			Family:    interfaces.WorkFailureFamilyRetryable,
+			Type:      interfaces.WorkFailureTypeTimeout,
 			retryable: true,
 		}
 	}
 	if errors.Is(err, context.Canceled) {
 		return cronTriggerFailure{
-			Family: interfaces.ProviderErrorFamilyTerminal,
-			Type:   interfaces.ProviderErrorTypeUnknown,
+			Family: interfaces.WorkFailureFamilyTerminal,
+			Type:   interfaces.WorkFailureTypeUnknown,
 		}
 	}
 	return cronTriggerFailure{
-		Family:    interfaces.ProviderErrorFamilyRetryable,
-		Type:      interfaces.ProviderErrorTypeInternalServerError,
+		Family:    interfaces.WorkFailureFamilyRetryable,
+		Type:      interfaces.WorkFailureTypeInternalServerError,
 		retryable: true,
 	}
 }

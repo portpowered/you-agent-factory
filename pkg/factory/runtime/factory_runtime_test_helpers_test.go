@@ -59,18 +59,18 @@ func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch in
 			ID:       "resp-safe-success",
 		}, "1"), nil
 	case "work-safe-failure":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider timed out", &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeTimeout,
+		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider timed out", &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeTimeout,
 		}, &interfaces.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-safe-failure",
 		}, "2"), nil
 	case "work-safe-windows-process-failure":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)", &interfaces.ProviderFailureMetadata{
-			Family: interfaces.ProviderErrorFamilyRetryable,
-			Type:   interfaces.ProviderErrorTypeInternalServerError,
+		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)", &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeInternalServerError,
 		}, &interfaces.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
@@ -482,7 +482,7 @@ func safeBoundaryResult(
 	workID string,
 	outcome interfaces.WorkOutcome,
 	errText string,
-	providerFailure *interfaces.ProviderFailureMetadata,
+	providerFailure *interfaces.WorkFailureMetadata,
 	providerSession *interfaces.ProviderSessionMetadata,
 	retryCount string,
 ) interfaces.WorkResult {
