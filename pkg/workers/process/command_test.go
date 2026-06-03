@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -158,6 +159,38 @@ func TestExecCommandRunner_ContextDeadlineReturnsSystemError(t *testing.T) {
 	}
 	if result.ExitCode != 0 {
 		t.Fatalf("ExitCode = %d, want zero value for system error", result.ExitCode)
+	}
+}
+
+func TestExecCommandRunner_SuccessfulExitTerminatesSpawnedChildProcess(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		// Unix success-path cleanup is covered in subprocess-success-cleanup-005.
+		t.Skip("Windows job-object post-run cleanup test; primary Unix behavioral gate is a separate story")
+	}
+
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	result, err := ExecCommandRunner{}.Run(context.Background(), CommandRequest{
+		Command: os.Args[0],
+		Args: []string{
+			"-test.run=TestExecCommandRunner_HelperProcess",
+			"--",
+			"spawn-child-success",
+		},
+		Env: append(os.Environ(),
+			"GO_WANT_COMMAND_HELPER=1",
+			"COMMAND_HELPER_PID_FILE="+pidFile,
+		),
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
+	}
+
+	childPID := readCommandHelperPID(t, pidFile)
+	if !waitForCommandHelperProcessExit(childPID, 3*time.Second) {
+		t.Fatalf("spawned child process %d is still running after parent exit 0", childPID)
 	}
 }
 
@@ -386,6 +419,9 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	case "spawn-child":
 		spawnCommandHelperChild()
 		time.Sleep(10 * time.Second)
+		os.Exit(0)
+	case "spawn-child-success":
+		spawnCommandHelperChild()
 		os.Exit(0)
 	case "pid-sleep":
 		writeCommandHelperPID()
