@@ -135,7 +135,7 @@ export function buildGraphEdges(
     });
     const resolvedStyle = pendingAddition
       ? {
-          stroke: "var(--color-af-warning-text)",
+          stroke: "var(--color-on-warning-container)",
           strokeDasharray: "9 4",
           strokeWidth: 2,
         }
