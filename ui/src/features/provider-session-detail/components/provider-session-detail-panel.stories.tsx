@@ -7,11 +7,18 @@ import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
 const providerSessionVerificationSessionID =
   "019e44f4-580e-7f32-981e-1e54ec6907d6";
+const cursorProviderSessionVerificationSessionID = "cursor_sess_story_01";
 const selectedProviderSession = {
   dispatchID: "dispatch-review-active",
   id: providerSessionVerificationSessionID,
   kind: "session_id",
   provider: "codex",
+} as const;
+const selectedCursorProviderSession = {
+  dispatchID: "dispatch-cursor-active",
+  id: cursorProviderSessionVerificationSessionID,
+  kind: "session_id",
+  provider: "cursor",
 } as const;
 
 export default {
@@ -96,6 +103,94 @@ export const TimestampPrefixedSessionSuccess = {
         <QueryClientProvider client={queryClient}>
           <ProviderSessionDetailPanel
             selectedProviderSession={selectedProviderSession}
+          />
+        </QueryClientProvider>
+      </div>
+    );
+  },
+};
+
+export const CursorSessionSuccess = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/provider-sessions/detail?id=${cursorProviderSessionVerificationSessionID}&kind=session_id&provider=cursor`,
+          response: {
+            body: {
+              parse: {
+                eventCount: 1,
+                functionCalls: [],
+                lineCount: 1,
+                malformedLineCount: 0,
+                parseErrors: [],
+                reasoning: [],
+                tokenUsage: {
+                  cacheWriteTokens: 4,
+                  cachedInputTokens: 8,
+                  inputTokens: 12,
+                  outputTokens: 6,
+                  reasoningOutputTokens: 0,
+                  totalTokens: 30,
+                },
+                turns: [],
+                unknownEventCount: 0,
+                unknownEvents: [],
+              },
+              providerSession: {
+                id: cursorProviderSessionVerificationSessionID,
+                kind: "session_id",
+                provider: "cursor",
+              },
+              source: {
+                modifiedAt: "2026-05-20T17:35:24Z",
+                relativePath: "store.db",
+                sizeBytes: 4096,
+              },
+              transcript: [
+                {
+                  order: 1,
+                  text: "Hello from Cursor session storage.",
+                  type: "assistant_message",
+                },
+              ],
+            },
+          },
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole("heading", { name: "Transcript" });
+    expect(
+      canvas.getByText("Hello from Cursor session storage."),
+    ).toBeTruthy();
+    expect(
+      canvas.getAllByText(
+        `cursor / Session ID / ${cursorProviderSessionVerificationSessionID}`,
+      ).length,
+    ).toBeGreaterThan(0);
+    expect(canvas.getByRole("heading", { name: "Token usage" })).toBeTruthy();
+  },
+  render: () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <div style={{ maxWidth: "100%", width: "960px" }}>
+        <QueryClientProvider client={queryClient}>
+          <ProviderSessionDetailPanel
+            selectedProviderSession={selectedCursorProviderSession}
           />
         </QueryClientProvider>
       </div>

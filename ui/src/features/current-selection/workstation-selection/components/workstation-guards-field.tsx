@@ -1,5 +1,6 @@
 import { useId } from "react";
 
+import { MonacoGuardSelectorEditor } from "../../../../components/prompt-editor";
 import {
   DashboardActionButton,
   Input,
@@ -20,6 +21,7 @@ import {
 } from "../../../current-factory-definition/lib/workstation-guards";
 import { CURRENT_SELECTION_FIELD_PANEL_CLASS } from "../../base/components/detail-card-shared";
 import type { EditableWorkstationWorkstationOptionsState } from "../lib/detail-card-types";
+import { useStableWorkstationGuardRowKeys } from "../lib/workstation-guard-row-keys";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationGuardsField({
@@ -37,6 +39,7 @@ export function EditableConfigurationWorkstationGuardsField({
 }) {
   const sectionId = useId();
   const addGuardFieldId = `${sectionId}-add-guard`;
+  const guardRowKeys = useStableWorkstationGuardRowKeys(guards);
 
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
@@ -55,10 +58,7 @@ export function EditableConfigurationWorkstationGuardsField({
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {guards.map((guard, index) => (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: guard rows have no stable server id until save
-              key={`${guard.type}-${formatWorkstationGuardSummary(guard)}-${index}`}
-            >
+            <li key={guardRowKeys[index]}>
               <WorkstationGuardRow
                 fieldErrors={fieldErrors}
                 guard={guard}
@@ -333,53 +333,55 @@ function MatchesFieldsGuardFields({
   rowId: string;
 }) {
   const inputKeyFieldId = `${rowId}-input-key`;
+  const inputKeyErrorId = `${rowId}-input-key-error`;
+  const inputKeyError = resolveWorkstationGuardFieldError(
+    fieldErrors,
+    guardIndex,
+    "matchConfig.inputKey",
+  );
 
   return (
     <div className="grid gap-1">
-      <label
-        className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-        htmlFor={inputKeyFieldId}
-      >
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.matchesFieldsGuardInputKeyFieldLabel}
-      </label>
-      <Input
+      </span>
+      <MonacoGuardSelectorEditor
+        ariaDescribedBy={inputKeyError ? inputKeyErrorId : undefined}
+        ariaInvalid={Boolean(inputKeyError)}
+        ariaLabel={messages.matchesFieldsGuardInputKeyFieldLabel}
         className={DASHBOARD_BODY_TEXT_CLASS}
+        hasError={Boolean(inputKeyError)}
         id={inputKeyFieldId}
-        onChange={(event) => {
+        loadingMessage={
+          messages.editableConfigurationGuardSelectorEditorLoading
+        }
+        modelPath={`inmemory://model/current-selection/workstation-guard-selector/${inputKeyFieldId}`}
+        onChange={(nextInputKey) => {
           onChange({
             ...guard,
-            matchConfig: { inputKey: event.target.value },
+            matchConfig: { inputKey: nextInputKey },
           });
         }}
-        type="text"
+        startupErrorMessage={
+          messages.editableConfigurationGuardSelectorEditorError
+        }
         value={guard.matchConfig?.inputKey ?? ""}
       />
-      {resolveWorkstationGuardFieldError(
-        fieldErrors,
-        guardIndex,
-        "matchConfig.inputKey",
-      ) ? (
-        <GuardFieldError
-          message={
-            resolveWorkstationGuardFieldError(
-              fieldErrors,
-              guardIndex,
-              "matchConfig.inputKey",
-            ) ?? ""
-          }
-        />
+      {inputKeyError ? (
+        <GuardFieldError id={inputKeyErrorId} message={inputKeyError} />
       ) : null}
     </div>
   );
 }
 
-function GuardFieldError({ message }: { message: string }) {
+function GuardFieldError({ id, message }: { id?: string; message: string }) {
   return (
     <p
       className={cn(
         "m-0 text-on-error-container",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
+      id={id}
       role="alert"
     >
       {message}

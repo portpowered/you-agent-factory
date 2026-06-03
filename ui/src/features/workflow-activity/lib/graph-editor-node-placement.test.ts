@@ -10,6 +10,7 @@ import {
 } from "./graph-editor-node-placement";
 
 const workerSize = graphEditorNodeDimensionsForKind("worker");
+const workstationSize = graphEditorNodeDimensionsForKind("workstation");
 
 describe("graphEditorNodeDimensionsForKind", () => {
   it("matches factory graph editor layout dimensions", () => {
@@ -38,6 +39,44 @@ describe("resolveViewportCenterNodePlacement", () => {
       collidesAtCenter: false,
       exhaustedSearch: false,
     });
+  });
+
+  it("centers a workstation on an empty canvas", () => {
+    const viewportCenter = { x: 640, y: 360 };
+
+    const result = resolveViewportCenterNodePlacement({
+      candidateSize: workstationSize,
+      occupiedRects: [],
+      viewportCenter,
+    });
+
+    expect(result).toEqual({
+      attemptsUsed: 1,
+      center: viewportCenter,
+      collidesAtCenter: false,
+      exhaustedSearch: false,
+    });
+  });
+
+  it("nudges a workstation away when the viewport center is blocked", () => {
+    const viewportCenter = { x: 300, y: 240 };
+    const blockerTopLeft = topLeftFromAxisAlignedRectCenter(
+      viewportCenter,
+      workstationSize,
+    );
+
+    const result = resolveViewportCenterNodePlacement({
+      candidateSize: workstationSize,
+      occupiedRects: [
+        axisAlignedRectFromTopLeft(blockerTopLeft, workstationSize),
+      ],
+      viewportCenter,
+    });
+
+    expect(result.collidesAtCenter).toBe(true);
+    expect(result.exhaustedSearch).toBe(false);
+    expect(result.center).not.toEqual(viewportCenter);
+    expect(result.attemptsUsed).toBeGreaterThan(1);
   });
 
   it("nudges away when the viewport center is blocked", () => {

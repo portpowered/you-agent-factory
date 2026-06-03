@@ -16,6 +16,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/api/providersessioncursor"
 	"go.uber.org/zap"
 )
 
@@ -38,24 +39,37 @@ func (s *Server) GetProviderSessionDetails(
 	r *http.Request,
 	params factoryapi.GetProviderSessionDetailsParams,
 ) {
-	if params.Provider != factoryapi.Codex || params.Kind != factoryapi.LoadableProviderSessionKindSessionID {
+	if params.Kind != factoryapi.LoadableProviderSessionKindSessionID {
 		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
 		return
 	}
 
-	details, err := loadProviderSessionDetails(
-		s.codexSessionsRoot,
-		string(params.Id),
+	var (
+		details factoryapi.ProviderSessionDetailResponse
+		err     error
 	)
+	switch params.Provider {
+	case factoryapi.Codex:
+		details, err = loadProviderSessionDetails(s.codexSessionsRoot, string(params.Id))
+	case factoryapi.Cursor:
+		details, err = providersessioncursor.LoadDetails(s.cursorSessionsRoot, string(params.Id))
+	default:
+		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
+		return
+	}
 	if err != nil {
 		switch {
-		case errors.Is(err, errInvalidProviderSessionIdentifier):
-			s.writeError(w, http.StatusBadRequest, "provider session must be a codex session_id identifier without path separators", "BAD_REQUEST")
+		case errors.Is(err, errInvalidProviderSessionIdentifier),
+			errors.Is(err, providersessioncursor.ErrInvalidProviderSessionIdentifier):
+			message := invalidProviderSessionIdentifierMessage(params.Provider)
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
-		case errors.Is(err, errProviderSessionNotFound):
+		case errors.Is(err, errProviderSessionNotFound),
+			errors.Is(err, providersessioncursor.ErrProviderSessionNotFound):
 			s.writeError(w, http.StatusNotFound, "provider session not found", "NOT_FOUND")
 			return
-		case errors.Is(err, errAmbiguousProviderSessionFile):
+		case errors.Is(err, errAmbiguousProviderSessionFile),
+			errors.Is(err, providersessioncursor.ErrAmbiguousProviderSessionFile):
 			s.writeError(w, http.StatusInternalServerError, "multiple provider session files match session identifier", "INTERNAL_ERROR")
 			return
 		default:
@@ -66,6 +80,15 @@ func (s *Server) GetProviderSessionDetails(
 	}
 
 	s.writeJSON(w, http.StatusOK, details)
+}
+
+func invalidProviderSessionIdentifierMessage(provider factoryapi.LoadableProviderSessionProvider) string {
+	switch provider {
+	case factoryapi.Cursor:
+		return "provider session must be a cursor session_id identifier without path separators"
+	default:
+		return "provider session must be a codex session_id identifier without path separators"
+	}
 }
 
 func loadProviderSessionDetails(root, id string) (factoryapi.ProviderSessionDetailResponse, error) {
