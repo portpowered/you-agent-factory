@@ -202,6 +202,9 @@ function buildReadyEditableWorkerConfigurationState({
         skipPermissions: value,
       }));
     },
+    onStopTokenChange: (value) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, stopToken: value }));
+    },
     onTimeoutAmountChange: (value) => {
       updateDraft(setSessionState, (draft) => ({
         ...draft,
@@ -284,6 +287,7 @@ function areEditableWorkerDraftsEqual(
     left.name === right.name &&
     left.provider === right.provider &&
     left.skipPermissions === right.skipPermissions &&
+    left.stopToken === right.stopToken &&
     left.timeoutAmount === right.timeoutAmount &&
     left.timeoutUnit === right.timeoutUnit &&
     left.type === right.type

@@ -46,6 +46,7 @@ export type EditableWorkerOverwriteField =
   | "name"
   | "provider"
   | "skipPermissions"
+  | "stopToken"
   | "timeout"
   | "type";
 
@@ -79,6 +80,7 @@ export type EditableWorkerConfigurationState =
       onNameChange: (value: string) => void;
       onProviderChange: (value: EditableWorkerDraft["provider"]) => void;
       onSkipPermissionsChange: (value: boolean) => void;
+      onStopTokenChange: (value: string) => void;
       onTimeoutAmountChange: (value: string) => void;
       onTimeoutUnitChange: (
         value: EditableWorkerDraft["timeoutUnit"],

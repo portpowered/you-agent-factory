@@ -35,6 +35,7 @@ describe("resolveEditableWorkerValues", () => {
       modelProvider: "CURSOR",
       provider: null,
       skipPermissions: null,
+      stopToken: null,
       timeout: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
@@ -66,6 +67,31 @@ describe("resolveEditableWorkerValues", () => {
       timeoutAmount: "5",
       timeoutUnit: "m",
     });
+  });
+
+  it("initializes stopToken from the selected worker value", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          stopToken: "<COMPLETE>",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(resolveEditableWorkerValues(factory, "reviewer")?.stopToken).toBe(
+      "<COMPLETE>",
+    );
+    expect(
+      editableWorkerDraftFromValues(
+        resolveEditableWorkerValues(factory, "reviewer")!,
+      ).stopToken,
+    ).toBe("<COMPLETE>");
   });
 
   it("initializes skipPermissions from the selected worker value", () => {
@@ -153,6 +179,7 @@ describe("applyEditableWorkerDraft", () => {
       name: "reviewer",
       provider: null,
       skipPermissions: false,
+      stopToken: "STOP",
       timeoutAmount: "",
       timeoutUnit: "m",
       type: "MODEL_WORKER",
@@ -222,6 +249,7 @@ describe("applyEditableWorkerDraft", () => {
       name: "runner",
       provider: null,
       skipPermissions: false,
+      stopToken: "",
       timeoutAmount: "5",
       timeoutUnit: "m",
       type: "SCRIPT_WORKER",
@@ -243,6 +271,7 @@ describe("applyEditableWorkerDraft", () => {
         name: "runner",
         provider: null,
         skipPermissions: false,
+        stopToken: "",
         timeoutAmount: "",
         timeoutUnit: "m",
         type: "SCRIPT_WORKER",
@@ -277,6 +306,7 @@ describe("applyEditableWorkerDraft", () => {
       name: "reviewer",
       provider: null,
       skipPermissions: true,
+      stopToken: "",
       timeoutAmount: "",
       timeoutUnit: "m",
       type: "MODEL_WORKER",
@@ -309,6 +339,7 @@ describe("applyEditableWorkerDraft", () => {
         name: "reviewer",
         provider: null,
         skipPermissions: false,
+        stopToken: "",
         timeoutAmount: "",
         timeoutUnit: "m",
         type: "MODEL_WORKER",
@@ -316,6 +347,69 @@ describe("applyEditableWorkerDraft", () => {
     );
 
     expect(disabledFactory?.workers?.[0]).not.toHaveProperty("skipPermissions");
+  });
+
+  it("writes stopToken when set and clears it when empty or whitespace-only", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          name: "Review",
+          stopWords: ["DONE"],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkerDraft(factory, "reviewer", {
+      argsText: "",
+      body: "",
+      command: "",
+      executorProvider: null,
+      model: "gpt-5.5",
+      modelLocality: null,
+      modelProvider: "CURSOR",
+      name: "reviewer",
+      provider: null,
+      skipPermissions: false,
+      stopToken: "<COMPLETE>",
+      timeoutAmount: "",
+      timeoutUnit: "m",
+      type: "MODEL_WORKER",
+    });
+
+    expect(updatedFactory?.workers?.[0]?.stopToken).toBe("<COMPLETE>");
+    expect(updatedFactory?.workstations?.[0]?.stopWords).toEqual(["DONE"]);
+
+    const clearedFactory = applyEditableWorkerDraft(updatedFactory!, "reviewer", {
+      argsText: "",
+      body: "",
+      command: "",
+      executorProvider: null,
+      model: "gpt-5.5",
+      modelLocality: null,
+      modelProvider: "CURSOR",
+      name: "reviewer",
+      provider: null,
+      skipPermissions: false,
+      stopToken: "   ",
+      timeoutAmount: "",
+      timeoutUnit: "m",
+      type: "MODEL_WORKER",
+    });
+
+    expect(clearedFactory?.workers?.[0]).not.toHaveProperty("stopToken");
+    expect(clearedFactory?.workstations?.[0]?.stopWords).toEqual(["DONE"]);
   });
 
   it("applies script worker fields without writing model provider overrides", () => {
@@ -345,6 +439,7 @@ describe("applyEditableWorkerDraft", () => {
         modelProvider: null,
         provider: null,
         skipPermissions: null,
+        stopToken: null,
         timeout: null,
         type: "SCRIPT_WORKER",
         workerName: "reviewer",
@@ -388,6 +483,7 @@ describe("applyEditableWorkerDraft", () => {
       name: "linear-sync",
       provider: "LINEAR",
       skipPermissions: false,
+      stopToken: "",
       timeoutAmount: "1",
       timeoutUnit: "h",
       type: "HOSTED_WORKER",
@@ -440,6 +536,7 @@ describe("applyEditableWorkerDraft", () => {
         modelProvider: "CURSOR",
         provider: null,
         skipPermissions: null,
+        stopToken: null,
         timeout: null,
         type: "MODEL_WORKER",
         workerName: "reviewer",

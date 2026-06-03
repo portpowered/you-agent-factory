@@ -227,6 +227,11 @@ function WorkerEditableConfigurationReadyForm({
           state={state}
           validationErrors={validationErrors}
         />
+        <WorkerEditableConfigurationStopTokenField
+          messages={messages}
+          state={state}
+          validationErrors={validationErrors}
+        />
         <WorkerTypeSpecificFields
           messages={messages}
           state={state}
@@ -312,6 +317,58 @@ function WorkerEditableConfigurationTimeoutField({
           </WorkerEditableConfigurationFieldHelp>
           <WorkerEditableConfigurationServerChangedHint
             fieldName="timeout"
+            messages={messages}
+            state={state}
+          />
+        </>
+      }
+    />
+  );
+}
+
+function WorkerEditableConfigurationStopTokenField({
+  messages,
+  state,
+  validationErrors,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
+  validationErrors: Extract<
+    EditableWorkerConfigurationState,
+    { status: "ready" }
+  >["validationErrors"];
+}) {
+  const fieldId = "editable-worker-stop-token";
+
+  return (
+    <WorkerEditableConfigurationField
+      errorMessage={validationErrors.stopToken}
+      fieldId={fieldId}
+      input={
+        <input
+          aria-describedby={
+            validationErrors.stopToken
+              ? `${fieldId}-error`
+              : "editable-worker-stop-token-hint"
+          }
+          aria-invalid={validationErrors.stopToken ? "true" : undefined}
+          className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+          id={fieldId}
+          onChange={(event) => state.onStopTokenChange(event.target.value)}
+          type="text"
+          value={state.draft.stopToken}
+        />
+      }
+      label={messages.stopTokenFieldLabel}
+      supportingContent={
+        <>
+          <WorkerEditableConfigurationFieldHelp>
+            <span id="editable-worker-stop-token-hint">
+              {messages.stopTokenFieldHelp}
+            </span>
+          </WorkerEditableConfigurationFieldHelp>
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="stopToken"
             messages={messages}
             state={state}
           />

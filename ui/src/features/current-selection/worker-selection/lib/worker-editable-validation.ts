@@ -18,6 +18,7 @@ export type EditableWorkerValidationField =
   | "name"
   | "provider"
   | "skipPermissions"
+  | "stopToken"
   | "timeout"
   | "type";
 

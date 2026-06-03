@@ -125,6 +125,28 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("tracks stopToken edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onStopTokenChange("<COMPLETE>");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        stopToken: "<COMPLETE>",
+      },
+      isDirty: true,
+    });
+  });
+
   it("tracks skipPermissions edits in dirty state", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),

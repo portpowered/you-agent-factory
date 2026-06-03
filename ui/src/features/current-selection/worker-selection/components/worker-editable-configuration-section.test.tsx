@@ -25,6 +25,7 @@ function buildReadyWorkerEditableConfigurationState(
       name: "reviewer",
       provider: null,
       skipPermissions: false,
+      stopToken: "",
       timeoutAmount: "",
       timeoutUnit: "m",
       type: "MODEL_WORKER",
@@ -41,6 +42,7 @@ function buildReadyWorkerEditableConfigurationState(
       name: "reviewer",
       provider: null,
       skipPermissions: null,
+      stopToken: null,
       timeout: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
@@ -57,6 +59,7 @@ function buildReadyWorkerEditableConfigurationState(
     onNameChange: vi.fn(),
     onProviderChange: vi.fn(),
     onSkipPermissionsChange: vi.fn(),
+    onStopTokenChange: vi.fn(),
     onTimeoutAmountChange: vi.fn(),
     onTimeoutUnitChange: vi.fn(),
     markChangesSaved: vi.fn(),
@@ -197,5 +200,50 @@ describe("WorkerEditableConfigurationSection skipPermissions control", () => {
         name: messages.skipPermissionsFieldLabel,
       }),
     ).toBeNull();
+  });
+});
+
+describe("WorkerEditableConfigurationSection stopToken control", () => {
+  it("shows the stop token input for all worker types", () => {
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={buildReadyWorkerEditableConfigurationState(["Review"])}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: messages.stopTokenFieldLabel }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(messages.stopTokenFieldHelp)).toBeInTheDocument();
+  });
+
+  it("shows the stop token input for script workers", () => {
+    const scriptWorkerState: Extract<
+      EditableWorkerConfigurationState,
+      { status: "ready" }
+    > = {
+      ...buildReadyWorkerEditableConfigurationState(["Review"]),
+      draft: {
+        ...buildReadyWorkerEditableConfigurationState(["Review"]).draft,
+        model: "",
+        modelProvider: null,
+        type: "SCRIPT_WORKER",
+        command: "node",
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={scriptWorkerState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: messages.stopTokenFieldLabel }),
+    ).toBeInTheDocument();
   });
 });

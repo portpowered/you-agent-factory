@@ -97,6 +97,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "When enabled, supported model providers can bypass permission prompts during execution.",
     skipPermissionsFieldLabel: "Bypass provider permissions",
+    stopTokenFieldHelp:
+      "Optional. Worker-owned marker that treats model-oriented output as complete when it appears. This is separate from workstation stop words.",
+    stopTokenFieldLabel: "Stop token",
     timeoutFieldHelp:
       "Optional. Limits how long a worker run may execute (for example 30s, 5m, or 1h).",
     timeoutFieldLabel: "Execution timeout",
@@ -185,6 +188,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "有効にすると、対応するモデルプロバイダーが実行中の権限プロンプトを省略できます。",
     skipPermissionsFieldLabel: "プロバイダー権限を省略",
+    stopTokenFieldHelp:
+      "任意。ワーカー所有のマーカーで、表示されたときにモデル指向の出力を完了とみなします。ワークステーションのストップワードとは別です。",
+    stopTokenFieldLabel: "ストップトークン",
     timeoutFieldHelp:
       "任意。ワーカー実行の上限時間を設定します（例: 30s、5m、1h）。",
     timeoutFieldLabel: "実行タイムアウト",
@@ -272,6 +278,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "활성화하면 지원되는 모델 제공자가 실행 중 권한 프롬프트를 건너뛸 수 있습니다.",
     skipPermissionsFieldLabel: "제공자 권한 건너뛰기",
+    stopTokenFieldHelp:
+      "선택 사항. 워커 소유 마커로, 표시되면 모델 지향 출력을 완료로 처리합니다. 워크스테이션 stop word와는 별개입니다.",
+    stopTokenFieldLabel: "중지 토큰",
     timeoutFieldHelp:
       "선택 사항. 워커 실행 시간 상한을 설정합니다(예: 30s, 5m, 1h).",
     timeoutFieldLabel: "실행 타임아웃",
@@ -348,6 +357,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "启用后，支持的 model provider 可在执行期间跳过权限提示。",
     skipPermissionsFieldLabel: "跳过 provider 权限",
+    stopTokenFieldHelp:
+      "可选。Worker 拥有的标记；出现时可将面向模型的输出视为完成。与 workstation 停止词无关。",
+    stopTokenFieldLabel: "停止标记",
     timeoutFieldHelp:
       "可选。限制 worker 运行的最长时间（例如 30s、5m、1h）。",
     timeoutFieldLabel: "执行超时",

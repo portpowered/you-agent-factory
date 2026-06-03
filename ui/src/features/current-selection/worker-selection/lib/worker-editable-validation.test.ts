@@ -22,6 +22,7 @@ function buildDraft(
     name: "reviewer",
     provider: null,
     skipPermissions: false,
+    stopToken: "",
     timeoutAmount: "",
     timeoutUnit: "m",
     type: "MODEL_WORKER",

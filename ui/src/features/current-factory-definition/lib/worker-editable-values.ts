@@ -45,6 +45,7 @@ export interface EditableWorkerValues {
   modelProvider: ModelProvider | null;
   provider: HostedProvider | null;
   skipPermissions: boolean | null;
+  stopToken: string | null;
   timeout: string | null;
   type: WorkerType | undefined;
   workerName: string;
@@ -62,6 +63,7 @@ export interface EditableWorkerDraft {
   modelProvider: ModelProvider | null;
   provider: HostedProvider | null;
   skipPermissions: boolean;
+  stopToken: string;
   timeoutAmount: string;
   timeoutUnit: WorkerTimeoutUnit;
   type: WorkerType;
@@ -88,6 +90,7 @@ export function resolveEditableWorkerValues(
     modelProvider: worker.modelProvider ?? null,
     provider: worker.provider ?? null,
     skipPermissions: worker.skipPermissions ?? null,
+    stopToken: worker.stopToken ?? null,
     timeout: worker.timeout ?? null,
     type: worker.type,
     workerName: worker.name,
@@ -114,6 +117,7 @@ export function editableWorkerDraftFromValues(
     modelProvider: values.modelProvider,
     provider: values.provider,
     skipPermissions: values.skipPermissions ?? false,
+    stopToken: values.stopToken ?? "",
     timeoutAmount: timeoutPicker.amount,
     timeoutUnit: timeoutPicker.unit,
     type: values.type ?? "MODEL_WORKER",
@@ -131,8 +135,11 @@ export function applyEditableWorkerDraft(
   }
 
   const trimmedName = draft.name.trim();
-  const nextWorker = applyWorkerTimeoutFromDraft(
-    buildWorkerFromDraft(workerResolution.worker, draft),
+  const nextWorker = applyWorkerStopTokenFromDraft(
+    applyWorkerTimeoutFromDraft(
+      buildWorkerFromDraft(workerResolution.worker, draft),
+      draft,
+    ),
     draft,
   );
 
@@ -220,6 +227,18 @@ function applyWorkerTimeoutFromDraft(
   return timeout ? { ...withoutTimeout, timeout } : withoutTimeout;
 }
 
+function applyWorkerStopTokenFromDraft(
+  worker: CanonicalWorker,
+  draft: EditableWorkerDraft,
+): CanonicalWorker {
+  const { stopToken: _preservedStopToken, ...withoutStopToken } = worker;
+  const trimmedStopToken = draft.stopToken.trim();
+
+  return trimmedStopToken.length > 0
+    ? { ...withoutStopToken, stopToken: trimmedStopToken }
+    : withoutStopToken;
+}
+
 function pickPreservedWorkerFields(
   worker: CanonicalWorker,
 ): Partial<CanonicalWorker> {
@@ -227,9 +246,6 @@ function pickPreservedWorkerFields(
 
   if (worker.resources !== undefined) {
     preserved.resources = worker.resources;
-  }
-  if (worker.stopToken !== undefined) {
-    preserved.stopToken = worker.stopToken;
   }
   if (worker.skipPermissions !== undefined) {
     preserved.skipPermissions = worker.skipPermissions;

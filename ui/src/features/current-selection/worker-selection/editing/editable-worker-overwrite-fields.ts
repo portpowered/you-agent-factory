@@ -73,6 +73,12 @@ export function resolveEditableWorkerOverwriteFields(
     fields.push("skipPermissions");
   }
   if (
+    sessionStartDraft.stopToken !== latestDefinitionDraft.stopToken &&
+    draft.stopToken !== latestDefinitionDraft.stopToken
+  ) {
+    fields.push("stopToken");
+  }
+  if (
     (sessionStartDraft.timeoutAmount !== latestDefinitionDraft.timeoutAmount ||
       sessionStartDraft.timeoutUnit !== latestDefinitionDraft.timeoutUnit) &&
     (draft.timeoutAmount !== latestDefinitionDraft.timeoutAmount ||
@@ -104,6 +110,7 @@ export function formatEditableWorkerOverwriteFieldLabels(
     | "nameFieldLabel"
     | "providerFieldLabel"
     | "skipPermissionsFieldLabel"
+    | "stopTokenFieldLabel"
     | "timeoutFieldLabel"
     | "typeFieldLabel"
   >,
@@ -127,6 +134,7 @@ function fieldLabel(
     | "nameFieldLabel"
     | "providerFieldLabel"
     | "skipPermissionsFieldLabel"
+    | "stopTokenFieldLabel"
     | "timeoutFieldLabel"
     | "typeFieldLabel"
   >,
@@ -152,6 +160,8 @@ function fieldLabel(
       return messages.providerFieldLabel.toLowerCase();
     case "skipPermissions":
       return messages.skipPermissionsFieldLabel.toLowerCase();
+    case "stopToken":
+      return messages.stopTokenFieldLabel.toLowerCase();
     case "timeout":
       return messages.timeoutFieldLabel.toLowerCase();
     case "name":
