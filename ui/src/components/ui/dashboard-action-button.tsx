@@ -12,8 +12,6 @@ const DASHBOARD_ACTION_BUTTON_SIZE_CLASS = {
 const DASHBOARD_ACTION_BUTTON_CONTENT_CLASS =
   "inline-flex items-center justify-center gap-2";
 const DASHBOARD_ACTION_BUTTON_EXECUTING_CONTENT_CLASS = "opacity-0";
-const DASHBOARD_ACTION_BUTTON_EXECUTING_OVERLAY_CLASS =
-  "pointer-events-none absolute inset-0 inline-flex items-center justify-center";
 const DASHBOARD_ACTION_BUTTON_SPINNER_CLASS = "size-4 animate-spin";
 
 export interface DashboardActionButtonProps
@@ -51,7 +49,7 @@ export const DashboardActionButton = forwardRef<
       {executing ? (
         <span
           aria-hidden="true"
-          className={DASHBOARD_ACTION_BUTTON_EXECUTING_OVERLAY_CLASS}
+          className="pointer-events-none absolute inset-0 inline-flex items-center justify-center"
         >
           <DashboardActionButtonSpinner />
         </span>

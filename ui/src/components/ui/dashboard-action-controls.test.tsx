@@ -41,6 +41,28 @@ describe("DashboardActionButton", () => {
     expect(button).toBeDisabled();
     expect(button.className).toContain("min-h-10");
     expect(button.querySelector(".animate-spin")).toBeTruthy();
+    const overlay = button.querySelector(
+      "span.pointer-events-none.absolute.inset-0",
+    );
+    expect(overlay).toBeTruthy();
+    expect(overlay?.className).toContain("inline-flex");
+    expect(overlay?.className).toContain("items-center");
+    expect(overlay?.className).toContain("justify-center");
+  });
+
+  it("renders executing overlay for icon-only buttons", () => {
+    render(
+      <DashboardActionButton aria-label="Export" executing iconOnly>
+        <svg aria-hidden="true" viewBox="0 0 16 16" />
+      </DashboardActionButton>,
+    );
+
+    const button = screen.getByRole("button", { name: "Export" });
+    const overlay = button.querySelector(
+      "span.pointer-events-none.absolute.inset-0",
+    );
+    expect(overlay).toBeTruthy();
+    expect(overlay?.querySelector(".animate-spin")).toBeTruthy();
   });
 
   it("keeps disabled and pressed semantics available for migrated surfaces", () => {
