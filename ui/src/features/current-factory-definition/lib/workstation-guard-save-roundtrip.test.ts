@@ -211,4 +211,77 @@ describe("workstation guard save round-trip", () => {
       ],
     });
   });
+
+  it("saves edited MATCHES_FIELDS inputKey without normalizing selector text", async () => {
+    const factory = buildGuardedFactoryFixture();
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      reviewWorkstationNode,
+    );
+    expect(editableValues).not.toBeNull();
+    if (!editableValues) {
+      return;
+    }
+
+    const editedSelector = '.Tags["_last_output"]';
+    const editedDraft = {
+      ...editableWorkstationDraftFromValues(editableValues),
+      guards: [
+        {
+          matchConfig: { inputKey: editedSelector },
+          type: "MATCHES_FIELDS" as const,
+        },
+      ],
+    };
+
+    const pendingFactory = applyEditableWorkstationDraft(
+      factory,
+      reviewWorkstationNode,
+      editedDraft,
+    );
+    expect(pendingFactory).not.toBeNull();
+    if (!pendingFactory) {
+      return;
+    }
+
+    const normalizedFactory = normalizeFactoryDefinition(pendingFactory);
+    expect(normalizedFactory.workstations?.[1]?.guards).toEqual([
+      {
+        matchConfig: { inputKey: editedSelector },
+        type: "MATCHES_FIELDS",
+      },
+    ]);
+
+    const saveFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...normalizedFactory,
+          version: {
+            logical: "8",
+            physical: "2026-06-01T14:00:00Z",
+          },
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+    await saveFactoryForSessionDocument(
+      {
+        baseVersion: factory.version,
+        factoryDefinition: normalizedFactory,
+        mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+      },
+      { fetch: saveFetch },
+    );
+
+    const saveRequestBody = JSON.parse(
+      String(saveFetch.mock.calls[0]?.[1]?.body),
+    );
+    expect(
+      saveRequestBody.factory.workstations[1].guards[0].matchConfig.inputKey,
+    ).toBe(editedSelector);
+  });
 });

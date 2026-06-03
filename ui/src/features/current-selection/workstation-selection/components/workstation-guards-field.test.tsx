@@ -103,6 +103,31 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
     expect(onGuardsChange).toHaveBeenCalledWith([]);
   });
 
+  it("updates guards draft matchConfig.inputKey with the exact selector string", () => {
+    const onGuardsChange = vi.fn();
+    const selector = '.Tags["_last_output"]';
+
+    renderWorkstationGuardsField({
+      guards: [
+        {
+          matchConfig: { inputKey: "" },
+          type: "MATCHES_FIELDS",
+        },
+      ],
+      onGuardsChange,
+    });
+
+    const selectorInput = screen.getByLabelText("Field selector");
+    fireEvent.change(selectorInput, { target: { value: selector } });
+
+    expect(onGuardsChange).toHaveBeenLastCalledWith([
+      {
+        matchConfig: { inputKey: selector },
+        type: "MATCHES_FIELDS",
+      },
+    ]);
+  });
+
   it("keeps MATCHES_FIELDS selector focused while typing multiple characters", async () => {
     const user = userEvent.setup();
 
