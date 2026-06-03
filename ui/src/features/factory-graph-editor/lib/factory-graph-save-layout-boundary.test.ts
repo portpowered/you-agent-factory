@@ -13,7 +13,7 @@ import {
   findGraphLayoutPropertyPaths,
 } from "./factory-graph-save-layout-boundary";
 
-describe("factory graph save layout boundary", () => {
+describe("findGraphLayoutPropertyPaths", () => {
   it("detects nested layout coordinate metadata", () => {
     expect(
       findGraphLayoutPropertyPaths({
@@ -43,7 +43,9 @@ describe("factory graph save layout boundary", () => {
       }),
     ).toEqual([]);
   });
+});
 
+describe("factory graph save layout boundary", () => {
   it("does not add layout fields when adding a workstation to the draft", () => {
     const addResult = addFactoryGraphNode({
       baseFactoryDefinition,
