@@ -1,5 +1,8 @@
 @import "tailwindcss";
 @import "./styles/color-role-tokens.css";
+@import "./styles/text-color-role-tokens.css";
+@import "./styles/typography-role-tokens.css";
+@import "./styles/typography-role-utilities.css";
 @import "./styles/color-role-aliases.css";
 @import "./styles/current-activity-graph-nodes.css";
 @import "./styles/tick-slider.css";
@@ -61,12 +64,6 @@
     0.25
   );
   /* Text af-* aliases (on-surface*): color-role-aliases.css */
-  --color-af-text-subtle: rgb(from var(--color-af-foundation-ink) r g b / 0.58);
-  --color-af-text-disabled: rgb(
-    from var(--color-af-foundation-ink) r g b /
-    0.42
-  );
-  --color-af-text-inverse: var(--color-af-foundation-canvas);
   /* Accent/semantic af-* aliases: color-role-aliases.css */
   --color-af-success-border: rgb(
     from var(--color-af-foundation-success) r g b /
@@ -123,8 +120,8 @@
   --color-af-chart-selection-stroke: var(--color-af-accent-border);
   --color-af-chart-cursor: var(--color-af-border-strong);
   --color-af-chart-active-dot-stroke: var(--color-af-background);
-  --color-af-code-ink: var(--color-af-foundation-code-ink);
-  --color-on-foreground: var(--color-af-text-inverse);
+  /* code / inverse text roles: text-color-role-tokens.css; af-* aliases in color-role-aliases.css */
+  --color-on-foreground: var(--color-on-inverse);
   --color-af-edge-muted: var(--color-af-border-strong);
   --color-af-edge-muted-soft: var(--color-af-border);
   --color-af-edge-danger-muted: rgb(from var(--color-af-danger) r g b / 0.32);
@@ -192,31 +189,31 @@
   }
 
   .af-dashboard-page-heading {
-    @apply font-display text-[clamp(1.85rem,4vw,3rem)] leading-none tracking-[-0.035em] text-on-surface;
+    @apply font-display text-display-medium text-on-surface;
   }
 
   .af-dashboard-section-heading {
-    @apply text-[1.02rem] font-semibold leading-tight text-on-surface;
+    @apply text-title-large text-on-surface;
   }
 
   .af-dashboard-body-text {
-    @apply text-[0.9rem] leading-[1.55] text-on-surface-variant;
+    @apply text-body-medium text-on-surface-variant;
   }
 
   .af-dashboard-supporting-text {
-    @apply text-[0.8rem] leading-[1.45] text-on-surface-variant;
+    @apply text-body-small text-on-surface-variant;
   }
 
   .af-dashboard-supporting-label {
-    @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-text-subtle;
+    @apply text-label-medium uppercase text-on-surface-subtle;
   }
 
   .af-dashboard-body-code {
-    @apply font-mono text-[0.9rem] leading-[1.55] text-af-code-ink;
+    @apply font-mono text-code-medium text-code;
   }
 
   .af-dashboard-supporting-code {
-    @apply font-mono text-[0.8rem] leading-[1.45] text-af-code-ink;
+    @apply font-mono text-code-small text-code;
   }
 
   .af-chart-grid-surface {
@@ -231,13 +228,13 @@
   }
 
   .af-dashboard-widget-subtitle {
-    @apply font-mono text-2xl text-on-surface-variant;
+    @apply font-mono text-display-small text-on-surface-variant;
     overflow-wrap: anywhere;
   }
 
   .af-dashboard-supporting-labels {
     dt {
-      @apply text-[0.8rem] font-bold uppercase tracking-[0.08em] text-af-text-subtle;
+      @apply text-label-medium uppercase text-on-surface-subtle;
     }
   }
 

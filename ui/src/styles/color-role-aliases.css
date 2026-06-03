@@ -18,6 +18,10 @@
   --color-af-border-strong: var(--color-outline-variant);
   --color-af-text: var(--color-on-surface);
   --color-af-text-muted: var(--color-on-surface-variant);
+  --color-af-text-subtle: var(--color-on-surface-subtle);
+  --color-af-text-disabled: var(--color-on-surface-disabled);
+  --color-af-text-inverse: var(--color-on-inverse);
+  --color-af-code-ink: var(--color-code);
 
   /* --- Primary accent (transitional af-* → roles) --- */
   --color-af-accent: var(--color-primary);

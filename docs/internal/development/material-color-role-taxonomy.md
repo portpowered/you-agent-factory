@@ -69,7 +69,7 @@ Shared primitives in `ui/src/components/ui/` use role utilities directly for neu
 | `af-text` | `text-on-surface` | Primary text on surfaces |
 | `af-text-muted` | `text-on-surface-variant` | Secondary text |
 
-Dashboard typography classes (`af-dashboard-*` in `styles.css`) apply `text-on-surface` / `text-on-surface-variant` for headings and body copy. Visual review: Storybook `Agent Factory/UI/Color Role Neutral Surfaces`.
+Dashboard typography classes (`af-dashboard-*` in `styles.css`) map to the Material scale and text color roles documented in [material-typography-role-taxonomy.md](./material-typography-role-taxonomy.md). Visual review: Storybook `Agent Factory/UI/Typography Role Hierarchy` and `Agent Factory/UI/Color Role Neutral Surfaces`.
 
 ### Shared primitives (US-004)
 
