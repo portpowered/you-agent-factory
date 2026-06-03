@@ -163,6 +163,15 @@ describe("validateEditableWorkerDraft", () => {
       timeout: messages.editableConfigurationTimeoutInvalid("abc"),
     });
   });
+
+  it("allows an empty timeout picker without validation errors", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({ timeoutAmount: "", timeoutUnit: "m" }),
+        messages,
+      ),
+    ).toEqual({});
+  });
 });
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: contract validation merge cases stay grouped with decode field mapping.

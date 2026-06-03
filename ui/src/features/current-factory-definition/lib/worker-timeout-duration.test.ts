@@ -36,6 +36,13 @@ describe("workerTimeoutPickerFromGoDuration", () => {
       unit: "m",
     });
   });
+
+  it("treats invalid Go duration strings as not configured", () => {
+    expect(workerTimeoutPickerFromGoDuration("not-a-duration")).toEqual({
+      amount: "",
+      unit: "m",
+    });
+  });
 });
 
 describe("goDurationFromWorkerTimeoutPicker", () => {
@@ -67,5 +74,26 @@ describe("goDurationFromWorkerTimeoutPicker", () => {
         unit: "h",
       }),
     ).toBe("1h");
+  });
+
+  it("rejects non-numeric and non-positive picker amounts", () => {
+    expect(
+      goDurationFromWorkerTimeoutPicker({
+        amount: "abc",
+        unit: "s",
+      }),
+    ).toBeNull();
+    expect(
+      goDurationFromWorkerTimeoutPicker({
+        amount: "0",
+        unit: "m",
+      }),
+    ).toBeNull();
+    expect(
+      goDurationFromWorkerTimeoutPicker({
+        amount: "   ",
+        unit: "h",
+      }),
+    ).toBeNull();
   });
 });

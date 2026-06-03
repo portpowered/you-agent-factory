@@ -61,4 +61,41 @@ describe("mapWorkerSaveErrorToFieldErrors", () => {
       timeout: "factory.workers[2].timeout must be a valid Go duration.",
     });
   });
+
+  it("maps stopToken save failures from error messages when targets are absent", () => {
+    const error = new CurrentFactoryDefinitionError(
+      "factory.workers[1].stopToken is invalid.",
+      {
+        code: "BAD_REQUEST",
+        status: 400,
+      },
+    );
+
+    expect(mapWorkerSaveErrorToFieldErrors(error)).toEqual({
+      stopToken: "factory.workers[1].stopToken is invalid.",
+    });
+  });
+
+  it("maps skipPermissions save failures from error messages when targets are absent", () => {
+    const error = new CurrentFactoryDefinitionError(
+      "factory.workers[0].skipPermissions must be a boolean.",
+      {
+        code: "BAD_REQUEST",
+        status: 400,
+      },
+    );
+
+    expect(mapWorkerSaveErrorToFieldErrors(error)).toEqual({
+      skipPermissions: "factory.workers[0].skipPermissions must be a boolean.",
+    });
+  });
+
+  it("returns undefined when the error does not map to worker fields", () => {
+    const error = new CurrentFactoryDefinitionError("factory is invalid.", {
+      code: "BAD_REQUEST",
+      status: 400,
+    });
+
+    expect(mapWorkerSaveErrorToFieldErrors(error)).toBeUndefined();
+  });
 });
