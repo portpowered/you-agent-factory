@@ -127,7 +127,9 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result inte
 		OutputWork:      generatedReplayOutputWorkPtr(result.RecordedOutputWork),
 		Error:           stringPtrIfNotEmpty(result.Error),
 		Feedback:        stringPtrIfNotEmpty(result.Feedback),
-		ProviderFailure: interfaces.GeneratedWorkFailureMetadata(result.ProviderFailure),
+		ProviderFailure: interfaces.GeneratedWorkFailureMetadata(
+			interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure),
+		),
 		Metrics:         generatedWorkMetrics(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload

@@ -820,6 +820,30 @@ func assertNilMatches(t *testing.T, wantNil bool, gotNil bool, field string) {
 	}
 }
 
+func TestCloneFactoryWorldDispatchCompletion_ResolvesFailureMetadataOnlyInput(t *testing.T) {
+	original := FactoryWorldDispatchCompletion{
+		DispatchID: "dispatch-1",
+		Result: WorkstationResult{
+			Outcome: "FAILED",
+			FailureMetadata: &WorkFailureMetadata{
+				Family: WorkFailureFamilyRetryable,
+				Type:   WorkFailureTypeTimeout,
+			},
+		},
+	}
+
+	cloned := CloneFactoryWorldDispatchCompletion(original)
+	if cloned.Result.FailureMetadata == nil || cloned.Result.FailureMetadata.Type != WorkFailureTypeTimeout {
+		t.Fatalf("cloned failure metadata = %#v, want retryable timeout", cloned.Result.FailureMetadata)
+	}
+	if cloned.Result.ProviderFailure == nil || cloned.Result.ProviderFailure.Type != WorkFailureTypeTimeout {
+		t.Fatalf("cloned provider failure = %#v, want canonical retryable timeout", cloned.Result.ProviderFailure)
+	}
+	if original.Result.ProviderFailure != nil {
+		t.Fatal("original provider failure should remain nil for failure_metadata-only input")
+	}
+}
+
 func TestCloneFactoryWorldDispatchCompletion_ClonesCanonicalProviderMetadataAndSafeDiagnostics(t *testing.T) {
 	original := testFactoryWorldDispatchCompletion()
 	cloned := CloneFactoryWorldDispatchCompletion(original)

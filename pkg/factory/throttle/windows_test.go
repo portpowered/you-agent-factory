@@ -7,6 +7,27 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestDeriveActiveThrottlePauses_ResolvesFailureMetadataOnlyRecord(t *testing.T) {
+	now := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
+
+	pauses := DeriveActiveThrottlePauses([]FailureRecord{{
+		Provider:        "claude",
+		Model:           "claude-sonnet",
+		OccurredAt:      now.Add(-5 * time.Minute),
+		FailureMetadata: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
+		},
+	}}, 30*time.Minute, now)
+
+	if len(pauses) != 1 {
+		t.Fatalf("pause count = %d, want 1", len(pauses))
+	}
+	if pauses[0].LaneID != "claude/claude-sonnet" {
+		t.Fatalf("lane ID = %q, want claude/claude-sonnet", pauses[0].LaneID)
+	}
+}
+
 func TestDeriveActiveThrottlePauses_CreatesOneActiveLaneForThrottleFailure(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
 
