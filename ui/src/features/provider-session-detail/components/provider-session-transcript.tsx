@@ -79,7 +79,9 @@ export function EncryptedReasoningNotice({
       >
         {messages.encryptedReasoningStateLabel}
       </span>
-      <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p
+        className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
+      >
         {messages.encryptedReasoningDescription}
       </p>
     </div>

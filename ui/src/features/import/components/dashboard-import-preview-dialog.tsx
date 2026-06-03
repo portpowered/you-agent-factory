@@ -78,7 +78,9 @@ function renderImportPreviewCurrentFactoryDescription(
   return (
     <>
       {beforeFactoryName}
-      <span className="font-semibold text-on-surface">{currentFactoryName}</span>
+      <span className="font-semibold text-on-surface">
+        {currentFactoryName}
+      </span>
       {afterFactoryName}
     </>
   );

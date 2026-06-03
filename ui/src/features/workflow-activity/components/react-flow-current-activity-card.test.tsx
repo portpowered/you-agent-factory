@@ -3056,9 +3056,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     const activeSelectedState = await getStateNodeArticle("story:complete");
     const activeSelectedArticle = activeSelectedState.querySelector("article");
 
-    expect(activeSelectedArticle?.className).toContain(
-      "border-primary",
-    );
+    expect(activeSelectedArticle?.className).toContain("border-primary");
     expect(activeSelectedArticle?.className).not.toContain(
       "border-af-success-border",
     );

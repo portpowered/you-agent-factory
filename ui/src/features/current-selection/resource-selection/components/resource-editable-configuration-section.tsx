@@ -153,7 +153,10 @@ function ResourceEditableConfigurationReadyForm({
       />
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {validationErrors.contract}
@@ -428,7 +431,9 @@ function ResourceRuntimeContextSection({
             <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
               {messages.tokenCountFieldLabel}
             </span>
-            <span className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+            <span
+              className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}
+            >
               {String(tokenCount)}
             </span>
           </div>
@@ -505,7 +510,10 @@ function ResourceEditableConfigurationOverwriteWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-on-warning-container", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-on-warning-container",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
@@ -565,7 +573,10 @@ function ResourceEditableConfigurationSharedImpactWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-on-warning-container", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-on-warning-container",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
         role="alert"
       >
         {messages.editableConfigurationSharedImpactWarning(

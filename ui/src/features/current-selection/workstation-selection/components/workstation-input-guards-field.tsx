@@ -40,7 +40,12 @@ export function EditableConfigurationWorkstationInputGuardsField({
         <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.workstationInputGuardsHeading}
         </h5>
-        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.workstationInputGuardsEmpty}
         </p>
       </div>
@@ -221,7 +226,12 @@ function PeerInputGuardFields({
         {matchInputFieldLabel}
       </label>
       {peerWorkTypes.length === 0 ? (
-        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.workstationInputGuardPeersEmpty}
         </p>
       ) : (
@@ -288,7 +298,10 @@ function ParentInputGuardFields({
         </label>
         {peerWorkTypes.length === 0 ? (
           <p
-            className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-surface-variant",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
           >
             {messages.workstationInputGuardPeersEmpty}
           </p>
@@ -354,7 +367,10 @@ function ParentInputGuardFields({
 function GuardFieldError({ message }: { message: string }) {
   return (
     <p
-      className={cn("m-0 text-on-error-container", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn(
+        "m-0 text-on-error-container",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
       role="alert"
     >
       {message}

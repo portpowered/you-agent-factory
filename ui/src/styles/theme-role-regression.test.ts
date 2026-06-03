@@ -1,80 +1,71 @@
-import { existsSync, readFileSync } from "node:fs";
+// @vitest-environment happy-dom
+
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { compile } from "@tailwindcss/node";
+import { beforeAll, describe, expect, it } from "vitest";
+
+import { applyDocumentColorPalette } from "../theme/app-color-palette";
+import { COLOR_PALETTE_IDS } from "../theme/color-palette";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
 const uiRoot = path.resolve(stylesDir, "../..");
 const repoRoot = path.resolve(uiRoot, "..");
+const stylesSourcePath = path.join(uiRoot, "src", "styles.css");
 
-const REGRESSION_CONTRACT_TESTS: ReadonlyArray<readonly [label: string, relativePath: string]> =
-  [
-    ["color role tokens", "src/styles/color-role-tokens.test.ts"],
-    ["color role aliases", "src/styles/color-role-aliases.test.ts"],
-    ["color palette presets", "src/styles/color-palette-presets.test.ts"],
-    ["typography role tokens", "src/styles/typography-role-tokens.test.ts"],
-    ["layout role tokens", "src/styles/layout-role-tokens.test.ts"],
-    [
-      "shared primitive semantics",
-      "src/components/ui/shared-primitive-semantic-color-roles.test.ts",
-    ],
-    [
-      "shared primitive neutrals",
-      "src/components/ui/shared-primitive-neutral-surface-roles.test.ts",
-    ],
-    ["feature surfaces", "src/features/feature-surface-color-roles.test.ts"],
-    ["dashboard graph chrome", "src/components/dashboard/dashboard-graph.test.tsx"],
-  ];
+function injectCompiledRootRules(compiledCss: string): void {
+  const rootBlocks = compiledCss.match(/:root[^{]*\{[^}]*\}/g) ?? [];
+  const paletteBlocks =
+    compiledCss.match(/\[data-color-palette="[^"]+"\][^{]*\{[^}]*\}/g) ?? [];
+  const style = document.createElement("style");
+  style.textContent = [...rootBlocks, ...paletteBlocks].join("\n");
+  document.head.appendChild(style);
+}
 
-const STORYBOOK_FIXTURES: ReadonlyArray<readonly [label: string, relativePath: string]> =
-  [
-    [
-      "theme overview",
-      "src/components/ui/theme-role-migration-overview.stories.tsx",
-    ],
-    [
-      "accent contrast",
-      "src/components/ui/color-role-accent-contrast.stories.tsx",
-    ],
-    [
-      "neutral surfaces",
-      "src/components/ui/color-role-neutral-surfaces.stories.tsx",
-    ],
-    [
-      "typography hierarchy",
-      "src/components/ui/typography-role-hierarchy.stories.tsx",
-    ],
-    ["layout primitives", "src/components/ui/layout-role-showcase.stories.tsx"],
-    [
-      "palette selector",
-      "src/features/header/components/dashboard-palette-selector.stories.tsx",
-    ],
-    [
-      "trace graph surfaces",
-      "src/features/trace-drilldown/components/trace-graph-surfaces.stories.tsx",
-    ],
-    [
-      "factory graph editor",
-      "src/features/factory-graph-editor/components/factory-graph-editor-flow.stories.tsx",
-    ],
-  ];
+function readCssVariable(name: string): string {
+  return getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+}
 
-describe("theme role migration regression index (US-010)", () => {
-  it.each(REGRESSION_CONTRACT_TESTS)(
-    "keeps regression contract %s at %s",
-    (_label, relativePath) => {
-      const absolutePath = path.join(uiRoot, relativePath);
-      expect(existsSync(absolutePath)).toBe(true);
-    },
-  );
+describe("theme role migration regression (US-010)", () => {
+  beforeAll(async () => {
+    const source = readFileSync(stylesSourcePath, "utf8");
+    const compiled = await compile(source, {
+      base: path.dirname(stylesSourcePath),
+      from: stylesSourcePath,
+      onDependency: () => {},
+    });
+    injectCompiledRootRules(compiled.build([]));
+  });
 
-  it.each(STORYBOOK_FIXTURES)(
-    "keeps Storybook fixture %s at %s",
-    (_label, relativePath) => {
-      const absolutePath = path.join(uiRoot, relativePath);
-      expect(existsSync(absolutePath)).toBe(true);
-    },
-  );
+  it("exposes Material role tokens on the document root", () => {
+    expect(readCssVariable("--color-primary")).toBeTruthy();
+    expect(readCssVariable("--color-on-surface")).toBeTruthy();
+    expect(readCssVariable("--color-surface-container-high")).toBeTruthy();
+    expect(readCssVariable("--color-outline")).toBeTruthy();
+  });
+
+  it.each(
+    COLOR_PALETTE_IDS,
+  )("switches foundation background when palette %s is applied", (paletteId) => {
+    applyDocumentColorPalette(paletteId);
+    expect(document.documentElement.dataset.colorPalette).toBe(paletteId);
+
+    const background = readCssVariable("--color-af-foundation-background");
+    expect(background).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(background.toLowerCase()).not.toBe("");
+  });
+
+  it("keeps yellow primary accent across palette switches", () => {
+    for (const paletteId of COLOR_PALETTE_IDS) {
+      applyDocumentColorPalette(paletteId);
+      expect(
+        readCssVariable("--color-af-foundation-accent").toLowerCase(),
+      ).toBe("#f5c76f");
+    }
+  });
 
   it("documents phased rollout and cleanup in the rollout guide", () => {
     const rolloutPath = path.join(
@@ -87,17 +78,5 @@ describe("theme role migration regression index (US-010)", () => {
     expect(source).toContain("## Cleanup phase");
     expect(source).toMatch(/Taxonomy.*US-001/s);
     expect(source).toContain("color-role-aliases.css");
-  });
-
-  it("dashboard graph chrome uses Material role CSS variables", () => {
-    const graphSource = readFileSync(
-      path.join(uiRoot, "src/components/dashboard/dashboard-graph.tsx"),
-      "utf8",
-    );
-
-    expect(graphSource).toContain("var(--color-outline)");
-    expect(graphSource).toContain("var(--color-surface-container-high)");
-    expect(graphSource).toContain("var(--color-on-surface)");
-    expect(graphSource).toContain("var(--color-surface)");
   });
 });

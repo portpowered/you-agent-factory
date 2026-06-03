@@ -72,7 +72,12 @@ export function WorkTypeStatesList({
         title={messages.statesHeading}
       />
       {states == null || states.length === 0 ? (
-        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.statesEmpty}
         </p>
       ) : (

@@ -75,9 +75,7 @@ export function WorkRelationshipsSection({
       ) : relationshipGraph?.status === "error" ? (
         <div className={CURRENT_SELECTION_ALERT_PANEL_CLASS} role="alert">
           <p className="m-0">{messages.workRelationshipsError}</p>
-          <p className="m-0 text-sm text-error">
-            {relationshipGraph.message}
-          </p>
+          <p className="m-0 text-sm text-error">{relationshipGraph.message}</p>
         </div>
       ) : relationships.length > 0 ? (
         <div className="grid gap-3 rounded-xl border border-outline bg-surface-container-high p-3">

@@ -14,12 +14,12 @@ import { AppLocaleProvider, NATIVE_LANGUAGE_LABELS } from "../../../i18n";
 import {
   AppColorPaletteProvider,
   applyDocumentColorPalette,
-  COLOR_PALETTE_OPTIONS,
 } from "../../../theme";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { getColorPaletteOptions } from "../messages/color-palette-options";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardHeader } from "./dashboard-header";
 
@@ -517,7 +517,7 @@ describe("DashboardHeader", () => {
     ).toBeTruthy();
     expect(
       screen.getAllByRole("menuitemradio").map((item) => item.textContent),
-    ).toEqual(COLOR_PALETTE_OPTIONS.map((option) => option.label));
+    ).toEqual(getColorPaletteOptions("en").map((option) => option.label));
 
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Slate" }));
 

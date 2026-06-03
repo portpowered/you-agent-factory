@@ -238,7 +238,10 @@ function SessionTabsContent({
   if (isPending) {
     return (
       <p
-        className={cn("text-sm text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "text-sm text-on-surface-variant",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
       >
         {messages.loadingSessionsLabel}
       </p>

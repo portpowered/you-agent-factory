@@ -11,9 +11,8 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 
 vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("../lib/trace-factory-graph-layout")
-  >();
+  const actual =
+    await importOriginal<typeof import("../lib/trace-factory-graph-layout")>();
   return {
     ...actual,
     buildTraceFactoryGraphLayoutPositions: async () => new Map(),
@@ -304,9 +303,7 @@ describe("TraceGridBentoCard work item selection", () => {
     const activeStoryButtons = within(card).getAllByRole("button", {
       name: "(story):Active Story",
     });
-    expect(activeStoryButtons[0]?.className).toContain(
-      "border-primary",
-    );
+    expect(activeStoryButtons[0]?.className).toContain("border-primary");
 
     fireEvent.click(activeStoryButtons[0]);
     expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");

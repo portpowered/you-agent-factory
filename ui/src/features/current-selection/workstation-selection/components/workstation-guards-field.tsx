@@ -44,7 +44,12 @@ export function EditableConfigurationWorkstationGuardsField({
         {messages.workstationGuardsHeading}
       </h5>
       {guards.length === 0 ? (
-        <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.workstationGuardsEmpty}
         </p>
       ) : (
@@ -215,7 +220,10 @@ function VisitCountGuardFields({
         </label>
         {workstationOptionsState.status === "error" ? (
           <p
-            className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-error-container",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
             role="alert"
           >
             {messages.editableConfigurationWorkstationUnavailablePrefix}{" "}
@@ -224,7 +232,10 @@ function VisitCountGuardFields({
         ) : null}
         {workstationOptionsState.status === "empty" ? (
           <p
-            className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-surface-variant",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
           >
             {workstationOptionsState.message}
           </p>
@@ -365,7 +376,10 @@ function MatchesFieldsGuardFields({
 function GuardFieldError({ message }: { message: string }) {
   return (
     <p
-      className={cn("m-0 text-on-error-container", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn(
+        "m-0 text-on-error-container",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
       role="alert"
     >
       {message}

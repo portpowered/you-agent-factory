@@ -17,14 +17,6 @@ export interface ColorPaletteOption {
   label: string;
 }
 
-export const COLOR_PALETTE_OPTIONS: readonly ColorPaletteOption[] = [
-  { id: "factory-dark", label: "Factory Dark" },
-  { id: "factory-light", label: "Factory Light" },
-  { id: "material-baseline", label: "Material Baseline" },
-  { id: "slate", label: "Slate" },
-  { id: "olive", label: "Olive" },
-] as const;
-
 export function isColorPaletteId(value: string): value is ColorPaletteId {
   return (COLOR_PALETTE_IDS as readonly string[]).includes(value);
 }

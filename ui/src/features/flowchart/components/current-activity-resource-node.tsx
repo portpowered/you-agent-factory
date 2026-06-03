@@ -49,8 +49,7 @@ export function ResourceNodeView({
         data.activeFlow &&
           !data.selectedResource &&
           "border-af-success-border shadow-af-success-chip",
-        data.selectedResource &&
-          "border-primary shadow-af-accent-selected",
+        data.selectedResource && "border-primary shadow-af-accent-selected",
         data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}

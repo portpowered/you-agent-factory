@@ -19,6 +19,8 @@ describe("detail-card-shared row surfaces", () => {
 
   it("keeps provider session cards on the subtle surface", () => {
     expect(PROVIDER_SESSION_CARD_CLASS).toContain("bg-surface-container-low");
-    expect(PROVIDER_SESSION_CARD_CLASS).not.toContain("bg-surface-container-high");
+    expect(PROVIDER_SESSION_CARD_CLASS).not.toContain(
+      "bg-surface-container-high",
+    );
   });
 });

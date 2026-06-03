@@ -46,8 +46,7 @@ export function WorkerNodeView({ data }: NodeProps<CurrentActivityWorkerNode>) {
         data.activeFlow &&
           !data.selectedWorker &&
           "border-af-success-border shadow-af-success-chip",
-        data.selectedWorker &&
-          "border-primary shadow-af-accent-selected",
+        data.selectedWorker && "border-primary shadow-af-accent-selected",
         data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}

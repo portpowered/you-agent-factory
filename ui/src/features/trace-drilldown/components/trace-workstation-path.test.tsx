@@ -15,9 +15,8 @@ const { mockBuildTraceFactoryGraphLayoutPositions } = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("../lib/trace-factory-graph-layout")
-  >();
+  const actual =
+    await importOriginal<typeof import("../lib/trace-factory-graph-layout")>();
   return {
     ...actual,
     buildTraceFactoryGraphLayoutPositions:
@@ -458,9 +457,7 @@ describe("TraceWorkstationPath layout", () => {
       ["dispatch-plan", { x: 420, y: 80, width: 156, height: 196 }],
       ["dispatch-implement", { x: 860, y: 160, width: 156, height: 196 }],
     ]);
-    mockBuildTraceFactoryGraphLayoutPositions.mockResolvedValue(
-      expectedLayout,
-    );
+    mockBuildTraceFactoryGraphLayoutPositions.mockResolvedValue(expectedLayout);
 
     render(
       <TraceWorkstationPath

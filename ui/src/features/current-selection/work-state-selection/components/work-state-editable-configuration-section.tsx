@@ -43,14 +43,20 @@ export function WorkStateEditableConfigurationSection({
       <div className="grid gap-2.5">
         {state?.status === "loading" ? (
           <p
-            className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-surface-variant",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
           >
             {messages.editableConfigurationLoading}
           </p>
         ) : null}
         {state?.status === "error" ? (
           <p
-            className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-error-container",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
             role="alert"
           >
             {messages.editableConfigurationErrorPrefix} {state.errorMessage}
@@ -58,7 +64,10 @@ export function WorkStateEditableConfigurationSection({
         ) : null}
         {state?.status === "empty" ? (
           <p
-            className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-surface-variant",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
           >
             {state.message || messages.editableConfigurationEmpty}
           </p>
@@ -93,7 +102,10 @@ function WorkStateEditableConfigurationReadyForm({
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {validationErrors.contract}

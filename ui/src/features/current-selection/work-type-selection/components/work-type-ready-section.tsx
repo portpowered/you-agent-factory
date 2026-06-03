@@ -59,7 +59,10 @@ export function WorkTypeReadySection({
     <form className="grid gap-2.5" onSubmit={(event) => event.preventDefault()}>
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {validationErrors.contract}
@@ -67,7 +70,10 @@ export function WorkTypeReadySection({
       ) : null}
       {state.hasValidationErrors ? (
         <p
-          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {messages.editableConfigurationValidationStatus}
@@ -179,7 +185,10 @@ function WorkTypeEditableField({
       {input}
       {errorMessage ? (
         <p
-          className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           id={`${fieldId}-error`}
           role="alert"
         >

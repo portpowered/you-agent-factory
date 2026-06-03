@@ -193,9 +193,7 @@ function renderedNodeBoundsById(): Map<string, RenderedTraceFlowNodeBounds> {
 
   return new Map(
     (
-      JSON.parse(payload) as Array<
-        { id: string } & RenderedTraceFlowNodeBounds
-      >
+      JSON.parse(payload) as Array<{ id: string } & RenderedTraceFlowNodeBounds>
     ).map((node) => [
       node.id,
       {

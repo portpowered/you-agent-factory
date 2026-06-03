@@ -10,10 +10,11 @@ import {
 import { DashboardActionButton } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import {
-  COLOR_PALETTE_OPTIONS,
   type ColorPaletteId,
+  type ColorPaletteOption,
   useAppColorPalette,
 } from "../../../theme";
+import { getColorPaletteOptions } from "../messages/color-palette-options";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 
@@ -29,6 +30,7 @@ export function DashboardPaletteMenu({ locale }: { locale: string }) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
   const headerMessages = getHeaderControlsMessages(locale);
+  const paletteOptions = getColorPaletteOptions(locale);
 
   useHeaderOptionMenuDismissal({
     buttonRef,
@@ -89,6 +91,7 @@ export function DashboardPaletteMenu({ locale }: { locale: string }) {
             setIsOpen(false);
             buttonRef.current?.focus();
           }}
+          paletteOptions={paletteOptions}
         />
       ) : null}
     </div>
@@ -103,6 +106,7 @@ function DashboardPaletteMenuList({
   menuRef,
   onChangePalette,
   onClose,
+  paletteOptions,
 }: {
   buttonRef: RefObject<HTMLButtonElement | null>;
   currentValue: ColorPaletteId;
@@ -111,6 +115,7 @@ function DashboardPaletteMenuList({
   menuRef: RefObject<HTMLDivElement | null>;
   onChangePalette: (palette: string) => void;
   onClose: () => void;
+  paletteOptions: readonly ColorPaletteOption[];
 }) {
   return (
     <div
@@ -129,7 +134,7 @@ function DashboardPaletteMenuList({
       ref={menuRef}
       role="menu"
     >
-      {COLOR_PALETTE_OPTIONS.map((option) => {
+      {paletteOptions.map((option) => {
         const isSelected = option.id === currentValue;
 
         return (

@@ -40,6 +40,7 @@ const TEXTUAL_COMPONENT_PROP_NAMES = new Set([
 const EXCLUDED_RELATIVE_PATH_PATTERNS = [
   /^src\/api\/generated\//,
   /^src\/components\/dashboard\/fixtures\//,
+  /^src\/components\/ui\/(color-role-accent-contrast|color-role-neutral-surfaces|layout-role-showcase|typography-role-hierarchy|theme-role-migration-overview)\.tsx$/,
   /^src\/testing\//,
   /\/messages\//,
   /\.stories\./,

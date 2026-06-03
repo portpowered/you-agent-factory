@@ -268,7 +268,9 @@ function EditableConfigurationReadyPromptFeedback({
           validationState={state.promptValidationState}
         />
       ) : null}
-      {!expanded && !showInlineValidationPanel && state.promptDiagnostics.length > 0 ? (
+      {!expanded &&
+      !showInlineValidationPanel &&
+      state.promptDiagnostics.length > 0 ? (
         <div aria-hidden="true" className="sr-only" id={diagnosticsId} />
       ) : null}
       <Collapsible onOpenChange={setExpanded} open={expanded}>

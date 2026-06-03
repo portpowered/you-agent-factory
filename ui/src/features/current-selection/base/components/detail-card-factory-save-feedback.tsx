@@ -25,7 +25,10 @@ export function DetailCardFactorySaveFeedback<
   if (saveState?.status === "success") {
     return (
       <p
-        className={cn("m-0 text-on-success-container", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-on-success-container",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
         role="status"
       >
         {messages.successMessage}
@@ -37,7 +40,10 @@ export function DetailCardFactorySaveFeedback<
     return (
       <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
         <p
-          className={cn("m-0 text-on-warning-container", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-warning-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {saveState.message}

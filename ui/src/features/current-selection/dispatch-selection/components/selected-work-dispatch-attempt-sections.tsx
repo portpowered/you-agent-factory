@@ -175,7 +175,9 @@ function ScriptRequestAttemptCard({
               String(attemptNumber ?? messages.pendingAttemptLabel),
             )}
           </strong>
-          <p className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}>
+          <p
+            className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}
+          >
             {enumMessages.localizeOutcome("PENDING")}
           </p>
         </div>
@@ -261,7 +263,9 @@ function ScriptResponseAttemptCard({
               String(attemptNumber ?? messages.completedAttemptLabel),
             )}
           </strong>
-          <p className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}>
+          <p
+            className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}
+          >
             {scriptResponse.outcome
               ? enumMessages.localizeOutcome(scriptResponse.outcome)
               : enumMessages.localizeOutcome("RECORDED")}

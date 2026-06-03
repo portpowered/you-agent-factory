@@ -361,7 +361,10 @@ function EditableConfigurationOverwriteWarning({
   return (
     <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
       <p
-        className={cn("m-0 text-on-warning-container", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "m-0 text-on-warning-container",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
@@ -390,7 +393,9 @@ function EditableConfigurationWorkerInput({
 }) {
   if (state.workerOptionsState.status === "empty") {
     return (
-      <p className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p
+        className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
+      >
         {state.workerOptionsState.message}
       </p>
     );
@@ -483,7 +488,10 @@ function EditableConfigurationSharedWorkerHint({
 
   return (
     <p
-      className={cn("m-0 text-on-surface-subtle", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn(
+        "m-0 text-on-surface-subtle",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
     >
       {messages.editableConfigurationSharedWorkerScopeHint(
         valueOrFallback(state.draft.workerName, messages.notConfiguredValue),

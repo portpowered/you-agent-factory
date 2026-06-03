@@ -9,12 +9,7 @@ import {
 
 describe("factory graph work state phase styling", () => {
   it.each([
-    [
-      "INITIAL",
-      "border-info-border bg-info-container",
-      "queue",
-      "text-info",
-    ],
+    ["INITIAL", "border-info-border bg-info-container", "queue", "text-info"],
     [
       "PROCESSING",
       "border-af-warning-border bg-warning-container",

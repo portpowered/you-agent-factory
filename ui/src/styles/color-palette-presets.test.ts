@@ -3,10 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import {
-  COLOR_PALETTE_IDS,
-  COLOR_PALETTE_OPTIONS,
-} from "../theme/color-palette";
+import { getColorPaletteOptions } from "../features/header/messages/color-palette-options";
+import { COLOR_PALETTE_IDS } from "../theme/color-palette";
 
 const stylesDir = path.dirname(fileURLToPath(import.meta.url));
 const palettePresetsSourcePath = path.join(
@@ -30,7 +28,7 @@ describe("color-palette-presets (US-008)", () => {
 
   it("documents exactly five predefined palettes", () => {
     expect(COLOR_PALETTE_IDS).toHaveLength(5);
-    expect(COLOR_PALETTE_OPTIONS.map((option) => option.label)).toEqual([
+    expect(getColorPaletteOptions("en").map((option) => option.label)).toEqual([
       "Factory Dark",
       "Factory Light",
       "Material Baseline",

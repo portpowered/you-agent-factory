@@ -15,7 +15,7 @@ describe("dashboard graph chrome", () => {
   it("styles React Flow canvas and controls with Material role CSS variables", () => {
     const source = readFileSync(dashboardGraphSourcePath, "utf8");
 
-    expect(source).toContain('color={DASHBOARD_GRAPH_BACKGROUND_COLOR}');
+    expect(source).toContain("color={DASHBOARD_GRAPH_BACKGROUND_COLOR}");
     expect(source).toContain("var(--color-outline)");
     expect(source).toContain("var(--color-surface-container-high)");
     expect(source).toContain("var(--color-on-surface-variant)");

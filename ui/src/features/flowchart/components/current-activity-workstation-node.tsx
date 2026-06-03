@@ -100,8 +100,7 @@ export function WorkstationNodeView({
       data.activeFlow &&
       !data.selectedWorkstation &&
       "agent-flow-node--active ring-2 ring-af-success-border",
-    data.selectedWorkstation &&
-      "border-primary shadow-af-accent-selected",
+    data.selectedWorkstation && "border-primary shadow-af-accent-selected",
     !exhaustionRule &&
       selectedWork &&
       "border-info-border shadow-af-info-selected",
