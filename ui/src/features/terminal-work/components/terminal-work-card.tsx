@@ -225,11 +225,9 @@ function TerminalWorkRow({
                   key={`${status}-${item.label}`}
                   onClick={() => onSelectItem(item)}
                   selected={selectedLabel === item.label}
-                  tone={status === "failed" ? "danger" : "info"}
+                  tone={status === "failed" ? "danger" : "success"}
                 >
-                  <span className="font-bold">
-                    {item.label}
-                  </span>
+                  <span className="font-bold">{item.label}</span>
                   {renderTerminalWorkContext(
                     item,
                     fallbackMessage,

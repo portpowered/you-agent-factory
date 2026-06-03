@@ -100,7 +100,7 @@ describe("DashboardStatusPill", () => {
     render(
       <>
         <DashboardStatusPill tone="neutral">Observe mode</DashboardStatusPill>
-        <DashboardStatusPill role="status" tone="warning">
+        <DashboardStatusPill role="status" tone="info">
           Draft changes pending
         </DashboardStatusPill>
       </>,
@@ -109,7 +109,7 @@ describe("DashboardStatusPill", () => {
     expect(screen.getByText("Observe mode").tagName).toBe("SPAN");
     expect(screen.queryByRole("button", { name: "Observe mode" })).toBeNull();
     expect(screen.getByText("Draft changes pending").className).toContain(
-      "border-af-warning-border",
+      "border-af-info-border",
     );
     expect(screen.getByRole("status").textContent).toBe(
       "Draft changes pending",

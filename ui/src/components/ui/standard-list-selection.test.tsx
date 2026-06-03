@@ -1,24 +1,25 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import {
+  STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
   STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
   STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
   STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+  STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
   StandardListSelection,
   StandardListSelectionItem,
 } from "./standard-list-selection";
 
-const ACCENT_SELECTED_TOKENS = [
+const SOLID_ACCENT_SELECTED_TOKENS = [
   "bg-af-accent",
-  "bg-af-accent-surface",
   "border-af-accent",
   "shadow-af-accent-selected",
 ] as const;
 
-function expectNoAccentSelectedTreatment(className: string) {
-  for (const token of ACCENT_SELECTED_TOKENS) {
-    expect(className).not.toContain(token);
+function expectNoSolidAccentSelectedTreatment(className: string) {
+  const tokens = className.split(/\s+/);
+  for (const token of SOLID_ACCENT_SELECTED_TOKENS) {
+    expect(tokens).not.toContain(token);
   }
 }
 
@@ -71,34 +72,45 @@ describe("StandardListSelectionItem", () => {
     expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS);
     expect(row.getAttribute("aria-pressed")).toBe("false");
     expect(row.getAttribute("data-selected")).toBe("false");
-    expectNoAccentSelectedTreatment(row.className);
+    expectNoSolidAccentSelectedTreatment(row.className);
   });
 
   it("uses neutral selected surfaces without accent fill when selected", () => {
     render(
-      <StandardListSelectionItem selected tone="info">
+      <StandardListSelectionItem selected tone="accent">
         Selected row
       </StandardListSelectionItem>,
     );
 
     const row = screen.getByRole("button", { name: "Selected row" });
     expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS);
-    expect(row.className).not.toContain(STANDARD_LIST_SELECTION_ROW_INFO_CLASS);
+    expect(row.className).not.toContain(
+      STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
+    );
     expect(row.getAttribute("aria-pressed")).toBe("true");
     expect(row.getAttribute("data-selected")).toBe("true");
-    expectNoAccentSelectedTreatment(row.className);
+    expectNoSolidAccentSelectedTreatment(row.className);
   });
 
-  it("applies info and danger tone variants only while unselected", () => {
+  it("applies accent, success, and danger tone variants only while unselected", () => {
     const { rerender } = render(
-      <StandardListSelectionItem tone="info">
-        Info row
+      <StandardListSelectionItem tone="accent">
+        Accent row
       </StandardListSelectionItem>,
     );
 
-    let row = screen.getByRole("button", { name: "Info row" });
-    expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_INFO_CLASS);
-    expectNoAccentSelectedTreatment(row.className);
+    let row = screen.getByRole("button", { name: "Accent row" });
+    expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS);
+    expectNoSolidAccentSelectedTreatment(row.className);
+
+    rerender(
+      <StandardListSelectionItem tone="success">
+        Success row
+      </StandardListSelectionItem>,
+    );
+    row = screen.getByRole("button", { name: "Success row" });
+    expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS);
+    expectNoSolidAccentSelectedTreatment(row.className);
 
     rerender(
       <StandardListSelectionItem tone="danger">
@@ -107,7 +119,7 @@ describe("StandardListSelectionItem", () => {
     );
     row = screen.getByRole("button", { name: "Danger row" });
     expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_DANGER_CLASS);
-    expectNoAccentSelectedTreatment(row.className);
+    expectNoSolidAccentSelectedTreatment(row.className);
   });
 
   it("honors per-row disabled state over list pending", () => {

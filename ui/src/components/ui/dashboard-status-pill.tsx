@@ -4,20 +4,28 @@ import { cn } from "../../lib/cn";
 
 const DASHBOARD_STATUS_PILL_BASE_CLASS =
   "inline-flex min-h-8 items-center justify-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold";
+
+/** Non-interactive status labels. Use accent tones for brand emphasis, semantic tones for state meaning only. */
 const DASHBOARD_STATUS_PILL_TONE_CLASS = {
   active: "border-af-accent-border bg-af-accent-surface text-af-text",
   danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
+  info: "border-af-info-border bg-af-info-surface text-af-info-text",
   neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
+  success:
+    "border-af-success-border bg-af-success-surface text-af-success-text",
   warning:
     "border-af-warning-border bg-af-warning-surface text-af-warning-text",
-};
+} as const;
+
+export type DashboardStatusPillTone =
+  keyof typeof DASHBOARD_STATUS_PILL_TONE_CLASS;
 
 export interface DashboardStatusPillProps
   extends Omit<
     HTMLAttributes<HTMLSpanElement>,
     "onClick" | "onKeyDown" | "onKeyUp" | "tabIndex"
   > {
-  tone?: keyof typeof DASHBOARD_STATUS_PILL_TONE_CLASS;
+  tone?: DashboardStatusPillTone;
 }
 
 export const DashboardStatusPill = forwardRef<

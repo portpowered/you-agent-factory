@@ -7,8 +7,8 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import {
   STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
   STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
+  STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
 } from "../../../components/ui/standard-list-selection";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
@@ -104,7 +104,7 @@ describe("CompletedFailedWorkstationCard", () => {
     const doneStoryButton = screen.getByRole("button", { name: /Done Story/ });
     expect(doneStoryButton.getAttribute("aria-label")).toBe("Done Story");
     expect(doneStoryButton.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
-    expect(doneStoryButton.className).toContain("text-af-on-info");
+    expect(doneStoryButton.className).toContain("text-af-success-text");
     expect(doneStoryButton).toBeTruthy();
     const failedStoryButton = screen.getByRole("button", {
       name: /Failed Story/,
@@ -313,7 +313,7 @@ describe("CompletedFailedWorkstationCard", () => {
     );
     expectStandardListTerminalRow(
       screen.getByRole("button", { name: /Done Story/ }),
-      { selected: false, tone: "info" },
+      { selected: false, tone: "success" },
     );
   });
 
@@ -352,7 +352,7 @@ describe("CompletedFailedWorkstationCard", () => {
 
     expectStandardListTerminalRow(
       screen.getByRole("button", { name: /Done Story/ }),
-      { selected: false, tone: "info" },
+      { selected: false, tone: "success" },
     );
     expectStandardListTerminalRow(
       screen.getByRole("button", { name: /Failed Story/ }),
@@ -493,13 +493,13 @@ function expectStandardListTerminalRow(
     tone,
   }: {
     selected: boolean;
-    tone: "info" | "danger";
+    tone: "success" | "danger";
   },
 ) {
   const unselectedToneClass =
     tone === "danger"
       ? STANDARD_LIST_SELECTION_ROW_DANGER_CLASS
-      : STANDARD_LIST_SELECTION_ROW_INFO_CLASS;
+      : STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS;
 
   expect(row.getAttribute("aria-pressed")).toBe(selected ? "true" : "false");
   expect(row.getAttribute("data-selected")).toBe(selected ? "true" : "false");

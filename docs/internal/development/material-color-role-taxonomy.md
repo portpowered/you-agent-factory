@@ -55,6 +55,16 @@ Separate from accent roles. Use only when communicating outcome or state meaning
 
 Each semantic family includes `on-*` and `*-container` / `on-*-container` pairs matching accent structure.
 
+### Shared primitives (US-004)
+
+| Component | Accent / brand emphasis | Semantic tones |
+| --- | --- | --- |
+| `Button` (`tone="default"`) | `af-accent` → `primary` | `destructive` → `error` only |
+| `DashboardStatusPill` | `active` → primary accent container | `success`, `warning`, `info`, `danger` for state meaning |
+| `StandardListSelectionItem` | `accent` → primary accent surface | `success` / `danger` for outcome rows; selected rows stay neutral |
+
+Do not use `warning` for draft/pending copy, `info` for brand row emphasis, or `success` for generic highlights.
+
 ## Implementation notes
 
 1. **Yellow primary** — `primary` stays tied to `af-foundation-accent` so Factory Dark identity is preserved.

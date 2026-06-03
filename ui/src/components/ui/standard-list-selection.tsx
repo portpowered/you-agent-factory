@@ -12,7 +12,11 @@ import {
   type SelectableCardButtonProps,
 } from "./selectable-card-button";
 
-export type StandardListSelectionTone = "neutral" | "info" | "danger";
+export type StandardListSelectionTone =
+  | "neutral"
+  | "accent"
+  | "success"
+  | "danger";
 
 const StandardListSelectionDisabledContext = createContext(false);
 
@@ -24,8 +28,11 @@ const STANDARD_LIST_SELECTION_ROW_BASE_CLASS =
 export const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
   "border-af-border bg-af-surface-raised text-af-text hover:border-af-border-strong hover:bg-af-overlay";
 
-export const STANDARD_LIST_SELECTION_ROW_INFO_CLASS =
-  "border-af-info-border bg-af-info-surface text-af-on-info";
+export const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
+  "border-af-accent-border bg-af-accent-surface text-af-on-accent";
+
+export const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
+  "border-af-success-border bg-af-success-surface text-af-success-text";
 
 export const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
   "border-af-danger-border bg-af-danger-surface text-af-on-danger";
@@ -37,9 +44,10 @@ const STANDARD_LIST_SELECTION_TONE_CLASS: Record<
   StandardListSelectionTone,
   string
 > = {
-  neutral: STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
-  info: STANDARD_LIST_SELECTION_ROW_INFO_CLASS,
+  accent: STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
   danger: STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
+  neutral: STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
+  success: STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
 };
 
 export function standardListSelectionRowClassName({
