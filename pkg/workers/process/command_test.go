@@ -7,10 +7,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -169,11 +171,25 @@ func TestExecCommandRunner_ContextDeadlineReturnsSystemError(t *testing.T) {
 }
 
 func TestExecCommandRunner_SuccessfulExitTerminatesSpawnedChildProcess(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// Windows job-object post-run cleanup is validated in the same test on Windows CI;
-		// Unix process-group cleanup is the primary behavioral gate for this story.
-		t.Skip("Unix process-group success-path cleanup test; Windows covered by job-object post-run path in story 003")
-	}
+	testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t)
+}
+
+// TestExecCommandRunner_AgentStyleSuccessLeavesNoChildProcess is the US-005 regression
+// guard: a command that spawns a background service and exits 0 must not leave the child
+// running after Run returns. Uses commandTestProcessRunning from command_process_test_unix.go
+// or command_process_test_windows.go for platform liveness checks.
+func TestExecCommandRunner_AgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
+	testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t)
+}
+
+func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
+	t.Helper()
+
+	const testGrace = 250 * time.Millisecond
+	postRunCleanupGracePeriodForTest = testGrace
+	t.Cleanup(func() {
+		postRunCleanupGracePeriodForTest = 0
+	})
 
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
 	result, err := ExecCommandRunner{}.Run(context.Background(), CommandRequest{
@@ -196,7 +212,12 @@ func TestExecCommandRunner_SuccessfulExitTerminatesSpawnedChildProcess(t *testin
 	}
 
 	childPID := readCommandHelperPID(t, pidFile)
-	if !waitForCommandHelperProcessExit(childPID, 3*time.Second) {
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
+	})
+
+	waitBudget := testGrace + 3*time.Second
+	if !waitForCommandHelperProcessExit(childPID, waitBudget) {
 		t.Fatalf("spawned child process %d is still running after parent exit 0", childPID)
 	}
 }
@@ -284,9 +305,61 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 	}
 }
 
+func TestExecCommandRunner_PostRunCleanupWaitsForParentWait(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix process-group supervision timing; Windows uses job-object post-run path")
+	}
+
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_, _ = ExecCommandRunner{}.Run(ctx, CommandRequest{
+			Command: os.Args[0],
+			Args: []string{
+				"-test.run=TestExecCommandRunner_HelperProcess",
+				"--",
+				"spawn-child",
+			},
+			Env: append(os.Environ(),
+				"GO_WANT_COMMAND_HELPER=1",
+				"COMMAND_HELPER_PID_FILE="+pidFile,
+			),
+		})
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(pidFile); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := os.Stat(pidFile); err != nil {
+		t.Fatal("helper did not write child pid file while parent still running")
+	}
+
+	childPID := readCommandHelperPID(t, pidFile)
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
+	})
+	if !commandTestProcessRunning(childPID) {
+		t.Fatalf("child process %d exited before parent cmd.Wait returned", childPID)
+	}
+
+	cancel()
+	<-runDone
+	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
+		t.Fatalf("child process %d still running after supervised Run ended", childPID)
+	}
+}
+
 func TestExecCommandRunner_LogsSuccessfulPostRunCleanupNoOp(t *testing.T) {
 	logger := &recordingCommandLogger{}
-	req := commandCleanupTestRequest()
+	req := commandCleanupTestRequest(t)
 	_, err := ExecCommandRunner{Logger: logger}.Run(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -312,7 +385,7 @@ func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	req := commandCleanupTestRequest()
+	req := commandCleanupTestRequest(t)
 	req.Args = []string{
 		"-test.run=TestExecCommandRunner_HelperProcess",
 		"--",
@@ -356,7 +429,7 @@ func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 
 func TestCommandProcessCleanupContext_LogsPartialFailureAtWarn(t *testing.T) {
 	logger := &recordingCommandLogger{}
-	req := commandCleanupTestRequest()
+	req := commandCleanupTestRequest(t)
 	logCtx := newCommandProcessCleanupContext(logger, req, commandProcessCleanupReasonPostRun)
 	logCtx.logCompleted(
 		commandProcessCleanupOutcomePartialFailure,
@@ -377,6 +450,27 @@ func TestCommandProcessCleanupContext_LogsPartialFailureAtWarn(t *testing.T) {
 	assertCommandCleanupLogFields(t, fields, req, commandProcessCleanupReasonPostRun)
 }
 
+func TestLoggingCommandRunner_LogsPostRunCleanupThroughWrappedExec(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	req := commandCleanupTestRequest(t)
+	runner := CommandRunnerWithLogging(ExecCommandRunner{}, logger)
+
+	_, err := runner.Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	completed := commandCleanupCompletedLogs(logger)
+	if len(completed) == 0 {
+		t.Fatal("expected command_runner.cleanup_completed log from wrapped exec runner")
+	}
+	last := completed[len(completed)-1]
+	if last.fields["event_name"] != workLogEventCommandRunnerCleanupCompleted {
+		t.Fatalf("event_name = %#v, want %q", last.fields["event_name"], workLogEventCommandRunnerCleanupCompleted)
+	}
+	assertCommandCleanupLogFields(t, last.fields, req, commandProcessCleanupReasonPostRun)
+}
+
 func TestCommandRunnerWithLogging_PropagatesLoggerToExecCommandRunner(t *testing.T) {
 	logger := &recordingCommandLogger{}
 	runner := CommandRunnerWithLogging(ExecCommandRunner{}, logger)
@@ -389,12 +483,16 @@ func TestCommandRunnerWithLogging_PropagatesLoggerToExecCommandRunner(t *testing
 	}
 }
 
-func commandCleanupTestRequest() CommandRequest {
+func commandCleanupTestRequest(t *testing.T) CommandRequest {
+	t.Helper()
 	return CommandRequest{
-		Command:    os.Args[0],
-		Args:       []string{"-test.run=TestExecCommandRunner_HelperProcess", "--", "success"},
-		Env:        append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
-		DispatchID: "dispatch-cleanup-log",
+		Command:           os.Args[0],
+		Args:              []string{"-test.run=TestExecCommandRunner_HelperProcess", "--", "success"},
+		Env:               append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
+		WorkDir:           t.TempDir(),
+		DispatchID:        "dispatch-cleanup-log",
+		WorkerType:        "script",
+		WorkstationName:   "cleanup-test-station",
 		Execution: interfaces.ExecutionMetadata{
 			RequestID: "request-cleanup-log",
 			TraceID:   "trace-cleanup-log",
@@ -423,7 +521,7 @@ func unwrapExecCommandRunner(runner CommandRunner) (ExecCommandRunner, bool) {
 }
 
 func commandCleanupCompletedLogs(logger *recordingCommandLogger) []recordedCommandLog {
-	return commandCleanupLogsByEvent(logger, workLogEventCommandProcessCleanupCompleted)
+	return commandCleanupLogsByEvent(logger, workLogEventCommandRunnerCleanupCompleted)
 }
 
 func commandCleanupCompletedLogsForReason(logger *recordingCommandLogger, reason commandProcessCleanupReason) []recordedCommandLog {
@@ -466,6 +564,34 @@ func assertCommandCleanupLogFields(
 	}
 	if fields["request_id"] != req.Execution.RequestID {
 		t.Fatalf("request_id = %#v, want %q", fields["request_id"], req.Execution.RequestID)
+	}
+	if fields["trace_id"] != req.Execution.TraceID {
+		t.Fatalf("trace_id = %#v, want %q", fields["trace_id"], req.Execution.TraceID)
+	}
+	if fields["args_count"] != len(req.Args) {
+		t.Fatalf("args_count = %#v, want %d", fields["args_count"], len(req.Args))
+	}
+	if req.WorkDir != "" && fields["working_dir"] != req.WorkDir {
+		t.Fatalf("working_dir = %#v, want %q", fields["working_dir"], req.WorkDir)
+	}
+	if req.WorkerType != "" && fields["worker_type"] != req.WorkerType {
+		t.Fatalf("worker_type = %#v, want %q", fields["worker_type"], req.WorkerType)
+	}
+	if req.WorkstationName != "" && fields["workstation_name"] != req.WorkstationName {
+		t.Fatalf("workstation_name = %#v, want %q", fields["workstation_name"], req.WorkstationName)
+	}
+	assertCommandCleanupLogExcludesSensitiveFields(t, fields)
+}
+
+func assertCommandCleanupLogExcludesSensitiveFields(t *testing.T, fields map[string]any) {
+	t.Helper()
+	for _, forbidden := range []string{"stdin", "stdin_bytes", "env"} {
+		if _, ok := fields[forbidden]; ok {
+			t.Fatalf("cleanup log unexpectedly includes %q", forbidden)
+		}
+	}
+	if _, ok := fields["args"]; ok {
+		t.Fatal("cleanup log unexpectedly includes full args slice")
 	}
 }
 
@@ -669,6 +795,16 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 		writeCommandHelperPID()
 		time.Sleep(10 * time.Second)
 		os.Exit(0)
+	case "pid-term-exit":
+		writeCommandHelperPID()
+		sigc := make(chan os.Signal, 1)
+		signal.Notify(sigc, syscall.SIGTERM)
+		<-sigc
+		os.Exit(0)
+	case "pid-ignore-term":
+		writeCommandHelperPID()
+		signal.Ignore(syscall.SIGTERM)
+		select {}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown helper mode %q\n", mode)
 		os.Exit(2)
