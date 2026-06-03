@@ -595,10 +595,6 @@ func assertCommandCleanupLogExcludesSensitiveFields(t *testing.T, fields map[str
 	}
 }
 
-func commandCleanupStartedLogs(logger *recordingCommandLogger) []recordedCommandLog {
-	return commandCleanupLogsByEvent(logger, workLogEventCommandRunnerCleanupStarted)
-}
-
 func TestLoggingCommandRunner_LogsRequestAndCompletionStatuses(t *testing.T) {
 	cases := []loggingCommandRunnerCase{
 		{
