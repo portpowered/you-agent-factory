@@ -196,3 +196,13 @@ Stub imports today: `App.export-submit`, `App.export-dialog`, `App.follow-up-tra
 | 003 current-selection | `current-selection-widget.*`, `useCurrentSelection.test.tsx`, `execution-details.test.tsx`, provider-session selection |
 | 004 graph/layout | `App.layout-graph.test.tsx`, `graph-editor-harness.test.ts`, workflow-activity React Flow suites, trace/factory-graph-editor flow tests |
 | 005–006 guard | Allowlist only named patterns above; Recharts/React Flow shims must stay narrow |
+
+## Console guard (story 005)
+
+**Status (UTC 2026-06-03):** Reusable opt-in guard lives at `ui/src/testing/strict-console-guard.ts`.
+
+- `installStrictConsoleGuard()` hooks `console.warn` / `console.error` for a single test.
+- `useStrictConsoleGuard({ allowlist })` wires Vitest `beforeEach` / `afterEach` for a describe block.
+- `withStrictConsole(options, callback)` runs an async callback under a temporary guard.
+- Allowlist entries require `name`, `level`, narrow `match` (substring or specific RegExp), and `reason`; broad wildcards are rejected at install time.
+- Story 006 adopts the guard on cleaned App shell and current-selection suites.
