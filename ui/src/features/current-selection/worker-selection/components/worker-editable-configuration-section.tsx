@@ -259,14 +259,6 @@ function WorkerEditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationOverwriteWarningDetail}
-      </p>
     </div>
   );
 }
@@ -320,14 +312,6 @@ function WorkerEditableConfigurationSharedImpactWarning({
           state.draft.name.trim() || workerName,
           formatList(workstationNames),
         )}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationSharedImpactWarningDetail}
       </p>
     </div>
   );

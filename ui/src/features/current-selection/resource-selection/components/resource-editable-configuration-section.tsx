@@ -514,14 +514,6 @@ function ResourceEditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationOverwriteWarningDetail}
-      </p>
     </div>
   );
 }
@@ -577,14 +569,6 @@ function ResourceEditableConfigurationSharedImpactWarning({
           formatList(workerNames),
           formatList(workstationNames),
         )}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationSharedImpactWarningDetail}
       </p>
     </div>
   );

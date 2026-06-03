@@ -318,14 +318,6 @@ function EditableConfigurationPromptAutocompleteDetails({
 }) {
   return (
     <>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationPromptAutocompleteDetail}
-      </p>
       {promptHelpState.contract.availableVariables.length > 0 ? (
         <PromptContractList
           heading={

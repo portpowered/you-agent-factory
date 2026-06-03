@@ -59,7 +59,7 @@ const workTypeDetailMessagesByLocale = {
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this work type.",
     handlingBehaviorDefaultHelper:
-      "When marked default, this work type receives prompt text from simplified you run --factory flows.",
+      "Default work type supplies prompt text for simplified factory runs.",
     handlingBehaviorDefaultLabel: "Mark as default work type",
     handlingBehaviorDefaultStatusLabel: "Default work type",
     localizeWorkStateType: localizeEnglishWorkStateType,

@@ -65,10 +65,10 @@ describe("TerminalWorkSummaryCard", () => {
       ),
     ).toBeNull();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Completed terminal work is retained in the session summary.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
   });
 
   it("renders terminal summary copy through the current-selection locale provider for a supported non-default locale", () => {

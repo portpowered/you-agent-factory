@@ -1010,9 +1010,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText(
-        "Worker reviewer is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
-      ),
+      screen.getByText("Worker reviewer is also used by Plan, Code."),
     ).toBeTruthy();
     expect(
       screen.queryByText(
@@ -1046,9 +1044,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      screen.getByText(
-        "Worker planner is also used by Plan, Code. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.",
-      ),
+      screen.getByText("Worker planner is also used by Plan, Code."),
     ).toBeTruthy();
     expect(
       screen.queryByText(
@@ -1259,10 +1255,13 @@ describe("WorkstationDetailCard editable configuration", () => {
     fireEvent.click(promptVariableHelpToggle());
 
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Suggestions appear only while typing inside {{ ... }}.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
+    expect(
+      screen.queryByText("Type inside {{ ... }} for suggestions."),
+    ).toBeNull();
     expect(screen.getByText("Available variables")).toBeTruthy();
     expect(screen.getByText(".WorkID")).toBeTruthy();
     expect(screen.getByText("{{ .WorkID }}")).toBeTruthy();

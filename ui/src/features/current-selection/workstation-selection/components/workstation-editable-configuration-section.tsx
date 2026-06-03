@@ -368,14 +368,6 @@ function EditableConfigurationOverwriteWarning({
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
       </p>
-      <p
-        className={cn(
-          "m-0 text-af-text-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
-        {messages.editableConfigurationOverwriteWarningDetail}
-      </p>
     </div>
   );
 }
