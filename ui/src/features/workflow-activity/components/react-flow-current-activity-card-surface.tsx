@@ -13,7 +13,6 @@ import {
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -39,9 +38,7 @@ export function CurrentActivityGraphSurface({
   const messages = getFactoryGraphEditorMessages(locale);
   const flowContainerRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
-  const storedNodePositions = useCurrentActivityGraphStore(
-    (state) => state.positionsByGraphKey[graph.graphKey] ?? {},
-  );
+  const storedNodePositions = graph.storedNodePositions;
   const saveError = editor.saveEditableDefinition.error;
   const editorValidationProjection = useMemo(() => {
     if (!editor.editorMode) {
