@@ -13,6 +13,7 @@ import {
   singleNodeDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { settleWorkflowActivityGraphEffects } from "../../../testing/workflow-activity-test-utils";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
@@ -354,7 +355,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     );
   });
 
-  it("renders the empty topology fallback when no workstation nodes exist", () => {
+  it("renders the empty topology fallback when no workstation nodes exist", async () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.factory = undefined;
     snapshot.topology.workstation_node_ids = [];
@@ -362,6 +363,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     renderWithQueryClient(
       <ReactFlowCurrentActivityCard {...createProps({ snapshot })} />,
     );
+    await settleWorkflowActivityGraphEffects();
 
     expect(screen.getByLabelText("Current activity")).toBeTruthy();
     expect(

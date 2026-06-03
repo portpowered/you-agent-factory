@@ -172,11 +172,27 @@ node scripts/summarize-warning-inventory.mjs
 
 Stub imports today: `App.export-submit`, `App.export-dialog`, `App.follow-up-trace`, `App.session-stream`.
 
+## Graph and layout cleanup (story 004)
+
+**Status (UTC 2026-06-03):** PRD graph/layout targets pass warning-inventory capture with **zero** hooked console lines:
+
+- `ui/src/App.layout-graph.test.tsx`, `ui/src/testing/graph-editor-harness.test.ts`
+- Representative workflow-activity graph suites (`react-flow-current-activity-card-graph*.test.*`, `react-flow-current-activity-card-graph-layout.test.tsx`)
+- Broader React Flow component/harness spot-check (`react-flow-current-activity-card*.test.tsx`, `factory-graph-editor-flow.test.tsx`, trace graph viewport/nodes tests)
+
+**Harness approach:**
+
+| Concern | Mitigation |
+| --- | --- |
+| Full `ReactFlowCurrentActivityCard` mount act noise (empty topology) | `settleWorkflowActivityGraphEffects()` from `ui/src/testing/workflow-activity-test-utils.ts` after render |
+| App shell graph assertions | `waitForAppShellWorkGraphReady()` (story 002); deterministic layout via `buildDashboardTestGraphLayout` mock in `app-shell-test-utils` |
+| Graph editor hook tests | `graph-editor-harness.ts` mock graph/draft wiring (no React Flow mount) |
+
 ## PRD story mapping
 
 | Story | Primary inventory targets |
 | --- | --- |
 | 002 App shell | `App.export-submit.test.tsx`, `App.session-stream.test.tsx`, `App.toolbar-locale.test.tsx`, `App.current-selection.test.tsx`, replay/stream tests |
 | 003 current-selection | `current-selection-widget.*`, `useCurrentSelection.test.tsx`, `execution-details.test.tsx`, provider-session selection |
-| 004 graph/layout | React Flow act warnings in App + selection harness; `App.layout-graph.test.tsx` (clean in this pass) |
+| 004 graph/layout | `App.layout-graph.test.tsx`, `graph-editor-harness.test.ts`, workflow-activity React Flow suites, trace/factory-graph-editor flow tests |
 | 005–006 guard | Allowlist only named patterns above; Recharts/React Flow shims must stay narrow |
