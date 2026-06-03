@@ -65,4 +65,32 @@ describe("MonacoGuardSelectorEditor", () => {
     expect(wrapper?.getAttribute("data-monaco-marker-count")).toBe("0");
     expect(wrapper?.getAttribute("data-monaco-marker-messages")).toBe("[]");
   });
+
+  it("routes mount-handler content changes and applies error styling", async () => {
+    const onChange = vi.fn();
+
+    render(
+      <MonacoGuardSelectorEditor
+        ariaLabel="Field selector"
+        hasError
+        loadingMessage="Starting selector editor."
+        modelPath="inmemory://model/test/workstation-guard-selector/row-1"
+        onChange={onChange}
+        startupErrorMessage="Selector editor failed."
+        value=""
+      />,
+    );
+
+    const selectorEditor = screen.getByLabelText("Field selector");
+    const wrapper = selectorEditor.parentElement;
+
+    fireEvent.change(selectorEditor, { target: { value: "." } });
+    fireEvent.change(selectorEditor, { target: { value: ".Na" } });
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(".");
+      expect(onChange).toHaveBeenCalledWith(".Na");
+    });
+    expect(wrapper?.className).toContain("border-af-danger-border");
+  });
 });

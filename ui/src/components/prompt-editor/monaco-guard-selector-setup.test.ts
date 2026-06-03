@@ -125,4 +125,27 @@ describe("registerWorkstationGuardSelectorCompletionProvider", () => {
       result.suggestions.map((item: { label: string }) => item.label),
     ).toEqual([".Name", ".WorkID", '.Tags["key"]']);
   });
+
+  it("returns no suggestions when the typed prefix matches nothing", () => {
+    const registerCompletionItemProvider = vi.fn();
+    const monaco = {
+      languages: {
+        CompletionItemKind: { Field: 13 },
+        registerCompletionItemProvider,
+      },
+    } as unknown as typeof import("monaco-editor");
+
+    registerWorkstationGuardSelectorCompletionProvider(monaco);
+
+    const provider = registerCompletionItemProvider.mock.calls[0][1];
+    const model = {
+      getValueInRange: () => ".Unknown",
+    };
+    const result = provider.provideCompletionItems(model, {
+      column: 9,
+      lineNumber: 1,
+    });
+
+    expect(result.suggestions).toEqual([]);
+  });
 });
