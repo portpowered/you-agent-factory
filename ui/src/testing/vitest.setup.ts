@@ -137,7 +137,8 @@ vi.mock("@monaco-editor/react", () => ({
         : null,
       createElement("textarea", {
         "aria-label": options?.ariaLabel,
-        "data-monaco-editor": "workstation-prompt",
+        "data-monaco-editor":
+          wrapperProps?.["data-monaco-editor"] ?? "workstation-prompt",
         onChange: (event: Event) =>
           onChange?.((event.target as HTMLTextAreaElement).value),
         value: value ?? "",

@@ -1,5 +1,6 @@
 import { useId } from "react";
 
+import { MonacoGuardSelectorEditor } from "../../../../components/prompt-editor";
 import {
   DashboardActionButton,
   Input,
@@ -321,50 +322,52 @@ function MatchesFieldsGuardFields({
   rowId: string;
 }) {
   const inputKeyFieldId = `${rowId}-input-key`;
+  const inputKeyErrorId = `${rowId}-input-key-error`;
+  const inputKeyError = resolveWorkstationGuardFieldError(
+    fieldErrors,
+    guardIndex,
+    "matchConfig.inputKey",
+  );
 
   return (
     <div className="grid gap-1">
-      <label
-        className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-        htmlFor={inputKeyFieldId}
-      >
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.matchesFieldsGuardInputKeyFieldLabel}
-      </label>
-      <Input
+      </span>
+      <MonacoGuardSelectorEditor
+        ariaDescribedBy={inputKeyError ? inputKeyErrorId : undefined}
+        ariaInvalid={Boolean(inputKeyError)}
+        ariaLabel={messages.matchesFieldsGuardInputKeyFieldLabel}
         className={DASHBOARD_BODY_TEXT_CLASS}
+        hasError={Boolean(inputKeyError)}
         id={inputKeyFieldId}
-        onChange={(event) => {
+        loadingMessage={
+          messages.editableConfigurationGuardSelectorEditorLoading
+        }
+        modelPath={`inmemory://model/current-selection/workstation-guard-selector/${inputKeyFieldId}`}
+        onChange={(nextInputKey) => {
           onChange({
             ...guard,
-            matchConfig: { inputKey: event.target.value },
+            matchConfig: { inputKey: nextInputKey },
           });
         }}
-        type="text"
+        startupErrorMessage={
+          messages.editableConfigurationGuardSelectorEditorError
+        }
         value={guard.matchConfig?.inputKey ?? ""}
       />
-      {resolveWorkstationGuardFieldError(
-        fieldErrors,
-        guardIndex,
-        "matchConfig.inputKey",
-      ) ? (
-        <GuardFieldError
-          message={
-            resolveWorkstationGuardFieldError(
-              fieldErrors,
-              guardIndex,
-              "matchConfig.inputKey",
-            ) ?? ""
-          }
-        />
+      {inputKeyError ? (
+        <GuardFieldError id={inputKeyErrorId} message={inputKeyError} />
       ) : null}
     </div>
   );
 }
 
-function GuardFieldError({ message }: { message: string }) {
+function GuardFieldError({ id, message }: { id?: string; message: string }) {
   return (
     <p
       className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      id={id}
       role="alert"
     >
       {message}

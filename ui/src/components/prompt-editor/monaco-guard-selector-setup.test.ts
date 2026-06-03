@@ -1,0 +1,128 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  buildWorkstationGuardSelectorCompletionItems,
+  registerWorkstationGuardSelectorCompletionProvider,
+  registerWorkstationGuardSelectorMonaco,
+  resetWorkstationGuardSelectorMonacoRegistrationForTests,
+  WORKSTATION_GUARD_SELECTOR_LANGUAGE_ID,
+  WORKSTATION_GUARD_SELECTOR_THEME_ID,
+} from "./monaco-guard-selector-setup";
+
+describe("registerWorkstationGuardSelectorMonaco", () => {
+  it("registers the guard-selector language and theme once", () => {
+    const register = vi.fn();
+    const setMonarchTokensProvider = vi.fn();
+    const defineTheme = vi.fn();
+
+    resetWorkstationGuardSelectorMonacoRegistrationForTests();
+
+    registerWorkstationGuardSelectorMonaco({
+      editor: { defineTheme },
+      languages: {
+        register,
+        setMonarchTokensProvider,
+      },
+    } as unknown as typeof import("monaco-editor"));
+    registerWorkstationGuardSelectorMonaco({
+      editor: { defineTheme },
+      languages: {
+        register,
+        setMonarchTokensProvider,
+      },
+    } as unknown as typeof import("monaco-editor"));
+
+    expect(register).toHaveBeenCalledTimes(1);
+    expect(register).toHaveBeenCalledWith({
+      id: WORKSTATION_GUARD_SELECTOR_LANGUAGE_ID,
+    });
+    expect(setMonarchTokensProvider).toHaveBeenCalledTimes(1);
+    expect(defineTheme).toHaveBeenCalledTimes(1);
+    expect(defineTheme).toHaveBeenCalledWith(
+      WORKSTATION_GUARD_SELECTOR_THEME_ID,
+      expect.objectContaining({
+        base: "vs-dark",
+        inherit: true,
+      }),
+    );
+  });
+});
+
+describe("buildWorkstationGuardSelectorCompletionItems", () => {
+  it("includes curated guard selector suggestions with descriptions", () => {
+    expect(buildWorkstationGuardSelectorCompletionItems()).toEqual([
+      expect.objectContaining({
+        detail: "Match by work name",
+        insertText: ".Name",
+        label: ".Name",
+      }),
+      expect.objectContaining({
+        detail: "Match by work identifier",
+        insertText: ".WorkID",
+        label: ".WorkID",
+      }),
+      expect.objectContaining({
+        detail: "Match by tag key",
+        insertText: '.Tags["key"]',
+        label: '.Tags["key"]',
+      }),
+    ]);
+  });
+});
+
+describe("registerWorkstationGuardSelectorCompletionProvider", () => {
+  it("scopes suggestions to guard selectors and filters by typed prefix", () => {
+    const registerCompletionItemProvider = vi.fn();
+    const monaco = {
+      languages: {
+        CompletionItemKind: { Field: 13 },
+        registerCompletionItemProvider,
+      },
+    } as unknown as typeof import("monaco-editor");
+
+    registerWorkstationGuardSelectorCompletionProvider(monaco);
+
+    const provider = registerCompletionItemProvider.mock.calls[0][1];
+    const model = {
+      getValueInRange: () => ".Ta",
+    };
+    const result = provider.provideCompletionItems(model, {
+      column: 4,
+      lineNumber: 1,
+    });
+
+    expect(result.suggestions).toHaveLength(1);
+    expect(result.suggestions[0]).toMatchObject({
+      insertText: '.Tags["key"]',
+      label: '.Tags["key"]',
+      detail: "Match by tag key",
+    });
+    expect(result.suggestions[0].documentation.value).toContain("replace key");
+  });
+
+  it("returns all curated suggestions when the selector is empty", () => {
+    const registerCompletionItemProvider = vi.fn();
+    const monaco = {
+      languages: {
+        CompletionItemKind: { Field: 13 },
+        registerCompletionItemProvider,
+      },
+    } as unknown as typeof import("monaco-editor");
+
+    registerWorkstationGuardSelectorCompletionProvider(monaco);
+
+    const provider = registerCompletionItemProvider.mock.calls[0][1];
+    const model = {
+      getValueInRange: () => "",
+    };
+    const result = provider.provideCompletionItems(model, {
+      column: 1,
+      lineNumber: 1,
+    });
+
+    expect(result.suggestions).toHaveLength(3);
+    expect(
+      result.suggestions.map((item: { label: string }) => item.label),
+    ).toEqual([".Name", ".WorkID", '.Tags["key"]']);
+  });
+});
