@@ -7,7 +7,7 @@ export interface CurrentActivityGraphNodeHoverState {
 
 /** Accent border/shadow applied on pointer hover when higher-priority states are absent. */
 export const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
-  "transition-[border-color,box-shadow] hover:border-af-accent-border hover:shadow-af-accent-chip";
+  "transition-[border-color,box-shadow] hover:border-primary hover:shadow-af-accent-chip";
 
 export function currentActivityGraphNodeHoverClassName(
   state: CurrentActivityGraphNodeHoverState,

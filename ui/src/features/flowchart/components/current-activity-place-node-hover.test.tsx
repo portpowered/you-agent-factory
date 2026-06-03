@@ -64,7 +64,7 @@ describe("CurrentActivity place node hover emphasis", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).toContain("hover:border-af-accent-border");
+    expect(shell?.className).toContain("hover:border-primary");
     expect(shell?.className).toContain(CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS);
   });
 
@@ -88,7 +88,7 @@ describe("CurrentActivity place node hover emphasis", () => {
       );
       const shell = nodeShell(container);
 
-      expect(shell?.className).not.toContain("hover:border-af-accent-border");
+      expect(shell?.className).not.toContain("hover:border-primary");
     }
   });
 });
