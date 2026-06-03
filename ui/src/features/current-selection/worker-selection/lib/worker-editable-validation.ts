@@ -4,6 +4,7 @@ import {
   normalizeFactoryDefinition,
 } from "../../../../api/factory-definition";
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
+import { goDurationFromWorkerTimeoutPicker } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 
 export type EditableWorkerValidationField =
@@ -43,6 +44,7 @@ export function validateEditableWorkerDraft(
     | "editableConfigurationNameRequired"
     | "editableConfigurationProviderRequired"
     | "editableConfigurationScriptCommandOrBodyRequired"
+    | "editableConfigurationTimeoutInvalid"
   >,
   context?: ValidateEditableWorkerDraftContext,
 ): EditableWorkerValidationErrors {
@@ -82,6 +84,18 @@ export function validateEditableWorkerDraft(
 
   if (draft.type === "SCRIPT_WORKER" && draft.argsText.includes("\0")) {
     validationErrors.args = messages.editableConfigurationArgsInvalid;
+  }
+
+  const trimmedTimeoutAmount = (draft.timeoutAmount ?? "").trim();
+  if (trimmedTimeoutAmount.length > 0) {
+    const timeout = goDurationFromWorkerTimeoutPicker({
+      amount: draft.timeoutAmount,
+      unit: draft.timeoutUnit,
+    });
+    if (timeout === null) {
+      validationErrors.timeout =
+        messages.editableConfigurationTimeoutInvalid(trimmedTimeoutAmount);
+    }
   }
 
   return validationErrors;
@@ -213,6 +227,12 @@ function resolveEditableWorkerContractField(
       return "name";
     case "provider":
       return "provider";
+    case "skipPermissions":
+      return "skipPermissions";
+    case "stopToken":
+      return "stopToken";
+    case "timeout":
+      return "timeout";
     case "type":
       return "type";
     default:

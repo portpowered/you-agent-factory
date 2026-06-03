@@ -33,6 +33,7 @@ export interface WorkerDetailMessages {
   editableConfigurationSaveStaleVersionDetail: string;
   editableConfigurationSaveSuccess: (workerName: string) => string;
   editableConfigurationScriptCommandOrBodyRequired: string;
+  editableConfigurationTimeoutInvalid: (value: string) => string;
   editableConfigurationSharedImpactWarning: (
     workerName: string,
     workstationNames: string,

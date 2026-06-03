@@ -72,6 +72,8 @@ const workerDetailMessagesByLocale = {
       `Running factory saved. ${workerName} was updated in the running factory definition.`,
     editableConfigurationScriptCommandOrBodyRequired:
       "Enter a command or script body before saving this worker.",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout must be a positive duration such as 30s, 5m, or 1h, got ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `Saving ${workerName} updates every workstation that references this worker, including ${workstationNames}.`,
     editableConfigurationSharedImpactWarningDetail:
@@ -163,6 +165,8 @@ const workerDetailMessagesByLocale = {
       `実行中のファクトリを保存しました。${workerName} が実行中のファクトリ定義で更新されました。`,
     editableConfigurationScriptCommandOrBodyRequired:
       "このワーカーを保存する前にコマンドまたはスクリプト本文を入力してください。",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout は 30s、5m、1h などの正の時間である必要があります。入力値: ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `${workerName} を保存すると、このワーカーを参照するすべてのワークステーション（${workstationNames} を含む）が更新されます。`,
     editableConfigurationSharedImpactWarningDetail:
@@ -253,6 +257,8 @@ const workerDetailMessagesByLocale = {
       `실행 중인 팩토리가 저장되었습니다. ${workerName} 이(가) 실행 중인 팩토리 정의에서 업데이트되었습니다.`,
     editableConfigurationScriptCommandOrBodyRequired:
       "이 워커를 저장하기 전에 명령 또는 스크립트 본문을 입력하세요.",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout은 30s, 5m, 1h처럼 양의 duration이어야 합니다. 입력값: ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `${workerName} 저장은 이 워커를 참조하는 모든 워크스테이션(${workstationNames} 포함)을 업데이트합니다.`,
     editableConfigurationSharedImpactWarningDetail:
@@ -334,6 +340,8 @@ const workerDetailMessagesByLocale = {
       `运行中的工厂已保存。${workerName} 已在运行中的工厂定义中更新。`,
     editableConfigurationScriptCommandOrBodyRequired:
       "保存此 worker 前请输入命令或脚本正文。",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout 必须是正数时长（例如 30s、5m 或 1h），当前为 ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `保存 ${workerName} 会更新引用此 worker 的所有 workstation，包括 ${workstationNames}。`,
     editableConfigurationSharedImpactWarningDetail:

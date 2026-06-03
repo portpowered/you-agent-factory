@@ -141,6 +141,28 @@ describe("validateEditableWorkerDraft", () => {
       provider: messages.editableConfigurationProviderRequired,
     });
   });
+
+  it("rejects non-positive timeout picker values", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({ timeoutAmount: "0", timeoutUnit: "m" }),
+        messages,
+      ),
+    ).toEqual({
+      timeout: messages.editableConfigurationTimeoutInvalid("0"),
+    });
+  });
+
+  it("rejects non-numeric timeout picker values", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({ timeoutAmount: "abc", timeoutUnit: "s" }),
+        messages,
+      ),
+    ).toEqual({
+      timeout: messages.editableConfigurationTimeoutInvalid("abc"),
+    });
+  });
 });
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: contract validation merge cases stay grouped with decode field mapping.
@@ -289,6 +311,78 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
         messages,
       ).model,
     ).toBe("Model is required.");
+  });
+
+  it("maps contract failures onto skipPermissions", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          name: "reviewer",
+          skipPermissions: "yes",
+          type: "MODEL_WORKER",
+          modelProvider: "CURSOR",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+      ).skipPermissions,
+    ).toContain("factory.workers[0].skipPermissions");
+  });
+
+  it("maps contract failures onto stopToken", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          name: "reviewer",
+          stopToken: 42,
+          type: "MODEL_WORKER",
+          modelProvider: "CURSOR",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+      ).stopToken,
+    ).toContain("factory.workers[0].stopToken");
+  });
+
+  it("maps contract failures onto timeout", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          name: "reviewer",
+          timeout: 42,
+          type: "MODEL_WORKER",
+          modelProvider: "CURSOR",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+      ).timeout,
+    ).toContain("factory.workers[0].timeout");
   });
 });
 

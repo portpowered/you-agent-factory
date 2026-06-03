@@ -32,6 +32,9 @@ export type EditableWorkerSaveValidationErrors = {
   modelProvider?: string;
   name?: string;
   provider?: string;
+  skipPermissions?: string;
+  stopToken?: string;
+  timeout?: string;
   type?: string;
 } & Record<string, string>;
 

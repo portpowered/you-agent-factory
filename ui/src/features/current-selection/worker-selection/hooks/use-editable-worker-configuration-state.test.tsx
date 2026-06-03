@@ -125,6 +125,29 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("disables save while timeout validation errors are present", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTimeoutAmountChange("0");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: false,
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        timeout: expect.any(String),
+      },
+    });
+  });
+
   it("tracks stopToken edits in dirty state", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),
