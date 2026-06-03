@@ -12,6 +12,8 @@ const PROMPT_EDITOR_CODE_SUBTLE_CLASS = cn(
   "text-xs text-af-text-muted",
   DASHBOARD_BODY_CODE_CLASS,
 );
+const PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS =
+  "grid min-h-24 gap-2 rounded-xl border p-3";
 
 export type PromptEditorValidationFeedbackState =
   | { status: "loading" }
@@ -42,38 +44,58 @@ export function PromptEditorDiagnosticsPanel({
 }: PromptEditorDiagnosticsPanelProps) {
   if (validationState.status === "loading") {
     return (
-      <p
+      <div
+        aria-hidden="true"
         className={cn(
-          "m-0 text-af-text-muted",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
+          PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
+          "border-transparent bg-transparent",
         )}
-      >
-        {labels.validationLoading}
-      </p>
+        id={id}
+      />
     );
   }
 
   if (validationState.status === "error") {
     return (
-      <p
+      <div
         className={cn(
-          "m-0 text-af-danger-text",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
+          PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
+          "border-af-danger-border bg-af-danger-surface",
         )}
+        id={id}
         role="alert"
       >
-        {labels.validationErrorPrefix} {validationState.errorMessage}
-      </p>
+        <p
+          className={cn(
+            "m-0 text-af-danger-text",
+            DASHBOARD_SUPPORTING_TEXT_CLASS,
+          )}
+        >
+          {labels.validationErrorPrefix} {validationState.errorMessage}
+        </p>
+      </div>
     );
   }
 
   if (diagnostics.length === 0) {
-    return null;
+    return (
+      <div
+        aria-hidden="true"
+        className={cn(
+          PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
+          "border-transparent bg-transparent",
+        )}
+        id={id}
+      />
+    );
   }
 
   return (
     <div
-      className="grid gap-2 rounded-xl border border-af-danger-border bg-af-danger-surface p-3"
+      className={cn(
+        PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
+        "border-af-danger-border bg-af-danger-surface",
+      )}
       id={id}
       role="alert"
     >

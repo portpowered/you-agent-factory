@@ -13,7 +13,7 @@ import {
   resolvePromptEditorResizeMaxWidth,
 } from "./prompt-editor-resize-bounds";
 
-interface HorizontalResizableWidthProps {
+interface VerticalResizableWidthProps {
   children: ReactNode;
   className?: string;
   maxWidth?: number;
@@ -21,13 +21,13 @@ interface HorizontalResizableWidthProps {
   resizeHandleLabel: string;
 }
 
-export function HorizontalResizableWidth({
+export function VerticalResizableWidth({
   children,
   className,
   maxWidth = PROMPT_EDITOR_RESIZE_MAX_WIDTH_PX,
   minWidth = PROMPT_EDITOR_RESIZE_MIN_WIDTH_PX,
   resizeHandleLabel,
-}: HorizontalResizableWidthProps) {
+}: VerticalResizableWidthProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [widthPx, setWidthPx] = useState<number | null>(null);
 

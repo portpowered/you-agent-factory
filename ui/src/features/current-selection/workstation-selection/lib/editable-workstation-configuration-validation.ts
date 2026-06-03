@@ -104,9 +104,6 @@ export function validateEditableWorkstationDraft(
 
   if (promptIsRequired && draft.prompt.trim().length === 0) {
     validationErrors.prompt = messages.editableConfigurationPromptRequired;
-  } else if (promptIsRequired && promptValidationState.status === "loading") {
-    validationErrors.prompt =
-      messages.editableConfigurationPromptValidationLoading;
   } else if (promptIsRequired && promptValidationState.status === "error") {
     validationErrors.prompt = `${messages.editableConfigurationPromptValidationErrorPrefix} ${promptValidationState.errorMessage}`;
   } else if (

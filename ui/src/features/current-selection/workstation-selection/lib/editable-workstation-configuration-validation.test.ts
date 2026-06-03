@@ -263,7 +263,7 @@ describe("validateEditableWorkstationDraft model workstation", () => {
     );
   });
 
-  it("maps prompt validation states to field errors", () => {
+  it("does not render loading prompt validation as a field error", () => {
     const loadingErrors = validateEditableWorkstationDraft(
       {
         ...baseDraft,
@@ -275,10 +275,27 @@ describe("validateEditableWorkstationDraft model workstation", () => {
       messages,
     );
 
-    expect(loadingErrors.prompt).toBe(
-      messages.editableConfigurationPromptValidationLoading,
-    );
+    expect(loadingErrors.prompt).toBeUndefined();
 
+    const errorPromptErrors = validateEditableWorkstationDraft(
+      {
+        ...baseDraft,
+        workerName: "reviewer",
+        prompt: "Configured prompt",
+      },
+      modelWorkstationValues,
+      {
+        errorMessage: "Prompt validation API unavailable.",
+        status: "error",
+      },
+      messages,
+    );
+    expect(errorPromptErrors.prompt).toBe(
+      "Prompt validation unavailable. Prompt validation API unavailable.",
+    );
+  });
+
+  it("maps failed prompt validation states to field errors", () => {
     const invalidPromptErrors = validateEditableWorkstationDraft(
       {
         ...baseDraft,

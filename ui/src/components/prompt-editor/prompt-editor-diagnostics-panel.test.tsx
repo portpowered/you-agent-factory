@@ -12,22 +12,27 @@ const labels = {
 };
 
 describe("PromptEditorDiagnosticsPanel", () => {
-  it("renders validation loading and error states", () => {
+  it("keeps validation loading quiet and renders error states", () => {
     const { rerender } = render(
       <PromptEditorDiagnosticsPanel
         diagnostics={[]}
+        id="prompt-diagnostics"
         labels={labels}
         validationState={{ status: "loading" }}
       />,
     );
 
+    const loadingPanel = document.getElementById("prompt-diagnostics");
     expect(
-      screen.getByText("Validating prompt variables for the current draft."),
-    ).toBeTruthy();
+      screen.queryByText("Validating prompt variables for the current draft."),
+    ).toBeNull();
+    expect(loadingPanel?.getAttribute("aria-hidden")).toBe("true");
+    expect(loadingPanel?.className).toContain("min-h-24");
 
     rerender(
       <PromptEditorDiagnosticsPanel
         diagnostics={[]}
+        id="prompt-diagnostics"
         labels={labels}
         validationState={{
           errorMessage: "Prompt validation API unavailable.",
@@ -78,15 +83,21 @@ describe("PromptEditorDiagnosticsPanel", () => {
     expect(screen.getByText("{{ if .WorkID }}")).toBeTruthy();
   });
 
-  it("returns null when validation is idle and there are no diagnostics", () => {
-    const { container } = render(
+  it("keeps an inert reserved region when validation is idle and there are no diagnostics", () => {
+    render(
       <PromptEditorDiagnosticsPanel
         diagnostics={[]}
+        id="prompt-diagnostics"
         labels={labels}
         validationState={{ status: "idle" }}
       />,
     );
 
-    expect(container.firstChild).toBeNull();
+    const panel = document.getElementById("prompt-diagnostics");
+    expect(panel).toBeTruthy();
+    expect(panel?.getAttribute("aria-hidden")).toBe("true");
+    expect(panel?.getAttribute("role")).toBeNull();
+    expect(panel?.className).toContain("min-h-24");
+    expect(panel?.className).toContain("border-transparent");
   });
 });

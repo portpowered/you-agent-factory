@@ -1,6 +1,9 @@
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import type { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { EditableWorkstationBehavior } from "../../../current-factory-definition/lib/workstation-behavior";
+import {
+  type EditableWorkstationBehavior,
+  workstationBehaviorRequiresPrompt,
+} from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
@@ -8,6 +11,7 @@ import {
   type resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftsEqual } from "../../../current-factory-definition/lib/workstation-guards";
+import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import {
   resolveDraftForBehaviorChange,
   updateEditableWorkstationCronDraft,
@@ -158,15 +162,24 @@ export function buildReadyEditableWorkstationConfigurationState({
     ) => EditableWorkstationSessionState | null,
   ) => void;
 }) {
-  const pendingFactoryDefinition = hasEditableWorkstationValidationErrors(
+  const hasValidationErrors = hasEditableWorkstationValidationErrors(
     resolvedValidationErrors,
-  )
-    ? null
-    : applyEditableWorkstationDraft(
-        editableDefinition,
-        selectedNode,
-        sessionState.draft,
-      );
+  );
+  const promptValidationBlocksPendingFactory =
+    workstationRequiresWorkerAssignment({
+      type: selectedEditableValues.workstationType,
+    }) &&
+    workstationBehaviorRequiresPrompt(sessionState.draft.behavior) &&
+    sessionState.draft.prompt.trim().length > 0 &&
+    promptValidationState.status === "loading";
+  const pendingFactoryDefinition =
+    hasValidationErrors || promptValidationBlocksPendingFactory
+      ? null
+      : applyEditableWorkstationDraft(
+          editableDefinition,
+          selectedNode,
+          sessionState.draft,
+        );
   const draftHandlers = createEditableWorkstationDraftHandlers(
     selectedEditableValues,
     setSessionState,
@@ -175,9 +188,7 @@ export function buildReadyEditableWorkstationConfigurationState({
   return {
     baseVersion: editableDefinition.version,
     draft: sessionState.draft,
-    hasValidationErrors: hasEditableWorkstationValidationErrors(
-      resolvedValidationErrors,
-    ),
+    hasValidationErrors,
     initialValues: selectedEditableValues,
     isDirty: !editableWorkstationDraftsEqual(
       sessionState.draft,

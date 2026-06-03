@@ -1,14 +1,14 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { HorizontalResizableWidth } from "./horizontal-resizable-width";
+import { VerticalResizableWidth } from "./vertical-resizable-width";
 
-describe("HorizontalResizableWidth", () => {
+describe("VerticalResizableWidth", () => {
   it("exposes a vertical resize separator and updates width while dragging", () => {
     const { container } = render(
       <div style={{ width: "640px" }}>
-        <HorizontalResizableWidth resizeHandleLabel="Resize prompt editor width">
+        <VerticalResizableWidth resizeHandleLabel="Resize prompt editor width">
           <div data-testid="prompt-surface">Prompt editor</div>
-        </HorizontalResizableWidth>
+        </VerticalResizableWidth>
       </div>,
     );
 
@@ -35,9 +35,9 @@ describe("HorizontalResizableWidth", () => {
   it("clamps dragged width to configured bounds", () => {
     const { container } = render(
       <div style={{ width: "400px" }}>
-        <HorizontalResizableWidth resizeHandleLabel="Resize prompt editor width">
+        <VerticalResizableWidth resizeHandleLabel="Resize prompt editor width">
           <div>Prompt editor</div>
-        </HorizontalResizableWidth>
+        </VerticalResizableWidth>
       </div>,
     );
 
