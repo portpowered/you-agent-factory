@@ -1,5 +1,10 @@
 [
   {
+    "file": "scripts/migrate-feature-color-roles.mjs",
+    "kind": "file",
+    "name": "scripts/migrate-feature-color-roles.mjs"
+  },
+  {
     "file": "scripts/summarize-warning-inventory.mjs",
     "kind": "file",
     "name": "scripts/summarize-warning-inventory.mjs"

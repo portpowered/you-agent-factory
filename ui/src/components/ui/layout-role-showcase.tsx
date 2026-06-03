@@ -15,6 +15,7 @@ import {
   FormGroupLayout,
   PageHeaderLayout,
   SectionStack,
+  ToolbarRowLayout,
 } from "./layout-primitives";
 
 export function LayoutRoleShowcase() {
@@ -51,6 +52,29 @@ export function LayoutRoleShowcase() {
             </>
           }
         />
+
+        <article
+          className={cn(
+            DASHBOARD_PANEL_SHELL_CLASS,
+            LAYOUT_CARD_INSET_CLASS,
+            "grid gap-layout-group",
+          )}
+        >
+          <h3 className={`m-0 ${DASHBOARD_SECTION_HEADING_CLASS}`}>
+            Toolbar row layout
+          </h3>
+          <ToolbarRowLayout>
+            <Button size="sm" type="button" variant="outline">
+              Filter
+            </Button>
+            <Button size="sm" type="button" variant="outline">
+              Export
+            </Button>
+            <Button size="sm" type="button">
+              Primary action
+            </Button>
+          </ToolbarRowLayout>
+        </article>
 
         <article
           className={cn(
