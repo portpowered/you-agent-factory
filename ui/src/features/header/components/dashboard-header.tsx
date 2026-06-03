@@ -29,16 +29,6 @@ import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
 
-const DASHBOARD_TOOLBAR_CLASS = cn(
-  DASHBOARD_PANEL_SHELL_CLASS,
-  "mb-3 grid gap-2 ",
-);
-const DASHBOARD_HEADER_ROWS_CLASS = "flex min-w-0 flex-col gap-0";
-const DASHBOARD_PRIMARY_ROW_CLASS = cn(
-  "flex min-w-0 items-stretch gap-2",
-  "max-md:flex-col px-2",
-);
-const DASHBOARD_SECONDARY_ROW_CLASS = "flex min-w-0";
 const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
 const DASHBOARD_TIMELINE_CLUSTER_CLASS = "flex min-w-0 w-full flex-1";
 const DASHBOARD_SESSION_STRIP_CLASS =
@@ -83,10 +73,15 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
   return (
     <section
       aria-label={headerMessages.dashboardSummaryLabel}
-      className={DASHBOARD_TOOLBAR_CLASS}
+      className={cn(DASHBOARD_PANEL_SHELL_CLASS, "mb-3 grid gap-2 ")}
     >
-      <div className={DASHBOARD_HEADER_ROWS_CLASS}>
-        <div className={DASHBOARD_PRIMARY_ROW_CLASS}>
+      <div className="flex min-w-0 flex-col gap-0">
+        <div
+          className={cn(
+            "flex min-w-0 items-stretch gap-2",
+            "max-md:flex-col px-2",
+          )}
+        >
           <h1 className={cn(DASHBOARD_TITLE_CLASS, DASHBOARD_BRAND_SLOT_CLASS)}>
             <DashboardBrandLockup
               locale={resolvedLocale}
@@ -117,7 +112,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             className={DASHBOARD_HEADER_ACTION_ROW_CLASS}
           />
         </div>
-        <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
+        <div className="flex min-w-0">
           <div className={DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS}>
             <TickSliderControl locale={resolvedLocale} />
             <div className={DASHBOARD_TIMELINE_ACTIONS_CLASS}>
