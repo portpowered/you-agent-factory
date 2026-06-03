@@ -89,7 +89,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsRequestLevelConflictingCurrentChai
 			}
 		]
 	}`))
-	if err == nil || err.Error() != "work request batch currentChainingTraceId and traceId must match when both are provided" {
+	if err == nil || err.Error() != "currentChainingTraceId and traceId must match when both are provided" {
 		t.Fatalf("ParseCanonicalWorkRequestJSON error = %v, want request-level conflict rejection", err)
 	}
 }
@@ -107,7 +107,7 @@ func TestParseCanonicalWorkRequestJSON_RejectsLegacyConflictingCurrentChainingTr
 			}
 		]
 	}`))
-	if err == nil || err.Error() != "work request batch works[0] currentChainingTraceId and traceId must match when both are provided" {
+	if err == nil || err.Error() != "works[0].currentChainingTraceId and traceId must match when both are provided" {
 		t.Fatalf("ParseCanonicalWorkRequestJSON error = %v, want legacy conflict rejection", err)
 	}
 }

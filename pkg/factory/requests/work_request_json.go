@@ -83,7 +83,7 @@ func validateConflictingWorkRequestTraceFields(raw canonicalWorkRequestJSON) err
 		raw.TraceID,
 		raw.LegacyTraceID,
 	); err != nil {
-		return fmt.Errorf("work request batch %w", err)
+		return err
 	}
 	for i := range raw.Works {
 		if err := ValidateWorkRequestTraceFieldAliases(
@@ -92,7 +92,7 @@ func validateConflictingWorkRequestTraceFields(raw canonicalWorkRequestJSON) err
 			raw.Works[i].TraceID,
 			raw.Works[i].LegacyTraceID,
 		); err != nil {
-			return fmt.Errorf("work request batch works[%d] %w", i, err)
+			return fmt.Errorf("works[%d].%w", i, err)
 		}
 	}
 	return nil

@@ -554,7 +554,7 @@ func decodeSubmitWorkRequestBody(body io.Reader) (factoryapi.SubmitWorkBySession
 		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
 	}
 	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
-		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, err
+		return factoryapi.SubmitWorkBySessionIdJSONRequestBody{}, requestFieldValidationError{message: err.Error()}
 	}
 
 	var fields map[string]json.RawMessage
@@ -584,7 +584,7 @@ func decodeWorkRequestBody(body io.Reader) (factoryapi.UpsertWorkRequestBySessio
 		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
 	}
 	if err := validateCanonicalWorkRequestJSONForAPI(data); err != nil {
-		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, err
+		return factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody{}, requestFieldValidationError{message: err.Error()}
 	}
 
 	if req.Works == nil || len(*req.Works) == 0 {
