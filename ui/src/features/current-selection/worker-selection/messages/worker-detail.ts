@@ -10,6 +10,7 @@ type WorkerDetailCatalogMessages = Omit<
   | "localizeExecutorProvider"
   | "localizeModelLocality"
   | "localizeModelProvider"
+  | "localizeTimeoutUnit"
   | "localizeWorkerType"
 >;
 
@@ -96,6 +97,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "When enabled, supported model providers can bypass permission prompts during execution.",
     skipPermissionsFieldLabel: "Bypass provider permissions",
+    timeoutFieldHelp:
+      "Optional. Limits how long a worker run may execute (for example 30s, 5m, or 1h).",
+    timeoutFieldLabel: "Execution timeout",
     summaryHeading: "Summary",
     typeFieldLabel: "Worker type",
     typeLabel: "Worker type",
@@ -181,6 +185,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "有効にすると、対応するモデルプロバイダーが実行中の権限プロンプトを省略できます。",
     skipPermissionsFieldLabel: "プロバイダー権限を省略",
+    timeoutFieldHelp:
+      "任意。ワーカー実行の上限時間を設定します（例: 30s、5m、1h）。",
+    timeoutFieldLabel: "実行タイムアウト",
     summaryHeading: "概要",
     typeFieldLabel: "ワーカー種別",
     typeLabel: "ワーカー種別",
@@ -265,6 +272,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "활성화하면 지원되는 모델 제공자가 실행 중 권한 프롬프트를 건너뛸 수 있습니다.",
     skipPermissionsFieldLabel: "제공자 권한 건너뛰기",
+    timeoutFieldHelp:
+      "선택 사항. 워커 실행 시간 상한을 설정합니다(예: 30s, 5m, 1h).",
+    timeoutFieldLabel: "실행 타임아웃",
     summaryHeading: "요약",
     typeFieldLabel: "워커 유형",
     typeLabel: "워커 유형",
@@ -338,6 +348,9 @@ const workerDetailMessagesByLocale = {
     skipPermissionsFieldHelp:
       "启用后，支持的 model provider 可在执行期间跳过权限提示。",
     skipPermissionsFieldLabel: "跳过 provider 权限",
+    timeoutFieldHelp:
+      "可选。限制 worker 运行的最长时间（例如 30s、5m、1h）。",
+    timeoutFieldLabel: "执行超时",
     summaryHeading: "摘要",
     typeFieldLabel: "Worker 类型",
     typeLabel: "Worker 类型",

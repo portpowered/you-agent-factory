@@ -21,6 +21,9 @@ function buildDraft(
     modelProvider: "CURSOR",
     name: "reviewer",
     provider: null,
+    skipPermissions: false,
+    timeoutAmount: "",
+    timeoutUnit: "m",
     type: "MODEL_WORKER",
     ...overrides,
   };

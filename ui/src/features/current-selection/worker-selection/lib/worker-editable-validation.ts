@@ -18,6 +18,7 @@ export type EditableWorkerValidationField =
   | "name"
   | "provider"
   | "skipPermissions"
+  | "timeout"
   | "type";
 
 export type EditableWorkerValidationErrors = Partial<

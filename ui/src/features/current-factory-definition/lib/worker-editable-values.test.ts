@@ -35,9 +35,36 @@ describe("resolveEditableWorkerValues", () => {
       modelProvider: "CURSOR",
       provider: null,
       skipPermissions: null,
+      timeout: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
       workstationNames: ["Review", "Plan"],
+    });
+  });
+
+  it("initializes timeout from the selected worker value", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          timeout: "5m",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(resolveEditableWorkerValues(factory, "reviewer")?.timeout).toBe("5m");
+    expect(
+      editableWorkerDraftFromValues(
+        resolveEditableWorkerValues(factory, "reviewer")!,
+      ),
+    ).toMatchObject({
+      timeoutAmount: "5",
+      timeoutUnit: "m",
     });
   });
 
@@ -126,6 +153,8 @@ describe("applyEditableWorkerDraft", () => {
       name: "reviewer",
       provider: null,
       skipPermissions: false,
+      timeoutAmount: "",
+      timeoutUnit: "m",
       type: "MODEL_WORKER",
     });
 
@@ -168,6 +197,61 @@ describe("applyEditableWorkerDraft", () => {
     expect(updatedFactory?.workTypes).toBe(factory.workTypes);
   });
 
+  it("writes timeout when configured and clears it when empty", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          command: "node",
+          name: "runner",
+          timeout: "30s",
+          type: "SCRIPT_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkerDraft(factory, "runner", {
+      argsText: "",
+      body: "",
+      command: "node",
+      executorProvider: null,
+      model: "",
+      modelLocality: null,
+      modelProvider: null,
+      name: "runner",
+      provider: null,
+      skipPermissions: false,
+      timeoutAmount: "5",
+      timeoutUnit: "m",
+      type: "SCRIPT_WORKER",
+    });
+
+    expect(updatedFactory?.workers?.[0]?.timeout).toBe("5m");
+
+    const clearedFactory = applyEditableWorkerDraft(
+      updatedFactory!,
+      "runner",
+      {
+        argsText: "",
+        body: "",
+        command: "node",
+        executorProvider: null,
+        model: "",
+        modelLocality: null,
+        modelProvider: null,
+        name: "runner",
+        provider: null,
+        skipPermissions: false,
+        timeoutAmount: "",
+        timeoutUnit: "m",
+        type: "SCRIPT_WORKER",
+      },
+    );
+
+    expect(clearedFactory?.workers?.[0]).not.toHaveProperty("timeout");
+  });
+
   it("writes skipPermissions when enabled and clears it when disabled", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
@@ -193,6 +277,8 @@ describe("applyEditableWorkerDraft", () => {
       name: "reviewer",
       provider: null,
       skipPermissions: true,
+      timeoutAmount: "",
+      timeoutUnit: "m",
       type: "MODEL_WORKER",
     });
 
@@ -223,6 +309,8 @@ describe("applyEditableWorkerDraft", () => {
         name: "reviewer",
         provider: null,
         skipPermissions: false,
+        timeoutAmount: "",
+        timeoutUnit: "m",
         type: "MODEL_WORKER",
       },
     );
@@ -256,6 +344,8 @@ describe("applyEditableWorkerDraft", () => {
         modelLocality: null,
         modelProvider: null,
         provider: null,
+        skipPermissions: null,
+        timeout: null,
         type: "SCRIPT_WORKER",
         workerName: "reviewer",
         workstationNames: [],
@@ -297,6 +387,9 @@ describe("applyEditableWorkerDraft", () => {
       modelProvider: null,
       name: "linear-sync",
       provider: "LINEAR",
+      skipPermissions: false,
+      timeoutAmount: "1",
+      timeoutUnit: "h",
       type: "HOSTED_WORKER",
     });
 
@@ -305,6 +398,7 @@ describe("applyEditableWorkerDraft", () => {
       linear: { pollInterval: "30s" },
       name: "linear-sync",
       provider: "LINEAR",
+      timeout: "1h",
       type: "HOSTED_WORKER",
     });
   });
@@ -345,6 +439,8 @@ describe("applyEditableWorkerDraft", () => {
         modelLocality: null,
         modelProvider: "CURSOR",
         provider: null,
+        skipPermissions: null,
+        timeout: null,
         type: "MODEL_WORKER",
         workerName: "reviewer",
         workstationNames: ["Review", "Plan"],

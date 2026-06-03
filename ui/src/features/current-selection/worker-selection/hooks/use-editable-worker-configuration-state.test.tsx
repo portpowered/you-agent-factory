@@ -102,6 +102,29 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("tracks timeout edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTimeoutAmountChange("30");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        timeoutAmount: "30",
+        timeoutUnit: "m",
+      },
+      isDirty: true,
+    });
+  });
+
   it("tracks skipPermissions edits in dirty state", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),

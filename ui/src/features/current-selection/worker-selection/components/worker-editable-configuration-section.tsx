@@ -16,6 +16,7 @@ import {
   EDITABLE_MODEL_PROVIDERS,
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
+import { WORKER_TIMEOUT_UNITS } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_FIELD_PANEL_CLASS,
@@ -221,6 +222,11 @@ function WorkerEditableConfigurationReadyForm({
             />
           }
         />
+        <WorkerEditableConfigurationTimeoutField
+          messages={messages}
+          state={state}
+          validationErrors={validationErrors}
+        />
         <WorkerTypeSpecificFields
           messages={messages}
           state={state}
@@ -228,6 +234,90 @@ function WorkerEditableConfigurationReadyForm({
         />
       </div>
     </form>
+  );
+}
+
+function WorkerEditableConfigurationTimeoutField({
+  messages,
+  state,
+  validationErrors,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
+  validationErrors: Extract<
+    EditableWorkerConfigurationState,
+    { status: "ready" }
+  >["validationErrors"];
+}) {
+  const amountFieldId = "editable-worker-timeout-amount";
+  const unitFieldId = "editable-worker-timeout-unit";
+  const isConfigured = (state.draft.timeoutAmount ?? "").trim().length > 0;
+
+  return (
+    <WorkerEditableConfigurationField
+      errorMessage={validationErrors.timeout}
+      fieldId={amountFieldId}
+      input={
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
+          <input
+            aria-describedby={
+              validationErrors.timeout
+                ? `${amountFieldId}-error`
+                : "editable-worker-timeout-hint"
+            }
+            aria-invalid={validationErrors.timeout ? "true" : undefined}
+            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            id={amountFieldId}
+            inputMode="decimal"
+            min={0}
+            onChange={(event) =>
+              state.onTimeoutAmountChange(event.target.value)
+            }
+            placeholder={messages.notConfiguredOptionLabel}
+            type="number"
+            value={isConfigured ? (state.draft.timeoutAmount ?? "") : ""}
+          />
+          <Select
+            aria-describedby={
+              validationErrors.timeout
+                ? `${amountFieldId}-error`
+                : "editable-worker-timeout-hint"
+            }
+            aria-invalid={validationErrors.timeout ? "true" : undefined}
+            aria-label={messages.timeoutFieldLabel}
+            disabled={!isConfigured}
+            id={unitFieldId}
+            onChange={(event) =>
+              state.onTimeoutUnitChange(
+                event.target.value as typeof state.draft.timeoutUnit,
+              )
+            }
+            value={state.draft.timeoutUnit}
+          >
+            {WORKER_TIMEOUT_UNITS.map((unit) => (
+              <option key={unit} value={unit}>
+                {messages.localizeTimeoutUnit(unit)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      }
+      label={messages.timeoutFieldLabel}
+      supportingContent={
+        <>
+          <WorkerEditableConfigurationFieldHelp>
+            <span id="editable-worker-timeout-hint">
+              {messages.timeoutFieldHelp}
+            </span>
+          </WorkerEditableConfigurationFieldHelp>
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="timeout"
+            messages={messages}
+            state={state}
+          />
+        </>
+      }
+    />
   );
 }
 

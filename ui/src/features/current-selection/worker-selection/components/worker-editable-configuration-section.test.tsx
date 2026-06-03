@@ -25,6 +25,8 @@ function buildReadyWorkerEditableConfigurationState(
       name: "reviewer",
       provider: null,
       skipPermissions: false,
+      timeoutAmount: "",
+      timeoutUnit: "m",
       type: "MODEL_WORKER",
     },
     hasValidationErrors: false,
@@ -39,6 +41,7 @@ function buildReadyWorkerEditableConfigurationState(
       name: "reviewer",
       provider: null,
       skipPermissions: null,
+      timeout: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
       workstationNames,
@@ -54,6 +57,8 @@ function buildReadyWorkerEditableConfigurationState(
     onNameChange: vi.fn(),
     onProviderChange: vi.fn(),
     onSkipPermissionsChange: vi.fn(),
+    onTimeoutAmountChange: vi.fn(),
+    onTimeoutUnitChange: vi.fn(),
     markChangesSaved: vi.fn(),
     onResetToLatest: vi.fn(),
     onTypeChange: vi.fn(),
@@ -97,6 +102,53 @@ describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
         /updates every workstation that references this worker/i,
       ),
     ).toBeNull();
+  });
+});
+
+describe("WorkerEditableConfigurationSection timeout control", () => {
+  it("shows the execution timeout picker for all worker types", () => {
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={buildReadyWorkerEditableConfigurationState(["Review"])}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("spinbutton", { name: messages.timeoutFieldLabel }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: messages.timeoutFieldLabel }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the timeout picker for script workers", () => {
+    const scriptWorkerState: Extract<
+      EditableWorkerConfigurationState,
+      { status: "ready" }
+    > = {
+      ...buildReadyWorkerEditableConfigurationState(["Review"]),
+      draft: {
+        ...buildReadyWorkerEditableConfigurationState(["Review"]).draft,
+        model: "",
+        modelProvider: null,
+        type: "SCRIPT_WORKER",
+        command: "node",
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={scriptWorkerState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("spinbutton", { name: messages.timeoutFieldLabel }),
+    ).toBeInTheDocument();
   });
 });
 

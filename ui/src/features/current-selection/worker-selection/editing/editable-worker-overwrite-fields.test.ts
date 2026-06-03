@@ -18,6 +18,9 @@ function buildDraft(
     modelProvider: "CURSOR",
     name: "reviewer",
     provider: "LINEAR",
+    skipPermissions: false,
+    timeoutAmount: "30",
+    timeoutUnit: "s",
     type: "MODEL_WORKER",
     ...overrides,
   };

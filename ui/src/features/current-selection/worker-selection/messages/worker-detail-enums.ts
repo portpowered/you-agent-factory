@@ -8,6 +8,7 @@ export interface WorkerDetailEnumMessages {
   localizeExecutorProvider: (value: string) => string;
   localizeModelLocality: (value: string) => string;
   localizeModelProvider: (value: string) => string;
+  localizeTimeoutUnit: (value: string) => string;
   localizeWorkerType: (value: string) => string;
 }
 
@@ -42,6 +43,17 @@ const workerDetailEnumMessagesByLocale = {
           GEMINI: "Gemini",
           KIRO: "Kiro",
           OPENCODE: "OpenCode",
+        },
+        locale: "en",
+        value,
+      }),
+    localizeTimeoutUnit: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          h: "Hours",
+          m: "Minutes",
+          s: "Seconds",
         },
         locale: "en",
         value,
@@ -92,6 +104,17 @@ const workerDetailEnumMessagesByLocale = {
         locale: "ja",
         value,
       }),
+    localizeTimeoutUnit: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          h: "時間",
+          m: "分",
+          s: "秒",
+        },
+        locale: "ja",
+        value,
+      }),
     localizeWorkerType: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -138,6 +161,17 @@ const workerDetailEnumMessagesByLocale = {
         locale: "ko",
         value,
       }),
+    localizeTimeoutUnit: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          h: "시간",
+          m: "분",
+          s: "초",
+        },
+        locale: "ko",
+        value,
+      }),
     localizeWorkerType: (value: string) =>
       localizeEnumLabel({
         category: "kind",
@@ -180,6 +214,17 @@ const workerDetailEnumMessagesByLocale = {
           GEMINI: "Gemini",
           KIRO: "Kiro",
           OPENCODE: "OpenCode",
+        },
+        locale: "zh-CN",
+        value,
+      }),
+    localizeTimeoutUnit: (value: string) =>
+      localizeEnumLabel({
+        category: "type",
+        labels: {
+          h: "小时",
+          m: "分钟",
+          s: "秒",
         },
         locale: "zh-CN",
         value,

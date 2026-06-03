@@ -54,6 +54,9 @@ export interface WorkerDetailMessages {
   referencingWorkstationsHeading: string;
   skipPermissionsFieldHelp: string;
   skipPermissionsFieldLabel: string;
+  timeoutFieldHelp: string;
+  timeoutFieldLabel: string;
+  localizeTimeoutUnit: (unit: string) => string;
   summaryHeading: string;
   typeFieldLabel: string;
   typeLabel: string;

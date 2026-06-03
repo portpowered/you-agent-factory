@@ -202,6 +202,18 @@ function buildReadyEditableWorkerConfigurationState({
         skipPermissions: value,
       }));
     },
+    onTimeoutAmountChange: (value) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        timeoutAmount: value,
+      }));
+    },
+    onTimeoutUnitChange: (value) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        timeoutUnit: value,
+      }));
+    },
     markChangesSaved: () => {
       setSessionState((currentState) =>
         currentState
@@ -272,6 +284,8 @@ function areEditableWorkerDraftsEqual(
     left.name === right.name &&
     left.provider === right.provider &&
     left.skipPermissions === right.skipPermissions &&
+    left.timeoutAmount === right.timeoutAmount &&
+    left.timeoutUnit === right.timeoutUnit &&
     left.type === right.type
   );
 }

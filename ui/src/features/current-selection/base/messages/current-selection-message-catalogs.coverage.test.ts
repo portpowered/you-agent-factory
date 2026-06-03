@@ -201,6 +201,13 @@ const invokeWorkerDetail = (
         formatter("CODEX" as never),
         formatter("future-provider" as never),
       ];
+    case "localizeTimeoutUnit":
+      return [
+        formatter("s" as never),
+        formatter("m" as never),
+        formatter("h" as never),
+        formatter("future-unit" as never),
+      ];
     case "localizeWorkerType":
       return [
         formatter("MODEL_WORKER" as never),
