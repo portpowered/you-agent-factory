@@ -108,7 +108,7 @@ func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompleti
 	clone := completion
 	failureMetadata := CanonicalWorkFailureMetadata(completion.Result.FailureMetadata, completion.Result.ProviderFailure)
 	clone.Result.FailureMetadata = CloneWorkFailureMetadata(failureMetadata)
-	clone.Result.ProviderFailure = CloneWorkFailureMetadata(failureMetadata)
+	clone.Result.ProviderFailure = nil
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)
 	clone.InputWorkItems = cloneFactoryWorkItems(completion.InputWorkItems)

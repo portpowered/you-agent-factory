@@ -18,8 +18,8 @@ func TestCloneFactoryWorldDispatchCompletion_ResolvesFailureMetadataOnlyInput(t 
 	if cloned.Result.FailureMetadata == nil || cloned.Result.FailureMetadata.Type != WorkFailureTypeTimeout {
 		t.Fatalf("cloned failure metadata = %#v, want retryable timeout", cloned.Result.FailureMetadata)
 	}
-	if cloned.Result.ProviderFailure == nil || cloned.Result.ProviderFailure.Type != WorkFailureTypeTimeout {
-		t.Fatalf("cloned provider failure = %#v, want canonical retryable timeout", cloned.Result.ProviderFailure)
+	if cloned.Result.ProviderFailure != nil {
+		t.Fatalf("cloned provider failure = %#v, want nil internal field", cloned.Result.ProviderFailure)
 	}
 	if original.Result.ProviderFailure != nil {
 		t.Fatal("original provider failure should remain nil for failure_metadata-only input")
@@ -85,7 +85,7 @@ func testFactoryWorldDispatchCompletion() FactoryWorldDispatchCompletion {
 }
 
 func mutateClonedDispatchCompletion(cloned FactoryWorldDispatchCompletion) {
-	cloned.Result.ProviderFailure.Family = WorkFailureFamilyTerminal
+	cloned.Result.FailureMetadata.Family = WorkFailureFamilyTerminal
 	cloned.ProviderSession.ID = "sess-2"
 	cloned.Diagnostics.RenderedPrompt.Variables["prompt_source"] = "mutated"
 	cloned.Diagnostics.Provider.RequestMetadata["session_id"] = "sess-2"

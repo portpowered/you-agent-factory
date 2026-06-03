@@ -417,8 +417,11 @@ func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompl
 	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-safe-123" {
 		t.Fatalf("provider session = %#v, want resp-safe-123", completion.result.ProviderSession)
 	}
-	if completion.result.ProviderFailure == nil || completion.result.ProviderFailure.Type != interfaces.WorkFailureTypeThrottled {
-		t.Fatalf("provider failure = %#v, want throttled", completion.result.ProviderFailure)
+	if completion.result.FailureMetadata == nil || completion.result.FailureMetadata.Type != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("failure metadata = %#v, want throttled", completion.result.FailureMetadata)
+	}
+	if completion.result.ProviderFailure != nil {
+		t.Fatalf("provider failure = %#v, want nil internal field", completion.result.ProviderFailure)
 	}
 	if completion.result.Diagnostics == nil || completion.result.Diagnostics.Provider == nil || completion.result.Diagnostics.RenderedPrompt == nil {
 		t.Fatalf("completion diagnostics = %#v, want safe provider and rendered prompt diagnostics", completion.result.Diagnostics)
