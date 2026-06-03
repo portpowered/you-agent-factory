@@ -47,6 +47,76 @@ func TestValidate_EquivalentTargetsForInvalidFactoryThroughConfigAndPackageValid
 	})
 }
 
+func TestValidate_RoutelessWorkstationReportsMissingOutputRoutesNotFailureRoute(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "cron",
+			Kind:           interfaces.WorkstationKindCron,
+			WorkerTypeName: "worker-a",
+		}},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkstationMissingOutputRoutes)
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
+		Type:     factoryvalidation.SubjectTypeWorkstation,
+		ID:       "cron",
+		Location: factoryvalidation.SubjectLocationOutputs,
+	})
+	for _, target := range result.Targets {
+		if target.Code == factoryvalidation.CodeWorkstationMissingFailureRoute &&
+			target.Subject.ID == "cron" {
+			t.Fatalf("routeless workstation must not receive missingFailureRoute, got %#v", target)
+		}
+	}
+}
+
+func TestValidate_WorkstationWithOutputsStillReportsMissingFailureRoute(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "in-review", Type: interfaces.StateTypeProcessing},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "repeater",
+			Kind:           interfaces.WorkstationKindRepeater,
+			WorkerTypeName: "worker-a",
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "in-review"}},
+		}},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkstationMissingFailureRoute)
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
+		Type:     factoryvalidation.SubjectTypeWorkstation,
+		ID:       "repeater",
+		Location: factoryvalidation.SubjectLocationOnFailure,
+	})
+	for _, target := range result.Targets {
+		if target.Code == factoryvalidation.CodeWorkstationMissingOutputRoutes &&
+			target.Subject.ID == "repeater" {
+			t.Fatalf("workstation with outputs must not receive missingOutputRoutes, got %#v", target)
+		}
+	}
+}
+
 func TestValidate_MissingOutcomeRoutesUseCanonicalWorkstationLocations(t *testing.T) {
 	t.Parallel()
 

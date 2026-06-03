@@ -3,8 +3,10 @@ package validation_test
 import (
 	"testing"
 
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestValidateBlockingLoad_RejectsCrossPathInvalidWithoutOutcomeRouteOnlyFindings(t *testing.T) {
@@ -29,6 +31,26 @@ func TestValidateBlockingLoad_RejectsCrossPathInvalidWithoutOutcomeRouteOnlyFind
 			t.Fatalf("unexpected deferred outcome-route target %#v", target)
 		}
 	}
+}
+
+func TestValidateBlockingLoad_DoesNotDeferMissingOutputRoutes(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name: "consume",
+		}},
+	}
+
+	result := factoryvalidation.ValidateBlockingLoad(cfg)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkstationMissingOutputRoutes)
 }
 
 func TestValidateBlockingLoad_AllowsNamedFactoryFixture(t *testing.T) {
