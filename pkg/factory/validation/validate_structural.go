@@ -262,6 +262,10 @@ func conflictingRouteTargets(workstation string, inputCounts map[string]int, rou
 	return targets
 }
 
+func workstationSkipsOutcomeRouteRequirements(workstation interfaces.FactoryWorkstationConfig) bool {
+	return strings.TrimSpace(workstation.Type) == interfaces.WorkstationTypeLogical
+}
+
 func workstationHasEffectiveOutputs(workstation interfaces.FactoryWorkstationConfig) bool {
 	if len(workstation.Outputs) > 0 {
 		return true
@@ -290,7 +294,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 				},
 				Path: fmt.Sprintf("%s.workstations[%d].outputs", validationRoot, workstationIndex),
 			})
-		} else {
+		} else if !workstationSkipsOutcomeRouteRequirements(workstation) {
 			hasFailureRoute := len(workstation.OnFailure) > 0 ||
 				workstationCanDefaultFailureRoute(workstation, failedWorkTypes)
 			if !hasFailureRoute {
@@ -306,6 +310,9 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 					Path: fmt.Sprintf("%s.workstations[%d].onFailure", validationRoot, workstationIndex),
 				})
 			}
+		}
+		if workstationSkipsOutcomeRouteRequirements(workstation) {
+			continue
 		}
 		if !workstationNeedsExplicitRejectionRoute(workstation) {
 			continue

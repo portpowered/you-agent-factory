@@ -1,6 +1,7 @@
 package validation_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -187,6 +188,7 @@ type missingOutputRoutesCase struct {
 	wantCode              string
 	wantLocation          factoryvalidation.SubjectLocation
 	wantPathSuffix        string
+	wantMessageContains   string
 	forbiddenCode         string
 	forbiddenCodeLocation factoryvalidation.SubjectLocation
 }
@@ -203,6 +205,35 @@ func missingOutputRoutesVsFailureRouteCases() []missingOutputRoutesCase {
 			wantCode:              factoryvalidation.CodeWorkstationMissingOutputRoutes,
 			wantLocation:          factoryvalidation.SubjectLocationOutputs,
 			wantPathSuffix:        "factory.workstations[0].outputs",
+			wantMessageContains:   "output routes",
+			forbiddenCode:         factoryvalidation.CodeWorkstationMissingFailureRoute,
+			forbiddenCodeLocation: factoryvalidation.SubjectLocationOnFailure,
+		},
+		{
+			name: "routeless_cron_without_worker",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name: "trigger-monkey",
+				Type: interfaces.WorkstationTypeLogical,
+				Kind: interfaces.WorkstationKindCron,
+				Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+			},
+			wantCode:              factoryvalidation.CodeWorkstationMissingOutputRoutes,
+			wantLocation:          factoryvalidation.SubjectLocationOutputs,
+			wantPathSuffix:        "factory.workstations[0].outputs",
+			wantMessageContains:   "output routes",
+			forbiddenCode:         factoryvalidation.CodeWorkstationMissingFailureRoute,
+			forbiddenCodeLocation: factoryvalidation.SubjectLocationOnFailure,
+		},
+		{
+			name: "routeless_logical_move_empty_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name: "router",
+				Type: interfaces.WorkstationTypeLogical,
+			},
+			wantCode:              factoryvalidation.CodeWorkstationMissingOutputRoutes,
+			wantLocation:          factoryvalidation.SubjectLocationOutputs,
+			wantPathSuffix:        "factory.workstations[0].outputs",
+			wantMessageContains:   "output routes",
 			forbiddenCode:         factoryvalidation.CodeWorkstationMissingFailureRoute,
 			forbiddenCodeLocation: factoryvalidation.SubjectLocationOnFailure,
 		},
@@ -297,6 +328,16 @@ func TestValidate_MissingOutputRoutesVsMissingFailureRoute(t *testing.T) {
 				Location: tt.wantLocation,
 			})
 			assertWorkstationTarget(t, result.Targets, tt.workstation.Name, tt.wantCode, tt.wantLocation, tt.wantPathSuffix)
+			if tt.wantMessageContains != "" {
+				assertWorkstationTargetMessageContains(
+					t,
+					result.Targets,
+					tt.workstation.Name,
+					tt.wantCode,
+					tt.wantLocation,
+					tt.wantMessageContains,
+				)
+			}
 			assertWorkstationTargetAbsent(
 				t,
 				result.Targets,
@@ -329,6 +370,27 @@ func assertWorkstationTarget(
 	t.Fatalf("targets = %#v, want %q for workstation %q at %q with path %q", targets, code, workstationID, location, pathSuffix)
 }
 
+func assertWorkstationTargetMessageContains(
+	t *testing.T,
+	targets []factoryvalidation.Target,
+	workstationID string,
+	code string,
+	location factoryvalidation.SubjectLocation,
+	substring string,
+) {
+	t.Helper()
+	for _, target := range targets {
+		if target.Code != code || target.Subject.ID != workstationID || target.Subject.Location != location {
+			continue
+		}
+		if !strings.Contains(target.Message, substring) {
+			t.Fatalf("target message = %q, want substring %q (target %#v)", target.Message, substring, target)
+		}
+		return
+	}
+	t.Fatalf("targets = %#v, want %q for workstation %q at %q", targets, code, workstationID, location)
+}
+
 func assertWorkstationTargetAbsent(
 	t *testing.T,
 	targets []factoryvalidation.Target,
@@ -343,5 +405,193 @@ func assertWorkstationTargetAbsent(
 			target.Subject.Location == location {
 			t.Fatalf("workstation %q must not receive %q at %q, got %#v", workstationID, code, location, target)
 		}
+	}
+}
+
+var workstationRouteRequirementCodes = []string{
+	factoryvalidation.CodeWorkstationMissingOutputRoutes,
+	factoryvalidation.CodeWorkstationMissingFailureRoute,
+	factoryvalidation.CodeWorkstationMissingRejectionRoute,
+}
+
+func assertNoWorkstationRouteRequirementTargets(t *testing.T, targets []factoryvalidation.Target, workstationID string) {
+	t.Helper()
+	for _, target := range targets {
+		if target.Subject.Type != factoryvalidation.SubjectTypeWorkstation || target.Subject.ID != workstationID {
+			continue
+		}
+		for _, code := range workstationRouteRequirementCodes {
+			if target.Code == code {
+				t.Fatalf("workstation %q must not receive route requirement %q at %q, got %#v", workstationID, code, target.Subject.Location, target)
+			}
+		}
+	}
+}
+
+func TestValidate_WorkerBackedKindsPreserveMissingFailureRouteWhenOutputsExist(t *testing.T) {
+	t.Parallel()
+
+	workTypesWithoutDefaultableFailure := []interfaces.WorkTypeConfig{{
+		Name: "task",
+		States: []interfaces.StateConfig{
+			{Name: "in-review", Type: interfaces.StateTypeProcessing},
+			{Name: "complete", Type: interfaces.StateTypeTerminal},
+		},
+	}}
+	outputRoute := []interfaces.IOConfig{{WorkTypeName: "task", StateName: "in-review"}}
+	workers := []interfaces.WorkerConfig{{Name: "worker-a"}}
+
+	cases := []struct {
+		name        string
+		workstation interfaces.FactoryWorkstationConfig
+	}{
+		{
+			name: "standard_workstation_with_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "process",
+				Kind:           interfaces.WorkstationKindStandard,
+				WorkerTypeName: "worker-a",
+				Outputs:        outputRoute,
+			},
+		},
+		{
+			name: "repeater_with_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "repeater",
+				Kind:           interfaces.WorkstationKindRepeater,
+				WorkerTypeName: "worker-a",
+				Outputs:        outputRoute,
+			},
+		},
+		{
+			name: "classifier_with_classification_route_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "classifier",
+				Type:           interfaces.WorkstationTypeClassify,
+				WorkerTypeName: "worker-a",
+				ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+					{Label: "approved", Outputs: outputRoute},
+				},
+			},
+		},
+		{
+			name: "poller_with_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "ingress",
+				Kind:           interfaces.WorkstationKindPoller,
+				WorkerTypeName: "worker-a",
+				Outputs:        outputRoute,
+			},
+		},
+		{
+			name: "cron_with_worker_and_outputs",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:           "scheduled-worker",
+				Kind:           interfaces.WorkstationKindCron,
+				WorkerTypeName: "worker-a",
+				Cron:           &interfaces.CronConfig{Schedule: "0 * * * *"},
+				Outputs:        outputRoute,
+			},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &interfaces.FactoryConfig{
+				WorkTypes:    workTypesWithoutDefaultableFailure,
+				Workers:      workers,
+				Workstations: []interfaces.FactoryWorkstationConfig{tt.workstation},
+			}
+			result := factoryvalidation.Validate(cfg)
+			assertWorkstationTarget(
+				t,
+				result.Targets,
+				tt.workstation.Name,
+				factoryvalidation.CodeWorkstationMissingFailureRoute,
+				factoryvalidation.SubjectLocationOnFailure,
+				"factory.workstations[0].onFailure",
+			)
+			assertWorkstationTargetAbsent(
+				t,
+				result.Targets,
+				tt.workstation.Name,
+				factoryvalidation.CodeWorkstationMissingOutputRoutes,
+				factoryvalidation.SubjectLocationOutputs,
+			)
+		})
+	}
+}
+
+func TestValidate_LogicalMoveOutcomeRouteExemption(t *testing.T) {
+	t.Parallel()
+
+	workTypesWithoutFailedState := []interfaces.WorkTypeConfig{{
+		Name: "task",
+		States: []interfaces.StateConfig{
+			{Name: "init", Type: interfaces.StateTypeInitial},
+			{Name: "in-review", Type: interfaces.StateTypeProcessing},
+			{Name: "complete", Type: interfaces.StateTypeTerminal},
+		},
+	}}
+	outputRoute := []interfaces.IOConfig{{WorkTypeName: "task", StateName: "in-review"}}
+
+	cases := []struct {
+		name        string
+		workTypes   []interfaces.WorkTypeConfig
+		workstation interfaces.FactoryWorkstationConfig
+	}{
+		{
+			name:      "logical_move_with_outputs_no_outcome_routes",
+			workTypes: workTypesWithoutFailedState,
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:    "router",
+				Type:    interfaces.WorkstationTypeLogical,
+				Outputs: outputRoute,
+			},
+		},
+		{
+			name:      "logical_move_cron_with_outputs_no_outcome_routes",
+			workTypes: workTypesWithoutFailedState,
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:    "scheduled-router",
+				Type:    interfaces.WorkstationTypeLogical,
+				Kind:    interfaces.WorkstationKindCron,
+				Cron:    &interfaces.CronConfig{Schedule: "0 * * * *"},
+				Outputs: outputRoute,
+			},
+		},
+		{
+			name: "logical_move_repeater_with_outputs_no_outcome_routes",
+			workTypes: []interfaces.WorkTypeConfig{{
+				Name: "task",
+				States: []interfaces.StateConfig{
+					{Name: "init", Type: interfaces.StateTypeInitial},
+					{Name: "in-review", Type: interfaces.StateTypeProcessing},
+					{Name: "complete", Type: interfaces.StateTypeTerminal},
+					{Name: "failed", Type: interfaces.StateTypeFailed},
+				},
+			}},
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name:    "loop-breaker",
+				Type:    interfaces.WorkstationTypeLogical,
+				Kind:    interfaces.WorkstationKindRepeater,
+				Outputs: outputRoute,
+			},
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &interfaces.FactoryConfig{
+				WorkTypes:    tt.workTypes,
+				Workstations: []interfaces.FactoryWorkstationConfig{tt.workstation},
+			}
+			result := factoryvalidation.Validate(cfg)
+			assertNoWorkstationRouteRequirementTargets(t, result.Targets, tt.workstation.Name)
+		})
 	}
 }
