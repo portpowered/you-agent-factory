@@ -64,10 +64,10 @@ export function LayoutRoleShowcase() {
             Toolbar row layout
           </h3>
           <ToolbarRowLayout>
-            <Button size="sm" type="button" variant="outline">
+            <Button size="sm" tone="outline" type="button">
               Filter
             </Button>
-            <Button size="sm" type="button" variant="outline">
+            <Button size="sm" tone="outline" type="button">
               Export
             </Button>
             <Button size="sm" type="button">
