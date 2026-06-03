@@ -21,8 +21,6 @@ import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-v
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "./trace-dispatch-factory-graph-node";
 
-const GRAPH_SHELL_CLASS =
-  "max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle";
 const GRAPH_SHELL_STYLE = { height: 320, minHeight: 256 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
 const TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS = {
@@ -112,7 +110,7 @@ export function TraceWorkstationPath({
   return (
     <DashboardGraphFrame
       aria-label={messages.dispatchPathGraphLabel}
-      className={GRAPH_SHELL_CLASS}
+      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle"
       data-trace-workstation-path
       style={GRAPH_SHELL_STYLE}
     >

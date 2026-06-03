@@ -45,15 +45,9 @@ import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
-const TRACE_EXPANDER_HEADER_CLASS =
-  "flex items-center justify-between gap-3  py-sm rounded-lg ";
 const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
 // tailwind-exception: intrinsic-sizing
 const TRACE_GRID_TABLE_CLASS = "min-w-[640px]";
-const TRACE_WORK_ITEM_BUTTON_CLASS = cn(
-  "h-auto min-h-0 justify-start border-af-accent-border bg-af-accent-surface px-2.5 py-1.5 text-left text-af-accent",
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-);
 
 export type TraceGridState =
   | { status: "idle"; message: string }
@@ -217,7 +211,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                   aria-labelledby={`${workItemsID}-heading`}
                   className="grid gap-2.5"
                 >
-                  <div className={TRACE_EXPANDER_HEADER_CLASS}>
+                  <div className="flex items-center justify-between gap-3  py-sm rounded-lg ">
                     <h3
                       className={DASHBOARD_SUPPORTING_LABEL_CLASS}
                       id={`${workItemsID}-heading`}
@@ -391,7 +385,10 @@ function SelectableWorkList({
         <li className="list-none" key={workItem.work_id}>
           {onSelectWorkID ? (
             <Button
-              className={TRACE_WORK_ITEM_BUTTON_CLASS}
+              className={cn(
+                "h-auto min-h-0 justify-start border-af-accent-border bg-af-accent-surface px-2.5 py-1.5 text-left text-af-accent",
+                DASHBOARD_SUPPORTING_CODE_CLASS,
+              )}
               onClick={() => onSelectWorkID(workItem.work_id)}
               size="sm"
               title={workItem.work_id}
