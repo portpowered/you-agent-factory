@@ -10,7 +10,7 @@ Canonical reference for the dashboard UI Material-style color roles introduced i
 
 - **Role tokens (long-term API):** `ui/src/styles/color-role-tokens.css` — use Tailwind utilities such as `bg-primary`, `text-on-surface`, `border-outline`.
 - **Transitional `af-*` aliases:** `ui/src/styles/color-role-aliases.css` — maps widely used `af-*` product tokens to roles so existing UI keeps rendering while components migrate.
-- **Factory palette keys:** `af-foundation-*` in `ui/src/styles.css` — baseline for Factory Dark until palette switching (US-008).
+- **Factory palette keys:** `af-foundation-*` in `ui/src/styles.css` — baseline for Factory Dark; palette presets in `ui/src/styles/color-palette-presets.css` override these keys at runtime (US-008).
 - **Cleanup (US-010):** remove `color-role-aliases.css` and obsolete `af-*` after consumers use role utilities directly.
 
 ## Role families
@@ -85,7 +85,7 @@ Do not use `warning` for draft/pending copy, `info` for brand row emphasis, or `
 
 1. **Yellow primary** — `primary` stays tied to `af-foundation-accent` so Factory Dark identity is preserved.
 2. **Secondary and tertiary saturation (US-003)** — `secondary` / `tertiary` roles use `af-foundation-secondary-accent` and `af-foundation-tertiary-accent` (calmer than `af-foundation-info` / `af-foundation-worker`). Semantic `info` and chart/info chrome keep the vibrant `af-foundation-info` family. Visual review: Storybook `Agent Factory/UI/Color Role Accent Contrast`.
-3. **Palette switching (US-008)** — Future palette sets override the same role keys; role names stay stable across Factory Dark, Factory Light, Material Baseline, Slate, and Olive.
+3. **Palette switching (US-008)** — Five predefined palettes (`factory-dark`, `factory-light`, `material-baseline`, `slate`, `olive`) override `af-foundation-*` keys via `data-color-palette` on `:root` (`ui/src/styles/color-palette-presets.css`). The dashboard header palette dropdown (`DashboardPaletteMenu`) persists the selection in `sessionStorage` for the current browser session. Role token names stay stable across palettes; yellow `#f5c76f` remains the primary brand accent.
 4. **Migration order** — Taxonomy (this doc) → `af-*` aliases → shared primitives → feature surfaces → alias cleanup.
 
 ## Transitional `af-*` alias map (US-002)

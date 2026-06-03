@@ -26,6 +26,7 @@ import { sessionStreamToggleLabel } from "../lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
+import { DashboardPaletteMenu } from "./dashboard-palette-menu";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
 
@@ -89,8 +90,9 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             actions={
               <fieldset
                 aria-label={headerMessages.globalHeaderActionsLabel}
-                className="shrink-0 self-end pb-2"
+                className="flex shrink-0 items-center gap-1.5 self-end pb-2"
               >
+                <DashboardPaletteMenu locale={resolvedLocale} />
                 <DashboardLocaleMenu
                   locale={resolvedLocale}
                   onChangeLocale={setLocale}

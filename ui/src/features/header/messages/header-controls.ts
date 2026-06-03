@@ -43,6 +43,8 @@ export interface HeaderControlsMessages {
   manualFactoryNameHelperText: string;
   manualFactoryNamePrecedenceTemplate: string;
   openSessionValidationPendingLabel: string;
+  paletteLabel: string;
+  paletteMenuButtonLabel: string;
   returnToCurrentTickLabel: string;
   resumeSessionStreamLabelTemplate: string;
   retrySessionsLabel: string;
@@ -125,6 +127,8 @@ const headerControlsMessagesByLocale = {
       "Manual override {{factoryName}} will launch instead of the detected selection.",
     openSessionValidationPendingLabel:
       "Checking whether this folder contains a runnable factory...",
+    paletteLabel: "Color palette",
+    paletteMenuButtonLabel: "Change color palette",
     pauseSessionStreamLabelTemplate: "Pause {{sessionLabel}} updates",
     returnToCurrentTickLabel: "Return to current tick",
     resumeSessionStreamLabelTemplate: "Resume {{sessionLabel}} updates",
@@ -205,6 +209,8 @@ const headerControlsMessagesByLocale = {
       "手動上書き {{factoryName}} は検出された選択より優先して起動されます。",
     openSessionValidationPendingLabel:
       "このフォルダーに実行可能なファクトリーがあるか確認しています...",
+    paletteLabel: "カラーパレット",
+    paletteMenuButtonLabel: "カラーパレットを変更",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} の更新を一時停止",
     returnToCurrentTickLabel: "現在のティックに戻る",
     resumeSessionStreamLabelTemplate: "{{sessionLabel}} の更新を再開",
@@ -286,6 +292,8 @@ const headerControlsMessagesByLocale = {
       "수동 재정의 {{factoryName}}이 감지된 선택보다 우선하여 실행됩니다.",
     openSessionValidationPendingLabel:
       "이 폴더에 실행 가능한 팩토리가 있는지 확인하는 중...",
+    paletteLabel: "색상 팔레트",
+    paletteMenuButtonLabel: "색상 팔레트 변경",
     pauseSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 일시중지",
     returnToCurrentTickLabel: "현재 틱으로 돌아가기",
     resumeSessionStreamLabelTemplate: "{{sessionLabel}} 업데이트 다시 시작",
@@ -366,6 +374,8 @@ const headerControlsMessagesByLocale = {
       "手动覆盖 {{factoryName}} 将优先于检测到的选择进行启动。",
     openSessionValidationPendingLabel:
       "正在检查此文件夹是否包含可运行的工厂...",
+    paletteLabel: "调色板",
+    paletteMenuButtonLabel: "更改调色板",
     pauseSessionStreamLabelTemplate: "暂停 {{sessionLabel}} 更新",
     returnToCurrentTickLabel: "返回当前刻度",
     resumeSessionStreamLabelTemplate: "恢复 {{sessionLabel}} 更新",

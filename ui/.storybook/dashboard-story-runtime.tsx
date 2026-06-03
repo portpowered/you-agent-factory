@@ -13,6 +13,7 @@ import { AppNotificationToaster } from "../src/features/notifications/public";
 import type { WorldState } from "../src/features/timeline/state/factoryTimelineStore";
 import { useFactoryTimelineStore } from "../src/features/timeline/state/factoryTimelineStore";
 import { DashboardSessionTestProvider } from "../src/testing/dashboard-session-test-provider";
+import { AppColorPaletteProvider } from "../src/theme";
 
 const DASHBOARD_STORYBOOK_BASE_PATH = "/dashboard/ui/";
 type FetchLike = (
@@ -339,10 +340,12 @@ function installDashboardApiMock(
 
 function StorybookDashboardRuntime({ children }: { children: ReactNode }) {
   return (
-    <QueryClientProvider client={createQueryClient()}>
-      {children}
-      <AppNotificationToaster />
-    </QueryClientProvider>
+    <AppColorPaletteProvider>
+      <QueryClientProvider client={createQueryClient()}>
+        {children}
+        <AppNotificationToaster />
+      </QueryClientProvider>
+    </AppColorPaletteProvider>
   );
 }
 
