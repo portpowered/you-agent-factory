@@ -580,6 +580,11 @@ func assertCommandCleanupLogFields(
 	if req.WorkstationName != "" && fields["workstation_name"] != req.WorkstationName {
 		t.Fatalf("workstation_name = %#v, want %q", fields["workstation_name"], req.WorkstationName)
 	}
+	assertCommandCleanupLogExcludesSensitiveFields(t, fields)
+}
+
+func assertCommandCleanupLogExcludesSensitiveFields(t *testing.T, fields map[string]any) {
+	t.Helper()
 	for _, forbidden := range []string{"stdin", "stdin_bytes", "env"} {
 		if _, ok := fields[forbidden]; ok {
 			t.Fatalf("cleanup log unexpectedly includes %q", forbidden)
