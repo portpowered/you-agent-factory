@@ -46,7 +46,7 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	submitDashboardWorldViewFunctionalWork(t, h, "world-view-failed", "trace-world-view-failed")
 	provider.nextDispatch(t)
 	provider.respond(interfaces.InferenceResponse{}, workers.NewProviderErrorWithSession(
-		interfaces.ProviderErrorTypePermanentBadRequest,
+		interfaces.WorkFailureTypePermanentBadRequest,
 		"provider rejected dashboard world-view work",
 		errors.New("provider rejected"),
 		&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-world-view-failed"},

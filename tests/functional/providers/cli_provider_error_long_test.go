@@ -59,8 +59,8 @@ func providerErrorLongCases() []providerLongCase {
 func runProviderErrorLongCase(t *testing.T, tc providerLongCase) {
 	t.Helper()
 
-	expectedType := interfaces.ProviderErrorTypeUnknown
-	expectedFamily := interfaces.ProviderErrorFamilyTerminal
+	expectedType := interfaces.WorkFailureTypeUnknown
+	expectedFamily := interfaces.WorkFailureFamilyTerminal
 	if tc.corpusEntry != "" {
 		entry := providerErrorCorpusEntryForTest(t, tc.corpusEntry)
 		expectedType = entry.ExpectedType
@@ -146,8 +146,8 @@ func assertProviderOutcome(
 	outcome testutil.ProviderErrorSmokeOutcome,
 	work testutil.ProviderErrorSmokeWork,
 	tc providerLongCase,
-	wantType interfaces.ProviderErrorType,
-	wantFamily interfaces.ProviderErrorFamily,
+	wantType interfaces.WorkFailureType,
+	wantFamily interfaces.WorkFailureFamily,
 ) {
 	t.Helper()
 
@@ -173,8 +173,8 @@ func assertProviderRequeueOutcome(
 	outcome testutil.ProviderErrorSmokeOutcome,
 	work testutil.ProviderErrorSmokeWork,
 	tc providerLongCase,
-	wantType interfaces.ProviderErrorType,
-	wantFamily interfaces.ProviderErrorFamily,
+	wantType interfaces.WorkFailureType,
+	wantFamily interfaces.WorkFailureFamily,
 ) {
 	t.Helper()
 
@@ -214,8 +214,8 @@ func assertProviderRequeueOutcome(
 func assertDispatchProviderFailureMatchesExpected(
 	t *testing.T,
 	dispatch interfaces.CompletedDispatch,
-	wantType interfaces.ProviderErrorType,
-	wantFamily interfaces.ProviderErrorFamily,
+	wantType interfaces.WorkFailureType,
+	wantFamily interfaces.WorkFailureFamily,
 ) {
 	t.Helper()
 

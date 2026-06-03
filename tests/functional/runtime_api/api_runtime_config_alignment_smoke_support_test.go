@@ -573,11 +573,11 @@ func assertRuntimeConfigAlignmentDispatchHistory(t *testing.T, history []interfa
 	if timeoutDispatch.ProviderFailure == nil {
 		t.Fatalf("%s failed dispatch ProviderFailure = nil, want timeout metadata", runtimeConfigAlignmentExecuteWorkstation)
 	}
-	if timeoutDispatch.ProviderFailure.Type != interfaces.ProviderErrorTypeTimeout {
-		t.Fatalf("%s failed dispatch ProviderFailure.Type = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.ProviderFailure.Type, interfaces.ProviderErrorTypeTimeout)
+	if timeoutDispatch.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("%s failed dispatch ProviderFailure.Type = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
 	}
-	if timeoutDispatch.ProviderFailure.Family != interfaces.ProviderErrorFamilyRetryable {
-		t.Fatalf("%s failed dispatch ProviderFailure.Family = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.ProviderFailure.Family, interfaces.ProviderErrorFamilyRetryable)
+	if timeoutDispatch.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("%s failed dispatch ProviderFailure.Family = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentExecuteWorkstation, interfaces.OutcomeAccepted, "") {
 		t.Fatalf("dispatch history missing accepted retry for %s: %#v", runtimeConfigAlignmentExecuteWorkstation, history)
