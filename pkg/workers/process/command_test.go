@@ -171,11 +171,25 @@ func TestExecCommandRunner_ContextDeadlineReturnsSystemError(t *testing.T) {
 }
 
 func TestExecCommandRunner_SuccessfulExitTerminatesSpawnedChildProcess(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// Windows job-object post-run cleanup is validated in the same test on Windows CI;
-		// Unix process-group cleanup is the primary behavioral gate for this story.
-		t.Skip("Unix process-group success-path cleanup test; Windows covered by job-object post-run path in story 003")
-	}
+	testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t)
+}
+
+// TestExecCommandRunner_AgentStyleSuccessLeavesNoChildProcess is the US-005 regression
+// guard: a command that spawns a background service and exits 0 must not leave the child
+// running after Run returns. Uses commandTestProcessRunning from command_process_test_unix.go
+// or command_process_test_windows.go for platform liveness checks.
+func TestExecCommandRunner_AgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
+	testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t)
+}
+
+func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
+	t.Helper()
+
+	const testGrace = 250 * time.Millisecond
+	postRunCleanupGracePeriodForTest = testGrace
+	t.Cleanup(func() {
+		postRunCleanupGracePeriodForTest = 0
+	})
 
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
 	result, err := ExecCommandRunner{}.Run(context.Background(), CommandRequest{
@@ -198,7 +212,12 @@ func TestExecCommandRunner_SuccessfulExitTerminatesSpawnedChildProcess(t *testin
 	}
 
 	childPID := readCommandHelperPID(t, pidFile)
-	if !waitForCommandHelperProcessExit(childPID, 3*time.Second) {
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
+	})
+
+	waitBudget := testGrace + 3*time.Second
+	if !waitForCommandHelperProcessExit(childPID, waitBudget) {
 		t.Fatalf("spawned child process %d is still running after parent exit 0", childPID)
 	}
 }
