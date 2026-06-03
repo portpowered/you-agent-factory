@@ -26,6 +26,8 @@ func TestOpenAPIContract_FactoryWriteFailureExamplesIncludeCanonicalTargets(t *t
 
 	assertResponseExampleHasCanonicalWorkstationFailureTarget(t, responses, "SaveCurrentFactoryBadRequest", "invalidFactory")
 	assertResponseExampleHasCanonicalWorkstationFailureTarget(t, responses, "CreateFactoryBadRequest", "invalidFactory")
+	assertResponseExampleHasCanonicalWorkstationOutputRoutesTarget(t, responses, "SaveCurrentFactoryBadRequest", "routelessWorkstation")
+	assertResponseExampleHasCanonicalWorkstationOutputRoutesTarget(t, responses, "CreateFactoryBadRequest", "routelessWorkstation")
 }
 
 func assertResponseExampleHasCanonicalWorkstationFailureTarget(
@@ -83,5 +85,63 @@ func assertResponseExampleHasCanonicalWorkstationFailureTarget(
 	}
 	if got, _ := subject["location"].(string); got != "ON_FAILURE" {
 		t.Fatalf("%s.%s subject location = %q, want ON_FAILURE", responseName, exampleName, got)
+	}
+}
+
+func assertResponseExampleHasCanonicalWorkstationOutputRoutesTarget(
+	t *testing.T,
+	responses map[string]any,
+	responseName string,
+	exampleName string,
+) {
+	t.Helper()
+
+	response, ok := responses[responseName].(map[string]any)
+	if !ok {
+		t.Fatalf("components.responses.%s is missing", responseName)
+	}
+	content, ok := response["content"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.responses.%s.content is missing", responseName)
+	}
+	applicationJSON, ok := content["application/json"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.responses.%s.content.application/json is missing", responseName)
+	}
+	examples, ok := applicationJSON["examples"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.responses.%s.content.application/json.examples is missing", responseName)
+	}
+	exampleWrapper, ok := examples[exampleName].(map[string]any)
+	if !ok {
+		t.Fatalf("components.responses.%s example %s is missing", responseName, exampleName)
+	}
+	example, ok := exampleWrapper["value"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.responses.%s example %s value must be an object", responseName, exampleName)
+	}
+	targets, ok := example["targets"].([]any)
+	if !ok || len(targets) == 0 {
+		t.Fatalf("%s.%s targets = %#v, want canonical validation targets", responseName, exampleName, example["targets"])
+	}
+	first, ok := targets[0].(map[string]any)
+	if !ok {
+		t.Fatalf("%s.%s first target = %#v, want object", responseName, exampleName, targets[0])
+	}
+	subject, ok := first["subject"].(map[string]any)
+	if !ok {
+		t.Fatalf("%s.%s target subject = %#v, want object", responseName, exampleName, first["subject"])
+	}
+	if got, _ := first["code"].(string); got != "factory.workstation.missingOutputRoutes" {
+		t.Fatalf("%s.%s target code = %q, want factory.workstation.missingOutputRoutes", responseName, exampleName, got)
+	}
+	if got, _ := subject["type"].(string); got != "WORKSTATION" {
+		t.Fatalf("%s.%s subject type = %q, want WORKSTATION", responseName, exampleName, got)
+	}
+	if got, _ := subject["id"].(string); got != "bob" {
+		t.Fatalf("%s.%s subject id = %q, want bob", responseName, exampleName, got)
+	}
+	if got, _ := subject["location"].(string); got != "OUTPUTS" {
+		t.Fatalf("%s.%s subject location = %q, want OUTPUTS", responseName, exampleName, got)
 	}
 }
