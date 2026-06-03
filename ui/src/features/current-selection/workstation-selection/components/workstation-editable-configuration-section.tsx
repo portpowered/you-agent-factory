@@ -145,7 +145,7 @@ function EditableConfigurationReadyForm({
     EditableWorkstationValidationErrors & Record<string, string | undefined>,
     EditableWorkstationSaveValidationErrors
   >(state.validationErrors, saveState);
-  const renderState = {
+  const renderState: typeof state = {
     ...state,
     validationErrors,
   };

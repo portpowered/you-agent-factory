@@ -45,7 +45,7 @@ export function ResourceNodeView({
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "af-current-activity-node-surface-resource justify-center text-left text-af-text",
+        "af-current-activity-node-surface-resource border-af-border-strong justify-center text-left text-af-text",
         data.activeFlow &&
           !data.selectedResource &&
           "border-af-success-border shadow-af-success-chip",

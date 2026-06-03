@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,
@@ -96,6 +96,37 @@ function EditableConfigurationPromptFeedback({
     { status: "ready" }
   >;
 }) {
+  const hasSyntaxDiagnostics = state.promptDiagnostics.some(
+    (diagnostic) => diagnostic.kind === "SYNTAX_ERROR",
+  );
+
+  if (
+    state.promptHelpState.status !== "ready" &&
+    (state.promptValidationState.status === "error" ||
+      hasSyntaxDiagnostics ||
+      state.promptDiagnostics.length > 0)
+  ) {
+    return (
+      <PromptEditorDiagnosticsPanel
+        diagnostics={state.promptDiagnostics}
+        id={diagnosticsId}
+        labels={{
+          diagnosticsHeading:
+            messages.editableConfigurationPromptDiagnosticsHeading,
+          diagnosticsSummary:
+            messages.editableConfigurationPromptDiagnosticsSummary,
+          validationErrorPrefix:
+            messages.editableConfigurationPromptValidationErrorPrefix,
+          validationLoading:
+            messages.editableConfigurationPromptValidationLoading,
+          variableDiagnosticLabel:
+            messages.editableConfigurationPromptVariableDiagnosticLabel,
+        }}
+        validationState={state.promptValidationState}
+      />
+    );
+  }
+
   if (state.promptHelpState.status === "loading") {
     return (
       <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
@@ -127,11 +158,24 @@ function EditableConfigurationPromptFeedback({
     );
   }
 
+  const readyPromptState: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  > & {
+    promptHelpState: Extract<
+      EditableWorkstationPromptHelpState,
+      { status: "ready" }
+    >;
+  } = {
+    ...state,
+    promptHelpState: state.promptHelpState,
+  };
+
   return (
     <EditableConfigurationReadyPromptFeedback
       diagnosticsId={diagnosticsId}
       messages={messages}
-      state={state}
+      state={readyPromptState}
     />
   );
 }
@@ -154,9 +198,27 @@ function EditableConfigurationReadyPromptFeedback({
   };
 }) {
   const [expanded, setExpanded] = useState(false);
+  const previousDiagnosticsCountRef = useRef(state.promptDiagnostics.length);
   const sectionId = useId();
   const contentId = `${sectionId}-prompt-feedback-content`;
   const promptHelpState = state.promptHelpState;
+  const hasSyntaxDiagnostics = state.promptDiagnostics.some(
+    (diagnostic) => diagnostic.kind === "SYNTAX_ERROR",
+  );
+  const showInlineValidationPanel =
+    !expanded &&
+    (hasSyntaxDiagnostics || state.promptValidationState.status === "error");
+
+  useEffect(() => {
+    if (
+      previousDiagnosticsCountRef.current === 0 &&
+      state.promptDiagnostics.length > 0
+    ) {
+      setExpanded(true);
+    }
+
+    previousDiagnosticsCountRef.current = state.promptDiagnostics.length;
+  }, [state.promptDiagnostics.length]);
 
   return (
     <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
@@ -187,7 +249,26 @@ function EditableConfigurationReadyPromptFeedback({
           {expanded ? messages.collapseAction : messages.expandAction}
         </ExpandablePanelTrigger>
       </div>
-      {!expanded && state.promptDiagnostics.length > 0 ? (
+      {showInlineValidationPanel ? (
+        <PromptEditorDiagnosticsPanel
+          diagnostics={state.promptDiagnostics}
+          id={diagnosticsId}
+          labels={{
+            diagnosticsHeading:
+              messages.editableConfigurationPromptDiagnosticsHeading,
+            diagnosticsSummary:
+              messages.editableConfigurationPromptDiagnosticsSummary,
+            validationErrorPrefix:
+              messages.editableConfigurationPromptValidationErrorPrefix,
+            validationLoading:
+              messages.editableConfigurationPromptValidationLoading,
+            variableDiagnosticLabel:
+              messages.editableConfigurationPromptVariableDiagnosticLabel,
+          }}
+          validationState={state.promptValidationState}
+        />
+      ) : null}
+      {!expanded && !showInlineValidationPanel && state.promptDiagnostics.length > 0 ? (
         <div aria-hidden="true" className="sr-only" id={diagnosticsId} />
       ) : null}
       <Collapsible onOpenChange={setExpanded} open={expanded}>
