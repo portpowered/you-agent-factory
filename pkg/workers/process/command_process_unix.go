@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// commandProcessGroupGracePeriod is the default bounded wait after a graceful
-// process-group signal before force-killing remaining members (post-run cleanup).
-const commandProcessGroupGracePeriod = 2 * time.Second
-
 type commandProcessTree struct{}
 
 func configureCommandProcessTree(cmd *exec.Cmd) {
@@ -79,7 +75,7 @@ func closeCommandProcessTree(cmd *exec.Cmd, _ *commandProcessTree, logCtx comman
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "missing command")
 		return
 	}
-	_ = terminateCommandProcessGroup(cmd, commandProcessGroupGracePeriod, logCtx)
+	_ = terminateCommandProcessGroup(cmd, postRunCleanupGracePeriod(), logCtx)
 }
 
 func commandProcessGroupRunning(pgid int) bool {

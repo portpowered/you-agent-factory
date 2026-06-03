@@ -8,7 +8,7 @@
 //
 // Background children that stay in the parent's process group (Unix) or job (Windows)
 // are terminated after cmd.Wait returns, including when the parent exits with code 0.
-// Post-run cleanup sends SIGTERM, waits up to commandProcessGroupGracePeriod (2s), then
+// Post-run cleanup sends SIGTERM, waits up to defaultPostRunCleanupGracePeriod (10s), then
 // SIGKILLs the group on Unix; on Windows it polls job active processes, may call
 // TerminateJobObject, then closes the job handle (KILL_ON_JOB_CLOSE). Parent stdout,
 // stderr, and exit code are captured before cleanup runs and are not changed by cleanup.

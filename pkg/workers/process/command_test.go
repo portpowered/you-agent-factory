@@ -7,10 +7,12 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -669,6 +671,16 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 		writeCommandHelperPID()
 		time.Sleep(10 * time.Second)
 		os.Exit(0)
+	case "pid-term-exit":
+		writeCommandHelperPID()
+		sigc := make(chan os.Signal, 1)
+		signal.Notify(sigc, syscall.SIGTERM)
+		<-sigc
+		os.Exit(0)
+	case "pid-ignore-term":
+		writeCommandHelperPID()
+		signal.Ignore(syscall.SIGTERM)
+		select {}
 	default:
 		fmt.Fprintf(os.Stderr, "unknown helper mode %q\n", mode)
 		os.Exit(2)

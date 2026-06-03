@@ -10,10 +10,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// commandProcessJobGracePeriod is the default bounded wait for job members to exit
-// after the parent command completes before force-terminating the job (post-run cleanup).
-const commandProcessJobGracePeriod = 2 * time.Second
-
 // jobobjectBasicAccountingInformation mirrors JOBOBJECT_BASIC_ACCOUNTING_INFORMATION
 // (see golang.org/x/sys/windows JobObjectBasicAccountingInformation).
 type jobobjectBasicAccountingInformation struct {
@@ -148,7 +144,7 @@ func closeCommandProcessTree(_ *exec.Cmd, tree *commandProcessTree, logCtx comma
 		logCtx.logCompleted(commandProcessCleanupOutcomeNoOp, 0, nil, "job handle not attached")
 		return
 	}
-	_ = terminateCommandJobGroup(tree.job, commandProcessJobGracePeriod, logCtx)
+	_ = terminateCommandJobGroup(tree.job, postRunCleanupGracePeriod(), logCtx)
 	windows.CloseHandle(tree.job)
 	tree.job = 0
 }
