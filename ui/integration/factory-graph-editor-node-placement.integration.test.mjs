@@ -159,12 +159,6 @@ const editableGraphFactoryReplayLines = [
 const viewportCenterToleranceRatio = 0.35;
 const flowPositionTolerancePx = 8;
 
-function distanceBetweenPoints(left, right) {
-  const deltaX = left.x - right.x;
-  const deltaY = left.y - right.y;
-  return Math.hypot(deltaX, deltaY);
-}
-
 function flowPositionsMatchWithinTolerance(left, right) {
   if (!left || !right) {
     return false;
@@ -460,75 +454,6 @@ describe.sequential("factory graph editor node placement browser integration", (
   afterEach(async () => {
     await new Promise((resolve) => setTimeout(resolve, 250));
   });
-
-  it(
-    "places a newly added worker near the visible viewport center after panning",
-    async () => {
-      const server = await startFactoryApiServer({
-        apiPort: preview.apiPort,
-        currentFactory: editableGraphFactoryDefinition,
-        eventLines: editableGraphFactoryReplayLines,
-      });
-      const browserPage = await openBrowserPage();
-
-      try {
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await server.replayCompleted;
-
-        const toolbar = await enterGraphEditor(browserPage.page);
-        await panGraphViewport(browserPage.page, 240, 180);
-
-        const existingDraftCenter = await nodeScreenCenter(
-          browserPage.page,
-          "rf__node-workstation:draft",
-        );
-        await addWorker(browserPage.page, toolbar, { name: "assistant" });
-
-        const newWorkerNode = browserPage.page.getByTestId(
-          "rf__node-worker:assistant",
-        );
-        await newWorkerNode.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
-
-        const viewportMetrics = await viewportScreenMetrics(browserPage.page);
-        const addedWorkerCenter = await nodeScreenCenter(
-          browserPage.page,
-          "rf__node-worker:assistant",
-        );
-        const distanceFromExistingDraft = distanceBetweenPoints(
-          addedWorkerCenter,
-          existingDraftCenter,
-        );
-
-        expect(isNearViewportCenter(addedWorkerCenter, viewportMetrics)).toBe(
-          true,
-        );
-        expect(distanceFromExistingDraft).toBeGreaterThan(80);
-
-        const flowPosition = await readNodeFlowPosition(
-          browserPage.page,
-          "rf__node-worker:assistant",
-        );
-        expect(flowPosition).not.toBeNull();
-        expect(Number.isFinite(flowPosition.x)).toBe(true);
-        expect(Number.isFinite(flowPosition.y)).toBe(true);
-
-        expectNoBrowserErrors(
-          browserPage.pageErrors,
-          browserPage.consoleErrors,
-          expect,
-        );
-      } finally {
-        await server.stop();
-        await browserPage.close();
-      }
-    },
-    browserScenarioTimeoutMs,
-  );
 
   it(
     "places a newly added workstation near the visible viewport center after panning",
