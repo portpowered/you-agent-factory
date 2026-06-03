@@ -744,6 +744,59 @@ describe("resolveEditableWorkstationValues", () => {
     });
   });
 
+  it("preserves edited MATCHES_FIELDS inputKey verbatim when applying the workstation draft", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.4",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      selectedNode,
+    );
+    expect(editableValues).not.toBeNull();
+
+    const editedSelector = '.Tags["_last_output"]';
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        ...editableWorkstationDraftFromValues(
+          editableValues as NonNullable<typeof editableValues>,
+        ),
+        guards: [
+          {
+            matchConfig: { inputKey: editedSelector },
+            type: "MATCHES_FIELDS",
+          },
+        ],
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]?.guards).toEqual([
+      {
+        matchConfig: { inputKey: editedSelector },
+        type: "MATCHES_FIELDS",
+      },
+    ]);
+  });
+
   it("writes draft guards onto the selected workstation", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",

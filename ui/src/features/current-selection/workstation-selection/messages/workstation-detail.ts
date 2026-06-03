@@ -152,6 +152,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `Spawned-by workstation ${workstation} is not available in this factory.`,
     matchesFieldsGuardInputKeyFieldLabel: "Field selector",
+    editableConfigurationGuardSelectorEditorLoading:
+      "Starting the field selector editor.",
+    editableConfigurationGuardSelectorEditorError:
+      "The field selector editor could not be started. Reload this workstation and try again.",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
     promptFieldLabel: "Prompt",
@@ -399,6 +403,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `spawned-by ワークステーション ${workstation} はこのファクトリーで利用できません。`,
     matchesFieldsGuardInputKeyFieldLabel: "フィールドセレクター",
+    editableConfigurationGuardSelectorEditorLoading:
+      "フィールドセレクターエディターを起動しています。",
+    editableConfigurationGuardSelectorEditorError:
+      "フィールドセレクターエディターを起動できませんでした。このワークステーションを再読み込みして、もう一度お試しください。",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
     promptFieldLabel: "プロンプト",
@@ -644,6 +652,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `spawned-by 워크스테이션 ${workstation} 은(는) 이 팩토리에서 사용할 수 없습니다.`,
     matchesFieldsGuardInputKeyFieldLabel: "필드 선택자",
+    editableConfigurationGuardSelectorEditorLoading:
+      "필드 선택자 편집기를 시작하는 중입니다.",
+    editableConfigurationGuardSelectorEditorError:
+      "필드 선택자 편집기를 시작할 수 없습니다. 이 워크스테이션을 다시 로드한 후 다시 시도하세요.",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
     promptFieldLabel: "프롬프트",
@@ -872,6 +884,9 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `spawned-by 工作站 ${workstation} 在当前工厂中不可用。`,
     matchesFieldsGuardInputKeyFieldLabel: "字段选择器",
+    editableConfigurationGuardSelectorEditorLoading: "正在启动字段选择器编辑器。",
+    editableConfigurationGuardSelectorEditorError:
+      "无法启动字段选择器编辑器。请重新加载此工作站后重试。",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",
     promptFieldLabel: "提示词",

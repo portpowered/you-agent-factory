@@ -75,6 +75,39 @@ function buildGuardedFactoryFixture(): CurrentFactoryDocument {
   };
 }
 
+function buildEditedVisitCountGuardDraft(
+  editableValues: NonNullable<
+    ReturnType<typeof resolveEditableWorkstationValues>
+  >,
+) {
+  return {
+    ...editableWorkstationDraftFromValues(editableValues),
+    guards: [
+      { maxVisits: 4, type: "VISIT_COUNT" as const, workstation: "Plan" },
+    ],
+    inputs: [
+      { guards: [], state: "queued", workType: "planItem" },
+      {
+        guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" as const }],
+        state: "queued",
+        workType: "story",
+      },
+    ],
+  };
+}
+
+function buildSavedDocumentVersion(
+  normalizedFactory: CurrentFactoryDocument,
+): CurrentFactoryDocument {
+  return {
+    ...normalizedFactory,
+    version: {
+      logical: "8",
+      physical: "2026-06-01T14:00:00Z",
+    },
+  };
+}
+
 describe("workstation guard save round-trip", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -91,20 +124,7 @@ describe("workstation guard save round-trip", () => {
       return;
     }
 
-    const editedDraft = {
-      ...editableWorkstationDraftFromValues(editableValues),
-      guards: [
-        { maxVisits: 4, type: "VISIT_COUNT" as const, workstation: "Plan" },
-      ],
-      inputs: [
-        { guards: [], state: "queued", workType: "planItem" },
-        {
-          guards: [{ matchInput: "planItem", type: "SAME_TRACE_ID" as const }],
-          state: "queued",
-          workType: "story",
-        },
-      ],
-    };
+    const editedDraft = buildEditedVisitCountGuardDraft(editableValues);
 
     expect(
       validateEditableWorkstationDraft(editedDraft, editableValues, {
@@ -156,13 +176,7 @@ describe("workstation guard save round-trip", () => {
     );
     expect(validationResult.targets).toEqual([]);
 
-    const savedDocument: CurrentFactoryDocument = {
-      ...normalizedFactory,
-      version: {
-        logical: "8",
-        physical: "2026-06-01T14:00:00Z",
-      },
-    };
+    const savedDocument = buildSavedDocumentVersion(normalizedFactory);
     const saveFetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(savedDocument), {
         headers: { "Content-Type": "application/json" },
@@ -210,5 +224,75 @@ describe("workstation guard save round-trip", () => {
         },
       ],
     });
+  });
+});
+
+describe("workstation guard MATCHES_FIELDS save round-trip", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("saves edited MATCHES_FIELDS inputKey without normalizing selector text", async () => {
+    const factory = buildGuardedFactoryFixture();
+    const editableValues = resolveEditableWorkstationValues(
+      factory,
+      reviewWorkstationNode,
+    );
+    expect(editableValues).not.toBeNull();
+    if (!editableValues) {
+      return;
+    }
+
+    const editedSelector = '.Tags["_last_output"]';
+    const editedDraft = {
+      ...editableWorkstationDraftFromValues(editableValues),
+      guards: [
+        {
+          matchConfig: { inputKey: editedSelector },
+          type: "MATCHES_FIELDS" as const,
+        },
+      ],
+    };
+
+    const pendingFactory = applyEditableWorkstationDraft(
+      factory,
+      reviewWorkstationNode,
+      editedDraft,
+    );
+    expect(pendingFactory).not.toBeNull();
+    if (!pendingFactory) {
+      return;
+    }
+
+    const normalizedFactory = normalizeFactoryDefinition(pendingFactory);
+    expect(normalizedFactory.workstations?.[1]?.guards).toEqual([
+      {
+        matchConfig: { inputKey: editedSelector },
+        type: "MATCHES_FIELDS",
+      },
+    ]);
+
+    const saveFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(buildSavedDocumentVersion(normalizedFactory)), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+        statusText: "OK",
+      }),
+    );
+    await saveFactoryForSessionDocument(
+      {
+        baseVersion: factory.version,
+        factoryDefinition: normalizedFactory,
+        mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+      },
+      { fetch: saveFetch },
+    );
+
+    const saveRequestBody = JSON.parse(
+      String(saveFetch.mock.calls[0]?.[1]?.body),
+    );
+    expect(
+      saveRequestBody.factory.workstations[1].guards[0].matchConfig.inputKey,
+    ).toBe(editedSelector);
   });
 });
