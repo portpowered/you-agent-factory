@@ -67,6 +67,7 @@ export function EditableConfigurationPromptInput({
           )}
           diagnostics={state.promptDiagnostics}
           hasDiagnostics={state.promptDiagnostics.length > 0}
+          height="100%"
           loadingMessage={messages.editableConfigurationPromptEditorLoading}
           modelPath={CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH}
           onChange={state.onPromptChange}

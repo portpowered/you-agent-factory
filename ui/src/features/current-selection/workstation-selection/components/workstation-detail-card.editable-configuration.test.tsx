@@ -1546,20 +1546,20 @@ describe("WorkstationDetailCard editable configuration", () => {
       "[data-prompt-editor-resizable='true']",
     ) as HTMLElement;
     const handle = within(section).getByRole("slider", {
-      name: "Resize prompt editor width",
+      name: "Resize prompt editor height",
     });
     const promptEditor = screen.getByLabelText("Prompt");
 
-    Object.defineProperty(resizable, "offsetWidth", {
+    Object.defineProperty(resizable, "offsetHeight", {
       configurable: true,
-      value: 520,
+      value: 216,
     });
 
-    fireEvent.pointerDown(handle, { button: 0, clientX: 120, pointerId: 11 });
-    fireEvent.pointerMove(handle, { clientX: 220, pointerId: 11 });
+    fireEvent.pointerDown(handle, { button: 0, clientY: 120, pointerId: 11 });
+    fireEvent.pointerMove(handle, { clientY: 220, pointerId: 11 });
     fireEvent.pointerUp(handle, { pointerId: 11 });
 
-    expect(resizable.style.width).toBe("620px");
+    expect(resizable.style.height).toBe("316px");
     expect(promptEditor.parentElement?.getAttribute("aria-describedby")).toBe(
       "editable-workstation-prompt-error editable-workstation-prompt-diagnostics",
     );

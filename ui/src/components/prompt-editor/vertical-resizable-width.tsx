@@ -7,41 +7,38 @@ import {
 } from "react";
 import { cn } from "../../lib/cn";
 import {
-  clampPromptEditorResizeWidth,
-  PROMPT_EDITOR_RESIZE_MAX_WIDTH_PX,
-  PROMPT_EDITOR_RESIZE_MIN_WIDTH_PX,
-  resolvePromptEditorResizeMaxWidth,
+  clampPromptEditorResizeHeight,
+  PROMPT_EDITOR_RESIZE_DEFAULT_HEIGHT,
+  PROMPT_EDITOR_RESIZE_MAX_HEIGHT_PX,
+  PROMPT_EDITOR_RESIZE_MIN_HEIGHT_PX,
 } from "./prompt-editor-resize-bounds";
 
 interface VerticalResizableWidthProps {
   children: ReactNode;
   className?: string;
-  maxWidth?: number;
-  minWidth?: number;
+  defaultHeight?: string;
+  maxHeight?: number;
+  minHeight?: number;
   resizeHandleLabel: string;
 }
 
 export function VerticalResizableWidth({
   children,
   className,
-  maxWidth = PROMPT_EDITOR_RESIZE_MAX_WIDTH_PX,
-  minWidth = PROMPT_EDITOR_RESIZE_MIN_WIDTH_PX,
+  defaultHeight = PROMPT_EDITOR_RESIZE_DEFAULT_HEIGHT,
+  maxHeight = PROMPT_EDITOR_RESIZE_MAX_HEIGHT_PX,
+  minHeight = PROMPT_EDITOR_RESIZE_MIN_HEIGHT_PX,
   resizeHandleLabel,
 }: VerticalResizableWidthProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [widthPx, setWidthPx] = useState<number | null>(null);
+  const [heightPx, setHeightPx] = useState<number | null>(null);
 
   const resolveBounds = useCallback(() => {
-    const parentWidth =
-      containerRef.current?.parentElement?.clientWidth ??
-      containerRef.current?.offsetWidth ??
-      maxWidth;
-
     return {
-      maxWidth: resolvePromptEditorResizeMaxWidth(maxWidth, parentWidth),
-      minWidth,
+      maxHeight,
+      minHeight,
     };
-  }, [maxWidth, minWidth]);
+  }, [maxHeight, minHeight]);
 
   const handleResizePointerDown = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -56,23 +53,23 @@ export function VerticalResizableWidth({
       }
 
       const bounds = resolveBounds();
-      const startWidth = widthPx ?? container.offsetWidth;
-      if (widthPx === null) {
-        setWidthPx(startWidth);
+      const startHeight = heightPx ?? container.offsetHeight;
+      if (heightPx === null) {
+        setHeightPx(startHeight);
       }
 
-      const startX = event.clientX;
+      const startY = event.clientY;
       const handle = event.currentTarget;
       if (typeof handle.setPointerCapture === "function") {
         handle.setPointerCapture(event.pointerId);
       }
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
-        const nextWidth = clampPromptEditorResizeWidth(
-          startWidth + (moveEvent.clientX - startX),
+        const nextHeight = clampPromptEditorResizeHeight(
+          startHeight + (moveEvent.clientY - startY),
           bounds,
         );
-        setWidthPx(nextWidth);
+        setHeightPx(nextHeight);
       };
 
       const endResize = () => {
@@ -88,33 +85,34 @@ export function VerticalResizableWidth({
       handle.addEventListener("pointerup", endResize);
       handle.addEventListener("pointercancel", endResize);
     },
-    [resolveBounds, widthPx],
+    [heightPx, resolveBounds],
   );
 
-  const resolvedWidth = widthPx ?? "100%";
+  const resolvedHeight = heightPx ?? defaultHeight;
   const ariaValueNow =
-    typeof resolvedWidth === "number" ? resolvedWidth : undefined;
+    typeof resolvedHeight === "number" ? resolvedHeight : undefined;
   const bounds = resolveBounds();
 
   return (
     <div
-      className={cn("relative max-w-full min-w-0", className)}
+      className={cn("relative min-h-0 min-w-0", className)}
       data-prompt-editor-resizable="true"
       ref={containerRef}
       style={{
-        width:
-          typeof resolvedWidth === "number"
-            ? `${resolvedWidth}px`
-            : resolvedWidth,
+        height:
+          typeof resolvedHeight === "number"
+            ? `${resolvedHeight}px`
+            : resolvedHeight,
       }}
     >
       {children}
       <div
         aria-label={resizeHandleLabel}
-        aria-valuemax={bounds.maxWidth}
-        aria-valuemin={bounds.minWidth}
+        aria-orientation="vertical"
+        aria-valuemax={bounds.maxHeight}
+        aria-valuemin={bounds.minHeight}
         aria-valuenow={ariaValueNow}
-        className="absolute inset-y-0 right-0 z-10 flex w-3 translate-x-1/2 cursor-col-resize touch-none items-stretch justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
+        className="absolute inset-x-0 bottom-0 z-10 flex h-3 translate-y-1/2 cursor-row-resize touch-none items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
         data-prompt-editor-resize-handle="true"
         onPointerDown={handleResizePointerDown}
         role="slider"
@@ -122,7 +120,7 @@ export function VerticalResizableWidth({
       >
         <span
           aria-hidden="true"
-          className="my-2 w-px rounded-full bg-af-border transition-colors hover:bg-af-border-strong"
+          className="mx-2 h-px flex-1 rounded-full bg-af-border transition-colors hover:bg-af-border-strong"
         />
       </div>
     </div>

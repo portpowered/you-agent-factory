@@ -1,23 +1,13 @@
-export const PROMPT_EDITOR_RESIZE_MIN_WIDTH_PX = 280;
-export const PROMPT_EDITOR_RESIZE_MAX_WIDTH_PX = 960;
+export const PROMPT_EDITOR_RESIZE_DEFAULT_HEIGHT = "13.5rem";
+export const PROMPT_EDITOR_RESIZE_MIN_HEIGHT_PX = 160;
+export const PROMPT_EDITOR_RESIZE_MAX_HEIGHT_PX = 640;
 
-export function clampPromptEditorResizeWidth(
-  width: number,
-  bounds: { maxWidth: number; minWidth: number },
+export function clampPromptEditorResizeHeight(
+  height: number,
+  bounds: { maxHeight: number; minHeight: number },
 ): number {
   return Math.min(
-    bounds.maxWidth,
-    Math.max(bounds.minWidth, Math.round(width)),
+    bounds.maxHeight,
+    Math.max(bounds.minHeight, Math.round(height)),
   );
-}
-
-export function resolvePromptEditorResizeMaxWidth(
-  configuredMaxWidth: number,
-  parentWidth: number,
-): number {
-  if (parentWidth <= 0) {
-    return configuredMaxWidth;
-  }
-
-  return Math.min(configuredMaxWidth, parentWidth);
 }
