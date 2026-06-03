@@ -9,6 +9,7 @@ import {
   type DashboardWorkItemSelection,
   type DashboardWorkstationRequestSelection,
   findFactoryWorkerInSnapshot,
+  findWorkstationNodeIDForPlace,
   resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
 } from "./dashboardSelection";
@@ -522,6 +523,99 @@ describe("resolveDashboardSelection", () => {
     expect(resolved).toEqual({
       kind: "node",
       nodeId: "review",
+    });
+  });
+
+  it("surfaces replayed work content from projected runtime refs for tracked work-item selection", () => {
+    const payloadStructureRequest = event(
+      "event-payload-structure",
+      0,
+      FACTORY_EVENT_TYPES.initialStructureRequest,
+      {
+        factory: {
+          workers: [{ name: "reviewer", type: "MODEL_WORKER" }],
+          workTypes: [
+            {
+              name: "task",
+              states: [
+                { name: "init", type: "INITIAL" },
+                { name: "review", type: "PROCESSING" },
+              ],
+            },
+          ],
+          workstations: [
+            {
+              id: "t-review",
+              inputs: [{ state: "init", workType: "task" }],
+              name: "Review",
+              outputs: [{ state: "review", workType: "task" }],
+              worker: "reviewer",
+            },
+          ],
+        },
+      },
+    );
+    const payloadWorkRequest = event(
+      "event-payload-work-request",
+      1,
+      FACTORY_EVENT_TYPES.workRequest,
+      {
+        source: "external-submit",
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            content: [{ type: "text", text: "hello from sse" }],
+            name: "work-payload-1",
+            traceId: "trace-work-payload-1",
+            workId: "work-payload-1",
+            workTypeName: "task",
+          },
+        ],
+      },
+    );
+    payloadWorkRequest.context.requestId = "request/work-payload-1";
+    payloadWorkRequest.context.traceIds = ["trace-work-payload-1"];
+    payloadWorkRequest.context.workIds = ["work-payload-1"];
+
+    const snapshot = buildFactoryTimelineSnapshot(
+      [payloadStructureRequest, payloadWorkRequest],
+      1,
+    );
+    const placeID = Object.entries(
+      snapshot.runtime.current_work_items_by_place_id ?? {},
+    ).find(([, workItems]) =>
+      workItems.some((workItem) => workItem.work_id === "work-payload-1"),
+    )?.[0];
+    if (!placeID) {
+      throw new Error("expected replayed work item on a current-work place");
+    }
+    const nodeID = findWorkstationNodeIDForPlace(snapshot, placeID);
+    if (!nodeID) {
+      throw new Error("expected workstation node for current-work place");
+    }
+
+    const resolved = resolveDashboardSelection({
+      selection: {
+        kind: "work-item",
+        nodeId: nodeID,
+        workItem: {
+          display_name: "work-payload-1",
+          trace_id: "trace-work-payload-1",
+          work_id: "work-payload-1",
+          work_type_id: "task",
+        },
+      },
+      snapshot,
+    });
+
+    expect(resolved).toMatchObject({
+      kind: "work-item",
+      nodeId: nodeID,
+      workItem: {
+        content: [{ type: "text", text: "hello from sse" }],
+        payload_status: "RESOLVED",
+        work_id: "work-payload-1",
+      },
     });
   });
 });
