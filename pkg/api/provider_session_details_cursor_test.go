@@ -34,6 +34,38 @@ func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testi
 	if resp.Parse.EventCount != 1 || resp.Parse.LineCount < 1 {
 		t.Fatalf("parse summary = %#v, want readable blob counts", resp.Parse)
 	}
+	if len(resp.Transcript) != 1 || resp.Transcript[0].Text == nil || *resp.Transcript[0].Text != "Hello from API fixture" {
+		t.Fatalf("transcript = %#v, want one readable bubble entry", resp.Transcript)
+	}
+	if resp.Parse.TokenUsage == nil || resp.Parse.TokenUsage.InputTokens == nil || *resp.Parse.TokenUsage.InputTokens != 100 {
+		t.Fatalf("token usage = %#v, want input tokens from fixture meta", resp.Parse.TokenUsage)
+	}
+	if resp.Parse.TokenUsage.CacheWriteTokens == nil || *resp.Parse.TokenUsage.CacheWriteTokens != 10 {
+		t.Fatalf("token usage = %#v, want cacheWriteTokens", resp.Parse.TokenUsage)
+	}
+	if resp.Parse.TokenUsage.TotalTokens == nil || *resp.Parse.TokenUsage.TotalTokens != 175 {
+		t.Fatalf("token usage total = %#v, want 175", resp.Parse.TokenUsage.TotalTokens)
+	}
+}
+
+func TestGetProviderSessionDetails_CursorUnavailableContentHasNoPlaintextTranscript(t *testing.T) {
+	root, sessionID := writeUnavailableCursorAgentStorageFixture(t)
+	srv := newTestServerWithCursorRoot(root)
+
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+sessionID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
+	if len(resp.Transcript) != 0 {
+		t.Fatalf("transcript = %#v, want no decrypted plaintext", resp.Transcript)
+	}
+	if resp.Parse.UnknownEventCount != 1 || len(resp.Parse.UnknownEvents) != 1 {
+		t.Fatalf("parse summary = %#v, want unavailable unknown events", resp.Parse)
+	}
 }
 
 func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {
@@ -93,6 +125,40 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
 		`{"createdAt":1000,"agentId":"cursor-api-readable","name":"API fixture session"}`,
 	); err != nil {
 		t.Fatalf("insert meta: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO meta (key, value) VALUES (?, ?)`,
+		"1",
+		`{"usage":{"inputTokens":100,"outputTokens":25,"cacheReadTokens":40,"cacheWriteTokens":10}}`,
+	); err != nil {
+		t.Fatalf("insert usage meta: %v", err)
+	}
+	return root, sessionID
+}
+
+func writeUnavailableCursorAgentStorageFixture(t *testing.T) (root string, sessionID string) {
+	t.Helper()
+	root = t.TempDir()
+	sessionID = "cursor-api-unavailable"
+	dbPath := filepath.Join(root, "workspace-hash", sessionID, "store.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT)`); err != nil {
+		t.Fatalf("create blobs table: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO blobs (key, value) VALUES (?, ?)`,
+		"encrypted-blob",
+		string([]byte{0x00, 0x01, 0x02, 0x03, 0xff, 0xfe, 0xfd, 0xfc, 0xfb, 0xfa}),
+	); err != nil {
+		t.Fatalf("insert encrypted blob: %v", err)
 	}
 	return root, sessionID
 }

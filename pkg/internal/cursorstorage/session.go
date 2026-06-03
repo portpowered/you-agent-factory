@@ -15,6 +15,7 @@ type SessionData struct {
 	Composers          []*RawComposer
 	Contexts           map[string][]*MessageContext
 	ParseStats         SessionParseStats
+	TokenUsage         SessionTokenUsage
 }
 
 // SessionParseStats summarizes readable vs unavailable blob records while parsing.
@@ -38,7 +39,7 @@ func LoadSessionData(resolved ResolvedStoreDB) (*SessionData, error) {
 	}
 	_ = info
 
-	bubbles, composers, contexts, stats, err := loadSessionFromStoreDBWithStats(resolved.AbsolutePath)
+	bubbles, composers, contexts, stats, tokenUsage, err := loadSessionFromStoreDBWithStats(resolved.AbsolutePath)
 	if err != nil {
 		return nil, err
 	}
@@ -49,6 +50,7 @@ func LoadSessionData(resolved ResolvedStoreDB) (*SessionData, error) {
 		Composers:   composers,
 		Contexts:    contexts,
 		ParseStats:  stats,
+		TokenUsage:  tokenUsage,
 	}, nil
 }
 

@@ -947,6 +947,7 @@ export interface components {
     ProviderSessionTokenUsage: {
       inputTokens?: number;
       cachedInputTokens?: number;
+      cacheWriteTokens?: number;
       outputTokens?: number;
       reasoningOutputTokens?: number;
       totalTokens?: number;

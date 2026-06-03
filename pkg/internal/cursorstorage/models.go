@@ -155,6 +155,25 @@ func (rb *RawBubble) GetTimestamp() time.Time {
 	return time.Unix(0, rb.Timestamp*int64(time.Millisecond))
 }
 
+// DisplayText returns the best-effort plaintext body for transcript mapping.
+func (rb *RawBubble) DisplayText() string {
+	if rb == nil {
+		return ""
+	}
+	if rb.Text != "" {
+		return rb.Text
+	}
+	return rb.RichText
+}
+
+// TranscriptEntryType maps cursor-agent bubble type to provider-neutral transcript types.
+func (rb *RawBubble) TranscriptEntryType() string {
+	if rb != nil && rb.Type == 1 {
+		return "user_message"
+	}
+	return "assistant_message"
+}
+
 // GetTimestamp returns a time.Time from the timestamp
 func (rc *RawComposer) GetCreatedAt() time.Time {
 	if rc.CreatedAt == 0 {

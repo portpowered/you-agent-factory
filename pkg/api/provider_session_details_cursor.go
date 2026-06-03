@@ -64,8 +64,9 @@ func mapCursorSessionToProviderSessionDetail(
 		Turns:              []factoryapi.ProviderSessionTurnSummary{},
 		FunctionCalls:      []factoryapi.ProviderSessionFunctionCallSummary{},
 		Reasoning:          []factoryapi.ProviderSessionReasoningSummary{},
-		ParseErrors:        []factoryapi.ProviderSessionLineError{},
-		UnknownEvents:      []factoryapi.ProviderSessionUnknownEvent{},
+		ParseErrors:        cursorParseErrorsFromStats(stats),
+		UnknownEvents:      cursorUnknownEventsFromStats(stats),
+		TokenUsage:         mapCursorTokenUsage(session.TokenUsage),
 	}
 
 	return factoryapi.ProviderSessionDetailResponse{
@@ -80,6 +81,100 @@ func mapCursorSessionToProviderSessionDetail(
 			ModifiedAt:   modifiedAt,
 		},
 		Parse:      summary,
-		Transcript: []factoryapi.ProviderSessionTranscriptEntry{},
+		Transcript: cursorTranscriptFromSession(session),
 	}
+}
+
+func mapCursorTokenUsage(usage cursorstorage.SessionTokenUsage) *factoryapi.ProviderSessionTokenUsage {
+	if usage.InputTokens == nil && usage.OutputTokens == nil &&
+		usage.CacheReadTokens == nil && usage.CacheWriteTokens == nil {
+		return nil
+	}
+	mapped := &factoryapi.ProviderSessionTokenUsage{
+		InputTokens:       usage.InputTokens,
+		OutputTokens:      usage.OutputTokens,
+		CachedInputTokens: usage.CacheReadTokens,
+		CacheWriteTokens:  usage.CacheWriteTokens,
+	}
+	mapped.TotalTokens = cursorTotalTokens(usage)
+	return mapped
+}
+
+func cursorTotalTokens(usage cursorstorage.SessionTokenUsage) *int {
+	total := 0
+	present := false
+	if usage.InputTokens != nil {
+		total += *usage.InputTokens
+		present = true
+	}
+	if usage.OutputTokens != nil {
+		total += *usage.OutputTokens
+		present = true
+	}
+	if usage.CacheReadTokens != nil {
+		total += *usage.CacheReadTokens
+		present = true
+	}
+	if usage.CacheWriteTokens != nil {
+		total += *usage.CacheWriteTokens
+		present = true
+	}
+	if !present {
+		return nil
+	}
+	return &total
+}
+
+func cursorTranscriptFromSession(session *cursorstorage.SessionData) []factoryapi.ProviderSessionTranscriptEntry {
+	if session == nil {
+		return []factoryapi.ProviderSessionTranscriptEntry{}
+	}
+	ordered := session.OrderedBubbles()
+	transcript := make([]factoryapi.ProviderSessionTranscriptEntry, 0, len(ordered))
+	for _, bubble := range ordered {
+		text := truncateSessionText(bubble.DisplayText())
+		if text == "" {
+			continue
+		}
+		var timestamp *time.Time
+		if ts := bubble.GetTimestamp(); !ts.IsZero() {
+			utc := ts.UTC()
+			timestamp = &utc
+		}
+		entryType := factoryapi.ProviderSessionTranscriptEntryType(bubble.TranscriptEntryType())
+		transcript = append(transcript, factoryapi.ProviderSessionTranscriptEntry{
+			Order:      len(transcript) + 1,
+			SourceType: stringPtrIfNotEmpty("cursor_bubble"),
+			Text:       stringPtrIfNotEmpty(text),
+			Timestamp:  timestamp,
+			Type:       entryType,
+		})
+	}
+	return transcript
+}
+
+func cursorParseErrorsFromStats(stats cursorstorage.SessionParseStats) []factoryapi.ProviderSessionLineError {
+	if stats.MalformedBlobCount+stats.MalformedMetaCount == 0 {
+		return []factoryapi.ProviderSessionLineError{}
+	}
+	return []factoryapi.ProviderSessionLineError{
+		{
+			LineNumber: 1,
+			Message:    "cursor session store contained malformed blob or meta records",
+		},
+	}
+}
+
+func cursorUnknownEventsFromStats(stats cursorstorage.SessionParseStats) []factoryapi.ProviderSessionUnknownEvent {
+	if stats.UnavailableBlobCount == 0 {
+		return []factoryapi.ProviderSessionUnknownEvent{}
+	}
+	events := make([]factoryapi.ProviderSessionUnknownEvent, 0, stats.UnavailableBlobCount)
+	for range stats.UnavailableBlobCount {
+		events = append(events, factoryapi.ProviderSessionUnknownEvent{
+			Type:        stringPtrIfNotEmpty("cursor_blob"),
+			PayloadType: stringPtrIfNotEmpty("unavailable"),
+		})
+	}
+	return events
 }

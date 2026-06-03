@@ -1762,6 +1762,7 @@ type ProviderSessionSourceMetadata struct {
 
 // ProviderSessionTokenUsage defines model for ProviderSessionTokenUsage.
 type ProviderSessionTokenUsage struct {
+	CacheWriteTokens      *int `json:"cacheWriteTokens,omitempty"`
 	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
 	InputTokens           *int `json:"inputTokens,omitempty"`
 	OutputTokens          *int `json:"outputTokens,omitempty"`

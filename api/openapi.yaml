@@ -2089,6 +2089,9 @@ components:
         cachedInputTokens:
           type: integer
           minimum: 0
+        cacheWriteTokens:
+          type: integer
+          minimum: 0
         outputTokens:
           type: integer
           minimum: 0

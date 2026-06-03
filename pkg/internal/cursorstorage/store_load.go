@@ -237,22 +237,22 @@ type MetaEntry struct {
 }
 
 // LoadSessionFromStoreDB loads session data from a single store.db file
-func LoadSessionFromStoreDB(dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, error) {
+func LoadSessionFromStoreDB(dbPath string) (map[string]*RawBubble, []*RawComposer, map[string][]*MessageContext, SessionTokenUsage, error) {
 	db, err := OpenDatabase(dbPath)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to open store.db: %w", err)
+		return nil, nil, nil, SessionTokenUsage{}, fmt.Errorf("failed to open store.db: %w", err)
 	}
 	defer func() { _ = db.Close() }()
 
 	// Query both tables
 	blobs, err := QueryBlobsTable(db)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to query blobs table: %w", err)
+		return nil, nil, nil, SessionTokenUsage{}, fmt.Errorf("failed to query blobs table: %w", err)
 	}
 
 	meta, err := QueryMetaTable(db)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to query meta table: %w", err)
+		return nil, nil, nil, SessionTokenUsage{}, fmt.Errorf("failed to query meta table: %w", err)
 	}
 
 	// Extract session ID from path: ~/.cursor/chats/{hash}/{session-id}/store.db
@@ -263,6 +263,7 @@ func LoadSessionFromStoreDB(dbPath string) (map[string]*RawBubble, []*RawCompose
 	bubbles := make(map[string]*RawBubble)
 	var composers []*RawComposer
 	contexts := make(map[string][]*MessageContext)
+	var sessionTokenUsage SessionTokenUsage
 
 	// Process blobs - they may contain bubble data
 	jsonParseFailures := 0
@@ -491,6 +492,7 @@ func LoadSessionFromStoreDB(dbPath string) (map[string]*RawBubble, []*RawCompose
 			}
 			LogInfo("Blob %d (key='%s') parsed successfully. Available fields: %v", i+1, blob.Key, keys)
 		}
+		mergeSessionTokenUsage(&sessionTokenUsage, tokenUsageFromData(data))
 
 		// Check if it's a bubble (has bubbleId)
 		if _, ok := data["bubbleId"].(string); ok {
@@ -640,6 +642,7 @@ func LoadSessionFromStoreDB(dbPath string) (map[string]*RawBubble, []*RawCompose
 			}
 			LogInfo("Meta %d (key='%s') parsed successfully. Available fields: %v", i+1, entry.Key, keys)
 		}
+		mergeSessionTokenUsage(&sessionTokenUsage, tokenUsageFromData(data))
 
 		// Extract session-level metadata from meta entry with key "0"
 		if entry.Key == "0" {
@@ -716,7 +719,7 @@ func LoadSessionFromStoreDB(dbPath string) (map[string]*RawBubble, []*RawCompose
 	LogInfo("LoadSessionFromStoreDB summary: %d blobs queried, %d meta queried, %d bubbles extracted, %d composers extracted, %d contexts extracted",
 		len(blobs), len(meta), len(bubbles), len(composers), len(contexts))
 
-	return bubbles, composers, contexts, nil
+	return bubbles, composers, contexts, sessionTokenUsage, nil
 }
 
 // LoadAllSessionsFromAgentStorage loads all sessions from all store.db files
@@ -726,7 +729,7 @@ func (r *AgentStorageReader) LoadAllSessionsFromAgentStorage() (map[string]*RawB
 	allContexts := make(map[string][]*MessageContext)
 
 	for _, dbPath := range r.storeDBPaths {
-		bubbles, composers, contexts, err := LoadSessionFromStoreDB(dbPath)
+		bubbles, composers, contexts, _, err := LoadSessionFromStoreDB(dbPath)
 		if err != nil {
 			// Log error but continue with other files
 			LogWarn("Failed to load session from %s: %v", dbPath, err)
