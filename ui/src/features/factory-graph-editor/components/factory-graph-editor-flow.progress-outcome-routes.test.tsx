@@ -122,6 +122,34 @@ const logicalMoveWorkstation: FactoryWorkstation = {
   worker: "",
 };
 
+const routelessLogicalMoveWorkstation: FactoryWorkstation = {
+  behavior: "CRON",
+  body: "Move work downstream on schedule.",
+  cron: {
+    schedule: "0 * * * *",
+    triggerAtStart: true,
+  },
+  inputs: [],
+  name: "router",
+  outputs: [],
+  type: "LOGICAL_MOVE",
+  worker: "",
+};
+
+const routelessLogicalMoveMissingOutputRoutesProjection =
+  projectFactoryValidationTargets([
+    {
+      code: "factory.workstation.missingOutputRoutes",
+      message: "missing output routes",
+      severity: "error",
+      subject: {
+        id: "router",
+        location: "OUTPUTS",
+        type: "WORKSTATION",
+      },
+    },
+  ]);
+
 const logicalMoveComparisonTopology: FactoryGraphTopology = {
   ...PROGRESS_OUTCOME_ROUTE_TOPOLOGY,
   nodes: [
@@ -396,6 +424,39 @@ describe("factory graph editor logical-move progress outcome route handles", () 
     expect(
       screen.queryByRole("button", { name: "Connect tool: router Reject" }),
     ).toBeNull();
+  });
+
+  it("shows missingOutputRoutes validation on the output handle for routeless LOGICAL_MOVE workstations", async () => {
+    const { container } = renderProgressOutcomeRouteFlow(
+      { workstations: [routelessLogicalMoveWorkstation] },
+      {
+        topology: logicalMoveComparisonTopology,
+        validationProjection: routelessLogicalMoveMissingOutputRoutesProjection,
+      },
+    );
+
+    const outputHandle = await screen.findByRole("button", {
+      name: "missing output routes",
+    });
+    expect(outputHandle.className).toContain("ring-af-danger-border");
+    expect(outputHandle.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.queryByRole("button", { name: "Connect tool: router Failure" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect tool: router Continue" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Connect tool: router Reject" }),
+    ).toBeNull();
+    expect(
+      container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
+    ).toHaveLength(1);
+    expect(
+      container.querySelectorAll(
+        '[data-z-axis-incomplete-hint="workstation-on-failure-source"], [data-z-axis-incomplete-hint="workstation-on-continue-source"], [data-z-axis-incomplete-hint="workstation-on-rejection-source"]',
+      ),
+    ).toHaveLength(0);
   });
 
   it("keeps standard processor outcome handles when logical-move is on the same graph", async () => {
