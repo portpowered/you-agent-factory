@@ -401,6 +401,7 @@ function WorkerTypeSpecificFields({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: model worker fields stay grouped for parity with script/hosted sections.
 function ModelWorkerEditableFields({
   messages,
   state,
@@ -537,7 +538,62 @@ function ModelWorkerEditableFields({
           />
         }
       />
+      <ModelWorkerSkipPermissionsField
+        messages={messages}
+        state={state}
+        validationErrors={validationErrors}
+      />
     </>
+  );
+}
+
+function ModelWorkerSkipPermissionsField({
+  messages,
+  state,
+  validationErrors,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
+  validationErrors: Extract<
+    EditableWorkerConfigurationState,
+    { status: "ready" }
+  >["validationErrors"];
+}) {
+  return (
+    <WorkerEditableConfigurationField
+      errorMessage={validationErrors.skipPermissions}
+      fieldId="editable-worker-skip-permissions"
+      input={
+        <input
+          aria-describedby={
+            validationErrors.skipPermissions
+              ? "editable-worker-skip-permissions-error"
+              : undefined
+          }
+          aria-invalid={validationErrors.skipPermissions ? "true" : undefined}
+          checked={state.draft.skipPermissions}
+          className="size-4 rounded border border-af-border"
+          id="editable-worker-skip-permissions"
+          onChange={(event) =>
+            state.onSkipPermissionsChange(event.target.checked)
+          }
+          type="checkbox"
+        />
+      }
+      label={messages.skipPermissionsFieldLabel}
+      supportingContent={
+        <>
+          <WorkerEditableConfigurationFieldHelp>
+            {messages.skipPermissionsFieldHelp}
+          </WorkerEditableConfigurationFieldHelp>
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="skipPermissions"
+            messages={messages}
+            state={state}
+          />
+        </>
+      }
+    />
   );
 }
 

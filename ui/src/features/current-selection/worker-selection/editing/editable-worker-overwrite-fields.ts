@@ -66,6 +66,13 @@ export function resolveEditableWorkerOverwriteFields(
     fields.push("provider");
   }
   if (
+    sessionStartDraft.skipPermissions !==
+      latestDefinitionDraft.skipPermissions &&
+    draft.skipPermissions !== latestDefinitionDraft.skipPermissions
+  ) {
+    fields.push("skipPermissions");
+  }
+  if (
     sessionStartDraft.name !== latestDefinitionDraft.name &&
     draft.name !== latestDefinitionDraft.name
   ) {
@@ -88,6 +95,7 @@ export function formatEditableWorkerOverwriteFieldLabels(
     | "modelProviderLabel"
     | "nameFieldLabel"
     | "providerFieldLabel"
+    | "skipPermissionsFieldLabel"
     | "typeFieldLabel"
   >,
 ) {
@@ -109,6 +117,7 @@ function fieldLabel(
     | "modelProviderLabel"
     | "nameFieldLabel"
     | "providerFieldLabel"
+    | "skipPermissionsFieldLabel"
     | "typeFieldLabel"
   >,
 ) {
@@ -131,6 +140,8 @@ function fieldLabel(
       return messages.bodyFieldLabel.toLowerCase();
     case "provider":
       return messages.providerFieldLabel.toLowerCase();
+    case "skipPermissions":
+      return messages.skipPermissionsFieldLabel.toLowerCase();
     case "name":
       return messages.nameFieldLabel.toLowerCase();
   }

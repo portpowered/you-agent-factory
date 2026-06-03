@@ -24,6 +24,7 @@ function buildReadyWorkerEditableConfigurationState(
       modelProvider: "CURSOR",
       name: "reviewer",
       provider: null,
+      skipPermissions: false,
       type: "MODEL_WORKER",
     },
     hasValidationErrors: false,
@@ -37,6 +38,7 @@ function buildReadyWorkerEditableConfigurationState(
       modelProvider: "CURSOR",
       name: "reviewer",
       provider: null,
+      skipPermissions: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
       workstationNames,
@@ -51,6 +53,7 @@ function buildReadyWorkerEditableConfigurationState(
     onModelProviderChange: vi.fn(),
     onNameChange: vi.fn(),
     onProviderChange: vi.fn(),
+    onSkipPermissionsChange: vi.fn(),
     markChangesSaved: vi.fn(),
     onResetToLatest: vi.fn(),
     onTypeChange: vi.fn(),
@@ -90,7 +93,57 @@ describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
     );
 
     expect(
-      screen.queryByText(/updates every workstation that references this worker/i),
+      screen.queryByText(
+        /updates every workstation that references this worker/i,
+      ),
+    ).toBeNull();
+  });
+});
+
+describe("WorkerEditableConfigurationSection skipPermissions control", () => {
+  it("shows the permission bypass toggle for model workers", () => {
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={buildReadyWorkerEditableConfigurationState(["Review"])}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("checkbox", {
+        name: messages.skipPermissionsFieldLabel,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the permission bypass toggle for script workers", () => {
+    const scriptWorkerState: Extract<
+      EditableWorkerConfigurationState,
+      { status: "ready" }
+    > = {
+      ...buildReadyWorkerEditableConfigurationState(["Review"]),
+      draft: {
+        ...buildReadyWorkerEditableConfigurationState(["Review"]).draft,
+        model: "",
+        modelProvider: null,
+        type: "SCRIPT_WORKER",
+        command: "node",
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={scriptWorkerState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("checkbox", {
+        name: messages.skipPermissionsFieldLabel,
+      }),
     ).toBeNull();
   });
 });

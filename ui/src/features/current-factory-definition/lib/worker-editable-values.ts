@@ -39,6 +39,7 @@ export interface EditableWorkerValues {
   modelLocality: ModelLocality | null;
   modelProvider: ModelProvider | null;
   provider: HostedProvider | null;
+  skipPermissions: boolean | null;
   type: WorkerType | undefined;
   workerName: string;
   workstationNames: string[];
@@ -54,6 +55,7 @@ export interface EditableWorkerDraft {
   modelLocality: ModelLocality | null;
   modelProvider: ModelProvider | null;
   provider: HostedProvider | null;
+  skipPermissions: boolean;
   type: WorkerType;
 }
 
@@ -77,6 +79,7 @@ export function resolveEditableWorkerValues(
     modelLocality: worker.modelLocality ?? null,
     modelProvider: worker.modelProvider ?? null,
     provider: worker.provider ?? null,
+    skipPermissions: worker.skipPermissions ?? null,
     type: worker.type,
     workerName: worker.name,
     workstationNames: resolveWorkstationNamesReferencingWorker(
@@ -99,6 +102,7 @@ export function editableWorkerDraftFromValues(
     modelLocality: values.modelLocality,
     modelProvider: values.modelProvider,
     provider: values.provider,
+    skipPermissions: values.skipPermissions ?? false,
     type: values.type ?? "MODEL_WORKER",
   };
 }
@@ -152,14 +156,20 @@ function buildWorkerFromDraft(
   };
 
   if (draft.type === "MODEL_WORKER") {
+    const {
+      skipPermissions: _preservedSkipPermissions,
+      ...baseWithoutSkipPermissions
+    } = base;
+
     return {
-      ...base,
+      ...baseWithoutSkipPermissions,
       ...(draft.modelProvider ? { modelProvider: draft.modelProvider } : {}),
       ...(draft.model.trim().length > 0 ? { model: draft.model.trim() } : {}),
       ...(draft.modelLocality ? { modelLocality: draft.modelLocality } : {}),
       ...(draft.executorProvider
         ? { executorProvider: draft.executorProvider }
         : {}),
+      ...(draft.skipPermissions ? { skipPermissions: true } : {}),
     };
   }
 

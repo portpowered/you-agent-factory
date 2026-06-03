@@ -93,6 +93,9 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "No workstations reference this worker in the running factory definition.",
     referencingWorkstationsHeading: "Referencing workstations",
+    skipPermissionsFieldHelp:
+      "When enabled, supported model providers can bypass permission prompts during execution.",
+    skipPermissionsFieldLabel: "Bypass provider permissions",
     summaryHeading: "Summary",
     typeFieldLabel: "Worker type",
     typeLabel: "Worker type",
@@ -175,6 +178,9 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "実行中のファクトリ定義でこのワーカーを参照するワークステーションはありません。",
     referencingWorkstationsHeading: "参照ワークステーション",
+    skipPermissionsFieldHelp:
+      "有効にすると、対応するモデルプロバイダーが実行中の権限プロンプトを省略できます。",
+    skipPermissionsFieldLabel: "プロバイダー権限を省略",
     summaryHeading: "概要",
     typeFieldLabel: "ワーカー種別",
     typeLabel: "ワーカー種別",
@@ -256,6 +262,9 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "실행 중인 팩토리 정의에서 이 워커를 참조하는 워크스테이션이 없습니다.",
     referencingWorkstationsHeading: "참조 워크스테이션",
+    skipPermissionsFieldHelp:
+      "활성화하면 지원되는 모델 제공자가 실행 중 권한 프롬프트를 건너뛸 수 있습니다.",
+    skipPermissionsFieldLabel: "제공자 권한 건너뛰기",
     summaryHeading: "요약",
     typeFieldLabel: "워커 유형",
     typeLabel: "워커 유형",
@@ -326,6 +335,9 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "运行中的工厂定义中没有 workstation 引用此 worker。",
     referencingWorkstationsHeading: "引用 workstation",
+    skipPermissionsFieldHelp:
+      "启用后，支持的 model provider 可在执行期间跳过权限提示。",
+    skipPermissionsFieldLabel: "跳过 provider 权限",
     summaryHeading: "摘要",
     typeFieldLabel: "Worker 类型",
     typeLabel: "Worker 类型",

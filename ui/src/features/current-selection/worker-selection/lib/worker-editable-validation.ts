@@ -17,6 +17,7 @@ export type EditableWorkerValidationField =
   | "modelProvider"
   | "name"
   | "provider"
+  | "skipPermissions"
   | "type";
 
 export type EditableWorkerValidationErrors = Partial<

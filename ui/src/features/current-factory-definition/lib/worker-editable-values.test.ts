@@ -34,10 +34,36 @@ describe("resolveEditableWorkerValues", () => {
       modelLocality: null,
       modelProvider: "CURSOR",
       provider: null,
+      skipPermissions: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
       workstationNames: ["Review", "Plan"],
     });
+  });
+
+  it("initializes skipPermissions from the selected worker value", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          skipPermissions: true,
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(resolveEditableWorkerValues(factory, "reviewer")?.skipPermissions).toBe(
+      true,
+    );
+    expect(
+      editableWorkerDraftFromValues(
+        resolveEditableWorkerValues(factory, "reviewer")!,
+      ).skipPermissions,
+    ).toBe(true);
   });
 
   it("returns null when the worker is missing from the factory document", () => {
@@ -99,6 +125,7 @@ describe("applyEditableWorkerDraft", () => {
       modelProvider: "CODEX",
       name: "reviewer",
       provider: null,
+      skipPermissions: false,
       type: "MODEL_WORKER",
     });
 
@@ -139,6 +166,68 @@ describe("applyEditableWorkerDraft", () => {
     expect(updatedFactory?.workers?.[0]).not.toHaveProperty("command");
     expect(updatedFactory?.workers?.[1]).toBe(factory.workers?.[1]);
     expect(updatedFactory?.workTypes).toBe(factory.workTypes);
+  });
+
+  it("writes skipPermissions when enabled and clears it when disabled", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const enabledFactory = applyEditableWorkerDraft(factory, "reviewer", {
+      argsText: "",
+      body: "",
+      command: "",
+      executorProvider: null,
+      model: "gpt-5.5",
+      modelLocality: null,
+      modelProvider: "CURSOR",
+      name: "reviewer",
+      provider: null,
+      skipPermissions: true,
+      type: "MODEL_WORKER",
+    });
+
+    expect(enabledFactory?.workers?.[0]?.skipPermissions).toBe(true);
+
+    const disabledFactory = applyEditableWorkerDraft(
+      {
+        ...factory,
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "reviewer",
+            skipPermissions: true,
+            type: "MODEL_WORKER",
+          },
+        ],
+      },
+      "reviewer",
+      {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        skipPermissions: false,
+        type: "MODEL_WORKER",
+      },
+    );
+
+    expect(disabledFactory?.workers?.[0]).not.toHaveProperty("skipPermissions");
   });
 
   it("applies script worker fields without writing model provider overrides", () => {

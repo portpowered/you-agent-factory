@@ -52,6 +52,8 @@ export interface WorkerDetailMessages {
   providerFieldLabel: string;
   referencingWorkstationsEmpty: string;
   referencingWorkstationsHeading: string;
+  skipPermissionsFieldHelp: string;
+  skipPermissionsFieldLabel: string;
   summaryHeading: string;
   typeFieldLabel: string;
   typeLabel: string;

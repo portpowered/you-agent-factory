@@ -102,6 +102,28 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("tracks skipPermissions edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onSkipPermissionsChange(true);
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        skipPermissions: true,
+      },
+      isDirty: true,
+    });
+  });
+
   it("allows save when model is cleared but model provider remains set", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),

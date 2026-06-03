@@ -196,6 +196,12 @@ function buildReadyEditableWorkerConfigurationState({
     onProviderChange: (value) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, provider: value }));
     },
+    onSkipPermissionsChange: (value) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        skipPermissions: value,
+      }));
+    },
     markChangesSaved: () => {
       setSessionState((currentState) =>
         currentState
@@ -265,6 +271,7 @@ function areEditableWorkerDraftsEqual(
     left.modelProvider === right.modelProvider &&
     left.name === right.name &&
     left.provider === right.provider &&
+    left.skipPermissions === right.skipPermissions &&
     left.type === right.type
   );
 }
