@@ -125,6 +125,30 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("tracks timeout unit edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTimeoutAmountChange("1");
+      result.current.onTimeoutUnitChange("h");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        timeoutAmount: "1",
+        timeoutUnit: "h",
+      },
+      isDirty: true,
+    });
+  });
+
   it("disables save while timeout validation errors are present", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),

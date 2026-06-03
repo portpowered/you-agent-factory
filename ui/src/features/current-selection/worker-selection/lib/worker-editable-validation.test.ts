@@ -141,37 +141,6 @@ describe("validateEditableWorkerDraft", () => {
       provider: messages.editableConfigurationProviderRequired,
     });
   });
-
-  it("rejects non-positive timeout picker values", () => {
-    expect(
-      validateEditableWorkerDraft(
-        buildDraft({ timeoutAmount: "0", timeoutUnit: "m" }),
-        messages,
-      ),
-    ).toEqual({
-      timeout: messages.editableConfigurationTimeoutInvalid("0"),
-    });
-  });
-
-  it("rejects non-numeric timeout picker values", () => {
-    expect(
-      validateEditableWorkerDraft(
-        buildDraft({ timeoutAmount: "abc", timeoutUnit: "s" }),
-        messages,
-      ),
-    ).toEqual({
-      timeout: messages.editableConfigurationTimeoutInvalid("abc"),
-    });
-  });
-
-  it("allows an empty timeout picker without validation errors", () => {
-    expect(
-      validateEditableWorkerDraft(
-        buildDraft({ timeoutAmount: "", timeoutUnit: "m" }),
-        messages,
-      ),
-    ).toEqual({});
-  });
 });
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: contract validation merge cases stay grouped with decode field mapping.

@@ -8,6 +8,23 @@ import {
 } from "./worker-save-validation-field-mapping";
 
 describe("resolveWorkerSaveValidationFieldName", () => {
+  it("returns null for non-worker validation subjects", () => {
+    expect(
+      resolveWorkerSaveValidationFieldName({
+        subject: { type: "WORKSTATION", id: "timeout" },
+        message: "Invalid timeout.",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for unrecognized worker field names", () => {
+    expect(
+      resolveWorkerSaveValidationFieldName(
+        workerFieldValidationTarget("unknownField", "Invalid field."),
+      ),
+    ).toBeNull();
+  });
+
   it("maps worker runtime validation targets onto editor fields", () => {
     expect(
       resolveWorkerSaveValidationFieldName(

@@ -95,5 +95,11 @@ describe("goDurationFromWorkerTimeoutPicker", () => {
         unit: "h",
       }),
     ).toBeNull();
+    expect(
+      goDurationFromWorkerTimeoutPicker({
+        amount: "1.5",
+        unit: "m",
+      }),
+    ).toBe("1.5m");
   });
 });
