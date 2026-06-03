@@ -29,31 +29,10 @@ import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
 import { TickSliderControl } from "./tick-slider-control";
 
-const DASHBOARD_TOOLBAR_CLASS = cn(
-  DASHBOARD_PANEL_SHELL_CLASS,
-  "mb-3 grid gap-2 ",
-);
-const DASHBOARD_HEADER_ROWS_CLASS = "flex min-w-0 flex-col gap-0";
-const DASHBOARD_PRIMARY_ROW_CLASS = cn(
-  "flex min-w-0 items-stretch gap-2",
-  "max-md:flex-col px-2",
-);
-const DASHBOARD_SECONDARY_ROW_CLASS = "flex min-w-0";
 const DASHBOARD_BRAND_SLOT_CLASS = "min-w-0 self-end pb-2";
-const DASHBOARD_TIMELINE_CLUSTER_CLASS = "flex min-w-0 w-full flex-1";
-const DASHBOARD_SESSION_STRIP_CLASS =
-  "flex min-w-0 h-full w-full items-stretch overflow-x-auto px-4 pt-1";
-const DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS =
-  "relative flex min-w-0 w-full rounded-sm items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2 px-2 pt-1";
 const DASHBOARD_TITLE_CLASS = cn("m-0 shrink-0", DASHBOARD_PAGE_HEADING_CLASS);
-const DASHBOARD_CONTROLS_CLASS = "shrink-0 self-end pb-2";
-const DASHBOARD_HEADER_ACTION_ROW_CLASS = "justify-end max-md:w-full";
 const DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS =
   "max-md:w-full max-md:justify-end";
-const DASHBOARD_TIMELINE_ACTIONS_CLASS =
-  "ml-auto flex shrink-0 items-center gap-1.5";
-const LOCALE_MENU_PANEL_CLASS =
-  "absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg";
 const LOCALE_MENU_ITEM_CLASS = cn(
   "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
   "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
@@ -83,18 +62,23 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
   return (
     <section
       aria-label={headerMessages.dashboardSummaryLabel}
-      className={DASHBOARD_TOOLBAR_CLASS}
+      className={cn(DASHBOARD_PANEL_SHELL_CLASS, "mb-3 grid gap-2 ")}
     >
-      <div className={DASHBOARD_HEADER_ROWS_CLASS}>
-        <div className={DASHBOARD_PRIMARY_ROW_CLASS}>
+      <div className="flex min-w-0 flex-col gap-0">
+        <div
+          className={cn(
+            "flex min-w-0 items-stretch gap-2",
+            "max-md:flex-col px-2",
+          )}
+        >
           <h1 className={cn(DASHBOARD_TITLE_CLASS, DASHBOARD_BRAND_SLOT_CLASS)}>
             <DashboardBrandLockup
               locale={resolvedLocale}
               wordmarkClassName="truncate"
             />
           </h1>
-          <div className={DASHBOARD_TIMELINE_CLUSTER_CLASS}>
-            <div className={DASHBOARD_SESSION_STRIP_CLASS}>
+          <div className="flex min-w-0 w-full flex-1">
+            <div className="flex min-w-0 h-full w-full items-stretch overflow-x-auto px-4 pt-1">
               <DashboardSessionTabs
                 locale={resolvedLocale}
                 state={sessionTabsState}
@@ -105,7 +89,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             actions={
               <fieldset
                 aria-label={headerMessages.globalHeaderActionsLabel}
-                className={DASHBOARD_CONTROLS_CLASS}
+                className="shrink-0 self-end pb-2"
               >
                 <DashboardLocaleMenu
                   locale={resolvedLocale}
@@ -114,13 +98,13 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
               </fieldset>
             }
             actionsClassName={DASHBOARD_HEADER_ACTION_ROW_ACTIONS_CLASS}
-            className={DASHBOARD_HEADER_ACTION_ROW_CLASS}
+            className="justify-end max-md:w-full"
           />
         </div>
-        <div className={DASHBOARD_SECONDARY_ROW_CLASS}>
-          <div className={DASHBOARD_TIMELINE_OPERATIONS_ROW_CLASS}>
+        <div className="flex min-w-0">
+          <div className="relative flex min-w-0 w-full rounded-sm items-center gap-1.5 rounded-t-2xl bg-af-surface-subtle pb-2 px-2 pt-1">
             <TickSliderControl locale={resolvedLocale} />
-            <div className={DASHBOARD_TIMELINE_ACTIONS_CLASS}>
+            <div className="ml-auto flex shrink-0 items-center gap-1.5">
               {sessionTabsState.activeSession ? (
                 <DashboardHeaderActionButton
                   aria-label={sessionStreamToggleLabel(
@@ -316,7 +300,7 @@ function DashboardLocaleMenuList({
   return (
     <div
       aria-label={label}
-      className={LOCALE_MENU_PANEL_CLASS}
+      className="absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-af-border bg-af-surface-raised p-1 text-af-text shadow-af-panel backdrop-blur-lg"
       id={id}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
