@@ -235,9 +235,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 	endTime time.Time,
 ) interfaces.CompletedDispatch {
 	dispatchEntry := completedDispatchEntry(snapshot, result.DispatchID)
-	failureMetadata := interfaces.CloneWorkFailureMetadata(
-		interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure),
-	)
+	failureMetadata := interfaces.CloneWorkFailureMetadata(result.FailureMetadata)
 	completed := interfaces.CompletedDispatch{
 		DispatchID:                  result.DispatchID,
 		TransitionID:                result.TransitionID,
@@ -413,7 +411,7 @@ func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResu
 		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
 		err:                result.Error,
 		feedback:           result.Feedback,
-		failureMetadata:    interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure),
+		failureMetadata:    result.FailureMetadata,
 	}
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)

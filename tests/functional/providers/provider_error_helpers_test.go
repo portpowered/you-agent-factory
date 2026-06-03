@@ -197,7 +197,7 @@ func assertRetryableInternalServerRequeueDispatch(
 	t.Helper()
 
 	assertDispatchHistoryMatchesWork(t, dispatch, work)
-	assertProviderFailureIsRetryableInternalServer(t, dispatch.ProviderFailure)
+	assertProviderFailureIsRetryableInternalServer(t, dispatch.FailureMetadata)
 	if !dispatchHasOutputMutationToPlace(dispatch, work.WorkTypeID+":init", work.WorkID) {
 		t.Fatalf(
 			"%s dispatch mutations = %#v, want retryable requeue to %s:init",
@@ -246,7 +246,7 @@ func assertRetryableInternalServerRequeueOutcome(
 		t.Fatalf("dispatch outcome = %s, want %s", dispatch.Outcome, interfaces.OutcomeFailed)
 	}
 	assertDispatchHistoryMatchesWork(t, dispatch, work)
-	assertProviderFailureIsRetryableInternalServer(t, dispatch.ProviderFailure)
+	assertProviderFailureIsRetryableInternalServer(t, dispatch.FailureMetadata)
 	if !dispatchHasOutputMutationToPlace(dispatch, work.WorkTypeID+":init", work.WorkID) {
 		t.Fatalf("dispatch mutations = %#v, want requeue to %s:init", dispatch.OutputMutations, work.WorkTypeID)
 	}

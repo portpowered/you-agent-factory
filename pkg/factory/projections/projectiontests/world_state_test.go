@@ -413,9 +413,6 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("completion failure metadata = %#v, want retryable/timeout", completion.Result.FailureMetadata)
 	}
-	if completion.Result.ProviderFailure != nil {
-		t.Fatalf("completion provider failure = %#v, want nil internal field", completion.Result.ProviderFailure)
-	}
 	if len(state.ProviderSessions) != 1 || state.ProviderSessions[0].ProviderSession.ID != "sess-1" {
 		t.Fatalf("provider sessions = %#v, want sess-1", state.ProviderSessions)
 	}
@@ -475,9 +472,6 @@ func TestReconstructFactoryWorldState_MapsLegacyProviderFailureOnlyWireToFailure
 	if completion.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable ||
 		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("completion failure metadata = %#v, want retryable/internal_server_error", completion.Result.FailureMetadata)
-	}
-	if completion.Result.ProviderFailure != nil {
-		t.Fatalf("completion provider failure = %#v, want nil internal field", completion.Result.ProviderFailure)
 	}
 }
 

@@ -761,7 +761,7 @@ func failureDetailsForResult(result interfaces.WorkResult) (string, string) {
 }
 
 func failureReasonForResult(result interfaces.WorkResult) string {
-	failureMetadata := interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)
+	failureMetadata := result.FailureMetadata
 	if failureMetadata != nil {
 		if failureMetadata.Type != "" {
 			return string(failureMetadata.Type)

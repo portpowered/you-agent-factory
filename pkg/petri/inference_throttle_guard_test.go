@@ -202,7 +202,7 @@ func completedLegacyThrottleFailure(dispatchID, transitionID string, endedAt tim
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},
@@ -214,7 +214,7 @@ func completedNonThrottleFailure(dispatchID, transitionID string, endedAt time.T
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyRetryable,
 		},
 	}

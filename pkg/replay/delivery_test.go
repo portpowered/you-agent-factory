@@ -345,9 +345,6 @@ func TestCompletionDeliveryPlan_PlannedResultClonesFailureMetadataOnlyInput(t *t
 	if planned.FailureMetadata == nil || planned.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("planned failure metadata = %#v, want detached internal_server_error", planned.FailureMetadata)
 	}
-	if planned.ProviderFailure != nil {
-		t.Fatalf("planned provider failure = %#v, want nil internal field", planned.ProviderFailure)
-	}
 }
 
 func TestCompletionDeliveryPlan_PlannedResultClonesProviderMetadata(t *testing.T) {
@@ -385,9 +382,6 @@ func TestCompletionDeliveryPlan_PlannedResultClonesProviderMetadata(t *testing.T
 	}
 	if planned.FailureMetadata == nil || planned.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("planned failure metadata = %#v, want detached internal_server_error", planned.FailureMetadata)
-	}
-	if planned.ProviderFailure != nil {
-		t.Fatalf("planned provider failure = %#v, want nil internal field", planned.ProviderFailure)
 	}
 }
 

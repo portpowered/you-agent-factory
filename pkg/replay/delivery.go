@@ -615,9 +615,7 @@ func cloneReplayPlannedResult(result interfaces.WorkResult) interfaces.WorkResul
 	if result.RecordedOutputWork != nil {
 		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
 	}
-	failureMetadata := interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)
-	clone.FailureMetadata = interfaces.CloneWorkFailureMetadata(failureMetadata)
-	clone.ProviderFailure = nil
+	clone.FailureMetadata = interfaces.CloneWorkFailureMetadata(result.FailureMetadata)
 	clone.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
 	clone.Diagnostics = interfaces.CloneWorkDiagnostics(result.Diagnostics)
 	return clone

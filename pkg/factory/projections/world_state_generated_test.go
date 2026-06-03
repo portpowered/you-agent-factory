@@ -28,9 +28,6 @@ func TestWorkstationResultFromGenerated_MapsProviderFailureOnlyWireToFailureMeta
 	if got.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("projected type = %q, want timeout", got.FailureMetadata.Type)
 	}
-	if got.ProviderFailure != nil {
-		t.Fatalf("projected provider failure = %#v, want nil internal field", got.ProviderFailure)
-	}
 }
 
 func TestWorkstationResultFromGenerated_OmitsFailureMetadataWhenWireUnset(t *testing.T) {

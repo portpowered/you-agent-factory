@@ -149,14 +149,14 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 	if first.Reason != "execution timeout" {
 		t.Fatalf("first dispatch reason = %q, want execution timeout", first.Reason)
 	}
-	if first.ProviderFailure == nil {
-		t.Fatal("first dispatch ProviderFailure is nil, want timeout metadata")
+	if first.FailureMetadata == nil {
+		t.Fatal("first dispatch FailureMetadata is nil, want timeout metadata")
 	}
-	if first.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("first dispatch provider failure type = %s, want %s", first.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
+	if first.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("first dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
 	}
-	if first.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("first dispatch provider failure family = %s, want %s", first.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
+	if first.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("first dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 	if len(first.OutputMutations) == 0 || first.OutputMutations[0].ToPlace != "task:init" {
 		t.Fatalf("first dispatch mutations = %#v, want requeue to task:init", first.OutputMutations)
@@ -168,9 +168,6 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 	second := dispatches[1]
 	if second.Outcome != interfaces.OutcomeAccepted {
 		t.Fatalf("second dispatch outcome = %s, want %s", second.Outcome, interfaces.OutcomeAccepted)
-	}
-	if second.ProviderFailure != nil {
-		t.Fatalf("second dispatch ProviderFailure = %#v, want nil", second.ProviderFailure)
 	}
 }
 

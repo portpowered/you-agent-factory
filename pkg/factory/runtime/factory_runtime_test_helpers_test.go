@@ -492,7 +492,7 @@ func safeBoundaryResult(
 		Outcome:         outcome,
 		Output:          "safe boundary output for " + workID,
 		Error:           errText,
-		ProviderFailure: providerFailure,
+		FailureMetadata: providerFailure,
 		ProviderSession: providerSession,
 		Diagnostics: &interfaces.WorkDiagnostics{
 			RenderedPrompt: &interfaces.RenderedPromptDiagnostic{

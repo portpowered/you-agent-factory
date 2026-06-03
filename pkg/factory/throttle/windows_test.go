@@ -35,7 +35,7 @@ func TestDeriveActiveThrottlePauses_CreatesOneActiveLaneForThrottleFailure(t *te
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-5 * time.Minute),
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},
@@ -59,7 +59,7 @@ func TestDeriveActiveThrottlePauses_LaterFailureExtendsLaneExpiry(t *testing.T) 
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: first,
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyThrottle,
 				Type:   interfaces.WorkFailureTypeThrottled,
 			},
@@ -68,7 +68,7 @@ func TestDeriveActiveThrottlePauses_LaterFailureExtendsLaneExpiry(t *testing.T) 
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: second,
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyThrottle,
 				Type:   interfaces.WorkFailureTypeThrottled,
 			},
@@ -93,7 +93,7 @@ func TestDeriveActiveThrottlePauses_OmitsExpiredWindows(t *testing.T) {
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-45 * time.Minute),
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},
@@ -112,7 +112,7 @@ func TestDeriveActiveThrottlePauses_KeepsProviderOnlyAndProviderModelLanesIsolat
 			Provider:   "claude",
 			Model:      "",
 			OccurredAt: now.Add(-5 * time.Minute),
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyThrottle,
 				Type:   interfaces.WorkFailureTypeThrottled,
 			},
@@ -121,7 +121,7 @@ func TestDeriveActiveThrottlePauses_KeepsProviderOnlyAndProviderModelLanesIsolat
 			Provider:   "claude",
 			Model:      "claude-sonnet",
 			OccurredAt: now.Add(-4 * time.Minute),
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyThrottle,
 				Type:   interfaces.WorkFailureTypeThrottled,
 			},
@@ -143,7 +143,7 @@ func TestDeriveActiveThrottlePauses_IgnoresRetryableNonThrottleFailures(t *testi
 		Provider:   "claude",
 		Model:      "claude-sonnet",
 		OccurredAt: now.Add(-5 * time.Minute),
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyRetryable,
 			Type:   interfaces.WorkFailureTypeInternalServerError,
 		},
