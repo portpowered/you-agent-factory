@@ -12,6 +12,7 @@ import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimeli
 import {
   registerAppDashboardTestLifecycle,
   renderApp,
+  settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
 import { historicalTimelineSnapshot } from "./testing/app-shell-timeline-test-utils";
 
@@ -103,6 +104,7 @@ describe("App replay workstation request flows", () => {
       snapshot: historicalTimelineSnapshot,
       timelineEvents: runtimeDetailsTimelineEvents,
     });
+    await settleAppShellDashboardEffects();
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -218,6 +220,7 @@ describe("App replay workstation request flows", () => {
       snapshot: historicalTimelineSnapshot,
       timelineEvents: scriptDashboardIntegrationTimelineEvents,
     });
+    await settleAppShellDashboardEffects();
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
