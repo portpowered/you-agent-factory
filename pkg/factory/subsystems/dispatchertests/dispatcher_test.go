@@ -593,7 +593,7 @@ func throttledCompletedDispatch(dispatchID string, transitionID string, endTime 
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		Outcome:      interfaces.OutcomeFailed,
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},

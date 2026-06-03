@@ -168,7 +168,7 @@ func TestHistoryTransitionerPipeline_ThrottledFailureRequeuesConsumedWorkToOrigi
 		TransitionID: "t1",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        "provider error: claude rate limit exceeded",
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},
@@ -286,9 +286,6 @@ func assertTimeoutFailureRequeueResult(t *testing.T, result *interfaces.TickResu
 	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
 		t.Fatalf("completed dispatch FailureMetadata.Family = %q, want %q", completed.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
-	if completed.ProviderFailure != nil {
-		t.Fatalf("completed dispatch ProviderFailure = %#v, want nil on internal CompletedDispatch", completed.ProviderFailure)
-	}
 }
 
 func TestHistoryTransitionerPipeline_TimeoutFailureRequeuesDespiteRenderedErrorText(t *testing.T) {
@@ -342,7 +339,7 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesConsumedWorkTo
 		TransitionID: "t1",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        "provider error: internal_server_error",
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyRetryable,
 			Type:   interfaces.WorkFailureTypeInternalServerError,
 		},
@@ -443,7 +440,7 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 		TransitionID:    "t1",
 		Outcome:         interfaces.OutcomeFailed,
 		Error:           errorText,
-		ProviderFailure: providerFailure,
+		FailureMetadata: providerFailure,
 	})
 
 	snapshot := pipelineSnapshot(
@@ -475,9 +472,6 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	}
 	if completed.FailureMetadata == nil {
 		t.Fatal("expected completed dispatch failure metadata")
-	}
-	if completed.ProviderFailure != nil {
-		t.Fatalf("completed dispatch ProviderFailure = %#v, want nil on internal CompletedDispatch", completed.ProviderFailure)
 	}
 	if completed.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("completed dispatch failure type = %q, want %q", completed.FailureMetadata.Type, interfaces.WorkFailureTypeInternalServerError)

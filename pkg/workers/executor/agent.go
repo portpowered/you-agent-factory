@@ -301,7 +301,7 @@ func (ae *AgentExecutor) inferWithRetry(ctx context.Context, req interfaces.Prov
 			return interfaces.InferenceResponse{}, retryCount, err
 		}
 
-		decision := workerprovider.ClassifyProviderFailure(providerErr)
+		decision := workerprovider.WorkFailureDecisionFromProviderError(providerErr)
 		if !decision.Retryable || retryCount >= ae.retryConfig.maxRetries {
 			return interfaces.InferenceResponse{}, retryCount, providerErr
 		}

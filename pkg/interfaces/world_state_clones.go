@@ -106,9 +106,7 @@ func CloneSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *SafeWorkDiagnos
 // selected-tick dispatch completion record.
 func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompletion) FactoryWorldDispatchCompletion {
 	clone := completion
-	failureMetadata := CanonicalWorkFailureMetadata(completion.Result.FailureMetadata, completion.Result.ProviderFailure)
-	clone.Result.FailureMetadata = CloneWorkFailureMetadata(failureMetadata)
-	clone.Result.ProviderFailure = nil
+	clone.Result.FailureMetadata = CloneWorkFailureMetadata(completion.Result.FailureMetadata)
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)
 	clone.InputWorkItems = cloneFactoryWorkItems(completion.InputWorkItems)

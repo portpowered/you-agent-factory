@@ -356,7 +356,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfa
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
 			OutputWork:                  generatedWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
 			OutputResources:             h.generatedOutputResourcesPtr(completed.OutputMutations),
-			ProviderFailure:             interfaces.PublishedProviderFailureMetadata(result.FailureMetadata, result.ProviderFailure),
+			ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		},
 	))
 }
@@ -761,7 +761,7 @@ func failureDetailsForResult(result interfaces.WorkResult) (string, string) {
 }
 
 func failureReasonForResult(result interfaces.WorkResult) string {
-	failureMetadata := interfaces.CanonicalWorkFailureMetadata(result.FailureMetadata, result.ProviderFailure)
+	failureMetadata := result.FailureMetadata
 	if failureMetadata != nil {
 		if failureMetadata.Type != "" {
 			return string(failureMetadata.Type)

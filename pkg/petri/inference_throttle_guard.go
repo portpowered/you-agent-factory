@@ -58,7 +58,7 @@ func (g *InferenceThrottleGuard) ActivePauses(ctx RuntimeGuardContext) []interfa
 	history := make([]factorythrottle.FailureRecord, 0, len(ctx.DispatchHistory))
 	for i := range ctx.DispatchHistory {
 		record := ctx.DispatchHistory[i]
-		failureMetadata := interfaces.CanonicalWorkFailureMetadata(record.FailureMetadata, record.ProviderFailure)
+		failureMetadata := record.FailureMetadata
 		if failureMetadata == nil || failureMetadata.Family != interfaces.WorkFailureFamilyThrottle {
 			continue
 		}

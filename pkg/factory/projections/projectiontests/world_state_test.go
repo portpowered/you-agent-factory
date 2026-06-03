@@ -383,7 +383,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			DispatchID:     "dispatch-1",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "FAILED", ProviderFailure: &interfaces.WorkFailureMetadata{Family: interfaces.WorkFailureFamilyRetryable, Type: interfaces.WorkFailureTypeTimeout}},
+			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureMetadata: &interfaces.WorkFailureMetadata{Family: interfaces.WorkFailureFamilyRetryable, Type: interfaces.WorkFailureTypeTimeout}},
 			DurationMillis: 900,
 			TraceData:      &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 			ProviderSession: &interfaces.ProviderSessionMetadata{
@@ -413,11 +413,65 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("completion failure metadata = %#v, want retryable/timeout", completion.Result.FailureMetadata)
 	}
-	if completion.Result.ProviderFailure != nil {
-		t.Fatalf("completion provider failure = %#v, want nil internal field", completion.Result.ProviderFailure)
-	}
 	if len(state.ProviderSessions) != 1 || state.ProviderSessions[0].ProviderSession.ID != "sess-1" {
 		t.Fatalf("provider sessions = %#v, want sess-1", state.ProviderSessions)
+	}
+}
+
+func TestReconstructFactoryWorldState_MapsLegacyProviderFailureOnlyWireToFailureMetadata(t *testing.T) {
+	t0 := time.Date(2026, 4, 19, 11, 0, 0, 0, time.UTC)
+	family := factoryapi.WorkFailureFamily(interfaces.WorkFailureFamilyRetryable)
+	failureType := factoryapi.WorkFailureType(interfaces.WorkFailureTypeInternalServerError)
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-legacy-wire",
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "tok-task-1",
+				PlaceID:  "task:init",
+				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+			}},
+		}),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeDispatchResponse,
+			"response/dispatch-legacy-wire",
+			3,
+			t0.Add(3*time.Second),
+			factoryapi.FactoryEventContext{
+				DispatchId: stringPtrForProjectionTest("dispatch-legacy-wire"),
+				TraceIds:   stringSlicePtrForProjectionTest([]string{"trace-1"}),
+				WorkIds:    stringSlicePtrForProjectionTest([]string{"work-1"}),
+			},
+			factoryapi.DispatchResponseEventPayload{
+				TransitionId: "t-review",
+				Outcome:      factoryapi.WorkOutcomeFailed,
+				Error:        stringPtrForProjectionTest("provider error: internal_server_error"),
+				ProviderFailure: &factoryapi.ProviderFailureMetadata{
+					Family: &family,
+					Type:   &failureType,
+				},
+				DurationMillis: int64PtrForProjectionTest(900),
+			},
+		),
+	}
+
+	state, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if len(state.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want 1 completion", state.CompletedDispatches)
+	}
+	completion := state.CompletedDispatches[0]
+	if completion.Result.FailureMetadata == nil {
+		t.Fatal("completion failure metadata is nil, want ingress from wire provider_failure")
+	}
+	if completion.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable ||
+		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("completion failure metadata = %#v, want retryable/internal_server_error", completion.Result.FailureMetadata)
 	}
 }
 

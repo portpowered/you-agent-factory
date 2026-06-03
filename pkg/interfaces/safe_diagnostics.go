@@ -100,11 +100,10 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *W
 	return out
 }
 
-// PublishedProviderFailureMetadata maps in-process failure metadata to the
-// published provider_failure field on events and API DTOs. Internal values may
-// set only FailureMetadata; legacy inputs may set only ProviderFailure.
-func PublishedProviderFailureMetadata(failure, providerFailure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	return GeneratedWorkFailureMetadata(CanonicalWorkFailureMetadata(failure, providerFailure))
+// PublishedProviderFailureMetadata maps in-process FailureMetadata to the
+// published provider_failure field on events and API DTOs.
+func PublishedProviderFailureMetadata(failure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
+	return GeneratedWorkFailureMetadata(failure)
 }
 
 // GeneratedWorkFailureMetadata converts canonical work-failure metadata into

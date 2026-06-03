@@ -22,12 +22,6 @@ func TestCloneFactoryWorldDispatchCompletion_ResolvesFailureMetadataOnlyInput(t 
 	if cloned.Result.FailureMetadata == nil || cloned.Result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
 		t.Fatalf("cloned failure metadata = %#v, want retryable timeout", cloned.Result.FailureMetadata)
 	}
-	if cloned.Result.ProviderFailure != nil {
-		t.Fatalf("cloned provider failure = %#v, want nil internal field", cloned.Result.ProviderFailure)
-	}
-	if original.Result.ProviderFailure != nil {
-		t.Fatal("original provider failure should remain nil for failure_metadata-only input")
-	}
 }
 
 func TestCloneFactoryWorldDispatchCompletion_ClonesCanonicalProviderMetadataAndSafeDiagnostics(t *testing.T) {
@@ -42,7 +36,7 @@ func testFactoryWorldDispatchCompletion() interfaces.FactoryWorldDispatchComplet
 		DispatchID: "dispatch-1",
 		Result: interfaces.WorkstationResult{
 			Outcome: "FAILED",
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyRetryable,
 				Type:   interfaces.WorkFailureTypeTimeout,
 			},
@@ -103,8 +97,8 @@ func mutateClonedDispatchCompletion(cloned *interfaces.FactoryWorldDispatchCompl
 func assertOriginalDispatchCompletionUnchanged(t *testing.T, original interfaces.FactoryWorldDispatchCompletion) {
 	t.Helper()
 
-	if original.Result.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("original provider failure = %#v, want retryable metadata unchanged", original.Result.ProviderFailure)
+	if original.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("original failure metadata = %#v, want retryable metadata unchanged", original.Result.FailureMetadata)
 	}
 	if original.ProviderSession.ID != "sess-1" {
 		t.Fatalf("original provider session = %#v, want sess-1 unchanged", original.ProviderSession)

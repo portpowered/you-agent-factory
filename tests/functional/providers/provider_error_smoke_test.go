@@ -150,11 +150,11 @@ func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacit
 
 	assertProviderErrorDispatchCount(t, smokeHarness.ProviderRunner().CallCount(), outcome)
 	dispatch := outcome.Dispatches[0]
-	if dispatch.ProviderFailure == nil {
-		t.Fatal("ProviderFailure is nil, want throttled metadata")
+	if dispatch.FailureMetadata == nil {
+		t.Fatal("FailureMetadata is nil, want throttled metadata")
 	}
-	if dispatch.ProviderFailure.Type != capacityEntry.ExpectedType {
-		t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, capacityEntry.ExpectedType)
+	if dispatch.FailureMetadata.Type != capacityEntry.ExpectedType {
+		t.Fatalf("failure metadata type = %s, want %s", dispatch.FailureMetadata.Type, capacityEntry.ExpectedType)
 	}
 	assertContainsAll(t, dispatch.Reason, []string{"provider error: " + string(capacityEntry.ExpectedType), conciseError})
 	for _, reject := range capacityEntry.RejectMessageContains {
@@ -186,14 +186,14 @@ func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T, timeoutE
 
 	assertProviderErrorDispatchCount(t, smokeHarness.ProviderRunner().CallCount(), outcome)
 	dispatch := outcome.Dispatches[0]
-	if dispatch.ProviderFailure == nil {
-		t.Fatal("ProviderFailure is nil, want timeout metadata")
+	if dispatch.FailureMetadata == nil {
+		t.Fatal("FailureMetadata is nil, want timeout metadata")
 	}
-	if dispatch.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("provider failure type = %s, want %s", dispatch.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
+	if dispatch.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("failure metadata type = %s, want %s", dispatch.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
 	}
-	if dispatch.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("provider failure family = %s, want %s", dispatch.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
+	if dispatch.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("failure metadata family = %s, want %s", dispatch.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 	assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", conciseError})
 	for _, reject := range timeoutEntry.RejectMessageContains {

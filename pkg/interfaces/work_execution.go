@@ -36,7 +36,6 @@ type WorkResult struct {
 	Feedback                    string                   `json:"feedback,omitempty"`
 	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
 	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderFailure             *WorkFailureMetadata `json:"provider_failure,omitempty"`
 	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics                 *WorkDiagnostics         `json:"diagnostics,omitempty"`
 	Metrics                     WorkMetrics              `json:"metrics"`
@@ -151,16 +150,6 @@ type WorkFailureDecision struct {
 type WorkFailureMetadata struct {
 	Family WorkFailureFamily `json:"family"`
 	Type   WorkFailureType   `json:"type"`
-}
-
-// CanonicalWorkFailureMetadata returns the generalized failure metadata from
-// the runtime result, falling back to the legacy provider-named field while
-// older callers are still being migrated.
-func CanonicalWorkFailureMetadata(failure *WorkFailureMetadata, providerFailure *WorkFailureMetadata) *WorkFailureMetadata {
-	if failure != nil {
-		return failure
-	}
-	return providerFailure
 }
 
 // ReplayArtifact is the versioned, self-contained recording used to replay a

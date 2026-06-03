@@ -127,7 +127,7 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result inte
 		OutputWork:      generatedReplayOutputWorkPtr(result.RecordedOutputWork),
 		Error:           stringPtrIfNotEmpty(result.Error),
 		Feedback:        stringPtrIfNotEmpty(result.Feedback),
-		ProviderFailure: interfaces.PublishedProviderFailureMetadata(result.FailureMetadata, result.ProviderFailure),
+		ProviderFailure: interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:         generatedWorkMetrics(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
@@ -247,6 +247,55 @@ func TestReduceReplayEvents_CompletionsRehydrateSafeDiagnosticsThroughInterfaces
 	}
 
 	assertReducedCompletionSafeDiagnostics(t, reduced.Completions[0])
+}
+
+func TestReduceReplayEvents_MapsLegacyProviderFailureOnlyWireToFailureMetadata(t *testing.T) {
+	family := factoryapi.WorkFailureFamily(interfaces.WorkFailureFamilyRetryable)
+	failureType := factoryapi.WorkFailureType(interfaces.WorkFailureTypeTimeout)
+	payload := factoryapi.DispatchResponseEventPayload{
+		CompletionId: stringPtrIfNotEmpty("completion-legacy"),
+		TransitionId: "process",
+		Outcome:      factoryapi.WorkOutcomeFailed,
+		Error:        stringPtrIfNotEmpty("provider timed out"),
+		ProviderFailure: &factoryapi.ProviderFailureMetadata{
+			Family: &family,
+			Type:   &failureType,
+		},
+	}
+	var union factoryapi.FactoryEvent_Payload
+	if err := union.FromDispatchResponseEventPayload(payload); err != nil {
+		t.Fatalf("encode dispatch completed payload: %v", err)
+	}
+
+	artifact := testReplayArtifact(t, factoryapi.FactoryEvent{
+		Id:            "factory-event/dispatch-completed/dispatch-legacy",
+		SchemaVersion: factoryapi.AgentFactoryEventV1,
+		Type:          factoryapi.FactoryEventTypeDispatchResponse,
+		Context: factoryapi.FactoryEventContext{
+			EventTime:  time.Date(2026, time.April, 10, 12, 0, 3, 0, time.UTC),
+			Tick:       3,
+			DispatchId: stringPtrIfNotEmpty("dispatch-legacy"),
+		},
+		Payload: union,
+	})
+
+	reduced, err := reduceReplayEvents(artifact)
+	if err != nil {
+		t.Fatalf("reduceReplayEvents: %v", err)
+	}
+	if len(reduced.Completions) != 1 {
+		t.Fatalf("reduced completions = %d, want 1", len(reduced.Completions))
+	}
+	completion := reduced.Completions[0].result
+	if completion.FailureMetadata == nil {
+		t.Fatal("failure metadata = nil, want retryable/timeout from wire provider_failure")
+	}
+	if completion.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("failure family = %q, want retryable", completion.FailureMetadata.Family)
+	}
+	if completion.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("failure type = %q, want timeout", completion.FailureMetadata.Type)
+	}
 }
 
 func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThem(t *testing.T) {
@@ -372,7 +421,7 @@ func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			TransitionID: "transition-safe",
 			Outcome:      interfaces.OutcomeAccepted,
 			Output:       "recorded provider output",
-			ProviderFailure: &interfaces.WorkFailureMetadata{
+			FailureMetadata: &interfaces.WorkFailureMetadata{
 				Family: interfaces.WorkFailureFamilyRetryable,
 				Type:   interfaces.WorkFailureTypeThrottled,
 			},
@@ -419,9 +468,6 @@ func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompl
 	}
 	if completion.result.FailureMetadata == nil || completion.result.FailureMetadata.Type != interfaces.WorkFailureTypeThrottled {
 		t.Fatalf("failure metadata = %#v, want throttled", completion.result.FailureMetadata)
-	}
-	if completion.result.ProviderFailure != nil {
-		t.Fatalf("provider failure = %#v, want nil internal field", completion.result.ProviderFailure)
 	}
 	if completion.result.Diagnostics == nil || completion.result.Diagnostics.Provider == nil || completion.result.Diagnostics.RenderedPrompt == nil {
 		t.Fatalf("completion diagnostics = %#v, want safe provider and rendered prompt diagnostics", completion.result.Diagnostics)

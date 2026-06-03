@@ -387,9 +387,6 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	}
-	if result.ProviderFailure != nil {
-		t.Fatal("internal WorkResult must leave ProviderFailure nil; emission maps FailureMetadata at boundary")
-	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-failed",
 		TransitionID:    "build",
@@ -481,13 +478,10 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 		TransitionID: "build",
 		Outcome:      interfaces.OutcomeFailed,
 		Error:        errorText,
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyRetryable,
 			Type:   interfaces.WorkFailureTypeInternalServerError,
 		},
-	}
-	if result.FailureMetadata != nil {
-		t.Fatal("legacy fixture must use ProviderFailure only to assert boundary fallback")
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      result.DispatchID,

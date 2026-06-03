@@ -734,9 +734,6 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	if len(sleeps) != 2 {
 		t.Fatalf("sleep count = %d, want 2", len(sleeps))
 	}
-	if result.ProviderFailure != nil {
-		t.Fatal("ProviderFailure should be nil on internal WorkResult; use FailureMetadata")
-	}
 	if result.FailureMetadata == nil {
 		t.Fatal("expected failure metadata on failed result")
 	}
@@ -972,8 +969,5 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 	}
 	if result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
 		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
-	}
-	if result.ProviderFailure != nil {
-		t.Fatal("ProviderFailure should be nil on internal WorkResult; use FailureMetadata")
 	}
 }

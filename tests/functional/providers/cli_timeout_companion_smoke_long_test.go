@@ -67,14 +67,14 @@ Execute the script.
 	if first.Reason != "execution timeout" {
 		t.Fatalf("first timeout dispatch reason = %q, want %q", first.Reason, "execution timeout")
 	}
-	if first.ProviderFailure == nil {
-		t.Fatal("first timeout dispatch ProviderFailure is nil, want timeout metadata")
+	if first.FailureMetadata == nil {
+		t.Fatal("first timeout dispatch FailureMetadata is nil, want timeout metadata")
 	}
-	if first.ProviderFailure.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("first timeout dispatch provider failure type = %s, want %s", first.ProviderFailure.Type, interfaces.WorkFailureTypeTimeout)
+	if first.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+		t.Fatalf("first timeout dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
 	}
-	if first.ProviderFailure.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("first timeout dispatch provider failure family = %s, want %s", first.ProviderFailure.Family, interfaces.WorkFailureFamilyRetryable)
+	if first.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("first timeout dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 	if len(first.OutputMutations) == 0 || first.OutputMutations[0].ToPlace != "task:init" {
 		t.Fatalf("first timeout dispatch mutations = %#v, want requeue to task:init", first.OutputMutations)
