@@ -1,6 +1,7 @@
 package validation_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -187,6 +188,7 @@ type missingOutputRoutesCase struct {
 	wantCode              string
 	wantLocation          factoryvalidation.SubjectLocation
 	wantPathSuffix        string
+	wantMessageContains   string
 	forbiddenCode         string
 	forbiddenCodeLocation factoryvalidation.SubjectLocation
 }
@@ -203,6 +205,22 @@ func missingOutputRoutesVsFailureRouteCases() []missingOutputRoutesCase {
 			wantCode:              factoryvalidation.CodeWorkstationMissingOutputRoutes,
 			wantLocation:          factoryvalidation.SubjectLocationOutputs,
 			wantPathSuffix:        "factory.workstations[0].outputs",
+			wantMessageContains:   "output routes",
+			forbiddenCode:         factoryvalidation.CodeWorkstationMissingFailureRoute,
+			forbiddenCodeLocation: factoryvalidation.SubjectLocationOnFailure,
+		},
+		{
+			name: "routeless_cron_without_worker",
+			workstation: interfaces.FactoryWorkstationConfig{
+				Name: "trigger-monkey",
+				Type: interfaces.WorkstationTypeLogical,
+				Kind: interfaces.WorkstationKindCron,
+				Cron: &interfaces.CronConfig{Schedule: "0 * * * *"},
+			},
+			wantCode:              factoryvalidation.CodeWorkstationMissingOutputRoutes,
+			wantLocation:          factoryvalidation.SubjectLocationOutputs,
+			wantPathSuffix:        "factory.workstations[0].outputs",
+			wantMessageContains:   "output routes",
 			forbiddenCode:         factoryvalidation.CodeWorkstationMissingFailureRoute,
 			forbiddenCodeLocation: factoryvalidation.SubjectLocationOnFailure,
 		},
@@ -297,6 +315,16 @@ func TestValidate_MissingOutputRoutesVsMissingFailureRoute(t *testing.T) {
 				Location: tt.wantLocation,
 			})
 			assertWorkstationTarget(t, result.Targets, tt.workstation.Name, tt.wantCode, tt.wantLocation, tt.wantPathSuffix)
+			if tt.wantMessageContains != "" {
+				assertWorkstationTargetMessageContains(
+					t,
+					result.Targets,
+					tt.workstation.Name,
+					tt.wantCode,
+					tt.wantLocation,
+					tt.wantMessageContains,
+				)
+			}
 			assertWorkstationTargetAbsent(
 				t,
 				result.Targets,
@@ -327,6 +355,27 @@ func assertWorkstationTarget(
 		return
 	}
 	t.Fatalf("targets = %#v, want %q for workstation %q at %q with path %q", targets, code, workstationID, location, pathSuffix)
+}
+
+func assertWorkstationTargetMessageContains(
+	t *testing.T,
+	targets []factoryvalidation.Target,
+	workstationID string,
+	code string,
+	location factoryvalidation.SubjectLocation,
+	substring string,
+) {
+	t.Helper()
+	for _, target := range targets {
+		if target.Code != code || target.Subject.ID != workstationID || target.Subject.Location != location {
+			continue
+		}
+		if !strings.Contains(target.Message, substring) {
+			t.Fatalf("target message = %q, want substring %q (target %#v)", target.Message, substring, target)
+		}
+		return
+	}
+	t.Fatalf("targets = %#v, want %q for workstation %q at %q", targets, code, workstationID, location)
 }
 
 func assertWorkstationTargetAbsent(
