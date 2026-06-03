@@ -228,6 +228,88 @@ describe("getProviderSessionDetails", () => {
       kind: "session_id",
       provider: "codex",
     });
+    expect(
+      toProviderSessionDetailRef({
+        id: "cursor_sess_01",
+        kind: "session_id",
+        provider: " CuRsOr ",
+      }),
+    ).toEqual({
+      id: "cursor_sess_01",
+      kind: "session_id",
+      provider: "cursor",
+    });
+  });
+
+  it("loads Cursor provider-session details using provider=cursor query params", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          parse: {
+            eventCount: 1,
+            functionCalls: [],
+            lineCount: 1,
+            malformedLineCount: 0,
+            parseErrors: [],
+            reasoning: [],
+            tokenUsage: {
+              inputTokens: 10,
+              outputTokens: 5,
+              totalTokens: 15,
+            },
+            turns: [],
+            unknownEventCount: 0,
+            unknownEvents: [],
+          },
+          transcript: [
+            {
+              lineNumber: 1,
+              order: 1,
+              sourceType: "assistant",
+              text: "Hello from Cursor",
+              type: "assistant",
+            },
+          ],
+          providerSession: {
+            id: "cursor_sess_01",
+            kind: "session_id",
+            provider: "cursor",
+          },
+          source: {
+            relativePath: "store.db",
+            sizeBytes: 4096,
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await expect(
+      getProviderSessionDetails(
+        {
+          id: "cursor_sess_01",
+          kind: "session_id",
+          provider: "cursor",
+        },
+        { fetch },
+      ),
+    ).resolves.toMatchObject({
+      providerSession: {
+        id: "cursor_sess_01",
+        provider: "cursor",
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/provider-sessions/detail?id=cursor_sess_01&kind=session_id&provider=cursor",
+      { method: "GET" },
+    );
   });
 
   it("rejects unsupported or unsafe provider-session metadata before issuing a request", () => {

@@ -22,8 +22,9 @@ export interface GetProviderSessionDetailsOptions {
 
 const GET_PROVIDER_SESSION_DETAIL_ENDPOINT = "/provider-sessions/detail";
 const LOADABLE_PROVIDER_SESSION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
-const LOADABLE_PROVIDER_SESSION_PROVIDER: ProviderSessionDetailRef["provider"] =
-  "codex";
+const LOADABLE_PROVIDER_SESSION_PROVIDERS = new Set<
+  ProviderSessionDetailRef["provider"]
+>(["codex", "cursor"]);
 const LOADABLE_PROVIDER_SESSION_KIND: ProviderSessionDetailRef["kind"] =
   "session_id";
 
@@ -125,12 +126,12 @@ export function toProviderSessionDetailRef(session: {
   kind?: string | null;
   provider?: string | null;
 }): ProviderSessionDetailRef | null {
-  const provider = normalizeProviderSessionPart(session.provider);
+  const provider = normalizeLoadableProviderSessionProvider(session.provider);
   const kind = normalizeProviderSessionPart(session.kind);
   const id = normalizeProviderSessionID(session.id);
 
   if (
-    provider !== LOADABLE_PROVIDER_SESSION_PROVIDER ||
+    provider === null ||
     kind !== LOADABLE_PROVIDER_SESSION_KIND ||
     id === null
   ) {
@@ -188,4 +189,20 @@ function normalizeProviderSessionPart(
 ): string | null {
   const trimmed = value?.trim().toLowerCase();
   return trimmed && trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeLoadableProviderSessionProvider(
+  value: string | null | undefined,
+): ProviderSessionDetailRef["provider"] | null {
+  const provider = normalizeProviderSessionPart(value);
+  if (
+    provider !== null &&
+    LOADABLE_PROVIDER_SESSION_PROVIDERS.has(
+      provider as ProviderSessionDetailRef["provider"],
+    )
+  ) {
+    return provider as ProviderSessionDetailRef["provider"];
+  }
+
+  return null;
 }
