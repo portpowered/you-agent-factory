@@ -28,7 +28,6 @@ import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
-export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
 export type FactoryGraphEditorVisibilityPreset =
   | "all"
   | "workflow"
@@ -50,13 +49,6 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 
 const TOOLBAR_ACTIONS_CLASS =
   "flex items-center gap-2 border-l border-af-border pl-2 max-md:ml-auto";
-const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
-  warning:
-    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
-};
-
 export function FactoryGraphEditorToolbar({
   activeTool,
   addMenuActions = [],
@@ -459,28 +451,10 @@ export function FactoryGraphEditorActionPopover({
   );
 }
 
-export function FactoryGraphEditorNotice({
-  children,
-  title,
-  tone = "neutral",
-}: {
-  children: ReactNode;
-  title: string;
-  tone?: FactoryGraphEditorNoticeTone;
-}) {
-  return (
-    <section
-      className={cn(
-        "grid gap-1 rounded-2xl border p-4",
-        NOTICE_TONE_CLASS[tone],
-      )}
-      role={tone === "danger" ? "alert" : "status"}
-    >
-      <h3 className="m-0 text-sm font-semibold">{title}</h3>
-      <p className="m-0 text-sm leading-6">{children}</p>
-    </section>
-  );
-}
+export {
+  FactoryGraphEditorNotice,
+  type FactoryGraphEditorNoticeTone,
+} from "./factory-graph-editor-notice";
 
 export function FactoryGraphEditorConfirmationDialog({
   cancelLabel,
