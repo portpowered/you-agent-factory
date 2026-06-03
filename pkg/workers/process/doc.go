@@ -24,4 +24,14 @@
 //
 // Operators should not rely on post-run cleanup to stop intentionally detached daemons or
 // services started outside the supervised group.
+//
+// # Supervised commands and sidecars
+//
+// Post-run cleanup runs only after cmd.Wait returns for that invocation. Long-running
+// factory commands—script pollers, live-runtime sidecars, and other supervised subprocesses—
+// stay in the same process group or job until their Run context is canceled or the process
+// exits on its own; cleanup does not run mid-flight while the parent is still executing.
+// Provider, script worker, and service layers must not duplicate process-tree termination;
+// they rely on this package's ExecCommandRunner (and LoggingCommandRunner wrapper) for
+// cancel, timeout, and post-run teardown.
 package process

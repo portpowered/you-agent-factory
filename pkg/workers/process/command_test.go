@@ -286,6 +286,58 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 	}
 }
 
+func TestExecCommandRunner_PostRunCleanupWaitsForParentWait(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix process-group supervision timing; Windows uses job-object post-run path")
+	}
+
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	runDone := make(chan struct{})
+	go func() {
+		defer close(runDone)
+		_, _ = ExecCommandRunner{}.Run(ctx, CommandRequest{
+			Command: os.Args[0],
+			Args: []string{
+				"-test.run=TestExecCommandRunner_HelperProcess",
+				"--",
+				"spawn-child",
+			},
+			Env: append(os.Environ(),
+				"GO_WANT_COMMAND_HELPER=1",
+				"COMMAND_HELPER_PID_FILE="+pidFile,
+			),
+		})
+	}()
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(pidFile); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := os.Stat(pidFile); err != nil {
+		t.Fatal("helper did not write child pid file while parent still running")
+	}
+
+	childPID := readCommandHelperPID(t, pidFile)
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
+	})
+	if !commandTestProcessRunning(childPID) {
+		t.Fatalf("child process %d exited before parent cmd.Wait returned", childPID)
+	}
+
+	cancel()
+	<-runDone
+	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
+		t.Fatalf("child process %d still running after supervised Run ended", childPID)
+	}
+}
+
 func TestExecCommandRunner_LogsSuccessfulPostRunCleanupNoOp(t *testing.T) {
 	logger := &recordingCommandLogger{}
 	req := commandCleanupTestRequest(t)
