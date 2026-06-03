@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
-func TestInferenceThrottleGuard_ActivePausesResolveFailureMetadataOnlyDispatch(t *testing.T) {
+func TestInferenceThrottleGuard_ActivePausesResolveLegacyProviderFailureOnlyDispatch(t *testing.T) {
 	now := time.Date(2026, time.May, 2, 15, 0, 0, 0, time.UTC)
 	guard := &InferenceThrottleGuard{
 		Provider:      "claude",
@@ -20,7 +20,7 @@ func TestInferenceThrottleGuard_ActivePausesResolveFailureMetadataOnlyDispatch(t
 	active := guard.ActivePauses(RuntimeGuardContext{
 		Now: now,
 		DispatchHistory: []interfaces.CompletedDispatch{
-			completedThrottleFailureWithFailureMetadata("dispatch-match", "t-claude", now.Add(-4*time.Minute)),
+			completedLegacyThrottleFailure("dispatch-match", "t-claude", now.Add(-4*time.Minute)),
 		},
 		RuntimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
 			Workers: map[string]*interfaces.WorkerConfig{
@@ -190,18 +190,19 @@ func completedThrottleFailure(dispatchID, transitionID string, endedAt time.Time
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		ProviderFailure: &interfaces.WorkFailureMetadata{
+		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
+			Type:   interfaces.WorkFailureTypeThrottled,
 		},
 	}
 }
 
-func completedThrottleFailureWithFailureMetadata(dispatchID, transitionID string, endedAt time.Time) interfaces.CompletedDispatch {
+func completedLegacyThrottleFailure(dispatchID, transitionID string, endedAt time.Time) interfaces.CompletedDispatch {
 	return interfaces.CompletedDispatch{
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		EndTime:      endedAt,
-		FailureMetadata: &interfaces.WorkFailureMetadata{
+		ProviderFailure: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
 			Type:   interfaces.WorkFailureTypeThrottled,
 		},
