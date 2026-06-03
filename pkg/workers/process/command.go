@@ -34,7 +34,10 @@ type LoggingCommandRunner struct {
 }
 
 // ExecCommandRunner implements CommandRunner by delegating to os/exec.
-type ExecCommandRunner struct{}
+type ExecCommandRunner struct {
+	// Logger emits structured process-group cleanup diagnostics. Nil disables cleanup logging.
+	Logger logging.Logger
+}
 
 func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
 	logger := logging.EnsureLogger(r.Logger)
@@ -61,7 +64,7 @@ func (r LoggingCommandRunner) Run(ctx context.Context, req CommandRequest) (Comm
 }
 
 // Run executes the command with process-tree cancellation, capturing stdout and stderr.
-func (ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
+func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandResult, error) {
 	if err := ctx.Err(); err != nil {
 		return CommandResult{}, err
 	}
@@ -92,19 +95,23 @@ func (ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (CommandRe
 		waitCh <- cmd.Wait()
 	}()
 
+	cleanupLogger := logging.EnsureLogger(r.Logger)
+	cancelCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonCancel)
+	postRunCleanup := newCommandProcessCleanupContext(cleanupLogger, req, commandProcessCleanupReasonPostRun)
+
 	var runErr error
 	select {
 	case runErr = <-waitCh:
 	case <-ctx.Done():
-		_ = terminateCommandProcessTree(cmd, tree)
+		_ = terminateCommandProcessTree(cmd, tree, cancelCleanup)
 		<-waitCh
-		closeCommandProcessTree(cmd, tree)
+		closeCommandProcessTree(cmd, tree, postRunCleanup)
 		return CommandResult{
 			Stdout: stdout.Bytes(),
 			Stderr: stderr.Bytes(),
 		}, ctx.Err()
 	}
-	closeCommandProcessTree(cmd, tree)
+	closeCommandProcessTree(cmd, tree, postRunCleanup)
 
 	result := CommandResult{
 		Stdout: stdout.Bytes(),
@@ -144,14 +151,34 @@ func CommandRunnerWithLogging(runner CommandRunner, logger logging.Logger) Comma
 		if existing.Logger == nil {
 			existing.Logger = logger
 		}
+		if existing.Runner != nil {
+			existing.Runner = execCommandRunnerWithLogger(existing.Runner, logger)
+		}
 		return existing
 	}
 	if runner == nil {
 		runner = ExecCommandRunner{}
 	}
 	return &LoggingCommandRunner{
-		Runner: runner,
+		Runner: execCommandRunnerWithLogger(runner, logger),
 		Logger: logger,
+	}
+}
+
+func execCommandRunnerWithLogger(runner CommandRunner, logger logging.Logger) CommandRunner {
+	switch typed := runner.(type) {
+	case ExecCommandRunner:
+		if typed.Logger == nil {
+			typed.Logger = logger
+		}
+		return typed
+	case *ExecCommandRunner:
+		if typed != nil && typed.Logger == nil {
+			typed.Logger = logger
+		}
+		return typed
+	default:
+		return runner
 	}
 }
 

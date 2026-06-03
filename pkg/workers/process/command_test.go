@@ -46,6 +46,7 @@ func canonicalWorkerTestPath(value string) string {
 type recordingCommandLogger struct {
 	infos    []recordedCommandLog
 	verboses []recordedCommandLog
+	warns    []recordedCommandLog
 }
 
 type recordedCommandLog struct {
@@ -60,7 +61,12 @@ func (l *recordingCommandLogger) Info(msg string, keysAndValues ...any) {
 		fields: commandLogFieldsMap(keysAndValues...),
 	})
 }
-func (l *recordingCommandLogger) Warn(_ string, _ ...any)  {}
+func (l *recordingCommandLogger) Warn(msg string, keysAndValues ...any) {
+	l.warns = append(l.warns, recordedCommandLog{
+		msg:    msg,
+		fields: commandLogFieldsMap(keysAndValues...),
+	})
+}
 func (l *recordingCommandLogger) Error(_ string, _ ...any) {}
 func (l *recordingCommandLogger) Verbose(msg string, keysAndValues ...any) {
 	l.verboses = append(l.verboses, recordedCommandLog{
@@ -224,6 +230,191 @@ func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testi
 	})
 	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
 		t.Fatalf("spawned child process %d is still running after command timeout", childPID)
+	}
+}
+
+func TestExecCommandRunner_LogsSuccessfulPostRunCleanupNoOp(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	req := commandCleanupTestRequest()
+	_, err := ExecCommandRunner{Logger: logger}.Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	completed := commandCleanupCompletedLogs(logger)
+	if len(completed) == 0 {
+		t.Fatal("expected post-run cleanup completion log")
+	}
+	last := completed[len(completed)-1]
+	assertCommandCleanupLogFields(t, last.fields, req, commandProcessCleanupReasonPostRun)
+	if last.fields["outcome"] != string(commandProcessCleanupOutcomeNoOp) {
+		t.Fatalf("cleanup outcome = %#v, want %q", last.fields["outcome"], commandProcessCleanupOutcomeNoOp)
+	}
+	if len(logger.warns) != 0 {
+		t.Fatalf("unexpected warn logs: %#v", logger.warns)
+	}
+}
+
+func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	req := commandCleanupTestRequest()
+	req.Args = []string{
+		"-test.run=TestExecCommandRunner_HelperProcess",
+		"--",
+		"spawn-child",
+	}
+	req.Env = append(os.Environ(),
+		"GO_WANT_COMMAND_HELPER=1",
+		"COMMAND_HELPER_PID_FILE="+pidFile,
+	)
+	req.Command = os.Args[0]
+
+	_, err := ExecCommandRunner{Logger: logger}.Run(ctx, req)
+	if err == nil {
+		t.Fatal("Run error = nil, want context deadline error")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Run error = %v, want %v", err, context.DeadlineExceeded)
+	}
+
+	childPID := readCommandHelperPID(t, pidFile)
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
+	})
+
+	cancelCompleted := commandCleanupCompletedLogsForReason(logger, commandProcessCleanupReasonCancel)
+	if len(cancelCompleted) == 0 {
+		t.Fatal("expected cancel cleanup completion log")
+	}
+	lastCancel := cancelCompleted[len(cancelCompleted)-1]
+	assertCommandCleanupLogFields(t, lastCancel.fields, req, commandProcessCleanupReasonCancel)
+	if lastCancel.fields["outcome"] != string(commandProcessCleanupOutcomeForceKillSuccess) {
+		t.Fatalf("cancel cleanup outcome = %#v, want %q", lastCancel.fields["outcome"], commandProcessCleanupOutcomeForceKillSuccess)
+	}
+	if _, ok := lastCancel.fields["args"]; ok {
+		t.Fatalf("cleanup log unexpectedly includes args: %#v", lastCancel.fields["args"])
+	}
+	if _, ok := lastCancel.fields["env"]; ok {
+		t.Fatalf("cleanup log unexpectedly includes env: %#v", lastCancel.fields["env"])
+	}
+}
+
+func TestCommandProcessCleanupContext_LogsPartialFailureAtWarn(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	req := commandCleanupTestRequest()
+	logCtx := newCommandProcessCleanupContext(logger, req, commandProcessCleanupReasonPostRun)
+	logCtx.logCompleted(
+		commandProcessCleanupOutcomePartialFailure,
+		4242,
+		errors.New("process group kill failed"),
+		"fallback killed parent",
+	)
+	if len(logger.warns) != 1 {
+		t.Fatalf("warn logs = %d, want 1", len(logger.warns))
+	}
+	fields := logger.warns[0].fields
+	if fields["outcome"] != string(commandProcessCleanupOutcomePartialFailure) {
+		t.Fatalf("outcome = %#v, want partial_failure", fields["outcome"])
+	}
+	if fields["process_group_id"] != 4242 {
+		t.Fatalf("process_group_id = %#v, want 4242", fields["process_group_id"])
+	}
+	assertCommandCleanupLogFields(t, fields, req, commandProcessCleanupReasonPostRun)
+}
+
+func TestCommandRunnerWithLogging_PropagatesLoggerToExecCommandRunner(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	runner := CommandRunnerWithLogging(ExecCommandRunner{}, logger)
+	execRunner, ok := unwrapExecCommandRunner(runner)
+	if !ok {
+		t.Fatal("expected wrapped ExecCommandRunner")
+	}
+	if execRunner.Logger == nil {
+		t.Fatal("ExecCommandRunner.Logger = nil, want injected logger")
+	}
+}
+
+func commandCleanupTestRequest() CommandRequest {
+	return CommandRequest{
+		Command:    os.Args[0],
+		Args:       []string{"-test.run=TestExecCommandRunner_HelperProcess", "--", "success"},
+		Env:        append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
+		DispatchID: "dispatch-cleanup-log",
+		Execution: interfaces.ExecutionMetadata{
+			RequestID: "request-cleanup-log",
+			TraceID:   "trace-cleanup-log",
+			WorkIDs:   []string{"work-cleanup-log"},
+		},
+	}
+}
+
+func unwrapExecCommandRunner(runner CommandRunner) (ExecCommandRunner, bool) {
+	switch typed := runner.(type) {
+	case *LoggingCommandRunner:
+		if typed == nil {
+			return ExecCommandRunner{}, false
+		}
+		return unwrapExecCommandRunner(typed.Runner)
+	case ExecCommandRunner:
+		return typed, true
+	case *ExecCommandRunner:
+		if typed == nil {
+			return ExecCommandRunner{}, false
+		}
+		return *typed, true
+	default:
+		return ExecCommandRunner{}, false
+	}
+}
+
+func commandCleanupCompletedLogs(logger *recordingCommandLogger) []recordedCommandLog {
+	return commandCleanupLogsByEvent(logger, workLogEventCommandProcessCleanupCompleted)
+}
+
+func commandCleanupCompletedLogsForReason(logger *recordingCommandLogger, reason commandProcessCleanupReason) []recordedCommandLog {
+	var completed []recordedCommandLog
+	for _, entry := range commandCleanupCompletedLogs(logger) {
+		if entry.fields["cleanup_reason"] == string(reason) {
+			completed = append(completed, entry)
+		}
+	}
+	return completed
+}
+
+func commandCleanupLogsByEvent(logger *recordingCommandLogger, eventName string) []recordedCommandLog {
+	var matched []recordedCommandLog
+	for _, bucket := range [][]recordedCommandLog{logger.infos, logger.verboses, logger.warns} {
+		for _, entry := range bucket {
+			if entry.fields["event_name"] == eventName {
+				matched = append(matched, entry)
+			}
+		}
+	}
+	return matched
+}
+
+func assertCommandCleanupLogFields(
+	t *testing.T,
+	fields map[string]any,
+	req CommandRequest,
+	reason commandProcessCleanupReason,
+) {
+	t.Helper()
+	if fields["command"] != req.Command {
+		t.Fatalf("command = %#v, want %q", fields["command"], req.Command)
+	}
+	if fields["dispatch_id"] != req.DispatchID {
+		t.Fatalf("dispatch_id = %#v, want %q", fields["dispatch_id"], req.DispatchID)
+	}
+	if fields["cleanup_reason"] != string(reason) {
+		t.Fatalf("cleanup_reason = %#v, want %q", fields["cleanup_reason"], reason)
+	}
+	if fields["request_id"] != req.Execution.RequestID {
+		t.Fatalf("request_id = %#v, want %q", fields["request_id"], req.Execution.RequestID)
 	}
 }
 
