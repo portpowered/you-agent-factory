@@ -1,5 +1,5 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { afterEach, beforeEach } from "vitest";
 
 const outDir = join(process.cwd(), ".warning-inventory");

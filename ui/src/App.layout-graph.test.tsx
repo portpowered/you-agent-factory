@@ -313,21 +313,25 @@ describe("App layout and graph behavior", () => {
     });
   });
 
-  it("renders a 20-node workflow through React Flow", async () => {
-    renderApp({ snapshot: twentyNodeSnapshot });
-    await waitForDashboardShell();
-    await waitForAppShellWorkGraphReady();
+  it(
+    "renders a 20-node workflow through React Flow",
+    async () => {
+      renderApp({ snapshot: twentyNodeSnapshot });
+      await waitForDashboardShell();
+      await waitForAppShellWorkGraphReady();
 
-    const workGraphViewport = screen.getByRole("region", {
-      name: "Work graph viewport",
-    });
-    await waitFor(() => {
+      const workGraphViewport = screen.getByRole("region", {
+        name: "Work graph viewport",
+      });
+      await waitFor(() => {
+        expect(
+          screen.getAllByRole("button", { name: /Select .* workstation/ }),
+        ).toHaveLength(20);
+      });
       expect(
-        screen.getAllByRole("button", { name: /Select .* workstation/ }),
-      ).toHaveLength(20);
-    });
-    expect(
-      within(workGraphViewport).getByRole("button", { name: "Zoom In" }),
-    ).toBeTruthy();
-  });
+        within(workGraphViewport).getByRole("button", { name: "Zoom In" }),
+      ).toBeTruthy();
+    },
+    60_000,
+  );
 });

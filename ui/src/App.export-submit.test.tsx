@@ -20,6 +20,7 @@ import {
   jsonResponse,
   registerAppDashboardTestLifecycle,
   renderApp,
+  settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
 
 const currentFactoryWithBundledFiles = {
@@ -229,6 +230,7 @@ describe("App shell export submission flows", () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(currentFactoryWithBundledFilesAPIResponse),
     );
+    await settleAppShellDashboardEffects();
 
     try {
       fireEvent.click(
@@ -283,6 +285,7 @@ describe("App shell export submission flows", () => {
           "semantic-workflow.png",
         );
       });
+      await settleAppShellDashboardEffects();
 
       const downloadedBlob = exportProbe.getDownloadedBlob();
       if (!downloadedBlob) {

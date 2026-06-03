@@ -82,11 +82,11 @@ for (const entry of entries) {
   };
   bucket.count += 1;
   if (entry.testFile) {
-    bucket.files.add(entry.testFile.replace(uiRoot + "/", ""));
+    bucket.files.add(entry.testFile.replace(`${uiRoot}/`, ""));
   }
   if (entry.testFile && entry.testName) {
     bucket.tests.add(
-      `${entry.testFile.replace(uiRoot + "/", "")} > ${entry.testName}`,
+      `${entry.testFile.replace(`${uiRoot}/`, "")} > ${entry.testName}`,
     );
   }
   byCategory.set(bucketKey, bucket);
