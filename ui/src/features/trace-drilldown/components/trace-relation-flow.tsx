@@ -21,8 +21,6 @@ import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-v
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "./trace-relation-factory-graph-node";
 
-const GRAPH_SHELL_CLASS =
-  "max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle";
 const GRAPH_SHELL_STYLE = { height: 352, minHeight: 288 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
 const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;
@@ -124,7 +122,7 @@ export function TraceRelationFlow({
   return (
     <DashboardGraphFrame
       aria-label={getTraceDrilldownMessages(locale).batchRelationGraphLabel}
-      className={GRAPH_SHELL_CLASS}
+      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-af-surface-subtle"
       data-trace-relation-flow
       style={GRAPH_SHELL_STYLE}
     >
