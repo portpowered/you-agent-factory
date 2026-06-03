@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
+import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
+import { mediumBranchingDashboardTopology } from "../../../components/dashboard/fixtures/topologies";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { resolveDashboardSelection } from "../../current-selection/base/public";
 import {
@@ -94,6 +96,23 @@ function resourceFamilyNodeIds(nodeIds: string[], resourceName: string) {
 }
 
 describe("current activity graph editor handles", () => {
+  it("projects work-state state_category on factory graph layout place nodes", async () => {
+    const factory = factoryFromDashboardTopology(mediumBranchingDashboardTopology);
+    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const initNode = graphLayout.nodes.find(
+      (node) =>
+        node.nodeKind === "state_position" && node.place.place_id === "story:init",
+    );
+    const blockedNode = graphLayout.nodes.find(
+      (node) =>
+        node.nodeKind === "state_position" &&
+        node.place.place_id === "story:blocked",
+    );
+
+    expect(initNode?.place.state_category).toBe("INITIAL");
+    expect(blockedNode?.place.state_category).toBe("FAILED");
+  });
+
   it("keeps a sample factory terminal state selected instead of falling back to the first workstation", async () => {
     const factory = loadSampleFactoryDefinition();
     const snapshot = buildSampleFactorySnapshot(factory);

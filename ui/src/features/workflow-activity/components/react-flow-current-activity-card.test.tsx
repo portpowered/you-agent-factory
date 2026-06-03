@@ -17,7 +17,11 @@ import {
   type ImportFactoryValue,
   SessionFactoryAPIError,
 } from "../../../api/session-factory";
-import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
+import {
+  buildDashboardSnapshotFixture,
+  factoryFromDashboardTopology,
+} from "../../../components/dashboard/fixtures";
+import { mediumBranchingDashboardTopology } from "../../../components/dashboard/fixtures/topologies";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import {
   resourceOccupancySnapshotForTick,
@@ -63,6 +67,7 @@ import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "../lib/current-activity-factory-graph-layout";
+import { workStatePhaseSurfaceClassName } from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -3252,6 +3257,34 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     fireEvent.click(cronButton);
 
     expect(onSelectWorkstation).toHaveBeenCalledWith("nightly-cron");
+  });
+
+  it("applies idle work-state phase surface colors from state_category", async () => {
+    const idleBranchingSnapshot = buildDashboardSnapshotFixture(
+      mediumBranchingDashboardTopology,
+    );
+    renderCurrentActivity({ snapshot: idleBranchingSnapshot });
+
+    const expectIdlePhaseSurface = async (
+      placeId: string,
+      stateCategory: "FAILED" | "INITIAL" | "PROCESSING" | "TERMINAL",
+    ) => {
+      const stateNode = await getStateNodeArticle(placeId);
+      const shell = stateNode.querySelector("article");
+      const shellClasses = shell?.className.split(/\s+/) ?? [];
+
+      expect(shellClasses.join(" ")).toContain(
+        workStatePhaseSurfaceClassName(stateCategory),
+      );
+      if (stateCategory !== "TERMINAL") {
+        expect(shellClasses).not.toContain("shadow-af-success-chip");
+      }
+    };
+
+    await expectIdlePhaseSurface("story:init", "INITIAL");
+    await expectIdlePhaseSurface("story:ready", "PROCESSING");
+    await expectIdlePhaseSurface("story:complete", "TERMINAL");
+    await expectIdlePhaseSurface("story:blocked", "FAILED");
   });
 
   it("renders state category icons without replacing state labels", async () => {
