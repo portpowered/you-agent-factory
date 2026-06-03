@@ -8,13 +8,6 @@ import (
 
 var errCommandProcessCleanupPartialFailure = errors.New("command process cleanup partial failure")
 
-const (
-	workLogEventCommandProcessCleanupStarted    = "command_process.cleanup_started"
-	workLogEventCommandProcessCleanupGraceful   = "command_process.cleanup_graceful"
-	workLogEventCommandProcessCleanupForceKill  = "command_process.cleanup_force_kill"
-	workLogEventCommandProcessCleanupCompleted  = "command_process.cleanup_completed"
-)
-
 type commandProcessCleanupReason string
 
 const (
@@ -46,38 +39,26 @@ func newCommandProcessCleanupContext(logger logging.Logger, req CommandRequest, 
 	}
 }
 
-func (c commandProcessCleanupContext) baseFields(eventName string, supervisorID int, extra ...any) []any {
-	fields := []any{
-		"event_name", eventName,
-		"cleanup_reason", string(c.reason),
-		"command", c.req.Command,
-		"dispatch_id", c.req.DispatchID,
-	}
-	if supervisorID > 0 {
-		fields = append(fields, "process_group_id", supervisorID)
-	}
-	fields = append(fields, extra...)
-	return workLogFields(c.req.Execution, fields...)
-}
-
 func (c commandProcessCleanupContext) logStarted(supervisorID int) {
-	c.logger.Info("command process cleanup: started",
-		c.baseFields(workLogEventCommandProcessCleanupStarted, supervisorID, "status", "started")...)
+	c.logger.Info("command runner: cleanup started",
+		commandRunnerCleanupLogFields(c.req, workLogEventCommandRunnerCleanupStarted, c.reason, supervisorID, "status", "started")...)
 }
 
 func (c commandProcessCleanupContext) logGraceful(supervisorID int) {
-	c.logger.Verbose("command process cleanup: graceful termination",
-		c.baseFields(workLogEventCommandProcessCleanupGraceful, supervisorID, "status", "graceful")...)
+	c.logger.Verbose("command runner: cleanup graceful termination",
+		commandRunnerCleanupLogFields(c.req, workLogEventCommandRunnerCleanupGraceful, c.reason, supervisorID, "status", "graceful")...)
 }
 
 func (c commandProcessCleanupContext) logForceKill(supervisorID int) {
-	c.logger.Info("command process cleanup: force kill",
-		c.baseFields(workLogEventCommandProcessCleanupForceKill, supervisorID, "status", "force_kill")...)
+	c.logger.Info("command runner: cleanup force kill",
+		commandRunnerCleanupLogFields(c.req, workLogEventCommandRunnerCleanupForceKill, c.reason, supervisorID, "status", "force_kill")...)
 }
 
 func (c commandProcessCleanupContext) logCompleted(outcome commandProcessCleanupOutcome, supervisorID int, err error, detail string) {
-	fields := c.baseFields(
-		workLogEventCommandProcessCleanupCompleted,
+	fields := commandRunnerCleanupLogFields(
+		c.req,
+		workLogEventCommandRunnerCleanupCompleted,
+		c.reason,
 		supervisorID,
 		"status", string(outcome),
 		"outcome", string(outcome),
@@ -89,7 +70,7 @@ func (c commandProcessCleanupContext) logCompleted(outcome commandProcessCleanup
 		fields = append(fields, "error", err.Error())
 	}
 
-	msg := "command process cleanup: completed"
+	msg := "command runner: cleanup completed"
 	switch outcome {
 	case commandProcessCleanupOutcomeNoOp,
 		commandProcessCleanupOutcomeGracefulSuccess,

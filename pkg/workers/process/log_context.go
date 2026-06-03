@@ -13,6 +13,10 @@ const (
 	workLogEventCommandRunnerCompleted      = "command_runner.completed"
 	workLogEventCommandRunnerRequestDetails = "command_runner.request_details"
 	workLogEventCommandRunnerOutputDetails  = "command_runner.output_details"
+	workLogEventCommandRunnerCleanupStarted   = "command_runner.cleanup_started"
+	workLogEventCommandRunnerCleanupGraceful  = "command_runner.cleanup_graceful"
+	workLogEventCommandRunnerCleanupForceKill = "command_runner.cleanup_force_kill"
+	workLogEventCommandRunnerCleanupCompleted = "command_runner.cleanup_completed"
 )
 
 func workLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
@@ -90,6 +94,36 @@ func commandOutputDetailsLogFields(req CommandRequest, result CommandResult, dur
 		"duration_ms", duration.Milliseconds(),
 		"stdout_bytes", len(result.Stdout),
 		"stderr_bytes", len(result.Stderr))
+}
+
+func commandRunnerCleanupLogFields(
+	req CommandRequest,
+	eventName string,
+	reason commandProcessCleanupReason,
+	supervisorID int,
+	extra ...any,
+) []any {
+	fields := []any{
+		"event_name", eventName,
+		"cleanup_reason", string(reason),
+		"command", req.Command,
+		"args_count", len(req.Args),
+		"dispatch_id", req.DispatchID,
+	}
+	if req.WorkDir != "" {
+		fields = append(fields, "working_dir", req.WorkDir)
+	}
+	if req.WorkerType != "" {
+		fields = append(fields, "worker_type", req.WorkerType)
+	}
+	if req.WorkstationName != "" {
+		fields = append(fields, "workstation_name", req.WorkstationName)
+	}
+	if supervisorID > 0 {
+		fields = append(fields, "process_group_id", supervisorID)
+	}
+	fields = append(fields, extra...)
+	return workLogFields(req.Execution, fields...)
 }
 
 func commandResultStatus(ctx context.Context, result CommandResult, err error) string {

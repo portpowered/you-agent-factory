@@ -288,7 +288,7 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 
 func TestExecCommandRunner_LogsSuccessfulPostRunCleanupNoOp(t *testing.T) {
 	logger := &recordingCommandLogger{}
-	req := commandCleanupTestRequest()
+	req := commandCleanupTestRequest(t)
 	_, err := ExecCommandRunner{Logger: logger}.Run(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Run returned error: %v", err)
@@ -314,7 +314,7 @@ func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	req := commandCleanupTestRequest()
+	req := commandCleanupTestRequest(t)
 	req.Args = []string{
 		"-test.run=TestExecCommandRunner_HelperProcess",
 		"--",
@@ -358,7 +358,7 @@ func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 
 func TestCommandProcessCleanupContext_LogsPartialFailureAtWarn(t *testing.T) {
 	logger := &recordingCommandLogger{}
-	req := commandCleanupTestRequest()
+	req := commandCleanupTestRequest(t)
 	logCtx := newCommandProcessCleanupContext(logger, req, commandProcessCleanupReasonPostRun)
 	logCtx.logCompleted(
 		commandProcessCleanupOutcomePartialFailure,
@@ -379,6 +379,27 @@ func TestCommandProcessCleanupContext_LogsPartialFailureAtWarn(t *testing.T) {
 	assertCommandCleanupLogFields(t, fields, req, commandProcessCleanupReasonPostRun)
 }
 
+func TestLoggingCommandRunner_LogsPostRunCleanupThroughWrappedExec(t *testing.T) {
+	logger := &recordingCommandLogger{}
+	req := commandCleanupTestRequest(t)
+	runner := CommandRunnerWithLogging(ExecCommandRunner{}, logger)
+
+	_, err := runner.Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	completed := commandCleanupCompletedLogs(logger)
+	if len(completed) == 0 {
+		t.Fatal("expected command_runner.cleanup_completed log from wrapped exec runner")
+	}
+	last := completed[len(completed)-1]
+	if last.fields["event_name"] != workLogEventCommandRunnerCleanupCompleted {
+		t.Fatalf("event_name = %#v, want %q", last.fields["event_name"], workLogEventCommandRunnerCleanupCompleted)
+	}
+	assertCommandCleanupLogFields(t, last.fields, req, commandProcessCleanupReasonPostRun)
+}
+
 func TestCommandRunnerWithLogging_PropagatesLoggerToExecCommandRunner(t *testing.T) {
 	logger := &recordingCommandLogger{}
 	runner := CommandRunnerWithLogging(ExecCommandRunner{}, logger)
@@ -391,12 +412,16 @@ func TestCommandRunnerWithLogging_PropagatesLoggerToExecCommandRunner(t *testing
 	}
 }
 
-func commandCleanupTestRequest() CommandRequest {
+func commandCleanupTestRequest(t *testing.T) CommandRequest {
+	t.Helper()
 	return CommandRequest{
-		Command:    os.Args[0],
-		Args:       []string{"-test.run=TestExecCommandRunner_HelperProcess", "--", "success"},
-		Env:        append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
-		DispatchID: "dispatch-cleanup-log",
+		Command:           os.Args[0],
+		Args:              []string{"-test.run=TestExecCommandRunner_HelperProcess", "--", "success"},
+		Env:               append(os.Environ(), "GO_WANT_COMMAND_HELPER=1"),
+		WorkDir:           t.TempDir(),
+		DispatchID:        "dispatch-cleanup-log",
+		WorkerType:        "script",
+		WorkstationName:   "cleanup-test-station",
 		Execution: interfaces.ExecutionMetadata{
 			RequestID: "request-cleanup-log",
 			TraceID:   "trace-cleanup-log",
@@ -425,7 +450,7 @@ func unwrapExecCommandRunner(runner CommandRunner) (ExecCommandRunner, bool) {
 }
 
 func commandCleanupCompletedLogs(logger *recordingCommandLogger) []recordedCommandLog {
-	return commandCleanupLogsByEvent(logger, workLogEventCommandProcessCleanupCompleted)
+	return commandCleanupLogsByEvent(logger, workLogEventCommandRunnerCleanupCompleted)
 }
 
 func commandCleanupCompletedLogsForReason(logger *recordingCommandLogger, reason commandProcessCleanupReason) []recordedCommandLog {
@@ -469,6 +494,33 @@ func assertCommandCleanupLogFields(
 	if fields["request_id"] != req.Execution.RequestID {
 		t.Fatalf("request_id = %#v, want %q", fields["request_id"], req.Execution.RequestID)
 	}
+	if fields["trace_id"] != req.Execution.TraceID {
+		t.Fatalf("trace_id = %#v, want %q", fields["trace_id"], req.Execution.TraceID)
+	}
+	if fields["args_count"] != len(req.Args) {
+		t.Fatalf("args_count = %#v, want %d", fields["args_count"], len(req.Args))
+	}
+	if req.WorkDir != "" && fields["working_dir"] != req.WorkDir {
+		t.Fatalf("working_dir = %#v, want %q", fields["working_dir"], req.WorkDir)
+	}
+	if req.WorkerType != "" && fields["worker_type"] != req.WorkerType {
+		t.Fatalf("worker_type = %#v, want %q", fields["worker_type"], req.WorkerType)
+	}
+	if req.WorkstationName != "" && fields["workstation_name"] != req.WorkstationName {
+		t.Fatalf("workstation_name = %#v, want %q", fields["workstation_name"], req.WorkstationName)
+	}
+	for _, forbidden := range []string{"stdin", "stdin_bytes", "env"} {
+		if _, ok := fields[forbidden]; ok {
+			t.Fatalf("cleanup log unexpectedly includes %q", forbidden)
+		}
+	}
+	if _, ok := fields["args"]; ok {
+		t.Fatal("cleanup log unexpectedly includes full args slice")
+	}
+}
+
+func commandCleanupStartedLogs(logger *recordingCommandLogger) []recordedCommandLog {
+	return commandCleanupLogsByEvent(logger, workLogEventCommandRunnerCleanupStarted)
 }
 
 func TestLoggingCommandRunner_LogsRequestAndCompletionStatuses(t *testing.T) {
