@@ -7,11 +7,6 @@ import {
   HEADER_MAX_TICK_TOKEN,
 } from "../messages/header-controls";
 
-const TICK_SLIDER_INPUT_CLASS =
-  "h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:accent-af-text-disabled";
-const TICK_SLIDER_META_CLASS = "ml-auto flex items-center";
-const TICK_SLIDER_STATUS_CLASS =
-  "whitespace-nowrap text-xs font-medium tabular-nums text-af-text-muted";
 const MINIMUM_TIMELINE_TICKS = 2;
 
 interface TimelineBounds {
@@ -120,7 +115,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
           aria-describedby={tickStatusID}
           aria-label={messages.sliderAriaLabel}
           aria-valuetext={sliderValueText}
-          className={TICK_SLIDER_INPUT_CLASS}
+          className="h-1.5 min-w-32 flex-1 cursor-pointer accent-af-accent disabled:cursor-not-allowed disabled:accent-af-text-disabled"
           disabled={isDisabled}
           max={bounds.maxTick}
           min={bounds.minTick}
@@ -130,8 +125,11 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
         />
       </label>
 
-      <div className={TICK_SLIDER_META_CLASS}>
-        <output className={TICK_SLIDER_STATUS_CLASS} id={tickStatusID}>
+      <div className="ml-auto flex items-center">
+        <output
+          className="whitespace-nowrap text-xs font-medium tabular-nums text-af-text-muted"
+          id={tickStatusID}
+        >
           {sliderValueText}
         </output>
       </div>
