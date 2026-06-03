@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/color-role-tokens.css";
+@import "./styles/color-role-aliases.css";
 @import "./styles/current-activity-graph-nodes.css";
 @import "./styles/tick-slider.css";
 
@@ -32,24 +33,10 @@
   --color-af-foundation-danger-ink: #ffb2b2;
   --color-af-foundation-worker: #b68cff;
   --color-af-foundation-worker-ink: #dfccff;
-  --color-af-background: var(--color-af-foundation-background);
-  --color-af-surface: var(--color-af-foundation-surface);
-  --color-af-surface-subtle: rgb(
-    from var(--color-af-foundation-overlay) r g b /
-    0.04
-  );
+  /* Neutral/product af-* aliases: color-role-aliases.css */
   --color-af-surface-subtle-muted: rgb(
     from var(--color-af-foundation-overlay) r g b /
     0.028
-  );
-  --color-af-surface-raised: rgb(
-    from var(--color-af-foundation-surface) r g b /
-    0.94
-  );
-  --color-af-border: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
-  --color-af-border-strong: rgb(
-    from var(--color-af-foundation-overlay) r g b /
-    0.18
   );
   --color-af-overlay: rgb(from var(--color-af-foundation-overlay) r g b / 0.08);
   --color-af-overlay-subtle: rgb(
@@ -68,32 +55,18 @@
     from var(--color-af-foundation-accent) r g b /
     0.25
   );
-  --color-af-text: var(--color-af-foundation-ink);
-  --color-af-text-muted: rgb(from var(--color-af-foundation-ink) r g b / 0.78);
+  /* Text af-* aliases (on-surface*): color-role-aliases.css */
   --color-af-text-subtle: rgb(from var(--color-af-foundation-ink) r g b / 0.58);
   --color-af-text-disabled: rgb(
     from var(--color-af-foundation-ink) r g b /
     0.42
   );
   --color-af-text-inverse: var(--color-af-foundation-canvas);
-  --color-af-accent: var(--color-af-foundation-accent);
-  --color-af-accent-hover: var(--color-af-foundation-accent-strong);
-  --color-af-accent-surface: rgb(
-    from var(--color-af-foundation-accent) r g b /
-    0.18
-  );
-  --color-af-accent-border: var(--color-af-foundation-accent);
-  --color-af-on-accent: var(--color-af-text-inverse);
-  --color-af-success: var(--color-af-foundation-success);
-  --color-af-success-surface: rgb(
-    from var(--color-af-foundation-success) r g b /
-    0.12
-  );
+  /* Accent/semantic af-* aliases: color-role-aliases.css */
   --color-af-success-border: rgb(
     from var(--color-af-foundation-success) r g b /
     0.28
   );
-  --color-af-success-text: var(--color-af-foundation-success-ink);
   --color-af-session-live-ping: radial-gradient(
     circle,
     rgb(from var(--color-af-foundation-success) r g b / 0.48) 0%,
@@ -101,52 +74,24 @@
     rgb(from var(--color-af-foundation-success) r g b / 0.08) 56%,
     transparent 76%
   );
-  --color-af-on-success: var(--color-af-text-inverse);
-  --color-af-warning: var(--color-af-foundation-warning);
-  --color-af-warning-surface: rgb(
-    from var(--color-af-foundation-warning) r g b /
-    0.14
-  );
   --color-af-warning-border: rgb(
     from var(--color-af-foundation-warning) r g b /
     0.3
   );
-  --color-af-warning-text: var(--color-af-foundation-warning-ink);
-  --color-af-on-warning: var(--color-af-text-inverse);
-  --color-af-danger: var(--color-af-foundation-danger);
   --color-af-danger-hover: var(--color-af-foundation-danger-bright);
-  --color-af-danger-surface: rgb(
-    from var(--color-af-foundation-danger) r g b /
-    0.18
-  );
   --color-af-danger-border: rgb(
     from var(--color-af-foundation-danger) r g b /
     0.3
-  );
-  --color-af-danger-text: var(--color-af-foundation-danger-ink);
-  --color-af-on-danger: var(--color-af-text-inverse);
-  --color-af-info: var(--color-af-foundation-info);
-  --color-af-info-surface: rgb(
-    from var(--color-af-foundation-info) r g b /
-    0.12
   );
   --color-af-info-border: rgb(
     from var(--color-af-foundation-info) r g b /
     0.28
   );
-  --color-af-info-text: var(--color-af-foundation-info-ink);
-  --color-af-on-info: var(--color-af-text-inverse);
-  --color-af-worker: var(--color-af-foundation-worker);
-  --color-af-worker-surface: rgb(
-    from var(--color-af-foundation-worker) r g b /
-    0.13
-  );
   --color-af-worker-border: rgb(
     from var(--color-af-foundation-worker) r g b /
     0.3
   );
-  --color-af-worker-text: var(--color-af-foundation-worker-ink);
-  --color-af-bg: var(--color-af-foundation-background);
+  --color-af-bg: var(--color-af-background);
   --color-af-bg-start: var(--color-af-foundation-background-start);
   --color-af-bg-mid: var(--color-af-foundation-background-mid);
   --color-af-canvas: var(--color-af-foundation-canvas);

@@ -8,9 +8,10 @@ Canonical reference for the dashboard UI Material-style color roles introduced i
 
 ## Source of truth
 
-- Token definitions: `ui/src/styles/color-role-tokens.css` (imported from `ui/src/styles.css`)
-- Factory Dark baseline values derive from `af-foundation-*` palette keys in `ui/src/styles.css`
-- Transitional `af-*` product tokens remain until alias migration (PRD US-002) and cleanup (US-010)
+- **Role tokens (long-term API):** `ui/src/styles/color-role-tokens.css` — use Tailwind utilities such as `bg-primary`, `text-on-surface`, `border-outline`.
+- **Transitional `af-*` aliases:** `ui/src/styles/color-role-aliases.css` — maps widely used `af-*` product tokens to roles so existing UI keeps rendering while components migrate.
+- **Factory palette keys:** `af-foundation-*` in `ui/src/styles.css` — baseline for Factory Dark until palette switching (US-008).
+- **Cleanup (US-010):** remove `color-role-aliases.css` and obsolete `af-*` after consumers use role utilities directly.
 
 ## Role families
 
@@ -60,6 +61,31 @@ Each semantic family includes `on-*` and `*-container` / `on-*-container` pairs 
 2. **Secondary and tertiary saturation** — Initial tokens mirror current foundation info/worker hues. US-003 lowers vibrancy while keeping hue families distinguishable from neutrals and from each other.
 3. **Palette switching (US-008)** — Future palette sets override the same role keys; role names stay stable across Factory Dark, Factory Light, Material Baseline, Slate, and Olive.
 4. **Migration order** — Taxonomy (this doc) → `af-*` aliases → shared primitives → feature surfaces → alias cleanup.
+
+## Transitional `af-*` alias map (US-002)
+
+| Transitional token | Role source of truth | Notes |
+| --- | --- | --- |
+| `af-background` | `background` | Page/shell backdrop |
+| `af-surface` | `surface` | Default component surface |
+| `af-surface-subtle` | `surface-container-low` | Low-emphasis panels |
+| `af-surface-raised` | `surface-container-high` | Raised cards, graph controls |
+| `af-border` | `outline` | Default borders |
+| `af-border-strong` | `outline-variant` | Stronger borders |
+| `af-text` | `on-surface` | Primary text |
+| `af-text-muted` | `on-surface-variant` | Secondary text |
+| `af-accent` | `primary` | Brand emphasis |
+| `af-accent-hover` | `on-primary-container` | Strong accent ink |
+| `af-accent-surface` | `primary-container` | Accent fill |
+| `af-accent-border` | `primary` | Accent stroke |
+| `af-on-accent` | `on-primary` | Text/icons on accent |
+| `af-success` / `af-success-surface` | `success` / `success-container` | Status only |
+| `af-warning` / `af-warning-surface` | `warning` / `warning-container` | Status only |
+| `af-danger` / `af-danger-surface` | `error` / `error-container` | Status only |
+| `af-info` / `af-info-surface` | `info` / `info-container` | Status only |
+| `af-worker` / `af-worker-surface` | `tertiary` / `tertiary-container` | Supporting accent |
+
+Tokens without a direct role yet (for example `af-text-subtle`, `af-overlay`, semantic `*-border` opacities, chart keys) remain defined in `ui/src/styles.css` until a later story adds roles or consumers migrate.
 
 ## CSS variable reference
 
