@@ -13,6 +13,7 @@ import (
 // 1. Base64URL decode + protobuf decode
 // 2. Base64URL decode + extract readable strings
 // 3. Return original if decoding fails
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session redacted reasoning decoding stays grouped until extraction refactor.
 // decodeRedactedReasoning is the internal implementation
 func decodeRedactedReasoning(encoded string) (string, bool) {
 	if encoded == "" {

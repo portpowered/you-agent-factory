@@ -8,6 +8,8 @@ import (
 )
 
 // backendsizecheck:ignore-function MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
+// pkgmaintcheck:ignore-function-lines MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session blob decode fallback chain stays grouped until behavior-preserving extraction refactor.
 func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParseFailures *int) (map[string]interface{}, *RawBubble, bool) {
 	var data map[string]interface{}
 	valueBytes := []byte(blob.Value)

@@ -13,6 +13,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity fixture-backed HTTP test keeps cursor detail response assertions together.
 func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testing.T) {
 	root, sessionID := writeReadableCursorAgentStorageFixture(t)
 	srv := newTestServerWithCursorRoot(root)

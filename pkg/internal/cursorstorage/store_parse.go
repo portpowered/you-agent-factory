@@ -118,6 +118,7 @@ func isReadableText(text string) bool {
 
 // parseTextMessageFormat parses cursor-agent's text message format: "text$uuid"
 // Returns a RawBubble if the format matches and data is valid, nil otherwise
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session text bubble parsing stays grouped until extraction refactor.
 // Handles format like: "hello$027f8b2f-d09c-4a69-98b0-b53f0118605d" (may have control chars)
 func parseTextMessageFormat(key, value, sessionID string) *RawBubble {
 	// First, check if value is valid UTF-8 - if not, it's likely binary data
@@ -217,6 +218,7 @@ func parseTextMessageFormat(key, value, sessionID string) *RawBubble {
 	return bubble
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session composer parsing stays grouped until extraction refactor.
 func parseComposerFromData(key string, data map[string]interface{}) (*RawComposer, error) {
 	composer := &RawComposer{}
 

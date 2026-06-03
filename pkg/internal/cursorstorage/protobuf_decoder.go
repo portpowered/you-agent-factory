@@ -106,6 +106,7 @@ func decodeVarint(data []byte) (uint64, int) {
 }
 
 // extractProtobufFields extracts all fields from protobuf data and returns them as a map
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session protobuf decoding stays grouped until extraction refactor.
 // This is a simplified decoder that focuses on extracting readable content
 func extractProtobufFields(data []byte) (map[string]interface{}, error) {
 	result := make(map[string]interface{})

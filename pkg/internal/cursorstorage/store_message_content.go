@@ -101,6 +101,7 @@ func messageDataFieldText(itemType, data string) string {
 	return data
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session message content formatting stays grouped until extraction refactor.
 func messageUnknownContentText(itemMap map[string]interface{}, itemType string) string {
 	var unknownParts []string
 	if itemType != "" {

@@ -17,6 +17,7 @@ func NewAgentStorageReader(storeDBPaths []string) *AgentStorageReader {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session store schema probing stays grouped until extraction refactor.
 // QueryBlobsTable queries the blobs table from a store.db file
 func QueryBlobsTable(db *sql.DB) ([]BlobEntry, error) {
 	// Check if blobs table exists
@@ -119,6 +120,7 @@ func QueryBlobsTable(db *sql.DB) ([]BlobEntry, error) {
 	return entries, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity MIT-ported cursor-session store schema probing stays grouped until extraction refactor.
 // QueryMetaTable queries the meta table from a store.db file
 func QueryMetaTable(db *sql.DB) ([]MetaEntry, error) {
 	// Check if meta table exists
