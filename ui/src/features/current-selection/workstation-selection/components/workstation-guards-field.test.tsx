@@ -29,7 +29,18 @@ function renderWorkstationGuardsField(
   );
 }
 
-describe("EditableConfigurationWorkstationGuardsField", () => {
+function typeSelectorValue(
+  selectorInput: HTMLElement,
+  targetValue: string,
+) {
+  let draftValue = "";
+  for (const character of targetValue) {
+    draftValue += character;
+    fireEvent.change(selectorInput, { target: { value: draftValue } });
+  }
+}
+
+describe("EditableConfigurationWorkstationGuardsField rendering", () => {
   it("renders guard rows with type and summary", () => {
     renderWorkstationGuardsField({
       guards: [
@@ -106,7 +117,9 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
 
     expect(onGuardsChange).toHaveBeenCalledWith([]);
   });
+});
 
+describe("EditableConfigurationWorkstationGuardsField MATCHES_FIELDS selector", () => {
   it("updates guards draft matchConfig.inputKey with the exact selector string", () => {
     const onGuardsChange = vi.fn();
     const selector = '.Tags["_last_output"]';
@@ -158,11 +171,7 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
     const selectorInput = screen.getByLabelText("Field selector");
     const targetValue = '.Tags["_last_output"]';
     await user.click(selectorInput);
-    let draftValue = "";
-    for (const character of targetValue) {
-      draftValue += character;
-      fireEvent.change(selectorInput, { target: { value: draftValue } });
-    }
+    typeSelectorValue(selectorInput, targetValue);
 
     expect(selectorInput).toHaveFocus();
     expect(selectorInput).toHaveValue(targetValue);
@@ -211,7 +220,9 @@ describe("EditableConfigurationWorkstationGuardsField", () => {
       },
     ]);
   });
+});
 
+describe("EditableConfigurationWorkstationGuardsField validation", () => {
   it("renders guard field validation errors with role=alert", () => {
     renderWorkstationGuardsField({
       fieldErrors: {
