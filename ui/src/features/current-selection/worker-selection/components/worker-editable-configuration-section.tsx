@@ -278,7 +278,7 @@ function WorkerEditableConfigurationTimeoutField({
                 : "editable-worker-timeout-hint"
             }
             aria-invalid={validationErrors.timeout ? "true" : undefined}
-            className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id={amountFieldId}
             inputMode="decimal"
             min={0}
@@ -359,7 +359,7 @@ function WorkerEditableConfigurationStopTokenField({
               : "editable-worker-stop-token-hint"
           }
           aria-invalid={validationErrors.stopToken ? "true" : undefined}
-          className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+          className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
           id={fieldId}
           onChange={(event) => state.onStopTokenChange(event.target.value)}
           type="text"
@@ -716,7 +716,7 @@ function ModelWorkerSkipPermissionsField({
           }
           aria-invalid={validationErrors.skipPermissions ? "true" : undefined}
           checked={state.draft.skipPermissions}
-          className="size-4 rounded border border-af-border"
+          className="size-4 rounded border border-outline"
           id="editable-worker-skip-permissions"
           onChange={(event) =>
             state.onSkipPermissionsChange(event.target.checked)
