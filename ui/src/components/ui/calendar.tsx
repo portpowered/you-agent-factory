@@ -34,18 +34,18 @@ export function Calendar({
         day: "h-10 w-10 p-0 font-medium text-on-surface aria-selected:opacity-100",
         day_button: cn(
           "h-10 w-10 rounded-lg text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-af-focus-ring",
-          "hover:bg-af-overlay aria-selected:bg-af-accent aria-selected:text-af-on-accent",
+          "hover:bg-af-overlay aria-selected:bg-primary aria-selected:text-on-primary",
         ),
-        disabled: "text-af-text-disabled",
+        disabled: "text-on-surface-disabled",
         month: "space-y-4",
         nav: "flex items-center gap-2",
         outside:
-          "text-af-text-disabled aria-selected:bg-af-accent-surface aria-selected:text-af-on-accent",
+          "text-on-surface-disabled aria-selected:bg-primary-container aria-selected:text-on-primary-container",
         root: cn(defaultClassNames.root, "text-sm"),
         selected: "font-semibold",
-        today: "text-af-accent",
+        today: "text-primary",
         weekday:
-          "text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle",
+          "text-xs font-bold uppercase tracking-[0.08em] text-on-surface-variant",
         ...classNames,
       }}
       showOutsideDays={showOutsideDays}
