@@ -13,7 +13,7 @@ Implement and review in this sequence. Later phases assume earlier ones are merg
 | Phase | Story | Deliverable | Status |
 | --- | --- | --- | --- |
 | 1. Taxonomy | US-001 | Role tokens in `color-role-tokens.css`; taxonomy in [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) | Complete |
-| 2. Compatibility aliases | US-002 | `color-role-aliases.css` maps transitional `af-*` → roles | Complete |
+| 2. Product `af-*` role wiring | US-002 | Role-backed `--color-af-*` keys in `color-role-tokens.css` (alias file removed) | Complete |
 | 3. Accent rebalance | US-003 | Calmer secondary/tertiary foundation keys; accent contrast Storybook | Complete |
 | 4. Shared primitive semantics | US-004 | Accent vs semantic tone policy in buttons, pills, lists | Complete |
 | 5. Shared neutral surfaces | US-005 | Role utilities in `ui/src/components/ui/` | Complete |
@@ -29,8 +29,7 @@ Implement and review in this sequence. Later phases assume earlier ones are merg
 
 | Area | Test file | What it proves |
 | --- | --- | --- |
-| Role token wiring | `ui/src/styles/color-role-tokens.test.ts` | Accent saturation contract (primary > secondary/tertiary) |
-| Alias layer | `ui/src/styles/color-role-aliases.test.ts` | Each transitional `af-*` aliases to documented role |
+| Role token wiring | `ui/src/styles/color-role-tokens.test.ts` | Accent saturation contract (primary > secondary/tertiary) and role-backed `--color-af-*` product keys |
 | Palette presets | `ui/src/styles/color-palette-presets.test.ts` | Five palettes override foundation keys |
 | Typography scale | `ui/src/styles/typography-role-tokens.test.ts` | Material scale tokens and utilities exist |
 | Layout scale | `ui/src/styles/layout-role-tokens.test.ts` | Layout spacing roles registered |
@@ -46,7 +45,6 @@ Run targeted UI checks from the repo root:
 cd ui && bun install
 cd ui && bun run tsc
 cd ui && bun x vitest run src/styles/theme-role-regression.test.ts \
-  src/styles/color-role-aliases.test.ts \
   src/styles/color-role-tokens.test.ts \
   src/styles/color-palette-presets.test.ts \
   src/features/feature-surface-color-roles.test.ts \
@@ -71,29 +69,29 @@ After story changes: `make ui-storybook` then `make ui-test-storybook` (or the t
 
 ## Cleanup phase (post-migration)
 
-Execute only after grep shows no production consumers of transitional class names or alias-only tokens.
+Alias layer removal is **complete**. Role-backed `--color-af-*` product keys live in `ui/src/styles/color-role-tokens.css`; foundation, overlay, border, and chart keys without role equivalents remain in `ui/src/styles.css`. Do not reintroduce `color-role-aliases.css` or its `@import`.
 
-### Gate checklist
+### Gate checklist (maintain)
 
 1. `ui/src/features/**` — no `bg-af-surface-*`, `text-af-text`, `bg-af-accent-*` (enforced by `feature-surface-color-roles.test.ts`).
 2. `ui/src/components/ui/**` — neutral and semantic contracts green (see shared-primitive `*.test.ts` files).
 3. Storybook overview and palette selector reviewed on all five palettes.
 4. Full `cd ui && bun run tsc` and theme regression vitest bundle (above) pass.
 
-### Removal steps
+### Completed alias removal
 
-1. Delete `ui/src/styles/color-role-aliases.css` and remove its `@import` from `ui/src/styles.css`.
-2. Remove duplicate `af-*` entries from `ui/src/styles.css` that only existed for alias indirection (keep foundation keys, overlays, semantic borders, chart keys until replaced).
-3. Delete `ui/src/styles/color-role-aliases.test.ts` after aliases are gone.
+1. Deleted `ui/src/styles/color-role-aliases.css` and removed its `@import` from `ui/src/styles.css`.
+2. Inlined role-backed `--color-af-*` definitions into `color-role-tokens.css`; kept foundation keys, overlays, semantic borders, and chart keys in `styles.css`.
+3. Deleted `ui/src/styles/color-role-aliases.test.ts`; product key wiring is asserted in `color-role-tokens.test.ts`.
 4. **Bulk migrator removed (complete).** The one-shot bulk class replacer was deleted after US-009; bulk migration is finished. Do not restore it. If transitional `af-*` patterns reappear, fix violations using `ui/src/features/feature-surface-color-roles.test.ts` and targeted manual edits.
-5. Update [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) to drop transitional tables and mark role utilities as the only API.
+5. [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) documents supported `--color-af-*` product keys until a later chart/overlay role pass.
 
-### Tokens that may remain after alias cleanup
+### Tokens that may remain
 
 Foundation palette keys (`af-foundation-*`), overlays (`af-overlay`), semantic border opacities (`af-*-border`), chart series keys (`af-chart-*`), and graph-edge keys without role equivalents stay in `styles.css` until a follow-up adds roles or retires the product keys.
 
 ## Related docs
 
-- [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) — role families and alias map
+- [material-color-role-taxonomy.md](./material-color-role-taxonomy.md) — role families and supported product keys
 - [material-typography-role-taxonomy.md](./material-typography-role-taxonomy.md) — typography and text color roles
 - [material-layout-role-taxonomy.md](./material-layout-role-taxonomy.md) — layout spacing primitives
