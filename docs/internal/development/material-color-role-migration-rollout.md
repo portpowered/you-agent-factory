@@ -35,6 +35,7 @@ Implement and review in this sequence. Later phases assume earlier ones are merg
 | Layout scale | `ui/src/styles/layout-role-tokens.test.ts` | Layout spacing roles registered |
 | Shared primitive semantics | `ui/src/components/ui/shared-primitive-semantic-color-roles.test.ts` | No semantic misuse for brand emphasis |
 | Shared primitive neutrals | `ui/src/components/ui/shared-primitive-neutral-surface-roles.test.ts` | Neutral chrome on role utilities |
+| Shared primitive disabled text | `ui/src/components/ui/shared-primitive-disabled-text-color-roles.test.ts` | Disabled/muted copy on `text-on-surface-disabled` in input, panel trigger, chart legend, action button spinner |
 | Calendar accent/text | `ui/src/components/ui/calendar-color-roles.test.ts` | DayPicker selected, today, outside, disabled, and weekday cells on role utilities |
 | Feature & graph surfaces | `ui/src/features/feature-surface-color-roles.test.ts` | Features avoid transitional tokens; graph/header samples use roles |
 | Prompt-editor neutrals | `ui/src/components/prompt-editor/prompt-editor-neutral-surface-roles.test.ts` | Monaco shells, diagnostics rows, and resize handle on role utilities |
@@ -51,6 +52,7 @@ cd ui && bun x vitest run src/styles/theme-role-regression.test.ts \
   src/styles/color-palette-presets.test.ts \
   src/features/feature-surface-color-roles.test.ts \
   src/components/ui/shared-primitive-neutral-surface-roles.test.ts \
+  src/components/ui/shared-primitive-disabled-text-color-roles.test.ts \
   src/components/ui/calendar-color-roles.test.ts \
   src/components/prompt-editor/prompt-editor-neutral-surface-roles.test.ts \
   src/components/ui/shared-primitive-semantic-color-roles.test.ts \
