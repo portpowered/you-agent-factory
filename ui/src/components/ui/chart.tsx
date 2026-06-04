@@ -262,7 +262,7 @@ export function ChartLegendContent({
             aria-pressed={!hidden}
             className={cn(
               "min-h-0 rounded-md border-transparent px-0 py-1 text-left font-normal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-focus",
-              hidden ? "text-af-text-disabled" : "",
+              hidden ? "text-on-surface-disabled" : "",
               itemClassName,
             )}
             data-chart-legend-series={key}
