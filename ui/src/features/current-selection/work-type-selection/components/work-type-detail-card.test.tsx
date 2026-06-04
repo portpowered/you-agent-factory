@@ -203,7 +203,7 @@ describe("WorkTypeDetailCard", () => {
     ).toBe(false);
     expect(
       within(panel).getByText(
-        "When marked default, this work type receives prompt text from simplified you run --factory flows.",
+        "Default work type supplies prompt text for simplified factory runs.",
       ),
     ).toBeTruthy();
     expect(within(panel).getByRole("heading", { name: "States" })).toBeTruthy();

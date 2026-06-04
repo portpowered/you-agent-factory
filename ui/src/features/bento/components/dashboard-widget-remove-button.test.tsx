@@ -19,8 +19,8 @@ describe("DashboardWidgetRemoveButton", () => {
     expect(button.className).toContain("h-10");
     expect(button.className).toContain("w-10");
     expect(button.className).toContain("focus-visible:ring-2");
-    expect(button.className).toContain("border-af-border");
-    expect(button.className).toContain("bg-af-surface-raised");
+    expect(button.className).toContain("border-outline");
+    expect(button.className).toContain("bg-surface-container-high");
 
     fireEvent.click(button);
 

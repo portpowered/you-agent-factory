@@ -4,6 +4,7 @@ import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
 import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
@@ -45,12 +46,16 @@ export function ResourceNodeView({
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "af-current-activity-node-surface-resource border-af-border-strong justify-center text-left text-af-text",
+        "af-current-activity-node-surface-resource border-outline-variant justify-center text-left text-on-surface",
+        currentActivityGraphNodeHoverClassName({
+          activeFlow: data.activeFlow,
+          muted: data.muted,
+          selected: data.selectedResource,
+        }),
         data.activeFlow &&
           !data.selectedResource &&
           "border-af-success-border shadow-af-success-chip",
-        data.selectedResource &&
-          "border-af-accent-border shadow-af-accent-selected",
+        data.selectedResource && "border-primary shadow-af-accent-selected",
         data.muted && "opacity-[0.45]",
       )}
       handles={data.handles}
@@ -116,7 +121,7 @@ function ResourceNodeContent({
           title={resourceLabel}
         >
           <GraphSemanticIcon
-            className="h-3.5 w-3.5 text-af-success"
+            className="h-3.5 w-3.5 text-success"
             kind="resource"
             label={resourceLabel}
             locale={locale}
@@ -124,7 +129,7 @@ function ResourceNodeContent({
         </span>
         <span className="flex min-w-0 overflow-hidden" title={label}>
           <span
-            className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-af-text"
+            className="block min-w-0 overflow-hidden truncate whitespace-nowrap font-mono text-[0.76rem] font-bold leading-[0.82rem] text-on-surface"
             data-resource-name
             title={label}
           >

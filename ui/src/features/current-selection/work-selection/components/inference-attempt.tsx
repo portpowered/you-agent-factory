@@ -25,6 +25,7 @@ import {
 } from "../../base/components/current-selection-locale";
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
+  CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
   HISTORY_HEADER_CLASS,
   INFERENCE_ATTEMPT_CARD_CLASS,
@@ -184,18 +185,21 @@ function AttemptTextBodyDisclosure({
 
   return (
     <div className="grid gap-1.5">
-      <div className={HISTORY_HEADER_CLASS}>
-        <strong id={labelId}>{label}</strong>
-        <ExpandablePanelTrigger
-          controlsID={panelId}
-          expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-          variant="section"
-        >
-          {expanded ? collapseAction : expandAction}
-        </ExpandablePanelTrigger>
-      </div>
+      <CurrentSelectionSectionHeader
+        action={
+          <ExpandablePanelTrigger
+            controlsID={panelId}
+            expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+            variant="section"
+          >
+            {expanded ? collapseAction : expandAction}
+          </ExpandablePanelTrigger>
+        }
+        headingId={labelId}
+        title={label}
+      />
       {expanded ? (
         <div id={panelId}>
           <InferenceAttemptTextSection label={label} value={value} />

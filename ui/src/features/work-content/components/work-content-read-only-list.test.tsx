@@ -20,6 +20,12 @@ describe("WorkContentPartList", () => {
       screen.getByRole("heading", { level: 2, name: "Review notes" }),
     ).toBeTruthy();
     expect(screen.getByText("Confirm payload visibility")).toBeTruthy();
+
+    const authoredShell = screen
+      .getByRole("heading", { level: 2, name: "Review notes" })
+      .closest("div");
+    expect(authoredShell?.className).toContain("border-outline");
+    expect(authoredShell?.className).toContain("bg-surface-container-high");
   });
 
   it("renders JSON parts as formatted code blocks", () => {
@@ -35,6 +41,10 @@ describe("WorkContentPartList", () => {
     );
 
     expect(screen.getByText(/"status": "ready"/)).toBeTruthy();
+
+    const jsonShell = screen.getByText(/"status": "ready"/).closest("pre");
+    expect(jsonShell?.className).toContain("border-outline");
+    expect(jsonShell?.className).toContain("bg-surface-container-high");
   });
 
   it("renders non-text parts with readable fallback descriptions", () => {

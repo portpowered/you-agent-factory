@@ -33,24 +33,24 @@ const SESSION_TAB_BUTTON_CLASS =
 const SESSION_TAB_CLOSE_BUTTON_CLASS =
   "px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_ACTIVE_CLASS = cn(
-  "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-af-surface-subtle text-af-text",
-  "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
-  "after:pointer-events-none after:absolute after:-right-4 after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-af-surface-subtle)_1rem)]",
+  "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-surface-container-low text-on-surface",
+  "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-surface-container-low)_1rem)]",
+  "after:pointer-events-none after:absolute after:-right-4 after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-surface-container-low)_1rem)]",
 );
 const SESSION_TAB_INACTIVE_CLASS =
-  "rounded-t-xl rounded-b-none text-af-text-muted hover:bg-af-overlay hover:text-af-text";
+  "rounded-t-xl rounded-b-none text-on-surface-variant hover:bg-af-overlay hover:text-on-surface";
 const SESSION_TAB_ACTIVE_BUTTON_CLASS =
   "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
 const SESSION_TAB_INACTIVE_BUTTON_CLASS =
   "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
 const SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS =
-  "flex items-center justify-center text-af-text-subtle transition-colors hover:text-af-text";
+  "flex items-center justify-center text-on-surface-subtle transition-colors hover:text-on-surface";
 const SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS = cn(
-  "rounded-tr-xl text-af-text-disabled transition-colors",
-  "group-hover:text-af-text-muted",
-  "hover:bg-af-overlay hover:text-af-text-muted",
-  "group-focus-within:bg-af-overlay-focus group-focus-within:text-af-text",
-  "focus-visible:bg-af-overlay-focus focus-visible:text-af-text",
+  "rounded-tr-xl text-on-surface-disabled transition-colors",
+  "group-hover:text-on-surface-variant",
+  "hover:bg-af-overlay hover:text-on-surface-variant",
+  "group-focus-within:bg-af-overlay-focus group-focus-within:text-on-surface",
+  "focus-visible:bg-af-overlay-focus focus-visible:text-on-surface",
 );
 export function DashboardSessionTabs({
   locale,
@@ -142,7 +142,7 @@ function DashboardSessionTabsView({
         </div>
         {closeError ? (
           <p
-            className="rounded-xl border border-af-danger-border bg-af-danger-surface px-3 py-2 text-sm text-af-danger-text"
+            className="rounded-xl border border-af-danger-border bg-error-container px-3 py-2 text-sm text-on-error-container"
             role="alert"
           >
             {closeError.message}
@@ -192,8 +192,8 @@ function OpenSessionButton({
       aria-haspopup="dialog"
       aria-label={label}
       className={cn(
-        "flex shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-af-text-muted transition-colors",
-        "hover:bg-af-overlay-subtle hover:text-af-text",
+        "flex shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-on-surface-variant transition-colors",
+        "hover:bg-af-overlay-subtle hover:text-on-surface",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
       )}
       onClick={onClick}
@@ -238,7 +238,10 @@ function SessionTabsContent({
   if (isPending) {
     return (
       <p
-        className={cn("text-sm text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn(
+          "text-sm text-on-surface-variant",
+          DASHBOARD_BODY_TEXT_CLASS,
+        )}
       >
         {messages.loadingSessionsLabel}
       </p>
@@ -261,7 +264,7 @@ function SessionTabsContent({
   if (sessions.length === 0) {
     return (
       <>
-        <p className={cn("text-sm text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p className={cn("text-sm text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
           {messages.sessionsEmptyTitle}
         </p>
         <OpenSessionButton
@@ -378,7 +381,7 @@ function SessionErrorState({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <p className={cn("text-sm text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+      <p className={cn("text-sm text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
         {label}
       </p>
       <Button onClick={onRetry} size="sm" tone="outline">
@@ -445,7 +448,7 @@ function SessionTabButton({
           <span className="truncate text-sm font-semibold">{label}</span>
         </span>
         <span
-          className="block truncate text-[11px] text-af-text-subtle"
+          className="block truncate text-[11px] text-on-surface-subtle"
           title={session.folderPath}
         >
           {secondaryPath}
@@ -488,9 +491,9 @@ function SessionTabStatusIndicator({
       <span
         className={cn(
           "absolute inset-0 rounded-full",
-          status === "live" && "bg-af-success",
-          status === "connecting" && "bg-af-accent",
-          status === "offline" && "bg-af-danger",
+          status === "live" && "bg-success",
+          status === "connecting" && "bg-primary",
+          status === "offline" && "bg-error",
         )}
       />
     </span>

@@ -200,7 +200,8 @@ const (
 
 // Defines values for LoadableProviderSessionProvider.
 const (
-	Codex LoadableProviderSessionProvider = "codex"
+	Codex  LoadableProviderSessionProvider = "codex"
+	Cursor LoadableProviderSessionProvider = "cursor"
 )
 
 // Defines values for ModelInvocationResponseMode.
@@ -1761,6 +1762,7 @@ type ProviderSessionSourceMetadata struct {
 
 // ProviderSessionTokenUsage defines model for ProviderSessionTokenUsage.
 type ProviderSessionTokenUsage struct {
+	CacheWriteTokens      *int `json:"cacheWriteTokens,omitempty"`
 	CachedInputTokens     *int `json:"cachedInputTokens,omitempty"`
 	InputTokens           *int `json:"inputTokens,omitempty"`
 	OutputTokens          *int `json:"outputTokens,omitempty"`

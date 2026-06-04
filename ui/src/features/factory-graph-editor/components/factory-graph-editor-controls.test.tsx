@@ -73,7 +73,7 @@ describe("factory graph editor toolbar controls", () => {
     renderToolbar();
 
     const addMenuButton = screen.getByRole("button", {
-      name: "Add tool",
+      name: "Add",
     });
     expect(addMenuButton.textContent).toBe("");
     expect(addMenuButton.getAttribute("aria-expanded")).toBe("false");
@@ -95,7 +95,7 @@ describe("factory graph editor toolbar controls", () => {
       within(menu).getByRole("button", { name: "Workstation" }).className,
     ).toContain("rounded-lg");
     expect(
-      screen.queryByRole("button", {
+      within(menu).queryByRole("button", {
         name: "Add",
       }),
     ).toBeNull();
@@ -106,11 +106,11 @@ describe("factory graph editor toolbar controls", () => {
 
     renderToolbar();
 
-    const connectButton = screen.getByRole("button", { name: "Connect tool" });
-    const deleteButton = screen.getByRole("button", { name: "Delete tool" });
+    const connectButton = screen.getByRole("button", { name: "Connect" });
+    const deleteButton = screen.getByRole("button", { name: "Delete" });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
     const addButton = screen.getByRole("button", {
-      name: "Add tool",
+      name: "Add",
     });
 
     expect(addButton.textContent).toBe("");
@@ -134,7 +134,32 @@ describe("factory graph editor toolbar controls", () => {
     await user.hover(deleteButton);
     expect(
       await screen.findByRole("tooltip", {
-        name: "Delete tool",
+        name: "Remove nodes or edges from the graph",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("shows the add menu tooltip on hover and keyboard focus", async () => {
+    const user = userEvent.setup();
+
+    renderToolbar();
+
+    const addButton = screen.getByRole("button", { name: "Add" });
+
+    await user.hover(addButton);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Add a graph entity",
+      }),
+    ).toBeTruthy();
+
+    await user.unhover(addButton);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    addButton.focus();
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Add a graph entity",
       }),
     ).toBeTruthy();
   });
@@ -181,8 +206,8 @@ describe("factory graph editor mode toggle controls", () => {
     });
 
     expect(toggle.className).toContain("border-af-warning-border");
-    expect(toggle.className).toContain("bg-af-warning-surface");
-    expect(toggle.className).toContain("text-af-warning-text");
+    expect(toggle.className).toContain("bg-warning-container");
+    expect(toggle.className).toContain("text-on-warning-container");
   });
 
   it("keeps default enter and leave tones when there are no unsaved changes", () => {
@@ -193,7 +218,7 @@ describe("factory graph editor mode toggle controls", () => {
     const enterToggle = screen.getByRole("button", {
       name: "Edit mode",
     });
-    expect(enterToggle.className).toContain("border-af-border");
+    expect(enterToggle.className).toContain("border-outline");
     expect(enterToggle.className).not.toContain("border-af-warning-border");
 
     rerender(
@@ -203,7 +228,7 @@ describe("factory graph editor mode toggle controls", () => {
     const leaveToggle = screen.getByRole("button", {
       name: "Leave editor",
     });
-    expect(leaveToggle.className).toContain("border-af-border-strong");
+    expect(leaveToggle.className).toContain("border-outline-variant");
     expect(leaveToggle.className).not.toContain("border-af-warning-border");
   });
 
@@ -219,9 +244,9 @@ describe("factory graph editor mode toggle controls", () => {
       name: "Edit mode",
     });
     expect(tooltip).toBeTruthy();
-    expect(tooltip.className).toContain("border-af-border-strong");
-    expect(tooltip.className).toContain("bg-af-surface-raised");
-    expect(tooltip.className).toContain("text-af-text");
+    expect(tooltip.className).toContain("border-outline-variant");
+    expect(tooltip.className).toContain("bg-surface-container-high");
+    expect(tooltip.className).toContain("text-on-surface");
   });
 
   it("keeps the mode-toggle tooltip below the trigger button", async () => {
@@ -249,15 +274,15 @@ describe("factory graph editor toolbar tooltip placement", () => {
 
     const toolbarTooltips = [
       {
-        buttonName: "Delete tool",
-        tooltipName: "Delete tool",
+        buttonName: "Delete",
+        tooltipName: "Remove nodes or edges from the graph",
       },
       {
-        buttonName: "Connect tool",
-        tooltipName: "Connect tool",
+        buttonName: "Connect",
+        tooltipName: "Connect nodes on the graph",
       },
       {
-        buttonName: "Open hide or show node classes menu",
+        buttonName: "Show or hide",
         tooltipName: "Show or hide node classes on the graph",
       },
       {
@@ -396,7 +421,7 @@ describe("factory graph editor hide/show controls", () => {
     renderToolbar({ onToggleHiddenNodeClass });
 
     const hideShowButton = screen.getByRole("button", {
-      name: "Open hide or show node classes menu",
+      name: "Show or hide",
     });
     expect(hideShowButton.getAttribute("aria-pressed")).toBe("false");
     expect(hideShowButton.getAttribute("aria-expanded")).toBe("false");
@@ -427,7 +452,7 @@ describe("factory graph editor hide/show controls", () => {
 
     expect(
       screen
-        .getByRole("button", { name: "Open hide or show node classes menu" })
+        .getByRole("button", { name: "Show or hide" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
   });
@@ -437,11 +462,11 @@ describe("factory graph editor hide/show controls", () => {
 
     expect(
       screen.getByRole("button", {
-        name: "Open hide or show node classes menu",
+        name: "Show or hide",
       }),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Add tool" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Connect tool" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
   });
 });
 

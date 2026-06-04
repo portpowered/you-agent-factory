@@ -319,7 +319,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				ModelProvider: string(interfaces.ModelProviderCursor),
 				UserMessage:   "summarize the workspace",
 			},
-			want: []string{"-p", "summarize the workspace"},
+			want: []string{"-p", "--output-format", "json", "summarize the workspace"},
 		},
 		{
 			name: "WithModelSessionAndForce",
@@ -330,7 +330,16 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				UserMessage:   "run the tests",
 			},
 			skipPermissions: true,
-			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "run the tests"},
+			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "json", "run the tests"},
+		},
+		{
+			name: "WithWorkspace",
+			req: interfaces.ProviderInferenceRequest{
+				ModelProvider:    string(interfaces.ModelProviderCursor),
+				WorkingDirectory: "/tmp/project",
+				UserMessage:      "inspect the repo",
+			},
+			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "json", "inspect the repo"},
 		},
 	}
 

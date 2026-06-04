@@ -157,11 +157,17 @@ const editableGraphFactoryReplayLines = [
 ];
 
 const viewportCenterToleranceRatio = 0.35;
+const flowPositionTolerancePx = 8;
 
-function distanceBetweenPoints(left, right) {
-  const deltaX = left.x - right.x;
-  const deltaY = left.y - right.y;
-  return Math.hypot(deltaX, deltaY);
+function flowPositionsMatchWithinTolerance(left, right) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return (
+    Math.abs(left.x - right.x) <= flowPositionTolerancePx &&
+    Math.abs(left.y - right.y) <= flowPositionTolerancePx
+  );
 }
 
 function boundingBoxesOverlap(left, right) {
@@ -261,7 +267,7 @@ async function addWorker(
   toolbar,
   { model = "gpt-5", modelProvider = "CURSOR", name },
 ) {
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Worker" })
@@ -281,7 +287,7 @@ async function addWorker(
 }
 
 async function addWorkstation(page, toolbar, { body, name }) {
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Workstation" })
@@ -349,7 +355,7 @@ async function readNodeScreenPosition(page, nodeTestId) {
 }
 
 async function addResource(page, toolbar, { capacity = "1", name }) {
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Resource" })
@@ -450,7 +456,7 @@ describe.sequential("factory graph editor node placement browser integration", (
   });
 
   it(
-    "places a newly added worker near the visible viewport center after panning",
+    "places a newly added workstation near the visible viewport center after panning",
     async () => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
@@ -466,40 +472,34 @@ describe.sequential("factory graph editor node placement browser integration", (
         await server.replayCompleted;
 
         const toolbar = await enterGraphEditor(browserPage.page);
-        await panGraphViewport(browserPage.page, 240, 180);
+        await panGraphViewport(browserPage.page, -220, 160);
 
-        const existingDraftCenter = await nodeScreenCenter(
-          browserPage.page,
-          "rf__node-workstation:draft",
-        );
-        await addWorker(browserPage.page, toolbar, { name: "assistant" });
+        await addWorkstation(browserPage.page, toolbar, {
+          body: "Review the drafted story.",
+          name: "review",
+        });
 
-        const newWorkerNode = browserPage.page.getByTestId(
-          "rf__node-worker:assistant",
+        const workstationNode = browserPage.page.getByTestId(
+          "rf__node-workstation:review",
         );
-        await newWorkerNode.waitFor({
+        await workstationNode.waitFor({
           state: "visible",
           timeout: uiInteractionTimeoutMs,
         });
 
         const viewportMetrics = await viewportScreenMetrics(browserPage.page);
-        const addedWorkerCenter = await nodeScreenCenter(
+        const addedWorkstationCenter = await nodeScreenCenter(
           browserPage.page,
-          "rf__node-worker:assistant",
-        );
-        const distanceFromExistingDraft = distanceBetweenPoints(
-          addedWorkerCenter,
-          existingDraftCenter,
+          "rf__node-workstation:review",
         );
 
-        expect(isNearViewportCenter(addedWorkerCenter, viewportMetrics)).toBe(
-          true,
-        );
-        expect(distanceFromExistingDraft).toBeGreaterThan(80);
+        expect(
+          isNearViewportCenter(addedWorkstationCenter, viewportMetrics),
+        ).toBe(true);
 
         const flowPosition = await readNodeFlowPosition(
           browserPage.page,
-          "rf__node-worker:assistant",
+          "rf__node-workstation:review",
         );
         expect(flowPosition).not.toBeNull();
         expect(Number.isFinite(flowPosition.x)).toBe(true);
@@ -568,6 +568,85 @@ describe.sequential("factory graph editor node placement browser integration", (
         );
 
         expect(boundingBoxesOverlap(anchorBox, workstationBox)).toBe(false);
+
+        expectNoBrowserErrors(
+          browserPage.pageErrors,
+          browserPage.consoleErrors,
+          expect,
+        );
+      } finally {
+        await server.stop();
+        await browserPage.close();
+      }
+    },
+    browserScenarioTimeoutMs,
+  );
+
+  it(
+    "keeps a newly added workstation flow position after save and reload",
+    async () => {
+      const server = await startFactoryApiServer({
+        apiPort: preview.apiPort,
+        currentFactory: editableGraphFactoryDefinition,
+        eventLines: editableGraphFactoryReplayLines,
+      });
+      const browserPage = await openBrowserPage();
+
+      try {
+        await browserPage.page.goto(preview.previewURL, {
+          waitUntil: "domcontentloaded",
+        });
+        await server.replayCompleted;
+
+        const toolbar = await enterGraphEditor(browserPage.page);
+        await panGraphViewport(browserPage.page, -180, 140);
+
+        await addWorkstation(browserPage.page, toolbar, {
+          body: "Review the drafted story.",
+          name: "review",
+        });
+
+        const workstationTestId = "rf__node-workstation:review";
+        await browserPage.page
+          .getByTestId(workstationTestId)
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const positionBeforeSave = await readNodeFlowPosition(
+          browserPage.page,
+          workstationTestId,
+        );
+        expect(positionBeforeSave).not.toBeNull();
+
+        await saveGraphDraft(browserPage.page, toolbar);
+
+        const positionAfterSave = await readNodeFlowPosition(
+          browserPage.page,
+          workstationTestId,
+        );
+        expect(
+          flowPositionsMatchWithinTolerance(
+            positionBeforeSave,
+            positionAfterSave,
+          ),
+        ).toBe(true);
+
+        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await server.replayCompleted;
+        await enterGraphEditor(browserPage.page);
+        await browserPage.page
+          .getByTestId(workstationTestId)
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+
+        const positionAfterReload = await readNodeFlowPosition(
+          browserPage.page,
+          workstationTestId,
+        );
+        expect(
+          flowPositionsMatchWithinTolerance(
+            positionBeforeSave,
+            positionAfterReload,
+          ),
+        ).toBe(true);
 
         expectNoBrowserErrors(
           browserPage.pageErrors,

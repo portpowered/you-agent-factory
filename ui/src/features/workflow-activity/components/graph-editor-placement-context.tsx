@@ -76,8 +76,10 @@ export function GraphEditorPlacementRegistrar({
   storedNodePositions: GraphNodePositions;
 }) {
   const apiRef = useContext(GraphEditorPlacementContext);
-  const [pendingDraft, setPendingDraft] =
-    useState<FactoryGraphAddEntityDraft | null>(null);
+  const [pendingPlacement, setPendingPlacement] = useState<{
+    draft: FactoryGraphAddEntityDraft;
+    storageGraphKey: string;
+  } | null>(null);
   const placementInput = useMemo(
     () => ({
       graphKey,
@@ -95,13 +97,17 @@ export function GraphEditorPlacementRegistrar({
 
     apiRef.current = {
       placeAddedNode: (draft) => {
-        setPendingDraft(draft);
+        const nodeId = factoryGraphNodeIdForAddEntityDraft(draft);
+        setPendingPlacement({
+          draft,
+          storageGraphKey: graphKeyAfterAddingNode(graphKey, nodeId),
+        });
       },
     };
-  }, [apiRef]);
+  }, [apiRef, graphKey]);
 
   useEffect(() => {
-    if (!pendingDraft || !placementInput.graphKey) {
+    if (!pendingPlacement || !placementInput.graphKey) {
       return;
     }
 
@@ -112,7 +118,7 @@ export function GraphEditorPlacementRegistrar({
     }
 
     const topLeft = resolveInitialPlacementTopLeft({
-      draft: pendingDraft,
+      draft: pendingPlacement.draft,
       nodes: placementInput.nodes,
       storedPositions: placementInput.storedNodePositions,
       viewportCenter: viewportCenterInFlowCoordinates(
@@ -121,18 +127,18 @@ export function GraphEditorPlacementRegistrar({
       ),
     });
     if (!topLeft) {
-      setPendingDraft(null);
+      setPendingPlacement(null);
       return;
     }
 
-    const nodeId = factoryGraphNodeIdForAddEntityDraft(pendingDraft);
+    const nodeId = factoryGraphNodeIdForAddEntityDraft(pendingPlacement.draft);
     placementInput.setStoredNodePosition(
-      graphKeyAfterAddingNode(placementInput.graphKey, nodeId),
+      pendingPlacement.storageGraphKey,
       nodeId,
       topLeft,
     );
-    setPendingDraft(null);
-  }, [flowContainerRef, flowInstanceRef, pendingDraft, placementInput]);
+    setPendingPlacement(null);
+  }, [flowContainerRef, flowInstanceRef, pendingPlacement, placementInput]);
 
   return null;
 }

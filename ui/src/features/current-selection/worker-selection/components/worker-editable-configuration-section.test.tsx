@@ -83,12 +83,14 @@ describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Saving reviewer updates every workstation",
+      "Saving reviewer updates workstations",
     );
     expect(screen.getByRole("alert").textContent).toMatch(/Review.*Plan/);
     expect(
-      screen.getByText(messages.editableConfigurationSharedImpactWarningDetail),
-    ).toBeInTheDocument();
+      screen.queryByText(
+        messages.editableConfigurationSharedImpactWarningDetail,
+      ),
+    ).toBeNull();
   });
 
   it("does not show worker save-impact warning for a single-workstation worker", () => {
@@ -101,9 +103,7 @@ describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
     );
 
     expect(
-      screen.queryByText(
-        /updates every workstation that references this worker/i,
-      ),
+      screen.queryByText(/updates workstations/i),
     ).toBeNull();
   });
 });

@@ -79,7 +79,7 @@ const BENTO_DRAG_CANCEL_SELECTOR =
 const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-hidden";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
-  "flex min-h-13 cursor-grab items-center justify-between gap-3 border-af-border px-3.5 py-3 active:cursor-grabbing";
+  "flex min-h-13 cursor-grab items-center justify-between gap-3 border-outline px-3.5 py-3 active:cursor-grabbing";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
   "min-h-11 flex-wrap items-start gap-2 px-3 py-2.5";
 const BENTO_CARD_HEADER_TOOLS_CLASS =

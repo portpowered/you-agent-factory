@@ -234,10 +234,10 @@ export const ImageChooseFileVerification = {
     }
 
     await expect(dropzone.className).toContain("border-dashed");
-    await expect(dropzone.className).toContain("border-af-border-strong");
-    await expect(dropzone.className).toContain("bg-af-surface-subtle");
-    await expect(dropzone.className).not.toContain("bg-af-accent-surface");
-    await expect(dropzone.className).not.toContain("border-af-accent-border");
+    await expect(dropzone.className).toContain("border-outline-variant");
+    await expect(dropzone.className).toContain("bg-surface-container-low");
+    await expect(dropzone.className).not.toContain("bg-primary-container");
+    await expect(dropzone.className).not.toContain("border-primary");
 
     fireEvent.dragOver(dropzone, {
       dataTransfer: {
@@ -250,8 +250,8 @@ export const ImageChooseFileVerification = {
       scope.getByText("Drop the image file to stage it."),
     ).toBeVisible();
     await expect(dropzone.className).toContain("bg-af-overlay");
-    await expect(dropzone.className).not.toContain("bg-af-accent-surface");
-    await expect(dropzone.className).not.toContain("border-af-accent-border");
+    await expect(dropzone.className).not.toContain("bg-primary-container");
+    await expect(dropzone.className).not.toContain("border-primary");
 
     const fileInput = scope.getByLabelText("Image file", {
       selector: "input",
@@ -308,8 +308,8 @@ export const SharedWorkContentRowChrome = {
     await expect(scope.getByText("Text")).toBeVisible();
     await expect(scope.getByText("Image")).toBeVisible();
     for (const row of rows) {
-      await expect(row).toHaveClass("border-af-border");
-      await expect(row).toHaveClass("bg-af-panel");
+      await expect(row).toHaveClass("border-outline");
+      await expect(row).toHaveClass("bg-surface-container-high");
     }
     await expect(
       scope.getByRole("button", { name: "Remove text item 1" }),

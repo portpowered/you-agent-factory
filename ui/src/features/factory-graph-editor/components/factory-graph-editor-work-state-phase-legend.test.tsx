@@ -17,7 +17,7 @@ describe("FactoryGraphEditorWorkStatePhaseLegend", () => {
 
     const swatches = legend.querySelectorAll("[aria-hidden='true']");
     expect(swatches.length).toBe(4);
-    expect(swatches[0]?.className).toContain("border-af-info-border");
+    expect(swatches[0]?.className).toContain("border-info-border");
     expect(swatches[1]?.className).toContain("border-af-warning-border");
     expect(swatches[2]?.className).toContain("border-af-success-border");
     expect(swatches[3]?.className).toContain("border-af-danger-border");

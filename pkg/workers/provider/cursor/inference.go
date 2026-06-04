@@ -1,0 +1,235 @@
+package cursor
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+const (
+	ResultTypeResult = "result"
+
+	ResultSubtypeSuccess = "success"
+
+	CommandOutputExcerptLimit    = 2048
+	CommandOutputLogPreviewLimit = 200
+
+	ResponseMetadataStdoutExcerpt = "stdout_excerpt"
+	ResponseMetadataStderrExcerpt = "stderr_excerpt"
+
+	ResponseMetadataRequestID        = "request_id"
+	ResponseMetadataDurationMS       = "duration_ms"
+	ResponseMetadataDurationAPIMS    = "duration_api_ms"
+	ResponseMetadataInputTokens      = "input_tokens"
+	ResponseMetadataOutputTokens     = "output_tokens"
+	ResponseMetadataCacheReadTokens  = "cache_read_tokens"
+	ResponseMetadataCacheWriteTokens = "cache_write_tokens"
+
+	ProviderSessionKindSessionID = "session_id"
+)
+
+type resultPayload struct {
+	Type          string         `json:"type"`
+	Subtype       string         `json:"subtype"`
+	IsError       bool           `json:"is_error"`
+	DurationMS    int64          `json:"duration_ms"`
+	DurationAPIMS int64          `json:"duration_api_ms"`
+	Result        string         `json:"result"`
+	SessionID     string         `json:"session_id"`
+	RequestID     string         `json:"request_id"`
+	Usage         *resultUsage   `json:"usage,omitempty"`
+}
+
+type resultUsage struct {
+	InputTokens      *int `json:"inputTokens,omitempty"`
+	OutputTokens     *int `json:"outputTokens,omitempty"`
+	CacheReadTokens  *int `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens *int `json:"cacheWriteTokens,omitempty"`
+}
+
+// InferenceResult is the parsed Cursor CLI success payload.
+type InferenceResult struct {
+	Content          string
+	ProviderSession  *interfaces.ProviderSessionMetadata
+	ResponseMetadata map[string]string
+}
+
+// ParseFailure classifies Cursor JSON parse failures for the provider layer.
+type ParseFailure struct {
+	Type    interfaces.WorkFailureType
+	Message string
+	Cause   error
+}
+
+func (f *ParseFailure) Error() string {
+	if f == nil {
+		return ""
+	}
+	return f.Message
+}
+
+// ParseInferenceResult parses Cursor --output-format json success stdout.
+func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *ParseFailure) {
+	trimmed := strings.TrimSpace(string(stdout))
+	if trimmed == "" {
+		return nil, resultParseFailure(provider, "cursor JSON output was empty", nil)
+	}
+
+	var payload resultPayload
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output was not valid JSON: %v", err), err)
+	}
+
+	if payload.Type != ResultTypeResult {
+		return nil, resultParseFailure(
+			provider,
+			fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult),
+			nil,
+		)
+	}
+	if payload.Subtype != ResultSubtypeSuccess {
+		return nil, resultErrorSubtype(provider, payload)
+	}
+	if payload.IsError {
+		return nil, &ParseFailure{
+			Type:    interfaces.WorkFailureTypeInternalServerError,
+			Message: "cursor JSON result reported is_error=true",
+		}
+	}
+
+	sessionID := strings.TrimSpace(payload.SessionID)
+	if sessionID == "" {
+		return nil, resultParseFailure(provider, "cursor JSON success result is missing session_id", nil)
+	}
+
+	return &InferenceResult{
+		Content: payload.Result,
+		ProviderSession: &interfaces.ProviderSessionMetadata{
+			Provider: provider,
+			Kind:     ProviderSessionKindSessionID,
+			ID:       sessionID,
+		},
+		ResponseMetadata: responseMetadataFromPayload(payload),
+	}, nil
+}
+
+func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
+	message := fmt.Sprintf("cursor JSON output had subtype %q", payload.Subtype)
+	if strings.TrimSpace(payload.Result) != "" {
+		message += ": " + strings.TrimSpace(payload.Result)
+	}
+	return &ParseFailure{
+		Type:    interfaces.WorkFailureTypeInternalServerError,
+		Message: message,
+	}
+}
+
+func resultParseFailure(provider, message string, cause error) *ParseFailure {
+	_ = provider
+	return &ParseFailure{
+		Type:    interfaces.WorkFailureTypePermanentBadRequest,
+		Message: message,
+		Cause:   cause,
+	}
+}
+
+func responseMetadataFromPayload(payload resultPayload) map[string]string {
+	metadata := make(map[string]string)
+	if requestID := strings.TrimSpace(payload.RequestID); requestID != "" {
+		metadata[ResponseMetadataRequestID] = requestID
+	}
+	if payload.DurationMS > 0 {
+		metadata[ResponseMetadataDurationMS] = strconv.FormatInt(payload.DurationMS, 10)
+	}
+	if payload.DurationAPIMS > 0 {
+		metadata[ResponseMetadataDurationAPIMS] = strconv.FormatInt(payload.DurationAPIMS, 10)
+	}
+	if payload.Usage == nil {
+		return metadata
+	}
+	if payload.Usage.InputTokens != nil {
+		metadata[ResponseMetadataInputTokens] = strconv.Itoa(*payload.Usage.InputTokens)
+	}
+	if payload.Usage.OutputTokens != nil {
+		metadata[ResponseMetadataOutputTokens] = strconv.Itoa(*payload.Usage.OutputTokens)
+	}
+	if payload.Usage.CacheReadTokens != nil {
+		metadata[ResponseMetadataCacheReadTokens] = strconv.Itoa(*payload.Usage.CacheReadTokens)
+	}
+	if payload.Usage.CacheWriteTokens != nil {
+		metadata[ResponseMetadataCacheWriteTokens] = strconv.Itoa(*payload.Usage.CacheWriteTokens)
+	}
+	return metadata
+}
+
+// BoundedCommandOutputExcerpt returns a bounded excerpt of command output.
+func BoundedCommandOutputExcerpt(output []byte, limit int) string {
+	trimmed := strings.TrimSpace(string(output))
+	if trimmed == "" || limit <= 0 {
+		return ""
+	}
+	if len(trimmed) <= limit {
+		return trimmed
+	}
+	return trimmed[:limit] + "..."
+}
+
+// WithCommandOutputExcerpts attaches bounded stdout/stderr excerpts to provider diagnostics.
+func WithCommandOutputExcerpts(diagnostics *interfaces.WorkDiagnostics, stdout, stderr []byte) *interfaces.WorkDiagnostics {
+	excerpts := make(map[string]string, 2)
+	if excerpt := BoundedCommandOutputExcerpt(stdout, CommandOutputExcerptLimit); excerpt != "" {
+		excerpts[ResponseMetadataStdoutExcerpt] = excerpt
+	}
+	if excerpt := BoundedCommandOutputExcerpt(stderr, CommandOutputExcerptLimit); excerpt != "" {
+		excerpts[ResponseMetadataStderrExcerpt] = excerpt
+	}
+	if len(excerpts) == 0 {
+		return diagnostics
+	}
+	return WithResponseMetadata(diagnostics, excerpts)
+}
+
+// WithResponseMetadata merges Cursor response metadata into provider diagnostics.
+func WithResponseMetadata(diagnostics *interfaces.WorkDiagnostics, metadata map[string]string) *interfaces.WorkDiagnostics {
+	if len(metadata) == 0 {
+		return diagnostics
+	}
+	diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
+	if diagnostics == nil {
+		diagnostics = &interfaces.WorkDiagnostics{}
+	}
+	if diagnostics.Provider == nil {
+		diagnostics.Provider = &interfaces.ProviderDiagnostic{}
+	}
+	if diagnostics.Provider.ResponseMetadata == nil {
+		diagnostics.Provider.ResponseMetadata = make(map[string]string, len(metadata))
+	}
+	for key, value := range metadata {
+		diagnostics.Provider.ResponseMetadata[key] = value
+	}
+	return diagnostics
+}
+
+// SuccessStdoutJSON builds representative Cursor success JSON for tests.
+func SuccessStdoutJSON(result, sessionID string) []byte {
+	if result == "" {
+		result = "Done. COMPLETE"
+	}
+	if sessionID == "" {
+		sessionID = "cursor-test-session"
+	}
+	payload := resultPayload{
+		Type:      ResultTypeResult,
+		Subtype:   ResultSubtypeSuccess,
+		SessionID: sessionID,
+		Result:    result,
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return encoded
+}

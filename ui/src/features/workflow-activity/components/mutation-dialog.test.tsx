@@ -97,8 +97,8 @@ describe("DashboardMutationDialog", () => {
     const importDialog = screen.getByRole("dialog", {
       name: "Review factory import",
     });
-    expect(importDialog.className).toContain("border-af-border");
-    expect(importDialog.className).toContain("bg-af-surface-raised");
+    expect(importDialog.className).toContain("border-outline");
+    expect(importDialog.className).toContain("bg-surface-container-high");
   });
 
   it("retains panel surface classes on the dialog section", () => {
@@ -112,8 +112,8 @@ describe("DashboardMutationDialog", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Export factory" });
-    expect(dialog.className).toContain("border-af-border");
-    expect(dialog.className).toContain("bg-af-surface-raised");
+    expect(dialog.className).toContain("border-outline");
+    expect(dialog.className).toContain("bg-surface-container-high");
     expect(dialog.className).toContain("shadow-af-panel");
   });
 

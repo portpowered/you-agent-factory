@@ -25,14 +25,14 @@ export function DashboardStatusPanel({
   const { locale: resolvedLocale } = useAppLocale(locale);
   const detailClassName =
     tone === "error"
-      ? cn(DETAIL_COPY_CLASS, "text-af-danger-text")
+      ? cn(DETAIL_COPY_CLASS, "text-on-error-container")
       : DETAIL_COPY_CLASS;
 
   return (
     <section
       className={cn(DASHBOARD_PANEL_SHELL_CLASS, "mb-4 p-4 md:p-5 md:px-6")}
     >
-      <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-af-accent">
+      <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-primary">
         <DashboardBrandLockup
           className="gap-2"
           locale={resolvedLocale}

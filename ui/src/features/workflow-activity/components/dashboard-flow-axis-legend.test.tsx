@@ -227,28 +227,24 @@ describe("DashboardFlowAxisLegend", () => {
 
     const swatches = phaseLegend.querySelectorAll("[aria-hidden='true']");
     expect(swatches.length).toBe(4);
-    expect(swatches[0]?.getAttribute("class")).toContain(
-      "border-af-info-border",
-    );
-    expect(swatches[0]?.getAttribute("class")).toContain("bg-af-info-surface");
+    expect(swatches[0]?.getAttribute("class")).toContain("border-info-border");
+    expect(swatches[0]?.getAttribute("class")).toContain("bg-info-container");
     expect(swatches[1]?.getAttribute("class")).toContain(
       "border-af-warning-border",
     );
     expect(swatches[1]?.getAttribute("class")).toContain(
-      "bg-af-warning-surface",
+      "bg-warning-container",
     );
     expect(swatches[2]?.getAttribute("class")).toContain(
       "border-af-success-border",
     );
     expect(swatches[2]?.getAttribute("class")).toContain(
-      "bg-af-success-surface",
+      "bg-success-container",
     );
     expect(swatches[3]?.getAttribute("class")).toContain(
       "border-af-danger-border",
     );
-    expect(swatches[3]?.getAttribute("class")).toContain(
-      "bg-af-danger-surface",
-    );
+    expect(swatches[3]?.getAttribute("class")).toContain("bg-error-container");
 
     for (const phase of ["INITIAL", "PROCESSING", "TERMINAL", "FAILED"]) {
       expect(

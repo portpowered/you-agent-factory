@@ -255,7 +255,9 @@ describe("App layout and graph behavior", () => {
     expect(screen.getByLabelText("agent-slot")).toBeTruthy();
     expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
     expect(screen.getByRole("img", { name: "worker:reviewer" })).toBeTruthy();
-    expect(screen.getByRole("img", { name: "work-type:story" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Select story work type" }),
+    ).toBeTruthy();
     expect(
       screen
         .getByRole("img", { name: "Resource" })

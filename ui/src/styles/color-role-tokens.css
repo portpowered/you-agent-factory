@@ -1,0 +1,144 @@
+/*
+ * Material-inspired color role tokens (Factory Dark baseline).
+ *
+ * Long-term theme API for dashboard UI. Product --color-af-* keys that map to
+ * roles are defined in this file; foundation/chart keys remain in styles.css.
+ *
+ * Accent intent:
+ * - primary: yellow brand accent (most prominent)
+ * - secondary: cool cyan supporting accent (af-foundation-secondary-accent)
+ * - tertiary: violet supporting accent (af-foundation-tertiary-accent)
+ *
+ * Semantic families are status-only; do not substitute for accent emphasis.
+ */
+
+@theme {
+  /* --- Neutral roles --- */
+  --color-background: var(--color-af-foundation-background);
+  --color-surface: var(--color-af-foundation-surface);
+  --color-surface-container-low: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.04
+  );
+  --color-surface-container: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.06
+  );
+  --color-surface-container-high: rgb(
+    from var(--color-af-foundation-surface) r g b /
+    0.94
+  );
+  --color-surface-container-highest: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.1
+  );
+  /* on-surface text roles: text-color-role-tokens.css */
+  --color-outline: rgb(from var(--color-af-foundation-overlay) r g b / 0.1);
+  --color-outline-variant: rgb(
+    from var(--color-af-foundation-overlay) r g b /
+    0.18
+  );
+
+  /* --- Primary accent (yellow brand) --- */
+  --color-primary: var(--color-af-foundation-accent);
+  --color-on-primary: var(--color-af-foundation-canvas);
+  --color-primary-container: rgb(
+    from var(--color-af-foundation-accent) r g b /
+    0.18
+  );
+  --color-on-primary-container: var(--color-af-foundation-accent-strong);
+
+  /* --- Secondary accent (cyan; calmer than semantic info and primary) --- */
+  --color-secondary: var(--color-af-foundation-secondary-accent);
+  --color-on-secondary: var(--color-af-foundation-canvas);
+  --color-secondary-container: rgb(
+    from var(--color-af-foundation-secondary-accent) r g b /
+    0.12
+  );
+  --color-on-secondary-container: var(
+    --color-af-foundation-secondary-accent-ink
+  );
+
+  /* --- Tertiary accent (violet; calmer than legacy worker chrome) --- */
+  --color-tertiary: var(--color-af-foundation-tertiary-accent);
+  --color-on-tertiary: var(--color-af-foundation-canvas);
+  --color-tertiary-container: rgb(
+    from var(--color-af-foundation-tertiary-accent) r g b /
+    0.13
+  );
+  --color-on-tertiary-container: var(--color-af-foundation-tertiary-accent-ink);
+
+  /* --- Semantic: success --- */
+  --color-success: var(--color-af-foundation-success);
+  --color-on-success: var(--color-af-foundation-canvas);
+  --color-success-container: rgb(
+    from var(--color-af-foundation-success) r g b /
+    0.12
+  );
+  --color-on-success-container: var(--color-af-foundation-success-ink);
+
+  /* --- Semantic: warning --- */
+  --color-warning: var(--color-af-foundation-warning);
+  --color-on-warning: var(--color-af-foundation-canvas);
+  --color-warning-container: rgb(
+    from var(--color-af-foundation-warning) r g b /
+    0.14
+  );
+  --color-on-warning-container: var(--color-af-foundation-warning-ink);
+
+  /* --- Semantic: error --- */
+  --color-error: var(--color-af-foundation-danger);
+  --color-on-error: var(--color-af-foundation-canvas);
+  --color-error-container: rgb(
+    from var(--color-af-foundation-danger) r g b /
+    0.18
+  );
+  --color-on-error-container: var(--color-af-foundation-danger-ink);
+
+  /* --- Semantic: info --- */
+  --color-info: var(--color-af-foundation-info);
+  --color-on-info: var(--color-af-foundation-canvas);
+  --color-info-container: rgb(
+    from var(--color-af-foundation-info) r g b /
+    0.12
+  );
+  --color-on-info-container: var(--color-af-foundation-info-ink);
+
+  /* --- Product af-* keys (role-backed; formerly color-role-aliases.css) --- */
+  --color-af-background: var(--color-background);
+  --color-af-surface: var(--color-surface);
+  --color-af-surface-subtle: var(--color-surface-container-low);
+  --color-af-surface-raised: var(--color-surface-container-high);
+  --color-af-border: var(--color-outline);
+  --color-af-border-strong: var(--color-outline-variant);
+  --color-af-text: var(--color-on-surface);
+  --color-af-text-muted: var(--color-on-surface-variant);
+  --color-af-text-subtle: var(--color-on-surface-subtle);
+  --color-af-text-disabled: var(--color-on-surface-disabled);
+  --color-af-text-inverse: var(--color-on-inverse);
+  --color-af-code-ink: var(--color-code);
+  --color-af-accent: var(--color-primary);
+  --color-af-accent-hover: var(--color-on-primary-container);
+  --color-af-accent-surface: var(--color-primary-container);
+  --color-af-accent-border: var(--color-primary);
+  --color-af-on-accent: var(--color-on-primary);
+  --color-af-success: var(--color-success);
+  --color-af-success-surface: var(--color-success-container);
+  --color-af-success-text: var(--color-on-success-container);
+  --color-af-on-success: var(--color-on-success);
+  --color-af-warning: var(--color-warning);
+  --color-af-warning-surface: var(--color-warning-container);
+  --color-af-warning-text: var(--color-on-warning-container);
+  --color-af-on-warning: var(--color-on-warning);
+  --color-af-danger: var(--color-error);
+  --color-af-danger-surface: var(--color-error-container);
+  --color-af-danger-text: var(--color-on-error-container);
+  --color-af-on-danger: var(--color-on-error);
+  --color-af-info: var(--color-info);
+  --color-af-info-surface: var(--color-info-container);
+  --color-af-info-text: var(--color-on-info-container);
+  --color-af-on-info: var(--color-on-info);
+  --color-af-worker: var(--color-tertiary);
+  --color-af-worker-surface: var(--color-tertiary-container);
+  --color-af-worker-text: var(--color-on-tertiary-container);
+}

@@ -102,6 +102,8 @@ export interface WorkstationDetailMessages {
     workstation: string,
   ) => string;
   matchesFieldsGuardInputKeyFieldLabel: string;
+  editableConfigurationGuardSelectorEditorLoading: string;
+  editableConfigurationGuardSelectorEditorError: string;
   modelFieldLabel: string;
   notConfiguredValue: string;
   promptFieldLabel: string;

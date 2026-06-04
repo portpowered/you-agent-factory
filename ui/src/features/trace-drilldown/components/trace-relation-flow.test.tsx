@@ -193,9 +193,7 @@ function renderedNodeBoundsById(): Map<string, RenderedTraceFlowNodeBounds> {
 
   return new Map(
     (
-      JSON.parse(payload) as Array<
-        { id: string } & RenderedTraceFlowNodeBounds
-      >
+      JSON.parse(payload) as Array<{ id: string } & RenderedTraceFlowNodeBounds>
     ).map((node) => [
       node.id,
       {
@@ -254,7 +252,7 @@ describe("TraceRelationFlow", () => {
       screen
         .getByTestId("trace-relation-flow-background")
         .getAttribute("data-background-color"),
-    ).toBe("var(--color-af-edge-muted-soft)");
+    ).toBe("var(--color-outline)");
     expect(
       screen
         .getByTestId("trace-relation-flow-background")
@@ -269,7 +267,7 @@ describe("TraceRelationFlow", () => {
       screen
         .getByTestId("trace-relation-flow-controls")
         .getAttribute("data-controls-style"),
-    ).toContain('"backgroundColor":"var(--color-af-graph-controls-surface)"');
+    ).toContain('"backgroundColor":"var(--color-surface)"');
     expect(
       screen
         .getByTestId("trace-relation-flow-controls")
@@ -284,7 +282,7 @@ describe("TraceRelationFlow", () => {
       throw new Error("Expected selectable relation node shell to render.");
     }
     expect(implementNode.className).toContain("border-af-success-border");
-    expect(implementNode.className).toContain("bg-af-success-surface");
+    expect(implementNode.className).toContain("bg-success-container");
     expect(within(implementButton).getByText("Parent-child")).toBeTruthy();
     expect(within(implementButton).getByText("Done")).toBeTruthy();
     expect(screen.queryByText("Work items")).toBeNull();
@@ -306,9 +304,9 @@ describe("TraceRelationFlow", () => {
     expect(edges[0]?.ariaLabel).toBe(
       "Parent-child relation from Plan story to Implement story, requiring Done",
     );
-    expect(edges[0]?.style?.stroke).toBe("var(--color-af-success)");
+    expect(edges[0]?.style?.stroke).toBe("var(--color-success)");
     expect(edges[0]?.style?.strokeDasharray).toBe("7 5");
-    expect(edges[1]?.style?.stroke).toBe("var(--color-af-danger-text)");
+    expect(edges[1]?.style?.stroke).toBe("var(--color-on-error-container)");
   });
 });
 

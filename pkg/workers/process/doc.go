@@ -8,7 +8,7 @@
 //
 // Background children that stay in the parent's process group (Unix) or job (Windows)
 // are terminated after cmd.Wait returns, including when the parent exits with code 0.
-// Post-run cleanup sends SIGTERM, waits up to commandProcessGroupGracePeriod (2s), then
+// Post-run cleanup sends SIGTERM, waits up to defaultPostRunCleanupGracePeriod (10s), then
 // SIGKILLs the group on Unix; on Windows it polls job active processes, may call
 // TerminateJobObject, then closes the job handle (KILL_ON_JOB_CLOSE). Parent stdout,
 // stderr, and exit code are captured before cleanup runs and are not changed by cleanup.
@@ -24,4 +24,14 @@
 //
 // Operators should not rely on post-run cleanup to stop intentionally detached daemons or
 // services started outside the supervised group.
+//
+// # Supervised commands and sidecars
+//
+// Post-run cleanup runs only after cmd.Wait returns for that invocation. Long-running
+// factory commands—script pollers, live-runtime sidecars, and other supervised subprocesses—
+// stay in the same process group or job until their Run context is canceled or the process
+// exits on its own; cleanup does not run mid-flight while the parent is still executing.
+// Provider, script worker, and service layers must not duplicate process-tree termination;
+// they rely on this package's ExecCommandRunner (and LoggingCommandRunner wrapper) for
+// cancel, timeout, and post-run teardown.
 package process

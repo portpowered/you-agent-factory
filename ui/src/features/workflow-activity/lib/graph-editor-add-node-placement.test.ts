@@ -2,6 +2,7 @@ import type { Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,
@@ -15,6 +16,19 @@ function workerNode(id: string, position: { x: number; y: number }): Node {
     id,
     position,
     width: 164,
+  };
+}
+
+function workstationNode(
+  id: string,
+  position: { x: number; y: number },
+): Node {
+  return {
+    data: { kind: "workstation" },
+    height: 196,
+    id,
+    position,
+    width: 156,
   };
 }
 
@@ -102,6 +116,99 @@ describe("resolveInitialPlacementTopLeft", () => {
 
     expect(topLeft).toEqual({ x: 418, y: 257 });
   });
+
+  it("changes the computed top-left when the viewport center moves for worker and workstation kinds", () => {
+    const workstationDraft: FactoryGraphAddEntityDraft = {
+      behavior: "STANDARD",
+      body: "",
+      kind: "workstation",
+      name: "review",
+      workerName: "writer",
+    };
+    const nearCenter = { x: 500, y: 300 };
+    const farCenter = { x: 1200, y: 900 };
+
+    const workerNear = resolveInitialPlacementTopLeft({
+      draft: workerDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: nearCenter,
+    });
+    const workerFar = resolveInitialPlacementTopLeft({
+      draft: workerDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: farCenter,
+    });
+    const workstationNear = resolveInitialPlacementTopLeft({
+      draft: workstationDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: nearCenter,
+    });
+    const workstationFar = resolveInitialPlacementTopLeft({
+      draft: workstationDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: farCenter,
+    });
+
+    expect(workerNear).not.toEqual(workerFar);
+    expect(workstationNear).not.toEqual(workstationFar);
+    expect(workerNear).not.toBeNull();
+    expect(workerFar).not.toBeNull();
+    expect(workstationNear).not.toBeNull();
+    expect(workstationFar).not.toBeNull();
+  });
+});
+
+describe("resolveInitialPlacementTopLeft for workstations", () => {
+  const workstationDraft: FactoryGraphAddEntityDraft = {
+    behavior: "STANDARD",
+    body: "",
+    kind: "workstation",
+    name: "review",
+    workerName: "writer",
+  };
+
+  it("centers at the viewport when the canvas center is free", () => {
+    const viewportCenter = { x: 500, y: 300 };
+    const workstationSize = graphEditorNodeDimensionsForKind("workstation");
+
+    const topLeft = resolveInitialPlacementTopLeft({
+      draft: workstationDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter,
+    });
+
+    expect(topLeft).toEqual({
+      x: viewportCenter.x - workstationSize.width / 2,
+      y: viewportCenter.y - workstationSize.height / 2,
+    });
+  });
+
+  it("nudges away from occupied nodes at the viewport center", () => {
+    const viewportCenter = { x: 500, y: 300 };
+    const workstationSize = graphEditorNodeDimensionsForKind("workstation");
+    const centeredTopLeft = {
+      x: viewportCenter.x - workstationSize.width / 2,
+      y: viewportCenter.y - workstationSize.height / 2,
+    };
+    const nodes = [
+      workstationNode("workstation:writer", centeredTopLeft),
+    ];
+
+    const topLeft = resolveInitialPlacementTopLeft({
+      draft: workstationDraft,
+      nodes,
+      storedPositions: {},
+      viewportCenter,
+    });
+
+    expect(topLeft).not.toEqual(centeredTopLeft);
+    expect(topLeft).not.toBeNull();
+  });
 });
 
 describe("occupiedRectsFromRenderedNodes", () => {
@@ -111,5 +218,18 @@ describe("occupiedRectsFromRenderedNodes", () => {
     ]);
 
     expect(rects).toEqual([{ height: 86, width: 164, x: 100, y: 200 }]);
+  });
+
+  it("uses measured node size when kind metadata is unavailable", () => {
+    const rects = occupiedRectsFromRenderedNodes([
+      {
+        height: 120,
+        id: "unknown:node",
+        position: { x: 40, y: 50 },
+        width: 80,
+      },
+    ]);
+
+    expect(rects).toEqual([{ height: 120, width: 80, x: 40, y: 50 }]);
   });
 });

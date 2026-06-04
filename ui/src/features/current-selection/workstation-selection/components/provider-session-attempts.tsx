@@ -19,6 +19,7 @@ import { useCurrentSelectionOperationalEnumMessages } from "../../base/component
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   CURRENT_SELECTION_BADGE_CLASS,
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
   CurrentSelectionSectionHeader,
   EXECUTION_PILL_CLASS,
   PROVIDER_SESSION_CARD_CLASS,
@@ -129,7 +130,10 @@ export function CollapsibleProviderSessionAttempts({
         title={resolvedTitle}
       />
       {expanded ? (
-        <div id={historyID}>
+        <div
+          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+          id={historyID}
+        >
           <ProviderSessionAttemptList
             attempts={attempts}
             currentDispatchID={currentDispatchID}
@@ -260,7 +264,7 @@ function ProviderSessionAttemptList({
               <div className="flex flex-wrap items-center gap-2">
                 <p
                   className={cn(
-                    "m-0 text-af-text-muted",
+                    "m-0 text-on-surface-variant",
                     DASHBOARD_BODY_TEXT_CLASS,
                   )}
                 >
@@ -392,7 +396,7 @@ function ProviderSessionLogAccess({
       {logTarget ? (
         <a
           className={cn(
-            "w-fit rounded-lg font-bold text-af-accent underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
+            "w-fit rounded-lg font-bold text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
             DASHBOARD_BODY_TEXT_CLASS,
           )}
           href={logTarget.href}
@@ -403,7 +407,7 @@ function ProviderSessionLogAccess({
       ) : (
         <span
           className={cn(
-            "font-bold text-af-text-muted",
+            "font-bold text-on-surface-variant",
             DASHBOARD_BODY_TEXT_CLASS,
           )}
         >

@@ -48,8 +48,8 @@ describe("EditableWorkerSaveHeaderAction", () => {
 
     const saveButton = screen.getByRole("button", { name: "Save worker" });
     expect(saveButton.className).toContain("border-af-warning-border");
-    expect(saveButton.className).toContain("bg-af-warning-surface");
-    expect(saveButton.className).toContain("text-af-warning-text");
+    expect(saveButton.className).toContain("bg-warning-container");
+    expect(saveButton.className).toContain("text-on-warning-container");
 
     rerender(
       <EditableWorkerSaveHeaderAction

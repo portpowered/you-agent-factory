@@ -93,7 +93,7 @@ describe("ProviderSessionAttempts", () => {
 
     expect(screen.getByText("Current dispatch")).toBeTruthy();
     expect(screen.getByText("Current dispatch").className).toContain(
-      "text-af-text",
+      "text-on-surface",
     );
     expect(
       screen.getByRole("button", { name: "Select work item Active Story" }),
@@ -120,10 +120,10 @@ describe("ProviderSessionAttempts", () => {
     expect(screen.getByText("Session selected")).toBeTruthy();
     expect(
       screen.getByText("Session selected").closest("button")?.className,
-    ).toContain("border-af-accent-border");
+    ).toContain("border-primary");
     expect(
       screen.getByText("Session selected").closest("button")?.className,
-    ).toContain("text-af-text");
+    ).toContain("text-on-surface");
     expect(screen.getByText("Session details unavailable")).toBeTruthy();
     expect(screen.getAllByText("Session log unavailable")).toHaveLength(2);
     expect(
@@ -161,6 +161,51 @@ describe("ProviderSessionAttempts", () => {
     expect(onSelectWorkstationRequest).toHaveBeenCalledWith(request);
     expect(onSelectProviderSession).toHaveBeenNthCalledWith(1, expectedSession);
     expect(onSelectProviderSession).toHaveBeenNthCalledWith(2, expectedSession);
+  });
+
+  it("renders a selectable open action for loadable Cursor provider sessions", async () => {
+    const user = userEvent.setup();
+    const onSelectProviderSession = vi.fn();
+    const expectedSession: LoadableProviderSessionRef = {
+      dispatchID: "dispatch-cursor-active",
+      id: "cursor_sess_01",
+      kind: "session_id",
+      provider: "cursor",
+    };
+
+    render(
+      <ProviderSessionAttempts
+        attempts={[
+          {
+            dispatch_id: "dispatch-cursor-active",
+            outcome: "ACCEPTED",
+            provider_session: {
+              id: expectedSession.id,
+              kind: expectedSession.kind,
+              provider: expectedSession.provider,
+            },
+            transition_id: "transition-cursor",
+            workstation_name: "Review",
+          },
+        ]}
+        currentDispatchID="dispatch-cursor-active"
+        emptyMessage="No workstation runs have been recorded for this workstation yet."
+        onSelectProviderSession={onSelectProviderSession}
+        renderHeading={(attempt) => attempt.dispatch_id}
+        selectedProviderSessionKey={null}
+        workstationKind="standard"
+      />,
+    );
+
+    const selectSessionButton = screen.getByRole("button", {
+      name: "Select provider session cursor / Session ID / cursor_sess_01 for dispatch dispatch-cursor-active",
+    });
+
+    expect(selectSessionButton).toBeTruthy();
+    expect(screen.getByText("Inspect session details")).toBeTruthy();
+
+    await user.click(selectSessionButton);
+    expect(onSelectProviderSession).toHaveBeenCalledWith(expectedSession);
   });
 
   it("renders zh-CN provider-session selection actions and accessible names", () => {

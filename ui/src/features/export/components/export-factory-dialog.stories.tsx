@@ -108,14 +108,14 @@ export const UnifiedChooseFileChrome = {
     const imageInput = scope.getByLabelText(messages.imageLabel);
 
     await expect(imageInput.className).toContain("border-dashed");
-    await expect(imageInput.className).toContain("border-af-border-strong");
-    await expect(imageInput.className).toContain("bg-af-surface-subtle");
-    await expect(imageInput.className).not.toContain("bg-af-accent-surface");
-    await expect(imageInput.className).not.toContain("border-af-accent-border");
+    await expect(imageInput.className).toContain("border-outline-variant");
+    await expect(imageInput.className).toContain("bg-surface-container-low");
+    await expect(imageInput.className).not.toContain("bg-primary-container");
+    await expect(imageInput.className).not.toContain("border-primary");
     await expect(imageInput.className).not.toContain(
-      "file:bg-af-accent-surface",
+      "file:bg-primary-container",
     );
-    await expect(imageInput.className).not.toContain("file:text-af-accent");
+    await expect(imageInput.className).not.toContain("file:text-primary");
 
     const coverImage = new File(["png"], "cover.png", { type: "image/png" });
     await userEvent.upload(imageInput, coverImage);

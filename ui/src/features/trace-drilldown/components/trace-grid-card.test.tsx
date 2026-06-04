@@ -11,9 +11,8 @@ import type { ReactNode } from "react";
 import { vi } from "vitest";
 
 vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("../lib/trace-factory-graph-layout")
-  >();
+  const actual =
+    await importOriginal<typeof import("../lib/trace-factory-graph-layout")>();
   return {
     ...actual,
     buildTraceFactoryGraphLayoutPositions: async () => new Map(),
@@ -220,8 +219,8 @@ describe("TraceGridBentoCard ready state", () => {
       );
     }
     expect(dispatchPill.className).toContain(DASHBOARD_SUPPORTING_CODE_CLASS);
-    expect(dispatchPill.className).toContain("border-af-info-border");
-    expect(dispatchPill.className).toContain("bg-af-info-surface");
+    expect(dispatchPill.className).toContain("border-info-border");
+    expect(dispatchPill.className).toContain("bg-info-container");
     expect(dispatchPill.className).toContain("py-0.5");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
@@ -304,9 +303,7 @@ describe("TraceGridBentoCard work item selection", () => {
     const activeStoryButtons = within(card).getAllByRole("button", {
       name: "(story):Active Story",
     });
-    expect(activeStoryButtons[0]?.className).toContain(
-      "border-af-accent-border",
-    );
+    expect(activeStoryButtons[0]?.className).toContain("border-primary");
 
     fireEvent.click(activeStoryButtons[0]);
     expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");

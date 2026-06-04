@@ -1,4 +1,5 @@
 import { SUPPORTED_LOCALES } from "../../../i18n";
+import { getColorPaletteOptions } from "./color-palette-options";
 import {
   getHeaderControlsMessages,
   HEADER_CURRENT_TICK_TOKEN,
@@ -34,6 +35,28 @@ describe("getHeaderControlsMessages", () => {
 
     expect(messages.languageLabel).toBe(expectedLabel);
     expect(messages.languageMenuButtonLabel).toBeTruthy();
+  });
+
+  it.each([
+    ["en", "Color palette"],
+    ["zh-CN", "调色板"],
+    ["ko", "색상 팔레트"],
+    ["ja", "カラーパレット"],
+  ] as const)("keeps palette-switcher labels available for %s", (locale, expectedLabel) => {
+    const messages = getHeaderControlsMessages(locale);
+
+    expect(messages.paletteLabel).toBe(expectedLabel);
+    expect(messages.paletteMenuButtonLabel).toBeTruthy();
+  });
+
+  it("keeps five localized palette option labels for English", () => {
+    expect(getColorPaletteOptions("en").map((option) => option.label)).toEqual([
+      "Factory Dark",
+      "Factory Light",
+      "Material Baseline",
+      "Slate",
+      "Olive",
+    ]);
   });
 
   it("falls back to the default locale when the locale is missing or unsupported", () => {

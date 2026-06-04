@@ -106,7 +106,7 @@ const FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS = "gap-1.5";
 const FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS = "gap-1.5";
 const STATUS_PILL_COMPACT_CLASS = "px-2.5 py-0.5 text-[0.7rem]";
 const MODE_TOGGLE_COMPACT_CLASS =
-  "size-8 rounded-md border-af-border bg-transparent text-af-text-muted hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text";
+  "size-8 rounded-md border-outline bg-transparent text-on-surface-variant hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface";
 const MODE_TOGGLE_COMPACT_DIRTY_CLASS = "size-8 rounded-md";
 
 export function CurrentActivityGraphHeaderActions({

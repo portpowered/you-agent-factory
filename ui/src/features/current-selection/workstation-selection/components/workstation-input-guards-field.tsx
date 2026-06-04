@@ -18,7 +18,7 @@ import {
   resolvePeerInputWorkTypes,
   setEditableInputSlotGuard,
 } from "../../../current-factory-definition/lib/workstation-guards";
-import { CURRENT_SELECTION_FIELD_PANEL_CLASS } from "../../base/components/detail-card-shared";
+import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationInputGuardsField({
@@ -36,11 +36,16 @@ export function EditableConfigurationWorkstationInputGuardsField({
 
   if (inputs.length === 0) {
     return (
-      <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+      <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
         <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
           {messages.workstationInputGuardsHeading}
         </h5>
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.workstationInputGuardsEmpty}
         </p>
       </div>
@@ -48,7 +53,7 @@ export function EditableConfigurationWorkstationInputGuardsField({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.workstationInputGuardsHeading}
       </h5>
@@ -102,16 +107,16 @@ function WorkstationInputSlotGuardRow({
   return (
     <article
       aria-labelledby={`${rowId}-heading`}
-      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
+      className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
     >
       <div className="grid min-w-0 gap-1">
-        <h6 className="m-0 text-sm text-af-text" id={`${rowId}-heading`}>
+        <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
           {messages.workstationInputSlotHeading(input.workType, input.state)}
         </h6>
         {guard ? (
           <p
             className={cn(
-              "m-0 text-af-text-subtle",
+              "m-0 text-on-surface-subtle",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -221,7 +226,12 @@ function PeerInputGuardFields({
         {matchInputFieldLabel}
       </label>
       {peerWorkTypes.length === 0 ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.workstationInputGuardPeersEmpty}
         </p>
       ) : (
@@ -288,7 +298,10 @@ function ParentInputGuardFields({
         </label>
         {peerWorkTypes.length === 0 ? (
           <p
-            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-surface-variant",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
           >
             {messages.workstationInputGuardPeersEmpty}
           </p>
@@ -354,7 +367,10 @@ function ParentInputGuardFields({
 function GuardFieldError({ message }: { message: string }) {
   return (
     <p
-      className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn(
+        "m-0 text-on-error-container",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
       role="alert"
     >
       {message}

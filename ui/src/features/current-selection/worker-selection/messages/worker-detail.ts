@@ -75,19 +75,18 @@ const workerDetailMessagesByLocale = {
     editableConfigurationTimeoutInvalid: (value) =>
       `timeout must be a positive duration such as 30s, 5m, or 1h, got ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
-      `Saving ${workerName} updates every workstation that references this worker, including ${workstationNames}.`,
+      `Saving ${workerName} updates workstations ${workstationNames}.`,
     editableConfigurationSharedImpactWarningDetail:
-      "Provider, model, and worker instruction settings are worker-owned and apply to all listed workstations.",
+      "Worker-owned settings apply to all listed workstations.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this worker.",
     executorProviderLabel: "Executor provider",
     expandAction: "Expand",
-    modelFieldHelp:
-      "Optional. Leave blank to use the provider default model identifier.",
+    modelFieldHelp: "Blank uses the provider default model.",
     modelLabel: "Model",
     modelLocalityLabel: "Model locality",
     modelProviderFieldHelp:
-      "Required for model workers. The provider selects routing and default model behavior.",
+      "Required for model workers; sets routing and default model.",
     modelProviderLabel: "Model provider",
     nameFieldLabel: "Worker name",
     notConfiguredOptionLabel: "Not configured",
@@ -168,9 +167,9 @@ const workerDetailMessagesByLocale = {
     editableConfigurationTimeoutInvalid: (value) =>
       `timeout は 30s、5m、1h などの正の時間である必要があります。入力値: ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
-      `${workerName} を保存すると、このワーカーを参照するすべてのワークステーション（${workstationNames} を含む）が更新されます。`,
+      `${workerName} を保存すると、ワークステーション ${workstationNames} が更新されます。`,
     editableConfigurationSharedImpactWarningDetail:
-      "プロバイダー、モデル、ワーカー指示はワーカー所有であり、一覧のすべてのワークステーションに適用されます。",
+      "ワーカー所有の設定は一覧のすべてのワークステーションに適用されます。",
     editableConfigurationValidationStatus:
       "このワーカーを保存する前にハイライトされた項目を修正してください。",
     executorProviderLabel: "実行プロバイダー",
@@ -260,9 +259,9 @@ const workerDetailMessagesByLocale = {
     editableConfigurationTimeoutInvalid: (value) =>
       `timeout은 30s, 5m, 1h처럼 양의 duration이어야 합니다. 입력값: ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
-      `${workerName} 저장은 이 워커를 참조하는 모든 워크스테이션(${workstationNames} 포함)을 업데이트합니다.`,
+      `${workerName} 저장은 워크스테이션 ${workstationNames}을(를) 업데이트합니다.`,
     editableConfigurationSharedImpactWarningDetail:
-      "제공자, 모델, 워커 지침은 워커 소유이며 나열된 모든 워크스테이션에 적용됩니다.",
+      "워커 소유 설정은 나열된 모든 워크스테이션에 적용됩니다.",
     editableConfigurationValidationStatus:
       "이 워커를 저장하기 전에 강조된 필드를 해결하세요.",
     executorProviderLabel: "실행자 제공자",
@@ -343,9 +342,9 @@ const workerDetailMessagesByLocale = {
     editableConfigurationTimeoutInvalid: (value) =>
       `timeout 必须是正数时长（例如 30s、5m 或 1h），当前为 ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
-      `保存 ${workerName} 会更新引用此 worker 的所有 workstation，包括 ${workstationNames}。`,
+      `保存 ${workerName} 会更新 workstation ${workstationNames}。`,
     editableConfigurationSharedImpactWarningDetail:
-      "Provider、模型和 worker 指令归 worker 所有，并应用于列出的所有 workstation。",
+      "Worker 拥有的设置会应用于列出的所有 workstation。",
     editableConfigurationValidationStatus: "保存此 worker 前请修正高亮字段。",
     executorProviderLabel: "执行器 provider",
     expandAction: "展开",

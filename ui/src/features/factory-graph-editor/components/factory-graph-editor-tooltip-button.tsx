@@ -55,7 +55,7 @@ export function FactoryGraphEditorTooltipActionButton({
       {tooltipVisible ? (
         <span
           className={cn(
-            "pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 rounded-xl border border-af-border-strong bg-af-surface-raised px-3 py-2 text-center text-xs font-medium text-af-text shadow-af-panel",
+            "pointer-events-none absolute left-1/2 z-30 -translate-x-1/2 rounded-xl border border-outline-variant bg-surface-container-high px-3 py-2 text-center text-xs font-medium text-on-surface shadow-af-panel",
             TOOLTIP_PLACEMENT_CLASS[placement],
           )}
           id={tooltipID}

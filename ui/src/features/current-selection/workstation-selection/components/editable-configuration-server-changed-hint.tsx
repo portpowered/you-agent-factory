@@ -25,7 +25,7 @@ export function EditableConfigurationServerChangedHint({
   return (
     <p
       className={cn(
-        "m-0 text-af-warning-text",
+        "m-0 text-on-warning-container",
         DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
     >

@@ -16,7 +16,7 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", buildCursorModelWorkerConfig("test-cursor-model", false))
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProviderCommandRunner(runner),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
@@ -38,6 +38,7 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "json"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--model", "test-cursor-model"})
 	assertProviderArgsPrompt(t, req, cursorMergedPrompt("Process the input task.", "Do the work."))
 	assertProviderStdin(t, req, "")
@@ -47,7 +48,7 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "simple_pipeline"))
 	support.WriteAgentConfig(t, dir, "processor", buildCursorModelWorkerConfig("test-cursor-model", true))
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProviderCommandRunner(runner),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
@@ -66,6 +67,7 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-f", "-p"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "json"})
 	assertProviderArgsPrompt(t, req, cursorMergedPrompt("Process the input task.", "Do the work."))
 }
 
@@ -80,7 +82,7 @@ stopToken: COMPLETE
 Process the input task.
 `)
 
-	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: []byte("Done. COMPLETE")})
+	runner := testutil.NewProviderCommandRunner(workers.CommandResult{Stdout: support.CursorProviderSuccessStdout("Done. COMPLETE")})
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProviderCommandRunner(runner),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
@@ -95,6 +97,7 @@ Process the input task.
 		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p", "--model", "test-cursor-model"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "json"})
 }
 
 func submitCursorProviderSmokeWork(t *testing.T, h *testutil.ServiceTestHarness) {

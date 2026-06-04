@@ -100,12 +100,6 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *W
 	return out
 }
 
-// PublishedProviderFailureMetadata maps in-process FailureMetadata to the
-// published provider_failure field on events and API DTOs.
-func PublishedProviderFailureMetadata(failure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	return GeneratedWorkFailureMetadata(failure)
-}
-
 // GeneratedWorkFailureMetadata converts canonical work-failure metadata into
 // the generated event contract.
 func GeneratedWorkFailureMetadata(failure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
@@ -304,6 +298,8 @@ func isSafeProviderMetadataKey(key string) bool {
 		"retry_count",
 		"session_id",
 		"source",
+		"stderr_excerpt",
+		"stdout_excerpt",
 		"worker_type",
 		"workstation_type",
 		"working_directory",

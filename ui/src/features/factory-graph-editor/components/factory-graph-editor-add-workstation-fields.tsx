@@ -180,7 +180,7 @@ function FactoryGraphEditorAddWorkstationCronFields({
         >
           <input
             checked={cron.triggerAtStart}
-            className="mr-2 size-4 rounded border border-af-border"
+            className="mr-2 size-4 rounded border border-outline"
             id="factory-graph-add-cron-trigger-at-start"
             onChange={(event) => {
               onChange({

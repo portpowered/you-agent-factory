@@ -33,7 +33,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "Expand editable configuration",
     editableConfigurationHeading: "Configuration",
     editableConfigurationModelSharedWorkerHint:
-      "Model edits are disabled here because this workstation shares its worker with other workstations.",
+      "Model edits are disabled for shared workers.",
     editableConfigurationNameDuplicate: (workstationName) =>
       `A workstation named "${workstationName}" already exists in the running factory definition.`,
     editableConfigurationNameRequired:
@@ -44,7 +44,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationOverwriteWarning: (fields) =>
       `The running factory changed after you started editing. Saving now will overwrite newer server values for ${fields}.`,
     editableConfigurationOverwriteWarningDetail:
-      "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
+      "Confirm latest values or keep editing.",
     editableConfigurationSaveAction: "Save changes",
     editableConfigurationSaveBusyAction: "Saving...",
     editableConfigurationSaveConfirmationCancelAction: "Cancel",
@@ -98,7 +98,7 @@ const workstationDetailMessagesByLocale = {
     ) =>
       `Autocomplete is ready with ${singularPlural(variableCount, "variable", "variables")} for ${singularPlural(inputCount, "authored input", "authored inputs")}.`,
     editableConfigurationPromptAutocompleteDetail:
-      "Suggestions appear only while typing inside {{ ... }}.",
+      "Type inside {{ ... }} for suggestions.",
     editableConfigurationPromptHelpExpandActionLabel:
       "Open prompt variable help",
     editableConfigurationPromptHelpCollapseActionLabel:
@@ -117,8 +117,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSharedWorkerScopeHint: (
       workerName,
       workstationNames,
-    ) =>
-      `Worker ${workerName} is also used by ${workstationNames}. Provider, model, runner process, and worker instruction settings stay worker-owned and are not edited from this workstation form.`,
+    ) => `Worker ${workerName} is also used by ${workstationNames}.`,
     editableConfigurationWorkerUnavailable:
       "The selected worker is no longer available. Choose another worker before saving this workstation.",
     editableConfigurationWorkerUnavailablePrefix:
@@ -152,6 +151,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `Spawned-by workstation ${workstation} is not available in this factory.`,
     matchesFieldsGuardInputKeyFieldLabel: "Field selector",
+    editableConfigurationGuardSelectorEditorLoading:
+      "Starting the field selector editor.",
+    editableConfigurationGuardSelectorEditorError:
+      "The field selector editor could not be started. Reload this workstation and try again.",
     modelFieldLabel: "Model",
     notConfiguredValue: "Not configured",
     promptFieldLabel: "Prompt",
@@ -278,7 +281,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "編集可能な構成を展開",
     editableConfigurationHeading: "構成",
     editableConfigurationModelSharedWorkerHint:
-      "このワークステーションは他のワークステーションと同じワーカーを共有しているため、ここではモデルを編集できません。",
+      "共有ワーカーのためモデル編集は無効です。",
     editableConfigurationNameDuplicate: (workstationName) =>
       `ワークステーション名 "${workstationName}" は、実行中のファクトリー定義にすでに存在します。`,
     editableConfigurationNameRequired:
@@ -364,8 +367,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSharedWorkerScopeHint: (
       workerName,
       workstationNames,
-    ) =>
-      `ワーカー ${workerName} は ${workstationNames} でも使用されています。provider、model、runner process、worker instruction の設定は worker 所有のままで、このワークステーションフォームからは編集されません。`,
+    ) => `ワーカー ${workerName} は ${workstationNames} でも使用されています。`,
     editableConfigurationWorkerUnavailable:
       "選択したワーカーは利用できなくなりました。保存前に別のワーカーを選択してください。",
     editableConfigurationWorkerUnavailablePrefix:
@@ -399,6 +401,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `spawned-by ワークステーション ${workstation} はこのファクトリーで利用できません。`,
     matchesFieldsGuardInputKeyFieldLabel: "フィールドセレクター",
+    editableConfigurationGuardSelectorEditorLoading:
+      "フィールドセレクターエディターを起動しています。",
+    editableConfigurationGuardSelectorEditorError:
+      "フィールドセレクターエディターを起動できませんでした。このワークステーションを再読み込みして、もう一度お試しください。",
     modelFieldLabel: "モデル",
     notConfiguredValue: "未設定",
     promptFieldLabel: "プロンプト",
@@ -525,7 +531,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "편집 가능한 구성 펼치기",
     editableConfigurationHeading: "구성",
     editableConfigurationModelSharedWorkerHint:
-      "이 워크스테이션은 다른 워크스테이션과 같은 워커를 공유하므로 여기서는 모델을 편집할 수 없습니다.",
+      "공유 워커에는 모델 편집이 비활성화됩니다.",
     editableConfigurationNameDuplicate: (workstationName) =>
       `워크스테이션 이름 "${workstationName}" 은(는) 실행 중인 팩토리 정의에 이미 있습니다.`,
     editableConfigurationNameRequired:
@@ -609,8 +615,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSharedWorkerScopeHint: (
       workerName,
       workstationNames,
-    ) =>
-      `워커 ${workerName}는 ${workstationNames}에서도 사용됩니다. provider, model, runner process, worker instruction 설정은 워커 소유로 유지되며 이 워크스테이션 양식에서 편집되지 않습니다.`,
+    ) => `워커 ${workerName}는 ${workstationNames}에서도 사용됩니다.`,
     editableConfigurationWorkerUnavailable:
       "선택한 워커를 더 이상 사용할 수 없습니다. 저장하기 전에 다른 워커를 선택하세요.",
     editableConfigurationWorkerUnavailablePrefix:
@@ -644,6 +649,10 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `spawned-by 워크스테이션 ${workstation} 은(는) 이 팩토리에서 사용할 수 없습니다.`,
     matchesFieldsGuardInputKeyFieldLabel: "필드 선택자",
+    editableConfigurationGuardSelectorEditorLoading:
+      "필드 선택자 편집기를 시작하는 중입니다.",
+    editableConfigurationGuardSelectorEditorError:
+      "필드 선택자 편집기를 시작할 수 없습니다. 이 워크스테이션을 다시 로드한 후 다시 시도하세요.",
     modelFieldLabel: "모델",
     notConfiguredValue: "구성되지 않음",
     promptFieldLabel: "프롬프트",
@@ -766,8 +775,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationCollapseActionLabel: "收起可编辑配置",
     editableConfigurationExpandActionLabel: "展开可编辑配置",
     editableConfigurationHeading: "配置",
-    editableConfigurationModelSharedWorkerHint:
-      "此工作站与其他工作站共享同一个 worker，因此这里不能编辑模型。",
+    editableConfigurationModelSharedWorkerHint: "共享 worker 时不能编辑模型。",
     editableConfigurationNameDuplicate: (workstationName) =>
       `工作站名称 "${workstationName}" 在运行中的工厂定义中已存在。`,
     editableConfigurationNameRequired: "保存此工作站前请输入工作站名称。",
@@ -839,8 +847,7 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationSharedWorkerScopeHint: (
       workerName,
       workstationNames,
-    ) =>
-      `工作器 ${workerName} 也被 ${workstationNames} 使用。provider、model、runner process 和 worker instruction 设置仍归 worker 所有，不会从此工作站表单编辑。`,
+    ) => `工作器 ${workerName} 也被 ${workstationNames} 使用。`,
     editableConfigurationWorkerUnavailable:
       "所选工作器已不可用。保存前请选择其他工作器。",
     editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",
@@ -872,6 +879,9 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `spawned-by 工作站 ${workstation} 在当前工厂中不可用。`,
     matchesFieldsGuardInputKeyFieldLabel: "字段选择器",
+    editableConfigurationGuardSelectorEditorLoading: "正在启动字段选择器编辑器。",
+    editableConfigurationGuardSelectorEditorError:
+      "无法启动字段选择器编辑器。请重新加载此工作站后重试。",
     modelFieldLabel: "模型",
     notConfiguredValue: "未配置",
     promptFieldLabel: "提示词",

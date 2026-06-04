@@ -23,41 +23,47 @@ import type {
 } from "./detail-card-types";
 
 export const EXECUTION_PILL_CLASS = cn(
-  "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info",
+  "inline-flex rounded-full border border-info-border bg-info-container px-2 py-0.5 text-info",
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
 export const PROVIDER_SESSION_CARD_CLASS =
-  "rounded-lg border border-af-border bg-af-surface-subtle p-3.5";
+  "rounded-lg border border-outline bg-surface-container-low p-3.5";
+/** Outer shell for expanded current-selection configuration and history panels. */
+export const CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS =
+  "grid gap-3 rounded-2xl border border-outline bg-surface-container-high p-3";
+/** Field stack inside an expandable section body (no per-field outline). */
+export const CURRENT_SELECTION_FORM_FIELD_CLASS = "grid gap-2";
+/** Standalone nested panel when a field group is not inside an expandable section body. */
 export const CURRENT_SELECTION_FIELD_PANEL_CLASS =
-  "grid gap-2 rounded-2xl border border-af-border bg-af-surface-raised p-3";
+  "grid gap-2 rounded-2xl border border-outline bg-surface-container-high p-3";
 /** Editable configuration field groups must use this stack instead of multi-column grid wrappers. */
 export const CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS =
   "grid grid-cols-1 gap-3";
 export const CURRENT_SELECTION_NOTICE_SUBTLE_CLASS = cn(
-  "m-0 text-af-text-muted",
+  "m-0 text-on-surface-variant",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const CURRENT_SELECTION_ALERT_PANEL_CLASS =
-  "grid gap-2 rounded-xl border border-af-danger-border bg-af-danger-surface p-3";
+  "grid gap-2 rounded-xl border border-af-danger-border bg-error-container p-3";
 export const CURRENT_SELECTION_WARNING_PANEL_CLASS =
-  "grid gap-2 rounded-2xl border border-af-warning-border bg-af-warning-surface p-3";
+  "grid gap-2 rounded-2xl border border-af-warning-border bg-warning-container p-3";
 export const CURRENT_SELECTION_CODE_SUBTLE_CLASS = cn(
-  "text-xs text-af-text-muted",
+  "text-xs text-on-surface-variant",
   DASHBOARD_BODY_CODE_CLASS,
 );
 export const HISTORY_HEADER_CLASS =
-  "flex items-center justify-between gap-3 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2 [&_h4]:m-0";
+  "flex items-center justify-between gap-3 rounded-lg border border-outline bg-surface-container-high px-3 py-2 [&_h4]:m-0";
 export const CURRENT_SELECTION_ACCENT_SURFACE_CLASS =
-  "border-af-accent-border bg-af-accent-surface text-af-text";
+  "border-primary bg-primary-container text-on-surface";
 export const CURRENT_SELECTION_BADGE_CLASS = cn(
   "inline-flex rounded-full border px-2 py-0.5",
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const WORKSTATION_SUMMARY_ITEM_CLASS =
-  "grid min-w-0 gap-1 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2";
+  "grid min-w-0 gap-1 rounded-lg border border-outline bg-surface-container-high px-3 py-2";
 export const INFERENCE_ATTEMPT_CARD_CLASS =
-  "grid min-w-0 gap-2.5 rounded-lg border border-af-border p-3.5";
+  "grid min-w-0 gap-2.5 rounded-lg border border-outline p-3.5";
 export const INFERENCE_ATTEMPT_DETAIL_CLASS = cn(
   "m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[8.5rem_minmax(0,1fr)] [&_div]:gap-2",
   DASHBOARD_BODY_TEXT_CLASS,
@@ -68,26 +74,26 @@ export const INFERENCE_ATTEMPT_TEXT_CLASS = cn(
 );
 export { AuthoredBodyText, REQUEST_AUTHORED_TEXT_CLASS, RequestAuthoredText };
 export const RUNTIME_DETAILS_SECTION_CLASS =
-  "mt-4 grid gap-3 border-t border-af-border pt-4 [&_h4]:m-0";
+  "mt-4 grid gap-3 border-t border-outline pt-4 [&_h4]:m-0";
 export const RUNTIME_DETAIL_VALUE_CLASS = "min-w-0 [overflow-wrap:anywhere]";
 export const RUNTIME_DETAIL_CODE_CLASS = cn(
   DASHBOARD_BODY_CODE_CLASS,
   "[overflow-wrap:anywhere]",
 );
 export const TRACE_ACTION_LINK_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-accent-border bg-af-accent-surface px-3 py-2 text-sm font-bold text-af-text outline-af-accent transition hover:border-af-accent hover:bg-af-accent-surface focus-visible:outline-2 focus-visible:outline-offset-2";
+  "inline-flex w-fit rounded-lg border border-primary bg-primary-container px-3 py-2 text-sm font-bold text-on-surface outline-af-accent transition hover:border-primary hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2";
 export const REQUEST_SELECTION_STATUS_CLASS = cn(
-  "m-0 text-af-text-subtle",
+  "m-0 text-on-surface-subtle",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
 export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cn(
-  "grid w-full gap-1.5 rounded-lg border border-af-border bg-af-surface-raised px-3 py-2.5 text-left text-af-text-muted outline-af-accent transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled",
+  "grid w-full gap-1.5 rounded-lg border border-outline bg-surface-container-high px-3 py-2.5 text-left text-on-surface-variant outline-af-accent transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled",
   DASHBOARD_BODY_TEXT_CLASS,
 );
 export const WORK_SELECTION_BUTTON_CLASS =
-  "inline-flex w-fit rounded-lg border border-af-border bg-af-surface-raised px-2.5 py-2 text-xs font-bold text-af-text-muted outline-af-accent transition hover:border-af-border-strong hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled";
+  "inline-flex w-fit rounded-lg border border-outline bg-surface-container-high px-2.5 py-2 text-xs font-bold text-on-surface-variant outline-af-accent transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled";
 export const REQUEST_HISTORY_TEXT_CLASS = cn(
-  "m-0 whitespace-pre-wrap rounded-lg border border-af-border bg-af-surface-raised p-2 [overflow-wrap:anywhere]",
+  "m-0 whitespace-pre-wrap rounded-lg border border-outline bg-surface-container-high p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
 );
 
@@ -111,7 +117,7 @@ export function CurrentSelectionSectionHeader({
         {supportingText ? (
           <p
             className={cn(
-              "m-0 text-af-text-subtle",
+              "m-0 text-on-surface-subtle",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >

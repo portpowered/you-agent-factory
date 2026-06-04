@@ -312,7 +312,7 @@ function ReadyWorkChart({
                   : (props.payload?.[0]?.payload?.label ?? props.label);
               return <ChartTooltipContent {...props} label={label} />;
             }}
-            cursor={{ stroke: "var(--color-af-chart-cursor)" }}
+            cursor={{ stroke: "var(--color-outline-variant)" }}
           />
           <WorkChartSelectionArea selectionRange={selectionRange} />
           <WorkChartLines
@@ -400,8 +400,8 @@ function WorkChartSelectionArea({
 
   return (
     <ReferenceArea
-      fill="var(--color-af-chart-selection-fill)"
-      stroke="var(--color-af-chart-selection-stroke)"
+      fill="var(--color-primary-container)"
+      stroke="var(--color-primary)"
       x1={selectionRange.startTick}
       x2={selectionRange.endTick}
     />
@@ -422,7 +422,7 @@ function WorkChartLines({
         className: seriesData.pointClassName,
         fill: seriesData.lineColor,
         r: seriesData.pointRadius,
-        stroke: "var(--color-af-chart-active-dot-stroke)",
+        stroke: "var(--color-background)",
         strokeWidth: 1.5,
       }}
       className={seriesData.lineClassName}

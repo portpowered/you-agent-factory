@@ -34,7 +34,7 @@ export interface GraphSemanticIconProps {
   locale?: string;
 }
 
-const DEFAULT_ICON_CLASS_NAME = "h-4 w-4 shrink-0 text-af-text-muted";
+const DEFAULT_ICON_CLASS_NAME = "h-4 w-4 shrink-0 text-on-surface-variant";
 const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
   "active-work": {
     paths: (

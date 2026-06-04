@@ -30,7 +30,7 @@ export function FactoryGraphEditorHideShowMenu({
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>
         <FactoryGraphEditorTooltipActionButton
-          aria-label={messages.toolbarOpenHideShowMenuLabel}
+          aria-label={messages.toolbarHideShowLabel}
           aria-pressed={pressed}
           iconOnly
           placement="above"
@@ -51,10 +51,10 @@ export function FactoryGraphEditorHideShowMenu({
         sideOffset={12}
       >
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-text">
+          <p className="m-0 text-sm font-semibold text-on-surface">
             {messages.toolbarHideShowMenuTitle}
           </p>
-          <p className="m-0 text-xs leading-5 text-af-text-muted">
+          <p className="m-0 text-xs leading-5 text-on-surface-variant">
             {messages.toolbarHideShowMenuDescription}
           </p>
         </div>
@@ -76,10 +76,10 @@ export function FactoryGraphEditorHideShowMenu({
               >
                 <span className="flex w-full items-center justify-between gap-3">
                   <span className="grid justify-items-start gap-0.5">
-                    <span className="text-sm font-semibold text-af-text">
+                    <span className="text-sm font-semibold text-on-surface">
                       {label}
                     </span>
-                    <span className="text-xs leading-5 text-af-text-muted">
+                    <span className="text-xs leading-5 text-on-surface-variant">
                       {messages.nodeClassVisibilityDescription(kind)}
                     </span>
                   </span>

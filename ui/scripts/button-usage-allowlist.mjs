@@ -103,7 +103,7 @@ export const approvedButtonUsageAllowlist = [
   {
     rawButtonFingerprints: [
       'className="pointer-events-auto absolute inset-0"',
-      'className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-af-border bg-af-surface-subtle text-af-text-muted outline-af-focus-ring transition hover:bg-af-overlay hover:text-af-text focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-af-border disabled:bg-af-surface-subtle disabled:text-af-text-disabled"',
+      'className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-outline bg-surface-container-low text-on-surface-variant outline-af-focus-ring transition hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled"',
     ],
     rawButtonReason:
       "The workflow mutation dialog keeps structural overlay-dismiss and close-icon button semantics in its shared shell.",

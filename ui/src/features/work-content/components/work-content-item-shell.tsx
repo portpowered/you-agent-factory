@@ -11,7 +11,7 @@ export function WorkContentItemShell({
   itemTypeLabel: string;
 }) {
   return (
-    <li className="grid gap-3 rounded-lg border-af-border border bg-af-panel p-3">
+    <li className="grid gap-3 rounded-lg border-outline border bg-surface-container-high p-3">
       <div className="flex items-start justify-between gap-3">
         <div className="grid gap-1">
           <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>

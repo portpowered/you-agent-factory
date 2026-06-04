@@ -1,5 +1,6 @@
 import { useId } from "react";
 
+import { MonacoGuardSelectorEditor } from "../../../../components/prompt-editor";
 import {
   DashboardActionButton,
   Input,
@@ -18,8 +19,9 @@ import {
   type WorkstationLevelGuard,
   type WorkstationLevelGuardType,
 } from "../../../current-factory-definition/lib/workstation-guards";
-import { CURRENT_SELECTION_FIELD_PANEL_CLASS } from "../../base/components/detail-card-shared";
+import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
 import type { EditableWorkstationWorkstationOptionsState } from "../lib/detail-card-types";
+import { useStableWorkstationGuardRowKeys } from "../lib/workstation-guard-row-keys";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationGuardsField({
@@ -37,23 +39,26 @@ export function EditableConfigurationWorkstationGuardsField({
 }) {
   const sectionId = useId();
   const addGuardFieldId = `${sectionId}-add-guard`;
+  const guardRowKeys = useStableWorkstationGuardRowKeys(guards);
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.workstationGuardsHeading}
       </h5>
       {guards.length === 0 ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.workstationGuardsEmpty}
         </p>
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {guards.map((guard, index) => (
-            <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: guard rows have no stable server id until save
-              key={`${guard.type}-${formatWorkstationGuardSummary(guard)}-${index}`}
-            >
+            <li key={guardRowKeys[index]}>
               <WorkstationGuardRow
                 fieldErrors={fieldErrors}
                 guard={guard}
@@ -139,16 +144,16 @@ function WorkstationGuardRow({
   return (
     <article
       aria-labelledby={`${rowId}-heading`}
-      className="grid gap-2 rounded-lg border border-af-border bg-af-surface-raised p-3"
+      className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="grid min-w-0 gap-1">
-          <h6 className="m-0 text-sm text-af-text" id={`${rowId}-heading`}>
+          <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
             {messages.localizeWorkstationGuardType(guard.type)}
           </h6>
           <p
             className={cn(
-              "m-0 text-af-text-subtle",
+              "m-0 text-on-surface-subtle",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -215,7 +220,10 @@ function VisitCountGuardFields({
         </label>
         {workstationOptionsState.status === "error" ? (
           <p
-            className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-error-container",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
             role="alert"
           >
             {messages.editableConfigurationWorkstationUnavailablePrefix}{" "}
@@ -224,7 +232,10 @@ function VisitCountGuardFields({
         ) : null}
         {workstationOptionsState.status === "empty" ? (
           <p
-            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
+            className={cn(
+              "m-0 text-on-surface-variant",
+              DASHBOARD_BODY_TEXT_CLASS,
+            )}
           >
             {workstationOptionsState.message}
           </p>
@@ -322,50 +333,55 @@ function MatchesFieldsGuardFields({
   rowId: string;
 }) {
   const inputKeyFieldId = `${rowId}-input-key`;
+  const inputKeyErrorId = `${rowId}-input-key-error`;
+  const inputKeyError = resolveWorkstationGuardFieldError(
+    fieldErrors,
+    guardIndex,
+    "matchConfig.inputKey",
+  );
 
   return (
     <div className="grid gap-1">
-      <label
-        className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-        htmlFor={inputKeyFieldId}
-      >
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
         {messages.matchesFieldsGuardInputKeyFieldLabel}
-      </label>
-      <Input
+      </span>
+      <MonacoGuardSelectorEditor
+        ariaDescribedBy={inputKeyError ? inputKeyErrorId : undefined}
+        ariaInvalid={Boolean(inputKeyError)}
+        ariaLabel={messages.matchesFieldsGuardInputKeyFieldLabel}
         className={DASHBOARD_BODY_TEXT_CLASS}
+        hasError={Boolean(inputKeyError)}
         id={inputKeyFieldId}
-        onChange={(event) => {
+        loadingMessage={
+          messages.editableConfigurationGuardSelectorEditorLoading
+        }
+        modelPath={`inmemory://model/current-selection/workstation-guard-selector/${inputKeyFieldId}`}
+        onChange={(nextInputKey) => {
           onChange({
             ...guard,
-            matchConfig: { inputKey: event.target.value },
+            matchConfig: { inputKey: nextInputKey },
           });
         }}
-        type="text"
+        startupErrorMessage={
+          messages.editableConfigurationGuardSelectorEditorError
+        }
         value={guard.matchConfig?.inputKey ?? ""}
       />
-      {resolveWorkstationGuardFieldError(
-        fieldErrors,
-        guardIndex,
-        "matchConfig.inputKey",
-      ) ? (
-        <GuardFieldError
-          message={
-            resolveWorkstationGuardFieldError(
-              fieldErrors,
-              guardIndex,
-              "matchConfig.inputKey",
-            ) ?? ""
-          }
-        />
+      {inputKeyError ? (
+        <GuardFieldError id={inputKeyErrorId} message={inputKeyError} />
       ) : null}
     </div>
   );
 }
 
-function GuardFieldError({ message }: { message: string }) {
+function GuardFieldError({ id, message }: { id?: string; message: string }) {
   return (
     <p
-      className={cn("m-0 text-af-danger-text", DASHBOARD_SUPPORTING_TEXT_CLASS)}
+      className={cn(
+        "m-0 text-on-error-container",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+      )}
+      id={id}
       role="alert"
     >
       {message}

@@ -647,10 +647,10 @@ describe("WorkItemDetailCard summary", () => {
     expect(within(activeCard).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(activeCard).getByText("Current dispatch").className,
-    ).toContain("text-af-text");
-    expect(activeCard.className).toContain("border-af-accent-border");
+    ).toContain("text-on-surface");
+    expect(activeCard.className).toContain("border-primary");
     expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
-    expect(historicalCard.className).not.toContain("border-af-accent-border");
+    expect(historicalCard.className).not.toContain("border-primary");
   });
 
   it("renders unavailable execution details with clear operator copy", () => {
@@ -1140,7 +1140,7 @@ describe("WorkItemDetailCard relationship graph", () => {
 
     expect(
       within(selectedRelationshipNode).getByText("Active Story").className,
-    ).toContain("text-af-text");
+    ).toContain("text-on-surface");
     expect(
       within(selectedRelationshipNode).getByText("Current selection"),
     ).toBeTruthy();
@@ -2373,13 +2373,13 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     });
     expect(selectedWorkButton).toBeTruthy();
     expect(selectedWorkButton.textContent).toContain("Active Story");
-    expect(selectedWorkButton.className).toContain("text-af-text");
+    expect(selectedWorkButton.className).toContain("text-on-surface");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
     const selectedTraceLink = within(dispatchCard).getByRole("link", {
       name: "trace-active-story (selected)",
     });
     expect(selectedTraceLink).toBeTruthy();
-    expect(selectedTraceLink.className).toContain("text-af-text");
+    expect(selectedTraceLink.className).toContain("text-on-surface");
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {

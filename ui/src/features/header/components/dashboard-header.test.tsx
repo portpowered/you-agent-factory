@@ -11,10 +11,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { AppLocaleProvider, NATIVE_LANGUAGE_LABELS } from "../../../i18n";
+import {
+  AppColorPaletteProvider,
+  applyDocumentColorPalette,
+} from "../../../theme";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import { getExportDialogMessages } from "../../export/messages/export-dialog";
 import { useExportDialogStore } from "../../export/state/exportDialogStore";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { getColorPaletteOptions } from "../messages/color-palette-options";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardHeader } from "./dashboard-header";
 
@@ -102,6 +107,8 @@ function seedDashboardHeaderSnapshot() {
 
 describe("DashboardHeader", () => {
   afterEach(() => {
+    window.sessionStorage.clear();
+    applyDocumentColorPalette("factory-dark");
     useExportDialogStore.setState({ isExportDialogOpen: false });
     useFactoryTimelineStore.getState().reset();
     useDashboardStreamStore.setState({
@@ -127,6 +134,9 @@ describe("DashboardHeader", () => {
     });
     const languageButton = screen.getByRole<HTMLButtonElement>("button", {
       name: headerMessages.languageMenuButtonLabel,
+    });
+    const paletteButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: headerMessages.paletteMenuButtonLabel,
     });
     const openSessionButton = screen.getByRole<HTMLButtonElement>("button", {
       name: headerMessages.openSessionButtonLabel,
@@ -168,6 +178,11 @@ describe("DashboardHeader", () => {
       actionRowSections[0]?.getAttribute("data-dashboard-action-row-section"),
     ).toBe("actions");
     expect(actionRowSections[0]?.contains(languageButton)).toBe(true);
+    expect(actionRowSections[0]?.contains(paletteButton)).toBe(true);
+    expect(
+      paletteButton.compareDocumentPosition(languageButton) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(heading.firstElementChild?.firstElementChild?.className).toContain(
       "h-12",
     );
@@ -175,7 +190,7 @@ describe("DashboardHeader", () => {
       "rounded-t-2xl",
     );
     expect(slider.closest("div")?.parentElement?.className).toContain(
-      "bg-af-surface-subtle",
+      "bg-surface-container-low",
     );
     expect(slider.closest("div")?.parentElement?.className).toContain("w-full");
     expect(slider.closest("div")?.className).toContain("md:flex-nowrap");
@@ -191,6 +206,7 @@ describe("DashboardHeader", () => {
     expect(controls[2]).toBe(slider);
     expect(controls[3]).toBe(exportButton);
     expect(globalActions.contains(languageButton)).toBe(true);
+    expect(globalActions.contains(paletteButton)).toBe(true);
     expect(globalActions.contains(openSessionButton)).toBe(false);
     expect(globalActions.contains(exportButton)).toBe(false);
     expect(actionRowSections[0]?.contains(exportButton)).toBe(false);
@@ -199,7 +215,9 @@ describe("DashboardHeader", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(languageButton.dataset.dashboardHeaderAction).toBe("neutral");
+    expect(paletteButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(languageButton.getAttribute("aria-haspopup")).toBe("menu");
+    expect(paletteButton.getAttribute("aria-haspopup")).toBe("menu");
     expect(languageButton.getAttribute("aria-expanded")).toBe("false");
     expect(languageButton.className).toContain("h-10");
     expect(languageButton.className).toContain("w-10");
@@ -262,6 +280,14 @@ describe("DashboardHeader", () => {
       screen.queryByText(headerMessages.openSessionButtonLabel),
     ).toBeNull();
     expect(screen.queryByText(exportMessages.triggerLabel)).toBeNull();
+    expect(
+      screen.getByRole("button", {
+        name: headerMessages.paletteMenuButtonLabel,
+      }).textContent,
+    ).toBe("");
+    expect(
+      screen.queryByText(headerMessages.paletteMenuButtonLabel),
+    ).toBeNull();
     expect(
       screen.queryByText(headerMessages.languageMenuButtonLabel),
     ).toBeNull();
@@ -467,6 +493,43 @@ describe("DashboardHeader", () => {
         name: englishExportMessages.triggerLabel,
       }),
     ).toBeTruthy();
+  });
+
+  it("switches the dashboard palette without reloading and persists it for the session", async () => {
+    seedDashboardHeaderSnapshot();
+    window.sessionStorage.clear();
+
+    renderWithQueryClient(
+      <AppColorPaletteProvider>
+        <DashboardHeader />
+      </AppColorPaletteProvider>,
+    );
+
+    const messages = getHeaderControlsMessages("en");
+    const paletteButton = screen.getByRole("button", {
+      name: messages.paletteMenuButtonLabel,
+    });
+
+    fireEvent.click(paletteButton);
+
+    expect(
+      screen.getByRole("menu", { name: messages.paletteLabel }),
+    ).toBeTruthy();
+    expect(
+      screen.getAllByRole("menuitemradio").map((item) => item.textContent),
+    ).toEqual(getColorPaletteOptions("en").map((option) => option.label));
+
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Slate" }));
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.colorPalette).toBe("slate");
+    });
+    expect(
+      window.sessionStorage.getItem("infinite-you-dashboard-color-palette"),
+    ).toBe("slate");
+    expect(
+      screen.queryByRole("menu", { name: messages.paletteLabel }),
+    ).toBeNull();
   });
 });
 

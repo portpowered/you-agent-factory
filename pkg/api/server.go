@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/mux"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
 )
@@ -33,7 +34,8 @@ type Server struct {
 	logger            *zap.Logger
 	router            *mux.Router
 	port              int
-	codexSessionsRoot string
+	codexSessionsRoot   string
+	cursorSessionsRoot  cursorstorage.AgentStorageRoot
 }
 
 var noModTime = time.Time{}
@@ -45,17 +47,24 @@ func NewServer(runtime apisurface.APISurface, port int, logger *zap.Logger) *Ser
 
 // ServerOptions configures optional API server boundaries.
 type ServerOptions struct {
-	CodexSessionsRoot string
+	CodexSessionsRoot  string
+	CursorSessionsRoot string
 }
 
 // NewServerWithOptions creates a new API server with explicit runtime
 // boundaries for tests and embedding processes.
 func NewServerWithOptions(runtime apisurface.APISurface, port int, logger *zap.Logger, opts ServerOptions) *Server {
+	cursorRoot, err := normalizeCursorSessionsRoot(opts.CursorSessionsRoot)
+	if err != nil {
+		logger.Warn("cursor sessions root unavailable; cursor provider-session detail disabled", zap.Error(err))
+		cursorRoot = ""
+	}
 	srv := &Server{
-		runtime:           runtime,
-		logger:            logger,
-		port:              port,
-		codexSessionsRoot: normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
+		runtime:            runtime,
+		logger:             logger,
+		port:               port,
+		codexSessionsRoot:  normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
+		cursorSessionsRoot: cursorRoot,
 	}
 	if sessionRuntime, ok := runtime.(apisurface.SessionAPISurface); ok {
 		srv.sessionRuntime = sessionRuntime
@@ -69,6 +78,17 @@ func normalizeCodexSessionsRoot(root string) string {
 		return filepath.Clean(root)
 	}
 	return defaultCodexSessionsRoot()
+}
+
+func normalizeCursorSessionsRoot(root string) (cursorstorage.AgentStorageRoot, error) {
+	if root != "" {
+		normalized, err := cursorstorage.NormalizeAgentStorageRoot(root)
+		if err != nil {
+			return "", err
+		}
+		return normalized, nil
+	}
+	return cursorstorage.DefaultAgentStorageRoot()
 }
 
 // Handler returns the http.Handler for testing and composition.

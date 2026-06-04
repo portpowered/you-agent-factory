@@ -59,9 +59,9 @@ const resourceDetailMessagesByLocale = {
       workerNames,
       workstationNames,
     ) =>
-      `Saving ${resourceName} updates every worker and workstation that references this resource, including workers ${workerNames} and workstations ${workstationNames}.`,
+      `Saving ${resourceName} updates workers ${workerNames} and workstations ${workstationNames}.`,
     editableConfigurationSharedImpactWarningDetail:
-      "Capacity and resource metadata apply anywhere this resource name is referenced.",
+      "Capacity and metadata apply wherever this resource is referenced.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this resource.",
     expandAction: "Expand",
@@ -128,9 +128,9 @@ const resourceDetailMessagesByLocale = {
       workerNames,
       workstationNames,
     ) =>
-      `${resourceName} を保存すると、このリソースを参照するすべてのワーカーとワークステーション（ワーカー ${workerNames}、ワークステーション ${workstationNames}）が更新されます。`,
+      `${resourceName} を保存すると、ワーカー ${workerNames} とワークステーション ${workstationNames} が更新されます。`,
     editableConfigurationSharedImpactWarningDetail:
-      "容量とリソースメタデータは、このリソース名が参照されるすべての場所に適用されます。",
+      "容量とメタデータは参照先すべてに適用されます。",
     editableConfigurationValidationStatus:
       "保存する前に強調表示された項目を修正してください。",
     expandAction: "展開",
@@ -197,9 +197,9 @@ const resourceDetailMessagesByLocale = {
       workerNames,
       workstationNames,
     ) =>
-      `${resourceName}을(를) 저장하면 이 리소스를 참조하는 모든 워커와 워크스테이션(워커 ${workerNames}, 워크스테이션 ${workstationNames})이 업데이트됩니다.`,
+      `${resourceName} 저장은 워커 ${workerNames} 및 워크스테이션 ${workstationNames}을(를) 업데이트합니다.`,
     editableConfigurationSharedImpactWarningDetail:
-      "용량과 리소스 메타데이터는 이 리소스 이름이 참조되는 모든 위치에 적용됩니다.",
+      "용량과 메타데이터는 참조되는 모든 위치에 적용됩니다.",
     editableConfigurationValidationStatus:
       "저장하기 전에 강조된 필드를 수정하세요.",
     expandAction: "펼치기",
@@ -259,9 +259,9 @@ const resourceDetailMessagesByLocale = {
       workerNames,
       workstationNames,
     ) =>
-      `保存 ${resourceName} 会更新引用此资源的所有工人和工位，包括工人 ${workerNames} 和工位 ${workstationNames}。`,
+      `保存 ${resourceName} 会更新工人 ${workerNames} 和工位 ${workstationNames}。`,
     editableConfigurationSharedImpactWarningDetail:
-      "容量和资源元数据会应用到引用此资源名称的所有位置。",
+      "容量和元数据会应用到所有引用位置。",
     editableConfigurationValidationStatus: "保存此资源前请修正高亮字段。",
     expandAction: "展开",
     loadPolicyFieldLabel: "加载策略",

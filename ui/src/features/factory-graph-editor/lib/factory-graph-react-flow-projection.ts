@@ -36,6 +36,7 @@ import {
   type FactoryGraphWorkStateType,
   resolveWorkStateTypeForGraphNode,
 } from "./factory-graph-work-state-type";
+import { factoryGraphEditorEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import {
   type FactoryValidationGraphProjection,
   filterValidationHandleErrorsForWorkstation,
@@ -130,16 +131,16 @@ const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
   "work-state": 4,
 };
 const EDGE_COLOR_BY_KIND = {
-  "worker-assignment": "var(--color-af-info)",
-  "worker-resource": "var(--color-af-success)",
+  "worker-assignment": "var(--color-info)",
+  "worker-resource": "var(--color-success)",
   "work-type-state": "var(--color-af-overlay)",
-  "workstation-input": "var(--color-af-accent)",
-  "workstation-on-continue": "var(--color-af-info)",
-  "workstation-on-failure": "var(--color-af-danger-text)",
-  "workstation-on-rejection": "var(--color-af-warning-text)",
-  "workstation-output": "var(--color-af-accent)",
-  "workstation-resource": "var(--color-af-success)",
-  "work-state-visibility-bypass": "var(--color-af-accent)",
+  "workstation-input": "var(--color-primary)",
+  "workstation-on-continue": "var(--color-info)",
+  "workstation-on-failure": "var(--color-on-error-container)",
+  "workstation-on-rejection": "var(--color-on-warning-container)",
+  "workstation-output": "var(--color-primary)",
+  "workstation-resource": "var(--color-success)",
+  "work-state-visibility-bypass": "var(--color-primary)",
 } as const;
 const COLUMN_X = 232;
 const ROW_Y = 118;
@@ -338,6 +339,37 @@ function buildFactoryGraphReactFlowEdge(
     input.topology,
     input.workstationResolver,
   );
+  const hoverClassName = factoryGraphEditorEdgeHoverClassName({
+    active,
+    pendingAddition,
+    pendingRemoval,
+  });
+  const resolvedStroke = pendingRemoval
+    ? "var(--color-af-danger-text)"
+    : pendingAddition
+      ? "var(--color-af-warning-text)"
+      : active
+        ? "var(--color-af-success)"
+        : color;
+  const resolvedStyle = {
+    opacity: pendingRemoval ? 0.48 : undefined,
+    stroke: resolvedStroke,
+    strokeDasharray: pendingRemoval
+      ? "7 5"
+      : pendingAddition
+        ? "9 4"
+        : edge.kind === "worker-resource" || edge.kind === "workstation-resource"
+          ? "4 5"
+          : undefined,
+    strokeWidth: pendingRemoval || pendingAddition || active ? 2 : 1.7,
+  } satisfies FactoryGraphReactFlowEdge["style"];
+  const style = hoverClassName
+    ? ({
+        ...resolvedStyle,
+        stroke: "var(--af-graph-edge-stroke)",
+        "--af-graph-edge-stroke": resolvedStroke,
+      } as FactoryGraphReactFlowEdge["style"])
+    : resolvedStyle;
 
   return {
     animated:
@@ -349,6 +381,7 @@ function buildFactoryGraphReactFlowEdge(
       active ? "agent-factory-editor-edge--active" : "",
       pendingAddition ? "agent-factory-editor-edge--pending-addition" : "",
       pendingRemoval ? "agent-factory-editor-edge--pending-removal" : "",
+      hoverClassName ?? "",
     ]
       .filter(Boolean)
       .join(" "),
@@ -376,35 +409,17 @@ function buildFactoryGraphReactFlowEdge(
     interactionWidth: 24,
     markerEnd: {
       color: pendingRemoval
-        ? "var(--color-af-danger-text)"
+        ? "var(--color-on-error-container)"
         : pendingAddition
-          ? "var(--color-af-warning-text)"
+          ? "var(--color-on-warning-container)"
           : active
-            ? "var(--color-af-success)"
+            ? "var(--color-success)"
             : color,
       type: MarkerType.ArrowClosed,
     },
     source: edge.sourceId,
     sourceHandle: handleAssignment?.sourceHandle,
-    style: {
-      opacity: pendingRemoval ? 0.48 : undefined,
-      stroke: pendingRemoval
-        ? "var(--color-af-danger-text)"
-        : pendingAddition
-          ? "var(--color-af-warning-text)"
-          : active
-            ? "var(--color-af-success)"
-            : color,
-      strokeDasharray: pendingRemoval
-        ? "7 5"
-        : pendingAddition
-          ? "9 4"
-          : edge.kind === "worker-resource" ||
-              edge.kind === "workstation-resource"
-            ? "4 5"
-            : undefined,
-      strokeWidth: pendingRemoval || pendingAddition || active ? 2 : 1.7,
-    },
+    style,
     target: edge.targetId,
     targetHandle: handleAssignment?.targetHandle,
     type: "factoryEditorEdge",

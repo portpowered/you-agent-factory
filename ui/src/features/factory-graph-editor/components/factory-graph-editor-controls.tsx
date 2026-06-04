@@ -14,7 +14,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 
@@ -28,7 +27,6 @@ import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
-export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
 export type FactoryGraphEditorVisibilityPreset =
   | "all"
   | "workflow"
@@ -49,14 +47,7 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 }
 
 const TOOLBAR_ACTIONS_CLASS =
-  "flex items-center gap-2 border-l border-af-border pl-2 max-md:ml-auto";
-const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
-  warning:
-    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
-};
-
+  "flex items-center gap-2 border-l border-outline pl-2 max-md:ml-auto";
 export function FactoryGraphEditorToolbar({
   activeTool,
   addMenuActions = [],
@@ -111,7 +102,7 @@ export function FactoryGraphEditorToolbar({
   return (
     <section
       aria-label={messages.toolbarAriaLabel}
-      className="pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0"
+      className="pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-full border border-outline bg-surface-container-high px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:bottom-3 max-md:left-4 max-md:right-4 max-md:flex-wrap max-md:justify-start max-md:gap-1.5 max-md:translate-x-0"
     >
       {hideShowVisible && onToggleHiddenNodeClass ? (
         <FactoryGraphEditorHideShowMenu
@@ -215,7 +206,7 @@ export function FactoryGraphEditorVisibilityPanel({
   return (
     <section
       aria-label={messages.visibilityPresetsAriaLabel}
-      className="pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-af-border bg-af-surface-raised px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
+      className="pointer-events-auto absolute right-7 top-7 z-20 flex flex-wrap items-center gap-2 rounded-full border border-outline bg-surface-container-high px-2 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
     >
       {options.map((option) => (
         <DashboardActionButton
@@ -291,10 +282,12 @@ function FactoryGraphEditorAddMenu({
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>
-        <DashboardActionButton
+        <FactoryGraphEditorTooltipActionButton
           aria-label={messages.toolbarOpenAddMenuLabel}
           disabled={!canInteract}
           iconOnly
+          placement="above"
+          tooltip={messages.toolbarAddDescription}
           tone={open ? "secondary" : "outline"}
           type="button"
         >
@@ -312,7 +305,7 @@ function FactoryGraphEditorAddMenu({
             <path d="M12 5v14" />
             <path d="M5 12h14" />
           </svg>
-        </DashboardActionButton>
+        </FactoryGraphEditorTooltipActionButton>
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -324,10 +317,10 @@ function FactoryGraphEditorAddMenu({
         sideOffset={12}
       >
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-text">
+          <p className="m-0 text-sm font-semibold text-on-surface">
             {messages.toolbarVisibilityMenuTitle}
           </p>
-          <p className="m-0 text-xs leading-5 text-af-text-muted">
+          <p className="m-0 text-xs leading-5 text-on-surface-variant">
             {messages.toolbarVisibilityMenuDescription}
           </p>
         </div>
@@ -345,11 +338,11 @@ function FactoryGraphEditorAddMenu({
               tone="ghost"
               type="button"
             >
-              <span className="text-sm font-semibold text-af-text">
+              <span className="text-sm font-semibold text-on-surface">
                 {action.label}
               </span>
               {action.description ? (
-                <span className="text-xs leading-5 text-af-text-muted">
+                <span className="text-xs leading-5 text-on-surface-variant">
                   {action.description}
                 </span>
               ) : null}
@@ -444,9 +437,9 @@ export function FactoryGraphEditorActionPopover({
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="grid gap-3" sideOffset={12}>
         <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-af-text">{title}</p>
+          <p className="m-0 text-sm font-semibold text-on-surface">{title}</p>
           {description ? (
-            <p className="m-0 text-xs leading-5 text-af-text-muted">
+            <p className="m-0 text-xs leading-5 text-on-surface-variant">
               {description}
             </p>
           ) : null}
@@ -457,28 +450,10 @@ export function FactoryGraphEditorActionPopover({
   );
 }
 
-export function FactoryGraphEditorNotice({
-  children,
-  title,
-  tone = "neutral",
-}: {
-  children: ReactNode;
-  title: string;
-  tone?: FactoryGraphEditorNoticeTone;
-}) {
-  return (
-    <section
-      className={cn(
-        "grid gap-1 rounded-2xl border p-4",
-        NOTICE_TONE_CLASS[tone],
-      )}
-      role={tone === "danger" ? "alert" : "status"}
-    >
-      <h3 className="m-0 text-sm font-semibold">{title}</h3>
-      <p className="m-0 text-sm leading-6">{children}</p>
-    </section>
-  );
-}
+export {
+  FactoryGraphEditorNotice,
+  type FactoryGraphEditorNoticeTone,
+} from "./factory-graph-editor-notice";
 
 export function FactoryGraphEditorConfirmationDialog({
   cancelLabel,

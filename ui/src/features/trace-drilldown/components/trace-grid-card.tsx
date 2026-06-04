@@ -169,7 +169,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
     <div className="grid min-w-0 w-full gap-3">
       <dl
         className={cn(
-          "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-af-border [&_div]:pt-3 [&_dt]:mb-1",
+          "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-outline [&_div]:pt-3 [&_dt]:mb-1",
           DASHBOARD_SUPPORTING_LABELS_CLASS,
           DASHBOARD_BODY_TEXT_CLASS,
         )}
@@ -324,7 +324,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                 <TableHead className="align-top" scope="row">
                   <span
                     className={cn(
-                      "inline-flex rounded-full border border-af-info-border bg-af-info-surface px-2 py-0.5 text-af-info-text",
+                      "inline-flex rounded-full border border-info-border bg-info-container px-2 py-0.5 text-on-info-container",
                       DASHBOARD_SUPPORTING_CODE_CLASS,
                     )}
                   >
@@ -386,7 +386,7 @@ function SelectableWorkList({
           {onSelectWorkID ? (
             <Button
               className={cn(
-                "h-auto min-h-0 justify-start border-af-accent-border bg-af-accent-surface px-2.5 py-1.5 text-left text-af-accent",
+                "h-auto min-h-0 justify-start border-primary bg-primary-container px-2.5 py-1.5 text-left text-primary",
                 DASHBOARD_SUPPORTING_CODE_CLASS,
               )}
               onClick={() => onSelectWorkID(workItem.work_id)}

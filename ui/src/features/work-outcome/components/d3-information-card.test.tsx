@@ -260,8 +260,8 @@ describe("D3CompletionInformationCard", () => {
     expect(chart.getAttribute("data-chart-presentation")).toBe("embedded");
     expect(chart.getAttribute("data-work-chart-presentation")).toBe("embedded");
     expect(chart.className).not.toContain("rounded-2xl");
-    expect(chart.className).not.toContain("border-af-border");
-    expect(chart.className).not.toContain("bg-af-surface-subtle");
+    expect(chart.className).not.toContain("border-outline");
+    expect(chart.className).not.toContain("bg-surface-container-low");
     expect(chart.className).toContain("pt-0");
     expect(chart.className).not.toContain("pt-4");
     expect(

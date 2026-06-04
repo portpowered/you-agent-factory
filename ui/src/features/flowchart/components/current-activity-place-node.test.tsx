@@ -134,6 +134,13 @@ describe("CurrentActivity place node work-state phase styling", () => {
     );
   });
 
+});
+
+describe("CurrentActivity place node work-state phase precedence", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("keeps selection ring visible on lifecycle-colored work-state nodes", () => {
     const place: DashboardPlaceRef = {
       kind: "work_state",
@@ -149,7 +156,7 @@ describe("CurrentActivity place node work-state phase styling", () => {
     );
     const shell = nodeShell(container);
 
-    expect(shell?.className).toContain("border-af-accent-border");
+    expect(shell?.className).toContain("border-primary");
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("INITIAL"),
     );
@@ -177,5 +184,44 @@ describe("CurrentActivity place node work-state phase styling", () => {
     expect(shell?.className).toContain(
       workStatePhaseSurfaceClassName("FAILED"),
     );
+  });
+
+  it("applies active-flow border over idle phase surface styling", () => {
+    const place: DashboardPlaceRef = {
+      kind: "work_state",
+      place_id: "story:ready",
+      state_category: "PROCESSING",
+      state_value: "ready",
+      type_id: "story",
+    };
+    const { container } = render(
+      <StatePositionNodeView {...statePositionNodeProps(place, { activeFlow: true })} />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.className).toContain("border-af-success-border");
+    expect(shell?.className).toContain("shadow-af-success-chip");
+    expect(shell?.className).toContain(
+      workStatePhaseSurfaceClassName("PROCESSING"),
+    );
+  });
+
+  it("keeps idle phase surface classes when muted", () => {
+    const place: DashboardPlaceRef = {
+      kind: "work_state",
+      place_id: "story:complete",
+      state_category: "TERMINAL",
+      state_value: "complete",
+      type_id: "story",
+    };
+    const { container } = render(
+      <StatePositionNodeView {...statePositionNodeProps(place, { muted: true })} />,
+    );
+    const shell = nodeShell(container);
+
+    expect(shell?.className).toContain(
+      workStatePhaseSurfaceClassName("TERMINAL"),
+    );
+    expect(shell?.className).toContain("opacity-[0.45]");
   });
 });

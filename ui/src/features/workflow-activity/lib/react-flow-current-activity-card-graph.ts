@@ -469,7 +469,7 @@ function buildPlaceNodeShell(
   input: BuildCurrentActivityNodesInput,
 ) {
   return {
-    className: "border-0 bg-transparent p-0 text-af-text",
+    className: "border-0 bg-transparent p-0 text-on-surface",
     draggable: true,
     height: positionedNode.height,
     id: positionedNode.nodeId,
@@ -626,13 +626,12 @@ function buildPlaceNode(
       data: {
         ...basePlaceData,
         kind: "work-type" as const,
-        ...(input.editor?.editorMode && wireSelectionHandlers
+        ...(wireSelectionHandlers
           ? { onSelectWorkType: input.onSelectWorkType }
           : {}),
         isDefaultWorkType,
         place,
         selectedWorkType:
-          input.editor?.editorMode === true &&
           input.selection?.kind === "work-type" &&
           input.selection.workTypeName === workTypeName,
       },
@@ -692,7 +691,7 @@ function buildWorkstationNode(
   );
 
   return {
-    className: "border-0 bg-transparent p-0 text-af-text",
+    className: "border-0 bg-transparent p-0 text-on-surface",
     data: {
       active: executions.length > 0,
       activeFlow: input.activeGraphHighlights.activeWorkstationNodeIds.has(

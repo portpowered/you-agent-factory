@@ -348,10 +348,10 @@ describe.sequential("factory graph editor browser integration", () => {
         });
 
         for (const [triggerName, tooltipName] of [
-          ["Delete tool", "Delete tool"],
-          ["Connect tool", "Connect tool"],
+          ["Delete", "Remove nodes or edges from the graph"],
+          ["Connect", "Connect nodes on the graph"],
           [
-            "Open hide or show node classes menu",
+            "Show or hide",
             "Show or hide node classes on the graph",
           ],
         ]) {
@@ -409,7 +409,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
         await toolbar
-          .getByRole("button", { name: "Add tool" })
+          .getByRole("button", { name: "Add" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         expect(
           await toolbar
@@ -725,7 +725,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
 
-        await toolbar.getByRole("button", { name: "Add tool" }).click();
+        await toolbar.getByRole("button", { name: "Add" }).click();
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Workstation" })
@@ -751,7 +751,7 @@ describe.sequential("factory graph editor browser integration", () => {
           })
           .toBe(true);
 
-        await toolbar.getByRole("button", { name: "Connect tool" }).click();
+        await toolbar.getByRole("button", { name: "Connect" }).click();
         await browserPage.page
           .getByTestId("rf__node-workstation:draft")
           .getByRole("button", {
@@ -877,7 +877,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
 
-        await toolbar.getByRole("button", { name: "Add tool" }).click();
+        await toolbar.getByRole("button", { name: "Add" }).click();
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Work type" })
@@ -961,7 +961,7 @@ describe.sequential("factory graph editor browser integration", () => {
           timeout: uiInteractionTimeoutMs,
         });
 
-        await toolbar.getByRole("button", { name: "Add tool" }).click();
+        await toolbar.getByRole("button", { name: "Add" }).click();
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Work type" })
@@ -1004,13 +1004,13 @@ describe.sequential("factory graph editor browser integration", () => {
         await expect
           .poll(
             async () =>
-              await toolbar.getByRole("button", { name: "Add tool" }).count(),
+              await toolbar.getByRole("button", { name: "Add" }).count(),
             { timeout: uiInteractionTimeoutMs },
           )
           .toBe(0);
         await toolbar
           .getByRole("button", {
-            name: "Open hide or show node classes menu",
+            name: "Show or hide",
           })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 

@@ -1,5 +1,5 @@
 import type { ReactFlowInstance } from "@xyflow/react";
-import { useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/factory-graph-editor-controls";
@@ -8,12 +8,12 @@ import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
+import { shouldShowGraphSaveFailureNotice } from "../lib/graph-save-failure-notice-visibility";
 import {
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -39,9 +39,7 @@ export function CurrentActivityGraphSurface({
   const messages = getFactoryGraphEditorMessages(locale);
   const flowContainerRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
-  const storedNodePositions = useCurrentActivityGraphStore(
-    (state) => state.positionsByGraphKey[graph.graphKey] ?? {},
-  );
+  const storedNodePositions = graph.storedNodePositions;
   const saveError = editor.saveEditableDefinition.error;
   const editorValidationProjection = useMemo(() => {
     if (!editor.editorMode) {
@@ -78,14 +76,26 @@ export function CurrentActivityGraphSurface({
   const saveFailureMessages = editor.editorMode
     ? saveErrorNoticeMessages(saveError)
     : [];
+  const [dismissedSaveFailureRevision, setDismissedSaveFailureRevision] =
+    useState<number | null>(null);
+  const dismissSaveFailureNotice = useCallback(() => {
+    setDismissedSaveFailureRevision(editor.saveAttemptRevision);
+  }, [editor.saveAttemptRevision]);
+  const showSaveFailureNotice = shouldShowGraphSaveFailureNotice({
+    dismissedSaveFailureRevision,
+    hasFailureMessages: saveFailureMessages.length > 0,
+    saveAttemptRevision: editor.saveAttemptRevision,
+  });
   if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
 
   return (
     <div className="grid min-h-0 flex-1 gap-3">
-      {saveFailureMessages.length > 0 ? (
+      {showSaveFailureNotice ? (
         <FactoryGraphEditorNotice
+          dismissLabel={messages.noticeDismissLabel}
+          onDismiss={dismissSaveFailureNotice}
           title={messages.noticeSaveFailedTitle}
           tone="danger"
         >
@@ -200,7 +210,7 @@ function snapshotHasObserverGraph(snapshot: DashboardSnapshot): boolean {
 function EmptyCurrentActivityState({ locale }: { locale?: string }) {
   const messages = getFactoryGraphEditorMessages(locale);
   return (
-    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-af-border-strong bg-af-surface-subtle p-5 [&_h3]:m-0">
+    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-outline-variant bg-surface-container-low p-5 [&_h3]:m-0">
       <h3>{messages.noticeEmptyTitle}</h3>
       <p>{messages.noticeEmptyMessage}</p>
     </div>

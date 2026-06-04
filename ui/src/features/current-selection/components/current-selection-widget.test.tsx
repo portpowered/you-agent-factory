@@ -1014,10 +1014,13 @@ describe("CurrentSelectionWidget", () => {
       ),
     ).toBeTruthy();
     expect(
-      screen.getByText(
+      screen.queryByText(
         "Review the latest runtime values before saving, or keep editing if this draft should replace them.",
       ),
-    ).toBeTruthy();
+    ).toBeNull();
+    expect(
+      screen.queryByText("Confirm latest values or keep editing."),
+    ).toBeNull();
   });
 
   it("renders workstation request details when a workstation request is selected", () => {

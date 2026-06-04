@@ -10,7 +10,12 @@ export interface WorkTypeDetailMessages
   configurationEmpty: string;
   configurationErrorPrefix: string;
   configurationLoading: string;
+  collapseAction: string;
+  editableConfigurationCollapseActionLabel: string;
+  editableConfigurationExpandActionLabel: string;
+  editableConfigurationHeading: string;
   editableConfigurationSaveAction: string;
+  expandAction: string;
   editableConfigurationSaveBusyAction: string;
   editableConfigurationSaveConfirmationCancelAction: string;
   editableConfigurationSaveConfirmationConfirmAction: string;

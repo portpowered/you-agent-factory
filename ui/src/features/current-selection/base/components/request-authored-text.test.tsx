@@ -28,11 +28,15 @@ describe("AuthoredBodyText", () => {
     expect(
       screen.getAllByText("bun test", { selector: "pre code" }),
     ).toHaveLength(1);
-    expect(container.firstElementChild?.className).toContain(
-      "[&_code]:rounded-sm",
+    const authoredShell = container.firstElementChild;
+    expect(authoredShell?.className).toContain("[&_code]:rounded-sm");
+    expect(authoredShell?.className).toContain("[&_code]:px-1");
+    expect(authoredShell?.className).toContain("[&_code]:py-0.5");
+    expect(authoredShell?.className).toContain("border-outline");
+    expect(authoredShell?.className).toContain("bg-surface-container-high");
+    expect(authoredShell?.className).toContain(
+      "[&_code]:bg-surface-container",
     );
-    expect(container.firstElementChild?.className).toContain("[&_code]:px-1");
-    expect(container.firstElementChild?.className).toContain("[&_code]:py-0.5");
   });
 
   it("renders plain text as readable fallback without requiring markdown syntax", () => {

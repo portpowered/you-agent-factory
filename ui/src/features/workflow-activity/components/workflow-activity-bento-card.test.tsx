@@ -464,8 +464,8 @@ describe("WorkflowActivityBentoCard header actions", () => {
       name: editorMessages.modeLeaveEditor,
     });
     expect(toggle.className).toContain("border-af-warning-border");
-    expect(toggle.className).toContain("bg-af-warning-surface");
-    expect(toggle.className).toContain("text-af-warning-text");
+    expect(toggle.className).toContain("bg-warning-container");
+    expect(toggle.className).toContain("text-on-warning-container");
     expect(toggle.className).toContain("size-8");
 
     const toolbar = await screen.findByRole("region", {

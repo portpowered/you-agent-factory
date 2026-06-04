@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId, useState } from "react";
 
+import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
@@ -8,7 +9,8 @@ import {
 import { cn } from "../../../../lib/cn";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_FIELD_PANEL_CLASS,
+  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
+  CURRENT_SELECTION_FORM_FIELD_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
   CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
@@ -29,48 +31,81 @@ export function WorkStateEditableConfigurationSection({
   saveState?: EditableWorkStateSaveState;
   state?: EditableWorkStateConfigurationState;
 }) {
-  const headingId = "editable-work-state-configuration-heading";
+  const [expanded, setExpanded] = useState(true);
+  const sectionId = useId();
+  const contentId = `${sectionId}-content`;
+  const headingId = `${sectionId}-heading`;
 
   return (
     <section
       aria-labelledby={headingId}
-      className="mt-0 grid gap-2.5 [&_h4]:m-0"
+      className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
       <CurrentSelectionSectionHeader
+        action={
+          <ExpandablePanelTrigger
+            aria-label={
+              expanded
+                ? messages.editableConfigurationCollapseActionLabel
+                : messages.editableConfigurationExpandActionLabel
+            }
+            controlsID={contentId}
+            expanded={expanded}
+            onClick={() => setExpanded((current) => !current)}
+            type="button"
+            variant="section"
+          >
+            {expanded ? messages.collapseAction : messages.expandAction}
+          </ExpandablePanelTrigger>
+        }
         headingId={headingId}
         title={messages.editableConfigurationHeading}
       />
-      <div className="grid gap-2.5">
-        {state?.status === "loading" ? (
-          <p
-            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
-          >
-            {messages.editableConfigurationLoading}
-          </p>
-        ) : null}
-        {state?.status === "error" ? (
-          <p
-            className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
-            role="alert"
-          >
-            {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-          </p>
-        ) : null}
-        {state?.status === "empty" ? (
-          <p
-            className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}
-          >
-            {state.message || messages.editableConfigurationEmpty}
-          </p>
-        ) : null}
-        {state?.status === "ready" ? (
-          <WorkStateEditableConfigurationReadyForm
-            messages={messages}
-            saveState={saveState}
-            state={state}
-          />
-        ) : null}
-      </div>
+      {expanded ? (
+        <div
+          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+          id={contentId}
+        >
+          {state?.status === "loading" ? (
+            <p
+              className={cn(
+                "m-0 text-on-surface-variant",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
+              {messages.editableConfigurationLoading}
+            </p>
+          ) : null}
+          {state?.status === "error" ? (
+            <p
+              className={cn(
+                "m-0 text-on-error-container",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+              role="alert"
+            >
+              {messages.editableConfigurationErrorPrefix} {state.errorMessage}
+            </p>
+          ) : null}
+          {state?.status === "empty" ? (
+            <p
+              className={cn(
+                "m-0 text-on-surface-variant",
+                DASHBOARD_BODY_TEXT_CLASS,
+              )}
+            >
+              {state.message || messages.editableConfigurationEmpty}
+            </p>
+          ) : null}
+          {state?.status === "ready" ? (
+            <WorkStateEditableConfigurationReadyForm
+              messages={messages}
+              saveState={saveState}
+              state={state}
+            />
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -93,7 +128,10 @@ function WorkStateEditableConfigurationReadyForm({
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
       {validationErrors.contract ? (
         <p
-          className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
           role="alert"
         >
           {validationErrors.contract}
@@ -115,7 +153,7 @@ function WorkStateEditableConfigurationReadyForm({
                   : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
-              className="w-full rounded-lg border border-af-border bg-af-surface px-3 py-2 text-sm text-af-text"
+              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-work-state-name"
               onChange={(event) => state.onNameChange(event.target.value)}
               type="text"
@@ -128,7 +166,7 @@ function WorkStateEditableConfigurationReadyForm({
           fieldId="editable-work-state-type"
           input={
             <output
-              className="block w-full rounded-lg border border-af-border bg-af-surface-raised px-3 py-2 text-sm text-af-text-muted"
+              className="block w-full rounded-lg border border-outline bg-surface-container-high px-3 py-2 text-sm text-on-surface-variant"
               id="editable-work-state-type"
             >
               {messages.localizeWorkStateType(state.draft.type)}
@@ -153,16 +191,16 @@ function WorkStateEditableConfigurationDraftStatus({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <p
-        className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}
+        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
         role="alert"
       >
         {messages.editableConfigurationValidationStatus}
       </p>
       <p
         className={cn(
-          "m-0 text-af-text-subtle",
+          "m-0 text-on-surface-subtle",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -184,7 +222,7 @@ function WorkStateEditableConfigurationField({
   label: string;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FIELD_PANEL_CLASS}>
+    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
       <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
         {label}
       </label>
@@ -192,7 +230,7 @@ function WorkStateEditableConfigurationField({
       {errorMessage ? (
         <p
           className={cn(
-            "m-0 text-af-danger-text",
+            "m-0 text-on-error-container",
             DASHBOARD_SUPPORTING_TEXT_CLASS,
           )}
           id={`${fieldId}-error`}

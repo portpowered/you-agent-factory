@@ -149,6 +149,23 @@ describe("validateEditableWorkstationGuardDraft workstation-level guards", () =>
         "Enter a field selector for this guard.",
     });
   });
+
+  it("accepts non-curated MATCHES_FIELDS inputKey selectors", () => {
+    expect(
+      validateEditableWorkstationGuardDraft(
+        buildDraft({
+          guards: [
+            {
+              matchConfig: { inputKey: '.Tags["_last_output"]' },
+              type: "MATCHES_FIELDS",
+            },
+          ],
+        }),
+        context,
+        messages,
+      ),
+    ).toEqual({});
+  });
 });
 
 describe("validateEditableWorkstationGuardDraft SAME_NAME guards", () => {

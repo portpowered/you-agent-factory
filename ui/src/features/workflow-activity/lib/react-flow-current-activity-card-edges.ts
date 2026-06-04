@@ -6,6 +6,7 @@ import type {
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
+import { currentActivityGraphEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
   type ActiveGraphHighlights,
@@ -13,10 +14,10 @@ import {
   type HandleAssignments,
 } from "./react-flow-current-activity-card-graph";
 
-const EDGE_STROKE_MUTED = "var(--color-af-edge-muted)";
-const EDGE_STROKE_SOFT = "var(--color-af-edge-muted-soft)";
+const EDGE_STROKE_MUTED = "var(--color-outline-variant)";
+const EDGE_STROKE_SOFT = "var(--color-outline)";
 const EDGE_STROKE_DANGER_MUTED = "var(--color-af-edge-danger-muted)";
-const EDGE_STROKE_ACTIVE = "var(--color-af-success)";
+const EDGE_STROKE_ACTIVE = "var(--color-success)";
 
 function edgeIsFailure(edge: PositionedEdge): boolean {
   return edge.outcomeKind === "failed" || edge.stateCategory === "FAILED";
@@ -87,6 +88,19 @@ function edgeLabel(
   return activeFlow ? edge.label || undefined : undefined;
 }
 
+function withHoverableEdgeStroke(style: Edge["style"]): Edge["style"] {
+  const stroke = style?.stroke;
+  if (typeof stroke !== "string") {
+    return style;
+  }
+
+  return {
+    ...style,
+    stroke: "var(--af-graph-edge-stroke)",
+    "--af-graph-edge-stroke": stroke,
+  } as Edge["style"];
+}
+
 export function buildGraphEdges(
   activeGraphHighlights: ActiveGraphHighlights,
   handleAssignments: HandleAssignments,
@@ -113,6 +127,22 @@ export function buildGraphEdges(
       !semantic &&
       (!activeGraphHighlights.relatedNodeIds.has(edge.fromNodeId) ||
         !activeGraphHighlights.relatedNodeIds.has(edge.toNodeId));
+    const hoverClassName = currentActivityGraphEdgeHoverClassName({
+      activeFlow,
+      muted,
+      pendingAddition,
+      semantic,
+    });
+    const resolvedStyle = pendingAddition
+      ? {
+          stroke: "var(--color-on-warning-container)",
+          strokeDasharray: "9 4",
+          strokeWidth: 2,
+        }
+      : edgeStyle(edge, activeFlow, muted);
+    const style = hoverClassName
+      ? withHoverableEdgeStroke(resolvedStyle)
+      : resolvedStyle;
 
     return {
       animated: activeFlow,
@@ -121,31 +151,26 @@ export function buildGraphEdges(
         semantic ? "agent-flow-edge--semantic" : "",
         muted ? "agent-flow-edge--muted" : "",
         pendingAddition ? "agent-flow-edge--pending-addition" : "",
+        hoverClassName ?? "",
       ]
         .filter(Boolean)
         .join(" "),
       id: edge.edgeId,
       label: edgeLabel(edge, activeFlow),
       labelBgStyle: {
-        fill: "var(--color-af-surface)",
+        fill: "var(--color-surface)",
         fillOpacity: activeFlow || semantic ? 0.92 : 0,
       },
-      labelStyle: { fill: "var(--color-af-text)" },
+      labelStyle: { fill: "var(--color-on-surface)" },
       markerEnd: {
         color: pendingAddition
-          ? "var(--color-af-warning-text)"
+          ? "var(--color-on-warning-container)"
           : edgeMarkerColor(edge, activeFlow),
         type: MarkerType.ArrowClosed,
       },
       source: edge.fromNodeId,
       sourceHandle: handleAssignments.sourceHandlesByEdgeId.get(edge.edgeId),
-      style: pendingAddition
-        ? {
-            stroke: "var(--color-af-warning-text)",
-            strokeDasharray: "9 4",
-            strokeWidth: 2,
-          }
-        : edgeStyle(edge, activeFlow, muted),
+      style,
       target: edge.toNodeId,
       targetHandle: handleAssignments.targetHandlesByEdgeId.get(edge.edgeId),
       type: "default",

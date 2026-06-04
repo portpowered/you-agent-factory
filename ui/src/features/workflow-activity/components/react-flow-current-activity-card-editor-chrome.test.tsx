@@ -53,8 +53,8 @@ describe("CurrentActivityGraphHeaderActions", () => {
 
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
     expect(toggle.className).toContain("border-af-warning-border");
-    expect(toggle.className).toContain("bg-af-warning-surface");
-    expect(toggle.className).toContain("text-af-warning-text");
+    expect(toggle.className).toContain("bg-warning-container");
+    expect(toggle.className).toContain("text-on-warning-container");
     await user.hover(toggle);
     expect(
       await screen.findByRole("tooltip", {
@@ -80,9 +80,9 @@ describe("CurrentActivityGraphHeaderActions", () => {
     });
 
     expect(toggle.className).toContain("border-af-warning-border");
-    expect(toggle.className).toContain("bg-af-warning-surface");
-    expect(toggle.className).toContain("text-af-warning-text");
-    expect(toggle.className).not.toContain("text-af-text-muted");
+    expect(toggle.className).toContain("bg-warning-container");
+    expect(toggle.className).toContain("text-on-warning-container");
+    expect(toggle.className).not.toContain("text-on-surface-variant");
   });
 
   it("keeps custom header actions in the actions section after the mode toggle", () => {

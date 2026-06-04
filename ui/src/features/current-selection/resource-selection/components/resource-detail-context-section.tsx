@@ -17,7 +17,7 @@ function SummaryField({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-0.5">
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <span className={cn("m-0 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+      <span className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
         {value}
       </span>
     </div>
@@ -97,13 +97,13 @@ export function ResourceDetailContextSection({
           title={messages.referencingWorkersHeading}
         />
         {workerNames.length > 0 ? (
-          <p className={cn("m-0 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
             {formatList(workerNames)}
           </p>
         ) : (
           <p
             className={cn(
-              "m-0 text-af-text-muted",
+              "m-0 text-on-surface-variant",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >
@@ -121,13 +121,13 @@ export function ResourceDetailContextSection({
           title={messages.referencingWorkstationsHeading}
         />
         {workstationNames.length > 0 ? (
-          <p className={cn("m-0 text-af-text", DASHBOARD_BODY_TEXT_CLASS)}>
+          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
             {formatList(workstationNames)}
           </p>
         ) : (
           <p
             className={cn(
-              "m-0 text-af-text-muted",
+              "m-0 text-on-surface-variant",
               DASHBOARD_SUPPORTING_TEXT_CLASS,
             )}
           >

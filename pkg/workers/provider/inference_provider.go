@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -189,23 +190,28 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	duration := time.Since(started)
 	commandDiagnostics := commandDiagnostics(execReq, result, duration, false)
 	providerSession := effectiveProviderSession(req, result)
+	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
 	if err != nil {
 		logger.Error("inferencer: request failed",
-			workLogFields(req.Dispatch.Execution,
-				"dispatcher", string(req.ModelProvider),
-				"error", err.Error(),
-				"output", string(result.Stdout),
-				"stderr", string(result.Stderr))...)
-		return interfaces.InferenceResponse{}, normalizeProviderExecutionError(req.ModelProvider, result, err, providerSession, commandDiagnostics)
+			cursorFailureLogFields(req, cursorProvider, result,
+				"error", err.Error())...)
+		return interfaces.InferenceResponse{}, normalizeProviderExecutionError(
+			req.ModelProvider, result, err, providerSession,
+			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+		)
 	}
 	if result.ExitCode != 0 {
 		logger.Error("inferencer: request failed",
-			workLogFields(req.Dispatch.Execution,
-				"dispatcher", string(req.ModelProvider),
-				"exit_code", result.ExitCode,
-				"output", string(result.Stdout),
-				"stderr", string(result.Stderr))...)
-		return interfaces.InferenceResponse{}, normalizeProviderExitFailure(req.ModelProvider, result, providerSession, commandDiagnostics)
+			cursorFailureLogFields(req, cursorProvider, result,
+				"exit_code", result.ExitCode)...)
+		return interfaces.InferenceResponse{}, normalizeProviderExitFailure(
+			req.ModelProvider, result, providerSession,
+			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+		)
+	}
+
+	if cursorProvider {
+		return p.completeCursorInference(req, result, commandDiagnostics, logger)
 	}
 
 	content := string(result.Stdout)
@@ -317,6 +323,69 @@ func providerOutputContainsTimeout(result CommandResult) bool {
 
 func formatProviderTimeoutFailure(provider string, result CommandResult) string {
 	return providerBehaviorForErrorClassification(provider).FormatTimeoutFailure(result)
+}
+
+func cursorFailureLogFields(req interfaces.RunnerExecutionRequest, cursorProvider bool, result CommandResult, extra ...any) []any {
+	fields := workLogFields(req.Dispatch.Execution,
+		append([]any{"dispatcher", string(req.ModelProvider)}, extra...)...)
+	if !cursorProvider {
+		fields = append(fields,
+			"output", string(result.Stdout),
+			"stderr", string(result.Stderr),
+		)
+		return fields
+	}
+	fields = append(fields,
+		"stdout_preview", cursorpkg.BoundedCommandOutputExcerpt(result.Stdout, cursorpkg.CommandOutputLogPreviewLimit),
+		"stderr_preview", cursorpkg.BoundedCommandOutputExcerpt(result.Stderr, cursorpkg.CommandOutputLogPreviewLimit),
+	)
+	return fields
+}
+
+func cursorInferenceFailureDiagnostics(
+	cursorProvider bool,
+	commandDiagnostics *interfaces.WorkDiagnostics,
+	result CommandResult,
+) *interfaces.WorkDiagnostics {
+	if !cursorProvider {
+		return commandDiagnostics
+	}
+	return cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
+}
+
+func (p *ScriptWrapProvider) completeCursorInference(
+	req interfaces.RunnerExecutionRequest,
+	result CommandResult,
+	commandDiagnostics *interfaces.WorkDiagnostics,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	parsed, parseErr := cursorpkg.ParseInferenceResult(req.ModelProvider, result.Stdout)
+	if parseErr != nil {
+		logger.Error("inferencer: cursor JSON parse failed",
+			cursorFailureLogFields(req, true, result,
+				"error", parseErr.Message)...)
+		failureDiagnostics := cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
+		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
+			parseErr.Type,
+			parseErr.Message,
+			parseErr.Cause,
+			effectiveProviderSession(req, result),
+			failureDiagnostics,
+		)
+	}
+	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
+	logger.Debug("inference results:",
+		workLogFields(req.Dispatch.Execution, "output", parsed.Content)...)
+	logger.Info("inferencer: request completed",
+		workLogFields(req.Dispatch.Execution,
+			"dispatcher", string(req.ModelProvider),
+			"output_len", len(parsed.Content),
+			"session_id", parsed.ProviderSession.ID)...)
+	return interfaces.InferenceResponse{
+		Content:         parsed.Content,
+		ProviderSession: parsed.ProviderSession,
+		Diagnostics:     diagnostics,
+	}, nil
 }
 
 func formatProviderCommandFailure(provider string, result CommandResult, err error) string {

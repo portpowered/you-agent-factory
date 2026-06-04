@@ -204,7 +204,7 @@ async function addWorker(
   toolbar,
   { model = "gpt-5-mini", modelProvider = "CURSOR", name },
 ) {
-  await toolbar.getByRole("button", { name: "Add tool" }).click();
+  await toolbar.getByRole("button", { name: "Add" }).click();
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Worker" })
@@ -322,7 +322,7 @@ describe.sequential("factory graph editor selection panel delete browser integra
 
         const deleteToolButton = browserPage.page
           .getByRole("article", { name: "Factory graph" })
-          .getByRole("button", { name: "Delete tool" });
+          .getByRole("button", { name: "Delete" });
         await deleteToolButton.scrollIntoViewIfNeeded();
         await deleteToolButton.click();
         expect(await deleteToolButton.getAttribute("aria-pressed")).toBe(

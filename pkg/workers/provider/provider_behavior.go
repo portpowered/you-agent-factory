@@ -347,6 +347,7 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	if req.WorkingDirectory != "" {
 		args = append(args, "--workspace", req.WorkingDirectory)
 	}
+	args = append(args, "--output-format", "json")
 	prompt := strings.TrimSpace(req.UserMessage)
 	if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
 		prompt = buildKiroPrompt(req)

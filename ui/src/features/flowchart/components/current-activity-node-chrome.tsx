@@ -3,7 +3,7 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { cn } from "../../../lib/cn";
 
 const ACTIVITY_GRAPH_NODE_TITLE_CLASS_NAME =
-  "block min-w-0 truncate whitespace-nowrap font-bold leading-tight text-af-text";
+  "block min-w-0 truncate whitespace-nowrap font-bold leading-tight text-on-surface";
 
 type ActivityGraphNodeBadgeTone =
   | "danger"
@@ -14,13 +14,13 @@ type ActivityGraphNodeBadgeTone =
 type ActivityGraphNodeBadgeWeight = "body" | "label";
 
 const BADGE_TONE_CLASS_NAME: Record<ActivityGraphNodeBadgeTone, string> = {
-  danger: "border-af-danger-border bg-af-danger-surface text-af-danger-text",
-  info: "border-af-info-border bg-af-info-surface text-af-info",
-  neutral: "border-af-border bg-af-surface-subtle text-af-text-muted",
+  danger: "border-af-danger-border bg-error-container text-on-error-container",
+  info: "border-info-border bg-info-container text-info",
+  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
   success:
-    "border-af-success-border bg-af-success-surface text-af-success-text",
+    "border-af-success-border bg-success-container text-on-success-container",
   warning:
-    "border-af-warning-border bg-af-warning-surface text-af-warning-text",
+    "border-af-warning-border bg-warning-container text-on-warning-container",
 };
 
 const BADGE_WEIGHT_CLASS_NAME: Record<ActivityGraphNodeBadgeWeight, string> = {

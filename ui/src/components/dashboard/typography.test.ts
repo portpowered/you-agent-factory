@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DASHBOARD_EXTENDED_TYPOGRAPHY_ROLES,
   DASHBOARD_RETIRED_TEXT_SIZE_LITERALS,
   DASHBOARD_TYPOGRAPHY_CONTRACT,
 } from "../ui/dashboard-typography";
@@ -17,30 +18,54 @@ function getRole(
 }
 
 describe("dashboard typography contract", () => {
-  it("documents the shared semantic roles and their current dashboard mappings", () => {
+  it("documents Material scale mappings for shared dashboard roles", () => {
     expect(DASHBOARD_TYPOGRAPHY_CONTRACT.map((entry) => entry.role)).toEqual([
       "pageHeading",
       "sectionHeading",
       "bodyText",
       "supportingText",
     ]);
-    expect(getRole("pageHeading").usage).toContain("page title");
-    expect(getRole("sectionHeading").usage).toEqual(
-      expect.arrayContaining(["widget title", "detail section heading"]),
-    );
-    expect(getRole("bodyText").usage).toEqual(
-      expect.arrayContaining([
-        "detail copy",
-        "table body text",
-        "trace metadata",
-      ]),
-    );
-    expect(getRole("supportingText").usage).toEqual(
-      expect.arrayContaining([
-        "metadata labels",
-        "chart-axis/supporting labels",
-      ]),
-    );
+    expect(getRole("pageHeading")).toMatchObject({
+      materialFamily: "display",
+      materialVariant: "medium",
+      textColorRole: "on-surface",
+      typeUtilityClass: "type-display-medium",
+    });
+    expect(getRole("sectionHeading")).toMatchObject({
+      materialFamily: "title",
+      materialVariant: "large",
+      textColorRole: "on-surface",
+    });
+    expect(getRole("bodyText")).toMatchObject({
+      materialFamily: "body",
+      materialVariant: "medium",
+      textColorRole: "on-surface-variant",
+    });
+    expect(getRole("supportingText")).toMatchObject({
+      materialFamily: "body",
+      materialVariant: "small",
+      textColorRole: "on-surface-variant",
+    });
+  });
+
+  it("documents the code extension and label roles beside Material families", () => {
+    expect(
+      DASHBOARD_EXTENDED_TYPOGRAPHY_ROLES.find(
+        (entry) => entry.className === "af-dashboard-body-code",
+      ),
+    ).toMatchObject({
+      materialFamily: "code",
+      textColorRole: "code",
+      typeUtilityClass: "type-code-medium",
+    });
+    expect(
+      DASHBOARD_EXTENDED_TYPOGRAPHY_ROLES.find(
+        (entry) => entry.className === "af-dashboard-supporting-label",
+      ),
+    ).toMatchObject({
+      materialFamily: "label",
+      textColorRole: "on-surface-subtle",
+    });
   });
 
   it("retires the repeated dashboard-only size literals for the covered roles", () => {

@@ -72,7 +72,12 @@ export function WorkTypeStatesList({
         title={messages.statesHeading}
       />
       {states == null || states.length === 0 ? (
-        <p className={cn("m-0 text-af-text-muted", DASHBOARD_BODY_TEXT_CLASS)}>
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
           {messages.statesEmpty}
         </p>
       ) : (
@@ -90,7 +95,7 @@ export function WorkTypeStatesList({
                     className={cn(
                       WORKSTATION_SUMMARY_ITEM_CLASS,
                       "h-auto min-h-0 w-full justify-start rounded-lg px-3 py-2 font-normal shadow-none",
-                      "border-af-border bg-af-surface-raised text-left hover:border-af-border-strong hover:bg-af-overlay",
+                      "border-outline bg-surface-container-high text-left hover:border-outline-variant hover:bg-af-overlay",
                     )}
                     onClick={() => onSelectWorkStateGraphNode(graphNodeId)}
                     tone="outline"
