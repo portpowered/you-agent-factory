@@ -151,6 +151,7 @@ function buildReadyEditableWorkerConfigurationState({
     sessionState.draft,
     sessionState.sessionStartDraft,
   );
+  const draftHandlers = createEditableWorkerDraftHandlers(setSessionState);
 
   return {
     baseVersion: editableDefinition.version,
@@ -160,42 +161,7 @@ function buildReadyEditableWorkerConfigurationState({
     hasValidationErrors,
     initialValues: selectedEditableValues,
     isDirty,
-    onArgsTextChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({ ...draft, argsText: value }));
-    },
-    onBodyChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({ ...draft, body: value }));
-    },
-    onCommandChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({ ...draft, command: value }));
-    },
-    onExecutorProviderChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({
-        ...draft,
-        executorProvider: value,
-      }));
-    },
-    onModelChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({ ...draft, model: value }));
-    },
-    onModelLocalityChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({
-        ...draft,
-        modelLocality: value,
-      }));
-    },
-    onModelProviderChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({
-        ...draft,
-        modelProvider: value,
-      }));
-    },
-    onNameChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({ ...draft, name: value }));
-    },
-    onProviderChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({ ...draft, provider: value }));
-    },
+    ...draftHandlers,
     markChangesSaved: () => {
       setSessionState((currentState) =>
         currentState
@@ -218,9 +184,6 @@ function buildReadyEditableWorkerConfigurationState({
           : currentState,
       );
     },
-    onTypeChange: (value) => {
-      updateDraft(setSessionState, (draft) => ({ ...draft, type: value }));
-    },
     overwriteFieldNames: resolveEditableWorkerOverwriteFields(
       sessionState.sessionStartDraft,
       sessionState.draft,
@@ -230,6 +193,77 @@ function buildReadyEditableWorkerConfigurationState({
     savedFactoryDefinition: editableDefinition,
     status: "ready",
     validationErrors,
+  };
+}
+
+function createEditableWorkerDraftHandlers(
+  setSessionState: (
+    updater: (
+      currentState: EditableWorkerSessionState | null,
+    ) => EditableWorkerSessionState | null,
+  ) => void,
+) {
+  return {
+    onArgsTextChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, argsText: value }));
+    },
+    onBodyChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, body: value }));
+    },
+    onCommandChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, command: value }));
+    },
+    onExecutorProviderChange: (value: EditableWorkerDraft["executorProvider"]) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        executorProvider: value,
+      }));
+    },
+    onModelChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, model: value }));
+    },
+    onModelLocalityChange: (value: EditableWorkerDraft["modelLocality"]) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        modelLocality: value,
+      }));
+    },
+    onModelProviderChange: (value: EditableWorkerDraft["modelProvider"]) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        modelProvider: value,
+      }));
+    },
+    onNameChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, name: value }));
+    },
+    onProviderChange: (value: EditableWorkerDraft["provider"]) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, provider: value }));
+    },
+    onSkipPermissionsChange: (value: boolean) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        skipPermissions: value,
+      }));
+    },
+    onStopTokenChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, stopToken: value }));
+    },
+    onTimeoutAmountChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        timeoutAmount: value,
+      }));
+    },
+    onTimeoutUnitChange: (value: EditableWorkerDraft["timeoutUnit"]) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        timeoutUnit: value,
+      }));
+    },
+    onTypeChange: (value: EditableWorkerDraft["type"]) => {
+      updateDraft(setSessionState, (draft) => ({ ...draft, type: value }));
+    },
   };
 }
 
@@ -265,6 +299,10 @@ function areEditableWorkerDraftsEqual(
     left.modelProvider === right.modelProvider &&
     left.name === right.name &&
     left.provider === right.provider &&
+    left.skipPermissions === right.skipPermissions &&
+    left.stopToken === right.stopToken &&
+    left.timeoutAmount === right.timeoutAmount &&
+    left.timeoutUnit === right.timeoutUnit &&
     left.type === right.type
   );
 }

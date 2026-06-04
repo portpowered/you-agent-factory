@@ -102,6 +102,120 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("tracks timeout edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTimeoutAmountChange("30");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        timeoutAmount: "30",
+        timeoutUnit: "m",
+      },
+      isDirty: true,
+    });
+  });
+
+  it("tracks timeout unit edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTimeoutAmountChange("1");
+      result.current.onTimeoutUnitChange("h");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        timeoutAmount: "1",
+        timeoutUnit: "h",
+      },
+      isDirty: true,
+    });
+  });
+
+  it("disables save while timeout validation errors are present", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTimeoutAmountChange("0");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: false,
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        timeout: expect.any(String),
+      },
+    });
+  });
+
+  it("tracks stopToken edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onStopTokenChange("<COMPLETE>");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        stopToken: "<COMPLETE>",
+      },
+      isDirty: true,
+    });
+  });
+
+  it("tracks skipPermissions edits in dirty state", () => {
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onSkipPermissionsChange(true);
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      draft: {
+        skipPermissions: true,
+      },
+      isDirty: true,
+    });
+  });
+
   it("allows save when model is cleared but model provider remains set", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),
@@ -310,6 +424,57 @@ describe("useEditableWorkerConfigurationState", () => {
       isDirty: false,
       overwriteFieldNames: [],
       status: "ready",
+    });
+  });
+
+  it("preserves runtime fields in the draft when changing worker type", async () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "reviewer",
+            skipPermissions: true,
+            stopToken: "<COMPLETE>",
+            timeout: "30m",
+            type: "MODEL_WORKER",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(workerSelection, "reviewer"),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTypeChange("SCRIPT_WORKER");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      draft: {
+        model: "gpt-5.5",
+        modelProvider: "CURSOR",
+        skipPermissions: true,
+        stopToken: "<COMPLETE>",
+        timeoutAmount: "30",
+        timeoutUnit: "m",
+        type: "SCRIPT_WORKER",
+      },
+      isDirty: true,
     });
   });
 

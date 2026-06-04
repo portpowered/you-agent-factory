@@ -33,6 +33,7 @@ export interface WorkerDetailMessages {
   editableConfigurationSaveStaleVersionDetail: string;
   editableConfigurationSaveSuccess: (workerName: string) => string;
   editableConfigurationScriptCommandOrBodyRequired: string;
+  editableConfigurationTimeoutInvalid: (value: string) => string;
   editableConfigurationSharedImpactWarning: (
     workerName: string,
     workstationNames: string,
@@ -52,6 +53,13 @@ export interface WorkerDetailMessages {
   providerFieldLabel: string;
   referencingWorkstationsEmpty: string;
   referencingWorkstationsHeading: string;
+  skipPermissionsFieldHelp: string;
+  skipPermissionsFieldLabel: string;
+  stopTokenFieldHelp: string;
+  stopTokenFieldLabel: string;
+  timeoutFieldHelp: string;
+  timeoutFieldLabel: string;
+  localizeTimeoutUnit: (unit: string) => string;
   summaryHeading: string;
   typeFieldLabel: string;
   typeLabel: string;

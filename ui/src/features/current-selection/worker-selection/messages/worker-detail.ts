@@ -10,6 +10,7 @@ type WorkerDetailCatalogMessages = Omit<
   | "localizeExecutorProvider"
   | "localizeModelLocality"
   | "localizeModelProvider"
+  | "localizeTimeoutUnit"
   | "localizeWorkerType"
 >;
 
@@ -71,6 +72,8 @@ const workerDetailMessagesByLocale = {
       `Running factory saved. ${workerName} was updated in the running factory definition.`,
     editableConfigurationScriptCommandOrBodyRequired:
       "Enter a command or script body before saving this worker.",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout must be a positive duration such as 30s, 5m, or 1h, got ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `Saving ${workerName} updates workstations ${workstationNames}.`,
     editableConfigurationSharedImpactWarningDetail:
@@ -92,6 +95,15 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "No workstations reference this worker in the running factory definition.",
     referencingWorkstationsHeading: "Referencing workstations",
+    skipPermissionsFieldHelp:
+      "When enabled, supported model providers can bypass permission prompts during execution.",
+    skipPermissionsFieldLabel: "Bypass provider permissions",
+    stopTokenFieldHelp:
+      "Optional. Worker-owned marker that treats model-oriented output as complete when it appears. This is separate from workstation stop words.",
+    stopTokenFieldLabel: "Stop token",
+    timeoutFieldHelp:
+      "Optional. Limits how long a worker run may execute (for example 30s, 5m, or 1h).",
+    timeoutFieldLabel: "Execution timeout",
     summaryHeading: "Summary",
     typeFieldLabel: "Worker type",
     typeLabel: "Worker type",
@@ -152,6 +164,8 @@ const workerDetailMessagesByLocale = {
       `実行中のファクトリを保存しました。${workerName} が実行中のファクトリ定義で更新されました。`,
     editableConfigurationScriptCommandOrBodyRequired:
       "このワーカーを保存する前にコマンドまたはスクリプト本文を入力してください。",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout は 30s、5m、1h などの正の時間である必要があります。入力値: ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `${workerName} を保存すると、ワークステーション ${workstationNames} が更新されます。`,
     editableConfigurationSharedImpactWarningDetail:
@@ -174,6 +188,15 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "実行中のファクトリ定義でこのワーカーを参照するワークステーションはありません。",
     referencingWorkstationsHeading: "参照ワークステーション",
+    skipPermissionsFieldHelp:
+      "有効にすると、対応するモデルプロバイダーが実行中の権限プロンプトを省略できます。",
+    skipPermissionsFieldLabel: "プロバイダー権限を省略",
+    stopTokenFieldHelp:
+      "任意。ワーカー所有のマーカーで、表示されたときにモデル指向の出力を完了とみなします。ワークステーションのストップワードとは別です。",
+    stopTokenFieldLabel: "ストップトークン",
+    timeoutFieldHelp:
+      "任意。ワーカー実行の上限時間を設定します（例: 30s、5m、1h）。",
+    timeoutFieldLabel: "実行タイムアウト",
     summaryHeading: "概要",
     typeFieldLabel: "ワーカー種別",
     typeLabel: "ワーカー種別",
@@ -233,6 +256,8 @@ const workerDetailMessagesByLocale = {
       `실행 중인 팩토리가 저장되었습니다. ${workerName} 이(가) 실행 중인 팩토리 정의에서 업데이트되었습니다.`,
     editableConfigurationScriptCommandOrBodyRequired:
       "이 워커를 저장하기 전에 명령 또는 스크립트 본문을 입력하세요.",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout은 30s, 5m, 1h처럼 양의 duration이어야 합니다. 입력값: ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `${workerName} 저장은 워크스테이션 ${workstationNames}을(를) 업데이트합니다.`,
     editableConfigurationSharedImpactWarningDetail:
@@ -255,6 +280,15 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "실행 중인 팩토리 정의에서 이 워커를 참조하는 워크스테이션이 없습니다.",
     referencingWorkstationsHeading: "참조 워크스테이션",
+    skipPermissionsFieldHelp:
+      "활성화하면 지원되는 모델 제공자가 실행 중 권한 프롬프트를 건너뛸 수 있습니다.",
+    skipPermissionsFieldLabel: "제공자 권한 건너뛰기",
+    stopTokenFieldHelp:
+      "선택 사항. 워커 소유 마커로, 표시되면 모델 지향 출력을 완료로 처리합니다. 워크스테이션 stop word와는 별개입니다.",
+    stopTokenFieldLabel: "중지 토큰",
+    timeoutFieldHelp:
+      "선택 사항. 워커 실행 시간 상한을 설정합니다(예: 30s, 5m, 1h).",
+    timeoutFieldLabel: "실행 타임아웃",
     summaryHeading: "요약",
     typeFieldLabel: "워커 유형",
     typeLabel: "워커 유형",
@@ -305,6 +339,8 @@ const workerDetailMessagesByLocale = {
       `运行中的工厂已保存。${workerName} 已在运行中的工厂定义中更新。`,
     editableConfigurationScriptCommandOrBodyRequired:
       "保存此 worker 前请输入命令或脚本正文。",
+    editableConfigurationTimeoutInvalid: (value) =>
+      `timeout 必须是正数时长（例如 30s、5m 或 1h），当前为 ${JSON.stringify(value)}`,
     editableConfigurationSharedImpactWarning: (workerName, workstationNames) =>
       `保存 ${workerName} 会更新 workstation ${workstationNames}。`,
     editableConfigurationSharedImpactWarningDetail:
@@ -325,6 +361,15 @@ const workerDetailMessagesByLocale = {
     referencingWorkstationsEmpty:
       "运行中的工厂定义中没有 workstation 引用此 worker。",
     referencingWorkstationsHeading: "引用 workstation",
+    skipPermissionsFieldHelp:
+      "启用后，支持的 model provider 可在执行期间跳过权限提示。",
+    skipPermissionsFieldLabel: "跳过 provider 权限",
+    stopTokenFieldHelp:
+      "可选。Worker 拥有的标记；出现时可将面向模型的输出视为完成。与 workstation 停止词无关。",
+    stopTokenFieldLabel: "停止标记",
+    timeoutFieldHelp:
+      "可选。限制 worker 运行的最长时间（例如 30s、5m、1h）。",
+    timeoutFieldLabel: "执行超时",
     summaryHeading: "摘要",
     typeFieldLabel: "Worker 类型",
     typeLabel: "Worker 类型",

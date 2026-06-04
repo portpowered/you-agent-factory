@@ -16,6 +16,7 @@ import {
   EDITABLE_MODEL_PROVIDERS,
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
+import { WORKER_TIMEOUT_UNITS } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
@@ -228,6 +229,16 @@ function WorkerEditableConfigurationReadyForm({
             />
           }
         />
+        <WorkerEditableConfigurationTimeoutField
+          messages={messages}
+          state={state}
+          validationErrors={validationErrors}
+        />
+        <WorkerEditableConfigurationStopTokenField
+          messages={messages}
+          state={state}
+          validationErrors={validationErrors}
+        />
         <WorkerTypeSpecificFields
           messages={messages}
           state={state}
@@ -235,6 +246,142 @@ function WorkerEditableConfigurationReadyForm({
         />
       </div>
     </form>
+  );
+}
+
+function WorkerEditableConfigurationTimeoutField({
+  messages,
+  state,
+  validationErrors,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
+  validationErrors: Extract<
+    EditableWorkerConfigurationState,
+    { status: "ready" }
+  >["validationErrors"];
+}) {
+  const amountFieldId = "editable-worker-timeout-amount";
+  const unitFieldId = "editable-worker-timeout-unit";
+  const isConfigured = (state.draft.timeoutAmount ?? "").trim().length > 0;
+
+  return (
+    <WorkerEditableConfigurationField
+      errorMessage={validationErrors.timeout}
+      fieldId={amountFieldId}
+      input={
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
+          <input
+            aria-describedby={
+              validationErrors.timeout
+                ? `${amountFieldId}-error`
+                : "editable-worker-timeout-hint"
+            }
+            aria-invalid={validationErrors.timeout ? "true" : undefined}
+            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
+            id={amountFieldId}
+            inputMode="decimal"
+            min={0}
+            onChange={(event) =>
+              state.onTimeoutAmountChange(event.target.value)
+            }
+            placeholder={messages.notConfiguredOptionLabel}
+            type="number"
+            value={isConfigured ? (state.draft.timeoutAmount ?? "") : ""}
+          />
+          <Select
+            aria-describedby={
+              validationErrors.timeout
+                ? `${amountFieldId}-error`
+                : "editable-worker-timeout-hint"
+            }
+            aria-invalid={validationErrors.timeout ? "true" : undefined}
+            aria-label={messages.timeoutFieldLabel}
+            disabled={!isConfigured}
+            id={unitFieldId}
+            onChange={(event) =>
+              state.onTimeoutUnitChange(
+                event.target.value as typeof state.draft.timeoutUnit,
+              )
+            }
+            value={state.draft.timeoutUnit}
+          >
+            {WORKER_TIMEOUT_UNITS.map((unit) => (
+              <option key={unit} value={unit}>
+                {messages.localizeTimeoutUnit(unit)}
+              </option>
+            ))}
+          </Select>
+        </div>
+      }
+      label={messages.timeoutFieldLabel}
+      supportingContent={
+        <>
+          <WorkerEditableConfigurationFieldHelp>
+            <span id="editable-worker-timeout-hint">
+              {messages.timeoutFieldHelp}
+            </span>
+          </WorkerEditableConfigurationFieldHelp>
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="timeout"
+            messages={messages}
+            state={state}
+          />
+        </>
+      }
+    />
+  );
+}
+
+function WorkerEditableConfigurationStopTokenField({
+  messages,
+  state,
+  validationErrors,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
+  validationErrors: Extract<
+    EditableWorkerConfigurationState,
+    { status: "ready" }
+  >["validationErrors"];
+}) {
+  const fieldId = "editable-worker-stop-token";
+
+  return (
+    <WorkerEditableConfigurationField
+      errorMessage={validationErrors.stopToken}
+      fieldId={fieldId}
+      input={
+        <input
+          aria-describedby={
+            validationErrors.stopToken
+              ? `${fieldId}-error`
+              : "editable-worker-stop-token-hint"
+          }
+          aria-invalid={validationErrors.stopToken ? "true" : undefined}
+          className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
+          id={fieldId}
+          onChange={(event) => state.onStopTokenChange(event.target.value)}
+          type="text"
+          value={state.draft.stopToken}
+        />
+      }
+      label={messages.stopTokenFieldLabel}
+      supportingContent={
+        <>
+          <WorkerEditableConfigurationFieldHelp>
+            <span id="editable-worker-stop-token-hint">
+              {messages.stopTokenFieldHelp}
+            </span>
+          </WorkerEditableConfigurationFieldHelp>
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="stopToken"
+            messages={messages}
+            state={state}
+          />
+        </>
+      }
+    />
   );
 }
 
@@ -398,6 +545,7 @@ function WorkerTypeSpecificFields({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: model worker fields stay grouped for parity with script/hosted sections.
 function ModelWorkerEditableFields({
   messages,
   state,
@@ -534,7 +682,62 @@ function ModelWorkerEditableFields({
           />
         }
       />
+      <ModelWorkerSkipPermissionsField
+        messages={messages}
+        state={state}
+        validationErrors={validationErrors}
+      />
     </>
+  );
+}
+
+function ModelWorkerSkipPermissionsField({
+  messages,
+  state,
+  validationErrors,
+}: {
+  messages: ReturnType<typeof getWorkerDetailMessages>;
+  state: Extract<EditableWorkerConfigurationState, { status: "ready" }>;
+  validationErrors: Extract<
+    EditableWorkerConfigurationState,
+    { status: "ready" }
+  >["validationErrors"];
+}) {
+  return (
+    <WorkerEditableConfigurationField
+      errorMessage={validationErrors.skipPermissions}
+      fieldId="editable-worker-skip-permissions"
+      input={
+        <input
+          aria-describedby={
+            validationErrors.skipPermissions
+              ? "editable-worker-skip-permissions-error"
+              : undefined
+          }
+          aria-invalid={validationErrors.skipPermissions ? "true" : undefined}
+          checked={state.draft.skipPermissions}
+          className="size-4 rounded border border-outline"
+          id="editable-worker-skip-permissions"
+          onChange={(event) =>
+            state.onSkipPermissionsChange(event.target.checked)
+          }
+          type="checkbox"
+        />
+      }
+      label={messages.skipPermissionsFieldLabel}
+      supportingContent={
+        <>
+          <WorkerEditableConfigurationFieldHelp>
+            {messages.skipPermissionsFieldHelp}
+          </WorkerEditableConfigurationFieldHelp>
+          <WorkerEditableConfigurationServerChangedHint
+            fieldName="skipPermissions"
+            messages={messages}
+            state={state}
+          />
+        </>
+      }
+    />
   );
 }
 

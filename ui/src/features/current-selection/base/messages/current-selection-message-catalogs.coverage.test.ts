@@ -184,6 +184,8 @@ const invokeWorkerDetail = (
       return [formatter("reviewer" as never)];
     case "editableConfigurationSharedImpactWarning":
       return [formatter("reviewer" as never, "Review, Plan" as never)];
+    case "editableConfigurationTimeoutInvalid":
+      return [formatter("0" as never), formatter("bad" as never)];
     case "localizeExecutorProvider":
       return [
         formatter("SCRIPT_WRAP" as never),
@@ -200,6 +202,13 @@ const invokeWorkerDetail = (
         formatter("CURSOR" as never),
         formatter("CODEX" as never),
         formatter("future-provider" as never),
+      ];
+    case "localizeTimeoutUnit":
+      return [
+        formatter("s" as never),
+        formatter("m" as never),
+        formatter("h" as never),
+        formatter("future-unit" as never),
       ];
     case "localizeWorkerType":
       return [

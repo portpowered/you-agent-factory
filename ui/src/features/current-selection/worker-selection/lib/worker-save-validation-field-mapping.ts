@@ -5,6 +5,9 @@ import {
 } from "../../base/lib/map-factory-validation-target-field-errors";
 import type { EditableWorkerSaveValidationErrors } from "./detail-card-types";
 
+const FACTORY_WORKER_RUNTIME_FIELD_PATH =
+  /factory\.workers\[\d+\]\.(timeout|stopToken|skipPermissions)/;
+
 export function resolveWorkerSaveValidationFieldName(
   target: FactoryValidationTargetLike,
 ): keyof EditableWorkerSaveValidationErrors | null {
@@ -41,6 +44,15 @@ export function resolveWorkerSaveValidationFieldName(
   if (subjectID === "provider") {
     return "provider";
   }
+  if (subjectID === "timeout") {
+    return "timeout";
+  }
+  if (subjectID === "stoptoken") {
+    return "stopToken";
+  }
+  if (subjectID === "skippermissions") {
+    return "skipPermissions";
+  }
 
   return null;
 }
@@ -48,8 +60,40 @@ export function resolveWorkerSaveValidationFieldName(
 export function mapWorkerSaveErrorToFieldErrors(
   error: FactorySaveValidationErrorLike,
 ): EditableWorkerSaveValidationErrors | undefined {
-  return mapFactoryValidationTargetsToFieldErrors(
-    error,
-    resolveWorkerSaveValidationFieldName,
+  const targetFieldErrors =
+    mapFactoryValidationTargetsToFieldErrors(
+      error,
+      resolveWorkerSaveValidationFieldName,
+    ) ?? {};
+  const messageFieldErrors = mapWorkerSaveErrorMessageToFieldErrors(
+    error.message,
   );
+
+  const fieldErrors = {
+    ...targetFieldErrors,
+    ...messageFieldErrors,
+  };
+
+  return Object.keys(fieldErrors).length > 0 ? fieldErrors : undefined;
+}
+
+function mapWorkerSaveErrorMessageToFieldErrors(
+  message: string,
+): EditableWorkerSaveValidationErrors {
+  const runtimeFieldMatch = message.match(FACTORY_WORKER_RUNTIME_FIELD_PATH);
+  if (!runtimeFieldMatch) {
+    return {};
+  }
+
+  const [, fieldName] = runtimeFieldMatch;
+  switch (fieldName) {
+    case "timeout":
+      return { timeout: message };
+    case "stopToken":
+      return { stopToken: message };
+    case "skipPermissions":
+      return { skipPermissions: message };
+    default:
+      return {};
+  }
 }

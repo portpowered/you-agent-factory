@@ -32,6 +32,9 @@ export type EditableWorkerSaveValidationErrors = {
   modelProvider?: string;
   name?: string;
   provider?: string;
+  skipPermissions?: string;
+  stopToken?: string;
+  timeout?: string;
   type?: string;
 } & Record<string, string>;
 
@@ -45,6 +48,9 @@ export type EditableWorkerOverwriteField =
   | "modelProvider"
   | "name"
   | "provider"
+  | "skipPermissions"
+  | "stopToken"
+  | "timeout"
   | "type";
 
 export type EditableWorkerSaveState =
@@ -76,6 +82,12 @@ export type EditableWorkerConfigurationState =
       ) => void;
       onNameChange: (value: string) => void;
       onProviderChange: (value: EditableWorkerDraft["provider"]) => void;
+      onSkipPermissionsChange: (value: boolean) => void;
+      onStopTokenChange: (value: string) => void;
+      onTimeoutAmountChange: (value: string) => void;
+      onTimeoutUnitChange: (
+        value: EditableWorkerDraft["timeoutUnit"],
+      ) => void;
       markChangesSaved: () => void;
       onResetToLatest: () => void;
       onTypeChange: (value: EditableWorkerDraft["type"]) => void;

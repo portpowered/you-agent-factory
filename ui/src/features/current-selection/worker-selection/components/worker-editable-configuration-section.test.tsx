@@ -24,6 +24,10 @@ function buildReadyWorkerEditableConfigurationState(
       modelProvider: "CURSOR",
       name: "reviewer",
       provider: null,
+      skipPermissions: false,
+      stopToken: "",
+      timeoutAmount: "",
+      timeoutUnit: "m",
       type: "MODEL_WORKER",
     },
     hasValidationErrors: false,
@@ -37,6 +41,9 @@ function buildReadyWorkerEditableConfigurationState(
       modelProvider: "CURSOR",
       name: "reviewer",
       provider: null,
+      skipPermissions: null,
+      stopToken: null,
+      timeout: null,
       type: "MODEL_WORKER",
       workerName: "reviewer",
       workstationNames,
@@ -51,6 +58,10 @@ function buildReadyWorkerEditableConfigurationState(
     onModelProviderChange: vi.fn(),
     onNameChange: vi.fn(),
     onProviderChange: vi.fn(),
+    onSkipPermissionsChange: vi.fn(),
+    onStopTokenChange: vi.fn(),
+    onTimeoutAmountChange: vi.fn(),
+    onTimeoutUnitChange: vi.fn(),
     markChangesSaved: vi.fn(),
     onResetToLatest: vi.fn(),
     onTypeChange: vi.fn(),
@@ -94,5 +105,145 @@ describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
     expect(
       screen.queryByText(/updates workstations/i),
     ).toBeNull();
+  });
+});
+
+describe("WorkerEditableConfigurationSection timeout control", () => {
+  it("shows the execution timeout picker for all worker types", () => {
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={buildReadyWorkerEditableConfigurationState(["Review"])}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("spinbutton", { name: messages.timeoutFieldLabel }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: messages.timeoutFieldLabel }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the timeout picker for script workers", () => {
+    const scriptWorkerState: Extract<
+      EditableWorkerConfigurationState,
+      { status: "ready" }
+    > = {
+      ...buildReadyWorkerEditableConfigurationState(["Review"]),
+      draft: {
+        ...buildReadyWorkerEditableConfigurationState(["Review"]).draft,
+        model: "",
+        modelProvider: null,
+        type: "SCRIPT_WORKER",
+        command: "node",
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={scriptWorkerState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("spinbutton", { name: messages.timeoutFieldLabel }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("WorkerEditableConfigurationSection skipPermissions control", () => {
+  it("shows the permission bypass toggle for model workers", () => {
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={buildReadyWorkerEditableConfigurationState(["Review"])}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("checkbox", {
+        name: messages.skipPermissionsFieldLabel,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the permission bypass toggle for script workers", () => {
+    const scriptWorkerState: Extract<
+      EditableWorkerConfigurationState,
+      { status: "ready" }
+    > = {
+      ...buildReadyWorkerEditableConfigurationState(["Review"]),
+      draft: {
+        ...buildReadyWorkerEditableConfigurationState(["Review"]).draft,
+        model: "",
+        modelProvider: null,
+        type: "SCRIPT_WORKER",
+        command: "node",
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={scriptWorkerState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("checkbox", {
+        name: messages.skipPermissionsFieldLabel,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("WorkerEditableConfigurationSection stopToken control", () => {
+  it("shows the stop token input for all worker types", () => {
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={buildReadyWorkerEditableConfigurationState(["Review"])}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: messages.stopTokenFieldLabel }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(messages.stopTokenFieldHelp)).toBeInTheDocument();
+  });
+
+  it("shows the stop token input for script workers", () => {
+    const scriptWorkerState: Extract<
+      EditableWorkerConfigurationState,
+      { status: "ready" }
+    > = {
+      ...buildReadyWorkerEditableConfigurationState(["Review"]),
+      draft: {
+        ...buildReadyWorkerEditableConfigurationState(["Review"]).draft,
+        model: "",
+        modelProvider: null,
+        type: "SCRIPT_WORKER",
+        command: "node",
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={scriptWorkerState}
+        workerName="reviewer"
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: messages.stopTokenFieldLabel }),
+    ).toBeInTheDocument();
   });
 });

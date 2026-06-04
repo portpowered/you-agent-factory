@@ -21,6 +21,10 @@ function buildDraft(
     modelProvider: "CURSOR",
     name: "reviewer",
     provider: null,
+    skipPermissions: false,
+    stopToken: "",
+    timeoutAmount: "",
+    timeoutUnit: "m",
     type: "MODEL_WORKER",
     ...overrides,
   };
@@ -285,6 +289,78 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
         messages,
       ).model,
     ).toBe("Model is required.");
+  });
+
+  it("maps contract failures onto skipPermissions", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          name: "reviewer",
+          skipPermissions: "yes",
+          type: "MODEL_WORKER",
+          modelProvider: "CURSOR",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+      ).skipPermissions,
+    ).toContain("factory.workers[0].skipPermissions");
+  });
+
+  it("maps contract failures onto stopToken", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          name: "reviewer",
+          stopToken: 42,
+          type: "MODEL_WORKER",
+          modelProvider: "CURSOR",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+      ).stopToken,
+    ).toContain("factory.workers[0].stopToken");
+  });
+
+  it("maps contract failures onto timeout", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          name: "reviewer",
+          timeout: 42,
+          type: "MODEL_WORKER",
+          modelProvider: "CURSOR",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "reviewer",
+        messages,
+      ).timeout,
+    ).toContain("factory.workers[0].timeout");
   });
 });
 

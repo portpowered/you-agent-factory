@@ -1,4 +1,9 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import {
+  goDurationFromWorkerTimeoutPicker,
+  type WorkerTimeoutUnit,
+  workerTimeoutPickerFromGoDuration,
+} from "./worker-timeout-duration";
 
 type CanonicalWorker = NonNullable<
   CanonicalFactoryDefinition["workers"]
@@ -39,6 +44,9 @@ export interface EditableWorkerValues {
   modelLocality: ModelLocality | null;
   modelProvider: ModelProvider | null;
   provider: HostedProvider | null;
+  skipPermissions: boolean | null;
+  stopToken: string | null;
+  timeout: string | null;
   type: WorkerType | undefined;
   workerName: string;
   workstationNames: string[];
@@ -54,6 +62,10 @@ export interface EditableWorkerDraft {
   modelLocality: ModelLocality | null;
   modelProvider: ModelProvider | null;
   provider: HostedProvider | null;
+  skipPermissions: boolean;
+  stopToken: string;
+  timeoutAmount: string;
+  timeoutUnit: WorkerTimeoutUnit;
   type: WorkerType;
 }
 
@@ -77,6 +89,9 @@ export function resolveEditableWorkerValues(
     modelLocality: worker.modelLocality ?? null,
     modelProvider: worker.modelProvider ?? null,
     provider: worker.provider ?? null,
+    skipPermissions: worker.skipPermissions ?? null,
+    stopToken: worker.stopToken ?? null,
+    timeout: worker.timeout ?? null,
     type: worker.type,
     workerName: worker.name,
     workstationNames: resolveWorkstationNamesReferencingWorker(
@@ -89,6 +104,8 @@ export function resolveEditableWorkerValues(
 export function editableWorkerDraftFromValues(
   values: EditableWorkerValues,
 ): EditableWorkerDraft {
+  const timeoutPicker = workerTimeoutPickerFromGoDuration(values.timeout);
+
   return {
     argsText: formatWorkerArgsText(values.args),
     body: values.body ?? "",
@@ -99,6 +116,10 @@ export function editableWorkerDraftFromValues(
     modelLocality: values.modelLocality,
     modelProvider: values.modelProvider,
     provider: values.provider,
+    skipPermissions: values.skipPermissions ?? false,
+    stopToken: values.stopToken ?? "",
+    timeoutAmount: timeoutPicker.amount,
+    timeoutUnit: timeoutPicker.unit,
     type: values.type ?? "MODEL_WORKER",
   };
 }
@@ -114,7 +135,16 @@ export function applyEditableWorkerDraft(
   }
 
   const trimmedName = draft.name.trim();
-  const nextWorker = buildWorkerFromDraft(workerResolution.worker, draft);
+  const nextWorker = applyWorkerSkipPermissionsFromDraft(
+    applyWorkerStopTokenFromDraft(
+      applyWorkerTimeoutFromDraft(
+        buildWorkerFromDraft(workerResolution.worker, draft),
+        draft,
+      ),
+      draft,
+    ),
+    draft,
+  );
 
   return {
     ...factory,
@@ -181,6 +211,43 @@ function buildWorkerFromDraft(
   };
 }
 
+function applyWorkerTimeoutFromDraft(
+  worker: CanonicalWorker,
+  draft: EditableWorkerDraft,
+): CanonicalWorker {
+  const { timeout: _preservedTimeout, ...withoutTimeout } = worker;
+  const timeout = goDurationFromWorkerTimeoutPicker({
+    amount: draft.timeoutAmount,
+    unit: draft.timeoutUnit,
+  });
+
+  return timeout ? { ...withoutTimeout, timeout } : withoutTimeout;
+}
+
+function applyWorkerStopTokenFromDraft(
+  worker: CanonicalWorker,
+  draft: EditableWorkerDraft,
+): CanonicalWorker {
+  const { stopToken: _preservedStopToken, ...withoutStopToken } = worker;
+  const trimmedStopToken = draft.stopToken.trim();
+
+  return trimmedStopToken.length > 0
+    ? { ...withoutStopToken, stopToken: trimmedStopToken }
+    : withoutStopToken;
+}
+
+function applyWorkerSkipPermissionsFromDraft(
+  worker: CanonicalWorker,
+  draft: EditableWorkerDraft,
+): CanonicalWorker {
+  const { skipPermissions: _preservedSkipPermissions, ...withoutSkipPermissions } =
+    worker;
+
+  return draft.skipPermissions
+    ? { ...withoutSkipPermissions, skipPermissions: true }
+    : withoutSkipPermissions;
+}
+
 function pickPreservedWorkerFields(
   worker: CanonicalWorker,
 ): Partial<CanonicalWorker> {
@@ -188,15 +255,6 @@ function pickPreservedWorkerFields(
 
   if (worker.resources !== undefined) {
     preserved.resources = worker.resources;
-  }
-  if (worker.timeout !== undefined) {
-    preserved.timeout = worker.timeout;
-  }
-  if (worker.stopToken !== undefined) {
-    preserved.stopToken = worker.stopToken;
-  }
-  if (worker.skipPermissions !== undefined) {
-    preserved.skipPermissions = worker.skipPermissions;
   }
   if (worker.operations !== undefined) {
     preserved.operations = worker.operations;
