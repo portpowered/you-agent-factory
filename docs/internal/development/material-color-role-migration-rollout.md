@@ -68,6 +68,7 @@ cd ui && bun x vitest run src/styles/theme-role-regression.test.ts \
 | Migration overview (all pillars) | `Agent Factory/UI/Theme Role Migration Overview` |
 | Accent contrast | `Agent Factory/UI/Color Role Accent Contrast` |
 | Neutral surfaces | `Agent Factory/UI/Color Role Neutral Surfaces` |
+| Overlay hover (shared primitives) | `Agent Factory/UI/Color Role Overlay Hover Surfaces` (browser check: `node scripts/verify-overlay-hover-storybook.mjs` after `build-storybook`) |
 | Typography hierarchy | `Agent Factory/UI/Typography Role Hierarchy` |
 | Layout primitives | `Agent Factory/UI/Layout Role Primitives` |
 | Palette selector | `you-agent-factory/Dashboard/Color Palette Selector` |

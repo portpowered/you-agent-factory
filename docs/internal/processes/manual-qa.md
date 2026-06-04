@@ -117,6 +117,13 @@ Use this checklist when the open-session flow changes and reviewers need proof a
 
 ## Latest Evidence
 
+Date: `2026-06-04` (UTC)
+
+- `cd ui && bun run build-storybook` passed.
+- `cd ui && bun run tsc` passed.
+- `cd ui && bunx vitest run src/components/ui/shared-primitive-overlay-hover-color-roles.test.ts src/components/ui/shared-primitive-overlay-hover-color-roles.behavior.test.tsx` passed in happy-dom, confirming selected table rows resolve `--color-surface-container-low` and ghost hover tokens resolve per palette on `factory-dark` and `factory-light`.
+- `cd ui && bun run build-storybook` then `cd ui && AGENT_FACTORY_STORYBOOK_PORT=6026 node scripts/verify-overlay-hover-storybook.mjs` passed in headless Chromium against `agent-factory-ui-color-role-overlay-hover-surfaces--overlay-hover-palette-verification`, switching `factory-dark` and `factory-light` and asserting computed hover backgrounds change for outline/secondary buttons, neutral list rows, and section/compact panel triggers; selected table rows render visible `bg-surface-container-low`; ghost/table row controls retain the migrated `hover:bg-surface-container*` class hooks.
+
 Date: `2026-05-31` (UTC)
 
 - `cd ui && bun run vitest run integration/factory-graph-editor.integration.test.mjs -t "discards pending"` passed in Playwright against the dashboard preview harness, covering current-activity card enter editor → add work type → discard pending changes → leave editor with zero session factory PUTs (story `ui-graph-editor-orchestration-split-004` browser gate).
