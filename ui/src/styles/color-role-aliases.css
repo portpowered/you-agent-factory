@@ -1,56 +1,5 @@
 /*
- * Transitional af-* → Material role aliases (Factory Dark baseline).
- *
- * Long-term source of truth: role tokens in color-role-tokens.css
- * (--color-primary, --color-on-surface, etc.).
- *
- * af-* names remain for incremental component migration; remove per
- * docs/internal/development/material-color-role-migration-rollout.md
- * after consumers switch to role utilities directly.
+ * Transitional alias layer retired: product --color-af-* keys live in
+ * color-role-tokens.css. This file remains until remove-color-role-aliases-layer-002
+ * drops the @import from styles.css.
  */
-
-@theme {
-  /* --- Neutral (transitional af-* → roles) --- */
-  --color-af-background: var(--color-background);
-  --color-af-surface: var(--color-surface);
-  --color-af-surface-subtle: var(--color-surface-container-low);
-  --color-af-surface-raised: var(--color-surface-container-high);
-  --color-af-border: var(--color-outline);
-  --color-af-border-strong: var(--color-outline-variant);
-  --color-af-text: var(--color-on-surface);
-  --color-af-text-muted: var(--color-on-surface-variant);
-  --color-af-text-subtle: var(--color-on-surface-subtle);
-  --color-af-text-disabled: var(--color-on-surface-disabled);
-  --color-af-text-inverse: var(--color-on-inverse);
-  --color-af-code-ink: var(--color-code);
-
-  /* --- Primary accent (transitional af-* → roles) --- */
-  --color-af-accent: var(--color-primary);
-  --color-af-accent-hover: var(--color-on-primary-container);
-  --color-af-accent-surface: var(--color-primary-container);
-  --color-af-accent-border: var(--color-primary);
-  --color-af-on-accent: var(--color-on-primary);
-
-  /* --- Semantic (transitional af-* → roles) --- */
-  --color-af-success: var(--color-success);
-  --color-af-success-surface: var(--color-success-container);
-  --color-af-success-text: var(--color-on-success-container);
-  --color-af-on-success: var(--color-on-success);
-  --color-af-warning: var(--color-warning);
-  --color-af-warning-surface: var(--color-warning-container);
-  --color-af-warning-text: var(--color-on-warning-container);
-  --color-af-on-warning: var(--color-on-warning);
-  --color-af-danger: var(--color-error);
-  --color-af-danger-surface: var(--color-error-container);
-  --color-af-danger-text: var(--color-on-error-container);
-  --color-af-on-danger: var(--color-on-error);
-  --color-af-info: var(--color-info);
-  --color-af-info-surface: var(--color-info-container);
-  --color-af-info-text: var(--color-on-info-container);
-  --color-af-on-info: var(--color-on-info);
-
-  /* --- Tertiary / worker (transitional af-* → roles) --- */
-  --color-af-worker: var(--color-tertiary);
-  --color-af-worker-surface: var(--color-tertiary-container);
-  --color-af-worker-text: var(--color-on-tertiary-container);
-}

@@ -43,7 +43,7 @@
   --color-af-foundation-danger-ink: #ffb2b2;
   --color-af-foundation-worker: #b68cff;
   --color-af-foundation-worker-ink: #dfccff;
-  /* Neutral/product af-* aliases: color-role-aliases.css */
+  /* Neutral/product af-* aliases: color-role-tokens.css */
   --color-af-surface-subtle-muted: rgb(
     from var(--color-af-foundation-overlay) r g b /
     0.028
@@ -65,8 +65,8 @@
     from var(--color-af-foundation-accent) r g b /
     0.25
   );
-  /* Text af-* aliases (on-surface*): color-role-aliases.css */
-  /* Accent/semantic af-* aliases: color-role-aliases.css */
+  /* Text af-* aliases (on-surface*): color-role-tokens.css */
+  /* Accent/semantic af-* aliases: color-role-tokens.css */
   --color-af-success-border: rgb(
     from var(--color-af-foundation-success) r g b /
     0.28
@@ -122,7 +122,7 @@
   --color-af-chart-selection-stroke: var(--color-af-accent-border);
   --color-af-chart-cursor: var(--color-af-border-strong);
   --color-af-chart-active-dot-stroke: var(--color-af-background);
-  /* code / inverse text roles: text-color-role-tokens.css; af-* aliases in color-role-aliases.css */
+  /* code / inverse text roles: text-color-role-tokens.css; role-backed af-* in color-role-tokens.css */
   --color-on-foreground: var(--color-on-inverse);
   --color-af-edge-muted: var(--color-af-border-strong);
   --color-af-edge-muted-soft: var(--color-af-border);
