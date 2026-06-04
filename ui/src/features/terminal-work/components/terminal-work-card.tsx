@@ -61,7 +61,7 @@ interface TerminalWorkRowProps {
 }
 
 const TERMINAL_ROW_CLASS =
-  "grid gap-2.5 rounded-lg border border-outline bg-surface-container-low p-3";
+  "grid gap-2.5 rounded-lg border border-outline p-3";
 const TERMINAL_FAILED_ROW_CLASS = "border-af-danger-border";
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_BUTTON_META_CLASS = cn(

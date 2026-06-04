@@ -11,11 +11,6 @@ import {
   PopoverTrigger,
   Select,
 } from "../../../components/ui";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";
@@ -77,15 +72,6 @@ export interface SubmitWorkCardProps {
   widgetId?: string;
 }
 
-const FIELD_GROUP_CLASS = "grid gap-2";
-const HELP_TEXT_CLASS = cn(
-  "max-w-xl leading-relaxed text-on-surface-variant",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
-const VALIDATION_TEXT_CLASS = cn(
-  "text-on-error-container",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
 const STATUS_TONE_CLASS_BY_KIND: Record<SubmitWorkStatus["kind"], string> = {
   error: "text-on-error-container",
   guidance: "text-on-surface-subtle",
@@ -174,9 +160,9 @@ export function SubmitWorkCard({
         }}
       >
         <div className="grid min-h-0 content-start gap-4 overflow-y-auto pr-1">
-          <div className={FIELD_GROUP_CLASS}>
+          <div className="grid gap-2">
             <label
-              className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+              className="af-dashboard-supporting-label"
               htmlFor={requestNameID}
             >
               {messages.requestNameLabel}
@@ -186,7 +172,7 @@ export function SubmitWorkCard({
                 validationErrors?.requestName ? requestNameErrorID : undefined
               }
               aria-invalid={validationErrors?.requestName ? "true" : undefined}
-              className={DASHBOARD_BODY_TEXT_CLASS}
+              className="af-dashboard-body-text"
               disabled={controlsDisabled}
               id={requestNameID}
               onChange={(event) => onRequestNameChange(event.target.value)}
@@ -195,13 +181,13 @@ export function SubmitWorkCard({
               value={draft.requestName}
             />
             {validationErrors?.requestName ? (
-              <p className={VALIDATION_TEXT_CLASS} id={requestNameErrorID}>
+              <p className=  "text-on-error-container af-dashboard-supporting-text" id={requestNameErrorID}>
                 {validationErrors.requestName}
               </p>
             ) : null}
           </div>
 
-          <div className={FIELD_GROUP_CLASS}>
+          <div className="grid gap-2">
             <div className="sr-only" id={submissionItemsID}>
               {messages.submissionItemsLabel}
             </div>
@@ -217,7 +203,7 @@ export function SubmitWorkCard({
               widgetId={widgetId}
             />
             {validationErrors?.submissionItems ? (
-              <p className={VALIDATION_TEXT_CLASS}>
+              <p className=  "text-on-error-container af-dashboard-supporting-text">
                 {validationErrors.submissionItems}
               </p>
             ) : null}
@@ -228,8 +214,7 @@ export function SubmitWorkCard({
           {shouldRenderStatus ? (
             <p
               className={cn(
-                "min-w-0 flex-1",
-                HELP_TEXT_CLASS,
+                "min-w-0 flex-1 max-w-xl leading-relaxed text-on-surface-variant af-dashboard-supporting-text",
                 STATUS_TONE_CLASS_BY_KIND[status.kind],
               )}
               id={statusID}
@@ -244,7 +229,6 @@ export function SubmitWorkCard({
           ) : null}
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
-            className="w-full justify-center self-start"
             disabled={!canSubmit}
             tone={canSubmit ? "default" : "outline"}
             type="submit"
@@ -297,7 +281,7 @@ function SubmitWorkHeaderControls({
             validationErrors?.workTypeName ? workTypeErrorID : undefined
           }
           aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
-          className={cn("min-h-9 py-2 text-xs", DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn("min-h-9 py-2 text-xs", "af-dashboard-body-text")}
           disabled={controlsDisabled}
           id={workTypeID}
           onChange={(event) => onWorkTypeNameChange(event.target.value)}
@@ -369,7 +353,7 @@ function AddSubmissionItemMenu({
         aria-label={messages.addItemMenuLabel}
         className="grid gap-3"
       >
-        <p className={HELP_TEXT_CLASS} id={menuDescriptionID}>
+        <p className="text-on-surface-variant af-dashboard-supporting-text" id={menuDescriptionID}>
           {messages.addItemMenuDescription}
         </p>
         <div className="grid gap-2">

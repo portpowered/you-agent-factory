@@ -27,7 +27,7 @@ export const EXECUTION_PILL_CLASS = cn(
   DASHBOARD_SUPPORTING_CODE_CLASS,
 );
 export const PROVIDER_SESSION_CARD_CLASS =
-  "rounded-lg border border-outline bg-surface-container-low p-3.5";
+  "";
 /** Outer shell for expanded current-selection configuration and history panels. */
 export const CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS =
   "grid gap-3 rounded-2xl border border-outline bg-surface-container-high p-3";
@@ -54,7 +54,7 @@ export const CURRENT_SELECTION_CODE_SUBTLE_CLASS = cn(
 export const HISTORY_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-outline bg-surface-container-high px-3 py-2 [&_h4]:m-0";
 export const CURRENT_SELECTION_ACCENT_SURFACE_CLASS =
-  "border-primary bg-primary-container text-on-surface";
+  "border-primary text-on-surface";
 export const CURRENT_SELECTION_BADGE_CLASS = cn(
   "inline-flex rounded-full border px-2 py-0.5",
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
@@ -81,7 +81,7 @@ export const RUNTIME_DETAIL_CODE_CLASS = cn(
   "[overflow-wrap:anywhere]",
 );
 export const TRACE_ACTION_LINK_CLASS =
-  "inline-flex w-fit rounded-lg border border-primary bg-primary-container px-3 py-2 text-sm font-bold text-on-surface outline-af-accent transition hover:border-primary hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2";
+  "inline-flex w-fit rounded-lg px-3 py-2 text-sm font-bold text-on-surface outline-af-accent transition hover:border-primary hover:bg-primary-container focus-visible:outline-2 focus-visible:outline-offset-2";
 export const REQUEST_SELECTION_STATUS_CLASS = cn(
   "m-0 text-on-surface-subtle",
   DASHBOARD_SUPPORTING_TEXT_CLASS,

@@ -90,7 +90,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
             actions={
               <fieldset
                 aria-label={headerMessages.globalHeaderActionsLabel}
-                className="flex shrink-0 items-center gap-1.5 self-end pb-2"
+                className="flex shrink-0 items-center gap-1.5 self-end pb-2 pr-2"
               >
                 <DashboardPaletteMenu locale={resolvedLocale} />
                 <DashboardLocaleMenu
@@ -106,7 +106,7 @@ export function DashboardHeader({ locale }: DashboardHeaderProps) {
         <div className="flex min-w-0">
           <div className="relative flex min-w-0 w-full rounded-sm items-center gap-1.5 rounded-t-2xl bg-surface-container-low pb-2 px-2 pt-1">
             <TickSliderControl locale={resolvedLocale} />
-            <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 pr-2">
               {sessionTabsState.activeSession ? (
                 <DashboardHeaderActionButton
                   aria-label={sessionStreamToggleLabel(

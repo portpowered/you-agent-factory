@@ -135,7 +135,7 @@ export function LogicalMoveDispatchHistoryCard({
       className={cn(
         PROVIDER_SESSION_CARD_CLASS,
         isCurrentDispatch &&
-          "border-primary bg-primary-container text-on-surface",
+          "text-on-surface",
       )}
     >
       <div className="flex items-start justify-between gap-3">

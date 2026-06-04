@@ -6,7 +6,7 @@ import {
 import { formatNumber } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
-import { ExpandableCodeBlock } from "./transcript-code-block";
+import { TranscriptContentPanel } from "./expandable-transcript-content";
 
 const EXEC_COMMAND_SUMMARY_CHAR_LIMIT = 200;
 
@@ -30,9 +30,8 @@ export function FriendlyExecCommandOutput({
         {text ? (
           <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p>
         ) : null}
-        <ExpandableCodeBlock
+        <ExecCommandContentSection
           label={messages.outputLabel}
-          locale={locale}
           value={output}
         />
       </div>
@@ -72,12 +71,26 @@ export function FriendlyExecCommandOutput({
           />
         </div>
       </section>
-      <ExpandableCodeBlock
+      <ExecCommandContentSection
         label={messages.execCommandRawOutputLabel}
-        locale={locale}
         value={output}
       />
     </div>
+  );
+}
+
+function ExecCommandContentSection({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <section className="grid gap-2">
+      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <TranscriptContentPanel kind="code" value={value} />
+    </section>
   );
 }
 

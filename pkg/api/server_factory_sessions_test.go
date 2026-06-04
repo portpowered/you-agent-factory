@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -656,6 +657,69 @@ func TestParseCodexSessionDetails_EmitsMixedTranscriptChronologically(t *testing
 
 	assertMixedCodexSessionSummary(t, parsed.Summary)
 	assertMixedCodexSessionTranscript(t, parsed)
+}
+
+func TestParseCodexSessionDetails_ReconcilesMirroredCodexMessages(t *testing.T) {
+	session := strings.Join([]string{
+		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-06-04T10:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I will inspect the factory state first.","phase":"commentary"}}`,
+		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will inspect the factory state first."}],"phase":"commentary"}}`,
+		`{"timestamp":"2026-06-04T10:00:02Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Plan the next phase."}]}}`,
+		`{"timestamp":"2026-06-04T10:00:02Z","type":"event_msg","payload":{"type":"user_message","message":"Plan the next phase."}}`,
+		`{"timestamp":"2026-06-04T10:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}`,
+		`{"timestamp":"2026-06-04T10:00:04Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Factory state looks ready."}]}}`,
+	}, "\n")
+
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+
+	if parsed.Summary.LineCount != 7 || parsed.Summary.EventCount != 7 {
+		t.Fatalf("summary = %#v, want all source records counted", parsed.Summary)
+	}
+	if parsed.Summary.TokenUsage == nil || intValue(parsed.Summary.TokenUsage.TotalTokens) != 120 {
+		t.Fatalf("token usage = %#v, want line-level token accounting retained", parsed.Summary.TokenUsage)
+	}
+	if len(parsed.Transcript) != 3 {
+		t.Fatalf("transcript = %#v, want mirrored messages emitted once", parsed.Transcript)
+	}
+	first := parsed.Transcript[0]
+	if first.Order != 1 || first.Type != factoryapi.AssistantMessage || intValue(first.LineNumber) != 2 || stringValue(first.Text) != "I will inspect the factory state first." {
+		t.Fatalf("first transcript entry = %#v, want first mirrored assistant message retained", first)
+	}
+	second := parsed.Transcript[1]
+	if second.Order != 2 || second.Type != factoryapi.UserMessage || intValue(second.LineNumber) != 4 || stringValue(second.Text) != "Plan the next phase." {
+		t.Fatalf("second transcript entry = %#v, want first mirrored user message retained", second)
+	}
+	third := parsed.Transcript[2]
+	if third.Order != 3 || third.Type != factoryapi.AssistantMessage || intValue(third.LineNumber) != 7 || stringValue(third.Text) != "Factory state looks ready." {
+		t.Fatalf("third transcript entry = %#v, want following distinct assistant message retained", third)
+	}
+}
+
+func TestParseCodexSessionDetails_PreservesLongMessageContent(t *testing.T) {
+	longPart := strings.Repeat("skill description ", 90) + "final-visible-tail"
+	session := strings.Join([]string{
+		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"permissions block"},{"type":"input_text","text":` + strconv.Quote(longPart) + `}]}}`,
+	}, "\n")
+
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+
+	if len(parsed.Transcript) != 1 {
+		t.Fatalf("transcript = %#v, want one developer message transcript entry", parsed.Transcript)
+	}
+	got := stringValue(parsed.Transcript[0].Text)
+	if !strings.Contains(got, "permissions block") || !strings.Contains(got, "final-visible-tail") {
+		t.Fatalf("transcript text length = %d, want full joined message content with tail; text=%q", len(got), got)
+	}
+	if strings.HasSuffix(got, "...") {
+		t.Fatalf("transcript text = %q, want no backend truncation suffix", got)
+	}
 }
 
 func assertCodexSessionSummaryCoreCounts(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {

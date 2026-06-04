@@ -174,7 +174,7 @@ export const CursorSessionSuccess = {
         `cursor / Session ID / ${cursorProviderSessionVerificationSessionID}`,
       ).length,
     ).toBeGreaterThan(0);
-    expect(canvas.getByRole("heading", { name: "Token usage" })).toBeTruthy();
+    expect(canvas.getByRole("heading", { name: "Token Usage" })).toBeTruthy();
   },
   render: () => {
     const queryClient = new QueryClient({
@@ -361,12 +361,12 @@ export const MixedTranscript = {
     expect(transcriptIndex).toBeGreaterThan(-1);
 
     for (const headingName of [
-      "Session analysis",
-      "Token usage",
+      "Session Analysis",
+      "Token Usage",
       "Turns",
-      "Function calls",
+      "Function Calls",
       "Reasoning",
-      "Maintainer diagnostics",
+      "Maintainer Diagnostics",
     ]) {
       const headingIndex = headingNames.indexOf(headingName);
       if (headingIndex !== -1) {
@@ -380,20 +380,20 @@ export const MixedTranscript = {
     expect(
       canvas.getAllByText("Inspect the parser branch before retrying."),
     ).toHaveLength(1);
-    expect(canvas.getAllByText("Encrypted reasoning").length).toBeGreaterThan(
+    expect(canvas.getAllByText("Encrypted Reasoning").length).toBeGreaterThan(
       0,
     );
-    const panel = canvas.getByLabelText("Selected session details");
+    const panel = canvas.getByLabelText("Selected Session Details");
     expect(panel.className).toContain("af-provider-session-sans");
 
-    expect(canvas.getByText("Command result")).toBeTruthy();
-    expect(canvas.getByText("Exit code")).toBeTruthy();
+    expect(canvas.getByText("Command Result")).toBeTruthy();
+    expect(canvas.getByText("Exit Code")).toBeTruthy();
     expect(canvas.getByText("0.6289 seconds")).toBeTruthy();
     expect(
       canvas.getByText("provider-session parsing verified successfully"),
     ).toBeTruthy();
     const rawToolOutputToggle = canvas.getByRole("button", {
-      name: "Expand Raw exec_command output",
+      name: "Expand Raw exec_command Output",
     });
     expect(rawToolOutputToggle).toBeTruthy();
     expect(

@@ -55,6 +55,11 @@ describe("InlineAddWidgetCard content", () => {
     const header = card.querySelector("header");
     expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
     expect(header?.className).toContain("cursor-grab");
+    expect(header?.className).toContain("bg-surface-container-high");
+    expect(
+      header?.querySelector("[data-bento-header-action-spacer='true']"),
+    ).toBeTruthy();
+    expect(card.querySelector("[class*='content-end']")).toBeNull();
     expect(
       within(card).queryByRole("button", { name: "Move Add widget" }),
     ).toBeNull();

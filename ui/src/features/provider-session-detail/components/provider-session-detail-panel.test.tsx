@@ -4,7 +4,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import { formatLocalTimezoneContext } from "../../../components/ui/formatters";
 import { formatDateTime } from "../../../i18n/formatters";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
 
@@ -23,6 +22,13 @@ describe("ProviderSessionDetailPanel", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
+
+  function expandDisclosure(name: string) {
+    const button = screen.queryByRole("button", { name });
+    if (button) {
+      fireEvent.click(button);
+    }
+  }
 
   it("loads Cursor session details when provider is cursor", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
@@ -64,7 +70,9 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
-    expect(screen.getAllByText("cursor / Session ID / cursor_sess_01").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("cursor_sess_01").length).toBeGreaterThan(0);
+    expandDisclosure("Expand Transcript");
+    expandDisclosure("Expand Assistant");
     expect(screen.getByText("Hello from Cursor")).toBeTruthy();
     expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
       "/provider-sessions/detail?id=cursor_sess_01&kind=session_id&provider=cursor",
@@ -82,7 +90,6 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByRole("status").textContent).toContain(
       "Loading session details...",
     );
-    expect(screen.getByText("dispatch-review-active")).toBeTruthy();
     expect(screen.getByText("sess_active")).toBeTruthy();
   });
 
@@ -113,10 +120,7 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByRole("status").textContent).toContain(
       "正在加载会话详情...",
     );
-    expect(
-      screen.getAllByText("codex / 会话 ID / sess_active").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getAllByText("会话 ID").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("sess_active").length).toBeGreaterThan(0);
     expect(screen.queryByText("session_id")).toBeNull();
 
     await waitFor(() => {
@@ -126,7 +130,7 @@ describe("ProviderSessionDetailPanel", () => {
     });
   });
 
-  it("falls back to a localized unknown-kind wrapper while preserving the raw provider-session kind", () => {
+  it("keeps selected-session preview focused on the session id for unknown kinds", () => {
     vi.mocked(globalThis.fetch).mockReturnValue(new Promise(() => undefined));
 
     renderWithQueryClient(
@@ -139,11 +143,8 @@ describe("ProviderSessionDetailPanel", () => {
       />,
     );
 
-    expect(
-      screen.getAllByText("codex / 未知种类：mystery_kind / sess_active")
-        .length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText("未知种类：mystery_kind")).toBeTruthy();
+    expect(screen.getAllByText("sess_active").length).toBeGreaterThan(0);
+    expect(screen.queryByText("mystery_kind")).toBeNull();
   });
 
   it("shows a not-found state when the session file is missing", async () => {
@@ -241,8 +242,9 @@ describe("ProviderSessionDetailPanel", () => {
       );
     });
     expect(
-      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+      screen.getByRole("heading", { name: "Maintainer Diagnostics" }),
     ).toBeTruthy();
+    expandDisclosure("Expand Maintainer Diagnostics");
     expect(
       screen.getByText("invalid character '}' after object key:value pair"),
     ).toBeTruthy();
@@ -298,12 +300,14 @@ describe("ProviderSessionDetailPanel", () => {
       );
     });
     expect(
-      screen.getByRole("heading", { name: "Session analysis" }),
+      screen.getByRole("heading", { name: "Session Analysis" }),
     ).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
+    expandDisclosure("Expand Session Analysis");
+    expect(screen.getByRole("heading", { name: "Token Usage" })).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+      screen.getByRole("heading", { name: "Maintainer Diagnostics" }),
     ).toBeTruthy();
+    expandDisclosure("Expand Maintainer Diagnostics");
     expect(screen.getByText("Unknown event on line 1")).toBeTruthy();
     expect(screen.getByText("Unknown event on line 2")).toBeTruthy();
   });
@@ -378,21 +382,27 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "Token usage" })).toBeTruthy();
+      expect(
+        screen.getByRole("heading", { name: "Session Analysis" }),
+      ).toBeTruthy();
     });
 
     expect(
       screen.getByText("2026/05/18/rollout-sess_active.jsonl"),
     ).toBeTruthy();
     expect(
-      screen.getByRole("heading", { name: "Session analysis" }),
+      screen.getByRole("heading", { name: "Session Analysis" }),
     ).toBeTruthy();
+    expandDisclosure("Expand Session Analysis");
+    expandDisclosure("Expand Execution Turns");
     expect(screen.getByText("Turn 1")).toBeTruthy();
     expect(screen.queryByText("list_dir")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Reasoning" })).toBeNull();
     expect(
-      screen.getByRole("heading", { name: "Maintainer diagnostics" }),
+      screen.getByRole("heading", { name: "Maintainer Diagnostics" }),
     ).toBeTruthy();
+    expandDisclosure("Expand Token Usage");
+    expandDisclosure("Expand Maintainer Diagnostics");
     expect(screen.getByText("182")).toBeTruthy();
     expect(screen.getByText("unexpected end of JSON input")).toBeTruthy();
     expect(screen.getByText("Unknown event on line 6")).toBeTruthy();
@@ -488,13 +498,21 @@ describe("ProviderSessionDetailPanel", () => {
 
     const transcriptTimestamp = formatDateTime("2026-05-18T14:10:04Z");
 
+    expandDisclosure("Expand Transcript");
+    expandDisclosure("Expand User");
+    expandDisclosure("Expand Assistant");
+    expandDisclosure("Expand Reasoning");
+    expandDisclosure("Expand read_file");
+    expandDisclosure("Expand call_tool_1");
+    expandDisclosure("Expand task_started");
+
     expect(
       screen.getByText("Summarize the rollout state for this work item."),
     ).toBeTruthy();
     expect(
       screen.getByText("The failing edge is in provider-session parsing."),
     ).toBeTruthy();
-    expect(screen.getAllByText("Encrypted reasoning").length).toBeGreaterThan(
+    expect(screen.getAllByText("Encrypted Reasoning").length).toBeGreaterThan(
       0,
     );
     expect(
@@ -506,42 +524,25 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("read_file")).toBeTruthy();
     expect(screen.getByText("call_tool_1")).toBeTruthy();
     expect(screen.getByText("Retry attempt scheduled.")).toBeTruthy();
-    expect(screen.getByText("Command result")).toBeTruthy();
-    expect(screen.getByText("Exit code")).toBeTruthy();
+    expect(screen.getByText("Command Result")).toBeTruthy();
+    expect(screen.getByText("Exit Code")).toBeTruthy();
     expect(screen.getAllByText("0").length).toBeGreaterThan(0);
-    expect(screen.getByText("Wall time")).toBeTruthy();
+    expect(screen.getByText("Wall Time")).toBeTruthy();
     expect(screen.getByText("0.6289 seconds")).toBeTruthy();
-    expect(screen.getByText("Summary")).toBeTruthy();
+    expect(screen.getAllByText("Summary").length).toBeGreaterThan(0);
     expect(
       screen.getByText("provider-session parsing verified successfully"),
     ).toBeTruthy();
     expect(screen.getByText("Order 4 / Turn 1")).toBeTruthy();
-    expect(screen.getByText("Session line 4")).toBeTruthy();
+    expect(screen.getByText("Session Line 4")).toBeTruthy();
     expect(
       screen
         .getAllByTitle("2026-05-18T14:10:04Z")
         .some((element) => element.textContent === transcriptTimestamp),
     ).toBe(true);
-    expect(screen.queryByText("Raw ISO timestamp")).toBeNull();
+    expect(screen.queryByText("Raw ISO Timestamp")).toBeNull();
 
-    const expandArguments = screen.getByRole("button", {
-      name: "Expand Arguments",
-    });
-    expect(expandArguments.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.getByText(`${longArguments.slice(0, 320)}…`)).toBeTruthy();
-
-    fireEvent.click(expandArguments);
-
-    expect(
-      screen
-        .getByRole("button", { name: "Collapse Arguments" })
-        .getAttribute("aria-expanded"),
-    ).toBe("true");
     expect(screen.getByText(longArguments)).toBeTruthy();
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Expand Raw exec_command output" }),
-    );
     expect(
       screen.getByText((content) => content.includes("Chunk ID: exec-123")),
     ).toBeTruthy();
@@ -581,13 +582,16 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
-    const panel = screen.getByLabelText("Selected session details");
+    const panel = screen.getByLabelText("Selected Session Details");
     expect(panel.className).toContain("af-provider-session-sans");
 
     const transcriptHeading = screen.getByRole("heading", {
       name: "Transcript",
     });
     expect(panel.contains(transcriptHeading)).toBe(true);
+
+    expandDisclosure("Expand Transcript");
+    expandDisclosure("Expand read_file");
 
     const rawArguments = screen.getByText(
       '{"path":"pkg/api/provider_session_details.go"}',
@@ -651,6 +655,11 @@ describe("ProviderSessionDetailPanel", () => {
     const turnStartedAt = formatDateTime("2026-05-18T14:10:00Z");
     const transcriptTimestamp = formatDateTime("2026-05-18T14:10:01Z");
 
+    expandDisclosure("Expand Source File");
+    expandDisclosure("Expand Transcript");
+    expandDisclosure("Expand Session Analysis");
+    expandDisclosure("Expand Execution Turns");
+
     expect(
       screen
         .getAllByTitle("2026-05-18T14:09:59Z")
@@ -667,14 +676,6 @@ describe("ProviderSessionDetailPanel", () => {
         .some((element) => element.textContent === transcriptTimestamp),
     ).toBe(true);
 
-    for (const rawTimestampControl of screen.getAllByText(
-      "Raw ISO timestamp",
-    )) {
-      fireEvent.click(rawTimestampControl);
-    }
-
-    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
-    expect(screen.getByText("2026-05-18T14:10:00Z")).toBeTruthy();
     expect(screen.queryByText("2026-05-18T14:10:01Z")).toBeNull();
   });
 
@@ -738,14 +739,7 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
-    expect(
-      screen.getByText(
-        "Times on this card are shown in your local timezone. Expand Raw ISO timestamp when you need the machine value.",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(formatLocalTimezoneContext("Timezone", "en")),
-    ).toBeTruthy();
+    expandDisclosure("Expand Transcript");
     expect(
       screen
         .getAllByTitle("2026-05-18T14:10:01Z")
@@ -755,6 +749,7 @@ describe("ProviderSessionDetailPanel", () => {
             formatDateTime("2026-05-18T14:10:01Z", "en"),
         ),
     ).toBe(true);
+    expandDisclosure("Expand User");
     expect(
       screen.getByText("Summarize the rollout state for this work item."),
     ).toBeTruthy();
@@ -772,14 +767,7 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
     });
 
-    expect(
-      screen.getByText(
-        "此卡片中的时间会按你的本地时区显示。需要机器时间值时，请展开原始 ISO 时间戳。",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(formatLocalTimezoneContext("时区", "zh-CN")),
-    ).toBeTruthy();
+    expandDisclosure("展开会话记录");
     expect(
       screen
         .getAllByTitle("2026-05-18T14:10:01Z")
@@ -789,16 +777,16 @@ describe("ProviderSessionDetailPanel", () => {
             formatDateTime("2026-05-18T14:10:01Z", "zh-CN"),
         ),
     ).toBe(true);
+    const zhUserExpandButton = screen.queryByRole("button", {
+      name: "展开用户",
+    });
+    if (zhUserExpandButton) {
+      fireEvent.click(zhUserExpandButton);
+    }
     expect(
       screen.getByText("Summarize the rollout state for this work item."),
     ).toBeTruthy();
 
-    for (const rawTimestampControl of screen.getAllByText("原始 ISO 时间戳")) {
-      fireEvent.click(rawTimestampControl);
-    }
-
-    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
-    expect(screen.getByText("2026-05-18T14:10:00Z")).toBeTruthy();
     expect(screen.queryByText("2026-05-18T14:10:01Z")).toBeNull();
     expect(screen.getByText("sess_active")).toBeTruthy();
   });
@@ -872,6 +860,10 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
     });
 
+    expandDisclosure("展开会话记录");
+    expandDisclosure("展开会话分析");
+    expandDisclosure("展开执行轮次");
+
     expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
     expect(screen.getAllByText("无时间戳").length).toBeGreaterThan(0);
     expect(screen.queryByText(" definitely-not-a-date ")).toBeNull();
@@ -940,15 +932,16 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
+    expandDisclosure("Expand Session Analysis");
     const headingNames = screen
       .getAllByRole("heading")
       .map((heading) => heading.textContent ?? "");
     const transcriptIndex = headingNames.indexOf("Transcript");
     const supportingHeadings = [
-      "Session analysis",
-      "Token usage",
+      "Session Analysis",
+      "Token Usage",
       "Turns",
-      "Maintainer diagnostics",
+      "Maintainer Diagnostics",
     ];
 
     expect(transcriptIndex).toBeGreaterThan(-1);
@@ -1068,6 +1061,11 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "Transcript" })).toBeTruthy();
     });
 
+    expandDisclosure("Expand Transcript");
+    expandDisclosure("Expand Reasoning");
+    expandDisclosure("Expand read_file");
+    expandDisclosure("Expand call_1");
+
     expect(screen.getAllByText(reasoningSummary)).toHaveLength(1);
     expect(screen.getAllByText(reasoningText)).toHaveLength(1);
     expect(screen.getAllByText(callArguments)).toHaveLength(1);
@@ -1176,13 +1174,17 @@ describe("ProviderSessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: "令牌用量" })).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "会话分析" })).toBeTruthy();
     });
+    expandDisclosure("展开会话分析");
+    expandDisclosure("展开令牌用量");
+    expandDisclosure("展开执行轮次");
+    expandDisclosure("展开维护诊断");
+    expandDisclosure("展开会话记录");
 
     expect(screen.getByRole("heading", { name: "已选会话详情" })).toBeTruthy();
-    expect(screen.getByText("提供方会话")).toBeTruthy();
-    expect(screen.getByText("提供方")).toBeTruthy();
-    expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(screen.getByText("会话 ID")).toBeTruthy();
+    expect(screen.getAllByText("sess_active").length).toBeGreaterThan(0);
     expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
     expect(screen.getAllByText("工具输出").length).toBeGreaterThan(0);
     expect(screen.getByText("输入")).toBeTruthy();
@@ -1191,8 +1193,8 @@ describe("ProviderSessionDetailPanel", () => {
     expect(screen.getByText("无时间戳")).toBeTruthy();
     expect(screen.queryByText("顺序 3 / 轮次 2")).toBeNull();
     expect(screen.queryByText("调用 ID")).toBeNull();
-    expect(screen.getAllByText("不可用").length).toBeGreaterThan(0);
     expect(screen.queryByText("加密推理")).toBeNull();
+    expandDisclosure("展开工具输出");
     expect(screen.getByText("命令结果")).toBeTruthy();
     expect(screen.getByText("退出代码")).toBeTruthy();
     expect(screen.getByText("耗时")).toBeTruthy();
@@ -1366,6 +1368,10 @@ describe("ProviderSessionDetailPanel", () => {
       expect(screen.getByRole("heading", { name: "会话记录" })).toBeTruthy();
     });
 
+    expandDisclosure("展开会话记录");
+    expandDisclosure("展开会话分析");
+    expandDisclosure("展开维护诊断");
+
     const headingNames = screen
       .getAllByRole("heading")
       .map((heading) => heading.textContent ?? "");
@@ -1374,11 +1380,13 @@ describe("ProviderSessionDetailPanel", () => {
 
     expect(transcriptIndex).toBeGreaterThan(-1);
     expect(analysisIndex).toBeGreaterThan(transcriptIndex);
-    expect(screen.getByText("提供方")).toBeTruthy();
-    expect(screen.getAllByText("类型").length).toBeGreaterThan(0);
+    expect(screen.getByText("会话 ID")).toBeTruthy();
     expect(screen.getAllByText("用户").length).toBeGreaterThan(0);
     expect(screen.getAllByText("助手").length).toBeGreaterThan(0);
     expect(screen.getAllByText("call_exec_1").length).toBeGreaterThan(0);
+    expandDisclosure("展开助手");
+    expandDisclosure("展开推理");
+    expandDisclosure("展开call_exec_1");
     expect(screen.getAllByText("加密推理").length).toBeGreaterThan(0);
     expect(
       screen.getAllByText(
@@ -1401,19 +1409,7 @@ describe("ProviderSessionDetailPanel", () => {
         ),
     ).toBe(true);
 
-    for (const rawTimestampControl of screen.getAllByText("原始 ISO 时间戳")) {
-      fireEvent.click(rawTimestampControl);
-    }
-
-    expect(screen.getByText("2026-05-18T14:09:59Z")).toBeTruthy();
     expect(screen.queryByText("2026-05-18T14:10:04Z")).toBeNull();
-
-    const rawOutputButton = screen.getByRole("button", {
-      name: "展开原始 exec_command 输出",
-    });
-    expect(rawOutputButton.getAttribute("aria-expanded")).toBe("false");
-
-    fireEvent.click(rawOutputButton);
 
     expect(
       screen.getByText((content) => content.includes("Chunk ID: exec-789")),

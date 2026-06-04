@@ -79,9 +79,9 @@ const BENTO_DRAG_CANCEL_SELECTOR =
 const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-hidden";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
-  "flex min-h-13 cursor-grab items-center justify-between gap-3 border-outline px-3.5 py-3 active:cursor-grabbing";
+  "relative z-10 flex min-h-13 shrink-0 cursor-grab items-center justify-between gap-3 border-b border-outline bg-surface-container-high px-3.5 py-3 active:cursor-grabbing";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
-  "min-h-11 flex-wrap items-start gap-2 px-3 py-2.5";
+  "min-h-11 flex-wrap items-center gap-2 px-3 py-2.5";
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
@@ -374,16 +374,20 @@ export function AgentBentoCardHeader({
           {title}
         </h3>
       </div>
-      {headerAction ? (
-        <div
-          className={cn(
-            BENTO_CARD_HEADER_TOOLS_CLASS,
-            compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
-          )}
-        >
-          {headerAction}
-        </div>
-      ) : null}
+      <div
+        className={cn(
+          BENTO_CARD_HEADER_TOOLS_CLASS,
+          compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
+        )}
+      >
+        {headerAction ?? (
+          <span
+            aria-hidden="true"
+            className="block h-10 w-10 shrink-0"
+            data-bento-header-action-spacer="true"
+          />
+        )}
+      </div>
     </header>
   );
 }

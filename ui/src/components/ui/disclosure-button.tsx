@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 
 import { Button, type ButtonProps } from "./button";
+import { cn } from "../../lib/cn";
 
 export interface DisclosureButtonProps extends ButtonProps {
   controlsID: string;
@@ -16,6 +17,7 @@ export const DisclosureButton = forwardRef<
       aria-controls={controlsID}
       aria-expanded={expanded}
       ref={ref}
+      tone="outline"
       {...props}
     />
   );

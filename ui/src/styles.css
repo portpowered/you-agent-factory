@@ -194,7 +194,7 @@
   }
 
   .af-dashboard-section-heading {
-    @apply text-title-large text-on-surface;
+    @apply text-title-large uppercase text-on-surface;
   }
 
   .af-dashboard-body-text {
