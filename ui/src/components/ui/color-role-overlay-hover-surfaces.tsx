@@ -18,9 +18,6 @@ export const OVERLAY_HOVER_VERIFICATION_PALETTES = [
   "factory-light",
 ] as const;
 
-export type OverlayHoverVerificationPalette =
-  (typeof OVERLAY_HOVER_VERIFICATION_PALETTES)[number];
-
 export function ColorRoleOverlayHoverSurfacesShowcase() {
   return (
     <section

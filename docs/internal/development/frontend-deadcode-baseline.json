@@ -5,6 +5,11 @@
     "name": "scripts/summarize-warning-inventory.mjs"
   },
   {
+    "file": "scripts/verify-overlay-hover-storybook.mjs",
+    "kind": "file",
+    "name": "scripts/verify-overlay-hover-storybook.mjs"
+  },
+  {
     "file": "src/features/factory-graph-editor/lib/factory-graph-operations.ts",
     "kind": "export",
     "name": "validateFactoryGraphState"
