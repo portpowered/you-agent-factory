@@ -100,7 +100,7 @@ function DashboardActionButtonSpinner() {
       viewBox="0 0 16 16"
     >
       <circle
-        className="text-af-text-disabled"
+        className="text-on-surface-disabled"
         cx="8"
         cy="8"
         r="6"

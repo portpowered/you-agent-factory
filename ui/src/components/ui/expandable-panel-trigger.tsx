@@ -18,7 +18,7 @@ const EXPANDABLE_PANEL_TRIGGER_VARIANT_CLASS: Record<
   string
 > = {
   section: cn(
-    "shrink-0 cursor-pointer rounded-lg border border-outline bg-surface-container-high px-2.5 py-2 text-on-surface-variant transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-af-text-disabled",
+    "shrink-0 cursor-pointer rounded-lg border border-outline bg-surface-container-high px-2.5 py-2 text-on-surface-variant transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled",
     DASHBOARD_SUPPORTING_TEXT_CLASS,
   ),
   compact: cn(
