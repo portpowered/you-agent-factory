@@ -120,7 +120,7 @@ export function VerticalResizableWidth({
       >
         <span
           aria-hidden="true"
-          className="mx-2 h-px flex-1 rounded-full bg-af-border transition-colors hover:bg-af-border-strong"
+          className="mx-2 h-px flex-1 rounded-full bg-outline transition-colors hover:bg-outline-variant"
         />
       </div>
     </div>
