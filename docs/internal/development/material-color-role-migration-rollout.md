@@ -79,9 +79,10 @@ Alias layer removal is **complete**. Role-backed `--color-af-*` product keys liv
 
 1. `ui/src/features/**` — no `bg-af-surface-*`, `text-af-text`, `bg-af-accent-*` (enforced by `feature-surface-color-roles.test.ts`).
 2. `ui/src/components/ui/**` — neutral and semantic contracts green (see shared-primitive `*.test.ts` files).
-3. `ui/src/components/prompt-editor/**` — Monaco shells, diagnostics rows, and resize handle on role utilities (enforced by `prompt-editor-neutral-surface-roles.test.ts`); RTL consumer tests in the same folder assert behavior only and do not pin transitional neutral class substrings.
-4. Storybook overview and palette selector reviewed on all five palettes.
-5. Full `cd ui && bun run tsc` and theme regression vitest bundle (above) pass.
+3. `ui/src/components/ui/calendar.tsx` — DayPicker selected, today, outside, disabled, and weekday cells on role utilities (enforced by `calendar-color-roles.test.ts`); `ui-foundation.test.tsx` and Storybook foundation showcase assert behavior/labels only and do not pin transitional accent/text class substrings on the calendar primitive.
+4. `ui/src/components/prompt-editor/**` — Monaco shells, diagnostics rows, and resize handle on role utilities (enforced by `prompt-editor-neutral-surface-roles.test.ts`); RTL consumer tests in the same folder assert behavior only and do not pin transitional neutral class substrings.
+5. Storybook overview and palette selector reviewed on all five palettes.
+6. Full `cd ui && bun run tsc` and theme regression vitest bundle (above) pass.
 
 ### Completed alias removal
 
