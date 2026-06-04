@@ -16,7 +16,7 @@ const typographyUtilitiesPath = path.join(
 );
 const textColorTokensPath = path.join(stylesDir, "text-color-role-tokens.css");
 const stylesSourcePath = path.join(stylesDir, "..", "styles.css");
-const aliasesSourcePath = path.join(stylesDir, "color-role-aliases.css");
+const roleTokensSourcePath = path.join(stylesDir, "color-role-tokens.css");
 
 const MATERIAL_SCALE_FAMILIES = [
   "display",
@@ -33,7 +33,7 @@ describe("typography-role-tokens (US-006)", () => {
   const utilitiesSource = readFileSync(typographyUtilitiesPath, "utf8");
   const textColorSource = readFileSync(textColorTokensPath, "utf8");
   const stylesSource = readFileSync(stylesSourcePath, "utf8");
-  const aliasesSource = readFileSync(aliasesSourcePath, "utf8");
+  const roleTokensSource = readFileSync(roleTokensSourcePath, "utf8");
 
   it("defines Material 3 scale families with large/medium/small variants", () => {
     for (const family of MATERIAL_SCALE_FAMILIES) {
@@ -75,13 +75,15 @@ describe("typography-role-tokens (US-006)", () => {
     );
   });
 
-  it("aliases transitional af-* text tokens to text color roles", () => {
-    expect(aliasesSource).toContain(
+  it("maps product af-* text tokens to text color roles in color-role-tokens.css", () => {
+    expect(roleTokensSource).toContain(
       "--color-af-text-disabled: var(--color-on-surface-disabled);",
     );
-    expect(aliasesSource).toContain(
+    expect(roleTokensSource).toContain(
       "--color-af-text-inverse: var(--color-on-inverse);",
     );
-    expect(aliasesSource).toContain("--color-af-code-ink: var(--color-code);");
+    expect(roleTokensSource).toContain(
+      "--color-af-code-ink: var(--color-code);",
+    );
   });
 });

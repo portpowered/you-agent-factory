@@ -9,9 +9,9 @@ Canonical reference for the dashboard UI Material-style color roles introduced i
 ## Source of truth
 
 - **Role tokens (long-term API):** `ui/src/styles/color-role-tokens.css` — use Tailwind utilities such as `bg-primary`, `text-on-surface`, `border-outline`.
-- **Transitional `af-*` aliases:** `ui/src/styles/color-role-aliases.css` — maps widely used `af-*` product tokens to roles so existing UI keeps rendering while components migrate.
+- **Product `--color-af-*` keys:** Role-backed mappings live in `ui/src/styles/color-role-tokens.css`; foundation palette keys, overlays, semantic border opacities, and chart series keys without role equivalents remain in `ui/src/styles.css`. These product keys are the supported surface until a later chart/overlay role pass retires or replaces them.
 - **Factory palette keys:** `af-foundation-*` in `ui/src/styles.css` — baseline for Factory Dark; palette presets in `ui/src/styles/color-palette-presets.css` override these keys at runtime (US-008).
-- **Rollout & cleanup (US-010):** [material-color-role-migration-rollout.md](./material-color-role-migration-rollout.md) — phased rollout, regression matrix, and alias removal checklist.
+- **Rollout & regression (US-010):** [material-color-role-migration-rollout.md](./material-color-role-migration-rollout.md) — phased rollout, regression matrix, and completed alias removal.
 
 ## Role families
 
@@ -86,32 +86,13 @@ Do not use `warning` for draft/pending copy, `info` for brand row emphasis, or `
 1. **Yellow primary** — `primary` stays tied to `af-foundation-accent` so Factory Dark identity is preserved.
 2. **Secondary and tertiary saturation (US-003)** — `secondary` / `tertiary` roles use `af-foundation-secondary-accent` and `af-foundation-tertiary-accent` (calmer than `af-foundation-info` / `af-foundation-worker`). Semantic `info` and chart/info chrome keep the vibrant `af-foundation-info` family. Visual review: Storybook `Agent Factory/UI/Color Role Accent Contrast`.
 3. **Palette switching (US-008)** — Five predefined palettes (`factory-dark`, `factory-light`, `material-baseline`, `slate`, `olive`) override `af-foundation-*` keys via `data-color-palette` on `:root` (`ui/src/styles/color-palette-presets.css`). The dashboard header palette dropdown (`DashboardPaletteMenu`) persists the selection in `sessionStorage` for the current browser session. Role token names stay stable across palettes; yellow `#f5c76f` remains the primary brand accent.
-4. **Migration order** — Taxonomy (this doc) → `af-*` aliases → shared primitives → feature surfaces → alias cleanup. See [material-color-role-migration-rollout.md](./material-color-role-migration-rollout.md) for regression tests, Storybook fixtures, and cleanup gates.
+4. **Migration order** — Taxonomy (this doc) → shared primitives → feature surfaces → alias layer removal (complete). See [material-color-role-migration-rollout.md](./material-color-role-migration-rollout.md) for regression tests, Storybook fixtures, and maintenance gates.
 
-## Transitional `af-*` alias map (US-002)
+## Supported `--color-af-*` product keys
 
-| Transitional token | Role source of truth | Notes |
-| --- | --- | --- |
-| `af-background` | `background` | Page/shell backdrop |
-| `af-surface` | `surface` | Default component surface |
-| `af-surface-subtle` | `surface-container-low` | Low-emphasis panels |
-| `af-surface-raised` | `surface-container-high` | Raised cards, graph controls |
-| `af-border` | `outline` | Default borders |
-| `af-border-strong` | `outline-variant` | Stronger borders |
-| `af-text` | `on-surface` | Primary text |
-| `af-text-muted` | `on-surface-variant` | Secondary text |
-| `af-accent` | `primary` | Brand emphasis |
-| `af-accent-hover` | `on-primary-container` | Strong accent ink |
-| `af-accent-surface` | `primary-container` | Accent fill |
-| `af-accent-border` | `primary` | Accent stroke |
-| `af-on-accent` | `on-primary` | Text/icons on accent |
-| `af-success` / `af-success-surface` | `success` / `success-container` | Status only |
-| `af-warning` / `af-warning-surface` | `warning` / `warning-container` | Status only |
-| `af-danger` / `af-danger-surface` | `error` / `error-container` | Status only |
-| `af-info` / `af-info-surface` | `info` / `info-container` | Status only |
-| `af-worker` / `af-worker-surface` | `tertiary` / `tertiary-container` | Supporting accent |
+Role-backed product keys (for example `af-text`, `af-surface`, `af-accent`, semantic surfaces) are defined in `ui/src/styles/color-role-tokens.css` and resolve to Material roles. Foundation keys (`af-foundation-*`), overlays (`af-overlay`), semantic `*-border` opacities, chart keys (`af-chart-*`), and graph-edge keys without role equivalents remain in `ui/src/styles.css` until a follow-up chart/overlay role pass.
 
-Tokens without a direct role yet (for example `af-text-subtle`, `af-overlay`, semantic `*-border` opacities, chart keys) remain defined in `ui/src/styles.css` until a later story adds roles or consumers migrate.
+Wiring contract: `ui/src/styles/color-role-tokens.test.ts` (`PRODUCT_AF_ROLE_PAIRS`) asserts each role-backed key maps to its documented role source.
 
 ## CSS variable reference
 
