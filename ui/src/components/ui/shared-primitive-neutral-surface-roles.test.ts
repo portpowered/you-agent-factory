@@ -49,5 +49,7 @@ describe("shared primitive neutral surface roles", () => {
       "border-outline bg-surface-container-high text-on-surface",
     );
     expect(source).toContain("text-on-surface-variant");
+    expect(source).toContain("hover:bg-surface-container-low");
+    expect(source).toContain("hover:bg-surface-container-highest");
   });
 });
