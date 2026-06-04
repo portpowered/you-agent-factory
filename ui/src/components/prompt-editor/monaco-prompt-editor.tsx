@@ -175,7 +175,7 @@ export function MonacoPromptEditor({
   return (
     <Editor
       className={cn(
-        "overflow-visible rounded-xl border border-af-border bg-transparent",
+        "overflow-visible rounded-xl border border-outline bg-transparent",
         hasDiagnostics
           ? "border-af-danger-border focus-within:border-af-danger"
           : undefined,
@@ -312,7 +312,7 @@ function PromptEditorFallbackState({
     <div
       aria-describedby={ariaDescribedBy}
       aria-invalid={ariaInvalid ? "true" : undefined}
-      className="grid h-full min-h-0 gap-2 overflow-auto rounded-xl border border-af-border bg-transparent px-3 py-3"
+      className="grid h-full min-h-0 gap-2 overflow-auto rounded-xl border border-outline bg-transparent px-3 py-3"
       data-monaco-editor-fallback="workstation-prompt"
       role={status}
       style={{ height }}

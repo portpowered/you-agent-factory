@@ -109,7 +109,7 @@ export function PromptEditorDiagnosticsPanel({
         <ul className="m-0 grid list-none gap-2 p-0">
           {diagnostics.map((diagnostic) => (
             <li
-              className="grid gap-1 rounded-lg border border-af-danger-border bg-af-surface-raised p-2"
+              className="grid gap-1 rounded-lg border border-af-danger-border bg-surface-container-high p-2"
               key={diagnosticListItemKey(diagnostic)}
             >
               <p
