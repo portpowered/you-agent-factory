@@ -26,7 +26,7 @@ const STANDARD_LIST_SELECTION_ROW_BASE_CLASS =
   "h-auto min-h-0 w-full justify-start gap-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 
 export const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
-  "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
+  "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-surface-container";
 
 export const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
   "border-primary bg-primary-container text-on-primary";

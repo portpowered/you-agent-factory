@@ -70,7 +70,7 @@ export const TableRow = forwardRef<
   return (
     <tr
       className={cn(
-        "transition-colors hover:bg-af-overlay data-[state=selected]:bg-af-overlay",
+        "transition-colors hover:bg-surface-container data-[state=selected]:bg-surface-container-low",
         className,
       )}
       ref={ref}

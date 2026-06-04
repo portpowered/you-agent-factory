@@ -17,11 +17,11 @@ const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
   destructive:
     "border-error bg-error text-on-error hover:border-af-danger-hover hover:bg-af-danger-hover",
   ghost:
-    "border-transparent bg-transparent text-on-surface-variant hover:bg-af-overlay hover:text-on-surface",
+    "border-transparent bg-transparent text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface",
   outline:
-    "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay",
+    "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-surface-container-highest",
   secondary:
-    "border-outline-variant bg-surface-container-low text-primary hover:border-primary hover:bg-af-overlay",
+    "border-outline-variant bg-surface-container-low text-primary hover:border-primary hover:bg-surface-container",
 };
 const BUTTON_SIZE_CLASS: Record<NonNullable<ButtonProps["size"]>, string> = {
   default: "px-4 py-2.5 text-sm",
