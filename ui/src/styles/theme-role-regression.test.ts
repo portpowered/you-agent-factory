@@ -67,6 +67,23 @@ describe("theme role migration regression (US-010)", () => {
     }
   });
 
+  it("exposes role-backed product af-* tokens through the compiled theme bundle", () => {
+    applyDocumentColorPalette(COLOR_PALETTE_IDS[0]!);
+
+    expect(readCssVariable("--color-af-text")).toBe(
+      readCssVariable("--color-on-surface"),
+    );
+    expect(readCssVariable("--color-af-text-muted")).toBe(
+      readCssVariable("--color-on-surface-variant"),
+    );
+    expect(readCssVariable("--color-af-surface")).toBe(
+      readCssVariable("--color-surface"),
+    );
+    expect(readCssVariable("--color-af-accent")).toBe(
+      readCssVariable("--color-primary"),
+    );
+  });
+
   it("documents phased rollout and cleanup in the rollout guide", () => {
     const rolloutPath = path.join(
       repoRoot,
@@ -77,6 +94,6 @@ describe("theme role migration regression (US-010)", () => {
     expect(source).toContain("## Rollout order");
     expect(source).toContain("## Cleanup phase");
     expect(source).toMatch(/Taxonomy.*US-001/s);
-    expect(source).toContain("color-role-aliases.css");
+    expect(source).toContain("color-role-tokens.test.ts");
   });
 });
