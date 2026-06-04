@@ -208,7 +208,7 @@ function GuardSelectorEditorFallbackState({
     >
       <p
         className={cn(
-          "m-0 text-af-text-muted",
+          "m-0 text-on-surface-variant",
           DASHBOARD_SUPPORTING_TEXT_CLASS,
         )}
       >
@@ -217,7 +217,7 @@ function GuardSelectorEditorFallbackState({
       <textarea
         aria-label={ariaLabel}
         className={cn(
-          "m-0 w-full resize-none border-0 bg-transparent p-0 text-af-text outline-none",
+          "m-0 w-full resize-none border-0 bg-transparent p-0 text-on-surface outline-none",
           DASHBOARD_BODY_TEXT_CLASS,
         )}
         defaultValue={value}
