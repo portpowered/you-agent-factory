@@ -1,27 +1,23 @@
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
 import type {
   DashboardInferenceAttempt,
   DashboardScriptRequest,
   DashboardScriptResponse,
 } from "../../../../api/dashboard/types";
-import { ExpandablePanelTrigger } from "../../../../components/ui";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
+import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
-import {
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-  CurrentSelectionSectionHeader,
-  EXECUTION_PILL_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
-  PROVIDER_SESSION_CARD_CLASS,
-} from "../../base/components/detail-card-shared";
+import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
+import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
+import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
 import { InferenceAttemptCard } from "../../work-selection/public";
 import {
   requestModel,
@@ -123,40 +119,22 @@ function CollapsibleDispatchAttemptSection({
   title: string;
 }) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
-  const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
   const panelId = `${sectionId}-panel`;
   const headingId = `${sectionId}-heading`;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      className="mt-3 grid gap-2.5 border-t border-outline pt-3"
+    <CurrentSelectionExpandableSection
+      className="mt-3 border-t border-outline pt-3"
+      contentId={panelId}
+      headingId={headingId}
+      title={title}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            controlsID={panelId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? messages.collapseAction : messages.expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={headingId}
-        title={title}
-      />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={panelId}
-        >
-          {children}
-        </div>
-      ) : null}
-    </section>
+      {children}
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -173,7 +151,7 @@ function ScriptRequestAttemptCard({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
-    <article className={PROVIDER_SESSION_CARD_CLASS}>
+    <CurrentSelectionHistoryCard>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <strong>
@@ -187,9 +165,9 @@ function ScriptRequestAttemptCard({
             {enumMessages.localizeOutcome("PENDING")}
           </p>
         </div>
-        <span className={EXECUTION_PILL_CLASS}>
+        <CurrentSelectionExecutionPill>
           {requestID ?? messages.scriptRequestPlaceholderId}
-        </span>
+        </CurrentSelectionExecutionPill>
       </div>
       <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
         <InferenceAttemptDetail
@@ -233,7 +211,7 @@ function ScriptRequestAttemptCard({
         args={scriptRequest.args}
         label={messages.resolvedArgsLabel}
       />
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }
 
@@ -261,7 +239,7 @@ function ScriptResponseAttemptCard({
   const locale = useCurrentSelectionLocale();
 
   return (
-    <article className={PROVIDER_SESSION_CARD_CLASS}>
+    <CurrentSelectionHistoryCard>
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <strong>
@@ -277,9 +255,9 @@ function ScriptResponseAttemptCard({
               : enumMessages.localizeOutcome("RECORDED")}
           </p>
         </div>
-        <span className={EXECUTION_PILL_CLASS}>
+        <CurrentSelectionExecutionPill>
           {requestID ?? messages.scriptResponsePlaceholderId}
-        </span>
+        </CurrentSelectionExecutionPill>
       </div>
       <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
         <InferenceAttemptDetail
@@ -349,6 +327,6 @@ function ScriptResponseAttemptCard({
         label={messages.stderrLabel}
         value={normalizedStderr}
       />
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }

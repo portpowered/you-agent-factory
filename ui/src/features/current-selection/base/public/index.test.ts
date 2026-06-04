@@ -25,9 +25,7 @@ describe("current-selection base public barrel", () => {
     expect(
       currentSelectionBasePublic.mergeDetailCardSaveFieldErrors,
     ).toBeTypeOf("function");
-    expect(currentSelectionBasePublic.PROVIDER_SESSION_CARD_CLASS).toBeTypeOf(
-      "string",
-    );
+    expect(currentSelectionBasePublic.CurrentSelectionHistoryCard).toBeDefined();
     expect(
       currentSelectionBasePublic.CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
     ).toBe("grid grid-cols-1 gap-3");

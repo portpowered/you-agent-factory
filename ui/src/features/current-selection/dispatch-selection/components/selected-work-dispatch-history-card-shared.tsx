@@ -3,13 +3,13 @@ import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../../components/ui/dash
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import { cn } from "../../../../lib/cn";
+import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
   REQUEST_HISTORY_TEXT_CLASS,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   TRACE_ACTION_LINK_CLASS,
-  WORK_SELECTION_BUTTON_CLASS,
 } from "../../base/components/detail-card-shared";
 import type { dedupeWorkItems } from "../dispatch-history/selected-work-dispatch-history-helpers";
 
@@ -131,22 +131,20 @@ export function WorkItemActionGroup({
       <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
       <div className="flex flex-wrap gap-2">
         {items.map((workItem) => (
-          <button
+          <CurrentSelectionSelectableButton
             aria-label={selectWorkItemAccessibleLabel(
               formatWorkItemLabel(workItem),
             )}
-            aria-pressed={selectedWorkID === workItem.work_id}
             className={cn(
-              WORK_SELECTION_BUTTON_CLASS,
               selectedWorkID === workItem.work_id &&
                 "border-primary bg-primary-container text-on-surface",
             )}
             key={`${label}-${workItem.work_id}`}
             onClick={() => onSelectWorkID?.(workItem.work_id)}
-            type="button"
+            selected={selectedWorkID === workItem.work_id}
           >
             {formatWorkItemLabel(workItem)}
-          </button>
+          </CurrentSelectionSelectableButton>
         ))}
       </div>
     </div>

@@ -179,7 +179,17 @@ async function expectWorkOutcomeChartContract(
   expect(overlay?.className).toContain("px-0");
   expect(overlay?.className).toContain("pb-3");
   expect(overlay?.className).toContain("pt-0");
-  expect(chart.querySelector(".recharts-responsive-container")).not.toBeNull();
+  const responsiveContainer = chart.querySelector<HTMLElement>(
+    ".recharts-responsive-container",
+  );
+  const svg = chart.querySelector<SVGElement>("svg");
+
+  expect(responsiveContainer).not.toBeNull();
+  expect(svg).not.toBeNull();
+  expect(
+    (responsiveContainer?.getBoundingClientRect().height ?? 0) > 0,
+  ).toBe(true);
+  expect((svg?.getBoundingClientRect().height ?? 0) > 0).toBe(true);
   expectSingleWorkOutcomeCardHeader(card);
   expectWorkChartCompactLegendContract(chart);
   expectWorkChartAxisLabelsVisible(chart);

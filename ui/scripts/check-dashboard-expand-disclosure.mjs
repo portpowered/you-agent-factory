@@ -71,8 +71,10 @@ function collectDisclosureUsage(sourceText, filePath) {
   );
   const imports = {
     disclosureButton: false,
+    currentSelectionExpandableSection: false,
     expandablePanelIcon: false,
     expandablePanelTrigger: false,
+    standardExpandableSection: false,
   };
   const rawDisclosureButtons = [];
 
@@ -95,6 +97,24 @@ function collectDisclosureUsage(sourceText, filePath) {
         imports.expandablePanelTrigger = true;
       }
 
+      if (modulePath.includes("standard-card-components")) {
+        imports.standardExpandableSection = true;
+      }
+
+      if (modulePath.includes("detail-card-shared")) {
+        const importClause = node.importClause;
+        if (
+          importClause?.namedBindings &&
+          ts.isNamedImports(importClause.namedBindings)
+        ) {
+          for (const element of importClause.namedBindings.elements) {
+            if (element.name.text === "CurrentSelectionExpandableSection") {
+              imports.currentSelectionExpandableSection = true;
+            }
+          }
+        }
+      }
+
       if (
         modulePath.endsWith("/components/ui") ||
         modulePath.endsWith("/components/ui/index")
@@ -114,6 +134,9 @@ function collectDisclosureUsage(sourceText, filePath) {
             }
             if (importedName === "DisclosureButton") {
               imports.disclosureButton = true;
+            }
+            if (importedName === "StandardExpandableSection") {
+              imports.standardExpandableSection = true;
             }
           }
         }
@@ -143,12 +166,16 @@ function collectDisclosureUsage(sourceText, filePath) {
 
 function getOwnerViolation({ imports, owner, relativeFilePath }) {
   if (owner === "expandable-panel-trigger") {
-    if (!imports.expandablePanelTrigger) {
+    if (
+      !imports.expandablePanelTrigger &&
+      !imports.standardExpandableSection &&
+      !imports.currentSelectionExpandableSection
+    ) {
       return {
         reason:
-          "Migrated dashboard inline expand entry points must import and use ExpandablePanelTrigger.",
+          "Migrated dashboard inline expand entry points must import and use ExpandablePanelTrigger, StandardExpandableSection, or CurrentSelectionExpandableSection.",
         recommendedFix:
-          "Replace ad-hoc disclosure buttons with ExpandablePanelTrigger and keep expanded state local to the feature.",
+          "Replace ad-hoc disclosure buttons with ExpandablePanelTrigger, StandardExpandableSection, or CurrentSelectionExpandableSection and keep expanded state local to the feature.",
         relativeFilePath,
       };
     }
@@ -272,7 +299,7 @@ async function main() {
   console.error(
     [
       "Dashboard expand disclosure guard failed.",
-      "Migrated dashboard inline expand entry points must stay on ExpandablePanelTrigger or the ExpandablePanelIcon legend shell exception.",
+      "Migrated dashboard inline expand entry points must stay on ExpandablePanelTrigger, StandardExpandableSection, CurrentSelectionExpandableSection, or the ExpandablePanelIcon legend shell exception.",
       "Violations:",
       report.violations.map(formatViolation).join("\n\n"),
     ].join("\n\n"),

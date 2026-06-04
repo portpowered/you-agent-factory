@@ -45,9 +45,6 @@ import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
 
-const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
-// tailwind-exception: intrinsic-sizing
-const TRACE_GRID_TABLE_CLASS = "min-w-[640px]";
 
 export type TraceGridState =
   | { status: "idle"; message: string }
@@ -107,33 +104,32 @@ function renderTraceState(
   switch (state.status) {
     case "idle":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.idleTitle}</h3>
-          <p>{messages.idleMessage}</p>
+        <div>
+          <h2>{messages.idleTitle}</h2>
         </div>
       );
     case "loading":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div>
           <h3>{messages.loadingTitle}</h3>
           <p>{messages.loadingMessage(state.workID)}</p>
           <div aria-hidden="true" className="grid gap-2 pt-2">
-            <Skeleton className={TRACE_LOADING_SKELETON_CLASS} />
+            <Skeleton className="h-4 w-full max-w-48" />
             <Skeleton className="h-24 w-full" />
-            <Skeleton className={TRACE_LOADING_SKELETON_CLASS} />
+            <Skeleton className="h-4 w-full max-w-48" />
           </div>
         </div>
       );
     case "empty":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div>
           <h3>{messages.emptyTitle}</h3>
           <p>{messages.emptyMessage}</p>
         </div>
       );
     case "error":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
+        <div>
           <h3>{messages.errorTitle}</h3>
           <p>{state.message}</p>
         </div>
@@ -271,7 +267,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
 
       {trace.dispatches.length > 0 ? (
         <Table
-          className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}
+          className={cn(DASHBOARD_BODY_TEXT_CLASS)}
           containerClassName="min-w-0 overscroll-x-contain"
           containerProps={
             {

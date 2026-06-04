@@ -5,7 +5,7 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { formatList } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
-import { CurrentSelectionSectionHeader } from "../../base/components/detail-card-shared";
+import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
 import type { ResourceDetailState } from "../lib/detail-card-types";
 import {
   resourceShowsModelFields,

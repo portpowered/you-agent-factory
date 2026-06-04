@@ -6,20 +6,22 @@ import {
 import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
 import { cn } from "../../../../lib/cn";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
 import {
+  CurrentSelectionBadge,
+  CurrentSelectionExecutionPill,
+} from "../../base/components/current-selection-pill";
+import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  CURRENT_SELECTION_BADGE_CLASS,
-  EXECUTION_PILL_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
   normalizeDetailText,
-  PROVIDER_SESSION_CARD_CLASS,
 } from "../../base/components/detail-card-shared";
+import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
 import { WorkItemPayloadList } from "../../work-selection/public";
 import {
@@ -82,15 +84,15 @@ export function DispatchHistoryCard({
   const title = requestTitle(request, selectedWorkID);
 
   return (
-    <article
+    <CurrentSelectionHistoryCard
       aria-label={messages.workstationDispatchRowAccessibleLabel(
         title,
         request.dispatch_id,
       )}
-      className={cn(
-        PROVIDER_SESSION_CARD_CLASS,
-        isCurrentDispatch && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-      )}
+      className={
+        isCurrentDispatch ? CURRENT_SELECTION_ACCENT_SURFACE_CLASS : undefined
+      }
+      highlighted={isCurrentDispatch}
     >
       <DispatchHistoryHeader
         dispatchID={request.dispatch_id}
@@ -156,7 +158,7 @@ export function DispatchHistoryCard({
       {view.hasFailureDetails ? (
         <DispatchFailureSection messages={messages} view={view} />
       ) : null}
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }
 
@@ -250,15 +252,15 @@ function DispatchHistoryHeader({
             label={messages.workstationOperationKindBadge}
           />
           {isCurrentDispatch ? (
-            <span className={CURRENT_SELECTION_BADGE_CLASS}>
+            <CurrentSelectionBadge>
               {messages.currentDispatchBadge}
-            </span>
+            </CurrentSelectionBadge>
           ) : null}
         </div>
       </div>
-      <span className={EXECUTION_PILL_CLASS}>
+      <CurrentSelectionExecutionPill>
         {dispatchID || messages.unknownDispatchId}
-      </span>
+      </CurrentSelectionExecutionPill>
     </div>
   );
 }

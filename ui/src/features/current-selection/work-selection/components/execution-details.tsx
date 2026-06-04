@@ -12,12 +12,12 @@ import {
 } from "../../base/components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
   TRACE_ACTION_LINK_CLASS,
 } from "../../base/components/detail-card-shared";
+import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
 import type {
   ExecutionDetailsSectionProps,
   InferenceAttemptsSectionProps,

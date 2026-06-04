@@ -8,7 +8,7 @@ import {
 } from "../../../components/ui/dashboard-typography";
 import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/base/public";
+import { CurrentSelectionHistoryCard } from "../../current-selection/base/public";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
@@ -510,8 +510,7 @@ function ParseDiagnosticsSection({
         </h5>
         <div className="grid gap-3">
           {detail.parse.parseErrors.map((error) => (
-            <article
-              className={PROVIDER_SESSION_CARD_CLASS}
+            <CurrentSelectionHistoryCard
               key={`parse-error-${error.lineNumber}`}
             >
               <strong>
@@ -520,11 +519,10 @@ function ParseDiagnosticsSection({
               <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
                 {error.message}
               </p>
-            </article>
+            </CurrentSelectionHistoryCard>
           ))}
           {detail.parse.unknownEvents.map((event) => (
-            <article
-              className={PROVIDER_SESSION_CARD_CLASS}
+            <CurrentSelectionHistoryCard
               key={`unknown-event-${event.lineNumber}`}
             >
               <strong>
@@ -545,7 +543,7 @@ function ParseDiagnosticsSection({
                   .filter(Boolean)
                   .join(" / ")}
               </p>
-            </article>
+            </CurrentSelectionHistoryCard>
           ))}
         </div>
       </section>

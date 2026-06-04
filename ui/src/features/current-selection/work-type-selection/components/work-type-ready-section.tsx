@@ -1,22 +1,18 @@
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
 
-import {
-  DashboardStatusPill,
-  ExpandablePanelTrigger,
-} from "../../../../components/ui";
+import { DashboardStatusPill } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import type { EditableWorkTypeValidationErrors } from "../../../current-factory-definition/lib/work-type-editable-validation";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
   CURRENT_SELECTION_FORM_FIELD_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
-  CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkTypeConfigurationState,
@@ -39,51 +35,31 @@ export function WorkTypeEditableConfigurationSection({
   state: Extract<EditableWorkTypeConfigurationState, { status: "ready" }>;
   workTypeName: string;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const sectionId = useId();
   const contentId = `${sectionId}-content`;
   const headingId = `${sectionId}-heading`;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      className="mt-0 grid gap-2.5 [&_h4]:m-0"
+    <CurrentSelectionExpandableSection
+      className="mt-0"
+      contentId={contentId}
+      defaultExpanded
+      headingId={headingId}
+      title={messages.editableConfigurationHeading}
+      toggleLabel={(expanded) =>
+        expanded
+          ? messages.editableConfigurationCollapseActionLabel
+          : messages.editableConfigurationExpandActionLabel
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            aria-label={
-              expanded
-                ? messages.editableConfigurationCollapseActionLabel
-                : messages.editableConfigurationExpandActionLabel
-            }
-            controlsID={contentId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? messages.collapseAction : messages.expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={headingId}
-        title={messages.editableConfigurationHeading}
+      <WorkTypeReadySection
+        messages={messages}
+        onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
+        saveState={saveState}
+        state={state}
+        workTypeName={workTypeName}
       />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={contentId}
-        >
-          <WorkTypeReadySection
-            messages={messages}
-            onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
-            saveState={saveState}
-            state={state}
-            workTypeName={workTypeName}
-          />
-        </div>
-      ) : null}
-    </section>
+    </CurrentSelectionExpandableSection>
   );
 }
 

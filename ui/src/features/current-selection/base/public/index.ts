@@ -3,16 +3,21 @@ export {
   useFactoryDocumentSave,
 } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 export * from "../components/current-selection-detail-layout";
+export * from "../components/current-selection-expandable-section";
 export {
   CurrentSelectionGraphDraftConflictNotifications,
   type CurrentSelectionGraphDraftConflictNotificationsProps,
 } from "../components/current-selection-graph-draft-conflict-notifications";
 export * from "../components/current-selection-header-actions";
+export * from "../components/current-selection-history-card";
 export * from "../components/current-selection-locale";
+export * from "../components/current-selection-pill";
 export {
   CurrentSelectionSaveNotifications,
   type CurrentSelectionSaveNotificationsProps,
 } from "../components/current-selection-save-notifications";
+export * from "../components/current-selection-section-header";
+export * from "../components/current-selection-selectable-button";
 export {
   DetailCardFactorySaveFeedback,
   type DetailCardFactorySaveFeedbackMessages,
@@ -26,6 +31,9 @@ export {
   EditableConfigurationSaveRow,
   type EditableConfigurationSaveRowProps,
 } from "../components/editable-configuration-save-row";
+export * from "../components/inference-attempt-detail";
+export * from "../components/inference-attempt-text-section";
+export * from "../components/metadata-section";
 export { NoSelectionDetailCard } from "../components/no-selection-detail-card";
 export * from "../hooks/detail-card-save-types";
 export type { FactoryDocumentSaveState } from "../hooks/factory-document-save-types";

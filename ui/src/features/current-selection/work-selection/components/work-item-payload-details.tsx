@@ -4,7 +4,7 @@ import { formatWorkItemLabel } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import { WorkContentReadOnlyList } from "../../../work-content/public";
 import { useCurrentSelectionDetailMessages } from "../../base/components/current-selection-locale";
-import { WORK_SELECTION_BUTTON_CLASS } from "../../base/components/detail-card-shared";
+import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 
 interface WorkItemPayloadMessages {
   consumedPayloadEmpty: string;
@@ -53,19 +53,17 @@ export function WorkItemPayloadList({
               key={workItem.work_id}
             >
               <div className="flex flex-wrap items-center gap-2">
-                <button
+                <CurrentSelectionSelectableButton
                   aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}
-                  aria-pressed={isSelected}
                   className={cn(
-                    WORK_SELECTION_BUTTON_CLASS,
                     isSelected &&
                       "border-primary bg-primary-container text-primary",
                   )}
                   onClick={() => onSelectWorkID?.(workItem.work_id)}
-                  type="button"
+                  selected={isSelected}
                 >
                   {workLabel}
-                </button>
+                </CurrentSelectionSelectableButton>
                 {workItem.state ? (
                   <span
                     className={cn(

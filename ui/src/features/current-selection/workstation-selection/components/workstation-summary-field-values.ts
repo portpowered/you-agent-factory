@@ -1,10 +1,9 @@
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
+import { WorkstationType } from "../../../../api/generated/openapi";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import type { WorkstationDetailCardProps } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { resolveWorkerBackedWorkstationSummaryRunnerValue } from "./workstation-runner-field";
-
-const LOGICAL_MOVE_TOPOLOGY_KIND = "LOGICAL_MOVE";
 
 export function resolveWorkstationSummaryRequiresWorkerAssignment(
   state: WorkstationDetailCardProps["editableConfigurationState"],
@@ -18,7 +17,7 @@ export function resolveWorkstationSummaryRequiresWorkerAssignment(
 
   if (
     selectedNode.workstation_kind?.trim().toUpperCase() ===
-    LOGICAL_MOVE_TOPOLOGY_KIND
+    WorkstationType.WorkstationTypeLogicalMove
   ) {
     return false;
   }

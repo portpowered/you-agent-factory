@@ -49,6 +49,66 @@ test("scanDashboardExpandDisclosure accepts ExpandablePanelTrigger ownership", a
   }
 });
 
+test("scanDashboardExpandDisclosure accepts StandardExpandableSection ownership", async () => {
+  const tempRoot = await createUiTree({
+    "src/features/terminal-work/components/terminal-work-card.tsx": `
+      import { StandardExpandableSection } from "../../standard-card-components/public";
+
+      export function TerminalWorkCard() {
+        return (
+          <StandardExpandableSection heading="Completed" toggleLabel={() => "Expand"}>
+            Content
+          </StandardExpandableSection>
+        );
+      }
+    `,
+  });
+
+  try {
+    await expect(
+      scanDashboardExpandDisclosure(tempRoot, [
+        {
+          owner: "expandable-panel-trigger",
+          relativeFilePath:
+            "src/features/terminal-work/components/terminal-work-card.tsx",
+        },
+      ]),
+    ).resolves.toEqual({ violations: [] });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("scanDashboardExpandDisclosure accepts CurrentSelectionExpandableSection ownership", async () => {
+  const tempRoot = await createUiTree({
+    "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx": `
+      import { CurrentSelectionExpandableSection } from "../../base/components/detail-card-shared";
+
+      export function WorkstationDetailCard() {
+        return (
+          <CurrentSelectionExpandableSection title="Requests" toggleLabel={() => "Expand"}>
+            Content
+          </CurrentSelectionExpandableSection>
+        );
+      }
+    `,
+  });
+
+  try {
+    await expect(
+      scanDashboardExpandDisclosure(tempRoot, [
+        {
+          owner: "expandable-panel-trigger",
+          relativeFilePath:
+            "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx",
+        },
+      ]),
+    ).resolves.toEqual({ violations: [] });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
 test("scanDashboardExpandDisclosure rejects raw aria-expanded buttons in guarded paths", async () => {
   const tempRoot = await createUiTree({
     "src/features/terminal-work/components/terminal-work-card.tsx": `

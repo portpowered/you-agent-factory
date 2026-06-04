@@ -1,5 +1,8 @@
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
-import type { components } from "../../../api/generated/openapi";
+import {
+  type components,
+  WorkstationKind,
+} from "../../../api/generated/openapi";
 import type { GraphSemanticIconKind } from "../components/graph-semantic-icon";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import {
@@ -10,11 +13,13 @@ import {
 export type ApiWorkstationKind = components["schemas"]["WorkstationKind"];
 
 export const STANDARD_WORKSTATION_KIND =
-  "STANDARD" satisfies ApiWorkstationKind;
+  WorkstationKind.WorkstationKindStandard satisfies ApiWorkstationKind;
 export const REPEATER_WORKSTATION_KIND =
-  "REPEATER" satisfies ApiWorkstationKind;
-export const CRON_WORKSTATION_KIND = "CRON" satisfies ApiWorkstationKind;
-export const POLLER_WORKSTATION_KIND = "POLLER" satisfies ApiWorkstationKind;
+  WorkstationKind.WorkstationKindRepeater satisfies ApiWorkstationKind;
+export const CRON_WORKSTATION_KIND =
+  WorkstationKind.WorkstationKindCron satisfies ApiWorkstationKind;
+export const POLLER_WORKSTATION_KIND =
+  WorkstationKind.WorkstationKindPoller satisfies ApiWorkstationKind;
 
 export const SUPPORTED_WORKSTATION_ICON_KINDS = [
   STANDARD_WORKSTATION_KIND,

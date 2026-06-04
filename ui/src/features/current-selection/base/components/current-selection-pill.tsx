@@ -1,0 +1,61 @@
+import { forwardRef, type HTMLAttributes } from "react";
+
+import {
+  DashboardStatusPill,
+  type DashboardStatusPillTone,
+} from "../../../../components/ui";
+import {
+  DASHBOARD_SUPPORTING_CODE_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "../../../../components/ui/dashboard-typography";
+import { cn } from "../../../../lib/cn";
+
+interface CurrentSelectionPillBaseProps
+  extends Omit<
+    HTMLAttributes<HTMLSpanElement>,
+    "onClick" | "onKeyDown" | "onKeyUp" | "tabIndex"
+  > {
+  tone?: DashboardStatusPillTone;
+}
+
+export const CurrentSelectionExecutionPill = forwardRef<
+  HTMLSpanElement,
+  CurrentSelectionPillBaseProps
+>(function CurrentSelectionExecutionPill(
+  { className, tone = "info", ...props },
+  ref,
+) {
+  return (
+    <DashboardStatusPill
+      className={cn(
+        "min-h-0 px-2 py-0.5",
+        DASHBOARD_SUPPORTING_CODE_CLASS,
+        className,
+      )}
+      ref={ref}
+      tone={tone}
+      {...props}
+    />
+  );
+});
+
+export const CurrentSelectionBadge = forwardRef<
+  HTMLSpanElement,
+  CurrentSelectionPillBaseProps
+>(function CurrentSelectionBadge(
+  { className, tone = "active", ...props },
+  ref,
+) {
+  return (
+    <DashboardStatusPill
+      className={cn(
+        "min-h-0 px-2 py-0.5",
+        DASHBOARD_SUPPORTING_TEXT_CLASS,
+        className,
+      )}
+      ref={ref}
+      tone={tone}
+      {...props}
+    />
+  );
+});

@@ -51,7 +51,7 @@ export function buildWorkChartData(
   const seriesByKey = new Map(
     model.series.map((definition) => [definition.key, definition.points]),
   );
-  const rows = model.points.map((point, index) => {
+  const rows = model.points.map((point) => {
     const row: WorkChartRow = {
       label: point.label,
       tick: point.tick,
@@ -60,7 +60,7 @@ export function buildWorkChartData(
     for (const definition of series) {
       const value = seriesByKey
         .get(definition.key)
-        ?.find((seriesPoint) => seriesPoint.order === index)?.value;
+        ?.find((seriesPoint) => seriesPoint.order === point.order)?.value;
       if (value !== undefined) {
         row[definition.key] = value;
       }

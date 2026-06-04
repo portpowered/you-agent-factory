@@ -2,18 +2,18 @@ import type { DashboardWorkMoveOperation } from "../../../../api/dashboard/types
 import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
+import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
 import {
-  CURRENT_SELECTION_BADGE_CLASS,
-  EXECUTION_PILL_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
-  PROVIDER_SESSION_CARD_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionBadge,
+  CurrentSelectionExecutionPill,
+} from "../../base/components/current-selection-pill";
+import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
+import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
 import {
   requestOutcome,
   requestStartedAt,
@@ -22,29 +22,11 @@ import {
 import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
 
 function OperationKindBadge({ label }: { label: string }) {
-  return (
-    <span
-      className={cn(
-        CURRENT_SELECTION_BADGE_CLASS,
-        "border-info-border bg-info-container text-info",
-      )}
-    >
-      {label}
-    </span>
-  );
+  return <CurrentSelectionBadge tone="info">{label}</CurrentSelectionBadge>;
 }
 
 export function WorkstationOperationKindBadge({ label }: { label: string }) {
-  return (
-    <span
-      className={cn(
-        CURRENT_SELECTION_BADGE_CLASS,
-        "border-outline bg-surface-container-high text-on-surface-variant",
-      )}
-    >
-      {label}
-    </span>
-  );
+  return <CurrentSelectionBadge tone="neutral">{label}</CurrentSelectionBadge>;
 }
 
 function formatMoveOccurredAt(
@@ -76,9 +58,8 @@ export function OperatorMoveHistoryCard({
   );
 
   return (
-    <article
+    <CurrentSelectionHistoryCard
       aria-label={messages.operatorMoveRowAccessibleLabel(transition)}
-      className={PROVIDER_SESSION_CARD_CLASS}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
@@ -106,7 +87,7 @@ export function OperatorMoveHistoryCard({
           )}
         />
       </dl>
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }
 
@@ -127,16 +108,12 @@ export function LogicalMoveDispatchHistoryCard({
   const isCurrentDispatch = currentDispatchID === request.dispatch_id;
 
   return (
-    <article
+    <CurrentSelectionHistoryCard
       aria-label={messages.logicalMoveDispatchRowAccessibleLabel(
         request.workstation_name,
         request.dispatch_id,
       )}
-      className={cn(
-        PROVIDER_SESSION_CARD_CLASS,
-        isCurrentDispatch &&
-          "text-on-surface",
-      )}
+      className={isCurrentDispatch ? "text-on-surface" : undefined}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
@@ -156,15 +133,15 @@ export function LogicalMoveDispatchHistoryCard({
             </p>
             <OperationKindBadge label={messages.moveOperationKindBadge} />
             {isCurrentDispatch ? (
-              <span className={CURRENT_SELECTION_BADGE_CLASS}>
+              <CurrentSelectionBadge>
                 {messages.currentDispatchBadge}
-              </span>
+              </CurrentSelectionBadge>
             ) : null}
           </div>
         </div>
-        <span className={EXECUTION_PILL_CLASS}>
+        <CurrentSelectionExecutionPill>
           {request.dispatch_id || messages.unknownDispatchId}
-        </span>
+        </CurrentSelectionExecutionPill>
       </div>
       <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
         <InferenceAttemptDetail
@@ -180,6 +157,6 @@ export function LogicalMoveDispatchHistoryCard({
           )}
         />
       </dl>
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }

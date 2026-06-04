@@ -277,11 +277,11 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(firstCompletedRegion?.id).not.toBe(secondCompletedRegion?.id);
 
     const firstCompletedHeading = screen.getAllByRole("heading", {
-      level: 4,
+      level: 5,
       name: messages.rowTitle("completed"),
     })[0];
     const secondCompletedHeading = screen.getAllByRole("heading", {
-      level: 4,
+      level: 5,
       name: messages.rowTitle("completed"),
     })[1];
     expect(firstCompletedHeading?.id).toBe(

@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
 import type { DashboardProviderSession } from "../../../../api/dashboard/types";
 
-import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
@@ -15,17 +13,18 @@ import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "../../../provider-session-detail/lib/provider-session-ref";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
+import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
 import {
+  CurrentSelectionBadge,
+  CurrentSelectionExecutionPill,
+} from "../../base/components/current-selection-pill";
+import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
+import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
+import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  CURRENT_SELECTION_BADGE_CLASS,
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-  CurrentSelectionSectionHeader,
-  EXECUTION_PILL_CLASS,
-  PROVIDER_SESSION_CARD_CLASS,
-  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
-  WORK_SELECTION_BUTTON_CLASS,
 } from "../../base/components/detail-card-shared";
 import type {
   CollapsibleProviderSessionAttemptsProps,
@@ -94,7 +93,6 @@ export function CollapsibleProviderSessionAttempts({
   workstationKind,
   workstationRequestsByDispatchID,
 }: CollapsibleProviderSessionAttemptsProps) {
-  const [expanded, setExpanded] = useState(false);
   const historyID = `workstation-run-history-${resetKey}`;
   const itemCountLabel = historyItemCountLabel
     ? historyItemCountLabel(attempts.length)
@@ -104,54 +102,33 @@ export function CollapsibleProviderSessionAttempts({
   const resolvedExpandActionLabel = expandActionLabel ?? messages.expandAction;
   const resolvedTitle = title ?? messages.runHistoryHeading;
 
-  useEffect(() => {
-    setExpanded(false);
-  }, []);
-
   return (
-    <section
-      aria-labelledby={`${historyID}-heading`}
-      className="mt-4 grid gap-2.5"
+    <CurrentSelectionExpandableSection
+      contentId={historyID}
+      headingId={`${historyID}-heading`}
+      resetKey={resetKey}
+      supportingText={itemCountLabel}
+      title={resolvedTitle}
+      toggleLabel={(expanded) =>
+        expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            controlsID={historyID}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel}
-          </ExpandablePanelTrigger>
-        }
-        headingId={`${historyID}-heading`}
-        supportingText={itemCountLabel}
-        title={resolvedTitle}
+      <ProviderSessionAttemptList
+        attempts={attempts}
+        currentDispatchID={currentDispatchID}
+        emptyMessage={emptyMessage}
+        messages={messages}
+        onSelectProviderSession={onSelectProviderSession}
+        onSelectWorkID={onSelectWorkID}
+        onSelectWorkstationRequest={onSelectWorkstationRequest}
+        renderHeading={renderHeading}
+        selectedProviderSessionKey={selectedProviderSessionKey}
+        selectedRequestDispatchID={selectedRequestDispatchID}
+        selectedWorkID={selectedWorkID}
+        workstationKind={workstationKind}
+        workstationRequestsByDispatchID={workstationRequestsByDispatchID}
       />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={historyID}
-        >
-          <ProviderSessionAttemptList
-            attempts={attempts}
-            currentDispatchID={currentDispatchID}
-            emptyMessage={emptyMessage}
-            messages={messages}
-            onSelectProviderSession={onSelectProviderSession}
-            onSelectWorkID={onSelectWorkID}
-            onSelectWorkstationRequest={onSelectWorkstationRequest}
-            renderHeading={renderHeading}
-            selectedProviderSessionKey={selectedProviderSessionKey}
-            selectedRequestDispatchID={selectedRequestDispatchID}
-            selectedWorkID={selectedWorkID}
-            workstationKind={workstationKind}
-            workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-          />
-        </div>
-      ) : null}
-    </section>
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -247,18 +224,20 @@ function ProviderSessionAttemptList({
           selectedRequestDispatchID === attempt.dispatch_id;
 
         return (
-          <article
-            className={cn(
-              PROVIDER_SESSION_CARD_CLASS,
-              isCurrentDispatch && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-            )}
+          <CurrentSelectionHistoryCard
+            className={
+              isCurrentDispatch
+                ? CURRENT_SELECTION_ACCENT_SURFACE_CLASS
+                : undefined
+            }
+            highlighted={isCurrentDispatch}
             key={`${attempt.dispatch_id}-${attempt.provider_session?.id}`}
           >
             <div className="flex items-start justify-between gap-3">
               <strong>{renderHeading(attempt)}</strong>
-              <span className={EXECUTION_PILL_CLASS}>
+              <CurrentSelectionExecutionPill>
                 {attempt.dispatch_id}
-              </span>
+              </CurrentSelectionExecutionPill>
             </div>
             <div className="mt-2 grid gap-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -271,9 +250,9 @@ function ProviderSessionAttemptList({
                   {outcome.label}
                 </p>
                 {isCurrentDispatch ? (
-                  <span className={CURRENT_SELECTION_BADGE_CLASS}>
+                  <CurrentSelectionBadge>
                     {messages.currentDispatchLabel}
-                  </span>
+                  </CurrentSelectionBadge>
                 ) : null}
               </div>
               {outcome.rawOutcomeLabel ? (
@@ -283,20 +262,19 @@ function ProviderSessionAttemptList({
               ) : null}
             </div>
             {loadableProviderSession && onSelectProviderSession ? (
-              <button
+              <CurrentSelectionSelectableButton
                 aria-label={messages.selectProviderSessionLabel(
                   providerSessionLabel,
                   attempt.dispatch_id,
                 )}
-                aria-pressed={providerSessionSelected}
                 className={cn(
                   "mt-2",
-                  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
                   providerSessionSelected &&
                     CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
                 )}
                 onClick={() => onSelectProviderSession(loadableProviderSession)}
-                type="button"
+                selected={providerSessionSelected}
+                variant="card"
               >
                 <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
                   {providerSessionSelected
@@ -306,7 +284,7 @@ function ProviderSessionAttemptList({
                 <code className={DASHBOARD_BODY_CODE_CLASS}>
                   {providerSessionLabel}
                 </code>
-              </button>
+              </CurrentSelectionSelectableButton>
             ) : (
               <div className="mt-2 grid gap-1">
                 <code className={DASHBOARD_BODY_CODE_CLASS}>
@@ -331,22 +309,20 @@ function ProviderSessionAttemptList({
                     const selected = selectedWorkID === workItem.work_id;
 
                     return (
-                      <button
+                      <CurrentSelectionSelectableButton
                         aria-label={messages.selectWorkItemLabel(
                           workItem.display_name || workItem.work_id,
                         )}
-                        aria-pressed={selected}
-                        className={WORK_SELECTION_BUTTON_CLASS}
                         key={`${attempt.dispatch_id}-${workItem.work_id}`}
                         onClick={() => onSelectWorkID(workItem.work_id)}
-                        type="button"
+                        selected={selected}
                       >
                         {selected
                           ? messages.workSelectedAction
                           : messages.openNamedWorkItemAction(
                               workItem.display_name || workItem.work_id,
                             )}
-                      </button>
+                      </CurrentSelectionSelectableButton>
                     );
                   })
                 ) : null
@@ -357,19 +333,17 @@ function ProviderSessionAttemptList({
               )}
               {onSelectWorkstationRequest ? (
                 request ? (
-                  <button
+                  <CurrentSelectionSelectableButton
                     aria-label={messages.selectWorkstationRequestLabel(
                       request.dispatch_id,
                     )}
-                    aria-pressed={requestSelected}
-                    className={WORK_SELECTION_BUTTON_CLASS}
                     onClick={() => onSelectWorkstationRequest(request)}
-                    type="button"
+                    selected={requestSelected}
                   >
                     {requestSelected
                       ? messages.requestSelectedAction
                       : messages.openRequestDetailsAction}
-                  </button>
+                  </CurrentSelectionSelectableButton>
                 ) : (
                   <p className={REQUEST_SELECTION_STATUS_CLASS}>
                     {messages.requestDetailsUnavailable(attempt.dispatch_id)}
@@ -377,7 +351,7 @@ function ProviderSessionAttemptList({
                 )
               ) : null}
             </div>
-          </article>
+          </CurrentSelectionHistoryCard>
         );
       })}
     </div>

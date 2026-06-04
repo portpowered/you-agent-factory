@@ -1,9 +1,15 @@
 /**
  * Production files that migrated to shared dashboard inline expand controls.
- * The guard keeps disclosure ownership on ExpandablePanelTrigger (or the
- * ExpandablePanelIcon shell exception for workflow-activity legend chrome).
+ * The guard keeps disclosure ownership on ExpandablePanelTrigger, the
+ * StandardExpandableSection / CurrentSelectionExpandableSection wrappers, or
+ * the ExpandablePanelIcon shell exception for workflow-activity legend chrome.
  */
 export const dashboardExpandDisclosureGuardPaths = [
+  {
+    owner: "expandable-panel-trigger",
+    relativeFilePath:
+      "src/features/standard-card-components/components/standard-expandable-section.tsx",
+  },
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:

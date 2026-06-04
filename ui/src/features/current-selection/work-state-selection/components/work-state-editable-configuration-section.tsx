@@ -1,18 +1,16 @@
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
 
-import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
   CURRENT_SELECTION_FORM_FIELD_CLASS,
   CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
-  CurrentSelectionSectionHeader,
 } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkStateConfigurationState,
@@ -31,82 +29,61 @@ export function WorkStateEditableConfigurationSection({
   saveState?: EditableWorkStateSaveState;
   state?: EditableWorkStateConfigurationState;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const sectionId = useId();
   const contentId = `${sectionId}-content`;
   const headingId = `${sectionId}-heading`;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    <CurrentSelectionExpandableSection
+      contentId={contentId}
+      defaultExpanded
+      headingId={headingId}
+      title={messages.editableConfigurationHeading}
+      toggleLabel={(expanded) =>
+        expanded
+          ? messages.editableConfigurationCollapseActionLabel
+          : messages.editableConfigurationExpandActionLabel
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            aria-label={
-              expanded
-                ? messages.editableConfigurationCollapseActionLabel
-                : messages.editableConfigurationExpandActionLabel
-            }
-            controlsID={contentId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? messages.collapseAction : messages.expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={headingId}
-        title={messages.editableConfigurationHeading}
-      />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={contentId}
+      {state?.status === "loading" ? (
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
         >
-          {state?.status === "loading" ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
-              {messages.editableConfigurationLoading}
-            </p>
-          ) : null}
-          {state?.status === "error" ? (
-            <p
-              className={cn(
-                "m-0 text-on-error-container",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-              role="alert"
-            >
-              {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-            </p>
-          ) : null}
-          {state?.status === "empty" ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
-              {state.message || messages.editableConfigurationEmpty}
-            </p>
-          ) : null}
-          {state?.status === "ready" ? (
-            <WorkStateEditableConfigurationReadyForm
-              messages={messages}
-              saveState={saveState}
-              state={state}
-            />
-          ) : null}
-        </div>
+          {messages.editableConfigurationLoading}
+        </p>
       ) : null}
-    </section>
+      {state?.status === "error" ? (
+        <p
+          className={cn(
+            "m-0 text-on-error-container",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+          role="alert"
+        >
+          {messages.editableConfigurationErrorPrefix} {state.errorMessage}
+        </p>
+      ) : null}
+      {state?.status === "empty" ? (
+        <p
+          className={cn(
+            "m-0 text-on-surface-variant",
+            DASHBOARD_BODY_TEXT_CLASS,
+          )}
+        >
+          {state.message || messages.editableConfigurationEmpty}
+        </p>
+      ) : null}
+      {state?.status === "ready" ? (
+        <WorkStateEditableConfigurationReadyForm
+          messages={messages}
+          saveState={saveState}
+          state={state}
+        />
+      ) : null}
+    </CurrentSelectionExpandableSection>
   );
 }
 

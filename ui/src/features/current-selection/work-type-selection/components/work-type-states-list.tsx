@@ -6,10 +6,8 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import type { EditableWorkTypeValues } from "../../../current-factory-definition/lib/work-type-editable-values";
-import {
-  CurrentSelectionSectionHeader,
-  WORKSTATION_SUMMARY_ITEM_CLASS,
-} from "../../base/components/detail-card-shared";
+import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
+import { WORKSTATION_SUMMARY_ITEM_CLASS } from "../../base/components/detail-card-shared";
 import { workStateGraphNodeId } from "../lib/work-state-graph-node-id";
 import type { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 

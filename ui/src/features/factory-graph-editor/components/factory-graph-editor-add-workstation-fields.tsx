@@ -1,4 +1,8 @@
 import {
+  WorkstationKind,
+  WorkstationType,
+} from "../../../api/generated/openapi";
+import {
   type EditableWorkstationBehavior,
   workstationBehaviorRequiresPrompt,
 } from "../../current-factory-definition/lib/workstation-behavior";
@@ -25,8 +29,8 @@ import {
 } from "./factory-graph-editor-add-dialog-fields";
 
 const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
-  "MODEL_WORKSTATION",
-  "LOGICAL_MOVE",
+  WorkstationType.WorkstationTypeModelWorkstation,
+  WorkstationType.WorkstationTypeLogicalMove,
 ] as const satisfies readonly EditableWorkstationType[];
 
 export function FactoryGraphEditorAddWorkstationFields({
@@ -101,7 +105,7 @@ export function FactoryGraphEditorAddWorkstationFields({
         }))}
         value={draft.behavior}
       />
-      {draft.behavior === "CRON" && draft.cron ? (
+      {draft.behavior === WorkstationKind.WorkstationKindCron && draft.cron ? (
         <FactoryGraphEditorAddWorkstationCronFields
           cron={draft.cron}
           errors={errors}

@@ -1,33 +1,12 @@
-import type { ReactNode } from "react";
 import type { DashboardPlaceRef } from "../../../../api/dashboard/types";
 import {
   DASHBOARD_BODY_CODE_CLASS,
   DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 } from "../../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import {
-  AuthoredBodyText,
-  REQUEST_AUTHORED_TEXT_CLASS,
-  RequestAuthoredText,
-} from "../../../../lib/authored-body-text";
 import { cn } from "../../../../lib/cn";
 import type { CurrentSelectionDetailMessages } from "../messages/current-selection-detail";
-import type {
-  InferenceAttemptDetailProps,
-  InferenceAttemptTextSectionProps,
-  MetadataSectionProps,
-} from "./detail-card-types";
 
-export const EXECUTION_PILL_CLASS = cn(
-  "inline-flex rounded-full border border-info-border bg-info-container px-2 py-0.5 text-info",
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-);
-export const PROVIDER_SESSION_CARD_CLASS =
-  "";
 /** Outer shell for expanded current-selection configuration and history panels. */
 export const CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS =
   "grid gap-3 rounded-2xl border border-outline bg-surface-container-high p-3";
@@ -55,11 +34,6 @@ export const HISTORY_HEADER_CLASS =
   "flex items-center justify-between gap-3 rounded-lg border border-outline bg-surface-container-high px-3 py-2 [&_h4]:m-0";
 export const CURRENT_SELECTION_ACCENT_SURFACE_CLASS =
   "border-primary text-on-surface";
-export const CURRENT_SELECTION_BADGE_CLASS = cn(
-  "inline-flex rounded-full border px-2 py-0.5",
-  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
 export const WORKSTATION_SUMMARY_ITEM_CLASS =
   "grid min-w-0 gap-1 rounded-lg border border-outline bg-surface-container-high px-3 py-2";
 export const INFERENCE_ATTEMPT_CARD_CLASS =
@@ -72,7 +46,6 @@ export const INFERENCE_ATTEMPT_DETAIL_CLASS = cn(
 export const INFERENCE_ATTEMPT_TEXT_CLASS = cn(
   "min-h-[20rem] md:min-h-[26rem] lg:min-h-[min(70vh,36rem)]",
 );
-export { AuthoredBodyText, REQUEST_AUTHORED_TEXT_CLASS, RequestAuthoredText };
 export const RUNTIME_DETAILS_SECTION_CLASS =
   "mt-4 grid gap-3 border-t border-outline pt-4 [&_h4]:m-0";
 export const RUNTIME_DETAIL_VALUE_CLASS = "min-w-0 [overflow-wrap:anywhere]";
@@ -86,120 +59,10 @@ export const REQUEST_SELECTION_STATUS_CLASS = cn(
   "m-0 text-on-surface-subtle",
   DASHBOARD_SUPPORTING_TEXT_CLASS,
 );
-export const PROVIDER_SESSION_SELECTION_BUTTON_CLASS = cn(
-  "grid w-full gap-1.5 rounded-lg border border-outline bg-surface-container-high px-3 py-2.5 text-left text-on-surface-variant outline-af-accent transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled",
-  DASHBOARD_BODY_TEXT_CLASS,
-);
-export const WORK_SELECTION_BUTTON_CLASS =
-  "inline-flex w-fit rounded-lg border border-outline bg-surface-container-high px-2.5 py-2 text-xs font-bold text-on-surface-variant outline-af-accent transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled";
 export const REQUEST_HISTORY_TEXT_CLASS = cn(
   "m-0 whitespace-pre-wrap rounded-lg border border-outline bg-surface-container-high p-2 [overflow-wrap:anywhere]",
   DASHBOARD_BODY_CODE_CLASS,
 );
-
-export function CurrentSelectionSectionHeader({
-  action,
-  headingId,
-  supportingText,
-  title,
-}: {
-  action?: ReactNode;
-  headingId: string;
-  supportingText?: ReactNode;
-  title: string;
-}) {
-  return (
-    <div className={HISTORY_HEADER_CLASS}>
-      <div className="grid min-w-0 gap-1">
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
-          {title}
-        </h4>
-        {supportingText ? (
-          <p
-            className={cn(
-              "m-0 text-on-surface-subtle",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
-            {supportingText}
-          </p>
-        ) : null}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-export function InferenceAttemptTextSection({
-  label,
-  value,
-}: InferenceAttemptTextSectionProps) {
-  return (
-    <section aria-label={label} className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <AuthoredBodyText
-        className={INFERENCE_ATTEMPT_TEXT_CLASS}
-        value={value}
-      />
-    </section>
-  );
-}
-
-export function InferenceAttemptDetail({
-  code = false,
-  label,
-  rawValue,
-  value,
-}: InferenceAttemptDetailProps) {
-  if (value === undefined || value === "") {
-    return null;
-  }
-
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-        {code ? (
-          <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
-        ) : rawValue ? (
-          <span title={rawValue}>{value}</span>
-        ) : (
-          value
-        )}
-      </dd>
-    </div>
-  );
-}
-
-export function MetadataSection({
-  emptyMessage,
-  metadata,
-  title,
-}: MetadataSectionProps) {
-  const entries = Object.entries(metadata ?? {}).sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
-
-  return (
-    <section aria-label={title} className={RUNTIME_DETAILS_SECTION_CLASS}>
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>{title}</h4>
-      {entries.length > 0 ? (
-        <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-          {entries.map(([key, value]) => (
-            <div key={key}>
-              <dt>{key}</dt>
-              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      ) : (
-        <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>
-      )}
-    </section>
-  );
-}
 
 export function isTerminalOrFailedPlace(place: DashboardPlaceRef): boolean {
   return (

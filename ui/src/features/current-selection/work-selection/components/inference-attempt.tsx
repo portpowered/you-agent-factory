@@ -17,25 +17,25 @@ import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "../../../provider-session-detail/lib/provider-session-ref";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionWorkstationDetailMessages,
 } from "../../base/components/current-selection-locale";
+import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
+import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import {
   CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  CurrentSelectionSectionHeader,
-  EXECUTION_PILL_CLASS,
   HISTORY_HEADER_CLASS,
   INFERENCE_ATTEMPT_CARD_CLASS,
   INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
-  InferenceAttemptTextSection,
   normalizeDetailText,
-  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
   REQUEST_SELECTION_STATUS_CLASS,
 } from "../../base/components/detail-card-shared";
+import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
+import { InferenceAttemptTextSection } from "../../base/components/inference-attempt-text-section";
 import type { InferenceAttemptCardProps } from "../lib/detail-card-types";
 
 export function InferenceAttemptCard({
@@ -109,17 +109,22 @@ function AttemptSummaryHeader({
           <strong id={headingId}>
             {detailMessages.attemptTitle(attempt.attempt)}
           </strong>
-          <span className={EXECUTION_PILL_CLASS}>
+          <CurrentSelectionExecutionPill>
             {attempt.outcome
               ? enumMessages.localizeOutcome(attempt.outcome)
               : enumMessages.localizeOutcome("PENDING")}
-          </span>
+          </CurrentSelectionExecutionPill>
         </div>
         {timingSummary ? (
           <p className={REQUEST_SELECTION_STATUS_CLASS}>{timingSummary}</p>
         ) : null}
       </div>
       <ExpandablePanelTrigger
+        aria-label={
+          expanded
+            ? detailMessages.collapseAttemptAction(attempt.attempt)
+            : detailMessages.expandAttemptAction(attempt.attempt)
+        }
         controlsID={panelId}
         expanded={expanded}
         onClick={onToggle}
@@ -175,7 +180,6 @@ function AttemptTextBodyDisclosure({
   label: string;
   value?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const panelId = useId();
   const labelId = `${panelId}-label`;
 
@@ -184,28 +188,15 @@ function AttemptTextBodyDisclosure({
   }
 
   return (
-    <div className="grid gap-1.5">
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            controlsID={panelId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? collapseAction : expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={labelId}
-        title={label}
-      />
-      {expanded ? (
-        <div id={panelId}>
-          <InferenceAttemptTextSection label={label} value={value} />
-        </div>
-      ) : null}
-    </div>
+    <CurrentSelectionExpandableSection
+      className="mt-0"
+      contentId={panelId}
+      headingId={labelId}
+      title={label}
+      toggleLabel={(expanded) => (expanded ? collapseAction : expandAction)}
+    >
+      <InferenceAttemptTextSection label={label} value={value} />
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -327,19 +318,18 @@ function AttemptProviderSessionDetails({
     return (
       <div className="grid gap-1">
         <span>{detailMessages.providerSessionLabel}</span>
-        <button
+        <CurrentSelectionSelectableButton
           aria-label={workstationMessages.selectProviderSessionLabel(
             state.providerSessionLabel,
             attempt.dispatch_id,
           )}
-          aria-pressed={state.providerSessionSelected}
           className={cn(
-            PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
             state.providerSessionSelected &&
               CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
           )}
           onClick={() => onSelectProviderSession(loadableProviderSession)}
-          type="button"
+          selected={state.providerSessionSelected}
+          variant="card"
         >
           <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
             {state.providerSessionSelected
@@ -349,7 +339,7 @@ function AttemptProviderSessionDetails({
           <code className={DASHBOARD_BODY_CODE_CLASS}>
             {state.providerSessionLabel}
           </code>
-        </button>
+        </CurrentSelectionSelectableButton>
       </div>
     );
   }

@@ -9,11 +9,11 @@ import {
 } from "../../base/components/current-selection-locale";
 import {
   INFERENCE_ATTEMPT_DETAIL_CLASS,
-  MetadataSection,
   RUNTIME_DETAIL_CODE_CLASS,
   RUNTIME_DETAIL_VALUE_CLASS,
   RUNTIME_DETAILS_SECTION_CLASS,
 } from "../../base/components/detail-card-shared";
+import { MetadataSection } from "../../base/components/metadata-section";
 import { getRunnerDisplayName } from "../../editing/runner-metadata";
 import {
   InferenceAttemptsSection,

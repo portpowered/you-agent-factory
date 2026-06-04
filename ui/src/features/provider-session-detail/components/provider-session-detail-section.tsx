@@ -1,12 +1,11 @@
-import { type ReactNode, useId, useState } from "react";
+import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABEL_CLASS,
 } from "../../../components/ui/dashboard-typography";
-import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { cn } from "../../../lib/cn";
+import { StandardExpandableSection } from "../../standard-card-components/public";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
 type SessionDetail = ProviderSessionDetailResponse;
@@ -23,32 +22,18 @@ export function ProviderSessionExpandableSection({
   locale?: string;
   preview: ReactNode;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const contentID = useId();
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-3 py-1.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0">
-          <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{heading}</h5>
-        </div>
-        <ExpandablePanelTrigger
-          aria-label={messages.transcriptToggleLabel({
-            expanded,
-            section: heading,
-          })}
-          className="mt-0.5 h-10 min-h-0 w-10 rounded-lg"
-          controlsID={contentID}
-          expanded={expanded}
-          onClick={() => setExpanded((current) => !current)}
-          variant="outline"
-        />
-      </div>
-      <div className="grid gap-5" id={contentID}>
-        {expanded ? children : preview}
-      </div>
-    </section>
+    <StandardExpandableSection
+      heading={heading}
+      preview={preview}
+      toggleLabel={({ expanded, section }) =>
+        messages.transcriptToggleLabel({ expanded, section })
+      }
+    >
+      {children}
+    </StandardExpandableSection>
   );
 }
 

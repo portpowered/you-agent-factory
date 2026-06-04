@@ -5,10 +5,10 @@ import {
 } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
+import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import {
   CURRENT_SELECTION_ALERT_PANEL_CLASS,
   CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
-  WORK_SELECTION_BUTTON_CLASS,
 } from "../../base/components/detail-card-shared";
 import type {
   SelectedWorkRelationshipEdge,
@@ -352,16 +352,15 @@ function RelationshipNodeCard({
         ) : null}
       </div>
       {node && onSelectWorkID && !isSelected ? (
-        <button
+        <CurrentSelectionSelectableButton
           aria-label={messages.relatedWorkSelectLabel(label)}
-          className={cn(WORK_SELECTION_BUTTON_CLASS, "w-full justify-start")}
+          className="w-full justify-start"
           onClick={() => onSelectWorkID(node.workID)}
-          type="button"
         >
           <span className="min-w-0 break-words text-left leading-5">
             {label}
           </span>
-        </button>
+        </CurrentSelectionSelectableButton>
       ) : (
         <code className="min-w-0 break-words text-sm leading-5 text-on-surface">
           {label}
