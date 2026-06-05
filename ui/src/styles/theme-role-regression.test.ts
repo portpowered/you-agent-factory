@@ -68,7 +68,9 @@ describe("theme role migration regression (US-010)", () => {
   });
 
   it("exposes role-backed product af-* tokens through the compiled theme bundle", () => {
-    applyDocumentColorPalette(COLOR_PALETTE_IDS[0]!);
+    const [firstPaletteId] = COLOR_PALETTE_IDS;
+    expect(firstPaletteId).toBeTruthy();
+    applyDocumentColorPalette(firstPaletteId ?? "");
 
     expect(readCssVariable("--color-af-text")).toBe(
       readCssVariable("--color-on-surface"),
