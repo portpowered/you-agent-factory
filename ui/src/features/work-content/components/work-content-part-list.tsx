@@ -1,5 +1,5 @@
 import type { components } from "../../../api/generated/openapi";
-import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
+import { DashboardText, SurfacePanel } from "../../../components/ui";
 import {
   AuthoredBodyText,
   REQUEST_AUTHORED_TEXT_CLASS,
@@ -47,14 +47,10 @@ function renderWorkContentPart(part: WorkContentPart, index: number) {
   }
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-outline bg-surface-container-high p-3 text-on-surface-variant",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
-      key={`work-content-part-${index}`}
-    >
+    <SurfacePanel asChild key={`work-content-part-${index}`} radius="lg">
+      <DashboardText className="text-on-surface-variant" variant="supporting">
       {describeWorkContentPart(part)}
-    </div>
+      </DashboardText>
+    </SurfacePanel>
   );
 }

@@ -50,8 +50,32 @@ describe("TranscriptSection", () => {
     expect(screen.getAllByText("Encrypted Reasoning").length).toBeGreaterThan(
       0,
     );
+    expect(
+      screen
+        .getAllByText("Encrypted Reasoning")
+        .some((element) => element.className.includes("bg-info-container")),
+    ).toBe(true);
     expect(screen.getByText("sealed-chatgpt-reasoning-blob")).toBeTruthy();
     expect(screen.queryByText("Encrypted reasoning content only.")).toBeNull();
+  });
+
+  it("renders transcript entry statuses through compact status pills", () => {
+    render(
+      <TranscriptSection
+        detail={buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              order: 1,
+              status: "completed",
+              text: "Done",
+              type: "assistant_message",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("completed").className).toContain("min-h-6");
   });
 });
 

@@ -1,13 +1,12 @@
-import { Button } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  Button,
+  DashboardLabel,
+  DashboardText,
+  surfacePanelVariants,
+} from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { EditableWorkTypeValues } from "../../../current-factory-definition/lib/work-type-editable-values";
 import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
-import { WORKSTATION_SUMMARY_ITEM_CLASS } from "../../base/components/detail-card-shared";
 import { workStateGraphNodeId } from "../lib/work-state-graph-node-id";
 import type { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 
@@ -21,30 +20,27 @@ function WorkTypeStateRowContent({
   return (
     <div className="grid min-w-0 gap-1">
       <div className="grid min-w-0 gap-1">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+        <DashboardLabel>
           {messages.stateNameColumnLabel}
-        </span>
-        <span
-          className={cn(
-            "min-w-0 [overflow-wrap:anywhere]",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
+        </DashboardLabel>
+        <DashboardText
+          as="span"
+          className="min-w-0 [overflow-wrap:anywhere]"
         >
           {state.name}
-        </span>
+        </DashboardText>
       </div>
       <div className="grid min-w-0 gap-1">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+        <DashboardLabel>
           {messages.stateTypeColumnLabel}
-        </span>
-        <span
-          className={cn(
-            "min-w-0 [overflow-wrap:anywhere]",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
+        </DashboardLabel>
+        <DashboardText
+          as="span"
+          className="min-w-0 [overflow-wrap:anywhere]"
+          variant="supporting"
         >
           {messages.localizeWorkStateType(state.type)}
-        </span>
+        </DashboardText>
       </div>
     </div>
   );
@@ -70,14 +66,9 @@ export function WorkTypeStatesList({
         title={messages.statesHeading}
       />
       {states == null || states.length === 0 ? (
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <DashboardText className="m-0 text-on-surface-variant">
           {messages.statesEmpty}
-        </p>
+        </DashboardText>
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {states.map((state) => {
@@ -91,7 +82,10 @@ export function WorkTypeStatesList({
                       state.name,
                     )}
                     className={cn(
-                      WORKSTATION_SUMMARY_ITEM_CLASS,
+                      surfacePanelVariants({
+                        className: "grid min-w-0 gap-1 px-3 py-2",
+                        radius: "lg",
+                      }),
                       "h-auto min-h-0 w-full justify-start rounded-lg px-3 py-2 font-normal shadow-none",
                       "border-outline bg-surface-container-high text-left hover:border-outline-variant hover:bg-af-overlay",
                     )}
@@ -105,7 +99,12 @@ export function WorkTypeStatesList({
                     />
                   </Button>
                 ) : (
-                  <div className={WORKSTATION_SUMMARY_ITEM_CLASS}>
+                  <div
+                    className={surfacePanelVariants({
+                      className: "grid min-w-0 gap-1 px-3 py-2",
+                      radius: "lg",
+                    })}
+                  >
                     <WorkTypeStateRowContent
                       messages={messages}
                       state={state}

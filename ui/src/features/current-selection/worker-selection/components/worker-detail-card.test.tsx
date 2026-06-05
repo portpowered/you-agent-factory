@@ -2,13 +2,14 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
-import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
 } from "../lib/detail-card-types";
 import { WorkerDetailCard } from "./worker-detail-card";
 import { EditableWorkerConfigurationHeaderActions } from "./worker-save-controls";
+
+const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -608,7 +609,7 @@ describe("WorkerDetailCard", () => {
     );
 
     const fieldGroup = container.querySelector(
-      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+      CURRENT_SELECTION_FORM_FIELDS_SELECTOR,
     );
     expect(fieldGroup).not.toBeNull();
     expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);

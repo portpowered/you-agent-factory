@@ -1,7 +1,6 @@
 import { forwardRef, type ReactNode } from "react";
 
 import { SelectableCardButton } from "../../../../components/ui";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 
 type CurrentSelectionSelectableButtonVariant = "card" | "compact";
@@ -40,7 +39,6 @@ export const CurrentSelectionSelectableButton = forwardRef<
     <SelectableCardButton
       className={cn(
         variantClassName,
-        DASHBOARD_BODY_TEXT_CLASS,
         selected && "border-primary bg-primary-container text-on-surface",
         className,
       )}

@@ -1,21 +1,22 @@
 import { type ReactNode, useId } from "react";
 
-import { Select } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  AlertPanel,
+  DashboardLabel,
+  DashboardText,
+  Input,
+  Select,
+} from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_FORM_FIELD_CLASS,
-  CURRENT_SELECTION_WARNING_PANEL_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionDetailFeedback,
+  CurrentSelectionFormField,
+  CurrentSelectionLabel,
+} from "../../base/public";
 import { formatEditableResourceOverwriteFieldLabels } from "../editing/editable-resource-overwrite-fields";
 import type {
   EditableResourceConfigurationState,
@@ -62,35 +63,22 @@ export function ResourceEditableConfigurationSection({
         }
       >
         {state?.status === "loading" ? (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-          >
+          <CurrentSelectionDetailFeedback>
             {messages.editableConfigurationLoading}
-          </p>
+          </CurrentSelectionDetailFeedback>
         ) : null}
         {state?.status === "error" ? (
-          <p
-            className={cn(
-              "m-0 text-on-error-container",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
+          <CurrentSelectionDetailFeedback
             role="alert"
+            tone="danger"
           >
             {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-          </p>
+          </CurrentSelectionDetailFeedback>
         ) : null}
         {state?.status === "empty" ? (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-          >
+          <CurrentSelectionDetailFeedback>
             {state.message || messages.editableConfigurationEmpty}
-          </p>
+          </CurrentSelectionDetailFeedback>
         ) : null}
         {state?.status === "ready" ? (
           <ResourceEditableConfigurationReadyForm
@@ -139,15 +127,9 @@ function ResourceEditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames}
       />
       {validationErrors.contract ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          role="alert"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {validationErrors.contract}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       <ResourceEditableConfigurationDraftStatus
         messages={messages}
@@ -157,12 +139,11 @@ function ResourceEditableConfigurationReadyForm({
         errorMessage={validationErrors.name}
         fieldId="editable-resource-name"
         input={
-          <input
+          <Input
             aria-describedby={
               validationErrors.name ? "editable-resource-name-error" : undefined
             }
             aria-invalid={validationErrors.name ? "true" : undefined}
-            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-resource-name"
             onChange={(event) => state.onNameChange(event.target.value)}
             type="text"
@@ -183,14 +164,13 @@ function ResourceEditableConfigurationReadyForm({
           errorMessage={validationErrors.capacity}
           fieldId="editable-resource-capacity"
           input={
-            <input
+            <Input
               aria-describedby={
                 validationErrors.capacity
                   ? "editable-resource-capacity-error"
                   : undefined
               }
               aria-invalid={validationErrors.capacity ? "true" : undefined}
-              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-capacity"
               inputMode="numeric"
               onChange={(event) => state.onCapacityChange(event.target.value)}
@@ -276,14 +256,13 @@ function ResourceTypeSpecificFields({
           errorMessage={validationErrors.model}
           fieldId="editable-resource-model"
           input={
-            <input
+            <Input
               aria-describedby={
                 validationErrors.model
                   ? "editable-resource-model-error"
                   : undefined
               }
               aria-invalid={validationErrors.model ? "true" : undefined}
-              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-model"
               onChange={(event) => state.onModelChange(event.target.value)}
               type="text"
@@ -303,14 +282,13 @@ function ResourceTypeSpecificFields({
           errorMessage={validationErrors.backend}
           fieldId="editable-resource-backend"
           input={
-            <input
+            <Input
               aria-describedby={
                 validationErrors.backend
                   ? "editable-resource-backend-error"
                   : undefined
               }
               aria-invalid={validationErrors.backend ? "true" : undefined}
-              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-backend"
               onChange={(event) => state.onBackendChange(event.target.value)}
               type="text"
@@ -330,14 +308,13 @@ function ResourceTypeSpecificFields({
           errorMessage={validationErrors.loadPolicy}
           fieldId="editable-resource-load-policy"
           input={
-            <input
+            <Input
               aria-describedby={
                 validationErrors.loadPolicy
                   ? "editable-resource-load-policy-error"
                   : undefined
               }
               aria-invalid={validationErrors.loadPolicy ? "true" : undefined}
-              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-resource-load-policy"
               onChange={(event) => state.onLoadPolicyChange(event.target.value)}
               type="text"
@@ -363,14 +340,13 @@ function ResourceTypeSpecificFields({
         errorMessage={validationErrors.provider}
         fieldId="editable-resource-provider"
         input={
-          <input
+          <Input
             aria-describedby={
               validationErrors.provider
                 ? "editable-resource-provider-error"
                 : undefined
             }
             aria-invalid={validationErrors.provider ? "true" : undefined}
-            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-resource-provider"
             onChange={(event) => state.onProviderChange(event.target.value)}
             type="text"
@@ -415,14 +391,12 @@ function ResourceRuntimeContextSection({
             title={messages.summaryHeading}
           />
           <div className="grid gap-0.5">
-            <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+            <CurrentSelectionLabel>
               {messages.tokenCountFieldLabel}
-            </span>
-            <span
-              className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}
-            >
+            </CurrentSelectionLabel>
+            <DashboardText as="span" className="m-0 text-on-surface">
               {String(tokenCount)}
-            </span>
+            </DashboardText>
           </div>
         </section>
       ) : null}
@@ -436,18 +410,16 @@ function ResourceRuntimeContextSection({
           title={messages.referencingWorkersHeading}
         />
         {workerNames.length > 0 ? (
-          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+          <DashboardText className="m-0 text-on-surface">
             {formatList(workerNames)}
-          </p>
+          </DashboardText>
         ) : (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
+          <DashboardText
+            className="m-0 text-on-surface-variant"
+            variant="supporting"
           >
             {messages.referencingWorkersEmpty}
-          </p>
+          </DashboardText>
         )}
       </section>
 
@@ -460,18 +432,16 @@ function ResourceRuntimeContextSection({
           title={messages.referencingWorkstationsHeading}
         />
         {workstationNames.length > 0 ? (
-          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+          <DashboardText className="m-0 text-on-surface">
             {formatList(workstationNames)}
-          </p>
+          </DashboardText>
         ) : (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
+          <DashboardText
+            className="m-0 text-on-surface-variant"
+            variant="supporting"
           >
             {messages.referencingWorkstationsEmpty}
-          </p>
+          </DashboardText>
         )}
       </section>
     </>
@@ -495,17 +465,14 @@ function ResourceEditableConfigurationOverwriteWarning({
   );
 
   return (
-    <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-      <p
-        className={cn(
-          "m-0 text-on-warning-container",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
+    <AlertPanel tone="warning">
+      <DashboardText
+        className="m-0 text-on-warning-container"
         role="alert"
       >
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
-      </p>
-    </div>
+      </DashboardText>
+    </AlertPanel>
   );
 }
 
@@ -523,14 +490,12 @@ function ResourceEditableConfigurationServerChangedHint({
   }
 
   return (
-    <p
-      className={cn(
-        "m-0 text-on-warning-container",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
+    <DashboardText
+      className="m-0 text-on-warning-container"
+      variant="supporting"
     >
       {messages.editableConfigurationServerFieldChangedHint}
-    </p>
+    </DashboardText>
   );
 }
 
@@ -550,12 +515,9 @@ function ResourceEditableConfigurationSharedImpactWarning({
   }
 
   return (
-    <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-      <p
-        className={cn(
-          "m-0 text-on-warning-container",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
+    <AlertPanel tone="warning">
+      <DashboardText
+        className="m-0 text-on-warning-container"
         role="alert"
       >
         {messages.editableConfigurationSharedImpactWarning(
@@ -563,8 +525,8 @@ function ResourceEditableConfigurationSharedImpactWarning({
           formatList(workerNames),
           formatList(workstationNames),
         )}
-      </p>
-    </div>
+      </DashboardText>
+    </AlertPanel>
   );
 }
 
@@ -580,22 +542,17 @@ function ResourceEditableConfigurationDraftStatus({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <p
-        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
+    <CurrentSelectionFormField>
+      <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
+      </CurrentSelectionDetailFeedback>
+      <DashboardText
+        className="m-0 text-on-surface-subtle"
+        variant="supporting"
       >
         {messages.editableConfigurationSaveDisabledValidationDetail}
-      </p>
-    </div>
+      </DashboardText>
+    </CurrentSelectionFormField>
   );
 }
 
@@ -613,23 +570,20 @@ function ResourceEditableConfigurationField({
   supportingContent?: ReactNode;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="label" htmlFor={fieldId}>
         {label}
-      </label>
+      </DashboardLabel>
       {input}
       {supportingContent}
       {errorMessage ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
+        <CurrentSelectionDetailFeedback
           id={`${fieldId}-error`}
+          tone="danger"
         >
           {errorMessage}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
-    </div>
+    </CurrentSelectionFormField>
   );
 }

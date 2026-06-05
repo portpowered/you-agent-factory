@@ -2,7 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
+  AlertPanel,
   Button,
+  DashboardLabel,
+  DashboardText,
   Dialog,
   DialogContent,
   DialogDescription,
@@ -11,22 +14,12 @@ import {
   DialogTitle,
   Input,
 } from "../../../components/ui";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { cn } from "../../../lib/cn";
 import type { CurrentFactoryExportFailure } from "../hooks/use-current-factory-export";
 import { downloadBlobAsFile } from "../lib/browser-download";
 import { buildFactoryExportFilename } from "../lib/build-factory-export-filename";
 import { writeFactoryExportPng } from "../lib/factory-png-export";
 import { getExportDialogMessages } from "../messages/export-dialog";
 import { ExportFactoryDialogImageField } from "./export-factory-dialog-image-field";
-
-const DIALOG_ERROR_PANEL_CLASS =
-  "rounded-2xl border border-af-danger-border bg-error-container px-4 py-3 text-sm text-on-error-container";
 
 export interface ExportFactoryDialogProps {
   factory: ImportFactoryValue | null;
@@ -100,20 +93,16 @@ export function ExportFactoryDialog({
       >
         <DialogHeader>
           <div className="space-y-2">
-            <DialogTitle className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)}>
-              {messages.title}
-            </DialogTitle>
-            <DialogDescription
-              className={cn("m-0 max-w-lg", DASHBOARD_BODY_TEXT_CLASS)}
-            >
+            <DialogTitle className="m-0">{messages.title}</DialogTitle>
+            <DialogDescription className="m-0 max-w-lg">
               {messages.description}
             </DialogDescription>
           </div>
         </DialogHeader>
 
-        <p className={cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <DashboardText className="m-0" variant="supporting">
           {messages.hint}
-        </p>
+        </DashboardText>
 
         <ExportFactoryDialogForm formState={formState} messages={messages} />
         <ExportFactoryDialogMessages
@@ -158,15 +147,13 @@ function ExportFactoryDialogForm({
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <label
-          className={cn(
-            "block text-sm font-semibold text-on-surface",
-            DASHBOARD_SUPPORTING_LABELS_CLASS,
-          )}
+        <DashboardLabel
+          as="label"
+          className="block text-sm font-semibold text-on-surface"
           htmlFor="export-factory-name"
         >
           {messages.nameLabel}
-        </label>
+        </DashboardLabel>
         <Input
           aria-describedby={
             formState.nameValidationMessage
@@ -174,7 +161,6 @@ function ExportFactoryDialogForm({
               : undefined
           }
           aria-invalid={formState.nameValidationMessage ? "true" : undefined}
-          className={DASHBOARD_BODY_TEXT_CLASS}
           disabled={formState.isExporting}
           id="export-factory-name"
           onBlur={() => {
@@ -191,16 +177,17 @@ function ExportFactoryDialogForm({
           type="text"
           value={formState.exportName}
         />
-        <p className={cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <DashboardText className="m-0" variant="supporting">
           {messages.nameDescription}
-        </p>
+        </DashboardText>
         {formState.nameValidationMessage ? (
-          <p
+          <DashboardText
             className="m-0 text-sm font-medium text-on-error-container"
             id={formState.nameValidationId}
+            variant="supporting"
           >
             {formState.nameValidationMessage}
-          </p>
+          </DashboardText>
         ) : null}
       </div>
 
@@ -236,31 +223,27 @@ function ExportFactoryDialogMessages({
   return (
     <>
       {isPreparing ? (
-        <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
+        <AlertPanel role="status" tone="danger">
           {messages.loadingStatus}
-        </div>
+        </AlertPanel>
       ) : null}
 
       {preparationFailure && factory === null && !isPreparing ? (
-        <div className={DIALOG_ERROR_PANEL_CLASS} role="status">
+        <AlertPanel role="status" tone="danger">
           {preparationFailure.message}
-        </div>
+        </AlertPanel>
       ) : null}
 
       {dialogState.status === "error" ? (
-        <div className={DIALOG_ERROR_PANEL_CLASS} role="alert">
+        <AlertPanel role="alert" tone="danger">
           {dialogState.message}
-        </div>
+        </AlertPanel>
       ) : null}
 
       {dialogState.status === "success" ? (
-        <div
-          aria-live="polite"
-          className="rounded-2xl border border-af-success-border bg-success-container px-4 py-3 text-sm text-on-success-container"
-          role="status"
-        >
+        <AlertPanel aria-live="polite" role="status" tone="success">
           {messages.successMessage(dialogState.filename)}
-        </div>
+        </AlertPanel>
       ) : null}
     </>
   );

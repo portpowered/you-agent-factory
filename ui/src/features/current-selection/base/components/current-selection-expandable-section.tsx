@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 
+import { surfacePanelVariants } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import { StandardExpandableSection } from "../../../standard-card-components/public";
-import { CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS } from "./detail-card-shared";
 
 export function CurrentSelectionExpandableSection({
   children,
@@ -28,7 +28,10 @@ export function CurrentSelectionExpandableSection({
   return (
     <StandardExpandableSection
       className={cn("mt-4 gap-2.5 py-0 [&_h4]:m-0", className)}
-      contentClassName={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
+      contentClassName={surfacePanelVariants({
+        className: "grid gap-3",
+        radius: "2xl",
+      })}
       contentID={contentId}
       defaultExpanded={defaultExpanded}
       heading={title}

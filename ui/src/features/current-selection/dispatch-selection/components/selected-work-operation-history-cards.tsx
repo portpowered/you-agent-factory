@@ -1,8 +1,6 @@
 import type { DashboardWorkMoveOperation } from "../../../../api/dashboard/types";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
+import { DashboardText } from "../../../../components/ui";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
-import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
@@ -12,8 +10,9 @@ import {
   CurrentSelectionBadge,
   CurrentSelectionExecutionPill,
 } from "../../base/components/current-selection-pill";
-import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
-import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
+import { CurrentSelectionDescriptionList } from "../../base/public";
+import { CurrentSelectionHistoryCard } from "../../history/public";
+import { InferenceAttemptDetail } from "../../work-selection/public";
 import {
   requestOutcome,
   requestStartedAt,
@@ -69,7 +68,7 @@ export function OperatorMoveHistoryCard({
           <OperationKindBadge label={messages.moveOperationKindBadge} />
         </div>
       </div>
-      <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.moveTransitionLabel}
           value={transition}
@@ -86,7 +85,7 @@ export function OperatorMoveHistoryCard({
             locale,
           )}
         />
-      </dl>
+      </CurrentSelectionDescriptionList>
     </CurrentSelectionHistoryCard>
   );
 }
@@ -121,16 +120,11 @@ export function LogicalMoveDispatchHistoryCard({
             {title || messages.logicalMoveDispatchTitle}
           </strong>
           <div className="flex flex-wrap items-center gap-2">
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
+            <DashboardText className="m-0 text-on-surface-variant">
               {outcome
                 ? enumMessages.localizeOutcome(outcome)
                 : enumMessages.localizeOutcome("PENDING")}
-            </p>
+            </DashboardText>
             <OperationKindBadge label={messages.moveOperationKindBadge} />
             {isCurrentDispatch ? (
               <CurrentSelectionBadge>
@@ -143,7 +137,7 @@ export function LogicalMoveDispatchHistoryCard({
           {request.dispatch_id || messages.unknownDispatchId}
         </CurrentSelectionExecutionPill>
       </div>
-      <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.workstationLabel}
           value={request.workstation_name}
@@ -156,7 +150,7 @@ export function LogicalMoveDispatchHistoryCard({
             locale,
           )}
         />
-      </dl>
+      </CurrentSelectionDescriptionList>
     </CurrentSelectionHistoryCard>
   );
 }

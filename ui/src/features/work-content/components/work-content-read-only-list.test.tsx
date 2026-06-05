@@ -60,7 +60,10 @@ describe("WorkContentPartList", () => {
       />,
     );
 
-    expect(screen.getByText("Image: diagram.png")).toBeTruthy();
+    const fallbackPart = screen.getByText("Image: diagram.png");
+    expect(fallbackPart).toBeTruthy();
+    expect(fallbackPart.className).toContain("border-outline");
+    expect(fallbackPart.className).toContain("bg-surface-container-high");
   });
 });
 

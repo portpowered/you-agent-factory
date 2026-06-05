@@ -1,6 +1,6 @@
 import {
-  DETAIL_COPY_CLASS,
-  WIDGET_SUBTITLE_CLASS,
+  DetailCopy,
+  WidgetSubtitle,
 } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "../../base/components/current-selection-locale";
@@ -23,7 +23,7 @@ export function TerminalWorkSummaryCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <p className={WIDGET_SUBTITLE_CLASS}>{label}</p>
+      <WidgetSubtitle>{label}</WidgetSubtitle>
       <dl>
         <div>
           <dt>{messages.statusLabel}</dt>
@@ -57,9 +57,7 @@ export function TerminalWorkSummaryCard({
       {status === "failed" &&
       normalizedFailureReason === undefined &&
       normalizedFailureMessage === undefined ? (
-        <p className={DETAIL_COPY_CLASS}>
-          {messages.failureDetailsUnavailable}
-        </p>
+        <DetailCopy>{messages.failureDetailsUnavailable}</DetailCopy>
       ) : null}
       {executionDetails ? (
         <ExecutionDetailsSection

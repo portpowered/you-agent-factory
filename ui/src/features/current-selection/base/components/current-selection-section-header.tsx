@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
 
 import {
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
-import { HISTORY_HEADER_CLASS } from "./detail-card-shared";
+  DashboardHeading,
+  DashboardText,
+  surfacePanelVariants,
+} from "../../../../components/ui";
 
 export function CurrentSelectionSectionHeader({
   action,
@@ -19,20 +18,24 @@ export function CurrentSelectionSectionHeader({
   title: string;
 }) {
   return (
-    <div className={HISTORY_HEADER_CLASS}>
+    <div
+      className={surfacePanelVariants({
+        className:
+          "flex items-center justify-between gap-3 px-3 py-2 [&_h4]:m-0",
+        radius: "lg",
+      })}
+    >
       <div className="grid min-w-0 gap-1">
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS} id={headingId}>
+        <DashboardHeading as="h4" id={headingId}>
           {title}
-        </h4>
+        </DashboardHeading>
         {supportingText ? (
-          <p
-            className={cn(
-              "m-0 text-on-surface-subtle",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
+          <DashboardText
+            className="m-0 text-on-surface-subtle"
+            variant="supporting"
           >
             {supportingText}
-          </p>
+          </DashboardText>
         ) : null}
       </div>
       {action}

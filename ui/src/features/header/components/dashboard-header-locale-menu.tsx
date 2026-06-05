@@ -7,15 +7,17 @@ import {
   useState,
 } from "react";
 
-import { DashboardActionButton } from "../../../components/ui";
 import {
   getNativeLanguageLabel,
   SUPPORTED_LOCALES,
   type SupportedLocale,
 } from "../../../i18n";
-import { cn } from "../../../lib/cn";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
+import {
+  DashboardHeaderOptionMenuItem,
+  DashboardHeaderOptionMenuSurface,
+} from "./dashboard-header-option-menu";
 
 interface HeaderLocaleOption {
   label: string;
@@ -130,9 +132,8 @@ function DashboardLocaleMenuList({
   options: readonly HeaderLocaleOption[];
 }) {
   return (
-    <div
+    <DashboardHeaderOptionMenuSurface
       aria-label={label}
-      className="absolute right-0 top-full z-10 mt-2 min-w-44 overflow-hidden rounded-2xl border border-outline bg-surface-container-high p-1 text-on-surface shadow-af-panel backdrop-blur-lg"
       id={id}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
@@ -150,49 +151,20 @@ function DashboardLocaleMenuList({
         const isSelected = option.value === currentValue;
 
         return (
-          <DashboardActionButton
+          <DashboardHeaderOptionMenuItem
             key={option.value}
-            aria-checked={isSelected}
-            className={cn(
-              "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
-              "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
-              isSelected
-                ? "border-primary bg-primary-container text-on-surface"
-                : "text-on-surface-variant",
-            )}
+            isSelected={isSelected}
             onClick={() => {
               onChangeLocale(option.value);
               onClose();
               buttonRef.current?.focus();
             }}
-            role="menuitemradio"
-            tone={isSelected ? "secondary" : "ghost"}
-            type="button"
           >
             <span>{option.label}</span>
-            {isSelected ? <LocaleMenuCheckIcon /> : null}
-          </DashboardActionButton>
+          </DashboardHeaderOptionMenuItem>
         );
       })}
-    </div>
-  );
-}
-
-function LocaleMenuCheckIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="16"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      width="16"
-    >
-      <path d="m5 12 4 4L19 6" />
-    </svg>
+    </DashboardHeaderOptionMenuSurface>
   );
 }
 

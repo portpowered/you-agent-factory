@@ -1,7 +1,5 @@
 import { cn } from "../../../lib/cn";
 
-export const CHOOSE_FILE_FIELD_GROUP_CLASS = "space-y-2";
-
 const CHOOSE_FILE_SHELL_BASE_CLASS =
   "rounded-xl border border-dashed border-outline-variant bg-surface-container-low transition-colors";
 
@@ -10,10 +8,6 @@ const CHOOSE_FILE_SHELL_DRAG_ACTIVE_CLASS =
 
 const CHOOSE_FILE_SHELL_DISABLED_CLASS =
   "cursor-not-allowed text-on-surface-disabled";
-
-/** Classes for native `<input type="file">` chrome inside the dashed shell. */
-export const CHOOSE_FILE_NATIVE_INPUT_CLASS =
-  "block w-full px-3 py-3 text-sm text-on-surface-variant file:mr-3 file:rounded-lg file:border-0 file:bg-surface-container-high file:px-3 file:py-2 file:text-sm file:font-semibold file:text-on-surface hover:bg-af-overlay";
 
 export interface ChooseFileShellClassNameOptions {
   className?: string;

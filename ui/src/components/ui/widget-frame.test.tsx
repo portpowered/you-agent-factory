@@ -1,25 +1,23 @@
 import { render, screen, within } from "@testing-library/react";
 
-import { DASHBOARD_PANEL_SHELL_CLASS } from "./dashboard-shell";
 import {
+  DashboardEmptyState,
   DashboardWidgetFrame,
-  DETAIL_CARD_CLASS,
-  DETAIL_COPY_CLASS,
-  EMPTY_STATE_CLASS,
-  WIDGET_SUBTITLE_CLASS,
+  DetailCopy,
+  WidgetSubtitle,
 } from "./widget-frame";
 
 describe("DashboardWidgetFrame", () => {
   it("renders the shared widget frame contract with dashboard copy styles intact", () => {
     render(
       <DashboardWidgetFrame title="Submit work" widgetId="submit-work">
-        <p className={WIDGET_SUBTITLE_CLASS}>Queue a new request</p>
-        <p className={DETAIL_COPY_CLASS}>
+        <WidgetSubtitle>Queue a new request</WidgetSubtitle>
+        <DetailCopy>
           Submissions stay inside the shared layout frame.
-        </p>
-        <div className={EMPTY_STATE_CLASS}>
+        </DetailCopy>
+        <DashboardEmptyState>
           <h3>No active submission</h3>
-        </div>
+        </DashboardEmptyState>
       </DashboardWidgetFrame>,
     );
 
@@ -47,19 +45,81 @@ describe("DashboardWidgetFrame", () => {
     });
 
     expect(card.className).toContain("min-w-0");
-    expect(card.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
-    expect(card.className).toContain(DETAIL_CARD_CLASS);
+    expect(card.dataset.dashboardPanelShell).toBe("grid-card");
+    expect(card.className).toContain("shadow-af-card");
+    expect(card.className).toContain("[&_dl]:grid");
+    expect(card.className).toContain("af-dashboard-supporting-labels");
     expect(card.className).toContain("border-outline");
     expect(card.className).toContain("bg-surface-container-high");
-    expect(subtitle.className).toContain(WIDGET_SUBTITLE_CLASS);
-    expect(bodyCopy.className).toContain(DETAIL_COPY_CLASS);
-    expect(emptyHeading.parentElement?.className).toContain(EMPTY_STATE_CLASS);
+    expect(subtitle.className).toContain("af-dashboard-widget-subtitle");
+    expect(bodyCopy.className).toContain("af-dashboard-body-text");
+    expect(emptyHeading.parentElement?.className).toContain("border-dashed");
     expect(emptyHeading.parentElement?.className).toContain(
       "border-outline-variant",
     );
     expect(emptyHeading.parentElement?.className).toContain(
       "bg-surface-container-low",
     );
+  });
+
+  it("renders compact dashboard empty states through the component contract", () => {
+    render(
+      <DashboardEmptyState compact>
+        <h3>No trace selected</h3>
+      </DashboardEmptyState>,
+    );
+
+    const emptyHeading = screen.getByRole("heading", {
+      name: "No trace selected",
+    });
+    expect(emptyHeading.parentElement?.className).toContain("min-h-0");
+    expect(emptyHeading.parentElement?.className).toContain(
+      "bg-surface-container-low",
+    );
+  });
+
+  it("supports the wide dashboard widget frame layout variant", () => {
+    render(
+      <DashboardWidgetFrame title="Trend card" widgetId="trend-card" wide>
+        <p>Trend content</p>
+      </DashboardWidgetFrame>,
+    );
+
+    expect(screen.getByRole("article", { name: "Trend card" }).className).toContain(
+      "min-h-72",
+    );
+  });
+
+  it("passes body props through to the shared bento card body", () => {
+    render(
+      <DashboardWidgetFrame
+        bodyClassName="custom-widget-body"
+        bodyProps={{ "data-widget-body": "trace-card" }}
+        bodyScroll={false}
+        title="Trace"
+        widgetId="trace"
+      >
+        <p>Trace content</p>
+      </DashboardWidgetFrame>,
+    );
+
+    const body = screen.getByText("Trace content").closest("[data-widget-body]");
+
+    expect(body?.getAttribute("data-widget-body")).toBe("trace-card");
+    expect(body?.className).toContain("custom-widget-body");
+  });
+
+  it("supports subtitle text on non-paragraph semantic elements", () => {
+    render(
+      <dl>
+        <WidgetSubtitle as="dd">42 completed</WidgetSubtitle>
+      </dl>,
+    );
+
+    const value = screen.getByText("42 completed");
+
+    expect(value.tagName).toBe("DD");
+    expect(value.className).toContain("af-dashboard-widget-subtitle");
   });
 
   it("routes header actions through AgentBentoCard without a custom header slot", () => {

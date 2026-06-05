@@ -1,13 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Input } from "../../../../components/ui";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
-import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
+import { DashboardLabel, DashboardText, Input } from "../../../../components/ui";
+import { CurrentSelectionFormField } from "../../base/public";
 import type {
   EditableWorkstationOverwriteField,
   WorkstationDetailCardProps,
@@ -49,7 +43,6 @@ export function EditableConfigurationCronFields({
             aria-invalid={
               state.validationErrors.cronSchedule ? "true" : undefined
             }
-            className={DASHBOARD_BODY_TEXT_CLASS}
             id="editable-workstation-cron-schedule"
             onChange={(event) => state.onCronScheduleChange(event.target.value)}
             value={cron.schedule}
@@ -78,7 +71,6 @@ export function EditableConfigurationCronFields({
             aria-invalid={
               state.validationErrors.cronJitter ? "true" : undefined
             }
-            className={DASHBOARD_BODY_TEXT_CLASS}
             id="editable-workstation-cron-jitter"
             onChange={(event) => state.onCronJitterChange(event.target.value)}
             value={cron.jitter}
@@ -103,7 +95,6 @@ export function EditableConfigurationCronFields({
             aria-invalid={
               state.validationErrors.cronExpiryWindow ? "true" : undefined
             }
-            className={DASHBOARD_BODY_TEXT_CLASS}
             id="editable-workstation-cron-expiry-window"
             onChange={(event) =>
               state.onCronExpiryWindowChange(event.target.value)
@@ -143,38 +134,34 @@ function EditableConfigurationCronField({
   state: ReadyEditableConfigurationState;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="label" htmlFor={fieldId}>
         {label}
-      </label>
+      </DashboardLabel>
       {input}
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
+      <DashboardText
+        className="m-0 text-on-surface-subtle"
         id={`${fieldId}-hint`}
+        variant="supporting"
       >
         {hint}
-      </p>
+      </DashboardText>
       <EditableConfigurationServerChangedHint
         fieldName={overwriteFieldName}
         messages={messages}
         state={state}
       />
       {errorMessage ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
+        <DashboardText
+          className="m-0 text-on-error-container"
           id={`${fieldId}-error`}
           role="alert"
+          variant="supporting"
         >
           {errorMessage}
-        </p>
+        </DashboardText>
       ) : null}
-    </div>
+    </CurrentSelectionFormField>
   );
 }
 
@@ -193,12 +180,10 @@ function EditableConfigurationCronTriggerAtStartField({
   const fieldId = "editable-workstation-cron-trigger-at-start";
 
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <label
-        className={cn(
-          "inline-flex items-center gap-2 text-on-surface",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
+    <CurrentSelectionFormField>
+      <DashboardText
+        as="label"
+        className="inline-flex items-center gap-2 text-on-surface"
         htmlFor={fieldId}
       >
         <input
@@ -211,24 +196,22 @@ function EditableConfigurationCronTriggerAtStartField({
           type="checkbox"
         />
         {messages.cronTriggerAtStartFieldLabel}
-      </label>
+      </DashboardText>
       <EditableConfigurationServerChangedHint
         fieldName="cronTriggerAtStart"
         messages={messages}
         state={state}
       />
       {state.validationErrors.cronTriggerAtStart ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
+        <DashboardText
+          className="m-0 text-on-error-container"
           id={`${fieldId}-error`}
           role="alert"
+          variant="supporting"
         >
           {state.validationErrors.cronTriggerAtStart}
-        </p>
+        </DashboardText>
       ) : null}
-    </div>
+    </CurrentSelectionFormField>
   );
 }

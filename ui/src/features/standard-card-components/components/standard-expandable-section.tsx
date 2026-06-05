@@ -6,9 +6,9 @@ import {
   useState,
 } from "react";
 import {
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+  DashboardHeading,
+  DashboardText,
+} from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { cn } from "../../../lib/cn";
 
@@ -84,22 +84,17 @@ export function StandardExpandableSection({
             )}
           >
             {leadingVisual}
-            <HeadingTag
-              className={DASHBOARD_SECTION_HEADING_CLASS}
-              id={headingID}
-            >
+            <DashboardHeading as={HeadingTag} id={headingID}>
               {heading}
-            </HeadingTag>
+            </DashboardHeading>
           </div>
           {supportingText ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-subtle",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
+            <DashboardText
+              className="m-0 text-on-surface-subtle"
+              variant="supporting"
             >
               {supportingText}
-            </p>
+            </DashboardText>
           ) : null}
         </div>
         <ExpandablePanelTrigger

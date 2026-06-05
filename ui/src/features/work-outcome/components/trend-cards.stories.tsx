@@ -1,12 +1,6 @@
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_WIDGET_SUBTITLE_CLASS,
-} from "../../../components/ui/dashboard-typography";
 import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
 import type {
   FailureTrendModel,
@@ -146,24 +140,18 @@ export const TypographyScale = {
     const failureScope = within(resolvedFailureCard);
     const timingScope = within(resolvedTimingCard);
 
-    expect(failureScope.getByText("Time range").className).toContain(
-      DASHBOARD_SUPPORTING_LABEL_CLASS,
-    );
-    expect(failureScope.getByLabelText("Time range").className).toContain(
-      DASHBOARD_BODY_TEXT_CLASS,
-    );
+    expect(failureScope.getByText("Time range").tagName).toBe("SPAN");
+    expect(failureScope.getByLabelText("Time range").tagName).toBe("SELECT");
     expect(
       failureScope.getByText("Failed in range").closest("dl")?.className,
-    ).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
+    ).toContain("md:grid-cols-3");
     expect(
       failureScope
         .getByText("Failed in range")
         .closest("div")
         ?.querySelector("dd")?.className,
-    ).toContain(DASHBOARD_WIDGET_SUBTITLE_CLASS);
-    expect(timingScope.getByLabelText("Timing range").className).toContain(
-      DASHBOARD_SUPPORTING_LABELS_CLASS,
-    );
+    ).toContain("af-dashboard-widget-subtitle");
+    expect(timingScope.getByLabelText("Timing range").tagName).toBe("DL");
   },
 };
 

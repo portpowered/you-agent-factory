@@ -9,7 +9,6 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
-import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { AppLocaleProvider, NATIVE_LANGUAGE_LABELS } from "../../../i18n";
 import {
   AppColorPaletteProvider,
@@ -155,7 +154,9 @@ describe("DashboardHeader", () => {
     expect(exportButton.dataset.dashboardHeaderAction).toBe("neutral");
     expect(exportButton.getAttribute("aria-haspopup")).toBe("dialog");
     expect(exportButton.getAttribute("aria-expanded")).toBe("false");
-    expect(toolbar.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(toolbar.dataset.dashboardPanelShell).toBe("panel");
+    expect(toolbar.className).toContain("border-outline");
+    expect(toolbar.className).toContain("bg-surface-container-high");
     expect(toolbar.className).toContain("mb-3");
     expect(toolbar.className).toContain("gap-2");
     expect(toolbar.className).toContain("p-2");

@@ -4,10 +4,6 @@ import {
   DashboardStatusPill,
   type DashboardStatusPillTone,
 } from "../../../../components/ui";
-import {
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 
 interface CurrentSelectionPillBaseProps
@@ -27,12 +23,9 @@ export const CurrentSelectionExecutionPill = forwardRef<
 ) {
   return (
     <DashboardStatusPill
-      className={cn(
-        "min-h-0 px-2 py-0.5",
-        DASHBOARD_SUPPORTING_CODE_CLASS,
-        className,
-      )}
+      className={cn("min-h-0 px-2 py-0.5", className)}
       ref={ref}
+      typography="supportingCode"
       tone={tone}
       {...props}
     />
@@ -48,12 +41,9 @@ export const CurrentSelectionBadge = forwardRef<
 ) {
   return (
     <DashboardStatusPill
-      className={cn(
-        "min-h-0 px-2 py-0.5",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-        className,
-      )}
+      className={cn("min-h-0 px-2 py-0.5", className)}
       ref={ref}
+      typography="supportingText"
       tone={tone}
       {...props}
     />

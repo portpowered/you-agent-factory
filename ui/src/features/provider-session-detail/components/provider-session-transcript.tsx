@@ -1,11 +1,12 @@
 import { useId, useState } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+  AlertPanel,
+  DashboardHeading,
+  DashboardLabel,
+  DashboardStatusPill,
+  DashboardText,
+} from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -34,9 +35,9 @@ export function TranscriptSection({
   return (
     <section className={cn("grid gap-3", className)}>
       {showHeading ? (
-        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        <DashboardHeading as="h5">
           {messages.transcriptHeading}
-        </h5>
+        </DashboardHeading>
       ) : null}
       <div className="grid gap-3">
         {detail.transcript.map((entry) => (
@@ -61,26 +62,14 @@ export function EncryptedReasoningNotice({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <div
-      className={cn(
-        "grid gap-2 rounded-lg border border-info-border bg-info-container p-3",
-        className,
-      )}
-    >
-      <span
-        className={cn(
-          "inline-flex w-fit rounded-full border border-info-border bg-info-container px-2 py-0.5 text-on-info-container",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
+    <AlertPanel className={className} radius="lg" tone="info">
+      <DashboardStatusPill size="compact" tone="info">
         {messages.encryptedReasoningStateLabel}
-      </span>
-      <p
-        className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
-      >
+      </DashboardStatusPill>
+      <DashboardText className="m-0 text-on-surface-variant">
         {messages.encryptedReasoningDescription}
-      </p>
-    </div>
+      </DashboardText>
+    </AlertPanel>
   );
 }
 
@@ -114,26 +103,20 @@ function TranscriptEntryCard({
       <div className="flex items-start justify-between gap-3">
         <div className="grid min-w-0 gap-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-              {entryTitle}
-            </span>
+            <DashboardLabel>{entryTitle}</DashboardLabel>
             {entry.status ? (
-              <span
-                className={cn(
-                  "inline-flex rounded-full border border-outline bg-surface-container-high px-2 py-0.5 text-on-surface-subtle",
-                  DASHBOARD_SUPPORTING_LABEL_CLASS,
-                )}
+              <DashboardStatusPill
+                size="compact"
               >
                 {entry.status}
-              </span>
+              </DashboardStatusPill>
             ) : null}
           </div>
           {metadata.length > 0 || timestampState.label ? (
-            <div
-              className={cn(
-                "flex flex-wrap items-center gap-x-2 gap-y-1 text-on-surface-subtle",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
+            <DashboardText
+              as="div"
+              className="flex flex-wrap items-center gap-x-2 gap-y-1 text-on-surface-subtle"
+              variant="supporting"
             >
               {metadata.map((item) => (
                 <span key={item}>{item}</span>
@@ -143,12 +126,12 @@ function TranscriptEntryCard({
                   {timestampState.label}
                 </span>
               ) : null}
-            </div>
+            </DashboardText>
           ) : null}
           {hasBody && !expanded && preview ? (
-            <p className={cn("m-0 line-clamp-2", DASHBOARD_BODY_TEXT_CLASS)}>
+            <DashboardText className="m-0 line-clamp-2">
               {preview}
-            </p>
+            </DashboardText>
           ) : null}
         </div>
         {hasBody ? (
@@ -226,14 +209,12 @@ function TranscriptEntryBody({
             />
           ) : null}
           {entry.encrypted && !entry.text && !encryptedContent ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-subtle",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
+            <DashboardText
+              className="m-0 text-on-surface-subtle"
+              variant="supporting"
             >
               {messages.encryptedReasoningOnly}
-            </p>
+            </DashboardText>
           ) : null}
         </div>
       );
@@ -316,7 +297,7 @@ function TranscriptContentSection({
 }) {
   return (
     <section className="grid gap-2">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <DashboardLabel>{label}</DashboardLabel>
       <TranscriptContentPanel kind={kind} value={value} />
     </section>
   );

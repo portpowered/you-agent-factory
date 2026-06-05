@@ -46,10 +46,6 @@ export const LAYOUT_DIALOG_BODY_CLASS = "grid gap-layout-group";
 export const LAYOUT_DIALOG_CONTENT_SHELL_CLASS =
   "grid gap-layout-group p-layout-inset-dialog";
 
-/** Card shell interior padding for raised panels. */
-export const LAYOUT_CARD_INSET_CLASS =
-  "p-layout-inset-card md:p-layout-inset-card-relaxed";
-
 export const DASHBOARD_LAYOUT_CONTRACT: readonly DashboardLayoutContractEntry[] =
   [
     {

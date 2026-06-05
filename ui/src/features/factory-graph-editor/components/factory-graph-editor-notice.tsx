@@ -1,16 +1,8 @@
 import type { ReactNode } from "react";
 
-import { DashboardIconButtonShell } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
+import { AlertPanel, DashboardIconButtonShell } from "../../../components/ui";
 
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
-
-const NOTICE_TONE_CLASS: Record<FactoryGraphEditorNoticeTone, string> = {
-  danger: "border-af-danger-border bg-error-container text-on-error-container",
-  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
-  warning:
-    "border-af-warning-border bg-warning-container text-on-warning-container",
-};
 
 export function FactoryGraphEditorNotice({
   children,
@@ -26,29 +18,31 @@ export function FactoryGraphEditorNotice({
   tone?: FactoryGraphEditorNoticeTone;
 }) {
   return (
-    <section
-      className={cn(
-        "grid gap-1 rounded-2xl border p-4",
-        NOTICE_TONE_CLASS[tone],
-      )}
+    <AlertPanel
+      asChild
+      padding="default"
+      radius="2xl"
       role={tone === "danger" ? "alert" : "status"}
+      tone={tone}
     >
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="m-0 text-sm font-semibold">{title}</h3>
-        {onDismiss && dismissLabel ? (
-          <DashboardIconButtonShell
-            aria-label={dismissLabel}
-            className="h-9 w-9 shrink-0"
-            onClick={onDismiss}
-            tone="ghost"
-            type="button"
-          >
-            <FactoryGraphEditorNoticeDismissIcon />
-          </DashboardIconButtonShell>
-        ) : null}
-      </div>
-      <div className="m-0 text-sm leading-6">{children}</div>
-    </section>
+      <section>
+        <div className="flex items-start justify-between gap-3">
+          <h3 className="m-0 text-sm font-semibold">{title}</h3>
+          {onDismiss && dismissLabel ? (
+            <DashboardIconButtonShell
+              aria-label={dismissLabel}
+              className="h-9 w-9 shrink-0"
+              onClick={onDismiss}
+              tone="ghost"
+              type="button"
+            >
+              <FactoryGraphEditorNoticeDismissIcon />
+            </DashboardIconButtonShell>
+          ) : null}
+        </div>
+        <div className="m-0 text-sm leading-6">{children}</div>
+      </section>
+    </AlertPanel>
   );
 }
 

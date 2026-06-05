@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../../components/ui/dashboard-typography";
+import { Button } from "../../../../components/ui";
+import { CodePanel } from "../../../../components/ui/code-panel";
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import { cn } from "../../../../lib/cn";
 import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import {
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  REQUEST_HISTORY_TEXT_CLASS,
-  RUNTIME_DETAIL_CODE_CLASS,
-  RUNTIME_DETAIL_VALUE_CLASS,
-  TRACE_ACTION_LINK_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionDescriptionList,
+  CurrentSelectionDetailCode,
+  CurrentSelectionDetailValue,
+  CurrentSelectionLabel,
+} from "../../base/public";
 import type { dedupeWorkItems } from "../dispatch-history/selected-work-dispatch-history-helpers";
 
 export function ScriptArgsSection({
@@ -26,12 +26,12 @@ export function ScriptArgsSection({
 
   return (
     <div className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
       <div className="grid gap-1">
         {args.map((arg) => (
-          <code className={RUNTIME_DETAIL_CODE_CLASS} key={arg}>
+          <CurrentSelectionDetailCode key={arg}>
             {arg}
-          </code>
+          </CurrentSelectionDetailCode>
         ))}
       </div>
     </div>
@@ -49,11 +49,11 @@ export function ScriptOutputSection({
 }) {
   return (
     <div className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
       {value ? (
-        <pre className={REQUEST_HISTORY_TEXT_CLASS}>{value}</pre>
+        <CodePanel>{value}</CodePanel>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>
+        <DetailCopy>{emptyMessage}</DetailCopy>
       )}
     </div>
   );
@@ -71,7 +71,7 @@ export function DispatchDetailSection({
       aria-label={title}
       className="mt-3 grid gap-2 border-t border-outline pt-3"
     >
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{title}</span>
+      <CurrentSelectionLabel>{title}</CurrentSelectionLabel>
       {children}
     </section>
   );
@@ -94,7 +94,7 @@ export function DispatchDetailList({
   }
 
   return (
-    <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+    <CurrentSelectionDescriptionList>
       {populatedEntries.map((entry) => (
         <InferenceAttemptDetailLink
           code={entry.code}
@@ -105,7 +105,7 @@ export function DispatchDetailList({
           value={entry.value}
         />
       ))}
-    </dl>
+    </CurrentSelectionDescriptionList>
   );
 }
 
@@ -128,7 +128,7 @@ export function WorkItemActionGroup({
 
   return (
     <div className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
       <div className="flex flex-wrap gap-2">
         {items.map((workItem) => (
           <CurrentSelectionSelectableButton
@@ -172,18 +172,24 @@ export function TraceActionGroup({
 
   return (
     <div className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
       <div className="flex flex-wrap gap-2">
         {traceIDs.map((traceID) => (
-          <a
-            className={TRACE_ACTION_LINK_CLASS}
-            href={`#${traceTargetId}`}
+          <Button
+            asChild
+            className="w-fit rounded-lg"
             key={traceID}
-            onClick={() => onSelectTraceID?.(traceID)}
+            size="sm"
+            tone="outline"
           >
-            {traceID}
-            {activeTraceID === traceID ? selectedTraceSuffix : ""}
-          </a>
+            <a
+              href={`#${traceTargetId}`}
+              onClick={() => onSelectTraceID?.(traceID)}
+            >
+              {traceID}
+              {activeTraceID === traceID ? selectedTraceSuffix : ""}
+            </a>
+          </Button>
         ))}
       </div>
     </div>
@@ -210,17 +216,19 @@ function InferenceAttemptDetailLink({
   return (
     <div>
       <dt>{label}</dt>
-      <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+      <CurrentSelectionDetailValue>
         {href ? (
-          <a className={TRACE_ACTION_LINK_CLASS} href={href} title={title}>
-            {value}
-          </a>
+          <Button asChild className="w-fit rounded-lg" size="sm" tone="outline">
+            <a href={href} title={title}>
+              {value}
+            </a>
+          </Button>
         ) : code ? (
-          <code className={RUNTIME_DETAIL_CODE_CLASS}>{value}</code>
+          <CurrentSelectionDetailCode>{value}</CurrentSelectionDetailCode>
         ) : (
           value
         )}
-      </dd>
+      </CurrentSelectionDetailValue>
     </div>
   );
 }

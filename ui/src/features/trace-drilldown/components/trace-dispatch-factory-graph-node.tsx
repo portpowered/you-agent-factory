@@ -1,10 +1,11 @@
 import type { NodeProps } from "@xyflow/react";
 
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
+import { DashboardText } from "../../../components/ui";
 import { formatTraceOutcome } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
 import {
   ActivityGraphNodeBadge,
+  activityGraphNodeSurfaceClassName,
   activityGraphNodeTitleClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
 import { ActivityGraphNodeShell } from "../../flowchart/components/current-activity-node-shell";
@@ -14,13 +15,6 @@ import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const WORKSTATION_NODE_CLASS =
   "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";
-const DISPATCH_NODE_TONE_DEFAULT_CLASS = "border-outline bg-surface";
-const DISPATCH_NODE_TONE_DANGER_CLASS =
-  "border-af-danger-border bg-error-container";
-const DISPATCH_NODE_TONE_WARNING_CLASS =
-  "border-af-warning-border bg-warning-container";
-const DISPATCH_NODE_TONE_SUCCESS_CLASS =
-  "border-af-success-border bg-success-container";
 
 function TraceDispatchFactoryGraphNode({
   data,
@@ -64,23 +58,28 @@ function TraceDispatchFactoryGraphNode({
               : messages.dispatchPathPendingOutcome}
           </ActivityGraphNodeBadge>
         </div>
-        <p
+        <DashboardText
           className={cn(
             "m-0 [overflow-wrap:anywhere]",
             activityGraphNodeTitleClassName("font-mono text-sm"),
-            DASHBOARD_BODY_TEXT_CLASS,
           )}
           data-factory-entity-title
           title={data.displayLabel}
         >
           {data.displayLabel}
-        </p>
-        <p className="m-0 text-[0.76rem] text-on-surface-variant [overflow-wrap:anywhere]">
+        </DashboardText>
+        <DashboardText
+          className="m-0 text-[0.76rem] text-on-surface-variant [overflow-wrap:anywhere]"
+          variant="supporting"
+        >
           {messages.dispatchPathInputPrefix}: {data.inputSummary}
-        </p>
-        <p className="m-0 text-[0.76rem] text-on-surface-variant [overflow-wrap:anywhere]">
+        </DashboardText>
+        <DashboardText
+          className="m-0 text-[0.76rem] text-on-surface-variant [overflow-wrap:anywhere]"
+          variant="supporting"
+        >
           {messages.dispatchPathOutputPrefix}: {data.outputSummary}
-        </p>
+        </DashboardText>
       </div>
     </ActivityGraphNodeShell>
   );
@@ -109,15 +108,15 @@ function outcomeBadgeTone(
 
 function outcomeToneClassName(outcome?: string): string {
   if (!outcome) {
-    return DISPATCH_NODE_TONE_DEFAULT_CLASS;
+    return activityGraphNodeSurfaceClassName("neutral");
   }
 
   const normalized = outcome.toUpperCase();
   if (normalized === "FAILED" || normalized === "REJECTED") {
-    return DISPATCH_NODE_TONE_DANGER_CLASS;
+    return activityGraphNodeSurfaceClassName("danger");
   }
   if (normalized === "CONTINUE") {
-    return DISPATCH_NODE_TONE_WARNING_CLASS;
+    return activityGraphNodeSurfaceClassName("warning");
   }
-  return DISPATCH_NODE_TONE_SUCCESS_CLASS;
+  return activityGraphNodeSurfaceClassName("success");
 }

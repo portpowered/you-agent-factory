@@ -69,14 +69,14 @@ describe("WorkTotalsCard", () => {
     expect(screen.getByLabelText("Completed: 3")).toBeTruthy();
     expect(screen.getByLabelText("Failed: 1")).toBeTruthy();
     expect(screen.getByLabelText("Dispatched: 5")).toBeTruthy();
-    expect(inProgressCard?.className).toContain("border-info-border");
+    expect(inProgressCard?.className).toContain("border-af-info-border");
     expect(inProgressCard?.className).toContain("bg-info-container");
     expect(completedCard?.className).toContain("border-af-success-border");
     expect(completedCard?.className).toContain("bg-success-container");
     expect(failedCard?.className).toContain("border-af-danger-border");
     expect(failedCard?.className).toContain("bg-error-container");
     expect(dispatchedCard?.className).toContain("border-outline");
-    expect(dispatchedCard?.className).not.toContain("border-info-border");
+    expect(dispatchedCard?.className).not.toContain("border-af-info-border");
     expect(dispatchedCard?.className).not.toContain("border-af-success-border");
     expect(dispatchedCard?.className).not.toContain("border-af-danger-border");
   });
@@ -106,7 +106,7 @@ describe("WorkTotalsCard", () => {
     expectNoVerticalScrollContainer(body);
 
     const statCard = within(card).getByText("In progress").closest("article");
-    expect(statCard?.className).toContain("py-1.5");
+    expect(statCard?.className).toContain("p-2");
     expect(within(requireValue(statCard)).getByText("2").className).toContain(
       "text-[1.2rem]",
     );

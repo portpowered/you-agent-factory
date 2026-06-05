@@ -1,8 +1,5 @@
 import { isAPIRecord } from "../../../api/transport";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DashboardLabel, DashboardText, SurfacePanel } from "../../../components/ui";
 import { formatNumber } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
@@ -27,9 +24,7 @@ export function FriendlyExecCommandOutput({
   if (friendlyOutput === null) {
     return (
       <div className="grid gap-3">
-        {text ? (
-          <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p>
-        ) : null}
+        {text ? <DashboardText className="m-0">{text}</DashboardText> : null}
         <ExecCommandContentSection
           label={messages.outputLabel}
           value={output}
@@ -40,37 +35,43 @@ export function FriendlyExecCommandOutput({
 
   return (
     <div className="grid gap-3">
-      {text ? (
-        <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{text}</p>
-      ) : null}
-      <section className="grid gap-2 rounded-lg border border-outline bg-surface-container-low p-3">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-          {messages.execCommandResultHeading}
-        </span>
-        <div className="grid gap-3">
-          {friendlyOutput.exitCode !== null ? (
+      {text ? <DashboardText className="m-0">{text}</DashboardText> : null}
+      <SurfacePanel asChild className="grid gap-2" radius="lg" surface="low">
+        <section>
+          <DashboardLabel>
+            {messages.execCommandResultHeading}
+          </DashboardLabel>
+          <div className="grid gap-3">
+            {friendlyOutput.exitCode !== null ? (
+              <SummaryMetric
+                label={messages.execCommandExitCodeLabel}
+                value={String(friendlyOutput.exitCode)}
+              />
+            ) : null}
+            {friendlyOutput.wallTime ? (
+              <SummaryMetric
+                label={messages.execCommandWallTimeLabel}
+                value={formatExecCommandWallTime(
+                  friendlyOutput.wallTime,
+                  locale,
+                )}
+              />
+            ) : null}
+            {status ? (
+              <SummaryMetric
+                label={messages.sessionStatusLabel}
+                value={status}
+              />
+            ) : null}
             <SummaryMetric
-              label={messages.execCommandExitCodeLabel}
-              value={String(friendlyOutput.exitCode)}
+              label={messages.execCommandOutputSummaryLabel}
+              value={
+                friendlyOutput.summary ?? messages.execCommandNoOutputSummary
+              }
             />
-          ) : null}
-          {friendlyOutput.wallTime ? (
-            <SummaryMetric
-              label={messages.execCommandWallTimeLabel}
-              value={formatExecCommandWallTime(friendlyOutput.wallTime, locale)}
-            />
-          ) : null}
-          {status ? (
-            <SummaryMetric label={messages.sessionStatusLabel} value={status} />
-          ) : null}
-          <SummaryMetric
-            label={messages.execCommandOutputSummaryLabel}
-            value={
-              friendlyOutput.summary ?? messages.execCommandNoOutputSummary
-            }
-          />
-        </div>
-      </section>
+          </div>
+        </section>
+      </SurfacePanel>
       <ExecCommandContentSection
         label={messages.execCommandRawOutputLabel}
         value={output}
@@ -88,7 +89,7 @@ function ExecCommandContentSection({
 }) {
   return (
     <section className="grid gap-2">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <DashboardLabel>{label}</DashboardLabel>
       <TranscriptContentPanel kind="code" value={value} />
     </section>
   );
@@ -105,8 +106,8 @@ function SummaryMetric({
 }) {
   return (
     <div className={cn("grid gap-1", className)}>
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>{value}</p>
+      <DashboardLabel>{label}</DashboardLabel>
+      <DashboardText className="m-0">{value}</DashboardText>
     </div>
   );
 }

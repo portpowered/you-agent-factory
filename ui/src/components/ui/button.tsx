@@ -5,8 +5,14 @@ import { cn } from "../../lib/cn";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   asChild?: boolean;
-  tone?: "default" | "destructive" | "outline" | "secondary" | "ghost";
-  size?: "default" | "icon" | "lg" | "sm";
+  tone?:
+    | "default"
+    | "destructive"
+    | "outline"
+    | "secondary"
+    | "ghost"
+    | "warning";
+  size?: "default" | "icon" | "lg" | "pill" | "sm";
 }
 
 const BUTTON_BASE_CLASS =
@@ -22,11 +28,14 @@ const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
     "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay",
   secondary:
     "border-outline-variant bg-surface-container-low text-primary hover:border-primary hover:bg-af-overlay",
+  warning:
+    "border-af-warning-border bg-warning-container text-on-warning-container hover:border-af-warning-border hover:bg-warning-container hover:text-on-warning-container",
 };
 const BUTTON_SIZE_CLASS: Record<NonNullable<ButtonProps["size"]>, string> = {
   default: "px-4 py-2.5 text-sm",
   icon: "h-11 w-11 px-0 py-0",
   lg: "px-5 py-3 text-base",
+  pill: "min-h-9 rounded-full px-3 py-2 text-xs",
   sm: "min-h-9 rounded-lg px-3 py-2 text-xs",
 };
 

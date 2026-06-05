@@ -1,4 +1,10 @@
 import { useId, useState } from "react";
+import {
+  DashboardLabel,
+  DashboardText,
+  SurfacePanel,
+  type DisclosureButtonProps,
+} from "../../../components/ui";
 import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import { ExpandablePanelIcon } from "../../../components/ui/expandable-panel-icon";
 import { cn } from "../../../lib/cn";
@@ -134,6 +140,24 @@ export function getDefaultDashboardFlowAxisLegendPhaseItems(
   }));
 }
 
+type DashboardFlowAxisLegendToggleProps = DisclosureButtonProps;
+
+function DashboardFlowAxisLegendToggle({
+  children,
+  className,
+  ...props
+}: DashboardFlowAxisLegendToggleProps) {
+  return (
+    <DisclosureButton
+      className={cn("dashboard-eyebrow", className)}
+      size="pill"
+      tone="outline"
+      {...props}
+    >
+      {children}
+    </DisclosureButton>
+  );
+}
 
 function normalizeLabelForAction(ariaLabel: string): string {
   return ariaLabel.charAt(0).toLowerCase() + ariaLabel.slice(1);
@@ -164,7 +188,7 @@ function DashboardFlowAxisLegendItems({
   return (
     <div className="flex flex-col gap-3">
       {edgeItems.length > 0 ? (
-        <ul className=  "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2">
+        <ul className="m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2">
           {edgeItems.map((item) => (
             <li
               className="flex items-center gap-2"
@@ -178,16 +202,19 @@ function DashboardFlowAxisLegendItems({
                 )}
                 data-legend-flow={item.tone === "active" ? "" : undefined}
               />
-              <span className="dashboard-body-sm min-w-0 text-on-surface-variant [overflow-wrap:anywhere]">
+              <DashboardText
+                as="span"
+                className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
+              >
                 {item.label}
-              </span>
+              </DashboardText>
             </li>
           ))}
         </ul>
       ) : null}
       {phaseItems.length > 0 ? (
         <section aria-label={editorMessages.workStatePhaseLegendAriaLabel}>
-          <ul className=  "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2">
+          <ul className="m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2">
             {phaseItems.map((item) => (
               <li
                 className="flex items-center gap-2"
@@ -196,18 +223,24 @@ function DashboardFlowAxisLegendItems({
               >
                 <span
                   aria-hidden="true"
-                  className={cn("h-3 w-3 shrink-0 rounded-sm border", item.swatchClassName)}
+                  className={cn(
+                    "h-3 w-3 shrink-0 rounded-sm border",
+                    item.swatchClassName,
+                  )}
                 />
-                <span className="dashboard-body-sm min-w-0 text-on-surface-variant [overflow-wrap:anywhere]">
+                <DashboardText
+                  as="span"
+                  className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
+                >
                   {item.label}
-                </span>
+                </DashboardText>
               </li>
             ))}
           </ul>
         </section>
       ) : null}
       {iconItems.length > 0 ? (
-        <ul className=  "m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2">
+        <ul className="m-0 grid list-none grid-cols-1 gap-x-3 gap-y-2 p-0 sm:grid-cols-2">
           {iconItems.map((item) => (
             <li
               className="flex min-w-0 items-center gap-2"
@@ -219,9 +252,12 @@ function DashboardFlowAxisLegendItems({
                 kind={item.kind}
                 label={messages.iconLabel(item.label)}
               />
-              <span className="dashboard-body-sm min-w-0 text-on-surface-variant [overflow-wrap:anywhere]">
+              <DashboardText
+                as="span"
+                className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
+              >
                 {item.label}
-              </span>
+              </DashboardText>
             </li>
           ))}
         </ul>
@@ -247,57 +283,61 @@ export function DashboardFlowAxisLegend({
 
   return (
     <div
-      className={cn( 
-         "pointer-events-none z-10 flex flex-col items-stretch gap-2 md:items-start", className)}
+      className={cn(
+        "pointer-events-none z-10 flex flex-col items-stretch gap-2 md:items-start",
+        className,
+      )}
       data-dashboard-flow-axis-legend=""
       data-legend-expanded={expanded ? "true" : "false"}
     >
       {expanded ? (
-        <aside
+        <SurfacePanel
           aria-label={resolvedAriaLabel}
-          className="dashboard-body-sm pointer-events-auto w-full rounded-lg border border-outline bg-surface-container-high px-3 py-3 text-on-surface-variant shadow-af-card backdrop-blur-md md:max-w-md"
+          asChild
+          className="dashboard-body-sm pointer-events-auto w-full text-on-surface-variant shadow-af-card backdrop-blur-md md:max-w-md"
           data-dashboard-flow-axis-legend-panel=""
           id={panelId}
+          radius="lg"
         >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <h3 className="dashboard-eyebrow m-0 text-primary">
-                {resolvedAriaLabel}
-              </h3>
+          <aside>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <DashboardLabel as="h3" className="m-0 text-primary">
+                  {resolvedAriaLabel}
+                </DashboardLabel>
+              </div>
+              <DashboardFlowAxisLegendToggle
+                aria-label={messages.collapseToggleLabel(actionTargetLabel)}
+                className="shrink-0"
+                controlsID={panelId}
+                data-dashboard-flow-axis-legend-toggle=""
+                expanded={true}
+                onClick={() => setExpanded(false)}
+              >
+                <ExpandablePanelIcon expanded={true} />
+                {messages.collapseLabel}
+              </DashboardFlowAxisLegendToggle>
             </div>
-            <DisclosureButton
-              aria-label={messages.collapseToggleLabel(actionTargetLabel)}
-              className="dashboard-eyebrow shrink-0 cursor-pointer rounded-full border border-outline bg-surface-container-low px-3 py-2 text-on-surface-variant transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
-              controlsID={panelId}
-              data-dashboard-flow-axis-legend-toggle=""
-              expanded={true}
-              onClick={() => setExpanded(false)}
-              type="button"
-            >
-              <ExpandablePanelIcon expanded={true} />
-              {messages.collapseLabel}
-            </DisclosureButton>
-          </div>
-          <DashboardFlowAxisLegendItems
-            edgeItems={edgeItems}
-            iconItems={iconItems}
-            locale={locale}
-            phaseItems={phaseItems}
-          />
-        </aside>
+            <DashboardFlowAxisLegendItems
+              edgeItems={edgeItems}
+              iconItems={iconItems}
+              locale={locale}
+              phaseItems={phaseItems}
+            />
+          </aside>
+        </SurfacePanel>
       ) : (
-        <DisclosureButton
+        <DashboardFlowAxisLegendToggle
           aria-label={messages.expandToggleLabel(actionTargetLabel)}
-          className="dashboard-eyebrow pointer-events-auto inline-flex items-center gap-2 rounded-full border border-outline bg-surface-container-high px-3 py-2 text-on-surface-variant shadow-af-card backdrop-blur-md transition-colors hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring"
+          className="pointer-events-auto shadow-af-card backdrop-blur-md"
           controlsID={panelId}
           data-dashboard-flow-axis-legend-toggle=""
           expanded={false}
           onClick={() => setExpanded(true)}
-          type="button"
         >
           <ExpandablePanelIcon expanded={false} />
           <span>{messages.minimizedLabel}</span>
-        </DisclosureButton>
+        </DashboardFlowAxisLegendToggle>
       )}
     </div>
   );

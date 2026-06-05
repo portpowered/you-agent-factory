@@ -3,15 +3,12 @@ import { useId } from "react";
 import { MonacoGuardSelectorEditor } from "../../../../components/prompt-editor";
 import {
   DashboardActionButton,
+  DashboardLabel,
+  DashboardText,
   Input,
   Select,
+  SurfacePanel,
 } from "../../../../components/ui";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
 import {
   createDefaultWorkstationGuard,
   formatWorkstationGuardSummary,
@@ -19,7 +16,7 @@ import {
   type WorkstationLevelGuard,
   type WorkstationLevelGuardType,
 } from "../../../current-factory-definition/lib/workstation-guards";
-import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
+import { CurrentSelectionFormField } from "../../base/public";
 import type { EditableWorkstationWorkstationOptionsState } from "../lib/detail-card-types";
 import { useStableWorkstationGuardRowKeys } from "../lib/workstation-guard-row-keys";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
@@ -42,19 +39,14 @@ export function EditableConfigurationWorkstationGuardsField({
   const guardRowKeys = useStableWorkstationGuardRowKeys(guards);
 
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="h5" className="m-0">
         {messages.workstationGuardsHeading}
-      </h5>
+      </DashboardLabel>
       {guards.length === 0 ? (
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <DashboardText className="m-0 text-on-surface-variant">
           {messages.workstationGuardsEmpty}
-        </p>
+        </DashboardText>
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {guards.map((guard, index) => (
@@ -83,14 +75,10 @@ export function EditableConfigurationWorkstationGuardsField({
         </ul>
       )}
       <div className="grid gap-2">
-        <label
-          className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-          htmlFor={addGuardFieldId}
-        >
+        <DashboardLabel as="label" htmlFor={addGuardFieldId}>
           {messages.workstationGuardsAddLabel}
-        </label>
+        </DashboardLabel>
         <Select
-          className={DASHBOARD_BODY_TEXT_CLASS}
           id={addGuardFieldId}
           onChange={(event) => {
             const nextType = event.target.value as WorkstationLevelGuardType;
@@ -118,7 +106,7 @@ export function EditableConfigurationWorkstationGuardsField({
           ))}
         </Select>
       </div>
-    </div>
+    </CurrentSelectionFormField>
   );
 }
 
@@ -142,50 +130,52 @@ function WorkstationGuardRow({
   const rowId = `editable-workstation-guard-${guardIndex}`;
 
   return (
-    <article
+    <SurfacePanel
       aria-labelledby={`${rowId}-heading`}
-      className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
+      asChild
+      className="grid gap-2"
+      radius="lg"
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="grid min-w-0 gap-1">
-          <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
-            {messages.localizeWorkstationGuardType(guard.type)}
-          </h6>
-          <p
-            className={cn(
-              "m-0 text-on-surface-subtle",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
-            {formatWorkstationGuardSummary(guard)}
-          </p>
+      <article>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="grid min-w-0 gap-1">
+            <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
+              {messages.localizeWorkstationGuardType(guard.type)}
+            </h6>
+            <DashboardText
+              className="m-0 text-on-surface-subtle"
+              variant="supporting"
+            >
+              {formatWorkstationGuardSummary(guard)}
+            </DashboardText>
+          </div>
+          <DashboardActionButton onClick={onRemove} type="button">
+            {messages.workstationGuardsRemoveAction}
+          </DashboardActionButton>
         </div>
-        <DashboardActionButton onClick={onRemove} type="button">
-          {messages.workstationGuardsRemoveAction}
-        </DashboardActionButton>
-      </div>
-      {guard.type === "VISIT_COUNT" ? (
-        <VisitCountGuardFields
-          fieldErrors={fieldErrors}
-          guard={guard}
-          guardIndex={guardIndex}
-          messages={messages}
-          onChange={onChange}
-          rowId={rowId}
-          workstationOptionsState={workstationOptionsState}
-        />
-      ) : null}
-      {guard.type === "MATCHES_FIELDS" ? (
-        <MatchesFieldsGuardFields
-          fieldErrors={fieldErrors}
-          guard={guard}
-          guardIndex={guardIndex}
-          messages={messages}
-          onChange={onChange}
-          rowId={rowId}
-        />
-      ) : null}
-    </article>
+        {guard.type === "VISIT_COUNT" ? (
+          <VisitCountGuardFields
+            fieldErrors={fieldErrors}
+            guard={guard}
+            guardIndex={guardIndex}
+            messages={messages}
+            onChange={onChange}
+            rowId={rowId}
+            workstationOptionsState={workstationOptionsState}
+          />
+        ) : null}
+        {guard.type === "MATCHES_FIELDS" ? (
+          <MatchesFieldsGuardFields
+            fieldErrors={fieldErrors}
+            guard={guard}
+            guardIndex={guardIndex}
+            messages={messages}
+            onChange={onChange}
+            rowId={rowId}
+          />
+        ) : null}
+      </article>
+    </SurfacePanel>
   );
 }
 
@@ -212,37 +202,22 @@ function VisitCountGuardFields({
   return (
     <div className="grid gap-2 md:grid-cols-2">
       <div className="grid gap-1">
-        <label
-          className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-          htmlFor={workstationFieldId}
-        >
+        <DashboardLabel as="label" htmlFor={workstationFieldId}>
           {messages.visitCountGuardWorkstationFieldLabel}
-        </label>
+        </DashboardLabel>
         {workstationOptionsState.status === "error" ? (
-          <p
-            className={cn(
-              "m-0 text-on-error-container",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-            role="alert"
-          >
+          <DashboardText className="m-0 text-on-error-container" role="alert">
             {messages.editableConfigurationWorkstationUnavailablePrefix}{" "}
             {workstationOptionsState.message}
-          </p>
+          </DashboardText>
         ) : null}
         {workstationOptionsState.status === "empty" ? (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-          >
+          <DashboardText className="m-0 text-on-surface-variant">
             {workstationOptionsState.message}
-          </p>
+          </DashboardText>
         ) : null}
         {workstationOptionsState.status === "ready" ? (
           <Select
-            className={DASHBOARD_BODY_TEXT_CLASS}
             id={workstationFieldId}
             onChange={(event) => {
               onChange({
@@ -276,14 +251,10 @@ function VisitCountGuardFields({
         ) : null}
       </div>
       <div className="grid gap-1">
-        <label
-          className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-          htmlFor={maxVisitsFieldId}
-        >
+        <DashboardLabel as="label" htmlFor={maxVisitsFieldId}>
           {messages.visitCountGuardMaxVisitsFieldLabel}
-        </label>
+        </DashboardLabel>
         <Input
-          className={DASHBOARD_BODY_TEXT_CLASS}
           id={maxVisitsFieldId}
           inputMode="numeric"
           min={1}
@@ -342,14 +313,13 @@ function MatchesFieldsGuardFields({
 
   return (
     <div className="grid gap-1">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+      <DashboardLabel>
         {messages.matchesFieldsGuardInputKeyFieldLabel}
-      </span>
+      </DashboardLabel>
       <MonacoGuardSelectorEditor
         ariaDescribedBy={inputKeyError ? inputKeyErrorId : undefined}
         ariaInvalid={Boolean(inputKeyError)}
         ariaLabel={messages.matchesFieldsGuardInputKeyFieldLabel}
-        className={DASHBOARD_BODY_TEXT_CLASS}
         hasError={Boolean(inputKeyError)}
         id={inputKeyFieldId}
         loadingMessage={
@@ -376,16 +346,14 @@ function MatchesFieldsGuardFields({
 
 function GuardFieldError({ id, message }: { id?: string; message: string }) {
   return (
-    <p
-      className={cn(
-        "m-0 text-on-error-container",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
+    <DashboardText
+      className="m-0 text-on-error-container"
       id={id}
       role="alert"
+      variant="supporting"
     >
       {message}
-    </p>
+    </DashboardText>
   );
 }
 

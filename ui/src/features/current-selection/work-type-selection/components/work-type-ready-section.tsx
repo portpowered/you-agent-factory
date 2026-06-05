@@ -1,19 +1,19 @@
 import { type ReactNode, useId } from "react";
 
-import { DashboardStatusPill } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
+  DashboardLabel,
+  DashboardStatusPill,
+  Input,
+} from "../../../../components/ui";
 import type { EditableWorkTypeValidationErrors } from "../../../current-factory-definition/lib/work-type-editable-validation";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_FORM_FIELD_CLASS,
-  CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
-  CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionFormField,
+  CurrentSelectionFormFields,
+  CurrentSelectionDetailFeedback,
+  CurrentSelectionSupportingText,
+} from "../../base/public";
 import type {
   EditableWorkTypeConfigurationState,
   EditableWorkTypeSaveState,
@@ -100,40 +100,27 @@ export function WorkTypeReadySection({
   return (
     <form className="grid gap-2.5" onSubmit={(event) => event.preventDefault()}>
       {validationErrors.contract ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          role="alert"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {validationErrors.contract}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       {state.hasValidationErrors ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          role="alert"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {messages.editableConfigurationValidationStatus}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
-      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+      <CurrentSelectionFormFields>
         <WorkTypeEditableField
           errorMessage={validationErrors.name}
           fieldId="editable-work-type-name"
           input={
-            <input
+            <Input
               aria-describedby={
                 validationErrors.name
                   ? "editable-work-type-name-error"
                   : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
-              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-work-type-name"
               onChange={(event) => state.onNameChange(event.target.value)}
               type="text"
@@ -142,7 +129,7 @@ export function WorkTypeReadySection({
           }
           label={messages.workTypeNameLabel}
         />
-        <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
+        <CurrentSelectionFormField>
           {hasDefaultHandlingBehavior ? (
             <DashboardStatusPill
               id={handlingBehaviorStatusId}
@@ -152,11 +139,9 @@ export function WorkTypeReadySection({
               {messages.handlingBehaviorDefaultStatusLabel}
             </DashboardStatusPill>
           ) : null}
-          <label
-            className={cn(
-              "flex items-center gap-2",
-              DASHBOARD_SUPPORTING_LABEL_CLASS,
-            )}
+          <DashboardLabel
+            as="label"
+            className="flex items-center gap-2"
             htmlFor="editable-work-type-handling-behavior-default"
           >
             <input
@@ -175,35 +160,29 @@ export function WorkTypeReadySection({
               type="checkbox"
             />
             {messages.handlingBehaviorDefaultLabel}
-          </label>
+          </DashboardLabel>
           {!hasDefaultHandlingBehavior ? (
-            <p
-              className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}
-              id={handlingBehaviorHelperId}
-            >
+            <CurrentSelectionSupportingText id={handlingBehaviorHelperId}>
               {messages.handlingBehaviorDefaultHelper}
-            </p>
+            </CurrentSelectionSupportingText>
           ) : null}
           {validationErrors.handlingBehavior ? (
-            <p
-              className={cn(
-                "m-0 text-on-error-container",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
+            <CurrentSelectionDetailFeedback
               id="editable-work-type-handling-behavior-error"
               role="alert"
+              tone="danger"
             >
               {validationErrors.handlingBehavior}
-            </p>
+            </CurrentSelectionDetailFeedback>
           ) : null}
-        </div>
+        </CurrentSelectionFormField>
         <WorkTypeStatesList
           messages={messages}
           onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
           states={state.initialValues.states}
           workTypeName={workTypeName}
         />
-      </div>
+      </CurrentSelectionFormFields>
     </form>
   );
 }
@@ -220,23 +199,20 @@ function WorkTypeEditableField({
   label: string;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="label" htmlFor={fieldId}>
         {label}
-      </label>
+      </DashboardLabel>
       {input}
       {errorMessage ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
+        <CurrentSelectionDetailFeedback
           id={`${fieldId}-error`}
           role="alert"
+          tone="danger"
         >
           {errorMessage}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
-    </div>
+    </CurrentSelectionFormField>
   );
 }

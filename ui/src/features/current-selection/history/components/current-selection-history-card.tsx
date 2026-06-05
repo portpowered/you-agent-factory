@@ -1,5 +1,5 @@
 import { forwardRef, type HTMLAttributes } from "react";
-
+import { surfacePanelVariants } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 
 export interface CurrentSelectionHistoryCardProps
@@ -16,11 +16,12 @@ export const CurrentSelectionHistoryCard = forwardRef<
 ) {
   return (
     <article
-      className={cn(
-        "grid min-w-0 gap-2.5 rounded-lg border border-outline bg-surface-container-low p-3",
-        highlighted && "border-primary text-on-surface",
-        className,
-      )}
+      className={surfacePanelVariants({
+        className: cn("grid min-w-0 gap-2.5", className),
+        radius: "lg",
+        surface: "low",
+        tone: highlighted ? "accent" : "default",
+      })}
       ref={ref}
       {...props}
     />

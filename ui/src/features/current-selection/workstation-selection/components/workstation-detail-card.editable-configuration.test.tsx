@@ -3,13 +3,15 @@ import userEvent from "@testing-library/user-event";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
-import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
 } from "../lib/detail-card-types";
 import { WorkstationDetailCard } from "./workstation-detail-card";
+
+const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
+
 import { EditableWorkstationConfigurationHeaderActions } from "./workstation-save-controls";
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
@@ -445,7 +447,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     const fieldGroup = editableConfigurationSection().querySelector(
-      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+      CURRENT_SELECTION_FORM_FIELDS_SELECTOR,
     );
     expect(fieldGroup).not.toBeNull();
     expect(fieldGroup?.className).not.toMatch(/md:grid-cols-\d/);
@@ -2302,9 +2304,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       within(configuration).queryByText("Worker selection unavailable."),
     ).toBeNull();
     expect(
-      configuration.querySelector(
-        `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
-      ),
+      configuration.querySelector(CURRENT_SELECTION_FORM_FIELDS_SELECTOR),
     ).toBeNull();
   });
 

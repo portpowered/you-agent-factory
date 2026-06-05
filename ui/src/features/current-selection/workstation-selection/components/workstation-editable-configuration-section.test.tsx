@@ -3,7 +3,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS } from "../../base/components/detail-card-shared";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
 import {
@@ -30,9 +29,8 @@ describe("EditableConfigurationSection async states", () => {
     const sectionBody = document.getElementById(
       expandButton.getAttribute("aria-controls") ?? "",
     );
-    expect(sectionBody?.className).toContain(
-      CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-    );
+    expect(sectionBody?.className).toContain("bg-surface-container-high");
+    expect(sectionBody?.className).toContain("rounded-2xl");
     expect(
       screen.getByLabelText("Workstation name").closest(".rounded-2xl"),
     ).toBe(sectionBody);

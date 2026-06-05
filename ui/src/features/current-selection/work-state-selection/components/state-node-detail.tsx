@@ -1,17 +1,18 @@
 import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  DashboardCode,
+  DashboardDescriptionList,
+  DashboardHeading,
+  DashboardText,
+  SurfacePanel,
+} from "../../../../components/ui";
 import {
   formatLocalDateTime,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
 import {
-  DETAIL_COPY_CLASS,
-  WIDGET_SUBTITLE_CLASS,
+  DetailCopy,
+  WidgetSubtitle,
 } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
@@ -22,6 +23,7 @@ import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,
 } from "../../base/components/detail-card-shared";
+import { CurrentSelectionSelectableButton } from "../../base/public";
 import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,
@@ -60,7 +62,7 @@ export function StateNodeDetailCard({
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       {showRuntimeSummary ? (
         <div className="mt-0 grid gap-1" title={placeLabel}>
-          <p className={WIDGET_SUBTITLE_CLASS}>{summaryLabel || placeLabel}</p>
+          <WidgetSubtitle>{summaryLabel || placeLabel}</WidgetSubtitle>
         </div>
       ) : null}
       {editableConfigurationState ? (
@@ -77,9 +79,9 @@ export function StateNodeDetailCard({
         </div>
       </dl>
       <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        <DashboardHeading as="h4" className="m-0">
           {messages.currentWorkHeading}
-        </h4>
+        </DashboardHeading>
         {visibleWorkItems.length > 0 ? (
           <StatePositionWorkList
             failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
@@ -88,13 +90,13 @@ export function StateNodeDetailCard({
             workItems={visibleWorkItems}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>
+          <DetailCopy>
             {emptyStatePlaceMessage(
               messages,
               usesRetainedWorkItems,
               tokenCount,
             )}
-          </p>
+          </DetailCopy>
         )}
       </section>
     </SelectionDetailLayout>
@@ -138,15 +140,16 @@ function StatePositionWorkListItem({
     <>
       <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
       {workID ? (
-        <code
-          className={`${DASHBOARD_BODY_CODE_CLASS} ${DASHBOARD_SUPPORTING_TEXT_CLASS}`}
+        <DashboardCode
+          className="text-on-surface-variant"
+          size="supporting"
         >
           {workID}
-        </code>
+        </DashboardCode>
       ) : null}
       {startedAt ? (
-        <time
-          className={DASHBOARD_BODY_TEXT_CLASS}
+        <DashboardText
+          as="time"
           dateTime={startedAt}
           title={startedAt}
         >
@@ -156,12 +159,10 @@ function StatePositionWorkListItem({
             messages.timestampUnavailable,
             locale,
           )}
-        </time>
+        </DashboardText>
       ) : null}
       {hasFailureReason || hasFailureMessage ? (
-        <dl
-          className={`m-0 grid gap-1.5 [&_dd]:m-0 [&_div]:grid [&_div]:min-w-0 [&_div]:grid-cols-[7rem_minmax(0,1fr)] [&_div]:gap-2 ${DASHBOARD_BODY_TEXT_CLASS}`}
-        >
+        <DashboardDescriptionList className="[&_div]:grid-cols-[7rem_minmax(0,1fr)]">
           {hasFailureReason ? (
             <div>
               <dt>{messages.failureReasonLabel}</dt>
@@ -178,7 +179,7 @@ function StatePositionWorkListItem({
               </dd>
             </div>
           ) : null}
-        </dl>
+        </DashboardDescriptionList>
       ) : null}
     </>
   );
@@ -186,22 +187,22 @@ function StatePositionWorkListItem({
   if (onSelectWorkItem) {
     return (
       <li>
-        <button
+        <CurrentSelectionSelectableButton
           aria-label={messages.selectWorkItemLabel(workLabel)}
-          className="grid w-full min-w-0 cursor-pointer gap-2 rounded-lg border border-outline bg-surface-container-high px-3 py-2 text-left outline-af-focus-ring transition hover:bg-af-overlay focus-visible:outline-2 focus-visible:outline-offset-2"
+          className="min-w-0 gap-2"
           onClick={() => onSelectWorkItem(workItem)}
-          type="button"
+          variant="card"
         >
           {content}
-        </button>
+        </CurrentSelectionSelectableButton>
       </li>
     );
   }
 
   return (
-    <li className="grid min-w-0 gap-2 rounded-lg border border-outline bg-surface-container-high px-3 py-2 text-sm">
-      {content}
-    </li>
+    <SurfacePanel asChild className="grid min-w-0 gap-2 text-sm" radius="lg">
+      <li>{content}</li>
+    </SurfacePanel>
   );
 }
 

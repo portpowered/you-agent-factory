@@ -12,8 +12,10 @@ import type {
   FactoryGraphTopology,
 } from "./factory-graph-draft-types";
 import { createFactoryGraphWorkstationResolver } from "./factory-graph-editor-connections";
-import { FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS } from "../../flowchart/lib/current-activity-graph-hover";
 import { projectFactoryGraphToReactFlow } from "./factory-graph-react-flow-projection";
+
+const FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS =
+  "agent-factory-editor-edge--hoverable";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: projection contract scenarios stay together around one adapter.
 describe("factory graph React Flow projection", () => {

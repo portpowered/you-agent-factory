@@ -1,18 +1,18 @@
 import { useId, useState } from "react";
 import type { DashboardInferenceAttempt } from "../../../../api/dashboard/types";
-import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  DashboardCode,
+  DashboardText,
+  ExpandablePanelTrigger,
+  surfacePanelVariants,
+} from "../../../../components/ui";
 import {
   formatDurationMillis,
   formatLocalDateTime,
   getLocalDateTimeDisplay,
   getProviderSessionLogTarget,
 } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
@@ -26,17 +26,15 @@ import {
 } from "../../base/components/current-selection-locale";
 import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
 import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
+import { normalizeDetailText } from "../../base/components/detail-card-shared";
 import {
-  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  HISTORY_HEADER_CLASS,
-  INFERENCE_ATTEMPT_CARD_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  normalizeDetailText,
-  REQUEST_SELECTION_STATUS_CLASS,
-} from "../../base/components/detail-card-shared";
-import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
-import { InferenceAttemptTextSection } from "../../base/components/inference-attempt-text-section";
+  CurrentSelectionDescriptionList,
+  CurrentSelectionLabel,
+  CurrentSelectionSupportingText,
+} from "../../base/public";
 import type { InferenceAttemptCardProps } from "../lib/detail-card-types";
+import { InferenceAttemptDetail } from "./inference-attempt-detail";
+import { InferenceAttemptTextSection } from "./inference-attempt-text-section";
 
 export function InferenceAttemptCard({
   attempt,
@@ -57,7 +55,10 @@ export function InferenceAttemptCard({
   return (
     <article
       aria-label={detailMessages.attemptAriaLabel(attempt.attempt)}
-      className={INFERENCE_ATTEMPT_CARD_CLASS}
+      className={surfacePanelVariants({
+        className: "grid min-w-0 gap-2.5 p-3.5",
+        radius: "lg",
+      })}
     >
       <AttemptSummaryHeader
         attempt={attempt}
@@ -103,7 +104,13 @@ function AttemptSummaryHeader({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
-    <div className={HISTORY_HEADER_CLASS}>
+    <div
+      className={surfacePanelVariants({
+        className:
+          "flex items-center justify-between gap-3 px-3 py-2 [&_h4]:m-0",
+        radius: "lg",
+      })}
+    >
       <div className="grid min-w-0 gap-1">
         <div className="flex items-start justify-between gap-3">
           <strong id={headingId}>
@@ -116,7 +123,9 @@ function AttemptSummaryHeader({
           </CurrentSelectionExecutionPill>
         </div>
         {timingSummary ? (
-          <p className={REQUEST_SELECTION_STATUS_CLASS}>{timingSummary}</p>
+          <CurrentSelectionSupportingText tone="status">
+            {timingSummary}
+          </CurrentSelectionSupportingText>
         ) : null}
       </div>
       <ExpandablePanelTrigger
@@ -224,7 +233,7 @@ function AttemptMetadataDetails({
   );
 
   return (
-    <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+    <CurrentSelectionDescriptionList>
       <InferenceAttemptDetail
         code
         label={detailMessages.inferenceRequestIdLabel}
@@ -286,7 +295,7 @@ function AttemptMetadataDetails({
         label={detailMessages.errorClassLabel}
         value={attempt.error_class}
       />
-    </dl>
+    </CurrentSelectionDescriptionList>
   );
 }
 
@@ -317,28 +326,26 @@ function AttemptProviderSessionDetails({
 
     return (
       <div className="grid gap-1">
-        <span>{detailMessages.providerSessionLabel}</span>
+        <CurrentSelectionLabel>
+          {detailMessages.providerSessionLabel}
+        </CurrentSelectionLabel>
         <CurrentSelectionSelectableButton
           aria-label={workstationMessages.selectProviderSessionLabel(
             state.providerSessionLabel,
             attempt.dispatch_id,
           )}
-          className={cn(
-            state.providerSessionSelected &&
-              CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-          )}
           onClick={() => onSelectProviderSession(loadableProviderSession)}
           selected={state.providerSessionSelected}
           variant="card"
         >
-          <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
+          <DashboardText as="span" variant="supporting">
             {state.providerSessionSelected
               ? workstationMessages.providerSessionSelectedAction
               : workstationMessages.providerSessionSelectAction}
-          </span>
-          <code className={DASHBOARD_BODY_CODE_CLASS}>
+          </DashboardText>
+          <DashboardCode>
             {state.providerSessionLabel}
-          </code>
+          </DashboardCode>
         </CurrentSelectionSelectableButton>
       </div>
     );
@@ -346,11 +353,13 @@ function AttemptProviderSessionDetails({
 
   return (
     <div className="grid gap-1">
-      <span>{detailMessages.providerSessionLabel}</span>
-      <code>{state.providerSessionLabel}</code>
-      <p className={REQUEST_SELECTION_STATUS_CLASS}>
+      <CurrentSelectionLabel>
+        {detailMessages.providerSessionLabel}
+      </CurrentSelectionLabel>
+      <DashboardCode>{state.providerSessionLabel}</DashboardCode>
+      <CurrentSelectionSupportingText tone="status">
         {workstationMessages.providerSessionSelectionUnavailable}
-      </p>
+      </CurrentSelectionSupportingText>
     </div>
   );
 }
@@ -375,13 +384,9 @@ function AttemptResponseDetails({
   }
 
   return attempt.outcome ? (
-    <p className={DETAIL_COPY_CLASS}>
-      {detailMessages.providerResponseUnavailable}
-    </p>
+    <DetailCopy>{detailMessages.providerResponseUnavailable}</DetailCopy>
   ) : (
-    <p className={DETAIL_COPY_CLASS}>
-      {detailMessages.awaitingProviderResponse}
-    </p>
+    <DetailCopy>{detailMessages.awaitingProviderResponse}</DetailCopy>
   );
 }
 

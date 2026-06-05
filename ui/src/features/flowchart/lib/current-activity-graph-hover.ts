@@ -6,7 +6,7 @@ export interface CurrentActivityGraphNodeHoverState {
 }
 
 /** Accent border/shadow applied on pointer hover when higher-priority states are absent. */
-export const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
+const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
   "transition-[border-color,box-shadow] hover:border-primary hover:shadow-af-accent-chip";
 
 export function currentActivityGraphNodeHoverClassName(
@@ -28,10 +28,9 @@ export interface CurrentActivityGraphEdgeHoverState {
   semantic?: boolean;
 }
 
-export const CURRENT_ACTIVITY_GRAPH_EDGE_HOVER_CLASS =
-  "agent-flow-edge--hoverable";
+const CURRENT_ACTIVITY_GRAPH_EDGE_HOVER_CLASS = "agent-flow-edge--hoverable";
 
-export const FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS =
+const FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS =
   "agent-factory-editor-edge--hoverable";
 
 export function currentActivityGraphEdgeHoverClassName(

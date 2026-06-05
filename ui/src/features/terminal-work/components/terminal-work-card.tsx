@@ -1,20 +1,15 @@
 import type { ReactNode } from "react";
 
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DashboardText } from "../../../components/ui";
 import {
   StandardListSelection,
   StandardListSelectionItem,
 } from "../../../components/ui/standard-list-selection";
 import {
-  DASHBOARD_WIDGET_CLASS,
-  DETAIL_CARD_CLASS,
-  DETAIL_COPY_CLASS,
+  DashboardWidgetFrame,
+  DetailCopy,
 } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { AgentBentoCard } from "../../bento/public";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
 import { GraphSemanticIcon } from "../../flowchart/public";
 import { StandardExpandableSection } from "../../standard-card-components/public";
@@ -53,10 +48,7 @@ interface TerminalWorkRowProps {
 }
 
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
-const TERMINAL_BUTTON_META_CLASS = cn(
-  "leading-snug text-current",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
+const TERMINAL_BUTTON_META_CLASS = "leading-snug text-current";
 
 function terminalStatusIconKind(
   status: TerminalWorkStatus,
@@ -79,19 +71,15 @@ export function CompletedFailedWorkstationCard({
   title,
   widgetId = "terminal-work",
 }: CompletedFailedWorkstationCardProps) {
-  const cardClassName = cn(
-    DASHBOARD_WIDGET_CLASS,
-    DETAIL_CARD_CLASS,
-    className,
-  );
   const messages = getTerminalWorkMessages(locale);
   const resolvedTitle = title ?? messages.cardTitle;
 
   return (
-    <AgentBentoCard
-      className={cardClassName}
+    <DashboardWidgetFrame
+      className={className}
       headerAction={headerAction}
       title={resolvedTitle}
+      widgetId={widgetId}
     >
       <fieldset className="grid gap-3">
         <legend className="sr-only">{messages.legendLabel}</legend>
@@ -130,7 +118,7 @@ export function CompletedFailedWorkstationCard({
           widgetId={widgetId}
         />
       </fieldset>
-    </AgentBentoCard>
+    </DashboardWidgetFrame>
   );
 }
 
@@ -178,10 +166,7 @@ function TerminalWorkRow({
           {items.map((item) => (
             <StandardListSelectionItem
               aria-label={item.label}
-              className={cn(
-                "px-2.5 py-2 [overflow-wrap:anywhere]",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
+              className="px-2.5 py-2 [overflow-wrap:anywhere]"
               key={`${status}-${item.label}`}
               onClick={() => onSelectItem(item)}
               selected={selectedLabel === item.label}
@@ -198,7 +183,7 @@ function TerminalWorkRow({
           ))}
         </StandardListSelection>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>
+        <DetailCopy>{emptyMessage}</DetailCopy>
       )}
     </StandardExpandableSection>
   );
@@ -217,13 +202,23 @@ function renderTerminalWorkContext(
     latestAttempt?.transition_id;
   if (!workstation) {
     return (
-      <span className={TERMINAL_BUTTON_META_CLASS}>{fallbackMessage}</span>
+      <DashboardText
+        as="span"
+        className={TERMINAL_BUTTON_META_CLASS}
+        variant="supporting"
+      >
+        {fallbackMessage}
+      </DashboardText>
     );
   }
 
   return (
-    <span className={TERMINAL_BUTTON_META_CLASS}>
+    <DashboardText
+      as="span"
+      className={TERMINAL_BUTTON_META_CLASS}
+      variant="supporting"
+    >
       {summary(status, workstation)}
-    </span>
+    </DashboardText>
   );
 }

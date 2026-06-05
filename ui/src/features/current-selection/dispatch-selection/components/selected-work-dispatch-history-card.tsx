@@ -1,12 +1,10 @@
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
+import { DashboardText } from "../../../../components/ui";
 import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
-import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
@@ -16,14 +14,14 @@ import {
   CurrentSelectionBadge,
   CurrentSelectionExecutionPill,
 } from "../../base/components/current-selection-pill";
-import {
-  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  normalizeDetailText,
-} from "../../base/components/detail-card-shared";
-import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
+import { normalizeDetailText } from "../../base/components/detail-card-shared";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
-import { WorkItemPayloadList } from "../../work-selection/public";
+import { CurrentSelectionDescriptionList } from "../../base/public";
+import { CurrentSelectionHistoryCard } from "../../history/public";
+import {
+  InferenceAttemptDetail,
+  WorkItemPayloadList,
+} from "../../work-selection/public";
 import {
   dedupeWorkItems,
   requestDurationMillis,
@@ -89,9 +87,6 @@ export function DispatchHistoryCard({
         title,
         request.dispatch_id,
       )}
-      className={
-        isCurrentDispatch ? CURRENT_SELECTION_ACCENT_SURFACE_CLASS : undefined
-      }
       highlighted={isCurrentDispatch}
     >
       <DispatchHistoryHeader
@@ -238,16 +233,11 @@ function DispatchHistoryHeader({
           {title || dispatchID || messages.unknownDispatchTitle}
         </strong>
         <div className="flex flex-wrap items-center gap-2">
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-          >
+          <DashboardText className="m-0 text-on-surface-variant">
             {outcome
               ? enumMessages.localizeOutcome(outcome)
               : enumMessages.localizeOutcome("PENDING")}
-          </p>
+          </DashboardText>
           <WorkstationOperationKindBadge
             label={messages.workstationOperationKindBadge}
           />
@@ -283,7 +273,7 @@ function DispatchSummaryDetails({
   );
 
   return (
-    <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+    <CurrentSelectionDescriptionList className="mt-2.5">
       <InferenceAttemptDetail
         label={messages.workstationLabel}
         value={request.workstation_name}
@@ -300,7 +290,7 @@ function DispatchSummaryDetails({
             : undefined
         }
       />
-    </dl>
+    </CurrentSelectionDescriptionList>
   );
 }
 
@@ -318,9 +308,7 @@ function DispatchRequestSection({
   return (
     <DispatchDetailSection title={messages.requestDetailsTitle}>
       {view.isScriptBackedRequest ? (
-        <p className={DETAIL_COPY_CLASS}>
-          {messages.promptDetailsNotApplicable}
-        </p>
+        <DetailCopy>{messages.promptDetailsNotApplicable}</DetailCopy>
       ) : null}
       <WorkItemPayloadList
         messages={{

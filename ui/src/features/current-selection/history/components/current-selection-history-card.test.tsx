@@ -3,12 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { CurrentSelectionHistoryCard } from "./current-selection-history-card";
 
 describe("CurrentSelectionHistoryCard", () => {
-  it("keeps history cards on the subtle surface", () => {
+  it("renders row content inside the low history surface", () => {
     render(<CurrentSelectionHistoryCard>row</CurrentSelectionHistoryCard>);
 
-    const card = screen.getByText("row");
-
-    expect(card.className).toContain("bg-surface-container-low");
-    expect(card.className).not.toContain("bg-surface-container-high");
+    expect(screen.getByText("row").closest("article")?.className).toContain(
+      "bg-surface-container-low",
+    );
   });
 });

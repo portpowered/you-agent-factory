@@ -1185,7 +1185,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "Sending your request...",
     );
-    expect(submittingStatus.className).toContain("text-on-surface");
+    expect(submittingStatus.className).toContain("bg-info-container");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,

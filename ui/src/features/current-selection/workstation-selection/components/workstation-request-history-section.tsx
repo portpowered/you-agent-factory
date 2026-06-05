@@ -9,12 +9,12 @@ import {
   formatDurationMillis,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import { cn } from "../../../../lib/cn";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
-import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
-import { REQUEST_SELECTION_STATUS_CLASS } from "../../base/components/detail-card-shared";
+import { CurrentSelectionSupportingText } from "../../base/public";
+import { CurrentSelectionHistoryCard } from "../../history/public";
 import type { WorkstationRequestHistorySectionProps } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
@@ -55,7 +55,7 @@ export function WorkstationRequestHistorySection({
           />
         ))
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.noWorkstationRequests}</p>
+        <DetailCopy>{messages.noWorkstationRequests}</DetailCopy>
       )}
     </CurrentSelectionExpandableSection>
   );
@@ -133,9 +133,9 @@ function WorkstationRequestHistoryCard({
         />
       </div>
       {requestSelected ? (
-        <p className={REQUEST_SELECTION_STATUS_CLASS}>
+        <CurrentSelectionSupportingText tone="status">
           {messages.selectedRequestLabel(request.dispatch_id)}
-        </p>
+        </CurrentSelectionSupportingText>
       ) : null}
     </CurrentSelectionHistoryCard>
   );

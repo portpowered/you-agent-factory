@@ -1,5 +1,8 @@
 import { render, screen } from "@testing-library/react";
-import { AuthoredBodyText, RequestAuthoredText } from "./detail-card-shared";
+import {
+  AuthoredBodyText,
+  RequestAuthoredText,
+} from "../../../../lib/authored-body-text";
 
 describe("AuthoredBodyText", () => {
   it("renders headings, lists, inline code, and fenced code blocks for markdown-authored request text", () => {
@@ -34,9 +37,7 @@ describe("AuthoredBodyText", () => {
     expect(authoredShell?.className).toContain("[&_code]:py-0.5");
     expect(authoredShell?.className).toContain("border-outline");
     expect(authoredShell?.className).toContain("bg-surface-container-high");
-    expect(authoredShell?.className).toContain(
-      "[&_code]:bg-surface-container",
-    );
+    expect(authoredShell?.className).toContain("[&_code]:bg-surface-container");
   });
 
   it("renders plain text as readable fallback without requiring markdown syntax", () => {

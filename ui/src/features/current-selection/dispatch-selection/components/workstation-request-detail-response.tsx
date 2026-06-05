@@ -1,17 +1,15 @@
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
+import { CodePanel } from "../../../../components/ui/code-panel";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import {
+  CurrentSelectionDescriptionList,
+  CurrentSelectionDetailCode,
+  CurrentSelectionDetailItem,
+  CurrentSelectionDetailSection,
+  CurrentSelectionDetailValue,
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "../../base/components/current-selection-locale";
-import {
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  REQUEST_HISTORY_TEXT_CLASS,
-  RUNTIME_DETAIL_CODE_CLASS,
-  RUNTIME_DETAIL_VALUE_CLASS,
-  RUNTIME_DETAILS_SECTION_CLASS,
-} from "../../base/components/detail-card-shared";
+} from "../../base/public";
 import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
 import type { WorkstationRequestDetailView } from "./workstation-request-detail-view";
 
@@ -25,19 +23,13 @@ export function ResponseDetailsSection({
   const messages = useCurrentSelectionDetailMessages();
 
   return (
-    <section
-      aria-label={messages.responseDetailsTitle}
-      className={RUNTIME_DETAILS_SECTION_CLASS}
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.responseDetailsTitle}
-      </h4>
+    <CurrentSelectionDetailSection title={messages.responseDetailsTitle}>
       {view.isScriptBackedRequest ? (
         <ScriptResponseDetails request={request} view={view} />
       ) : (
         <InferenceResponseDetails request={request} />
       )}
-    </section>
+    </CurrentSelectionDetailSection>
   );
 }
 
@@ -53,29 +45,22 @@ export function ErrorDetailsSection({
   }
 
   return (
-    <section
-      aria-label={messages.errorDetailsTitle}
-      className={RUNTIME_DETAILS_SECTION_CLASS}
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.errorDetailsTitle}
-      </h4>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-        <div>
-          <dt>{messages.failureReasonLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.normalizedFailureReason ?? messages.failureReasonUnavailable}
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.failureMessageLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.normalizedFailureMessage ??
-              messages.failureMessageUnavailable}
-          </dd>
-        </div>
-      </dl>
-    </section>
+    <CurrentSelectionDetailSection title={messages.errorDetailsTitle}>
+      <CurrentSelectionDescriptionList>
+        <CurrentSelectionDetailItem
+          label={messages.failureReasonLabel}
+          value={
+            view.normalizedFailureReason ?? messages.failureReasonUnavailable
+          }
+        />
+        <CurrentSelectionDetailItem
+          label={messages.failureMessageLabel}
+          value={
+            view.normalizedFailureMessage ?? messages.failureMessageUnavailable
+          }
+        />
+      </CurrentSelectionDescriptionList>
+    </CurrentSelectionDetailSection>
   );
 }
 
@@ -92,54 +77,46 @@ function ScriptResponseDetails({
 
   return (
     <>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+      <CurrentSelectionDescriptionList>
         <TraceIDField traceIDs={request.trace_ids} />
         {scriptResponse ? (
           <>
-            <div>
-              <dt>{messages.scriptRequestIdLabel}</dt>
-              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.script_request_id ? (
-                  <code className={RUNTIME_DETAIL_CODE_CLASS}>
-                    {scriptResponse.script_request_id}
-                  </code>
-                ) : (
-                  messages.scriptResponseUnavailableSummary
-                )}
-              </dd>
-            </div>
-            <div>
-              <dt>{messages.scriptAttemptLabel}</dt>
-              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.attempt ?? messages.scriptAttemptUnavailable}
-              </dd>
-            </div>
-            <div>
-              <dt>{messages.outcomeLabel}</dt>
-              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.outcome ?? messages.outcomeUnavailable}
-              </dd>
-            </div>
-            <div>
-              <dt>{messages.durationLabel}</dt>
-              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.duration_millis !== undefined
+            <CurrentSelectionDetailItem
+              code={Boolean(scriptResponse.script_request_id)}
+              label={messages.scriptRequestIdLabel}
+              value={
+                scriptResponse.script_request_id ??
+                messages.scriptResponseUnavailableSummary
+              }
+            />
+            <CurrentSelectionDetailItem
+              label={messages.scriptAttemptLabel}
+              value={
+                scriptResponse.attempt ?? messages.scriptAttemptUnavailable
+              }
+            />
+            <CurrentSelectionDetailItem
+              label={messages.outcomeLabel}
+              value={scriptResponse.outcome ?? messages.outcomeUnavailable}
+            />
+            <CurrentSelectionDetailItem
+              label={messages.durationLabel}
+              value={
+                scriptResponse.duration_millis !== undefined
                   ? formatDurationMillis(scriptResponse.duration_millis, locale)
-                  : messages.durationUnavailable}
-              </dd>
-            </div>
-            <div>
-              <dt>{messages.exitCodeLabel}</dt>
-              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.exit_code ?? messages.exitCodeUnavailable}
-              </dd>
-            </div>
-            <div>
-              <dt>{messages.failureTypeLabel}</dt>
-              <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-                {scriptResponse.failure_type ?? messages.failureTypeUnavailable}
-              </dd>
-            </div>
+                  : messages.durationUnavailable
+              }
+            />
+            <CurrentSelectionDetailItem
+              label={messages.exitCodeLabel}
+              value={scriptResponse.exit_code ?? messages.exitCodeUnavailable}
+            />
+            <CurrentSelectionDetailItem
+              label={messages.failureTypeLabel}
+              value={
+                scriptResponse.failure_type ?? messages.failureTypeUnavailable
+              }
+            />
             <ScriptOutputField
               emptyMessage={messages.stdoutEmpty}
               title={messages.stdoutLabel}
@@ -152,13 +129,13 @@ function ScriptResponseDetails({
             />
           </>
         ) : null}
-      </dl>
+      </CurrentSelectionDescriptionList>
       {request.script_response ? null : (
-        <p className={DETAIL_COPY_CLASS}>
+        <DetailCopy>
           {request.errored_request_count > 0 || view.hasFailureDetails
             ? messages.scriptResponseUnavailableErrored
             : messages.scriptResponseUnavailablePending}
-        </p>
+        </DetailCopy>
       )}
     </>
   );
@@ -170,9 +147,9 @@ function InferenceResponseDetails({
   request: WorkstationRequestDetailCardProps["request"];
 }) {
   return (
-    <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+    <CurrentSelectionDescriptionList>
       <TraceIDField traceIDs={request.trace_ids} />
-    </dl>
+    </CurrentSelectionDescriptionList>
   );
 }
 
@@ -189,12 +166,12 @@ function TraceIDField({
       <dd className="grid gap-1">
         {traceIDs && traceIDs.length > 0 ? (
           traceIDs.map((traceId: string) => (
-            <code className={RUNTIME_DETAIL_CODE_CLASS} key={traceId}>
+            <CurrentSelectionDetailCode key={traceId}>
               {traceId}
-            </code>
+            </CurrentSelectionDetailCode>
           ))
         ) : (
-          <span className={RUNTIME_DETAIL_VALUE_CLASS}>
+          <span className="min-w-0 [overflow-wrap:anywhere]">
             {messages.traceUnavailable}
           </span>
         )}
@@ -215,13 +192,9 @@ function ScriptOutputField({
   return (
     <div>
       <dt>{title}</dt>
-      <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-        {value ? (
-          <pre className={REQUEST_HISTORY_TEXT_CLASS}>{value}</pre>
-        ) : (
-          emptyMessage
-        )}
-      </dd>
+      <CurrentSelectionDetailValue>
+        {value ? <CodePanel>{value}</CodePanel> : emptyMessage}
+      </CurrentSelectionDetailValue>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
 import { DashboardWidgetFrame } from "../../../../components/ui";
-import { DETAIL_CARD_WIDE_CLASS } from "../../../../components/ui/widget-frame";
 import { useSelectionHistoryStore } from "../state/selectionHistoryStore";
 import { CurrentSelectionHeaderActions } from "./current-selection-header-actions";
 import { useCurrentSelectionShellMessages } from "./current-selection-locale";
@@ -37,7 +36,6 @@ export function SelectionDetailLayout({
 
   return (
     <DashboardWidgetFrame
-      className={DETAIL_CARD_WIDE_CLASS}
       headerAction={
         <CurrentSelectionHeaderActions
           canRedo={canRedo}
@@ -55,6 +53,7 @@ export function SelectionDetailLayout({
         />
       }
       title={messages.title}
+      wide
       widgetId={widgetId}
     >
       {children}

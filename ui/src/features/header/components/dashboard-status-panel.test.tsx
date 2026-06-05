@@ -1,7 +1,5 @@
 import { render, screen } from "@testing-library/react";
 
-import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
-import { DASHBOARD_PAGE_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardStatusPanel } from "./dashboard-status-panel";
 
@@ -20,9 +18,11 @@ describe("DashboardStatusPanel", () => {
     expect(screen.getByText("U").className).not.toContain("sr-only");
     expect(headerEyebrow?.textContent).toContain("U");
     expect(headerEyebrow?.className).toContain("text-primary");
-    expect(heading.className).toContain(DASHBOARD_PAGE_HEADING_CLASS);
+    expect(heading.className).toContain("af-dashboard-page-heading");
     expect(screen.queryByText("Waiting for more timeline data.")).toBeNull();
-    expect(section?.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(section?.getAttribute("data-dashboard-panel-shell")).toBe("panel");
+    expect(section?.className).toContain("border-outline");
+    expect(section?.className).toContain("bg-surface-container-high");
     expect(section?.className).toContain("mb-4");
   });
 
@@ -38,9 +38,11 @@ describe("DashboardStatusPanel", () => {
     const detail = screen.getByText("Waiting for more timeline data.");
 
     expect(detail).toBeTruthy();
-    expect(container.querySelector("section")?.className).toContain(
-      DASHBOARD_PANEL_SHELL_CLASS,
-    );
+    expect(
+      container
+        .querySelector("section")
+        ?.getAttribute("data-dashboard-panel-shell"),
+    ).toBe("panel");
     expect(detail.className).toContain("max-w-80");
     expect(detail.className).toContain("text-on-error-container");
   });

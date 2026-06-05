@@ -5,11 +5,8 @@ import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
+import { DashboardHeading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-} from "../../../components/ui/dashboard-typography";
 import { ScrollArea } from "../../../components/ui/scroll-area";
 import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";
@@ -89,7 +86,7 @@ const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
 const BENTO_CARD_BODY_SCROLL_CLASS = "min-h-0 flex-1";
 const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 gap-2.5 px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
-  DASHBOARD_BODY_TEXT_CLASS,
+  "af-dashboard-body-text",
 );
 const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 px-3 pt-3 pb-4 [&>*]:pb-1";
 
@@ -365,14 +362,12 @@ export function AgentBentoCardHeader({
       data-bento-drag-handle="true"
     >
       <div className="min-w-0 flex-1">
-        <h3
-          className={cn(
-            "m-0 min-w-0 flex-1 [overflow-wrap:anywhere]",
-            DASHBOARD_SECTION_HEADING_CLASS,
-          )}
+        <DashboardHeading
+          as="h3"
+          className="m-0 min-w-0 flex-1 [overflow-wrap:anywhere]"
         >
           {title}
-        </h3>
+        </DashboardHeading>
       </div>
       <div
         className={cn(

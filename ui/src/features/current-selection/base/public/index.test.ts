@@ -25,10 +25,12 @@ describe("current-selection base public barrel", () => {
     expect(
       currentSelectionBasePublic.mergeDetailCardSaveFieldErrors,
     ).toBeTypeOf("function");
-    expect(currentSelectionBasePublic.CurrentSelectionHistoryCard).toBeDefined();
-    expect(
-      currentSelectionBasePublic.CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
-    ).toBe("grid grid-cols-1 gap-3");
+    expect(currentSelectionBasePublic.CurrentSelectionDetailSection).toBeTypeOf(
+      "function",
+    );
+    expect(currentSelectionBasePublic.CurrentSelectionFormFields).toBeTypeOf(
+      "object",
+    );
     expect(currentSelectionBasePublic.EditableConfigurationSaveRow).toBeTypeOf(
       "function",
     );

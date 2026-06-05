@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
+import { DashboardLabel, SurfacePanel } from "../../../components/ui";
 
 export function WorkContentItemShell({
   children,
@@ -11,16 +11,16 @@ export function WorkContentItemShell({
   itemTypeLabel: string;
 }) {
   return (
-    <li className="grid gap-3 rounded-lg border-outline border bg-surface-container-high p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid gap-1">
-          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {itemTypeLabel}
-          </span>
+    <SurfacePanel asChild className="grid gap-3" radius="lg">
+      <li>
+        <div className="flex items-start justify-between gap-3">
+          <div className="grid gap-1">
+            <DashboardLabel>{itemTypeLabel}</DashboardLabel>
+          </div>
+          {headerActions}
         </div>
-        {headerActions}
-      </div>
-      {children}
-    </li>
+        {children}
+      </li>
+    </SurfacePanel>
   );
 }

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { ChooseFileField } from "./choose-file-field";
+import { ChooseFileNativeInput } from "./choose-file-native-input";
 
 describe("ChooseFileField", () => {
   it("renders export-style field grouping with neutral dashed shell on the control", () => {
@@ -53,5 +54,26 @@ describe("ChooseFileField", () => {
     expect(activeShell.className).toContain("bg-af-overlay");
     expect(activeShell.className).not.toContain("bg-primary-container");
     expect(activeShell.className).not.toContain("border-primary");
+  });
+
+  it("composes native file input chrome inside the shared dashed shell", () => {
+    render(
+      <ChooseFileField
+        control={
+          <ChooseFileNativeInput
+            aria-label="Factory cover image"
+            className="custom-native-input"
+          />
+        }
+        label={<label>Cover image</label>}
+      />,
+    );
+
+    const input = screen.getByLabelText("Factory cover image");
+    expect(input.getAttribute("type")).toBe("file");
+    expect(input.className).toContain("border-dashed");
+    expect(input.className).toContain("bg-surface-container-low");
+    expect(input.className).toContain("file:bg-surface-container-high");
+    expect(input.className).toContain("custom-native-input");
   });
 });

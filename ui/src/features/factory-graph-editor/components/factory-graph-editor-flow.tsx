@@ -3,6 +3,7 @@ import type { Edge, NodeProps } from "@xyflow/react";
 import { cn } from "../../../lib/cn";
 import {
   ActivityGraphNodeBadge,
+  activityGraphNodeSurfaceClassName,
   activityGraphNodeTitleClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
 import { ActivityGraphNodeShell } from "../../flowchart/components/current-activity-node-shell";
@@ -36,11 +37,11 @@ import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 type FactoryGraphEditorNode = FactoryGraphReactFlowNode;
 
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
-  resource: "border-af-success-border bg-success-container",
-  worker: "border-info-border bg-info-container",
-  workstation: "border-primary bg-primary-container",
+  resource: activityGraphNodeSurfaceClassName("success"),
+  worker: activityGraphNodeSurfaceClassName("info"),
+  workstation: activityGraphNodeSurfaceClassName("primary"),
   "work-type": "border-outline bg-surface-container-low",
-  "work-state": "border-outline-variant bg-surface-container-high",
+  "work-state": activityGraphNodeSurfaceClassName("neutralHigh"),
 };
 
 export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {
@@ -120,7 +121,10 @@ function FactoryGraphEditorNodeView({
           : undefined,
         data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
         data.draftStatus === "removal" &&
-          "border-af-danger-border bg-error-container ring-2 ring-af-danger-border",
+          cn(
+            activityGraphNodeSurfaceClassName("danger"),
+            "ring-2 ring-af-danger-border",
+          ),
       )}
       handles={data.connectionAnchors}
       nodeType={data.kind === "workstation" ? "workstation" : "resource"}

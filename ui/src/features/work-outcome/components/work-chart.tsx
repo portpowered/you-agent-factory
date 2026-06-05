@@ -17,12 +17,9 @@ import {
   ChartTooltipContent,
 } from "../../../components/ui/chart";
 import { Skeleton } from "../../../components/ui/skeleton";
-import {
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/ui/widget-frame";
+import { DashboardEmptyState } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { DASHBOARD_CHART_AXIS_LABEL_CLASS } from "../lib/chart-contract";
+import { dashboardChartAxisLabelClassName } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
 import {
   buildWorkChartData,
@@ -36,27 +33,25 @@ import {
   type WorkChartZoomRange,
 } from "./work-chart-interactions";
 import {
-  WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS,
   type WorkChartPresentation,
   workChartPresentationClasses,
 } from "./work-chart-presentation";
 
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
 
-export {
-  WORK_CHART_EMBEDDED_READY_CLASS,
-  WORK_CHART_READY_CLASS,
-  type WorkChartPresentation,
-} from "./work-chart-presentation";
-export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
+export { type WorkChartPresentation } from "./work-chart-presentation";
+const WORK_CHART_AXIS_LABEL_CLASS = dashboardChartAxisLabelClassName();
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
-export const WORK_CHART_LEGEND_CONTENT_CLASS =
+const WORK_CHART_LEGEND_CONTENT_CLASS =
   "flex-nowrap justify-center gap-x-2 gap-y-1 pt-0 sm:justify-start";
-export const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
-export const WORK_CHART_LEGEND_SWATCH_CLASS = "h-2 w-2";
+const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
+const WORK_CHART_LEGEND_SWATCH_CLASS = "h-2 w-2";
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_STATUS_PANEL_CLASS =
   "flex h-full min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center";
+// tailwind-exception: intrinsic-sizing
+const WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS =
+  "grid min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center items-start gap-1.5 p-0 [&_h3]:m-0";
 const WORK_CHART_SHELL_CLASS =
   "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
@@ -462,19 +457,9 @@ function WorkChartStatusPanel({
   title,
 }: WorkChartStatusPanelProps) {
   const embedded = presentation === "embedded";
-  return (
-    <div
-      aria-busy={ariaBusy || undefined}
-      aria-live={role === "alert" ? "assertive" : "polite"}
-      className={cn(
-        embedded ? WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS : EMPTY_STATE_CLASS,
-        embedded ? null : EMPTY_STATE_COMPACT_CLASS,
-        embedded ? null : WORK_CHART_STATUS_PANEL_CLASS,
-        embedded ? WORK_CHART_STATUS_PANEL_CLASS : null,
-      )}
-      data-work-chart-presentation={presentation}
-      role={role}
-    >
+
+  const content = (
+    <>
       {loading ? (
         <div aria-hidden="true" className="grid w-full gap-3">
           <Skeleton className="h-4 w-32" />
@@ -483,6 +468,36 @@ function WorkChartStatusPanel({
       ) : null}
       <h3>{title}</h3>
       <p>{message}</p>
+    </>
+  );
+
+  if (!embedded) {
+    return (
+      <DashboardEmptyState
+        aria-busy={ariaBusy || undefined}
+        aria-live={role === "alert" ? "assertive" : "polite"}
+        className={WORK_CHART_STATUS_PANEL_CLASS}
+        compact
+        data-work-chart-presentation={presentation}
+        role={role}
+      >
+        {content}
+      </DashboardEmptyState>
+    );
+  }
+
+  return (
+    <div
+      aria-busy={ariaBusy || undefined}
+      aria-live={role === "alert" ? "assertive" : "polite"}
+      className={cn(
+        WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS,
+        WORK_CHART_STATUS_PANEL_CLASS,
+      )}
+      data-work-chart-presentation={presentation}
+      role={role}
+    >
+      {content}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../components/ui/dashboard-typography";
 import { cn } from "../../../lib/cn";
 
 export type DashboardChartSemanticRole =
@@ -38,22 +37,32 @@ const DASHBOARD_CHART_LINE_WEIGHT_CLASS = "[stroke-width:2.25]";
 const DASHBOARD_CHART_POINT_WEIGHT_CLASS = "[stroke-width:1.5]";
 const DASHBOARD_CHART_DEFAULT_POINT_RADIUS = 3.25;
 
-export const DASHBOARD_CHART_AXIS_CLASS =
-  "stroke-outline-variant [stroke-width:1]";
-export const DASHBOARD_CHART_AXIS_LABEL_CLASS = cn(
-  "fill-on-surface-subtle [letter-spacing:0.16em]",
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
+const DASHBOARD_CHART_AXIS_CLASS = "stroke-outline-variant [stroke-width:1]";
+const DASHBOARD_CHART_AXIS_LABEL_CLASS = cn(
+  "type-label-medium fill-on-surface-subtle font-semibold uppercase tracking-[0.16em]",
 );
-export const DASHBOARD_CHART_LINE_CLASS = cn(
+const DASHBOARD_CHART_LINE_CLASS = cn(
   "fill-none [stroke-linecap:round] [stroke-linejoin:round]",
   DASHBOARD_CHART_LINE_WEIGHT_CLASS,
 );
-export const DASHBOARD_CHART_POINT_CLASS = cn(
+const DASHBOARD_CHART_POINT_CLASS = cn(
   "stroke-background",
   DASHBOARD_CHART_POINT_WEIGHT_CLASS,
 );
-export const DASHBOARD_CHART_SURFACE_CLASS =
+const DASHBOARD_CHART_SURFACE_CLASS =
   "af-chart-grid-surface block min-h-0 w-full rounded-lg";
+
+export function dashboardChartAxisClassName(): string {
+  return DASHBOARD_CHART_AXIS_CLASS;
+}
+
+export function dashboardChartAxisLabelClassName(): string {
+  return DASHBOARD_CHART_AXIS_LABEL_CLASS;
+}
+
+export function dashboardChartSurfaceClassName(): string {
+  return DASHBOARD_CHART_SURFACE_CLASS;
+}
 
 const DASHBOARD_CHART_SEMANTIC_STYLES: Record<
   DashboardChartSemanticRole,

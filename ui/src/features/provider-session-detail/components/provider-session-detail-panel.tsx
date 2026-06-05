@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
+  AlertPanel,
+  DashboardHeading,
+  DashboardLabel,
+  DashboardText,
+} from "../../../components/ui";
+import { DetailCopy } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { CurrentSelectionHistoryCard } from "../../current-selection/base/public";
+import { CurrentSelectionHistoryCard } from "../../current-selection/history/public";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
@@ -253,18 +253,13 @@ function StatusNotice({
   tone?: "default" | "error";
 }) {
   return (
-    <p
-      className={cn(
-        "m-0 rounded-lg border px-3 py-2.5",
-        tone === "error"
-          ? "border-af-danger-border bg-error-container text-on-error-container"
-          : "border-outline bg-surface-container-low text-on-surface-variant",
-        DASHBOARD_BODY_TEXT_CLASS,
-      )}
+    <AlertPanel
+      radius="lg"
       role={tone === "error" ? "alert" : "status"}
+      tone={tone === "error" ? "danger" : "info"}
     >
       {children}
-    </p>
+    </AlertPanel>
   );
 }
 
@@ -351,7 +346,7 @@ function TokenUsageSection({
             ]}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>{messages.tokenUsageUnavailable}</p>
+          <DetailCopy>{messages.tokenUsageUnavailable}</DetailCopy>
         )
       }
     >
@@ -379,7 +374,7 @@ function TokenUsageSection({
           />
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.tokenUsageUnavailable}</p>
+        <DetailCopy>{messages.tokenUsageUnavailable}</DetailCopy>
       )}
     </ProviderSessionExpandableSection>
   );
@@ -416,7 +411,7 @@ function TurnsSection({
             ]}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>{messages.turnsUnavailable}</p>
+          <DetailCopy>{messages.turnsUnavailable}</DetailCopy>
         )
       }
     >
@@ -425,21 +420,20 @@ function TurnsSection({
           {detail.parse.turns.map((turn) => (
             <article className="grid gap-3 py-1.5" key={turn.index}>
               <div className="grid gap-1">
-                <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+                <DashboardLabel>
                   {messages.turnLabel({ index: turn.index })}
-                </span>
-                <div
-                  className={cn(
-                    "text-on-surface-subtle",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
+                </DashboardLabel>
+                <DashboardText
+                  as="div"
+                  className="text-on-surface-subtle"
+                  variant="supporting"
                 >
                   <TimestampMetricValue
                     locale={locale}
                     timestamp={turn.startedAt}
                     unavailableLabel={messages.noTimestamp}
                   />
-                </div>
+                </DashboardText>
               </div>
               <div className="grid gap-4">
                 <DetailMetric
@@ -463,7 +457,7 @@ function TurnsSection({
           ))}
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.turnsUnavailable}</p>
+        <DetailCopy>{messages.turnsUnavailable}</DetailCopy>
       )}
     </ProviderSessionExpandableSection>
   );
@@ -505,9 +499,9 @@ function ParseDiagnosticsSection({
       }
     >
       <section className="grid gap-3">
-        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+        <DashboardHeading as="h5">
           {messages.parseErrorsHeading}
-        </h5>
+        </DashboardHeading>
         <div className="grid gap-3">
           {detail.parse.parseErrors.map((error) => (
             <CurrentSelectionHistoryCard
@@ -516,9 +510,9 @@ function ParseDiagnosticsSection({
               <strong>
                 {messages.lineLabel({ lineNumber: error.lineNumber })}
               </strong>
-              <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
+              <DashboardText className="m-0 mt-1.5">
                 {error.message}
-              </p>
+              </DashboardText>
             </CurrentSelectionHistoryCard>
           ))}
           {detail.parse.unknownEvents.map((event) => (
@@ -530,11 +524,9 @@ function ParseDiagnosticsSection({
                   lineNumber: event.lineNumber,
                 })}
               </strong>
-              <p
-                className={cn(
-                  "m-0 mt-1.5 text-on-surface-subtle",
-                  DASHBOARD_SUPPORTING_TEXT_CLASS,
-                )}
+              <DashboardText
+                className="m-0 mt-1.5 text-on-surface-subtle"
+                variant="supporting"
               >
                 {[
                   event.type ? `type=${event.type}` : null,
@@ -542,7 +534,7 @@ function ParseDiagnosticsSection({
                 ]
                   .filter(Boolean)
                   .join(" / ")}
-              </p>
+              </DashboardText>
             </CurrentSelectionHistoryCard>
           ))}
         </div>

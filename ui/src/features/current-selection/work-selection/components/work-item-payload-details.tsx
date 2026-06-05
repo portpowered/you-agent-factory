@@ -1,10 +1,11 @@
 import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
-import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
+import { DashboardText, SurfacePanel } from "../../../../components/ui";
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
 import { cn } from "../../../../lib/cn";
 import { WorkContentReadOnlyList } from "../../../work-content/public";
 import { useCurrentSelectionDetailMessages } from "../../base/components/current-selection-locale";
 import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
+import { CurrentSelectionLabel } from "../../base/public";
 
 interface WorkItemPayloadMessages {
   consumedPayloadEmpty: string;
@@ -40,7 +41,9 @@ export function WorkItemPayloadList({
 
   return (
     <div className="grid gap-2">
-      <span>{resolvedMessages.consumedWorkItemsLabel}</span>
+      <CurrentSelectionLabel>
+        {resolvedMessages.consumedWorkItemsLabel}
+      </CurrentSelectionLabel>
       <div className="grid gap-3">
         {workItems.map((workItem) => {
           const workLabel = formatWorkItemLabel(workItem);
@@ -48,51 +51,53 @@ export function WorkItemPayloadList({
           const hasPayloadDetails = workItemHasPayloadDetails(workItem);
 
           return (
-            <article
-              className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
+            <SurfacePanel
+              asChild
+              className="grid gap-2"
               key={workItem.work_id}
+              radius="lg"
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <CurrentSelectionSelectableButton
-                  aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}
-                  className={cn(
-                    isSelected &&
-                      "border-primary bg-primary-container text-primary",
-                  )}
-                  onClick={() => onSelectWorkID?.(workItem.work_id)}
-                  selected={isSelected}
-                >
-                  {workLabel}
-                </CurrentSelectionSelectableButton>
-                {workItem.state ? (
-                  <span
+              <article>
+                <div className="flex flex-wrap items-center gap-2">
+                  <CurrentSelectionSelectableButton
+                    aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}
                     className={cn(
-                      "text-on-surface-variant",
-                      DASHBOARD_SUPPORTING_TEXT_CLASS,
+                      isSelected &&
+                        "border-primary bg-primary-container text-primary",
                     )}
+                    onClick={() => onSelectWorkID?.(workItem.work_id)}
+                    selected={isSelected}
                   >
-                    {resolvedMessages.stateLabel}: {workItem.state}
-                  </span>
+                    {workLabel}
+                  </CurrentSelectionSelectableButton>
+                  {workItem.state ? (
+                    <DashboardText
+                      as="span"
+                      className="text-on-surface-variant"
+                      variant="supporting"
+                    >
+                      {resolvedMessages.stateLabel}: {workItem.state}
+                    </DashboardText>
+                  ) : null}
+                  {resolveWorkTypeID(workItem) ? (
+                    <DashboardText
+                      as="span"
+                      className="text-on-surface-variant"
+                      variant="supporting"
+                    >
+                      {resolvedMessages.workTypeLabel}:{" "}
+                      {resolveWorkTypeID(workItem)}
+                    </DashboardText>
+                  ) : null}
+                </div>
+                {hasPayloadDetails ? (
+                  <WorkItemPayloadDetails
+                    messages={resolvedMessages}
+                    workItem={workItem}
+                  />
                 ) : null}
-                {resolveWorkTypeID(workItem) ? (
-                  <span
-                    className={cn(
-                      "text-on-surface-variant",
-                      DASHBOARD_SUPPORTING_TEXT_CLASS,
-                    )}
-                  >
-                    {resolvedMessages.workTypeLabel}:{" "}
-                    {resolveWorkTypeID(workItem)}
-                  </span>
-                ) : null}
-              </div>
-              {hasPayloadDetails ? (
-                <WorkItemPayloadDetails
-                  messages={resolvedMessages}
-                  workItem={workItem}
-                />
-              ) : null}
-            </article>
+              </article>
+            </SurfacePanel>
           );
         })}
       </div>

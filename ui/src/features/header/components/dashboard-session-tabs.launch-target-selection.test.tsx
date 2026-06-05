@@ -3,13 +3,14 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import {
-  STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
-} from "../../../components/ui/standard-list-selection";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardSessionTabs } from "./dashboard-session-tabs";
+
+const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
+  "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
+const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
+  "border-outline-variant bg-surface-container-low text-on-surface";
 
 const listFactorySessions = vi.fn();
 const openFactorySession = vi.fn();

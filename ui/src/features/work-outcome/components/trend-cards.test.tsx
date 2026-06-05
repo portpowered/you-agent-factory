@@ -1,11 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_WIDGET_SUBTITLE_CLASS,
-} from "../../../components/ui/dashboard-typography";
 import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
 import type {
   FailureTrendModel,
@@ -186,30 +180,30 @@ describe("dashboard trend cards", () => {
     const timingScope = within(resolvedTimingCard);
     const toolbar = failureScope.getByText("Time range").closest("div");
     const summary = failureScope.getByText("Failed in range").closest("dl");
+    const failedInRangeMetric = failureScope
+      .getByText("Failed in range")
+      .closest("div");
 
-    expect(failureScope.getByText("Time range").className).toContain(
-      DASHBOARD_SUPPORTING_LABEL_CLASS,
-    );
-    expect(failureScope.getByLabelText("Time range").className).toContain(
-      DASHBOARD_BODY_TEXT_CLASS,
-    );
+    expect(failureScope.getByText("Time range").tagName).toBe("SPAN");
+    expect(failureScope.getByLabelText("Time range").tagName).toBe("SELECT");
     expect(
       requireValue(toolbar, "expected failure trend toolbar").className,
     ).toContain("md:flex-row");
     expect(
       requireValue(summary, "expected failure summary").className,
     ).toContain("md:grid-cols-3");
-    expect(summary?.className).toContain(DASHBOARD_SUPPORTING_LABELS_CLASS);
-    expect(summary?.className).toContain("border-outline");
-    expect(summary?.className).toContain("bg-surface-container-low");
+    expect(failedInRangeMetric?.className).toContain("border-outline");
+    expect(failedInRangeMetric?.className).toContain(
+      "bg-surface-container-low",
+    );
     expect(
       failureScope
         .getByText("Failed in range")
         .closest("div")
         ?.querySelector("dd")?.className,
-    ).toContain(DASHBOARD_WIDGET_SUBTITLE_CLASS);
+    ).toContain("af-dashboard-widget-subtitle");
     expect(failureScope.getByText("Work type: story").className).toContain(
-      DASHBOARD_BODY_TEXT_CLASS,
+      "af-dashboard-body-text",
     );
     expect(failureScope.getByText("Work type: story").className).toContain(
       "text-on-surface-variant",
@@ -222,13 +216,11 @@ describe("dashboard trend cards", () => {
     );
 
     expect(reworkScope.getByText("work-active-story").className).toContain(
-      DASHBOARD_WIDGET_SUBTITLE_CLASS,
+      "af-dashboard-widget-subtitle",
     );
-    expect(timingScope.getByLabelText("Timing range").className).toContain(
-      DASHBOARD_SUPPORTING_LABELS_CLASS,
-    );
+    expect(timingScope.getByLabelText("Timing range").tagName).toBe("DL");
     expect(timingScope.getByText("450ms").className).toContain(
-      DASHBOARD_WIDGET_SUBTITLE_CLASS,
+      "af-dashboard-widget-subtitle",
     );
   });
 });

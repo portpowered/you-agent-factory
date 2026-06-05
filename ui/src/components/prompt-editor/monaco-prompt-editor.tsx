@@ -4,11 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
+import { DashboardCode, DashboardText } from "../ui";
 import { cn } from "../../lib/cn";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../ui/dashboard-typography";
 import {
   buildWorkstationPromptMarkers,
   isInsideTemplate,
@@ -317,22 +314,15 @@ function PromptEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <p
-        className={cn(
-          "m-0 text-on-surface-variant",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
+      <DashboardText className="m-0 text-on-surface-variant" variant="supporting">
         {message}
-      </p>
-      <pre
-        className={cn(
-          "m-0 whitespace-pre-wrap break-words text-on-surface-variant [overflow-wrap:anywhere]",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
+      </DashboardText>
+      <DashboardCode
+        as="pre"
+        className="m-0 whitespace-pre-wrap break-words text-on-surface-variant [overflow-wrap:anywhere]"
       >
         {value}
-      </pre>
+      </DashboardCode>
     </div>
   );
 }

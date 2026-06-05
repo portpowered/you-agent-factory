@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
-import { CURRENT_ACTIVITY_GRAPH_EDGE_HOVER_CLASS } from "../../flowchart/lib/current-activity-graph-hover";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   type ActiveGraphHighlights,
@@ -10,6 +9,8 @@ import {
   buildHandleAssignments,
   buildVisibleGraphEdges,
 } from "./react-flow-current-activity-card-graph";
+
+const CURRENT_ACTIVITY_GRAPH_EDGE_HOVER_CLASS = "agent-flow-edge--hoverable";
 
 describe("buildGraphEdges hover emphasis", () => {
   it("marks neutral edges hoverable and suppresses hoverable class for active, semantic, and muted edges", async () => {

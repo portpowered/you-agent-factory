@@ -1,20 +1,17 @@
 import type { DashboardProviderSession } from "../../../../api/dashboard/types";
 
 import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  Button,
+  DashboardCode,
+  DashboardText,
+} from "../../../../components/ui";
 import { getProviderSessionLogTarget } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
-import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
 import {
   CurrentSelectionBadge,
@@ -22,15 +19,13 @@ import {
 } from "../../base/components/current-selection-pill";
 import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
 import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
-import {
-  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  REQUEST_SELECTION_STATUS_CLASS,
-} from "../../base/components/detail-card-shared";
 import type {
   CollapsibleProviderSessionAttemptsProps,
   ProviderSessionAttemptsProps,
   ProviderSessionLogAccessProps,
 } from "../../base/components/detail-card-types";
+import { CurrentSelectionSupportingText } from "../../base/public";
+import { CurrentSelectionHistoryCard } from "../../history/public";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
@@ -199,7 +194,7 @@ function ProviderSessionAttemptList({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   if (attempts.length === 0) {
-    return <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>;
+    return <DetailCopy>{emptyMessage}</DetailCopy>;
   }
 
   return (
@@ -225,11 +220,6 @@ function ProviderSessionAttemptList({
 
         return (
           <CurrentSelectionHistoryCard
-            className={
-              isCurrentDispatch
-                ? CURRENT_SELECTION_ACCENT_SURFACE_CLASS
-                : undefined
-            }
             highlighted={isCurrentDispatch}
             key={`${attempt.dispatch_id}-${attempt.provider_session?.id}`}
           >
@@ -241,14 +231,9 @@ function ProviderSessionAttemptList({
             </div>
             <div className="mt-2 grid gap-1">
               <div className="flex flex-wrap items-center gap-2">
-                <p
-                  className={cn(
-                    "m-0 text-on-surface-variant",
-                    DASHBOARD_BODY_TEXT_CLASS,
-                  )}
-                >
+                <DashboardText className="m-0 text-on-surface-variant">
                   {outcome.label}
-                </p>
+                </DashboardText>
                 {isCurrentDispatch ? (
                   <CurrentSelectionBadge>
                     {messages.currentDispatchLabel}
@@ -256,9 +241,9 @@ function ProviderSessionAttemptList({
                 ) : null}
               </div>
               {outcome.rawOutcomeLabel ? (
-                <p className={DASHBOARD_SUPPORTING_CODE_CLASS}>
+                <DashboardCode as="p" className="m-0" size="supporting">
                   {outcome.rawOutcomeLabel}
-                </p>
+                </DashboardCode>
               ) : null}
             </div>
             {loadableProviderSession && onSelectProviderSession ? (
@@ -267,32 +252,26 @@ function ProviderSessionAttemptList({
                   providerSessionLabel,
                   attempt.dispatch_id,
                 )}
-                className={cn(
-                  "mt-2",
-                  providerSessionSelected &&
-                    CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-                )}
+                className="mt-2"
                 onClick={() => onSelectProviderSession(loadableProviderSession)}
                 selected={providerSessionSelected}
                 variant="card"
               >
-                <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
+                <DashboardText as="span" variant="supporting">
                   {providerSessionSelected
                     ? messages.providerSessionSelectedAction
                     : messages.providerSessionSelectAction}
-                </span>
-                <code className={DASHBOARD_BODY_CODE_CLASS}>
+                </DashboardText>
+                <DashboardCode>
                   {providerSessionLabel}
-                </code>
+                </DashboardCode>
               </CurrentSelectionSelectableButton>
             ) : (
               <div className="mt-2 grid gap-1">
-                <code className={DASHBOARD_BODY_CODE_CLASS}>
-                  {providerSessionLabel}
-                </code>
-                <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                <DashboardCode>{providerSessionLabel}</DashboardCode>
+                <CurrentSelectionSupportingText tone="status">
                   {messages.providerSessionSelectionUnavailable}
-                </p>
+                </CurrentSelectionSupportingText>
               </div>
             )}
             <ProviderSessionLogAccess
@@ -327,9 +306,9 @@ function ProviderSessionAttemptList({
                   })
                 ) : null
               ) : (
-                <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                <CurrentSelectionSupportingText tone="status">
                   {messages.workDetailsUnavailable(attempt.dispatch_id)}
-                </p>
+                </CurrentSelectionSupportingText>
               )}
               {onSelectWorkstationRequest ? (
                 request ? (
@@ -345,9 +324,9 @@ function ProviderSessionAttemptList({
                       : messages.openRequestDetailsAction}
                   </CurrentSelectionSelectableButton>
                 ) : (
-                  <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                  <CurrentSelectionSupportingText tone="status">
                     {messages.requestDetailsUnavailable(attempt.dispatch_id)}
-                  </p>
+                  </CurrentSelectionSupportingText>
                 )
               ) : null}
             </div>
@@ -368,25 +347,18 @@ function ProviderSessionLogAccess({
   return (
     <div className="mt-2 grid min-w-0 gap-1">
       {logTarget ? (
-        <a
-          className={cn(
-            "w-fit rounded-lg font-bold text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          href={logTarget.href}
-          title={logTarget.display}
-        >
-          {messages.providerSessionLogAction}
-        </a>
+        <Button asChild className="w-fit rounded-lg" size="sm" tone="outline">
+          <a href={logTarget.href} title={logTarget.display}>
+            {messages.providerSessionLogAction}
+          </a>
+        </Button>
       ) : (
-        <span
-          className={cn(
-            "font-bold text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
+        <DashboardText
+          as="span"
+          className="font-bold text-on-surface-variant"
         >
           {messages.providerSessionLogUnavailable}
-        </span>
+        </DashboardText>
       )}
     </div>
   );

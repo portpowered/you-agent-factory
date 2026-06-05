@@ -1,14 +1,11 @@
 import { type ReactNode, useId } from "react";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import {
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/ui/widget-frame";
+  AlertPanel,
+  Button,
+  DashboardHeading,
+  DashboardLabel,
+  DashboardText,
+} from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
 
@@ -17,11 +14,6 @@ const DIALOG_OVERLAY_CLASS =
 const DIALOG_CONTENT_CLASS = "grid gap-layout-block p-4 md:p-5";
 const DIALOG_CONTENT_WITH_MEDIA_CLASS =
   "lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]";
-
-const MESSAGE_PANEL_TONE_CLASS = {
-  error: "border-af-danger-border bg-error-container text-on-error-container",
-  neutral: "border-outline bg-surface-container-low text-on-surface-variant",
-} as const;
 
 export interface DashboardMutationDialogProps {
   children: ReactNode;
@@ -105,36 +97,34 @@ export function DashboardMutationDialog({
           <div className="grid content-start gap-4">
             <header className="flex items-start justify-between gap-4">
               <div className="grid gap-2">
-                <p
-                  className={cn(
-                    "mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary",
-                    DASHBOARD_SUPPORTING_LABELS_CLASS,
-                  )}
+                <DashboardLabel
+                  as="p"
+                  className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary"
                 >
                   {resolvedFlowLabel}
-                </p>
-                <h2
-                  className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)}
+                </DashboardLabel>
+                <DashboardHeading
+                  as="h2"
+                  className="m-0"
                   id={titleId}
                 >
                   {title}
-                </h2>
+                </DashboardHeading>
                 {description ? (
-                  <p
-                    className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}
-                    id={descriptionId}
-                  >
+                  <DashboardText className="m-0" id={descriptionId}>
                     {description}
-                  </p>
+                  </DashboardText>
                 ) : null}
               </div>
 
               {showCloseButton && onClose ? (
-                <button
+                <Button
                   aria-label={resolvedCloseLabel}
-                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-outline bg-surface-container-low text-on-surface-variant outline-af-focus-ring transition hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled"
+                  className="h-10 min-h-10 w-10 rounded-full bg-surface-container-low text-on-surface-variant"
                   disabled={closeDisabled}
                   onClick={onClose}
+                  size="icon"
+                  tone="outline"
                   type="button"
                 >
                   <svg
@@ -151,7 +141,7 @@ export function DashboardMutationDialog({
                     <path d="M6 6l12 12" />
                     <path d="M18 6L6 18" />
                   </svg>
-                </button>
+                </Button>
               ) : null}
             </header>
 
@@ -177,25 +167,23 @@ export function DashboardMessagePanel({
   tone = "neutral",
 }: DashboardMessagePanelProps) {
   return (
-    <div
+    <AlertPanel
       aria-live={ariaLive}
-      className={cn(
-        EMPTY_STATE_CLASS,
-        compact && EMPTY_STATE_COMPACT_CLASS,
-        MESSAGE_PANEL_TONE_CLASS[tone],
-        className,
-      )}
+      className={className}
+      compact={compact}
       role={role}
+      tone={tone === "error" ? "danger" : "neutral"}
+      variant="empty"
     >
       <div className="flex items-start justify-between gap-4">
         <div className="grid gap-1">
-          <h3>{title}</h3>
-          <div className={cn("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+          <DashboardHeading as="h3">{title}</DashboardHeading>
+          <DashboardText as="div" className="m-0 text-sm" variant="supporting">
             {children}
-          </div>
+          </DashboardText>
         </div>
         {action}
       </div>
-    </div>
+    </AlertPanel>
   );
 }

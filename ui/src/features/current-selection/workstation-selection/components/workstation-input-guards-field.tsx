@@ -1,12 +1,12 @@
 import { useId } from "react";
 
-import { Input, Select } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
+  DashboardLabel,
+  DashboardText,
+  Input,
+  Select,
+  SurfacePanel,
+} from "../../../../components/ui";
 import type { EditableWorkstationInputDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import {
   createDefaultInputGuard,
@@ -18,7 +18,7 @@ import {
   resolvePeerInputWorkTypes,
   setEditableInputSlotGuard,
 } from "../../../current-factory-definition/lib/workstation-guards";
-import { CURRENT_SELECTION_FORM_FIELD_CLASS } from "../../base/components/detail-card-shared";
+import { CurrentSelectionFormField } from "../../base/public";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 export function EditableConfigurationWorkstationInputGuardsField({
@@ -36,27 +36,22 @@ export function EditableConfigurationWorkstationInputGuardsField({
 
   if (inputs.length === 0) {
     return (
-      <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-        <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+      <CurrentSelectionFormField>
+        <DashboardLabel as="h5" className="m-0">
           {messages.workstationInputGuardsHeading}
-        </h5>
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        </DashboardLabel>
+        <DashboardText className="m-0 text-on-surface-variant">
           {messages.workstationInputGuardsEmpty}
-        </p>
-      </div>
+        </DashboardText>
+      </CurrentSelectionFormField>
     );
   }
 
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <h5 className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="h5" className="m-0">
         {messages.workstationInputGuardsHeading}
-      </h5>
+      </DashboardLabel>
       <ul className="m-0 grid list-none gap-2 p-0">
         {inputs.map((input, slotIndex) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: input slots have no stable server id until save
@@ -79,7 +74,7 @@ export function EditableConfigurationWorkstationInputGuardsField({
           </li>
         ))}
       </ul>
-    </div>
+    </CurrentSelectionFormField>
   );
 }
 
@@ -105,94 +100,92 @@ function WorkstationInputSlotGuardRow({
   const guardTypeValue = guard?.type ?? "";
 
   return (
-    <article
+    <SurfacePanel
       aria-labelledby={`${rowId}-heading`}
-      className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
+      asChild
+      className="grid gap-2"
+      radius="lg"
     >
-      <div className="grid min-w-0 gap-1">
-        <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
-          {messages.workstationInputSlotHeading(input.workType, input.state)}
-        </h6>
-        {guard ? (
-          <p
-            className={cn(
-              "m-0 text-on-surface-subtle",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
-            {messages.localizeInputGuardType(guard.type)} ·{" "}
-            {formatInputGuardSummary(guard)}
-          </p>
-        ) : null}
-      </div>
-      <div className="grid gap-2">
-        <label
-          className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-          htmlFor={guardTypeFieldId}
-        >
-          {messages.workstationInputGuardTypeFieldLabel}
-        </label>
-        <Select
-          className={DASHBOARD_BODY_TEXT_CLASS}
-          id={guardTypeFieldId}
-          onChange={(event) => {
-            const nextType = event.target.value as InputGuardType | "";
-            if (!nextType) {
-              onChange(setEditableInputSlotGuard(input, null));
-              return;
-            }
+      <article>
+        <div className="grid min-w-0 gap-1">
+          <h6 className="m-0 text-sm text-on-surface" id={`${rowId}-heading`}>
+            {messages.workstationInputSlotHeading(input.workType, input.state)}
+          </h6>
+          {guard ? (
+            <DashboardText
+              className="m-0 text-on-surface-subtle"
+              variant="supporting"
+            >
+              {messages.localizeInputGuardType(guard.type)} ·{" "}
+              {formatInputGuardSummary(guard)}
+            </DashboardText>
+          ) : null}
+        </div>
+        <div className="grid gap-2">
+          <DashboardLabel as="label" htmlFor={guardTypeFieldId}>
+            {messages.workstationInputGuardTypeFieldLabel}
+          </DashboardLabel>
+          <Select
+            id={guardTypeFieldId}
+            onChange={(event) => {
+              const nextType = event.target.value as InputGuardType | "";
+              if (!nextType) {
+                onChange(setEditableInputSlotGuard(input, null));
+                return;
+              }
 
-            onChange(
-              setEditableInputSlotGuard(
-                input,
-                createDefaultInputGuard(nextType, peerWorkTypes),
-              ),
-            );
-          }}
-          value={guardTypeValue}
-        >
-          <option value="">{messages.workstationInputGuardNoneOption}</option>
-          {INPUT_GUARD_TYPES.map((guardType) => (
-            <option key={guardType} value={guardType}>
-              {messages.localizeInputGuardType(guardType)}
-            </option>
-          ))}
-        </Select>
-        {resolveFieldError(fieldErrors, slotIndex, "type") ? (
-          <GuardFieldError
-            message={resolveFieldError(fieldErrors, slotIndex, "type") ?? ""}
+              onChange(
+                setEditableInputSlotGuard(
+                  input,
+                  createDefaultInputGuard(nextType, peerWorkTypes),
+                ),
+              );
+            }}
+            value={guardTypeValue}
+          >
+            <option value="">{messages.workstationInputGuardNoneOption}</option>
+            {INPUT_GUARD_TYPES.map((guardType) => (
+              <option key={guardType} value={guardType}>
+                {messages.localizeInputGuardType(guardType)}
+              </option>
+            ))}
+          </Select>
+          {resolveFieldError(fieldErrors, slotIndex, "type") ? (
+            <GuardFieldError
+              message={resolveFieldError(fieldErrors, slotIndex, "type") ?? ""}
+            />
+          ) : null}
+        </div>
+        {guard?.type === "SAME_NAME" || guard?.type === "SAME_TRACE_ID" ? (
+          <PeerInputGuardFields
+            fieldErrors={fieldErrors}
+            guard={guard}
+            matchInputFieldLabel={messages.inputGuardMatchInputFieldLabel}
+            messages={messages}
+            onChange={(nextGuard) => {
+              onChange(setEditableInputSlotGuard(input, nextGuard));
+            }}
+            peerWorkTypes={peerWorkTypes}
+            rowId={rowId}
+            slotIndex={slotIndex}
           />
         ) : null}
-      </div>
-      {guard?.type === "SAME_NAME" || guard?.type === "SAME_TRACE_ID" ? (
-        <PeerInputGuardFields
-          fieldErrors={fieldErrors}
-          guard={guard}
-          matchInputFieldLabel={messages.inputGuardMatchInputFieldLabel}
-          messages={messages}
-          onChange={(nextGuard) => {
-            onChange(setEditableInputSlotGuard(input, nextGuard));
-          }}
-          peerWorkTypes={peerWorkTypes}
-          rowId={rowId}
-          slotIndex={slotIndex}
-        />
-      ) : null}
-      {guard?.type === "ALL_CHILDREN_COMPLETE" ||
-      guard?.type === "ANY_CHILD_FAILED" ? (
-        <ParentInputGuardFields
-          fieldErrors={fieldErrors}
-          guard={guard}
-          messages={messages}
-          onChange={(nextGuard) => {
-            onChange(setEditableInputSlotGuard(input, nextGuard));
-          }}
-          peerWorkTypes={peerWorkTypes}
-          rowId={rowId}
-          slotIndex={slotIndex}
-        />
-      ) : null}
-    </article>
+        {guard?.type === "ALL_CHILDREN_COMPLETE" ||
+        guard?.type === "ANY_CHILD_FAILED" ? (
+          <ParentInputGuardFields
+            fieldErrors={fieldErrors}
+            guard={guard}
+            messages={messages}
+            onChange={(nextGuard) => {
+              onChange(setEditableInputSlotGuard(input, nextGuard));
+            }}
+            peerWorkTypes={peerWorkTypes}
+            rowId={rowId}
+            slotIndex={slotIndex}
+          />
+        ) : null}
+      </article>
+    </SurfacePanel>
   );
 }
 
@@ -219,24 +212,15 @@ function PeerInputGuardFields({
 
   return (
     <div className="grid gap-1">
-      <label
-        className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-        htmlFor={matchInputFieldId}
-      >
+      <DashboardLabel as="label" htmlFor={matchInputFieldId}>
         {matchInputFieldLabel}
-      </label>
+      </DashboardLabel>
       {peerWorkTypes.length === 0 ? (
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <DashboardText className="m-0 text-on-surface-variant">
           {messages.workstationInputGuardPeersEmpty}
-        </p>
+        </DashboardText>
       ) : (
         <Select
-          className={DASHBOARD_BODY_TEXT_CLASS}
           id={matchInputFieldId}
           onChange={(event) => {
             onChange({
@@ -290,24 +274,15 @@ function ParentInputGuardFields({
   return (
     <div className="grid gap-2 md:grid-cols-2">
       <div className="grid gap-1">
-        <label
-          className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-          htmlFor={parentInputFieldId}
-        >
+        <DashboardLabel as="label" htmlFor={parentInputFieldId}>
           {messages.inputGuardParentInputFieldLabel}
-        </label>
+        </DashboardLabel>
         {peerWorkTypes.length === 0 ? (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-          >
+          <DashboardText className="m-0 text-on-surface-variant">
             {messages.workstationInputGuardPeersEmpty}
-          </p>
+          </DashboardText>
         ) : (
           <Select
-            className={DASHBOARD_BODY_TEXT_CLASS}
             id={parentInputFieldId}
             onChange={(event) => {
               onChange({
@@ -333,14 +308,10 @@ function ParentInputGuardFields({
         ) : null}
       </div>
       <div className="grid gap-1">
-        <label
-          className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-          htmlFor={spawnedByFieldId}
-        >
+        <DashboardLabel as="label" htmlFor={spawnedByFieldId}>
           {messages.inputGuardSpawnedByFieldLabel}
-        </label>
+        </DashboardLabel>
         <Input
-          className={DASHBOARD_BODY_TEXT_CLASS}
           id={spawnedByFieldId}
           onChange={(event) => {
             const spawnedBy = event.target.value.trim();
@@ -366,15 +337,13 @@ function ParentInputGuardFields({
 
 function GuardFieldError({ message }: { message: string }) {
   return (
-    <p
-      className={cn(
-        "m-0 text-on-error-container",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
+    <DashboardText
+      className="m-0 text-on-error-container"
       role="alert"
+      variant="supporting"
     >
       {message}
-    </p>
+    </DashboardText>
   );
 }
 

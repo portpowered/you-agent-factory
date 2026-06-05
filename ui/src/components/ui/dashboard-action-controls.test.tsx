@@ -115,6 +115,16 @@ describe("DashboardStatusPill", () => {
       "Draft changes pending",
     );
   });
+
+  it("supports compact status labels for dense metadata rows", () => {
+    render(
+      <DashboardStatusPill size="compact" tone="neutral">
+        queued
+      </DashboardStatusPill>,
+    );
+
+    expect(screen.getByText("queued").className).toContain("min-h-6");
+  });
 });
 
 describe("DashboardActionRow", () => {

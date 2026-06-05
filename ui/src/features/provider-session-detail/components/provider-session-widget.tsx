@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
 
-import {
-  DashboardWidgetFrame,
-  DETAIL_COPY_CLASS,
-} from "../../../components/ui";
+import { DashboardWidgetFrame, DetailCopy } from "../../../components/ui";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionWidgetMessages } from "../messages/provider-session-widget";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";
@@ -35,7 +32,7 @@ export function ProviderSessionWidget({
           selectedProviderSession={selectedProviderSession}
         />
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.emptyState}</p>
+        <DetailCopy>{messages.emptyState}</DetailCopy>
       )}
     </DashboardWidgetFrame>
   );

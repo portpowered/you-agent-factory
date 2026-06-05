@@ -1,9 +1,4 @@
-import { Select } from "../../../../components/ui";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
+import { DashboardText, Select } from "../../../../components/ui";
 import { resolveRunnerSelection } from "../../../current-factory-definition/lib/runner-selection";
 import {
   getRunnerDisplayName,
@@ -50,7 +45,6 @@ export function EditableConfigurationRunnerField({
             : undefined
         }
         aria-invalid={state.validationErrors.runnerName ? "true" : undefined}
-        className={DASHBOARD_BODY_TEXT_CLASS}
         id="editable-workstation-runner"
         onChange={(event) =>
           state.onRunnerChange(
@@ -66,14 +60,12 @@ export function EditableConfigurationRunnerField({
           </option>
         ))}
       </Select>
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
+      <DashboardText
+        className="m-0 text-on-surface-subtle"
+        variant="supporting"
       >
         {messages.runnerFieldHelp(runnerName, sourceLabel)}
-      </p>
+      </DashboardText>
     </div>
   );
 }

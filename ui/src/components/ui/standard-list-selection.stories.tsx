@@ -1,14 +1,20 @@
 import { expect, within } from "storybook/test";
 
 import {
-  STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
-  STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
   StandardListSelection,
   StandardListSelectionItem,
 } from "./standard-list-selection";
+
+const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
+  "border-primary bg-primary-container text-on-primary";
+const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
+  "border-af-danger-border bg-error-container text-on-error";
+const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
+  "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
+const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
+  "border-outline-variant bg-surface-container-low text-on-surface";
+const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
+  "border-af-success-border bg-success-container text-on-success-container";
 
 const SOLID_ACCENT_SELECTED_TOKENS = [
   "bg-primary",

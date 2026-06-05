@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { cn } from "../../../lib/cn";
+import { DashboardLabel, DashboardText } from "../../../components/ui";
 import { StandardExpandableSection } from "../../standard-card-components/public";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
 
@@ -46,15 +42,13 @@ export function SectionMetricPreview({
     <dl className="grid gap-2">
       {items.map((item) => (
         <div className="grid gap-1" key={item.label}>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{item.label}</dt>
-          <dd
-            className={cn(
-              "m-0 [overflow-wrap:anywhere]",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
+          <DashboardLabel as="dt">{item.label}</DashboardLabel>
+          <DashboardText
+            as="dd"
+            className="m-0 [overflow-wrap:anywhere]"
           >
             {item.value}
-          </dd>
+          </DashboardText>
         </div>
       ))}
     </dl>
@@ -78,15 +72,15 @@ export function TranscriptSectionPreview({
     <div className="grid gap-2">
       {previewEntries.map((entry) => (
         <div className="grid gap-1" key={entry.order}>
-          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+          <DashboardLabel>
             {getTranscriptPreviewEntryTitle(entry, messages)}
-          </span>
-          <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}>
+          </DashboardLabel>
+          <DashboardText className="m-0">
             {messages.orderLabel({
               order: entry.order,
               turnIndex: entry.turnIndex,
             })}
-          </p>
+          </DashboardText>
         </div>
       ))}
     </div>

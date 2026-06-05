@@ -1,10 +1,6 @@
 import { useId, useState } from "react";
 
-import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { Button, CodePanel, DashboardLabel } from "../../../components/ui";
 import { AuthoredBodyText } from "../../../lib/authored-body-text";
 import { cn } from "../../../lib/cn";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
@@ -36,20 +32,19 @@ export function ExpandableTranscriptContent({
   return (
     <section className={cn("grid gap-2", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+        <DashboardLabel>{label}</DashboardLabel>
         {shouldCollapse ? (
-          <button
+          <Button
             aria-controls={panelID}
             aria-expanded={expanded}
-            className={cn(
-              "inline-flex w-fit rounded-lg border border-outline px-2.5 py-2 text-on-surface-variant transition hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
+            className="w-fit rounded-lg"
             onClick={() => setExpanded((current) => !current)}
+            size="sm"
+            tone="outline"
             type="button"
           >
             {messages.transcriptToggleLabel({ expanded, section: label })}
-          </button>
+          </Button>
         ) : null}
       </div>
       <TranscriptContentPanel
@@ -72,15 +67,9 @@ export function TranscriptContentPanel({
 }) {
   if (kind === "code") {
     return (
-      <pre
-        className={cn(
-          "m-0 whitespace-pre-wrap rounded-lg border border-outline bg-surface-container-low p-3 [overflow-wrap:anywhere]",
-          DASHBOARD_BODY_CODE_CLASS,
-        )}
-        id={id}
-      >
+      <CodePanel id={id} padding="default" surface="low">
         {value}
-      </pre>
+      </CodePanel>
     );
   }
 

@@ -1,10 +1,5 @@
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
+import { AlertPanel, DashboardText } from "../../../../components/ui";
 import type { DetailCardSaveState } from "../hooks/detail-card-save-types";
-import { CURRENT_SELECTION_WARNING_PANEL_CLASS } from "./detail-card-shared";
 
 export type DetailCardFactorySaveFeedbackMessages = {
   errorPrefix: string;
@@ -24,50 +19,37 @@ export function DetailCardFactorySaveFeedback<
 >({ messages, saveState }: DetailCardFactorySaveFeedbackProps<TFieldErrors>) {
   if (saveState?.status === "success") {
     return (
-      <p
-        className={cn(
-          "m-0 text-on-success-container",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        role="status"
-      >
-        {messages.successMessage}
-      </p>
+      <AlertPanel role="status" tone="success">
+        <DashboardText className="m-0">
+          {messages.successMessage}
+        </DashboardText>
+      </AlertPanel>
     );
   }
 
   if (saveState?.status === "warning") {
     return (
-      <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-        <p
-          className={cn(
-            "m-0 text-on-warning-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          role="alert"
-        >
+      <AlertPanel role="alert" tone="warning">
+        <DashboardText className="m-0">
           {saveState.message}
-        </p>
-        <p
-          className={cn(
-            "m-0 text-on-surface-subtle",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
+        </DashboardText>
+        <DashboardText
+          className="m-0 text-on-surface-subtle"
+          variant="supporting"
         >
           {messages.staleVersionDetail}
-        </p>
-      </div>
+        </DashboardText>
+      </AlertPanel>
     );
   }
 
   if (saveState?.status === "error") {
     return (
-      <p
-        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
-        {messages.errorPrefix} {saveState.errorMessage}
-      </p>
+      <AlertPanel role="alert" tone="danger">
+        <DashboardText className="m-0">
+          {messages.errorPrefix} {saveState.errorMessage}
+        </DashboardText>
+      </AlertPanel>
     );
   }
 

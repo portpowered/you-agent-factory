@@ -1,15 +1,16 @@
-import { DashboardStatusPill } from "../../../../components/ui/dashboard-status-pill";
 import {
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  AlertPanel,
+  DashboardHeading,
+  DashboardStatusPill,
+  SurfacePanel,
+} from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import {
-  CURRENT_SELECTION_ALERT_PANEL_CLASS,
-  CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionLabel,
+  CurrentSelectionSupportingText,
+} from "../../base/public";
 import type {
   SelectedWorkRelationshipEdge,
   SelectedWorkRelationshipGraph,
@@ -65,20 +66,20 @@ export function WorkRelationshipsSection({
       aria-label={messages.workRelationshipsHeading}
       className="mt-4 grid gap-2.5 [&_h4]:m-0"
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
+      <DashboardHeading as="h4" className="m-0">
         {messages.workRelationshipsHeading}
-      </h4>
+      </DashboardHeading>
       {graphStatus === "loading" ? (
-        <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS} role="status">
+        <CurrentSelectionSupportingText role="status">
           {messages.workRelationshipsLoading}
-        </p>
+        </CurrentSelectionSupportingText>
       ) : relationshipGraph?.status === "error" ? (
-        <div className={CURRENT_SELECTION_ALERT_PANEL_CLASS} role="alert">
+        <AlertPanel role="alert" tone="danger">
           <p className="m-0">{messages.workRelationshipsError}</p>
-          <p className="m-0 text-sm text-error">{relationshipGraph.message}</p>
-        </div>
+          <p className="m-0 text-sm">{relationshipGraph.message}</p>
+        </AlertPanel>
       ) : relationships.length > 0 ? (
-        <div className="grid gap-3 rounded-xl border border-outline bg-surface-container-high p-3">
+        <SurfacePanel className="grid gap-3">
           <RelationshipLegend messages={messages} />
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,16rem)_minmax(0,1fr)] md:grid-rows-[auto_auto_auto] md:items-start">
             <RelationshipLane
@@ -138,11 +139,11 @@ export function WorkRelationshipsSection({
             messages={messages}
             onSelectWorkID={onSelectWorkID}
           />
-        </div>
+        </SurfacePanel>
       ) : (
-        <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
+        <CurrentSelectionSupportingText>
           {messages.workRelationshipsEmpty}
-        </p>
+        </CurrentSelectionSupportingText>
       )}
     </section>
   );
@@ -232,54 +233,47 @@ function RelationshipLane({
   }
 
   return (
-    <section
+    <SurfacePanel
+      asChild
       aria-label={messages.relationshipLaneAriaLabel(label)}
-      className={cn(
-        "grid gap-2 rounded-xl border border-outline bg-surface-container-high p-3",
-        className,
-      )}
+      className={cn("grid gap-2", className)}
     >
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-full border text-sm font-bold",
-            relationshipDirectionBadgeClass(label, messages),
-          )}
-        >
-          {relationshipDirectionGlyph(label, messages)}
-        </span>
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      </div>
-      <ul className="m-0 grid list-none gap-2 p-0">
-        {items.map((relationship) => (
-          <li
-            className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
-            key={relationship.key}
-          >
-            <div className="flex items-center gap-2">
-              <DashboardStatusPill
-                aria-hidden="true"
-                className="min-h-6 px-2 py-0.5 text-[11px]"
-                tone={relationshipPillTone(relationship.group)}
-              >
-                {relationshipDirectionGlyph(label, messages)}
-              </DashboardStatusPill>
-              <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-                {relationship.description}
-              </span>
-            </div>
-            <RelationshipNodeCard
-              heading={relationship.edgeLabel}
-              label={relationship.workLabel}
-              messages={messages}
-              node={relationship.node}
-              onSelectWorkID={onSelectWorkID}
-            />
-          </li>
-        ))}
-      </ul>
-    </section>
+      <section>
+        <div className="flex items-center gap-2">
+          <RelationshipDirectionBadge label={label} messages={messages} />
+          <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
+        </div>
+        <ul className="m-0 grid list-none gap-2 p-0">
+          {items.map((relationship) => (
+            <li key={relationship.key}>
+              <SurfacePanel asChild className="grid gap-2" radius="lg">
+                <article>
+                  <div className="flex items-center gap-2">
+                    <DashboardStatusPill
+                      aria-hidden="true"
+                      className="min-h-6 px-2 py-0.5 text-[11px]"
+                      tone={relationshipPillTone(relationship.group)}
+                    >
+                      {relationshipDirectionGlyph(label, messages)}
+                    </DashboardStatusPill>
+                    <CurrentSelectionLabel>
+                      {relationship.description}
+                    </CurrentSelectionLabel>
+                  </div>
+                  <RelationshipNodeCard
+                    heading={relationship.edgeLabel}
+                    label={relationship.workLabel}
+                    messages={messages}
+                    node={relationship.node}
+                    onSelectWorkID={onSelectWorkID}
+                  />
+                </article>
+              </SurfacePanel>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </SurfacePanel>
   );
 }
 
@@ -289,24 +283,28 @@ function RelationshipLegend({
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
 }) {
   return (
-    <section
+    <SurfacePanel
+      asChild
       aria-label={messages.relationshipLegendHeading}
-      className="grid gap-2 rounded-lg border border-outline bg-surface-container-high p-3"
+      className="grid gap-2"
+      radius="lg"
     >
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-        {messages.relationshipLegendHeading}
-      </span>
-      <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-        {relationshipLegendItems(messages).map((item) => (
-          <li key={item.label}>
-            <DashboardStatusPill tone={item.tone}>
-              <span aria-hidden="true">{item.glyph}</span>
-              <span>{item.label}</span>
-            </DashboardStatusPill>
-          </li>
-        ))}
-      </ul>
-    </section>
+      <section>
+        <CurrentSelectionLabel>
+          {messages.relationshipLegendHeading}
+        </CurrentSelectionLabel>
+        <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
+          {relationshipLegendItems(messages).map((item) => (
+            <li key={item.label}>
+              <DashboardStatusPill tone={item.tone}>
+                <span aria-hidden="true">{item.glyph}</span>
+                <span>{item.label}</span>
+              </DashboardStatusPill>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </SurfacePanel>
   );
 }
 
@@ -332,19 +330,14 @@ function RelationshipNodeCard({
   const metadata = buildRelationshipMetadata(node, messages);
 
   return (
-    <div
+    <SurfacePanel
       aria-current={ariaCurrent}
-      className={cn(
-        "grid min-w-0 gap-2 rounded-xl border p-3",
-        isSelected
-          ? "border-primary bg-primary-container"
-          : "border-outline bg-surface-container-high",
-        className,
-      )}
+      className={cn("grid min-w-0 gap-2", className)}
       data-selected-work-relationship-node={isSelected ? "selected" : "related"}
+      tone={isSelected ? "selected" : "default"}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{heading}</span>
+        <CurrentSelectionLabel>{heading}</CurrentSelectionLabel>
         {isSelected ? (
           <DashboardStatusPill tone="active">
             {messages.relationshipCurrentSelectionBadge}
@@ -381,7 +374,7 @@ function RelationshipNodeCard({
           </li>
         ))}
       </ul>
-    </div>
+    </SurfacePanel>
   );
 }
 
@@ -468,27 +461,6 @@ function relationshipDirectionGlyph(
   }
 }
 
-function relationshipDirectionBadgeClass(
-  label: string,
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-) {
-  switch (label) {
-    case messages.relationshipParentLabel:
-    case messages.relationshipChildLabel:
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-primary bg-primary-container text-on-surface";
-    case messages.relationshipDependsOnLabel:
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-af-warning-border bg-warning-container text-on-warning-container";
-    case messages.relationshipRequiredByLabel:
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-outline bg-af-overlay text-on-surface";
-    default:
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "border-outline bg-surface-container-high text-on-surface-variant";
-  }
-}
-
 function buildRelationshipGroups(
   relationships: RelatedWorkItem[],
 ): RelationshipGroup[] {
@@ -536,6 +508,40 @@ function relationshipGroup(
       return "required-by";
     default:
       return "related";
+  }
+}
+
+function RelationshipDirectionBadge({
+  label,
+  messages,
+}: {
+  label: string;
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
+}) {
+  return (
+    <DashboardStatusPill
+      aria-hidden="true"
+      className="h-8 min-h-8 w-8 px-0 py-0 text-sm font-bold"
+      tone={relationshipDirectionTone(label, messages)}
+      typography="none"
+    >
+      {relationshipDirectionGlyph(label, messages)}
+    </DashboardStatusPill>
+  );
+}
+
+function relationshipDirectionTone(
+  label: string,
+  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
+) {
+  switch (label) {
+    case messages.relationshipParentLabel:
+    case messages.relationshipChildLabel:
+      return "active" as const;
+    case messages.relationshipDependsOnLabel:
+      return "warning" as const;
+    default:
+      return "neutral" as const;
   }
 }
 

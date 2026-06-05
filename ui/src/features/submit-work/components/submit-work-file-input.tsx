@@ -1,6 +1,6 @@
 import { type DragEvent, useState } from "react";
 
-import { Button } from "../../../components/ui";
+import { Button, DashboardLabel, DashboardText } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { ChooseFileField } from "../../choose-file/public";
 import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
@@ -9,24 +9,18 @@ import type { SubmitWorkDraftFileItem } from "./submit-work-card";
 
 export function FileSubmissionItemEditor({
   disabled,
-  fieldLabelClassName,
-  helpTextClassName,
   inputID,
   item,
   locale,
   messages,
   onStageFileItems,
-  validationTextClassName,
 }: {
   disabled: boolean;
-  fieldLabelClassName: string;
-  helpTextClassName: string;
   inputID: string;
   item: SubmitWorkDraftFileItem;
   locale?: string;
   messages: SubmitWorkMessages;
   onStageFileItems: (files: File[]) => void;
-  validationTextClassName: string;
 }) {
   const [isDragActive, setIsDragActive] = useState(false);
   const typeLabel = submitWorkItemRowTypeLabel(item.type, locale);
@@ -63,7 +57,12 @@ export function FileSubmissionItemEditor({
       <ChooseFileField
         afterControl={
           item.stagingStatus === "failure" && item.stagingError ? (
-            <p className={validationTextClassName}>{item.stagingError}</p>
+            <DashboardText
+              className="text-on-error-container"
+              variant="supporting"
+            >
+              {item.stagingError}
+            </DashboardText>
           ) : null
         }
         control={
@@ -113,8 +112,14 @@ export function FileSubmissionItemEditor({
             }}
           >
             <div className="flex flex-wrap items-center gap-3">
-              <span className={fieldLabelClassName}>{inputLabel}</span>
-              <span className={helpTextClassName}>{stateDescription}</span>
+              <DashboardLabel>{inputLabel}</DashboardLabel>
+              <DashboardText
+                as="span"
+                className="max-w-xl leading-relaxed text-on-surface-variant"
+                variant="supporting"
+              >
+                {stateDescription}
+              </DashboardText>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Button
@@ -132,12 +137,16 @@ export function FileSubmissionItemEditor({
                 </span>
               </Button>
               {(item.fileName ?? "").length > 0 ? (
-                <span className={helpTextClassName}>
+                <DashboardText
+                  as="span"
+                  className="max-w-xl leading-relaxed text-on-surface-variant"
+                  variant="supporting"
+                >
                   {messages.fileItemMetadata(
                     item.fileName ?? "",
                     item.mediaType ?? "",
                   )}
-                </span>
+                </DashboardText>
               ) : null}
             </div>
           </label>

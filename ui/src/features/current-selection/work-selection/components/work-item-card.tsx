@@ -2,7 +2,7 @@ import {
   formatList,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
-import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
+import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import {
   getWorkContentInspectMessages,
   WorkContentReadOnlyList,
@@ -42,9 +42,7 @@ export function WorkItemDetailCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <p className={WIDGET_SUBTITLE_CLASS}>
-        {formatWorkItemLabel(selection.workItem)}
-      </p>
+      <WidgetSubtitle>{formatWorkItemLabel(selection.workItem)}</WidgetSubtitle>
       <dl>
         <div>
           <dt>{messages.workIdLabel}</dt>

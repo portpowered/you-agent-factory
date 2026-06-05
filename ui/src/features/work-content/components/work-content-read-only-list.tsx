@@ -1,9 +1,6 @@
 import type { ReactNode } from "react";
 import type { components } from "../../../api/generated/openapi";
-import {
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DashboardLabel, DashboardText } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import {
   getWorkContentInspectMessages,
@@ -45,9 +42,7 @@ export function WorkContentReadOnlyList({
   return (
     <section aria-label={resolvedAriaLabel} className="grid gap-2">
       {showHeading ? (
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-          {messages.heading}
-        </span>
+        <DashboardLabel>{messages.heading}</DashboardLabel>
       ) : null}
       {body}
     </section>
@@ -99,16 +94,16 @@ function StatusMessage({
   tone: "muted" | "warning";
 }) {
   return (
-    <p
+    <DashboardText
       className={cn(
         "m-0",
         tone === "warning"
           ? "text-on-warning-container"
           : "text-on-surface-variant",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
       )}
+      variant="supporting"
     >
       {children}
-    </p>
+    </DashboardText>
   );
 }

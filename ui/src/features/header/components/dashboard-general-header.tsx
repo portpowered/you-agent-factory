@@ -1,6 +1,5 @@
-import { DashboardActionRow } from "../../../components/ui";
-import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
-import { DASHBOARD_PAGE_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
+import { DashboardActionRow, DashboardHeading } from "../../../components/ui";
+import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { cn } from "../../../lib/cn";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import type { DashboardSessionTabsState } from "../hooks/use-dashboard-session-tabs-state";
@@ -28,9 +27,9 @@ export function DashboardGeneralHeader({
   const headerMessages = getHeaderControlsMessages(locale);
 
   return (
-    <section
+    <DashboardPanelShell
       aria-label={headerMessages.dashboardSummaryLabel}
-      className={cn(DASHBOARD_PANEL_SHELL_CLASS, "mb-3 grid gap-2")}
+      className="mb-3 grid gap-2"
     >
       <div className="flex min-w-0 flex-col gap-0">
         <div
@@ -39,14 +38,12 @@ export function DashboardGeneralHeader({
             "max-md:flex-col",
           )}
         >
-          <h1
-            className={cn(
-              "m-0 min-w-0 shrink-0 self-end pb-2",
-              DASHBOARD_PAGE_HEADING_CLASS,
-            )}
+          <DashboardHeading
+            className="m-0 min-w-0 shrink-0 self-end pb-2"
+            level="page"
           >
             <DashboardBrandLockup locale={locale} wordmarkClassName="truncate" />
-          </h1>
+          </DashboardHeading>
           <div className="flex min-w-0 w-full flex-1">
             <div className="flex h-full min-w-0 w-full items-stretch overflow-x-auto px-4 pt-1">
               <DashboardSessionTabs locale={locale} state={sessionTabsState} />
@@ -75,6 +72,6 @@ export function DashboardGeneralHeader({
           </div>
         </div>
       </div>
-    </section>
+    </DashboardPanelShell>
   );
 }

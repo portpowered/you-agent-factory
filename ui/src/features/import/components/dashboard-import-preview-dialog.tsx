@@ -1,21 +1,19 @@
 import { useId, useMemo, useState } from "react";
 import {
+  AlertPanel,
   Button,
+  DashboardDescriptionList,
+  DashboardHeading,
+  DashboardLabel,
+  DashboardText,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  SurfacePanel,
 } from "../../../components/ui";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { EMPTY_STATE_CLASS } from "../../../components/ui/widget-frame";
-import { cn } from "../../../lib/cn";
 import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
 import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 import { allocateImportCreateFactoryName } from "../lib/allocate-import-create-factory-name";
@@ -28,15 +26,8 @@ import {
   IMPORT_PREVIEW_CURRENT_FACTORY_NAME_TOKEN,
 } from "../messages/import-preview-dialog";
 
-const IMPORT_DIALOG_HINT_CLASS = cn("m-0", DASHBOARD_SUPPORTING_TEXT_CLASS);
-const IMPORT_DIALOG_LABEL_CLASS = cn(
-  "text-[0.7rem] font-bold uppercase tracking-[0.14em] text-primary",
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
 const IMPORT_SAVE_CHOICE_OPTION_CLASS =
   "grid cursor-pointer gap-1 rounded-xl border border-transparent p-3 transition-colors has-[:focus-visible]:border-primary has-[:checked]:border-primary has-[:checked]:bg-surface";
-const IMPORT_ERROR_PANEL_CLASS =
-  "border-af-danger-border bg-error-container text-on-error-container";
 
 type ReadyFactoryImportPreviewState = Extract<
   FactoryImportPreviewState,
@@ -120,18 +111,19 @@ function FactoryImportActivationErrorPanel({
   const messages = getImportPreviewDialogMessages(locale);
 
   return (
-    <div
+    <AlertPanel
       aria-live="assertive"
-      className={cn(EMPTY_STATE_CLASS, IMPORT_ERROR_PANEL_CLASS)}
       role="alert"
+      tone="danger"
+      variant="empty"
     >
       <div className="grid gap-1">
         <h3>{messages.activationErrorTitle}</h3>
-        <p className={cn("m-0 text-sm", DASHBOARD_SUPPORTING_TEXT_CLASS)}>
+        <DashboardText className="m-0 text-sm" variant="supporting">
           {factoryImportActivationErrorCopy(error, locale)}
-        </p>
+        </DashboardText>
       </div>
-    </div>
+    </AlertPanel>
   );
 }
 
@@ -176,83 +168,82 @@ function FactoryImportSaveChoiceFieldset({
   const createOptionId = useId();
 
   return (
-    <fieldset
-      className="grid gap-3 rounded-2xl border border-outline bg-surface-container-low p-4"
-      disabled={isSubmitting}
-    >
-      <legend className={IMPORT_DIALOG_LABEL_CLASS}>
-        {messages.saveChoiceLegend}
-      </legend>
-      <div
-        className="grid gap-2"
-        role="radiogroup"
-        aria-label={messages.saveChoiceLegend}
-      >
-        <label
-          className={IMPORT_SAVE_CHOICE_OPTION_CLASS}
-          htmlFor={replaceOptionId}
+    <SurfacePanel asChild className="grid gap-3" radius="2xl" surface="low">
+      <fieldset disabled={isSubmitting}>
+        <DashboardLabel as="legend" className="text-primary">
+          {messages.saveChoiceLegend}
+        </DashboardLabel>
+        <div
+          className="grid gap-2"
+          role="radiogroup"
+          aria-label={messages.saveChoiceLegend}
         >
-          <span className="flex items-start gap-3">
-            <input
-              checked={choice === "replace_current"}
-              className="mt-1"
-              id={replaceOptionId}
-              name="factory-import-save-choice"
-              onChange={() => {
-                onChoiceChange("replace_current");
-              }}
-              type="radio"
-              value="replace_current"
-            />
-            <span className="grid gap-1">
-              <span className="text-base font-semibold text-on-surface">
-                {messages.replaceCurrentOption}
-              </span>
-              <span className={IMPORT_DIALOG_HINT_CLASS}>
-                {messages.replaceCurrentOptionDescription}
-              </span>
-              <span className="text-sm font-semibold text-on-surface">
-                {currentSessionFactoryName}
-              </span>
-            </span>
-          </span>
-        </label>
-        <label
-          className={IMPORT_SAVE_CHOICE_OPTION_CLASS}
-          htmlFor={createOptionId}
-        >
-          <span className="flex items-start gap-3">
-            <input
-              checked={choice === "create_new_named"}
-              className="mt-1"
-              id={createOptionId}
-              name="factory-import-save-choice"
-              onChange={() => {
-                onChoiceChange("create_new_named");
-              }}
-              type="radio"
-              value="create_new_named"
-            />
-            <span className="grid gap-1">
-              <span className="text-base font-semibold text-on-surface">
-                {messages.createNewNamedOption}
-              </span>
-              <span className={IMPORT_DIALOG_HINT_CLASS}>
-                {messages.createNewNamedOptionDescription}
-              </span>
+          <label
+            className={IMPORT_SAVE_CHOICE_OPTION_CLASS}
+            htmlFor={replaceOptionId}
+          >
+            <span className="flex items-start gap-3">
+              <input
+                checked={choice === "replace_current"}
+                className="mt-1"
+                id={replaceOptionId}
+                name="factory-import-save-choice"
+                onChange={() => {
+                  onChoiceChange("replace_current");
+                }}
+                type="radio"
+                value="replace_current"
+              />
               <span className="grid gap-1">
-                <span className={IMPORT_DIALOG_LABEL_CLASS}>
-                  {messages.createResolvedNameLabel}
+                <span className="text-base font-semibold text-on-surface">
+                  {messages.replaceCurrentOption}
                 </span>
+                <DashboardText as="span" className="m-0" variant="supporting">
+                  {messages.replaceCurrentOptionDescription}
+                </DashboardText>
                 <span className="text-sm font-semibold text-on-surface">
-                  {createFactoryName}
+                  {currentSessionFactoryName}
                 </span>
               </span>
             </span>
-          </span>
-        </label>
-      </div>
-    </fieldset>
+          </label>
+          <label
+            className={IMPORT_SAVE_CHOICE_OPTION_CLASS}
+            htmlFor={createOptionId}
+          >
+            <span className="flex items-start gap-3">
+              <input
+                checked={choice === "create_new_named"}
+                className="mt-1"
+                id={createOptionId}
+                name="factory-import-save-choice"
+                onChange={() => {
+                  onChoiceChange("create_new_named");
+                }}
+                type="radio"
+                value="create_new_named"
+              />
+              <span className="grid gap-1">
+                <span className="text-base font-semibold text-on-surface">
+                  {messages.createNewNamedOption}
+                </span>
+                <DashboardText as="span" className="m-0" variant="supporting">
+                  {messages.createNewNamedOptionDescription}
+                </DashboardText>
+                <span className="grid gap-1">
+                  <DashboardLabel as="span" className="text-primary">
+                    {messages.createResolvedNameLabel}
+                  </DashboardLabel>
+                  <span className="text-sm font-semibold text-on-surface">
+                    {createFactoryName}
+                  </span>
+                </span>
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
+    </SurfacePanel>
   );
 }
 
@@ -323,30 +314,33 @@ export function FactoryImportPreviewDialog({
           }
         }}
       >
-        <div className="overflow-hidden rounded-3xl border border-outline bg-surface-container-low p-3">
+        <SurfacePanel
+          className="overflow-hidden"
+          padding="default"
+          radius="2xl"
+          surface="low"
+        >
           <img
             alt={messages.previewImageAlt(previewState.value.factory.name)}
             className="block h-full max-h-96 w-full rounded-2xl object-contain"
             src={previewState.value.previewImageSrc}
           />
-        </div>
+        </SurfacePanel>
         <div className="grid content-start gap-5">
           <DialogHeader className="grid gap-3">
-            <p className={IMPORT_DIALOG_LABEL_CLASS}>{messages.flowLabel}</p>
+            <DashboardLabel as="p" className="m-0 text-primary">
+              {messages.flowLabel}
+            </DashboardLabel>
             <div className="grid gap-2">
-              <DialogTitle
-                className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)}
-              >
+              <DashboardHeading as={DialogTitle} className="m-0">
                 {messages.title}
-              </DialogTitle>
-              <DialogDescription
-                className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS)}
-              >
+              </DashboardHeading>
+              <DashboardText as={DialogDescription} className="m-0">
                 {renderImportPreviewCurrentFactoryDescription(
                   messages.descriptionTemplate,
                   currentSessionFactoryName,
                 )}
-              </DialogDescription>
+              </DashboardText>
             </div>
           </DialogHeader>
 
@@ -354,24 +348,26 @@ export function FactoryImportPreviewDialog({
             {previewState.value.factory.name}
           </p>
 
-          <dl className="grid gap-3 rounded-2xl border border-outline bg-surface-container-low p-4 text-sm text-on-surface-variant">
-            <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
-                {messages.droppedFileLabel}
-              </dt>
-              <dd className="m-0 font-semibold text-on-surface">
-                {previewState.file.name}
-              </dd>
-            </div>
-            <div className="grid gap-1">
-              <dt className={IMPORT_DIALOG_LABEL_CLASS}>
-                {messages.embeddedFactoryLabel}
-              </dt>
-              <dd className="m-0 font-semibold text-on-surface">
-                {previewState.value.factory.name}
-              </dd>
-            </div>
-          </dl>
+          <SurfacePanel asChild padding="default" radius="2xl" surface="low">
+            <DashboardDescriptionList className="gap-3">
+              <div className="grid gap-1">
+                <DashboardLabel as="dt" className="text-primary">
+                  {messages.droppedFileLabel}
+                </DashboardLabel>
+                <dd className="m-0 font-semibold text-on-surface">
+                  {previewState.file.name}
+                </dd>
+              </div>
+              <div className="grid gap-1">
+                <DashboardLabel as="dt" className="text-primary">
+                  {messages.embeddedFactoryLabel}
+                </DashboardLabel>
+                <dd className="m-0 font-semibold text-on-surface">
+                  {previewState.value.factory.name}
+                </dd>
+              </div>
+            </DashboardDescriptionList>
+          </SurfacePanel>
 
           <FactoryImportSaveChoiceFieldset
             choice={choice}
@@ -382,7 +378,9 @@ export function FactoryImportPreviewDialog({
             onChoiceChange={setChoice}
           />
 
-          <p className={IMPORT_DIALOG_HINT_CLASS}>{messages.hint}</p>
+          <DashboardText className="m-0" variant="supporting">
+            {messages.hint}
+          </DashboardText>
 
           {activationState.status === "error" ? (
             <FactoryImportActivationErrorPanel

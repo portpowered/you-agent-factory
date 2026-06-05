@@ -13,7 +13,10 @@ import {
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
 } from "../lib/work-chart-legend-contract";
-import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-contract";
+import {
+  expectSingleWorkOutcomeCardHeader,
+  expectWorkOutcomeCardFillsChartBody,
+} from "../lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { D3CompletionInformationCard } from "./d3-information-card";
 
@@ -218,7 +221,7 @@ describe("D3CompletionInformationCard", () => {
     cleanup();
   });
 
-  it("exposes exactly one bento header with the card title outside the chart region", () => {
+  it("keeps the bento header while leaving the chart region titleless", () => {
     const messages = getWorkOutcomeMessages();
     render(
       <D3CompletionInformationCard
@@ -236,6 +239,7 @@ describe("D3CompletionInformationCard", () => {
       cardTitle: messages.chart.cardTitle,
       headerActionLabel: "Remove chart",
     });
+    expectWorkOutcomeCardFillsChartBody(card, messages.chart.cardRegionLabel);
   });
 
   it("flattens ready-state chart chrome without duplicating the bento card title", () => {
@@ -305,8 +309,10 @@ describe("D3CompletionInformationCard", () => {
     const chartRegion = within(card).getByLabelText(
       "Work outcome chart region",
     );
+    expectWorkOutcomeCardFillsChartBody(card, "Work outcome chart region");
     expect(chartRegion.className).toContain("flex");
     expect(chartRegion.className).toContain("flex-1");
+    expect(chartRegion.className).toContain("h-full");
     expect(chartRegion.className).toContain("min-h-0");
     expect(chartRegion.className).toContain("px-4");
     expect(chartRegion.className).toContain("sm:px-5");

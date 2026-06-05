@@ -7,8 +7,7 @@ import {
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { Button, Dialog } from "../../../components/ui";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
+import { AlertPanel, Button, DashboardText, Dialog } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { useDashboardStreamStore } from "../../dashboard/state/dashboardStreamStore";
 import {
@@ -141,12 +140,9 @@ function DashboardSessionTabsView({
           />
         </div>
         {closeError ? (
-          <p
-            className="rounded-xl border border-af-danger-border bg-error-container px-3 py-2 text-sm text-on-error-container"
-            role="alert"
-          >
+          <AlertPanel role="alert" tone="danger">
             {closeError.message}
-          </p>
+          </AlertPanel>
         ) : null}
       </div>
       <Dialog
@@ -237,14 +233,9 @@ function SessionTabsContent({
 
   if (isPending) {
     return (
-      <p
-        className={cn(
-          "text-sm text-on-surface-variant",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-      >
+      <DashboardText className="text-sm text-on-surface-variant">
         {messages.loadingSessionsLabel}
-      </p>
+      </DashboardText>
     );
   }
   if (error) {
@@ -264,9 +255,9 @@ function SessionTabsContent({
   if (sessions.length === 0) {
     return (
       <>
-        <p className={cn("text-sm text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+        <DashboardText className="text-sm text-on-surface">
           {messages.sessionsEmptyTitle}
-        </p>
+        </DashboardText>
         <OpenSessionButton
           label={messages.openSessionButtonLabel}
           onClick={onOpenSession}
@@ -381,9 +372,9 @@ function SessionErrorState({
 }) {
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <p className={cn("text-sm text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+      <DashboardText className="text-sm text-on-surface">
         {label}
-      </p>
+      </DashboardText>
       <Button onClick={onRetry} size="sm" tone="outline">
         {messages.retrySessionsLabel}
       </Button>

@@ -230,11 +230,6 @@ it("renders script response field fallbacks when a response is present but spars
 
   expect(
     responseDetails.getByText(
-      "Script response details are not available for this workstation request.",
-    ),
-  ).toBeTruthy();
-  expect(
-    responseDetails.getByText(
       "Duration details are not available for this script response yet.",
     ),
   ).toBeTruthy();

@@ -1,17 +1,18 @@
 import { type ReactNode, useId } from "react";
 
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
+  DashboardLabel,
+  DashboardText,
+  Input,
+  SurfacePanel,
+} from "../../../../components/ui";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_FORM_FIELD_CLASS,
-  CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionDetailFeedback,
+  CurrentSelectionFormField,
+  CurrentSelectionFormFields,
+} from "../../base/public";
 import type {
   EditableWorkStateConfigurationState,
   EditableWorkStateSaveState,
@@ -46,35 +47,22 @@ export function WorkStateEditableConfigurationSection({
       }
     >
       {state?.status === "loading" ? (
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <CurrentSelectionDetailFeedback>
           {messages.editableConfigurationLoading}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       {state?.status === "error" ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
+        <CurrentSelectionDetailFeedback
           role="alert"
+          tone="danger"
         >
           {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       {state?.status === "empty" ? (
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <CurrentSelectionDetailFeedback>
           {state.message || messages.editableConfigurationEmpty}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       {state?.status === "ready" ? (
         <WorkStateEditableConfigurationReadyForm
@@ -104,33 +92,26 @@ function WorkStateEditableConfigurationReadyForm({
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
       {validationErrors.contract ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          role="alert"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {validationErrors.contract}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       <WorkStateEditableConfigurationDraftStatus
         messages={messages}
         state={state}
       />
-      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+      <CurrentSelectionFormFields>
         <WorkStateEditableConfigurationField
           errorMessage={validationErrors.name}
           fieldId="editable-work-state-name"
           input={
-            <input
+            <Input
               aria-describedby={
                 validationErrors.name
                   ? "editable-work-state-name-error"
                   : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
-              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-work-state-name"
               onChange={(event) => state.onNameChange(event.target.value)}
               type="text"
@@ -142,16 +123,20 @@ function WorkStateEditableConfigurationReadyForm({
         <WorkStateEditableConfigurationField
           fieldId="editable-work-state-type"
           input={
-            <output
-              className="block w-full rounded-lg border border-outline bg-surface-container-high px-3 py-2 text-sm text-on-surface-variant"
-              id="editable-work-state-type"
+            <SurfacePanel
+              asChild
+              className="text-sm text-on-surface-variant"
+              padding="compact"
+              radius="lg"
             >
-              {messages.localizeWorkStateType(state.draft.type)}
-            </output>
+              <output id="editable-work-state-type">
+                {messages.localizeWorkStateType(state.draft.type)}
+              </output>
+            </SurfacePanel>
           }
           label={messages.typeFieldLabel}
         />
-      </div>
+      </CurrentSelectionFormFields>
     </form>
   );
 }
@@ -168,22 +153,17 @@ function WorkStateEditableConfigurationDraftStatus({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <p
-        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
+    <CurrentSelectionFormField>
+      <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
+      </CurrentSelectionDetailFeedback>
+      <DashboardText
+        className="m-0 text-on-surface-subtle"
+        variant="supporting"
       >
         {messages.editableConfigurationSaveDisabledValidationDetail}
-      </p>
-    </div>
+      </DashboardText>
+    </CurrentSelectionFormField>
   );
 }
 
@@ -199,23 +179,20 @@ function WorkStateEditableConfigurationField({
   label: string;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="label" htmlFor={fieldId}>
         {label}
-      </label>
+      </DashboardLabel>
       {input}
       {errorMessage ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
+        <CurrentSelectionDetailFeedback
           id={`${fieldId}-error`}
           role="alert"
+          tone="danger"
         >
           {errorMessage}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
-    </div>
+    </CurrentSelectionFormField>
   );
 }

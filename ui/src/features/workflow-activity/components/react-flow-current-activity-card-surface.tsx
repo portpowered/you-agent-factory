@@ -2,6 +2,7 @@ import type { ReactFlowInstance } from "@xyflow/react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import { AlertPanel } from "../../../components/ui";
 import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
@@ -210,9 +211,9 @@ function snapshotHasObserverGraph(snapshot: DashboardSnapshot): boolean {
 function EmptyCurrentActivityState({ locale }: { locale?: string }) {
   const messages = getFactoryGraphEditorMessages(locale);
   return (
-    <div className="grid min-h-60 items-start gap-1 rounded-2xl border border-dashed border-outline-variant bg-surface-container-low p-5 [&_h3]:m-0">
+    <AlertPanel tone="neutral" variant="empty">
       <h3>{messages.noticeEmptyTitle}</h3>
       <p>{messages.noticeEmptyMessage}</p>
-    </div>
+    </AlertPanel>
   );
 }

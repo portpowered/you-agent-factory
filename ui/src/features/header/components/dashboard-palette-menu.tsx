@@ -7,8 +7,6 @@ import {
   useState,
 } from "react";
 
-import { DashboardActionButton } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
 import {
   type ColorPaletteId,
   type ColorPaletteOption,
@@ -17,11 +15,10 @@ import {
 import { getColorPaletteOptions } from "../messages/color-palette-options";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import { DashboardHeaderActionButton } from "./dashboard-header-action-button";
-
-const PALETTE_MENU_ITEM_CLASS = cn(
-  "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
-  "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
-);
+import {
+  DashboardHeaderOptionMenuItem,
+  DashboardHeaderOptionMenuSurface,
+} from "./dashboard-header-option-menu";
 
 export function DashboardPaletteMenu({ locale }: { locale: string }) {
   const { palette, setPalette } = useAppColorPalette();
@@ -118,10 +115,10 @@ function DashboardPaletteMenuList({
   paletteOptions: readonly ColorPaletteOption[];
 }) {
   return (
-    <div
+    <DashboardHeaderOptionMenuSurface
       aria-label={label}
-      className="absolute right-0 top-full z-10 mt-2 min-w-52 overflow-hidden rounded-2xl border border-outline bg-surface-container-high p-1 text-on-surface shadow-af-panel backdrop-blur-lg"
       id={id}
+      minWidthClassName="min-w-52"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -138,48 +135,20 @@ function DashboardPaletteMenuList({
         const isSelected = option.id === currentValue;
 
         return (
-          <DashboardActionButton
+          <DashboardHeaderOptionMenuItem
             key={option.id}
-            aria-checked={isSelected}
-            className={cn(
-              PALETTE_MENU_ITEM_CLASS,
-              isSelected
-                ? "border-primary bg-primary-container text-on-surface"
-                : "text-on-surface-variant",
-            )}
+            isSelected={isSelected}
             onClick={() => {
               onChangePalette(option.id);
               onClose();
               buttonRef.current?.focus();
             }}
-            role="menuitemradio"
-            tone={isSelected ? "secondary" : "ghost"}
-            type="button"
           >
             <span>{option.label}</span>
-            {isSelected ? <HeaderOptionMenuCheckIcon /> : null}
-          </DashboardActionButton>
+          </DashboardHeaderOptionMenuItem>
         );
       })}
-    </div>
-  );
-}
-
-function HeaderOptionMenuCheckIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      height="16"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      viewBox="0 0 24 24"
-      width="16"
-    >
-      <path d="m5 12 4 4L19 6" />
-    </svg>
+    </DashboardHeaderOptionMenuSurface>
   );
 }
 

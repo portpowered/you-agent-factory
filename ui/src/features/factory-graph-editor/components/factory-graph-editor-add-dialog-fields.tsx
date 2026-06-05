@@ -1,17 +1,54 @@
+import type { ReactNode } from "react";
+
 import {
   FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,
 } from "../../../components/prompt-editor";
 import { Input, Select, Textarea } from "../../../components/ui";
 
-export const FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS = "grid gap-2";
-export const FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS =
+const FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS = "grid gap-2";
+const FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS =
   "text-sm font-semibold text-on-surface";
-export const FACTORY_GRAPH_ADD_FIELD_HELP_CLASS =
+const FACTORY_GRAPH_ADD_FIELD_HELP_CLASS =
   "m-0 text-xs leading-5 text-on-surface-variant";
-export const FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS =
+const FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS =
   "m-0 text-sm text-on-error-container";
-export const FACTORY_GRAPH_ADD_INPUT_CLASS = "bg-surface";
+const FACTORY_GRAPH_ADD_INPUT_CLASS = "bg-surface";
+
+export function FactoryGraphEditorAddField({
+  children,
+  error,
+  helpText,
+  inputId,
+  label,
+}: {
+  children: ReactNode;
+  error?: string;
+  helpText?: string;
+  inputId?: string;
+  label: ReactNode;
+}) {
+  const labelContent = inputId ? (
+    <label className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS} htmlFor={inputId}>
+      {label}
+    </label>
+  ) : (
+    <p className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS}>{label}</p>
+  );
+
+  return (
+    <div className={FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS}>
+      {labelContent}
+      {children}
+      {helpText ? (
+        <p className={FACTORY_GRAPH_ADD_FIELD_HELP_CLASS}>{helpText}</p>
+      ) : null}
+      {error ? (
+        <p className={FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS}>{error}</p>
+      ) : null}
+    </div>
+  );
+}
 
 export function FactoryGraphEditorTextareaField({
   error,
@@ -27,10 +64,7 @@ export function FactoryGraphEditorTextareaField({
   value: string;
 }) {
   return (
-    <div className={FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS}>
-      <label className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS} htmlFor={inputId}>
-        {label}
-      </label>
+    <FactoryGraphEditorAddField error={error} inputId={inputId} label={label}>
       <Textarea
         aria-label={label}
         className={FACTORY_GRAPH_ADD_INPUT_CLASS}
@@ -40,10 +74,7 @@ export function FactoryGraphEditorTextareaField({
         }}
         value={value}
       />
-      {error ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS}>{error}</p>
-      ) : null}
-    </div>
+    </FactoryGraphEditorAddField>
   );
 }
 
@@ -65,10 +96,12 @@ export function FactoryGraphEditorTextField({
   value: string;
 }) {
   return (
-    <div className={FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS}>
-      <label className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS} htmlFor={inputId}>
-        {label}
-      </label>
+    <FactoryGraphEditorAddField
+      error={error}
+      helpText={helpText}
+      inputId={inputId}
+      label={label}
+    >
       <Input
         aria-label={label}
         className={FACTORY_GRAPH_ADD_INPUT_CLASS}
@@ -79,13 +112,7 @@ export function FactoryGraphEditorTextField({
         }}
         value={value}
       />
-      {helpText ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_HELP_CLASS}>{helpText}</p>
-      ) : null}
-      {error ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS}>{error}</p>
-      ) : null}
-    </div>
+    </FactoryGraphEditorAddField>
   );
 }
 
@@ -107,10 +134,12 @@ export function FactoryGraphEditorSelectField({
   value: string;
 }) {
   return (
-    <div className={FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS}>
-      <label className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS} htmlFor={inputId}>
-        {label}
-      </label>
+    <FactoryGraphEditorAddField
+      error={error}
+      helpText={helpText}
+      inputId={inputId}
+      label={label}
+    >
       <Select
         aria-label={label}
         className={FACTORY_GRAPH_ADD_INPUT_CLASS}
@@ -126,13 +155,7 @@ export function FactoryGraphEditorSelectField({
           </option>
         ))}
       </Select>
-      {helpText ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_HELP_CLASS}>{helpText}</p>
-      ) : null}
-      {error ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS}>{error}</p>
-      ) : null}
-    </div>
+    </FactoryGraphEditorAddField>
   );
 }
 
@@ -157,8 +180,7 @@ export function FactoryGraphEditorPromptBodyField({
   value: string;
 }) {
   return (
-    <div className={FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS}>
-      <p className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS}>{label}</p>
+    <FactoryGraphEditorAddField helpText={helpText} label={label}>
       <MonacoPromptEditor
         ariaLabel={label}
         autocompleteState={factoryGraphAddPromptAutocompleteState}
@@ -169,9 +191,6 @@ export function FactoryGraphEditorPromptBodyField({
         startupErrorMessage={startupErrorMessage}
         value={value}
       />
-      {helpText ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_HELP_CLASS}>{helpText}</p>
-      ) : null}
-    </div>
+    </FactoryGraphEditorAddField>
   );
 }

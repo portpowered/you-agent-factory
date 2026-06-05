@@ -1,12 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
-import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
 import { DETAIL_CARD_NOW } from "../../base/components/detail-card-test-helpers";
 import { WorkstationDetailCard } from "./workstation-detail-card";
 
@@ -914,7 +907,7 @@ describe("WorkstationDetailCard", () => {
       },
     );
     expect(unavailableWorkStatus.className).toContain(
-      DASHBOARD_SUPPORTING_TEXT_CLASS,
+      "af-dashboard-supporting-text",
     );
     expect(unavailableWorkStatus.className).not.toContain("text-[0.78rem]");
 
@@ -1287,10 +1280,10 @@ describe("WorkstationDetailCard", () => {
       name: "Active work",
     });
     expect(activeWorkHeading.className).toContain(
-      DASHBOARD_SECTION_HEADING_CLASS,
+      "af-dashboard-section-heading",
     );
     const activeWorkCard = screen.getByText("Active Story").closest("li");
-    expect(activeWorkCard?.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
+    expect(activeWorkCard?.className).toContain("af-dashboard-body-text");
 
     const runHistorySection = screen
       .getByRole("heading", { name: "Run history" })
@@ -1299,7 +1292,7 @@ describe("WorkstationDetailCard", () => {
     const countText = within(runHistorySection as HTMLElement).getByText(
       "2 runs",
     );
-    expect(countText.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
+    expect(countText.className).toContain("af-dashboard-supporting-text");
 
     fireEvent.click(
       within(runHistorySection as HTMLElement).getByRole("button", {
@@ -1310,11 +1303,11 @@ describe("WorkstationDetailCard", () => {
     const dispatchPill = within(runHistorySection as HTMLElement)
       .getAllByText("dispatch-review-active")
       .find((element) => element.tagName === "SPAN");
-    expect(dispatchPill?.className).toContain(DASHBOARD_SUPPORTING_CODE_CLASS);
+    expect(dispatchPill?.className).toContain("af-dashboard-supporting-code");
     const sessionMetadata = within(runHistorySection as HTMLElement).getByText(
       /codex \/ Session ID \/ sess-active-story/,
     );
     expect(sessionMetadata.tagName).toBe("CODE");
-    expect(sessionMetadata.className).toContain(DASHBOARD_BODY_CODE_CLASS);
+    expect(sessionMetadata.className).toContain("af-dashboard-body-code");
   });
 });

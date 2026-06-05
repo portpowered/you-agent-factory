@@ -1,5 +1,5 @@
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DashboardHeading } from "../../../../components/ui";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
 import { requestDispatchID } from "../../hooks/useCurrentSelection.request-helpers";
@@ -129,12 +129,13 @@ export function SelectedWorkDispatchHistorySection({
         aria-labelledby="selected-work-operation-history-heading"
         className="mt-4 grid gap-2.5"
       >
-        <h4
-          className={DASHBOARD_SECTION_HEADING_CLASS}
+        <DashboardHeading
+          as="h4"
+          className="m-0"
           id="selected-work-operation-history-heading"
         >
           {messages.workOperationsHeading}
-        </h4>
+        </DashboardHeading>
         {operationHistory.length > 0 ? (
           <div className="grid gap-3">
             {operationHistory.map((item) =>
@@ -152,7 +153,7 @@ export function SelectedWorkDispatchHistorySection({
             )}
           </div>
         ) : (
-          <p className={DETAIL_COPY_CLASS}>{messages.workOperationsEmpty}</p>
+          <DetailCopy>{messages.workOperationsEmpty}</DetailCopy>
         )}
       </section>
     );
@@ -181,12 +182,13 @@ export function SelectedWorkDispatchHistorySection({
       aria-labelledby="selected-work-dispatch-history-heading"
       className="mt-4 grid gap-2.5"
     >
-      <h4
-        className={DASHBOARD_SECTION_HEADING_CLASS}
+      <DashboardHeading
+        as="h4"
+        className="m-0"
         id="selected-work-dispatch-history-heading"
       >
         {messages.dispatchHistoryHeading}
-      </h4>
+      </DashboardHeading>
       {requests.length > 0 ? (
         <div className="grid gap-3">
           {requests.map((request) => (
@@ -205,7 +207,7 @@ export function SelectedWorkDispatchHistorySection({
           ))}
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.dispatchHistoryEmpty}</p>
+        <DetailCopy>{messages.dispatchHistoryEmpty}</DetailCopy>
       )}
     </section>
   );

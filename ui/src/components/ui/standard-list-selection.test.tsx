@@ -1,13 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import {
-  STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS,
-  STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
   StandardListSelection,
   StandardListSelectionItem,
+  standardListSelectionRowClassName,
 } from "./standard-list-selection";
 
 /** Solid primary fill + selected shadow — not used for unselected accent rows (they use container + border-primary). */
@@ -15,6 +11,16 @@ const SOLID_ACCENT_SELECTED_TOKENS = [
   "bg-primary",
   "shadow-af-accent-selected",
 ] as const;
+const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
+  "border-primary bg-primary-container text-on-primary";
+const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
+  "border-af-danger-border bg-error-container text-on-error";
+const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
+  "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
+const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
+  "border-outline-variant bg-surface-container-low text-on-surface";
+const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
+  "border-af-success-border bg-success-container text-on-success-container";
 
 function expectNoSolidAccentSelectedTreatment(className: string) {
   const tokens = className.split(/\s+/);
@@ -61,6 +67,21 @@ describe("StandardListSelection", () => {
 });
 
 describe("StandardListSelectionItem", () => {
+  it("exposes row variant class generation without exporting raw class constants", () => {
+    expect(
+      standardListSelectionRowClassName({
+        selected: false,
+        tone: "success",
+      }),
+    ).toContain(STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS);
+    expect(
+      standardListSelectionRowClassName({
+        selected: true,
+        tone: "danger",
+      }),
+    ).toContain(STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS);
+  });
+
   it("uses neutral dark gray surfaces when unselected", () => {
     render(
       <StandardListSelectionItem tone="neutral">
@@ -72,7 +93,20 @@ describe("StandardListSelectionItem", () => {
     expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS);
     expect(row.getAttribute("aria-pressed")).toBe("false");
     expect(row.getAttribute("data-selected")).toBe("false");
+    expect(row.className).toContain("af-dashboard-body-text");
     expectNoSolidAccentSelectedTreatment(row.className);
+  });
+
+  it("allows row typography to be omitted for custom content", () => {
+    render(
+      <StandardListSelectionItem textRole="none">
+        Custom row
+      </StandardListSelectionItem>,
+    );
+
+    expect(screen.getByRole("button", { name: "Custom row" }).className).not.toContain(
+      "af-dashboard-body-text",
+    );
   });
 
   it("uses neutral selected surfaces without accent fill when selected", () => {
@@ -99,7 +133,7 @@ describe("StandardListSelectionItem", () => {
       </StandardListSelectionItem>,
     );
 
-    let     row = screen.getByRole("button", { name: "Accent row" });
+    let row = screen.getByRole("button", { name: "Accent row" });
     expect(row.className).toContain(STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS);
     expect(row.className).toContain("border-primary");
     expect(row.className).toContain("bg-primary-container");

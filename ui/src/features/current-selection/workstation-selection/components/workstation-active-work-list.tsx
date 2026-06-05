@@ -1,17 +1,16 @@
 import {
   DashboardActionButton,
   DashboardActionRow,
+  DashboardText,
 } from "../../../../components/ui";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
-import { REQUEST_SELECTION_STATUS_CLASS } from "../../base/components/detail-card-shared";
+import { CurrentSelectionSupportingText } from "../../base/public";
 import type { WorkstationActiveWorkListProps } from "../lib/detail-card-types";
 
 export function WorkstationActiveWorkList({
@@ -94,11 +93,9 @@ export function WorkstationActiveWorkList({
                 ) : undefined;
 
               return (
-                <li
-                  className={cn(
-                    "grid min-w-0 gap-2 rounded-lg px-3 py-2",
-                    DASHBOARD_BODY_TEXT_CLASS,
-                  )}
+                <DashboardText
+                  as="li"
+                  className="grid min-w-0 gap-2 rounded-lg px-3 py-2"
                   key={`${execution.dispatch_id}-${workIdentifier}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -118,31 +115,31 @@ export function WorkstationActiveWorkList({
                     />
                   </div>
                   {workItem ? null : (
-                    <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                    <CurrentSelectionSupportingText tone="status">
                       {messages.workDetailsUnavailable(execution.dispatch_id)}
-                    </p>
+                    </CurrentSelectionSupportingText>
                   )}
                   {requestSelected ? (
-                    <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                    <CurrentSelectionSupportingText tone="status">
                       {messages.selectedRequestLabel(execution.dispatch_id)}
-                    </p>
+                    </CurrentSelectionSupportingText>
                   ) : null}
                   {onSelectWorkstationRequest ? (
                     request ? null : (
-                      <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                      <CurrentSelectionSupportingText tone="status">
                         {messages.requestDetailsUnavailable(
                           execution.dispatch_id,
                         )}
-                      </p>
+                      </CurrentSelectionSupportingText>
                     )
                   ) : null}
-                </li>
+                </DashboardText>
               );
             });
           })}
         </ul>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.activeWorkEmpty}</p>
+        <DetailCopy>{messages.activeWorkEmpty}</DetailCopy>
       )}
     </CurrentSelectionExpandableSection>
   );

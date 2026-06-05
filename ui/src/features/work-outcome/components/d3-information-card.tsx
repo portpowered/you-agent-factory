@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
-import { DASHBOARD_WIDGET_CLASS } from "../../../components/ui/widget-frame";
-import { cn } from "../../../lib/cn";
-import { AgentBentoCard } from "../../bento/public";
+import { DashboardWidgetFrame } from "../../../components/ui/widget-frame";
 import { getDashboardWorkChartSeriesDefinitions } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
@@ -19,7 +17,7 @@ export interface WorkChartCardProps {
 }
 
 const WORK_CHART_BODY_CLASS =
-  "!flex !min-h-0 !flex-col !gap-0 !overflow-hidden px-0 pb-5";
+  "!flex !h-full !min-h-0 !flex-1 !flex-col !gap-0 !overflow-hidden px-0 pb-5";
 
 export function WorkChartCard({
   chartState,
@@ -35,7 +33,6 @@ export function WorkChartCard({
   const chartRegionID = widgetId
     ? `${widgetId}-chart-region`
     : "work-outcome-chart-region";
-  const cardClassName = cn(DASHBOARD_WIDGET_CLASS, className);
   const resolvedTitle = title ?? chartMessages.cardTitle;
   const chartSeries: readonly WorkChartSeriesDefinition[] =
     getDashboardWorkChartSeriesDefinitions([
@@ -58,15 +55,17 @@ export function WorkChartCard({
     ]);
 
   return (
-    <AgentBentoCard
+    <DashboardWidgetFrame
       bodyClassName={WORK_CHART_BODY_CLASS}
-      className={cardClassName}
+      bodyScroll={false}
+      className={className}
       headerAction={headerAction}
       title={resolvedTitle}
+      widgetId={widgetId ?? "work-outcome-chart"}
     >
       <section
         aria-label={chartMessages.cardRegionLabel}
-        className="flex min-h-0 flex-1 px-4 sm:px-5"
+        className="flex h-full min-h-0 flex-1 px-4 sm:px-5"
         id={chartRegionID}
       >
         <WorkChart
@@ -79,7 +78,7 @@ export function WorkChartCard({
           state={chartState}
         />
       </section>
-    </AgentBentoCard>
+    </DashboardWidgetFrame>
   );
 }
 

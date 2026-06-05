@@ -1,10 +1,6 @@
 import type { ReactNode } from "react";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DashboardLabel, DashboardText } from "../../../components/ui";
 import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
-import { cn } from "../../../lib/cn";
 
 export function DetailMetric({
   label,
@@ -13,19 +9,20 @@ export function DetailMetric({
   label: string;
   value: number | string | ReactNode;
 }) {
-  const wrapperClassName = cn("mt-1", DASHBOARD_BODY_TEXT_CLASS);
-
   return (
     <div className="grid gap-1 py-1.5">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+      <DashboardLabel>{label}</DashboardLabel>
       {typeof value === "string" || typeof value === "number" ? (
-        <p className={cn("m-0 [overflow-wrap:anywhere]", wrapperClassName)}>
+        <DashboardText className="m-0 mt-1 [overflow-wrap:anywhere]">
           {value}
-        </p>
+        </DashboardText>
       ) : (
-        <div className={cn("[overflow-wrap:anywhere]", wrapperClassName)}>
+        <DashboardText
+          as="div"
+          className="mt-1 [overflow-wrap:anywhere]"
+        >
           {value}
-        </div>
+        </DashboardText>
       )}
     </div>
   );

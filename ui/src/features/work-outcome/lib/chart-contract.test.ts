@@ -1,5 +1,8 @@
 import {
   type DashboardChartSemanticRole,
+  dashboardChartAxisClassName,
+  dashboardChartAxisLabelClassName,
+  dashboardChartSurfaceClassName,
   getDashboardChartSemanticStyle,
   getDashboardWorkChartSeriesDefinitions,
 } from "./chart-contract";
@@ -15,6 +18,12 @@ const EXPECTED_CHART_COLORS: Record<DashboardChartSemanticRole, string> = {
 };
 
 describe("dashboard chart contract", () => {
+  it("exposes chart chrome helpers without exporting raw class constants", () => {
+    expect(dashboardChartAxisClassName()).toContain("stroke-outline-variant");
+    expect(dashboardChartAxisLabelClassName()).toContain("fill-on-surface-subtle");
+    expect(dashboardChartSurfaceClassName()).toContain("af-chart-grid-surface");
+  });
+
   it("maps each semantic role onto the canonical dashboard chart token family", () => {
     for (const [role, color] of Object.entries(EXPECTED_CHART_COLORS)) {
       expect(

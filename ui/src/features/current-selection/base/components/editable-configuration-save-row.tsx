@@ -4,7 +4,6 @@ import {
   DashboardActionButton,
   DashboardActionRow,
 } from "../../../../components/ui";
-import { cn } from "../../../../lib/cn";
 
 export interface EditableConfigurationSaveRowProps {
   busyLabel: string;
@@ -32,17 +31,10 @@ export function EditableConfigurationSaveRow({
         <>
           {resetSlot}
           <DashboardActionButton
-            className={
-              emphasizeSave
-                ? cn(
-                    "border-af-warning-border bg-warning-container text-on-warning-container",
-                    "hover:border-af-warning-border hover:bg-warning-container hover:text-on-warning-container",
-                  )
-                : undefined
-            }
             disabled={!canSave}
             executing={isSaving}
             onClick={onSave}
+            tone={emphasizeSave ? "warning" : "outline"}
             type="button"
           >
             {label}

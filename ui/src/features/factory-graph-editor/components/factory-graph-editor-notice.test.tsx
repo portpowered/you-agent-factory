@@ -31,4 +31,16 @@ describe("FactoryGraphEditorNotice", () => {
     await user.keyboard("{Enter}");
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it("uses shared warning alert styling for warning notices", () => {
+    render(
+      <FactoryGraphEditorNotice title="Unsaved changes" tone="warning">
+        Review the draft before leaving.
+      </FactoryGraphEditorNotice>,
+    );
+
+    expect(screen.getByRole("status").className).toContain(
+      "bg-warning-container",
+    );
+  });
 });

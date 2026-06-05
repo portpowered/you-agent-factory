@@ -1,7 +1,6 @@
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
-import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
+import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
+import { CurrentSelectionDetailFeedback } from "../../base/public";
 import { useWorkerDetailState } from "../hooks/use-worker-detail-state";
 import type { WorkerDetailCardProps } from "../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
@@ -21,38 +20,25 @@ export function WorkerDetailCard({
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
       {editableConfigurationState?.status !== "ready" ? (
-        <p className={WIDGET_SUBTITLE_CLASS}>{workerName}</p>
+        <WidgetSubtitle>{workerName}</WidgetSubtitle>
       ) : null}
       {detailState.status === "loading" ? (
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <CurrentSelectionDetailFeedback>
           {messages.configurationLoading}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       {detailState.status === "error" ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
+        <CurrentSelectionDetailFeedback
           role="alert"
+          tone="danger"
         >
           {messages.configurationErrorPrefix} {detailState.errorMessage}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       {detailState.status === "empty" ? (
-        <p
-          className={cn(
-            "m-0 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <CurrentSelectionDetailFeedback>
           {messages.configurationEmpty}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       {detailState.status === "ready" ? (
         <WorkerEditableConfigurationSection

@@ -4,21 +4,23 @@ import type {
   DashboardScriptRequest,
   DashboardScriptResponse,
 } from "../../../../api/dashboard/types";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
+import { DashboardText } from "../../../../components/ui";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
-import { CurrentSelectionHistoryCard } from "../../base/components/current-selection-history-card";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
 import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
-import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
-import { InferenceAttemptDetail } from "../../base/components/inference-attempt-detail";
-import { InferenceAttemptCard } from "../../work-selection/public";
+import { CurrentSelectionDescriptionList } from "../../base/public";
+import { CurrentSelectionHistoryCard } from "../../history/public";
+import {
+  InferenceAttemptCard,
+  InferenceAttemptDetail,
+} from "../../work-selection/public";
 import {
   requestModel,
   requestProvider,
@@ -62,7 +64,7 @@ export function DispatchInferenceAttemptsSection({
             />
           ))
         ) : emptyCopy ? (
-          <p className={DETAIL_COPY_CLASS}>{emptyCopy}</p>
+          <DetailCopy>{emptyCopy}</DetailCopy>
         ) : null}
       </div>
     </CollapsibleDispatchAttemptSection>
@@ -102,9 +104,7 @@ export function DispatchScriptAttemptsSection({
             scriptResponse={scriptResponse}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>
-            {messages.noScriptAttemptRecordedYet}
-          </p>
+          <DetailCopy>{messages.noScriptAttemptRecordedYet}</DetailCopy>
         )}
       </div>
     </CollapsibleDispatchAttemptSection>
@@ -159,17 +159,15 @@ function ScriptRequestAttemptCard({
               String(attemptNumber ?? messages.pendingAttemptLabel),
             )}
           </strong>
-          <p
-            className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}
-          >
+          <DashboardText className="m-0 text-on-surface-variant">
             {enumMessages.localizeOutcome("PENDING")}
-          </p>
+          </DashboardText>
         </div>
         <CurrentSelectionExecutionPill>
           {requestID ?? messages.scriptRequestPlaceholderId}
         </CurrentSelectionExecutionPill>
       </div>
-      <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.scriptRequestIdLabel}
           code
@@ -206,7 +204,7 @@ function ScriptRequestAttemptCard({
           code
           value={scriptRequest.command}
         />
-      </dl>
+      </CurrentSelectionDescriptionList>
       <ScriptArgsSection
         args={scriptRequest.args}
         label={messages.resolvedArgsLabel}
@@ -247,19 +245,17 @@ function ScriptResponseAttemptCard({
               String(attemptNumber ?? messages.completedAttemptLabel),
             )}
           </strong>
-          <p
-            className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}
-          >
+          <DashboardText className="m-0 text-on-surface-variant">
             {scriptResponse.outcome
               ? enumMessages.localizeOutcome(scriptResponse.outcome)
               : enumMessages.localizeOutcome("RECORDED")}
-          </p>
+          </DashboardText>
         </div>
         <CurrentSelectionExecutionPill>
           {requestID ?? messages.scriptResponsePlaceholderId}
         </CurrentSelectionExecutionPill>
       </div>
-      <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.scriptRequestIdLabel}
           code
@@ -316,7 +312,7 @@ function ScriptResponseAttemptCard({
           code
           value={failureType}
         />
-      </dl>
+      </CurrentSelectionDescriptionList>
       <ScriptOutputSection
         emptyMessage={messages.noStdoutRecorded}
         label={messages.stdoutLabel}

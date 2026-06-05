@@ -10,7 +10,7 @@ const SCROLL_AREA_VIEWPORT_CLASS = cn(
   "[&::-webkit-scrollbar]:hidden",
 );
 
-export const SCROLL_AREA_THUMB_CLASS =
+const SCROLL_AREA_THUMB_CLASS =
   "relative flex-1 rounded-full bg-outline-variant transition-colors hover:bg-af-text-subtle";
 
 export type ScrollAreaProps = ComponentProps<

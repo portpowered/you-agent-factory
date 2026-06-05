@@ -1,7 +1,5 @@
-import { cn } from "../../lib/cn";
 import { Button } from "./button";
-import { LAYOUT_CARD_INSET_CLASS } from "./dashboard-layout";
-import { DASHBOARD_PANEL_SHELL_CLASS } from "./dashboard-shell";
+import { DashboardPanelShell } from "./dashboard-shell";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_PAGE_HEADING_CLASS,
@@ -53,13 +51,7 @@ export function LayoutRoleShowcase() {
           }
         />
 
-        <article
-          className={cn(
-            DASHBOARD_PANEL_SHELL_CLASS,
-            LAYOUT_CARD_INSET_CLASS,
-            "grid gap-layout-group",
-          )}
-        >
+        <DashboardPanelShell as="article" className="grid gap-layout-group" inset>
           <h3 className={`m-0 ${DASHBOARD_SECTION_HEADING_CLASS}`}>
             Toolbar row layout
           </h3>
@@ -74,15 +66,9 @@ export function LayoutRoleShowcase() {
               Primary action
             </Button>
           </ToolbarRowLayout>
-        </article>
+        </DashboardPanelShell>
 
-        <article
-          className={cn(
-            DASHBOARD_PANEL_SHELL_CLASS,
-            LAYOUT_CARD_INSET_CLASS,
-            "grid gap-layout-group",
-          )}
-        >
+        <DashboardPanelShell as="article" className="grid gap-layout-group" inset>
           <h3 className={`m-0 ${DASHBOARD_SECTION_HEADING_CLASS}`}>
             Stacked card layout
           </h3>
@@ -94,15 +80,9 @@ export function LayoutRoleShowcase() {
               Section stacks separate major groups at gap-layout-section.
             </p>
           </CardContentStack>
-        </article>
+        </DashboardPanelShell>
 
-        <article
-          className={cn(
-            DASHBOARD_PANEL_SHELL_CLASS,
-            LAYOUT_CARD_INSET_CLASS,
-            "grid gap-layout-group",
-          )}
-        >
+        <DashboardPanelShell as="article" className="grid gap-layout-group" inset>
           <h3 className={`m-0 ${DASHBOARD_SECTION_HEADING_CLASS}`}>
             Form / dialog body layout
           </h3>
@@ -124,7 +104,7 @@ export function LayoutRoleShowcase() {
               footer regions.
             </p>
           </DialogBodyLayout>
-        </article>
+        </DashboardPanelShell>
       </SectionStack>
     </section>
   );
