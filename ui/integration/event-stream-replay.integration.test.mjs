@@ -155,7 +155,17 @@ async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
     state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
-  await workstationButton.click({ force: true });
+  await workstationButton.scrollIntoViewIfNeeded();
+  try {
+    await workstationButton.click({ force: true });
+  } catch (error) {
+    // React Flow workstation buttons can remain visible while clipping leaves the
+    // actionable box outside the viewport in CI. Fall back to the DOM click so
+    // the test still verifies replay behavior after the button renders.
+    await workstationButton.evaluate((button) => {
+      button.click();
+    });
+  }
 
   await page.getByRole("article", { name: "Current selection" }).waitFor({
     state: "visible",
