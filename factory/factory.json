@@ -1,5 +1,5 @@
 {
-  "name": "UNDEFINED",
+  "name": "factory",
   "resources": [
     {
       "capacity": 10,
@@ -27,6 +27,69 @@
         "content": {
           "encoding": "utf-8"
         },
+        "targetPath": "factory/docs/planning.md",
+        "type": "DOC"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-cron-logical-move-output-route-validation.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-cursor-agent-session-metrics.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-dashboard-ui-nit-cleanup-bundle.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-factory-graph-add-node-placement.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-material-color-role-migration.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-subprocess-success-cleanup.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-worker-runtime-configuration.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
+        "targetPath": "factory/inputs/plan/default/prd-workstation-guard-selector-autocomplete.md",
+        "type": "INPUT"
+      },
+      {
+        "content": {
+          "encoding": "utf-8"
+        },
         "targetPath": "factory/scripts/setup-workspace.py",
         "type": "SCRIPT"
       }
@@ -34,7 +97,7 @@
   },
   "version": {
     "logical": 1780219232503513601,
-    "physical": "2026-06-03T06:22:52.292237Z"
+    "physical": "2026-06-04T10:28:25.828255Z"
   },
   "workTypes": [
     {
@@ -138,7 +201,7 @@
   "workers": [
     {
       "executorProvider": "SCRIPT_WRAP",
-      "modelProvider": "CURSOR",
+      "modelProvider": "CODEX",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
@@ -152,6 +215,11 @@
       "command": "python3",
       "name": "workspace-setup",
       "type": "SCRIPT_WORKER"
+    },
+    {
+      "modelProvider": "CURSOR",
+      "name": "planner",
+      "type": "MODEL_WORKER"
     }
   ],
   "workstations": [
@@ -221,7 +289,7 @@
         }
       ],
       "type": "MODEL_WORKSTATION",
-      "worker": "processor"
+      "worker": "planner"
     },
     {
       "inputs": [

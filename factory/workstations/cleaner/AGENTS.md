@@ -19,8 +19,8 @@ run git pull and make the workspace be up to date to remote
    - remove dead code, duplication, redundant legacy handling, and overlapping structures where the public workflow allows it
    - preserve intended public behavior unless the cleanup explicitly aims to change that behavior
    - when cleanup touches tests, prefer behavioral runtime, API, CLI, UI, or emitted-event assertions instead of meta tests about file layout, docs topology, bundle internals, or command/route inventories
-   - default to one standalone cleanup idea via `you submit`
-   - use `you submit batch` with a stable `requestId` only when one submission must create multiple work items together because the follow-up needs dependency ordering, parent-child membership, or mixed work types
+   - default to one standalone cleanup idea via `you submit --session {{ .Context.SessionID }}`
+   - use `you submit batch --session {{ .Context.SessionID }}` with a stable `requestId` only when one submission must create multiple work items together because the follow-up needs dependency ordering, parent-child membership, or mixed work types
 2. read the code under `./`, read recent PRs associated with your previous requests, and inspect existing work with `you work list` or related CLI commands to see any previous cleanup attempts that have already been made
 
 ## Step 2 - based on the above results decide on one of the following:
@@ -77,12 +77,13 @@ you submit \
   --name your-idea-name \
   --work-type-name idea \
   --payload ./your-idea-name.md
+  --session {{ .Context.SessionID }}
 ```
 
 2. only use a batch submission when the follow-up needs dependency ordering, parent-child membership, or mixed work types. Write the canonical `FACTORY_REQUEST_BATCH` JSON to a temp file, then submit with a stable `requestId`:
 
 ```bash
-you submit batch ./your-batch.json
+you submit batch ./your-batch.json --session {{ .Context.SessionID }}
 ```
 
 3. batch JSON must include `requestId`, `type`, and `works`, and may include `relations`.
