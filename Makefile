@@ -95,7 +95,7 @@ generate-go-client-api:
 	$(GO) generate -tags=interfaces ./pkg/generatedclient
 
 generate-ui-api:
-	cd ui && node ./node_modules/openapi-typescript/bin/cli.js ../api/openapi.yaml -o src/api/generated/openapi.ts
+	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
 	cd ui && $(UI_EXEC) biome format --write src/api/generated/openapi.ts
 
 generate-wire:

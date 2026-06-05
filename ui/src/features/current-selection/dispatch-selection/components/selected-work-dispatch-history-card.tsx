@@ -1,27 +1,26 @@
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
-import {
-  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  CURRENT_SELECTION_BADGE_CLASS,
-  EXECUTION_PILL_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
-  normalizeDetailText,
-  PROVIDER_SESSION_CARD_CLASS,
-} from "../../base/components/detail-card-shared";
+import { CurrentSelectionBadge } from "../../base/components/current-selection-pill";
+import { normalizeDetailText } from "../../base/components/detail-card-shared";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
-import { WorkItemPayloadList } from "../../work-selection/public";
+import { CurrentSelectionDescriptionList } from "../../base/public";
+import {
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
+import {
+  InferenceAttemptDetail,
+  WorkItemPayloadList,
+} from "../../work-selection/public";
 import {
   dedupeWorkItems,
   requestDurationMillis,
@@ -61,7 +60,6 @@ interface DispatchHistoryCardProps {
   request: SelectedWorkRequestHistoryItem;
   selectedProviderSessionKey?: string | null;
   selectedWorkID: string;
-  traceTargetId: string;
 }
 
 export function DispatchHistoryCard({
@@ -73,7 +71,6 @@ export function DispatchHistoryCard({
   request,
   selectedProviderSessionKey,
   selectedWorkID,
-  traceTargetId,
 }: DispatchHistoryCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
   const locale = useCurrentSelectionLocale();
@@ -82,15 +79,12 @@ export function DispatchHistoryCard({
   const title = requestTitle(request, selectedWorkID);
 
   return (
-    <article
+    <CurrentSelectionHistoryCard
       aria-label={messages.workstationDispatchRowAccessibleLabel(
         title,
         request.dispatch_id,
       )}
-      className={cn(
-        PROVIDER_SESSION_CARD_CLASS,
-        isCurrentDispatch && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-      )}
+      highlighted={isCurrentDispatch}
     >
       <DispatchHistoryHeader
         dispatchID={request.dispatch_id}
@@ -119,7 +113,6 @@ export function DispatchHistoryCard({
             onSelectTraceID={onSelectTraceID}
             onSelectWorkID={onSelectWorkID}
             selectedWorkID={selectedWorkID}
-            traceTargetId={traceTargetId}
             view={view}
           />
           <DispatchScriptAttemptsSection
@@ -138,7 +131,6 @@ export function DispatchHistoryCard({
             onSelectTraceID={onSelectTraceID}
             onSelectWorkID={onSelectWorkID}
             selectedWorkID={selectedWorkID}
-            traceTargetId={traceTargetId}
             view={view}
           />
           <DispatchInferenceAttemptsSection
@@ -156,7 +148,7 @@ export function DispatchHistoryCard({
       {view.hasFailureDetails ? (
         <DispatchFailureSection messages={messages} view={view} />
       ) : null}
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }
 
@@ -230,36 +222,27 @@ function DispatchHistoryHeader({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="grid min-w-0 gap-1">
-        <strong className="min-w-0 [overflow-wrap:anywhere]">
-          {title || dispatchID || messages.unknownDispatchTitle}
-        </strong>
-        <div className="flex flex-wrap items-center gap-2">
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-          >
-            {outcome
-              ? enumMessages.localizeOutcome(outcome)
-              : enumMessages.localizeOutcome("PENDING")}
-          </p>
+    <CurrentSelectionHistoryCardHeader
+      badges={
+        <>
           <WorkstationOperationKindBadge
             label={messages.workstationOperationKindBadge}
           />
           {isCurrentDispatch ? (
-            <span className={CURRENT_SELECTION_BADGE_CLASS}>
+            <CurrentSelectionBadge>
               {messages.currentDispatchBadge}
-            </span>
+            </CurrentSelectionBadge>
           ) : null}
-        </div>
-      </div>
-      <span className={EXECUTION_PILL_CLASS}>
-        {dispatchID || messages.unknownDispatchId}
-      </span>
-    </div>
+        </>
+      }
+      identifier={dispatchID || messages.unknownDispatchId}
+      subtitle={
+        outcome
+          ? enumMessages.localizeOutcome(outcome)
+          : enumMessages.localizeOutcome("PENDING")
+      }
+      title={title || dispatchID || messages.unknownDispatchTitle}
+    />
   );
 }
 
@@ -281,7 +264,7 @@ function DispatchSummaryDetails({
   );
 
   return (
-    <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+    <CurrentSelectionDescriptionList className="mt-2.5">
       <InferenceAttemptDetail
         label={messages.workstationLabel}
         value={request.workstation_name}
@@ -298,7 +281,7 @@ function DispatchSummaryDetails({
             : undefined
         }
       />
-    </dl>
+    </CurrentSelectionDescriptionList>
   );
 }
 
@@ -316,9 +299,7 @@ function DispatchRequestSection({
   return (
     <DispatchDetailSection title={messages.requestDetailsTitle}>
       {view.isScriptBackedRequest ? (
-        <p className={DETAIL_COPY_CLASS}>
-          {messages.promptDetailsNotApplicable}
-        </p>
+        <DetailCopy>{messages.promptDetailsNotApplicable}</DetailCopy>
       ) : null}
       <WorkItemPayloadList
         messages={{
@@ -346,7 +327,6 @@ function DispatchResponseSection({
   onSelectTraceID,
   onSelectWorkID,
   selectedWorkID,
-  traceTargetId,
   view,
 }: {
   activeTraceID?: string | null;
@@ -354,7 +334,6 @@ function DispatchResponseSection({
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
-  traceTargetId: string;
   view: DispatchHistoryView;
 }) {
   return (
@@ -372,7 +351,6 @@ function DispatchResponseSection({
         onSelectTraceID={onSelectTraceID}
         selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
-        traceTargetId={traceTargetId}
       />
     </DispatchDetailSection>
   );
@@ -384,7 +362,6 @@ function DispatchTraceSection({
   onSelectTraceID,
   onSelectWorkID,
   selectedWorkID,
-  traceTargetId,
   view,
 }: {
   activeTraceID?: string | null;
@@ -392,7 +369,6 @@ function DispatchTraceSection({
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
-  traceTargetId: string;
   view: DispatchHistoryView;
 }) {
   return (
@@ -410,7 +386,6 @@ function DispatchTraceSection({
         onSelectTraceID={onSelectTraceID}
         selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
-        traceTargetId={traceTargetId}
       />
     </DispatchDetailSection>
   );

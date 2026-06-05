@@ -1,24 +1,25 @@
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "../../../components/ui/dashboard-typography";
+  DashboardLabel,
+  DashboardText,
+  Select,
+  SurfacePanel,
+} from "../../../components/ui";
 import {
   formatDurationMillis,
   formatTraceOutcome,
 } from "../../../components/ui/formatters";
 import {
+  DashboardEmptyState,
+  DashboardEmptyStateText,
+  DashboardEmptyStateTitle,
   DashboardWidgetFrame,
-  DETAIL_CARD_WIDE_CLASS,
-  DETAIL_COPY_CLASS,
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-  WIDGET_SUBTITLE_CLASS,
+  DetailCopy,
+  WidgetSubtitle,
 } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
 import {
-  DASHBOARD_CHART_AXIS_CLASS,
-  DASHBOARD_CHART_SURFACE_CLASS,
+  dashboardChartAxisClassName,
+  dashboardChartSurfaceClassName,
   getDashboardChartSemanticStyle,
 } from "../lib/chart-contract";
 import {
@@ -29,6 +30,7 @@ import {
   type TimingTrendModel,
 } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
+import { TrendSummaryGrid, TrendSummaryMetric } from "./trend-summary";
 
 interface FailureTrendCardProps {
   className?: string;
@@ -53,16 +55,10 @@ interface TimingTrendCardProps {
   widgetId?: string;
 }
 
-const TREND_SUMMARY_CLASS = cn(
-  "mb-4 grid grid-cols-1 gap-3 [&_dd]:m-0 [&_div]:rounded-lg [&_div]:border [&_div]:border-outline [&_div]:bg-surface-container-low [&_div]:p-3 [&_dt]:mb-1 md:grid-cols-3",
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-);
 const TREND_CHART_CLASS = cn(
-  DASHBOARD_CHART_SURFACE_CLASS,
+  dashboardChartSurfaceClassName(),
   "min-h-44 border border-outline",
 );
-const TREND_SUMMARY_TERM_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const TREND_SUMMARY_VALUE_CLASS = WIDGET_SUBTITLE_CLASS;
 const FAILURE_TREND_CHART_STYLE =
   getDashboardChartSemanticStyle("failureTrend");
 const REWORK_TREND_CHART_STYLE = getDashboardChartSemanticStyle("reworkTrend");
@@ -77,6 +73,7 @@ export function FailureTrendCard({
   widgetId = "failure-trend",
 }: FailureTrendCardProps) {
   const messages = getWorkOutcomeMessages(locale).trends;
+  const rangeSelectId = `${widgetId}-failure-range`;
   const changeRange = (value: string) => {
     if (isThroughputRangeID(value)) {
       onRangeChange(value);
@@ -85,54 +82,47 @@ export function FailureTrendCard({
 
   return (
     <DashboardWidgetFrame
-      className={cn(DETAIL_CARD_WIDE_CLASS, className)}
+      className={className}
       title={messages.failureTitle}
+      wide
       widgetId={widgetId}
     >
       <div className="mb-4 flex flex-col items-start justify-between gap-3 md:flex-row">
-        <p className={WIDGET_SUBTITLE_CLASS}>{messages.failureSummary}</p>
-        <label className="grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36">
-          <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+        <WidgetSubtitle>{messages.failureSummary}</WidgetSubtitle>
+        <div className="grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36">
+          <DashboardLabel as="label" htmlFor={rangeSelectId}>
             {messages.rangeLabel}
-          </span>
-          <select
+          </DashboardLabel>
+          <Select
             aria-label={messages.rangeLabel}
-            className={cn(
-              "rounded-lg border border-primary bg-surface-container-high px-2 py-2 text-on-surface",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
-            value={rangeID}
+            className="rounded-lg border-primary py-2"
+            id={rangeSelectId}
             onChange={(event) => changeRange(event.target.value)}
+            value={rangeID}
           >
             {THROUGHPUT_RANGE_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>
                 {messages.rangeOptionLabel(option.id, option.id)}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </div>
       </div>
 
-      <dl className={TREND_SUMMARY_CLASS}>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.failedInRangeLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.failureDelta}</dd>
-        </div>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.totalFailedLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.currentFailed}</dd>
-        </div>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.causeGroupsLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>{model.groups.length}</dd>
-        </div>
-      </dl>
+      <TrendSummaryGrid>
+        <TrendSummaryMetric
+          label={messages.failedInRangeLabel}
+          value={model.failureDelta}
+        />
+        <TrendSummaryMetric
+          label={messages.totalFailedLabel}
+          value={model.currentFailed}
+        />
+        <TrendSummaryMetric
+          label={messages.causeGroupsLabel}
+          value={model.groups.length}
+        />
+      </TrendSummaryGrid>
 
       {model.points.length > 0 ? (
         <svg
@@ -162,10 +152,14 @@ export function FailureTrendCard({
           ))}
         </svg>
       ) : (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.failureEmptyTitle}</h3>
-          <p>{messages.failureEmptyMessage}</p>
-        </div>
+        <DashboardEmptyState compact>
+          <DashboardEmptyStateTitle>
+            {messages.failureEmptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.failureEmptyMessage}
+          </DashboardEmptyStateText>
+        </DashboardEmptyState>
       )}
 
       {model.groups.length > 0 ? (
@@ -174,26 +168,30 @@ export function FailureTrendCard({
           aria-label={messages.causeGroupsRegionLabel}
         >
           {model.groups.map((group) => (
-            <li
-              className="flex items-center justify-between gap-3 rounded-lg border border-outline bg-surface-container-low px-3 py-2.5"
+            <SurfacePanel
+              asChild
+              className="flex items-center justify-between gap-3 px-3 py-2.5"
               key={group.label}
+              padding="none"
+              radius="lg"
+              surface="low"
             >
-              <span
-                className={cn(
-                  "min-w-0 text-on-surface-variant [overflow-wrap:anywhere]",
-                  DASHBOARD_BODY_TEXT_CLASS,
-                )}
-              >
-                {group.label}
-              </span>
-              <strong className="shrink-0 text-on-error-container">
-                {group.count}
-              </strong>
-            </li>
+              <li>
+                <DashboardText
+                  as="span"
+                  className="min-w-0 text-on-surface-variant [overflow-wrap:anywhere]"
+                >
+                  {group.label}
+                </DashboardText>
+                <strong className="shrink-0 text-on-error-container">
+                  {group.count}
+                </strong>
+              </li>
+            </SurfacePanel>
           ))}
         </ul>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.causeGroupsEmpty}</p>
+        <DetailCopy>{messages.causeGroupsEmpty}</DetailCopy>
       )}
     </DashboardWidgetFrame>
   );
@@ -209,38 +207,27 @@ export function ReworkTrendCard({
 
   return (
     <DashboardWidgetFrame
-      className={cn(DETAIL_CARD_WIDE_CLASS, className)}
+      className={className}
       title={messages.reworkTitle}
+      wide
       widgetId={widgetId}
     >
-      <p className={WIDGET_SUBTITLE_CLASS}>{messages.reworkSummary}</p>
+      <WidgetSubtitle>{messages.reworkSummary}</WidgetSubtitle>
 
-      <dl className={TREND_SUMMARY_CLASS}>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.traceWorkLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>
-            {model.currentWorkLabel}
-          </dd>
-        </div>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.retryOrReworkLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>
-            {model.retryOrReworkCount}
-          </dd>
-        </div>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.latestOutcomeLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>
-            {formatTraceOutcome(model.terminalOutcome)}
-          </dd>
-        </div>
-      </dl>
+      <TrendSummaryGrid>
+        <TrendSummaryMetric
+          label={messages.traceWorkLabel}
+          value={model.currentWorkLabel}
+        />
+        <TrendSummaryMetric
+          label={messages.retryOrReworkLabel}
+          value={model.retryOrReworkCount}
+        />
+        <TrendSummaryMetric
+          label={messages.latestOutcomeLabel}
+          value={formatTraceOutcome(model.terminalOutcome)}
+        />
+      </TrendSummaryGrid>
 
       {model.points.length > 0 ? (
         <svg
@@ -275,10 +262,14 @@ export function ReworkTrendCard({
           ))}
         </svg>
       ) : (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.reworkEmptyTitle}</h3>
-          <p>{messages.reworkEmptyMessage}</p>
-        </div>
+        <DashboardEmptyState compact>
+          <DashboardEmptyStateTitle>
+            {messages.reworkEmptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.reworkEmptyMessage}
+          </DashboardEmptyStateText>
+        </DashboardEmptyState>
       )}
     </DashboardWidgetFrame>
   );
@@ -294,38 +285,27 @@ export function TimingTrendCard({
 
   return (
     <DashboardWidgetFrame
-      className={cn(DETAIL_CARD_WIDE_CLASS, className)}
+      className={className}
       title={messages.timingTitle}
+      wide
       widgetId={widgetId}
     >
-      <p className={WIDGET_SUBTITLE_CLASS}>{messages.timingSummary}</p>
+      <WidgetSubtitle>{messages.timingSummary}</WidgetSubtitle>
 
-      <dl className={TREND_SUMMARY_CLASS}>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.traceWorkLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>
-            {model.currentWorkLabel}
-          </dd>
-        </div>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.slowestDurationLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>
-            {formatDurationMillis(model.slowestDurationMillis)}
-          </dd>
-        </div>
-        <div>
-          <dt className={TREND_SUMMARY_TERM_CLASS}>
-            {messages.averageDurationLabel}
-          </dt>
-          <dd className={TREND_SUMMARY_VALUE_CLASS}>
-            {formatDurationMillis(model.averageDurationMillis)}
-          </dd>
-        </div>
-      </dl>
+      <TrendSummaryGrid>
+        <TrendSummaryMetric
+          label={messages.traceWorkLabel}
+          value={model.currentWorkLabel}
+        />
+        <TrendSummaryMetric
+          label={messages.slowestDurationLabel}
+          value={formatDurationMillis(model.slowestDurationMillis)}
+        />
+        <TrendSummaryMetric
+          label={messages.averageDurationLabel}
+          value={formatDurationMillis(model.averageDurationMillis)}
+        />
+      </TrendSummaryGrid>
 
       {model.points.length > 0 ? (
         <>
@@ -358,33 +338,29 @@ export function TimingTrendCard({
               </circle>
             ))}
           </svg>
-          <dl
-            className={cn(TREND_SUMMARY_CLASS, "mt-3 md:grid-cols-2")}
+          <TrendSummaryGrid
             aria-label={messages.timingRangeLabel}
+            className="mt-3 md:grid-cols-2"
           >
-            <div>
-              <dt className={TREND_SUMMARY_TERM_CLASS}>
-                {messages.fastestDurationLabel}
-              </dt>
-              <dd className={TREND_SUMMARY_VALUE_CLASS}>
-                {formatDurationMillis(model.fastestDurationMillis)}
-              </dd>
-            </div>
-            <div>
-              <dt className={TREND_SUMMARY_TERM_CLASS}>
-                {messages.latestDurationLabel}
-              </dt>
-              <dd className={TREND_SUMMARY_VALUE_CLASS}>
-                {formatDurationMillis(model.latestDurationMillis)}
-              </dd>
-            </div>
-          </dl>
+            <TrendSummaryMetric
+              label={messages.fastestDurationLabel}
+              value={formatDurationMillis(model.fastestDurationMillis)}
+            />
+            <TrendSummaryMetric
+              label={messages.latestDurationLabel}
+              value={formatDurationMillis(model.latestDurationMillis)}
+            />
+          </TrendSummaryGrid>
         </>
       ) : (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.reworkEmptyTitle}</h3>
-          <p>{messages.timingEmptyMessage}</p>
-        </div>
+        <DashboardEmptyState compact>
+          <DashboardEmptyStateTitle>
+            {messages.reworkEmptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.timingEmptyMessage}
+          </DashboardEmptyStateText>
+        </DashboardEmptyState>
       )}
     </DashboardWidgetFrame>
   );
@@ -394,14 +370,14 @@ function TrendAxes() {
   return (
     <>
       <line
-        className={DASHBOARD_CHART_AXIS_CLASS}
+        className={dashboardChartAxisClassName()}
         x1="14"
         x2="306"
         y1="106"
         y2="106"
       />
       <line
-        className={DASHBOARD_CHART_AXIS_CLASS}
+        className={dashboardChartAxisClassName()}
         x1="14"
         x2="14"
         y1="14"

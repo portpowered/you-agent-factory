@@ -1,6 +1,5 @@
 import { Save } from "lucide-react";
 import { DashboardActionButton } from "../../../../components/ui";
-import { cn } from "../../../../lib/cn";
 import { EditableConfigurationDiscardHeaderAction } from "../../base/public";
 import type { EditableWorkstationSaveState } from "../lib/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
@@ -65,18 +64,11 @@ export function EditableWorkstationSaveHeaderAction({
         saveState.status === "confirming" || saveState.status === "submitting"
       }
       aria-haspopup="dialog"
-      className={
-        emphasizeSave
-          ? cn(
-              "border-af-warning-border bg-warning-container text-on-warning-container",
-              "hover:border-af-warning hover:bg-warning hover:text-on-warning",
-            )
-          : undefined
-      }
       disabled={!canSave}
       executing={saveState.status === "submitting"}
       iconOnly
       onClick={onClick}
+      tone={emphasizeSave ? "warning" : "outline"}
       type="button"
     >
       <Save aria-hidden="true" className="size-4" />

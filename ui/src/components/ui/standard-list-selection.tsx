@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import { cn } from "../../lib/cn";
+import { DASHBOARD_BODY_TEXT_CLASS } from "./dashboard-typography";
 import {
   SelectableCardButton,
   type SelectableCardButtonProps,
@@ -20,24 +21,24 @@ export type StandardListSelectionTone =
 
 const StandardListSelectionDisabledContext = createContext(false);
 
-export const STANDARD_LIST_SELECTION_LIST_CLASS = "grid gap-2";
+const STANDARD_LIST_SELECTION_LIST_CLASS = "grid gap-2";
 
 const STANDARD_LIST_SELECTION_ROW_BASE_CLASS =
   "h-auto min-h-0 w-full justify-start gap-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 
-export const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
+const STANDARD_LIST_SELECTION_ROW_NEUTRAL_CLASS =
   "border-outline bg-surface-container-high text-on-surface hover:border-outline-variant hover:bg-af-overlay";
 
-export const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
+const STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS =
   "border-primary bg-primary-container text-on-primary";
 
-export const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
+const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
   "border-af-success-border bg-success-container text-on-success-container";
 
-export const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
+const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
   "border-af-danger-border bg-error-container text-on-error";
 
-export const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
+const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
   "border-outline-variant bg-surface-container-low text-on-surface";
 
 const STANDARD_LIST_SELECTION_TONE_CLASS: Record<
@@ -103,6 +104,7 @@ export function StandardListSelection({
 export interface StandardListSelectionItemProps
   extends Omit<SelectableCardButtonProps, "selected" | "tone"> {
   selected?: boolean;
+  textRole?: "body" | "none";
   tone?: StandardListSelectionTone;
 }
 
@@ -115,6 +117,7 @@ export const StandardListSelectionItem = forwardRef<
     className,
     disabled,
     selected = false,
+    textRole = "body",
     tone = "neutral",
     ...props
   },
@@ -125,7 +128,7 @@ export const StandardListSelectionItem = forwardRef<
   return (
     <SelectableCardButton
       className={standardListSelectionRowClassName({
-        className,
+        className: cn(textRole === "body" && DASHBOARD_BODY_TEXT_CLASS, className),
         selected,
         tone,
       })}

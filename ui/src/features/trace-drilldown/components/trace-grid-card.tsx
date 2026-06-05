@@ -5,18 +5,18 @@ import type {
   DashboardTrace,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import { ExpandablePanelTrigger } from "../../../components/ui";
+import {
+  DashboardCode,
+  DashboardDescriptionList,
+  DashboardLabel,
+  DashboardStatusPill,
+  ExpandablePanelTrigger,
+} from "../../../components/ui";
 import { Button } from "../../../components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
 } from "../../../components/ui/collapsible";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-} from "../../../components/ui/dashboard-typography";
 import {
   formatDurationMillis,
   formatTraceOutcome,
@@ -33,21 +33,15 @@ import {
   TableRow,
 } from "../../../components/ui/table";
 import {
-  DASHBOARD_WIDGET_CLASS,
-  DETAIL_CARD_CLASS,
-  DETAIL_CARD_WIDE_CLASS,
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
+  DashboardEmptyState,
+  DashboardEmptyStateText,
+  DashboardEmptyStateTitle,
+  DashboardWidgetFrame,
 } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { AgentBentoCard } from "../../bento/components/agent-bento";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
-
-const TRACE_LOADING_SKELETON_CLASS = "h-4 w-full max-w-48";
-// tailwind-exception: intrinsic-sizing
-const TRACE_GRID_TABLE_CLASS = "min-w-[640px]";
 
 export type TraceGridState =
   | { status: "idle"; message: string }
@@ -73,27 +67,23 @@ export function TraceGridBentoCard({
   onSelectWorkID,
   state,
   title,
+  widgetId = "trace-drilldown",
 }: TraceGridBentoCardProps) {
   const messages = getTraceDrilldownMessages(locale);
-  const cardClassName = cn(
-    DASHBOARD_WIDGET_CLASS,
-    DETAIL_CARD_CLASS,
-    DETAIL_CARD_WIDE_CLASS,
-    "h-full min-h-0 overflow-hidden",
-    className,
-  );
 
   return (
-    <AgentBentoCard
+    <DashboardWidgetFrame
       bodyProps={
         { "data-trace-card-scroll": "" } as HTMLAttributes<HTMLDivElement>
       }
-      className={cardClassName}
+      className={cn("h-full min-h-0 overflow-hidden", className)}
       headerAction={headerAction}
       title={title ?? messages.title}
+      wide
+      widgetId={widgetId}
     >
       {renderTraceState(state, locale, onSelectWorkID)}
-    </AgentBentoCard>
+    </DashboardWidgetFrame>
   );
 }
 
@@ -107,35 +97,46 @@ function renderTraceState(
   switch (state.status) {
     case "idle":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.idleTitle}</h3>
-          <p>{messages.idleMessage}</p>
+        <div>
+          <DashboardEmptyStateTitle as="h2">
+            {messages.idleTitle}
+          </DashboardEmptyStateTitle>
         </div>
       );
     case "loading":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.loadingTitle}</h3>
-          <p>{messages.loadingMessage(state.workID)}</p>
+        <div>
+          <DashboardEmptyStateTitle>
+            {messages.loadingTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.loadingMessage(state.workID)}
+          </DashboardEmptyStateText>
           <div aria-hidden="true" className="grid gap-2 pt-2">
-            <Skeleton className={TRACE_LOADING_SKELETON_CLASS} />
+            <Skeleton className="h-4 w-full max-w-48" />
             <Skeleton className="h-24 w-full" />
-            <Skeleton className={TRACE_LOADING_SKELETON_CLASS} />
+            <Skeleton className="h-4 w-full max-w-48" />
           </div>
         </div>
       );
     case "empty":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.emptyTitle}</h3>
-          <p>{messages.emptyMessage}</p>
+        <div>
+          <DashboardEmptyStateTitle>
+            {messages.emptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.emptyMessage}
+          </DashboardEmptyStateText>
         </div>
       );
     case "error":
       return (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.errorTitle}</h3>
-          <p>{state.message}</p>
+        <div>
+          <DashboardEmptyStateTitle>
+            {messages.errorTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>{state.message}</DashboardEmptyStateText>
         </div>
       );
     case "ready":
@@ -167,25 +168,15 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
 
   return (
     <div className="grid min-w-0 w-full gap-3">
-      <dl
-        className={cn(
-          "m-0 grid gap-3 [&_dd]:m-0 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-outline [&_div]:pt-3 [&_dt]:mb-1",
-          DASHBOARD_SUPPORTING_LABELS_CLASS,
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-      >
+      <DashboardDescriptionList className="gap-3 [&_div:first-child]:border-t-0 [&_div:first-child]:pt-0 [&_div]:border-t [&_div]:border-outline [&_div]:pt-3 [&_dt]:mb-1">
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {messages.traceIdLabel}
-          </dt>
+          <DashboardLabel as="dt">{messages.traceIdLabel}</DashboardLabel>
           <dd className="[overflow-wrap:anywhere]">
             {trace.trace_id || messages.unavailableValue}
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {messages.dispatchFlowLabel}
-          </dt>
+          <DashboardLabel as="dt">{messages.dispatchFlowLabel}</DashboardLabel>
           <dd>
             <TraceWorkstationPath
               dispatches={trace.dispatches}
@@ -194,9 +185,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {messages.dispatchCountLabel}
-          </dt>
+          <DashboardLabel as="dt">{messages.dispatchCountLabel}</DashboardLabel>
           <dd>{trace.dispatches.length}</dd>
         </div>
         <div>
@@ -212,12 +201,13 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
                   className="grid gap-2.5"
                 >
                   <div className="flex items-center justify-between gap-3  py-sm rounded-lg ">
-                    <h3
-                      className={DASHBOARD_SUPPORTING_LABEL_CLASS}
+                    <DashboardLabel
+                      as="h3"
+                      className="m-0"
                       id={`${workItemsID}-heading`}
                     >
                       {messages.workItemsSummary(workItems.length)}
-                    </h3>
+                    </DashboardLabel>
                     <ExpandablePanelTrigger
                       controlsID={workItemsID}
                       expanded={workItemsExpanded}
@@ -244,17 +234,15 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
-            {messages.requestIdsLabel}
-          </dt>
+          <DashboardLabel as="dt">{messages.requestIdsLabel}</DashboardLabel>
           <dd className="[overflow-wrap:anywhere]">
             {trace.request_ids?.join(", ") || messages.unavailableValue}
           </dd>
         </div>
         <div>
-          <dt className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+          <DashboardLabel as="dt">
             {messages.batchRelationsLabel}
-          </dt>
+          </DashboardLabel>
           <dd>
             {trace.relations && trace.relations.length > 0 ? (
               <TraceRelationFlow
@@ -267,11 +255,11 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
             )}
           </dd>
         </div>
-      </dl>
+      </DashboardDescriptionList>
 
       {trace.dispatches.length > 0 ? (
         <Table
-          className={cn(TRACE_GRID_TABLE_CLASS, DASHBOARD_BODY_TEXT_CLASS)}
+          className="min-w-2xl"
           containerClassName="min-w-0 overscroll-x-contain"
           containerProps={
             {
@@ -279,41 +267,20 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
             } as HTMLAttributes<HTMLDivElement>
           }
         >
-          <TableCaption
-            className={cn("mb-2 text-left", DASHBOARD_SUPPORTING_LABEL_CLASS)}
-          >
+          <TableCaption className="mb-2 text-left">
             {messages.tableCaption}
           </TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead
-                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                scope="col"
-              >
-                {messages.dispatchColumnLabel}
-              </TableHead>
-              <TableHead
-                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                scope="col"
-              >
+              <TableHead scope="col">{messages.dispatchColumnLabel}</TableHead>
+              <TableHead scope="col">
                 {messages.workstationColumnLabel}
               </TableHead>
-              <TableHead
-                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                scope="col"
-              >
-                {messages.outcomeColumnLabel}
-              </TableHead>
-              <TableHead
-                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                scope="col"
-              >
+              <TableHead scope="col">{messages.outcomeColumnLabel}</TableHead>
+              <TableHead scope="col">
                 {messages.inputItemsColumnLabel}
               </TableHead>
-              <TableHead
-                className={DASHBOARD_SUPPORTING_LABEL_CLASS}
-                scope="col"
-              >
+              <TableHead scope="col">
                 {messages.outputItemsColumnLabel}
               </TableHead>
             </TableRow>
@@ -322,14 +289,13 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
             {trace.dispatches.map((dispatch) => (
               <TableRow key={dispatch.dispatch_id}>
                 <TableHead className="align-top" scope="row">
-                  <span
-                    className={cn(
-                      "inline-flex rounded-full border border-info-border bg-info-container px-2 py-0.5 text-on-info-container",
-                      DASHBOARD_SUPPORTING_CODE_CLASS,
-                    )}
+                  <DashboardStatusPill
+                    size="compact"
+                    tone="info"
+                    typography="supportingCode"
                   >
                     {dispatch.dispatch_id}
-                  </span>
+                  </DashboardStatusPill>
                 </TableHead>
                 <TableCell className="align-top">
                   {dispatch.workstation_name || dispatch.transition_id}
@@ -363,10 +329,14 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </TableBody>
         </Table>
       ) : (
-        <div className={cn(EMPTY_STATE_CLASS, EMPTY_STATE_COMPACT_CLASS)}>
-          <h3>{messages.noTraceHistoryTitle}</h3>
-          <p>{messages.noTraceHistoryMessage}</p>
-        </div>
+        <DashboardEmptyState compact>
+          <DashboardEmptyStateTitle>
+            {messages.noTraceHistoryTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.noTraceHistoryMessage}
+          </DashboardEmptyStateText>
+        </DashboardEmptyState>
       )}
     </div>
   );
@@ -385,10 +355,7 @@ function SelectableWorkList({
         <li className="list-none" key={workItem.work_id}>
           {onSelectWorkID ? (
             <Button
-              className={cn(
-                "h-auto min-h-0 justify-start border-primary bg-primary-container px-2.5 py-1.5 text-left text-primary",
-                DASHBOARD_SUPPORTING_CODE_CLASS,
-              )}
+              className="h-auto min-h-0 justify-start border-primary bg-primary-container px-2.5 py-1.5 text-left text-primary"
               onClick={() => onSelectWorkID(workItem.work_id)}
               size="sm"
               title={workItem.work_id}
@@ -397,9 +364,9 @@ function SelectableWorkList({
               {formatTypedWorkItemLabel(workItem)}
             </Button>
           ) : (
-            <code className={DASHBOARD_SUPPORTING_CODE_CLASS}>
+            <DashboardCode size="supporting">
               {formatTypedWorkItemLabel(workItem)}
-            </code>
+            </DashboardCode>
           )}
         </li>
       ))}

@@ -1,42 +1,18 @@
 import { useId, useState } from "react";
-import type { DashboardInferenceAttempt } from "../../../../api/dashboard/types";
-import { ExpandablePanelTrigger } from "../../../../components/ui";
-import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
-import {
-  formatDurationMillis,
-  formatLocalDateTime,
-  getLocalDateTimeDisplay,
-  getProviderSessionLogTarget,
-} from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
-import {
-  getLoadableProviderSessionRef,
-  providerSessionSelectionKey,
-} from "../../../provider-session-detail/lib/provider-session-ref";
+import { surfacePanelVariants } from "../../../../components/ui";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-  useCurrentSelectionOperationalEnumMessages,
-  useCurrentSelectionWorkstationDetailMessages,
 } from "../../base/components/current-selection-locale";
-import {
-  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  CurrentSelectionSectionHeader,
-  EXECUTION_PILL_CLASS,
-  HISTORY_HEADER_CLASS,
-  INFERENCE_ATTEMPT_CARD_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
-  InferenceAttemptTextSection,
-  normalizeDetailText,
-  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
-  REQUEST_SELECTION_STATUS_CLASS,
-} from "../../base/components/detail-card-shared";
 import type { InferenceAttemptCardProps } from "../lib/detail-card-types";
+import { getInferenceAttemptTimingSummary } from "../lib/inference-attempt-timing";
+import {
+  InferenceAttemptRequestBodySection,
+  InferenceAttemptResponseSection,
+} from "./inference-attempt-body-sections";
+import { InferenceAttemptMetadataDetails } from "./inference-attempt-metadata-details";
+import { InferenceAttemptProviderSessionDetails } from "./inference-attempt-provider-session";
+import { InferenceAttemptSummaryHeader } from "./inference-attempt-summary-header";
 
 export function InferenceAttemptCard({
   attempt,
@@ -48,7 +24,7 @@ export function InferenceAttemptCard({
   const summaryHeadingId = `${attemptPanelId}-heading`;
   const detailMessages = useCurrentSelectionDetailMessages();
   const locale = useCurrentSelectionLocale();
-  const timingSummary = getAttemptTimingSummary(
+  const timingSummary = getInferenceAttemptTimingSummary(
     attempt,
     detailMessages,
     locale,
@@ -57,9 +33,12 @@ export function InferenceAttemptCard({
   return (
     <article
       aria-label={detailMessages.attemptAriaLabel(attempt.attempt)}
-      className={INFERENCE_ATTEMPT_CARD_CLASS}
+      className={surfacePanelVariants({
+        className: "grid min-w-0 gap-2.5 p-3.5",
+        radius: "lg",
+      })}
     >
-      <AttemptSummaryHeader
+      <InferenceAttemptSummaryHeader
         attempt={attempt}
         expanded={expanded}
         headingId={summaryHeadingId}
@@ -84,410 +63,21 @@ export function InferenceAttemptCard({
   );
 }
 
-function AttemptSummaryHeader({
-  attempt,
-  expanded,
-  headingId,
-  onToggle,
-  panelId,
-  timingSummary,
-}: {
-  attempt: DashboardInferenceAttempt;
-  expanded: boolean;
-  headingId: string;
-  onToggle: () => void;
-  panelId: string;
-  timingSummary: string | undefined;
-}) {
-  const detailMessages = useCurrentSelectionDetailMessages();
-  const enumMessages = useCurrentSelectionOperationalEnumMessages();
-
-  return (
-    <div className={HISTORY_HEADER_CLASS}>
-      <div className="grid min-w-0 gap-1">
-        <div className="flex items-start justify-between gap-3">
-          <strong id={headingId}>
-            {detailMessages.attemptTitle(attempt.attempt)}
-          </strong>
-          <span className={EXECUTION_PILL_CLASS}>
-            {attempt.outcome
-              ? enumMessages.localizeOutcome(attempt.outcome)
-              : enumMessages.localizeOutcome("PENDING")}
-          </span>
-        </div>
-        {timingSummary ? (
-          <p className={REQUEST_SELECTION_STATUS_CLASS}>{timingSummary}</p>
-        ) : null}
-      </div>
-      <ExpandablePanelTrigger
-        controlsID={panelId}
-        expanded={expanded}
-        onClick={onToggle}
-        type="button"
-        variant="section"
-      >
-        {expanded
-          ? detailMessages.collapseAttemptAction(attempt.attempt)
-          : detailMessages.expandAttemptAction(attempt.attempt)}
-      </ExpandablePanelTrigger>
-    </div>
-  );
-}
-
 function AttemptExpandedContent({
   attempt,
   onSelectProviderSession,
   selectedProviderSessionKey,
 }: InferenceAttemptCardProps) {
-  const detailMessages = useCurrentSelectionDetailMessages();
-  const providerSessionState = useAttemptProviderSessionState({
-    attempt,
-    selectedProviderSessionKey,
-  });
-
   return (
     <>
-      <AttemptMetadataDetails attempt={attempt} />
-      <AttemptProviderSessionDetails
+      <InferenceAttemptMetadataDetails attempt={attempt} />
+      <InferenceAttemptProviderSessionDetails
         attempt={attempt}
         onSelectProviderSession={onSelectProviderSession}
-        state={providerSessionState}
+        selectedProviderSessionKey={selectedProviderSessionKey}
       />
-      <AttemptTextBodyDisclosure
-        expandAction={detailMessages.expandRequestBodyAction}
-        collapseAction={detailMessages.collapseRequestBodyAction}
-        label={detailMessages.requestBodyLabel}
-        value={normalizeDetailText(attempt.prompt)}
-      />
-      <AttemptResponseDetails attempt={attempt} />
+      <InferenceAttemptRequestBodySection attempt={attempt} />
+      <InferenceAttemptResponseSection attempt={attempt} />
     </>
   );
-}
-
-function AttemptTextBodyDisclosure({
-  collapseAction,
-  expandAction,
-  label,
-  value,
-}: {
-  collapseAction: string;
-  expandAction: string;
-  label: string;
-  value?: string;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const panelId = useId();
-  const labelId = `${panelId}-label`;
-
-  if (!value) {
-    return null;
-  }
-
-  return (
-    <div className="grid gap-1.5">
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            controlsID={panelId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? collapseAction : expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={labelId}
-        title={label}
-      />
-      {expanded ? (
-        <div id={panelId}>
-          <InferenceAttemptTextSection label={label} value={value} />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function AttemptMetadataDetails({
-  attempt,
-}: {
-  attempt: DashboardInferenceAttempt;
-}) {
-  const detailMessages = useCurrentSelectionDetailMessages();
-  const enumMessages = useCurrentSelectionOperationalEnumMessages();
-  const locale = useCurrentSelectionLocale();
-  const provider =
-    attempt.diagnostics?.provider?.provider ??
-    attempt.provider_session?.provider;
-  const model = attempt.diagnostics?.provider?.model;
-  const requestTime = getLocalDateTimeDisplay(
-    attempt.request_time,
-    detailMessages.timestampUnavailable,
-    locale,
-  );
-  const responseTime = getLocalDateTimeDisplay(
-    attempt.response_time,
-    detailMessages.timestampUnavailable,
-    locale,
-  );
-
-  return (
-    <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-      <InferenceAttemptDetail
-        code
-        label={detailMessages.inferenceRequestIdLabel}
-        value={attempt.inference_request_id}
-      />
-      <InferenceAttemptDetail
-        code
-        label={detailMessages.providerLabel}
-        value={provider}
-      />
-      <InferenceAttemptDetail
-        code
-        label={detailMessages.modelLabel}
-        value={model}
-      />
-      <InferenceAttemptDetail
-        code
-        label={detailMessages.workingDirectoryLabel}
-        value={attempt.working_directory}
-      />
-      <InferenceAttemptDetail
-        code
-        label={detailMessages.worktreeLabel}
-        value={attempt.worktree}
-      />
-      <InferenceAttemptDetail
-        label={detailMessages.requestTimeLabel}
-        rawValue={requestTime.rawTimestamp ?? undefined}
-        value={requestTime.label}
-      />
-      <InferenceAttemptDetail
-        code
-        label={detailMessages.outcomeLabel}
-        value={
-          attempt.outcome
-            ? enumMessages.localizeOutcome(attempt.outcome)
-            : undefined
-        }
-      />
-      <InferenceAttemptDetail
-        label={detailMessages.elapsedTimeLabel}
-        value={
-          attempt.duration_millis !== undefined
-            ? formatDurationMillis(attempt.duration_millis, locale)
-            : undefined
-        }
-      />
-      <InferenceAttemptDetail
-        label={detailMessages.responseTimeLabel}
-        rawValue={responseTime.rawTimestamp ?? undefined}
-        value={responseTime.label}
-      />
-      <InferenceAttemptDetail
-        label={detailMessages.exitCodeLabel}
-        value={attempt.exit_code}
-      />
-      <InferenceAttemptDetail
-        code
-        label={detailMessages.errorClassLabel}
-        value={attempt.error_class}
-      />
-    </dl>
-  );
-}
-
-function AttemptProviderSessionDetails({
-  attempt,
-  onSelectProviderSession,
-  state,
-}: {
-  attempt: DashboardInferenceAttempt;
-  onSelectProviderSession?: InferenceAttemptCardProps["onSelectProviderSession"];
-  state: ReturnType<typeof useAttemptProviderSessionState>;
-}) {
-  const detailMessages = useCurrentSelectionDetailMessages();
-  const workstationMessages = useCurrentSelectionWorkstationDetailMessages();
-
-  if (!state.providerSessionLabel) {
-    return (
-      <InferenceAttemptDetail
-        code={!state.providerSessionLogTarget}
-        label={detailMessages.providerSessionLabel}
-        value={state.providerSessionLabel}
-      />
-    );
-  }
-
-  if (state.loadableProviderSession && onSelectProviderSession) {
-    const loadableProviderSession = state.loadableProviderSession;
-
-    return (
-      <div className="grid gap-1">
-        <span>{detailMessages.providerSessionLabel}</span>
-        <button
-          aria-label={workstationMessages.selectProviderSessionLabel(
-            state.providerSessionLabel,
-            attempt.dispatch_id,
-          )}
-          aria-pressed={state.providerSessionSelected}
-          className={cn(
-            PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
-            state.providerSessionSelected &&
-              CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-          )}
-          onClick={() => onSelectProviderSession(loadableProviderSession)}
-          type="button"
-        >
-          <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
-            {state.providerSessionSelected
-              ? workstationMessages.providerSessionSelectedAction
-              : workstationMessages.providerSessionSelectAction}
-          </span>
-          <code className={DASHBOARD_BODY_CODE_CLASS}>
-            {state.providerSessionLabel}
-          </code>
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid gap-1">
-      <span>{detailMessages.providerSessionLabel}</span>
-      <code>{state.providerSessionLabel}</code>
-      <p className={REQUEST_SELECTION_STATUS_CLASS}>
-        {workstationMessages.providerSessionSelectionUnavailable}
-      </p>
-    </div>
-  );
-}
-
-function AttemptResponseDetails({
-  attempt,
-}: {
-  attempt: DashboardInferenceAttempt;
-}) {
-  const detailMessages = useCurrentSelectionDetailMessages();
-  const response = normalizeDetailText(attempt.response);
-
-  if (response) {
-    return (
-      <AttemptTextBodyDisclosure
-        collapseAction={detailMessages.collapseResponseBodyAction}
-        expandAction={detailMessages.expandResponseBodyAction}
-        label={detailMessages.responseBodyLabel}
-        value={response}
-      />
-    );
-  }
-
-  return attempt.outcome ? (
-    <p className={DETAIL_COPY_CLASS}>
-      {detailMessages.providerResponseUnavailable}
-    </p>
-  ) : (
-    <p className={DETAIL_COPY_CLASS}>
-      {detailMessages.awaitingProviderResponse}
-    </p>
-  );
-}
-
-function useAttemptProviderSessionState({
-  attempt,
-  selectedProviderSessionKey,
-}: {
-  attempt: DashboardInferenceAttempt;
-  selectedProviderSessionKey?: string | null;
-}) {
-  const workstationMessages = useCurrentSelectionWorkstationDetailMessages();
-  const providerSessionLogTarget = getProviderSessionLogTarget(
-    attempt.provider_session,
-    attempt.request_time,
-  );
-  const loadableProviderSession = getLoadableProviderSessionRef({
-    dispatch_id: attempt.dispatch_id,
-    provider_session: attempt.provider_session,
-  });
-  const providerSessionLabel = attempt.provider_session
-    ? formatLocalizedProviderSessionLabel(
-        attempt.provider_session,
-        workstationMessages,
-      )
-    : undefined;
-  const providerSessionSelected =
-    loadableProviderSession !== null &&
-    selectedProviderSessionKey ===
-      providerSessionSelectionKey(loadableProviderSession);
-
-  return {
-    loadableProviderSession,
-    providerSessionLabel,
-    providerSessionLogTarget,
-    providerSessionSelected,
-  };
-}
-
-function formatLocalizedProviderSessionLabel(
-  session: DashboardInferenceAttempt["provider_session"],
-  workstationMessages: ReturnType<
-    typeof useCurrentSelectionWorkstationDetailMessages
-  >,
-): string {
-  if (!session?.id) {
-    return workstationMessages.unavailableValue;
-  }
-
-  const localizedKind = localizeProviderSessionKind(
-    session.kind,
-    workstationMessages,
-  );
-  const parts = [session.provider, localizedKind].filter(
-    (value): value is string => value !== undefined && value !== "",
-  );
-
-  if (parts.length === 0) {
-    return session.id;
-  }
-
-  return `${parts.join(" / ")} / ${session.id}`;
-}
-
-function localizeProviderSessionKind(
-  kind: string | undefined,
-  workstationMessages: ReturnType<
-    typeof useCurrentSelectionWorkstationDetailMessages
-  >,
-): string | undefined {
-  const normalizedKind = kind?.trim();
-  if (!normalizedKind) {
-    return undefined;
-  }
-
-  return workstationMessages.localizeProviderSessionKind(normalizedKind);
-}
-
-function getAttemptTimingSummary(
-  attempt: DashboardInferenceAttempt,
-  detailMessages: ReturnType<typeof useCurrentSelectionDetailMessages>,
-  locale?: string | null,
-): string | undefined {
-  if (attempt.duration_millis !== undefined) {
-    return `${detailMessages.elapsedTimeLabel}: ${formatDurationMillis(
-      attempt.duration_millis,
-      locale,
-    )}`;
-  }
-
-  if (attempt.response_time) {
-    return `${detailMessages.responseTimeLabel}: ${formatLocalDateTime(
-      attempt.response_time,
-      detailMessages.timestampUnavailable,
-      locale,
-    )}`;
-  }
-
-  return undefined;
 }

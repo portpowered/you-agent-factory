@@ -124,8 +124,8 @@ export function ChartContainer({
           <div className="pointer-events-none absolute inset-0">{overlay}</div>
         ) : null}
         {footer ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1">{chartSurface}</div>
+          <div className="flex min-h-0 flex-1 basis-0 flex-col">
+            <div className="h-full min-h-0 flex-1 basis-0">{chartSurface}</div>
             {footer}
           </div>
         ) : (

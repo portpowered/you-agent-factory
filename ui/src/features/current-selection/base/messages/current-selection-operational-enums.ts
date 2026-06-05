@@ -1,3 +1,4 @@
+import { WorkstationKind } from "../../../../api/generated/openapi";
 import {
   type LocalizedMessageCatalog,
   localizeEnumLabel,
@@ -5,7 +6,6 @@ import {
 } from "../../../../i18n";
 
 const RAW_REJECTED_OUTCOME = "REJECTED";
-const REPEATER_WORKSTATION_KIND = "REPEATER";
 
 type WorkstationRunOutcomeDisplay = {
   label: string;
@@ -31,7 +31,8 @@ function isRepeaterRejectedOutcome(
 ): boolean {
   return (
     value.trim().toUpperCase() === RAW_REJECTED_OUTCOME &&
-    workstationKind?.trim().toUpperCase() === REPEATER_WORKSTATION_KIND
+    workstationKind?.trim().toUpperCase() ===
+      WorkstationKind.WorkstationKindRepeater
   );
 }
 

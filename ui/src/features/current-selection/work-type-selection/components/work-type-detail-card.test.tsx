@@ -1,13 +1,15 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import { useEditableWorkTypeConfigurationState } from "../hooks/use-editable-work-type-configuration-state";
 import type {
   EditableWorkTypeConfigurationState,
   EditableWorkTypeSaveState,
 } from "../lib/detail-card-types";
 import { WorkTypeDetailCard } from "./work-type-detail-card";
+
+const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
+
 import { EditableWorkTypeConfigurationHeaderActions } from "./work-type-save-controls";
 
 vi.mock(
@@ -293,7 +295,7 @@ describe("WorkTypeDetailCard", () => {
     );
 
     const fieldGroup = container.querySelector(
-      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+      CURRENT_SELECTION_FORM_FIELDS_SELECTOR,
     );
     expect(fieldGroup).not.toBeNull();
     expect(fieldGroup?.className).not.toMatch(/sm:grid-cols-\d/);

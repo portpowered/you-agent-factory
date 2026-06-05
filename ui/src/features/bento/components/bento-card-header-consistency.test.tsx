@@ -20,6 +20,9 @@ function expectBentoCardHeaderSemantics(
 
   expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
   expect(header?.className).toContain("cursor-grab");
+  expect(header?.className).toContain("shrink-0");
+  expect(header?.className).toContain("bg-surface-container-high");
+  expect(header?.className).toContain("border-b");
   expect(
     within(card).queryByRole("button", { name: `Move ${title}` }),
   ).toBeNull();
@@ -28,6 +31,9 @@ function expectBentoCardHeaderSemantics(
       within(card).getByRole("heading", { level: 3, name: title }),
     ),
   ).toBe(true);
+  expect(
+    header?.querySelector("[data-bento-header-action-spacer='true']"),
+  ).toBeTruthy();
 
   if (compactChrome) {
     expect(header?.className).toContain("min-h-11");

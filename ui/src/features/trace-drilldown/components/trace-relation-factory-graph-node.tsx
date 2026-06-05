@@ -1,13 +1,11 @@
 import type { NodeProps } from "@xyflow/react";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DashboardText } from "../../../components/ui";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   ActivityGraphNodeBadge,
+  activityGraphNodeSurfaceClassName,
   activityGraphNodeTitleClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
 import {
@@ -21,23 +19,8 @@ import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const RELATION_NODE_ACTIVE_CLASS =
   "hover:border-primary hover:bg-primary-container";
-const RELATION_NODE_BADGE_CLASS =
-  "inline-flex rounded-full border px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.08em]";
 const RELATION_NODE_CLASS =
   "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";
-const RELATION_STATE_BADGE_DANGER_CLASS =
-  "border-af-danger-border bg-error-container text-on-error-container";
-const RELATION_STATE_BADGE_SUCCESS_CLASS =
-  "border-af-success-border bg-success-container text-on-success-container";
-const RELATION_STATE_BADGE_WARNING_CLASS =
-  "border-af-warning-border bg-warning-container text-on-warning-container";
-const RELATION_NODE_TONE_DEFAULT_CLASS = "border-outline bg-surface";
-const RELATION_NODE_TONE_DANGER_CLASS =
-  "border-af-danger-border bg-error-container";
-const RELATION_NODE_TONE_SUCCESS_CLASS =
-  "border-af-success-border bg-success-container";
-const RELATION_NODE_TONE_WARNING_CLASS =
-  "border-af-warning-border bg-warning-container";
 
 function TraceRelationFactoryGraphNode({
   data,
@@ -74,41 +57,34 @@ function TraceRelationFactoryGraphNode({
             {data.kindLabel}
           </ActivityGraphNodeBadge>
           {data.relationTypes.slice(0, 1).map((relationType) => (
-            <span
-              className={cn(
-                RELATION_NODE_BADGE_CLASS,
-                "border-info-border bg-info-container text-info",
-                DASHBOARD_SUPPORTING_LABEL_CLASS,
-              )}
+            <ActivityGraphNodeBadge
               key={relationType}
+              tone="info"
+              weight="label"
             >
               {messages.localizeRelationType(relationType)}
-            </span>
+            </ActivityGraphNodeBadge>
           ))}
           {data.relationStates.slice(0, 1).map((relationState) => (
-            <span
-              className={cn(
-                RELATION_NODE_BADGE_CLASS,
-                relationStateBadgeClassName(relationState),
-                DASHBOARD_SUPPORTING_LABEL_CLASS,
-              )}
+            <ActivityGraphNodeBadge
               key={relationState}
+              tone={relationStateToneClassName(relationState)}
+              weight="label"
             >
               {messages.localizeRelationState(relationState)}
-            </span>
+            </ActivityGraphNodeBadge>
           ))}
         </div>
-        <p
+        <DashboardText
           className={cn(
             "m-0 [overflow-wrap:anywhere]",
             activityGraphNodeTitleClassName("text-sm"),
-            DASHBOARD_BODY_TEXT_CLASS,
           )}
           data-factory-entity-title
           title={data.workID ?? data.displayLabel}
         >
           {data.displayLabel}
-        </p>
+        </DashboardText>
       </div>
     </ActivityGraphNodeShell>
   );
@@ -181,17 +157,6 @@ function semanticIconClassName(kind: FactoryGraphNodeKind): string {
   }
 }
 
-function relationStateBadgeClassName(relationState: string): string {
-  const tone = relationStateToneClassName(relationState);
-  if (tone === "danger") {
-    return RELATION_STATE_BADGE_DANGER_CLASS;
-  }
-  if (tone === "success") {
-    return RELATION_STATE_BADGE_SUCCESS_CLASS;
-  }
-  return RELATION_STATE_BADGE_WARNING_CLASS;
-}
-
 function relationStateToneClassName(
   relationState: string,
 ): "danger" | "success" | "warning" {
@@ -218,16 +183,9 @@ function relationStateToneClassName(
 function relationNodeToneClassName(relationStates: string[]): string {
   const primaryState = relationStates[0];
   if (!primaryState) {
-    return RELATION_NODE_TONE_DEFAULT_CLASS;
+    return activityGraphNodeSurfaceClassName("neutral");
   }
 
   const tone = relationStateToneClassName(primaryState);
-  if (tone === "danger") {
-    return RELATION_NODE_TONE_DANGER_CLASS;
-  }
-  if (tone === "success") {
-    return RELATION_NODE_TONE_SUCCESS_CLASS;
-  }
-
-  return RELATION_NODE_TONE_WARNING_CLASS;
+  return activityGraphNodeSurfaceClassName(tone);
 }

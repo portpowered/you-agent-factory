@@ -1,14 +1,18 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: worker editable fields, validation feedback, save wiring, and shared-impact warnings stay colocated in one section.
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
 
-import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  AlertPanel,
+  AlertPanelText,
+  Checkbox,
+  DashboardLabel,
+  DashboardText,
+  FormWarning,
+  Input,
+  Select,
+  Textarea,
+} from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
 import {
   EDITABLE_EXECUTOR_PROVIDERS,
   EDITABLE_HOSTED_PROVIDERS,
@@ -17,14 +21,13 @@ import {
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
 import { WORKER_TIMEOUT_UNITS } from "../../../current-factory-definition/lib/worker-timeout-duration";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-  CURRENT_SELECTION_FORM_FIELD_CLASS,
-  CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
-  CURRENT_SELECTION_WARNING_PANEL_CLASS,
-  CurrentSelectionSectionHeader,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionDetailFeedback,
+  CurrentSelectionFormField,
+  CurrentSelectionFormFields,
+} from "../../base/public";
 import { formatEditableWorkerOverwriteFieldLabels } from "../editing/editable-worker-overwrite-fields";
 import type {
   EditableWorkerConfigurationState,
@@ -47,83 +50,46 @@ export function WorkerEditableConfigurationSection({
   state?: WorkerDetailCardProps["editableConfigurationState"];
   workerName: string;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const sectionId = useId();
   const contentId = `${sectionId}-content`;
   const headingId = `${sectionId}-heading`;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    <CurrentSelectionExpandableSection
+      contentId={contentId}
+      defaultExpanded
+      headingId={headingId}
+      title={messages.editableConfigurationHeading}
+      toggleLabel={(expanded) =>
+        expanded
+          ? messages.editableConfigurationCollapseActionLabel
+          : messages.editableConfigurationExpandActionLabel
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            aria-label={
-              expanded
-                ? messages.editableConfigurationCollapseActionLabel
-                : messages.editableConfigurationExpandActionLabel
-            }
-            controlsID={contentId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? messages.collapseAction : messages.expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={headingId}
-        title={messages.editableConfigurationHeading}
-      />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={contentId}
-        >
-          {state?.status === "loading" ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
-              {messages.editableConfigurationLoading}
-            </p>
-          ) : null}
-          {state?.status === "error" ? (
-            <p
-              className={cn(
-                "m-0 text-on-error-container",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-              role="alert"
-            >
-              {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-            </p>
-          ) : null}
-          {state?.status === "empty" ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
-              {state.message || messages.editableConfigurationEmpty}
-            </p>
-          ) : null}
-          {state?.status === "ready" ? (
-            <WorkerEditableConfigurationReadyForm
-              messages={messages}
-              saveState={saveState}
-              state={state}
-              workerName={workerName}
-            />
-          ) : null}
-        </div>
+      {state?.status === "loading" ? (
+        <CurrentSelectionDetailFeedback>
+          {messages.editableConfigurationLoading}
+        </CurrentSelectionDetailFeedback>
       ) : null}
-    </section>
+      {state?.status === "error" ? (
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
+          {messages.editableConfigurationErrorPrefix} {state.errorMessage}
+        </CurrentSelectionDetailFeedback>
+      ) : null}
+      {state?.status === "empty" ? (
+        <CurrentSelectionDetailFeedback>
+          {state.message || messages.editableConfigurationEmpty}
+        </CurrentSelectionDetailFeedback>
+      ) : null}
+      {state?.status === "ready" ? (
+        <WorkerEditableConfigurationReadyForm
+          messages={messages}
+          saveState={saveState}
+          state={state}
+          workerName={workerName}
+        />
+      ) : null}
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -155,31 +121,24 @@ function WorkerEditableConfigurationReadyForm({
         overwriteFieldNames={state.overwriteFieldNames}
       />
       {validationErrors.contract ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-          role="alert"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {validationErrors.contract}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
       <WorkerEditableConfigurationDraftStatus
         messages={messages}
         state={state}
       />
-      <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+      <CurrentSelectionFormFields>
         <WorkerEditableConfigurationField
           errorMessage={validationErrors.name}
           fieldId="editable-worker-name"
           input={
-            <input
+            <Input
               aria-describedby={
                 validationErrors.name ? "editable-worker-name-error" : undefined
               }
               aria-invalid={validationErrors.name ? "true" : undefined}
-              className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
               id="editable-worker-name"
               onChange={(event) => state.onNameChange(event.target.value)}
               type="text"
@@ -244,7 +203,7 @@ function WorkerEditableConfigurationReadyForm({
           state={state}
           validationErrors={validationErrors}
         />
-      </div>
+      </CurrentSelectionFormFields>
     </form>
   );
 }
@@ -271,14 +230,13 @@ function WorkerEditableConfigurationTimeoutField({
       fieldId={amountFieldId}
       input={
         <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem]">
-          <input
+          <Input
             aria-describedby={
               validationErrors.timeout
                 ? `${amountFieldId}-error`
                 : "editable-worker-timeout-hint"
             }
             aria-invalid={validationErrors.timeout ? "true" : undefined}
-            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id={amountFieldId}
             inputMode="decimal"
             min={0}
@@ -352,14 +310,13 @@ function WorkerEditableConfigurationStopTokenField({
       errorMessage={validationErrors.stopToken}
       fieldId={fieldId}
       input={
-        <input
+        <Input
           aria-describedby={
             validationErrors.stopToken
               ? `${fieldId}-error`
               : "editable-worker-stop-token-hint"
           }
           aria-invalid={validationErrors.stopToken ? "true" : undefined}
-          className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
           id={fieldId}
           onChange={(event) => state.onStopTokenChange(event.target.value)}
           type="text"
@@ -402,17 +359,11 @@ function WorkerEditableConfigurationOverwriteWarning({
   );
 
   return (
-    <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-      <p
-        className={cn(
-          "m-0 text-on-warning-container",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        role="alert"
-      >
+    <AlertPanel tone="warning">
+      <AlertPanelText role="alert">
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
-      </p>
-    </div>
+      </AlertPanelText>
+    </AlertPanel>
   );
 }
 
@@ -430,14 +381,9 @@ function WorkerEditableConfigurationServerChangedHint({
   }
 
   return (
-    <p
-      className={cn(
-        "m-0 text-on-warning-container",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
-    >
+    <FormWarning>
       {messages.editableConfigurationServerFieldChangedHint}
-    </p>
+    </FormWarning>
   );
 }
 
@@ -456,20 +402,14 @@ function WorkerEditableConfigurationSharedImpactWarning({
   }
 
   return (
-    <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-      <p
-        className={cn(
-          "m-0 text-on-warning-container",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        role="alert"
-      >
+    <AlertPanel tone="warning">
+      <AlertPanelText role="alert">
         {messages.editableConfigurationSharedImpactWarning(
           state.draft.name.trim() || workerName,
           formatList(workstationNames),
         )}
-      </p>
-    </div>
+      </AlertPanelText>
+    </AlertPanel>
   );
 }
 
@@ -485,22 +425,17 @@ function WorkerEditableConfigurationDraftStatus({
   }
 
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <p
-        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
+    <CurrentSelectionFormField>
+      <CurrentSelectionDetailFeedback role="alert" tone="danger">
         {messages.editableConfigurationValidationStatus}
-      </p>
-      <p
-        className={cn(
-          "m-0 text-on-surface-subtle",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
+      </CurrentSelectionDetailFeedback>
+      <DashboardText
+        className="m-0 text-on-surface-subtle"
+        variant="supporting"
       >
         {messages.editableConfigurationSaveDisabledValidationDetail}
-      </p>
-    </div>
+      </DashboardText>
+    </CurrentSelectionFormField>
   );
 }
 
@@ -598,12 +533,11 @@ function ModelWorkerEditableFields({
         errorMessage={validationErrors.model}
         fieldId="editable-worker-model"
         input={
-          <input
+          <Input
             aria-describedby={
               validationErrors.model ? "editable-worker-model-error" : undefined
             }
             aria-invalid={validationErrors.model ? "true" : undefined}
-            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-worker-model"
             onChange={(event) => state.onModelChange(event.target.value)}
             type="text"
@@ -708,7 +642,7 @@ function ModelWorkerSkipPermissionsField({
       errorMessage={validationErrors.skipPermissions}
       fieldId="editable-worker-skip-permissions"
       input={
-        <input
+        <Checkbox
           aria-describedby={
             validationErrors.skipPermissions
               ? "editable-worker-skip-permissions-error"
@@ -716,12 +650,10 @@ function ModelWorkerSkipPermissionsField({
           }
           aria-invalid={validationErrors.skipPermissions ? "true" : undefined}
           checked={state.draft.skipPermissions}
-          className="size-4 rounded border border-outline"
           id="editable-worker-skip-permissions"
           onChange={(event) =>
             state.onSkipPermissionsChange(event.target.checked)
           }
-          type="checkbox"
         />
       }
       label={messages.skipPermissionsFieldLabel}
@@ -759,14 +691,13 @@ function ScriptWorkerEditableFields({
         errorMessage={validationErrors.command}
         fieldId="editable-worker-command"
         input={
-          <input
+          <Input
             aria-describedby={
               validationErrors.command
                 ? "editable-worker-command-error"
                 : undefined
             }
             aria-invalid={validationErrors.command ? "true" : undefined}
-            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-worker-command"
             onChange={(event) => state.onCommandChange(event.target.value)}
             type="text"
@@ -786,12 +717,12 @@ function ScriptWorkerEditableFields({
         errorMessage={validationErrors.args}
         fieldId="editable-worker-args"
         input={
-          <textarea
+          <Textarea
             aria-describedby={
               validationErrors.args ? "editable-worker-args-error" : undefined
             }
             aria-invalid={validationErrors.args ? "true" : undefined}
-            className="min-h-24 w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
+            className="min-h-24"
             id="editable-worker-args"
             onChange={(event) => state.onArgsTextChange(event.target.value)}
             value={state.draft.argsText}
@@ -810,12 +741,12 @@ function ScriptWorkerEditableFields({
         errorMessage={validationErrors.body}
         fieldId="editable-worker-body"
         input={
-          <textarea
+          <Textarea
             aria-describedby={
               validationErrors.body ? "editable-worker-body-error" : undefined
             }
             aria-invalid={validationErrors.body ? "true" : undefined}
-            className="min-h-32 w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
+            className="min-h-32"
             id="editable-worker-body"
             onChange={(event) => state.onBodyChange(event.target.value)}
             value={state.draft.body}
@@ -928,14 +859,9 @@ function WorkerEditableConfigurationFieldHelp({
   children: ReactNode;
 }) {
   return (
-    <p
-      className={cn(
-        "m-0 text-on-surface-subtle",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
-    >
+    <DashboardText className="m-0 text-on-surface-subtle" variant="supporting">
       {children}
-    </p>
+    </DashboardText>
   );
 }
 
@@ -953,23 +879,17 @@ function WorkerEditableConfigurationField({
   supportingContent?: ReactNode;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="label" htmlFor={fieldId}>
         {label}
-      </label>
+      </DashboardLabel>
       {input}
       {supportingContent}
       {errorMessage ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-          id={`${fieldId}-error`}
-        >
+        <CurrentSelectionDetailFeedback id={`${fieldId}-error`} tone="danger">
           {errorMessage}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
-    </div>
+    </CurrentSelectionFormField>
   );
 }

@@ -1,13 +1,8 @@
-import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_PAGE_HEADING_CLASS,
-} from "../../../components/ui/dashboard-typography";
+import { DashboardHeading } from "../../../components/ui";
+import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
+import { DetailCopy } from "../../../components/ui/widget-frame";
 import { useAppLocale } from "../../../i18n";
-import { cn } from "../../../lib/cn";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
-
-const DETAIL_COPY_CLASS = cn("m-0 max-w-80", DASHBOARD_BODY_TEXT_CLASS);
 
 interface DashboardStatusPanelProps {
   detail?: string;
@@ -24,14 +19,10 @@ export function DashboardStatusPanel({
 }: DashboardStatusPanelProps) {
   const { locale: resolvedLocale } = useAppLocale(locale);
   const detailClassName =
-    tone === "error"
-      ? cn(DETAIL_COPY_CLASS, "text-on-error-container")
-      : DETAIL_COPY_CLASS;
+    tone === "error" ? "max-w-80 text-on-error-container" : "max-w-80";
 
   return (
-    <section
-      className={cn(DASHBOARD_PANEL_SHELL_CLASS, "mb-4 p-4 md:p-5 md:px-6")}
-    >
+    <DashboardPanelShell className="mb-4 p-4 md:p-5 md:px-6">
       <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-primary">
         <DashboardBrandLockup
           className="gap-2"
@@ -39,8 +30,12 @@ export function DashboardStatusPanel({
           wordmarkClassName="truncate"
         />
       </p>
-      <h1 className={cn("m-0", DASHBOARD_PAGE_HEADING_CLASS)}>{title}</h1>
-      {detail ? <p className={detailClassName}>{detail}</p> : null}
-    </section>
+      <DashboardHeading className="m-0" level="page">
+        {title}
+      </DashboardHeading>
+      {detail ? (
+        <DetailCopy className={detailClassName}>{detail}</DetailCopy>
+      ) : null}
+    </DashboardPanelShell>
   );
 }

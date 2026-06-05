@@ -3,15 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
-import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
-import { CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS } from "../../base/components/detail-card-shared";
 import type {
   EditableWorkStateConfigurationState,
   EditableWorkStateSaveState,
 } from "../lib/detail-card-types";
 import { getWorkStateDetailMessages } from "../messages/work-state-detail";
 import { StateNodeDetailCard } from "./state-node-detail";
+
+const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
+
 import { EditableWorkStateConfigurationHeaderActions } from "./work-state-save-controls";
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
@@ -159,7 +160,7 @@ describe("StateNodeDetailCard", () => {
     const summary = within(header).getByText("story: implemented", {
       selector: "p",
     });
-    expect(summary.className).toContain(WIDGET_SUBTITLE_CLASS);
+    expect(summary.className).toContain("af-dashboard-widget-subtitle");
   });
 
   it("renders selected state node empty-position guidance", () => {
@@ -706,7 +707,7 @@ describe("StateNodeDetailCard editable work state configuration", () => {
     );
 
     const fieldGroup = container.querySelector(
-      `.${CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS.replaceAll(" ", ".")}`,
+      CURRENT_SELECTION_FORM_FIELDS_SELECTOR,
     );
     expect(fieldGroup).not.toBeNull();
     expect(fieldGroup?.className).not.toMatch(/sm:grid-cols-\d/);

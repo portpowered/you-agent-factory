@@ -1,25 +1,23 @@
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { LocalizedTimezoneNote } from "../../../../components/ui/localized-timezone-note";
-import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
+import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
+  CurrentSelectionDescriptionList,
+  CurrentSelectionDetailCode,
+  CurrentSelectionDetailSection,
+  CurrentSelectionDetailValue,
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "../../base/components/current-selection-locale";
-import {
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  MetadataSection,
-  RUNTIME_DETAIL_CODE_CLASS,
-  RUNTIME_DETAIL_VALUE_CLASS,
-  RUNTIME_DETAILS_SECTION_CLASS,
-} from "../../base/components/detail-card-shared";
+} from "../../base/public";
 import { getRunnerDisplayName } from "../../editing/runner-metadata";
 import {
+  InferenceAttemptDetail,
   InferenceAttemptsSection,
   WorkItemPayloadList,
 } from "../../work-selection/public";
 import type { WorkstationRequestDetailCardProps } from "../lib/detail-card-types";
+import { RequestMetadataSection } from "./request-metadata-section";
 import {
   ErrorDetailsSection,
   ResponseDetailsSection,
@@ -49,7 +47,7 @@ export function WorkstationRequestDetailCard({
         view={view}
       />
       {view.isScriptBackedRequest ? (
-        <MetadataSection
+        <RequestMetadataSection
           emptyMessage={messages.metadataEmpty}
           metadata={request.request_metadata}
           title={messages.requestMetadataTitle}
@@ -57,7 +55,7 @@ export function WorkstationRequestDetailCard({
       ) : null}
       <ResponseDetailsSection request={request} view={view} />
       {view.isScriptBackedRequest ? (
-        <MetadataSection
+        <RequestMetadataSection
           emptyMessage={
             request.errored_request_count > 0 || view.hasFailureDetails
               ? messages.responseMetadataUnavailableErrored
@@ -87,41 +85,33 @@ function WorkstationRequestSummary({
 
   return (
     <>
-      <p className={WIDGET_SUBTITLE_CLASS}>{view.requestTitle}</p>
+      <WidgetSubtitle>{view.requestTitle}</WidgetSubtitle>
       <LocalizedTimezoneNote
         locale={locale}
         timezoneLabel={messages.localizedTimezoneLabel}
       >
         {messages.localizedTimezoneContext}
       </LocalizedTimezoneNote>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-        <div>
-          <dt>{messages.dispatchIdLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            <code className={RUNTIME_DETAIL_CODE_CLASS}>
-              {request.dispatch_id}
-            </code>
-          </dd>
-        </div>
+      <CurrentSelectionDescriptionList>
+        <InferenceAttemptDetail
+          code
+          label={messages.dispatchIdLabel}
+          value={request.dispatch_id}
+        />
         {request.request_id ? (
-          <div>
-            <dt>{messages.requestIdLabel}</dt>
-            <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-              <code className={RUNTIME_DETAIL_CODE_CLASS}>
-                {request.request_id}
-              </code>
-            </dd>
-          </div>
+          <InferenceAttemptDetail
+            code
+            label={messages.requestIdLabel}
+            value={request.request_id}
+          />
         ) : null}
-        <div>
-          <dt>{messages.workstationLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {request.workstation_name || messages.workstationUnavailable}
-          </dd>
-        </div>
+        <InferenceAttemptDetail
+          label={messages.workstationLabel}
+          value={request.workstation_name || messages.workstationUnavailable}
+        />
         <div>
           <dt>{messages.outcomeLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+          <CurrentSelectionDetailValue>
             {view.outcome ? (
               <span className="flex flex-wrap gap-x-2 gap-y-1">
                 <span>{view.outcome}</span>
@@ -141,35 +131,33 @@ function WorkstationRequestSummary({
             ) : (
               messages.outcomeUnavailable
             )}
-          </dd>
+          </CurrentSelectionDetailValue>
         </div>
-        <div>
-          <dt>{messages.totalDurationLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {view.totalDurationMillis !== undefined
+        <InferenceAttemptDetail
+          label={messages.totalDurationLabel}
+          value={
+            view.totalDurationMillis !== undefined
               ? formatDurationMillis(view.totalDurationMillis, locale)
-              : messages.totalDurationUnavailable}
-          </dd>
-        </div>
+              : messages.totalDurationUnavailable
+          }
+        />
         {view.requestRunner?.runnerId ? (
-          <div>
-            <dt>{messages.runnerLabel}</dt>
-            <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-              {getRunnerDisplayName(view.requestRunner.runnerId) ??
-                view.requestRunner.displayName ??
-                view.requestRunner.runnerId}
-            </dd>
-          </div>
+          <InferenceAttemptDetail
+            label={messages.runnerLabel}
+            value={
+              getRunnerDisplayName(view.requestRunner.runnerId) ??
+              view.requestRunner.displayName ??
+              view.requestRunner.runnerId
+            }
+          />
         ) : null}
         {view.requestRunner?.selectionSource ? (
-          <div>
-            <dt>{messages.runnerSelectionSourceLabel}</dt>
-            <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-              {view.requestRunner.selectionSource}
-            </dd>
-          </div>
+          <InferenceAttemptDetail
+            label={messages.runnerSelectionSourceLabel}
+            value={view.requestRunner.selectionSource}
+          />
         ) : null}
-      </dl>
+      </CurrentSelectionDescriptionList>
     </>
   );
 }
@@ -190,39 +178,27 @@ function RequestDetailsSection({
 
   if (!view.isScriptBackedRequest) {
     return (
-      <section
-        aria-label={messages.requestDetailsTitle}
-        className={RUNTIME_DETAILS_SECTION_CLASS}
-      >
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-          {messages.requestDetailsTitle}
-        </h4>
+      <CurrentSelectionDetailSection title={messages.requestDetailsTitle}>
         <ConsumedWorkItemsSection
           onSelectWorkID={onSelectWorkID}
           selectedWorkID={selectedWorkID}
           workItems={consumedWorkItems}
         />
-      </section>
+      </CurrentSelectionDetailSection>
     );
   }
 
   return (
-    <section
-      aria-label={messages.requestDetailsTitle}
-      className={RUNTIME_DETAILS_SECTION_CLASS}
-    >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.requestDetailsTitle}
-      </h4>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+    <CurrentSelectionDetailSection title={messages.requestDetailsTitle}>
+      <CurrentSelectionDescriptionList>
         <ScriptRequestFields request={request} />
-      </dl>
+      </CurrentSelectionDescriptionList>
       <ConsumedWorkItemsSection
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
         workItems={consumedWorkItems}
       />
-    </section>
+    </CurrentSelectionDetailSection>
   );
 }
 
@@ -270,45 +246,45 @@ function ScriptRequestFields({
     <>
       <div>
         <dt>{messages.scriptRequestIdLabel}</dt>
-        <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+        <CurrentSelectionDetailValue>
           {scriptRequest.script_request_id ? (
-            <code className={RUNTIME_DETAIL_CODE_CLASS}>
+            <CurrentSelectionDetailCode>
               {scriptRequest.script_request_id}
-            </code>
+            </CurrentSelectionDetailCode>
           ) : (
             messages.scriptRequestUnavailable
           )}
-        </dd>
+        </CurrentSelectionDetailValue>
       </div>
       <div>
         <dt>{messages.scriptAttemptLabel}</dt>
-        <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+        <CurrentSelectionDetailValue>
           {scriptRequest.attempt ?? messages.scriptAttemptUnavailable}
-        </dd>
+        </CurrentSelectionDetailValue>
       </div>
       <div>
         <dt>{messages.commandLabel}</dt>
-        <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+        <CurrentSelectionDetailValue>
           {scriptRequest.command ? (
-            <code className={RUNTIME_DETAIL_CODE_CLASS}>
+            <CurrentSelectionDetailCode>
               {scriptRequest.command}
-            </code>
+            </CurrentSelectionDetailCode>
           ) : (
             messages.commandUnavailable
           )}
-        </dd>
+        </CurrentSelectionDetailValue>
       </div>
       <div>
         <dt>{messages.resolvedArgsLabel}</dt>
         <dd className="grid gap-1">
           {scriptRequest.args && scriptRequest.args.length > 0 ? (
             scriptRequest.args.map((arg: string) => (
-              <code className={RUNTIME_DETAIL_CODE_CLASS} key={arg}>
+              <CurrentSelectionDetailCode key={arg}>
                 {arg}
-              </code>
+              </CurrentSelectionDetailCode>
             ))
           ) : (
-            <span className={RUNTIME_DETAIL_VALUE_CLASS}>
+            <span className="min-w-0 [overflow-wrap:anywhere]">
               {messages.scriptArgumentsUnavailable}
             </span>
           )}

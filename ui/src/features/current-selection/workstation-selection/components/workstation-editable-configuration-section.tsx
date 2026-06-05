@@ -1,25 +1,27 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: current-selection editable workstation fields stay colocated so save feedback, overwrite hints, and responsive form structure evolve together.
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
 
-import { ExpandablePanelTrigger, Select } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  AlertPanel,
+  AlertPanelText,
+  DashboardLabel,
+  DashboardText,
+  FormDescription,
+  FormError,
+  Input,
+  Select,
+  surfacePanelVariants,
+} from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
 import type { WorkstationLevelGuard } from "../../../current-factory-definition/lib/workstation-guards";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-  CURRENT_SELECTION_FORM_FIELD_CLASS,
-  CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS,
-  CURRENT_SELECTION_WARNING_PANEL_CLASS,
-  CurrentSelectionSectionHeader,
-  WORKSTATION_SUMMARY_ITEM_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionDetailFeedback,
+  CurrentSelectionFormField,
+  CurrentSelectionFormFields,
+} from "../../base/public";
 import { formatEditableOverwriteFieldLabels } from "../editing/editable-workstation-overwrite-fields";
 import type {
   EditableWorkstationOverwriteField,
@@ -53,82 +55,44 @@ export function EditableConfigurationSection({
   saveState?: EditableWorkstationSaveState;
   state?: WorkstationDetailCardProps["editableConfigurationState"];
 }) {
-  const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
   const contentId = `${sectionId}-content`;
   const headingId = `${sectionId}-heading`;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    <CurrentSelectionExpandableSection
+      contentId={contentId}
+      headingId={headingId}
+      title={messages.editableConfigurationHeading}
+      toggleLabel={(expanded) =>
+        expanded
+          ? messages.editableConfigurationCollapseActionLabel
+          : messages.editableConfigurationExpandActionLabel
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            aria-label={
-              expanded
-                ? messages.editableConfigurationCollapseActionLabel
-                : messages.editableConfigurationExpandActionLabel
-            }
-            controlsID={contentId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? messages.collapseAction : messages.expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={headingId}
-        title={messages.editableConfigurationHeading}
-      />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={contentId}
-        >
-          {state?.status === "loading" ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
-              {messages.editableConfigurationLoading}
-            </p>
-          ) : null}
-          {state?.status === "error" ? (
-            <p
-              className={cn(
-                "m-0 text-on-error-container",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-              role="alert"
-            >
-              {messages.editableConfigurationErrorPrefix} {state.errorMessage}
-            </p>
-          ) : null}
-          {state?.status === "empty" ? (
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
-              {state.message || messages.editableConfigurationEmpty}
-            </p>
-          ) : null}
-          {state?.status === "ready" ? (
-            <EditableConfigurationReadyForm
-              messages={messages}
-              saveState={saveState}
-              state={state}
-            />
-          ) : null}
-        </div>
+      {state?.status === "loading" ? (
+        <CurrentSelectionDetailFeedback>
+          {messages.editableConfigurationLoading}
+        </CurrentSelectionDetailFeedback>
       ) : null}
-    </section>
+      {state?.status === "error" ? (
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
+          {messages.editableConfigurationErrorPrefix} {state.errorMessage}
+        </CurrentSelectionDetailFeedback>
+      ) : null}
+      {state?.status === "empty" ? (
+        <CurrentSelectionDetailFeedback>
+          {state.message || messages.editableConfigurationEmpty}
+        </CurrentSelectionDetailFeedback>
+      ) : null}
+      {state?.status === "ready" ? (
+        <EditableConfigurationReadyForm
+          messages={messages}
+          saveState={saveState}
+          state={state}
+        />
+      ) : null}
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -168,14 +132,13 @@ function EditableConfigurationReadyForm({
         errorMessage={validationErrors.name}
         fieldId="editable-workstation-name"
         input={
-          <input
+          <Input
             aria-describedby={
               validationErrors.name
                 ? "editable-workstation-name-error"
                 : undefined
             }
             aria-invalid={validationErrors.name ? "true" : undefined}
-            className="w-full rounded-lg border border-outline bg-surface px-3 py-2 text-sm text-on-surface"
             id="editable-workstation-name"
             onChange={(event) => state.onNameChange(event.target.value)}
             type="text"
@@ -192,7 +155,7 @@ function EditableConfigurationReadyForm({
         }
       />
       {requiresWorkerAssignment ? (
-        <div className={CURRENT_SELECTION_VERTICAL_FORM_FIELDS_CLASS}>
+        <CurrentSelectionFormFields>
           <EditableConfigurationField
             fieldId="editable-workstation-worker"
             errorMessage={validationErrors.workerName}
@@ -275,7 +238,7 @@ function EditableConfigurationReadyForm({
               />
             }
           />
-        </div>
+        </CurrentSelectionFormFields>
       ) : null}
       <EditableConfigurationWorkstationGuardsField
         fieldErrors={validationErrors}
@@ -335,12 +298,9 @@ function EditableConfigurationDraftStatus({
   }
 
   return (
-    <p
-      className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
-      role="alert"
-    >
+    <CurrentSelectionDetailFeedback role="alert" tone="danger">
       {messages.editableConfigurationValidationStatus}
-    </p>
+    </CurrentSelectionDetailFeedback>
   );
 }
 
@@ -361,17 +321,11 @@ function EditableConfigurationOverwriteWarning({
   );
 
   return (
-    <div className={CURRENT_SELECTION_WARNING_PANEL_CLASS}>
-      <p
-        className={cn(
-          "m-0 text-on-warning-container",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        role="alert"
-      >
+    <AlertPanel tone="warning">
+      <AlertPanelText role="alert">
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
-      </p>
-    </div>
+      </AlertPanelText>
+    </AlertPanel>
   );
 }
 
@@ -387,23 +341,18 @@ function EditableConfigurationWorkerInput({
 }) {
   if (state.workerOptionsState.status === "empty") {
     return (
-      <p
-        className={cn("m-0 text-on-surface-variant", DASHBOARD_BODY_TEXT_CLASS)}
-      >
+      <FormDescription variant="body">
         {state.workerOptionsState.message}
-      </p>
+      </FormDescription>
     );
   }
 
   if (state.workerOptionsState.status === "error") {
     return (
-      <p
-        className={cn("m-0 text-on-error-container", DASHBOARD_BODY_TEXT_CLASS)}
-        role="alert"
-      >
+      <FormError>
         {messages.editableConfigurationWorkerUnavailablePrefix}{" "}
         {state.workerOptionsState.message}
-      </p>
+      </FormError>
     );
   }
 
@@ -415,7 +364,6 @@ function EditableConfigurationWorkerInput({
           : undefined
       }
       aria-invalid={state.validationErrors.workerName ? "true" : undefined}
-      className={DASHBOARD_BODY_TEXT_CLASS}
       id="editable-workstation-worker"
       onChange={(event) => state.onWorkerChange(event.target.value)}
       value={state.draft.workerName}
@@ -447,7 +395,6 @@ function EditableConfigurationBehaviorInput({
           : undefined
       }
       aria-invalid={state.validationErrors.behavior ? "true" : undefined}
-      className={DASHBOARD_BODY_TEXT_CLASS}
       id="editable-workstation-kind"
       onChange={(event) =>
         state.onBehaviorChange(
@@ -481,17 +428,12 @@ function EditableConfigurationSharedWorkerHint({
   }
 
   return (
-    <p
-      className={cn(
-        "m-0 text-on-surface-subtle",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
-    >
+    <DashboardText className="m-0 text-on-surface-subtle" variant="supporting">
       {messages.editableConfigurationSharedWorkerScopeHint(
         valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
         formatList(sharedWorkstationNames),
       )}
-    </p>
+    </DashboardText>
   );
 }
 
@@ -534,14 +476,14 @@ export function WorkstationSummary({
   );
 
   return (
-    <section
-      aria-labelledby={sectionId}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+    <CurrentSelectionExpandableSection
+      defaultExpanded
+      headingId={sectionId}
+      title={messages.summaryHeading}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
     >
-      <CurrentSelectionSectionHeader
-        headingId={sectionId}
-        title={messages.summaryHeading}
-      />
       <ul className="m-0 grid list-none gap-2 p-0 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
         {requiresWorkerAssignment ? (
           <WorkstationSummaryItem
@@ -582,7 +524,7 @@ export function WorkstationSummary({
         />
         <WorkstationSummaryItem label={historyLabel} value={historyCount} />
       </ul>
-    </section>
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -600,31 +542,30 @@ function EditableConfigurationField({
   supportingContent?: ReactNode;
 }) {
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
-      <label className={DASHBOARD_SUPPORTING_LABEL_CLASS} htmlFor={fieldId}>
+    <CurrentSelectionFormField>
+      <DashboardLabel as="label" htmlFor={fieldId}>
         {label}
-      </label>
+      </DashboardLabel>
       {input}
       {supportingContent}
       {errorMessage ? (
-        <p
-          className={cn(
-            "m-0 text-on-error-container",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-          id={`${fieldId}-error`}
-        >
+        <CurrentSelectionDetailFeedback id={`${fieldId}-error`} tone="danger">
           {errorMessage}
-        </p>
+        </CurrentSelectionDetailFeedback>
       ) : null}
-    </div>
+    </CurrentSelectionFormField>
   );
 }
 
 function WorkstationSummaryItem({ label, value }: WorkstationSummaryItemProps) {
   return (
-    <li className={WORKSTATION_SUMMARY_ITEM_CLASS}>
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
+    <li
+      className={surfacePanelVariants({
+        className: "grid min-w-0 gap-1 px-3 py-2",
+        radius: "lg",
+      })}
+    >
+      <DashboardLabel>{label}</DashboardLabel>
       <strong className="min-w-0 text-sm text-on-surface [overflow-wrap:anywhere]">
         {value}
       </strong>

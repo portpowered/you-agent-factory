@@ -49,7 +49,7 @@ export function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          "fixed inset-x-4 top-1/2 z-50 mx-auto max-w-2xl -translate-y-1/2 rounded-2xl border border-outline bg-surface-container-high text-on-surface shadow-af-panel",
+          "fixed inset-x-4 top-1/2 z-50 mx-auto max-h-dvh max-w-2xl -translate-y-1/2 overflow-y-auto rounded-2xl border border-outline bg-surface-container-high text-on-surface shadow-af-panel",
           LAYOUT_DIALOG_CONTENT_SHELL_CLASS,
           className,
         )}

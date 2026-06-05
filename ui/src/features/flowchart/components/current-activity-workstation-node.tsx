@@ -28,6 +28,7 @@ import type {
   ZAxisIncompleteHints,
 } from "./current-activity-node-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
+import { CurrentActivityWorkProgressMarker } from "./current-activity-work-progress-marker";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 
 export interface WorkstationNodeData extends Record<string, unknown> {
@@ -401,39 +402,31 @@ function workstationOverflowMarkers(
 
   if (remainingCount > WORKSTATION_SUMMARY_DOT_LIMIT) {
     return (
-      <span
-        aria-label={messages.activeItemCountLabel(totalCount)}
-        className="mt-2 flex min-h-7 w-full items-center justify-center rounded-lg border border-af-success-border bg-success-container px-3 py-1 font-mono text-[0.9rem] font-bold leading-none text-success"
+      <CurrentActivityWorkProgressMarker
+        ariaLabel={messages.activeItemCountLabel(totalCount)}
+        className="mt-2 flex min-h-7 w-full rounded-lg px-3 py-1 text-[0.9rem]"
+        count={totalCount}
         data-workstation-work-progress="numeric"
-        role="status"
-      >
-        {totalCount}
-      </span>
+        kind="numeric"
+      />
     );
   }
 
   return (
-    <span
-      aria-label={messages.activeItemCountLabel(totalCount)}
-      className="mt-2 flex min-h-7 items-center justify-center gap-1 rounded-lg border border-af-success-border bg-success-container px-2"
+    <CurrentActivityWorkProgressMarker
+      ariaLabel={messages.activeItemCountLabel(totalCount)}
+      className="mt-2 flex min-h-7 gap-1 rounded-lg px-2"
       data-workstation-work-progress="dots"
-      role="status"
-    >
-      {Array.from(
-        { length: remainingCount },
-        (_, dotNumber) => dotNumber + 1,
-      ).map((dotNumber) => (
-        <span
-          key={`${remainingCount}-${dotNumber}`}
-          aria-hidden="true"
-          className="h-1.5 w-1.5 rounded-full bg-success"
-          data-workstation-work-progress-dot={String(dotNumber - 1)}
-        />
-      ))}
-      <span className="ml-1 font-mono text-[0.68rem] font-bold text-success">
-        +{remainingCount}
-      </span>
-    </span>
+      dotClassName="h-1.5 w-1.5"
+      dotCount={remainingCount}
+      dotDataAttribute="data-workstation-work-progress-dot"
+      kind="dots"
+      suffix={
+        <span className="ml-1 font-mono text-[0.68rem] font-bold text-success">
+          +{remainingCount}
+        </span>
+      }
+    />
   );
 }
 

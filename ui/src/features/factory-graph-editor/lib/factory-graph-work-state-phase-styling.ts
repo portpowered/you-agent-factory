@@ -10,6 +10,7 @@
  * `current-activity-place-node.tsx` via `place.state_category`.
  */
 import type { GraphSemanticIconKind } from "../../flowchart/components/graph-semantic-icon";
+import { activityGraphNodeSurfaceClassName } from "../../flowchart/components/current-activity-node-chrome";
 import type { FactoryGraphWorkStateType } from "./factory-graph-work-state-type";
 
 export const WORK_STATE_PHASE_LEGEND_ORDER = [
@@ -20,13 +21,13 @@ export const WORK_STATE_PHASE_LEGEND_ORDER = [
 ] as const satisfies readonly FactoryGraphWorkStateType[];
 
 const NEUTRAL_WORK_STATE_SURFACE =
-  "border-outline-variant bg-surface-container-high";
+  activityGraphNodeSurfaceClassName("neutralHigh");
 
 const WORK_STATE_PHASE_SURFACE: Record<FactoryGraphWorkStateType, string> = {
-  INITIAL: "border-info-border bg-info-container",
-  PROCESSING: "border-af-warning-border bg-warning-container",
-  TERMINAL: "border-af-success-border bg-success-container",
-  FAILED: "border-af-danger-border bg-error-container",
+  INITIAL: activityGraphNodeSurfaceClassName("info"),
+  PROCESSING: activityGraphNodeSurfaceClassName("warning"),
+  TERMINAL: activityGraphNodeSurfaceClassName("success"),
+  FAILED: activityGraphNodeSurfaceClassName("danger"),
 };
 
 const WORK_STATE_PHASE_ICON_KIND: Record<

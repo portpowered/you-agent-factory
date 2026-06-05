@@ -1,34 +1,46 @@
 import {
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-  CURRENT_SELECTION_FIELD_PANEL_CLASS,
-  CURRENT_SELECTION_FORM_FIELD_CLASS,
-  HISTORY_HEADER_CLASS,
-  PROVIDER_SESSION_CARD_CLASS,
-  WORKSTATION_SUMMARY_ITEM_CLASS,
+  emptyStatePlaceMessage,
+  isTerminalOrFailedPlace,
+  normalizeDetailText,
 } from "./detail-card-shared";
 
-describe("detail-card-shared row surfaces", () => {
-  it("uses raised default surfaces for shared nested detail rows", () => {
-    for (const className of [
-      HISTORY_HEADER_CLASS,
-      WORKSTATION_SUMMARY_ITEM_CLASS,
-      CURRENT_SELECTION_FIELD_PANEL_CLASS,
-      CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-    ]) {
-      expect(className).toContain("bg-surface-container-high");
-      expect(className).not.toContain("bg-surface-container-low");
-    }
+describe("detail-card-shared helpers", () => {
+  it("recognizes terminal and failed places", () => {
+    expect(
+      isTerminalOrFailedPlace({
+        place_id: "done",
+        state_category: "TERMINAL",
+      }),
+    ).toBe(true);
+    expect(
+      isTerminalOrFailedPlace({
+        place_id: "failed",
+        state_category: "FAILED",
+      }),
+    ).toBe(true);
+    expect(
+      isTerminalOrFailedPlace({
+        place_id: "active",
+        state_category: "ACTIVE",
+      }),
+    ).toBe(false);
   });
 
-  it("keeps expandable section form fields free of per-field outlines", () => {
-    expect(CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS).toContain("border");
-    expect(CURRENT_SELECTION_FORM_FIELD_CLASS).not.toContain("border");
+  it("selects the empty-state copy for retained and non-retained work", () => {
+    const messages = {
+      noCurrentWorkInPlace: "No current work.",
+      noWorkRecordedAtSelectedTick: "No work recorded.",
+      selectedTickWorkUnavailable: "Work unavailable.",
+    };
+
+    expect(emptyStatePlaceMessage(messages, false, 1)).toBe("No current work.");
+    expect(emptyStatePlaceMessage(messages, true, 1)).toBe("Work unavailable.");
+    expect(emptyStatePlaceMessage(messages, true, 0)).toBe("No work recorded.");
   });
 
-  it("keeps provider session cards on the subtle surface", () => {
-    expect(PROVIDER_SESSION_CARD_CLASS).toContain("bg-surface-container-low");
-    expect(PROVIDER_SESSION_CARD_CLASS).not.toContain(
-      "bg-surface-container-high",
-    );
+  it("normalizes blank detail text to undefined", () => {
+    expect(normalizeDetailText("  details  ")).toBe("details");
+    expect(normalizeDetailText("   ")).toBeUndefined();
+    expect(normalizeDetailText(undefined)).toBeUndefined();
   });
 });

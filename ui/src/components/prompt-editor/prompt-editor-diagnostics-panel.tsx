@@ -1,18 +1,16 @@
 import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../components/ui/dashboard-typography";
+  AlertPanel,
+  AlertPanelText,
+  CodePanel,
+  DashboardCode,
+  DashboardLabel,
+  SurfacePanel,
+} from "../../components/ui";
 import { cn } from "../../lib/cn";
 import { formatSyntaxDiagnosticMessage } from "./prompt-editor-diagnostic-message";
 import type { PromptEditorDiagnostic } from "./prompt-editor-types";
 
-const PROMPT_EDITOR_CODE_SUBTLE_CLASS = cn(
-  "text-xs text-on-surface-variant",
-  DASHBOARD_BODY_CODE_CLASS,
-);
-const PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS =
+const PROMPT_EDITOR_DIAGNOSTICS_RESERVED_PANEL_CLASS =
   "grid min-h-24 gap-2 rounded-xl border p-3";
 
 export type PromptEditorValidationFeedbackState =
@@ -47,7 +45,7 @@ export function PromptEditorDiagnosticsPanel({
       <div
         aria-hidden="true"
         className={cn(
-          PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
+          PROMPT_EDITOR_DIAGNOSTICS_RESERVED_PANEL_CLASS,
           "border-transparent bg-transparent",
         )}
         id={id}
@@ -57,23 +55,11 @@ export function PromptEditorDiagnosticsPanel({
 
   if (validationState.status === "error") {
     return (
-      <div
-        className={cn(
-          PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
-          "border-af-danger-border bg-af-danger-surface",
-        )}
-        id={id}
-        role="alert"
-      >
-        <p
-          className={cn(
-            "m-0 text-af-danger-text",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
+      <AlertPanel className="min-h-24" id={id} role="alert" tone="danger">
+        <AlertPanelText variant="supporting">
           {labels.validationErrorPrefix} {validationState.errorMessage}
-        </p>
-      </div>
+        </AlertPanelText>
+      </AlertPanel>
     );
   }
 
@@ -82,7 +68,7 @@ export function PromptEditorDiagnosticsPanel({
       <div
         aria-hidden="true"
         className={cn(
-          PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
+          PROMPT_EDITOR_DIAGNOSTICS_RESERVED_PANEL_CLASS,
           "border-transparent bg-transparent",
         )}
         id={id}
@@ -91,55 +77,44 @@ export function PromptEditorDiagnosticsPanel({
   }
 
   return (
-    <div
-      className={cn(
-        PROMPT_EDITOR_DIAGNOSTICS_PANEL_CLASS,
-        "border-af-danger-border bg-af-danger-surface",
-      )}
-      id={id}
-      role="alert"
-    >
-      <p className={cn("m-0 text-af-danger-text", DASHBOARD_BODY_TEXT_CLASS)}>
-        {labels.diagnosticsSummary}
-      </p>
+    <AlertPanel className="min-h-24" id={id} role="alert" tone="danger">
+      <AlertPanelText>{labels.diagnosticsSummary}</AlertPanelText>
       <div className="grid gap-2">
-        <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>
+        <DashboardLabel as="h5" className="m-0">
           {labels.diagnosticsHeading}
-        </h5>
+        </DashboardLabel>
         <ul className="m-0 grid list-none gap-2 p-0">
           {diagnostics.map((diagnostic) => (
-            <li
-              className="grid gap-1 rounded-lg border border-af-danger-border bg-surface-container-high p-2"
+            <SurfacePanel
+              asChild
+              className="grid gap-1 border-af-danger-border"
               key={diagnosticListItemKey(diagnostic)}
+              padding="compact"
+              radius="lg"
             >
-              <p
-                className={cn(
-                  "m-0 text-af-danger-text",
-                  DASHBOARD_BODY_TEXT_CLASS,
-                )}
-              >
-                {formatDiagnosticListMessage(diagnostic, labels)}
-              </p>
-              {diagnostic.path ? (
-                <code
-                  className={cn(
-                    PROMPT_EDITOR_CODE_SUBTLE_CLASS,
-                    "[overflow-wrap:anywhere]",
-                  )}
-                >
-                  {diagnostic.path}
-                </code>
-              ) : null}
-              {diagnostic.sourceText ? (
-                <pre className="m-0 whitespace-pre-wrap rounded-lg border border-outline bg-surface-container-low p-2 text-xs text-on-surface-variant [overflow-wrap:anywhere]">
-                  {diagnostic.sourceText}
-                </pre>
-              ) : null}
-            </li>
+              <li>
+                <AlertPanelText>
+                  {formatDiagnosticListMessage(diagnostic, labels)}
+                </AlertPanelText>
+                {diagnostic.path ? (
+                  <DashboardCode className="text-xs text-on-surface-variant [overflow-wrap:anywhere]">
+                    {diagnostic.path}
+                  </DashboardCode>
+                ) : null}
+                {diagnostic.sourceText ? (
+                  <CodePanel
+                    className="text-xs text-on-surface-variant"
+                    surface="low"
+                  >
+                    {diagnostic.sourceText}
+                  </CodePanel>
+                ) : null}
+              </li>
+            </SurfacePanel>
           ))}
         </ul>
       </div>
-    </div>
+    </AlertPanel>
   );
 }
 

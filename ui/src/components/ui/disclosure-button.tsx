@@ -16,6 +16,7 @@ export const DisclosureButton = forwardRef<
       aria-controls={controlsID}
       aria-expanded={expanded}
       ref={ref}
+      tone="outline"
       {...props}
     />
   );

@@ -1,28 +1,27 @@
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
 import type {
   DashboardInferenceAttempt,
   DashboardScriptRequest,
   DashboardScriptResponse,
 } from "../../../../api/dashboard/types";
-import { ExpandablePanelTrigger } from "../../../../components/ui";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
+import { CurrentSelectionDescriptionList } from "../../base/public";
 import {
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-  CurrentSelectionSectionHeader,
-  EXECUTION_PILL_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
+import {
+  InferenceAttemptCard,
   InferenceAttemptDetail,
-  PROVIDER_SESSION_CARD_CLASS,
-} from "../../base/components/detail-card-shared";
-import { InferenceAttemptCard } from "../../work-selection/public";
+} from "../../work-selection/public";
 import {
   requestModel,
   requestProvider,
@@ -66,7 +65,7 @@ export function DispatchInferenceAttemptsSection({
             />
           ))
         ) : emptyCopy ? (
-          <p className={DETAIL_COPY_CLASS}>{emptyCopy}</p>
+          <DetailCopy>{emptyCopy}</DetailCopy>
         ) : null}
       </div>
     </CollapsibleDispatchAttemptSection>
@@ -106,9 +105,7 @@ export function DispatchScriptAttemptsSection({
             scriptResponse={scriptResponse}
           />
         ) : (
-          <p className={DETAIL_COPY_CLASS}>
-            {messages.noScriptAttemptRecordedYet}
-          </p>
+          <DetailCopy>{messages.noScriptAttemptRecordedYet}</DetailCopy>
         )}
       </div>
     </CollapsibleDispatchAttemptSection>
@@ -123,40 +120,22 @@ function CollapsibleDispatchAttemptSection({
   title: string;
 }) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
-  const [expanded, setExpanded] = useState(false);
   const sectionId = useId();
   const panelId = `${sectionId}-panel`;
   const headingId = `${sectionId}-heading`;
 
   return (
-    <section
-      aria-labelledby={headingId}
-      className="mt-3 grid gap-2.5 border-t border-outline pt-3"
+    <CurrentSelectionExpandableSection
+      className="mt-3 border-t border-outline pt-3"
+      contentId={panelId}
+      headingId={headingId}
+      title={title}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            controlsID={panelId}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? messages.collapseAction : messages.expandAction}
-          </ExpandablePanelTrigger>
-        }
-        headingId={headingId}
-        title={title}
-      />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={panelId}
-        >
-          {children}
-        </div>
-      ) : null}
-    </section>
+      {children}
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -173,25 +152,15 @@ function ScriptRequestAttemptCard({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
-    <article className={PROVIDER_SESSION_CARD_CLASS}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong>
-            {messages.requestAttemptLabel(
-              String(attemptNumber ?? messages.pendingAttemptLabel),
-            )}
-          </strong>
-          <p
-            className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}
-          >
-            {enumMessages.localizeOutcome("PENDING")}
-          </p>
-        </div>
-        <span className={EXECUTION_PILL_CLASS}>
-          {requestID ?? messages.scriptRequestPlaceholderId}
-        </span>
-      </div>
-      <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
+    <CurrentSelectionHistoryCard>
+      <CurrentSelectionHistoryCardHeader
+        identifier={requestID ?? messages.scriptRequestPlaceholderId}
+        subtitle={enumMessages.localizeOutcome("PENDING")}
+        title={messages.requestAttemptLabel(
+          String(attemptNumber ?? messages.pendingAttemptLabel),
+        )}
+      />
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.scriptRequestIdLabel}
           code
@@ -228,12 +197,12 @@ function ScriptRequestAttemptCard({
           code
           value={scriptRequest.command}
         />
-      </dl>
+      </CurrentSelectionDescriptionList>
       <ScriptArgsSection
         args={scriptRequest.args}
         label={messages.resolvedArgsLabel}
       />
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }
 
@@ -261,27 +230,19 @@ function ScriptResponseAttemptCard({
   const locale = useCurrentSelectionLocale();
 
   return (
-    <article className={PROVIDER_SESSION_CARD_CLASS}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong>
-            {messages.responseAttemptLabel(
-              String(attemptNumber ?? messages.completedAttemptLabel),
-            )}
-          </strong>
-          <p
-            className={`m-0 text-on-surface-variant ${DASHBOARD_BODY_TEXT_CLASS}`}
-          >
-            {scriptResponse.outcome
-              ? enumMessages.localizeOutcome(scriptResponse.outcome)
-              : enumMessages.localizeOutcome("RECORDED")}
-          </p>
-        </div>
-        <span className={EXECUTION_PILL_CLASS}>
-          {requestID ?? messages.scriptResponsePlaceholderId}
-        </span>
-      </div>
-      <dl className={`mt-2.5 ${INFERENCE_ATTEMPT_DETAIL_CLASS}`}>
+    <CurrentSelectionHistoryCard>
+      <CurrentSelectionHistoryCardHeader
+        identifier={requestID ?? messages.scriptResponsePlaceholderId}
+        subtitle={
+          scriptResponse.outcome
+            ? enumMessages.localizeOutcome(scriptResponse.outcome)
+            : enumMessages.localizeOutcome("RECORDED")
+        }
+        title={messages.responseAttemptLabel(
+          String(attemptNumber ?? messages.completedAttemptLabel),
+        )}
+      />
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.scriptRequestIdLabel}
           code
@@ -338,7 +299,7 @@ function ScriptResponseAttemptCard({
           code
           value={failureType}
         />
-      </dl>
+      </CurrentSelectionDescriptionList>
       <ScriptOutputSection
         emptyMessage={messages.noStdoutRecorded}
         label={messages.stdoutLabel}
@@ -349,6 +310,6 @@ function ScriptResponseAttemptCard({
         label={messages.stderrLabel}
         value={normalizedStderr}
       />
-    </article>
+    </CurrentSelectionHistoryCard>
   );
 }

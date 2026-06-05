@@ -162,6 +162,35 @@ export interface WorkstationActiveWorkListProps {
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
+export interface WorkstationRequestHistorySectionProps {
+  messages: WorkstationDetailMessages;
+  now: number;
+  onSelectWorkID?: (workID: string) => void;
+  onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
+  requests: DashboardWorkstationRequest[];
+  resetKey: string;
+  selectedRequest?: DashboardWorkstationRequest | null;
+  selectedWorkID?: string | null;
+}
+
+export interface WorkstationHistorySectionProps {
+  collapseActionLabel: string;
+  expandActionLabel: string;
+  messages: WorkstationDetailMessages;
+  now: number;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+  onSelectWorkID?: (workID: string) => void;
+  onSelectWorkstationRequest?: (request: DashboardWorkstationRequest) => void;
+  providerSessions: DashboardProviderSessionAttempt[];
+  selectedNodeID: string;
+  selectedProviderSessionKey?: string | null;
+  selectedRequest?: DashboardWorkstationRequest | null;
+  selectedWorkID?: string | null;
+  workstationKind?: DashboardWorkstationNode["workstation_kind"];
+  workstationRequests: DashboardWorkstationRequest[];
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>;
+}
+
 export interface WorkstationSummaryProps {
   activeRunCount: number;
   editableConfigurationState?: EditableWorkstationConfigurationState;

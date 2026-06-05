@@ -572,7 +572,7 @@ describe("WorkItemDetailCard summary", () => {
       ),
     ).toBeTruthy();
     expect(
-      traceDetails.getByRole("link", { name: "trace-active-story" }),
+      traceDetails.getByRole("button", { name: "trace-active-story" }),
     ).toBeTruthy();
     expect(
       screen.queryByText("Never expose this raw system prompt."),
@@ -696,7 +696,7 @@ describe("WorkItemDetailCard summary", () => {
         "No workstation dispatch has been recorded yet for this work item.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("link", { name: "Open trace" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open trace" })).toBeNull();
   });
 
   it("does not render a separate inference attempts section for selected work items", () => {
@@ -943,7 +943,7 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      traceDetails.getByRole("link", { name: "trace-active-story" }),
+      traceDetails.getByRole("button", { name: "trace-active-story" }),
     ).toBeTruthy();
   });
 
@@ -984,21 +984,11 @@ describe("WorkItemDetailCard summary", () => {
       />,
     );
 
-    const traceLink = within(
+    const traceButton = within(
       screen.getByRole("region", { name: "Trace details" }),
-    ).getByRole("link", { name: "trace-active-story" });
+    ).getByRole("button", { name: "trace-active-story" });
 
-    expect(traceLink.getAttribute("href")).toBe("#trace");
-
-    traceLink.addEventListener(
-      "click",
-      (event) => {
-        event.preventDefault();
-      },
-      { once: true },
-    );
-
-    fireEvent.click(traceLink);
+    fireEvent.click(traceButton);
 
     expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
   });
@@ -1247,15 +1237,13 @@ describe("WorkItemDetailCard relationship graph", () => {
     const focusedSummary = screen.getByRole("region", {
       name: "Focused work summary",
     });
-    const traceAction = within(focusedSummary).getByRole("link", {
+    const traceAction = within(focusedSummary).getByRole("button", {
       name: "Open trace",
     });
 
     expect(
       within(focusedSummary).getByText("trace-active-story (selected)"),
     ).toBeTruthy();
-    expect(traceAction.getAttribute("href")).toBe("#trace");
-
     fireEvent.click(traceAction);
 
     expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
@@ -1319,7 +1307,7 @@ describe("WorkItemDetailCard relationship graph", () => {
 
     expect(within(focusedSummary).getByText("Unavailable")).toBeTruthy();
     expect(
-      within(focusedSummary).queryByRole("link", { name: "Open trace" }),
+      within(focusedSummary).queryByRole("button", { name: "Open trace" }),
     ).toBeNull();
   });
 
@@ -1575,8 +1563,14 @@ describe("WorkItemDetailCard relationship graph", () => {
       "Work relationships could not be loaded for this work item.",
     );
     expect(
-      within(relationshipSection).getByText(/selected timeline snapshot/i),
-    ).toBeTruthy();
+      within(relationshipSection).getByText(
+        "Work relationships could not be loaded for this work item.",
+      ).className,
+    ).toContain("!text-current");
+    expect(
+      within(relationshipSection).getByText(/selected timeline snapshot/i)
+        .className,
+    ).toContain("af-dashboard-supporting-text");
     expect(within(relationshipSection).queryByText("Selected work")).toBeNull();
   });
 });
@@ -1989,17 +1983,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       within(secondResponseBody).getByText("Ready for the next workstation."),
     ).toBeTruthy();
 
-    const traceLink = within(dispatchCard).getByRole("link", {
+    const traceButton = within(dispatchCard).getByRole("button", {
       name: "trace-active-story",
     });
-    traceLink.addEventListener(
-      "click",
-      (event) => {
-        event.preventDefault();
-      },
-      { once: true },
-    );
-    fireEvent.click(traceLink);
+    fireEvent.click(traceButton);
     fireEvent.click(
       within(dispatchCard).getAllByRole("button", {
         name: "Select work item Active Story",
@@ -2375,11 +2362,12 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(selectedWorkButton.textContent).toContain("Active Story");
     expect(selectedWorkButton.className).toContain("text-on-surface");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
-    const selectedTraceLink = within(dispatchCard).getByRole("link", {
+    const selectedTraceButton = within(dispatchCard).getByRole("button", {
       name: "trace-active-story (selected)",
     });
-    expect(selectedTraceLink).toBeTruthy();
-    expect(selectedTraceLink.className).toContain("text-on-surface");
+    expect(selectedTraceButton).toBeTruthy();
+    expect(selectedTraceButton.getAttribute("aria-pressed")).toBe("true");
+    expect(selectedTraceButton.className).toContain("text-on-surface");
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {
@@ -2697,7 +2685,7 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
     ).toBeTruthy();
     expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
     expect(
-      within(dispatchCard).getByRole("link", {
+      within(dispatchCard).getByRole("button", {
         name: "trace-active-story（選択中）",
       }),
     ).toBeTruthy();

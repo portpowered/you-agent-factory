@@ -74,10 +74,7 @@ export function InlineAddWidgetCard({
   }
 
   return (
-    <AgentBentoCard
-      bodyClassName="grid min-h-0 content-end"
-      title={messages.title}
-    >
+    <AgentBentoCard title={messages.title}>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
         <InlineAddWidgetSelector
           actionLabel={messages.actionLabel}

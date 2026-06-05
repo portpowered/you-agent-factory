@@ -2,6 +2,7 @@ import type {
   DashboardSnapshot,
   DashboardWorkMoveOperation,
 } from "../../../api/dashboard/types";
+import { WorkstationType } from "../../../api/generated/openapi";
 import {
   requestDispatchID,
   requestStartedAt,
@@ -28,8 +29,6 @@ interface SortableSelectedWorkOperation {
   sortTime: string;
   tieBreaker: string;
 }
-
-const LOGICAL_MOVE_WORKSTATION_KIND = "LOGICAL_MOVE";
 
 export function buildSelectedWorkOperationHistory({
   moveOperations,
@@ -83,7 +82,8 @@ export function classifyWorkstationOperationKind(
   snapshot: DashboardSnapshot | null | undefined,
 ): "workstation" | "logical-move-dispatch" {
   const workstationKind = resolveWorkstationKind(request, snapshot);
-  return workstationKind?.toUpperCase() === LOGICAL_MOVE_WORKSTATION_KIND
+  return workstationKind?.toUpperCase() ===
+    WorkstationType.WorkstationTypeLogicalMove
     ? "logical-move-dispatch"
     : "workstation";
 }

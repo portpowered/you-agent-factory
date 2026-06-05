@@ -1,9 +1,33 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import { TranscriptSection } from "./provider-session-transcript";
 
 describe("TranscriptSection", () => {
+  it("expands assistant transcript text from the entry header", () => {
+    const longAssistantText = `${"assistant transcript detail ".repeat(18)}final-visible-marker`;
+
+    render(
+      <TranscriptSection
+        detail={buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              order: 1,
+              text: longAssistantText,
+              type: "assistant_message",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.queryByText(/final-visible-marker/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand Assistant" }));
+
+    expect(screen.getByText(/final-visible-marker/)).toBeTruthy();
+  });
+
   it("formats encrypted reasoning payloads as transcript code content", () => {
     render(
       <TranscriptSection
@@ -21,11 +45,37 @@ describe("TranscriptSection", () => {
       />,
     );
 
-    expect(screen.getAllByText("Encrypted reasoning").length).toBeGreaterThan(
+    fireEvent.click(screen.getByRole("button", { name: "Expand Reasoning" }));
+
+    expect(screen.getAllByText("Encrypted Reasoning").length).toBeGreaterThan(
       0,
     );
+    expect(
+      screen
+        .getAllByText("Encrypted Reasoning")
+        .some((element) => element.className.includes("bg-info-container")),
+    ).toBe(true);
     expect(screen.getByText("sealed-chatgpt-reasoning-blob")).toBeTruthy();
     expect(screen.queryByText("Encrypted reasoning content only.")).toBeNull();
+  });
+
+  it("renders transcript entry statuses through compact status pills", () => {
+    render(
+      <TranscriptSection
+        detail={buildProviderSessionDetailResponse({
+          transcript: [
+            {
+              order: 1,
+              status: "completed",
+              text: "Done",
+              type: "assistant_message",
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("completed").className).toContain("min-h-6");
   });
 });
 

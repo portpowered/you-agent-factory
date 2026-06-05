@@ -201,7 +201,9 @@ describe("Trace relation factory graph node", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Story B" }));
     expect(onSelectWorkID).toHaveBeenCalledWith("work-b");
-    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(screen.getByText("Failed").className).toContain(
+      "bg-error-container",
+    );
     const node = screen.getByText("Story B").closest("article");
     if (!node) {
       throw new Error("Expected relation node shell to render.");

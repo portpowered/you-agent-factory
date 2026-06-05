@@ -37,7 +37,7 @@ describe("EditableWorkstationConfigurationHeaderActions", () => {
 });
 
 describe("EditableWorkstationSaveHeaderAction", () => {
-  it("uses stronger warning hover styling when save is available and not submitting", () => {
+  it("uses shared warning button styling when save is available and not submitting", () => {
     const { rerender } = render(
       <EditableWorkstationSaveHeaderAction
         canSave
@@ -50,9 +50,9 @@ describe("EditableWorkstationSaveHeaderAction", () => {
     expect(saveButton.className).toContain("border-af-warning-border");
     expect(saveButton.className).toContain("bg-warning-container");
     expect(saveButton.className).toContain("text-on-warning-container");
-    expect(saveButton.className).toContain("hover:border-af-warning");
-    expect(saveButton.className).toContain("hover:bg-warning");
-    expect(saveButton.className).toContain("hover:text-on-warning");
+    expect(saveButton.className).toContain("hover:border-af-warning-border");
+    expect(saveButton.className).toContain("hover:bg-warning-container");
+    expect(saveButton.className).toContain("hover:text-on-warning-container");
 
     rerender(
       <EditableWorkstationSaveHeaderAction

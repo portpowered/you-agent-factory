@@ -180,7 +180,7 @@ describe("WorkstationDetailCard request history", () => {
     const pendingRuntimePill = within(requestHistorySection).getByText(
       "Elapsed: 0ms",
     );
-    expect(pendingRuntimePill.className).toContain("border-info-border");
+    expect(pendingRuntimePill.className).toContain("border-af-info-border");
     expect(
       within(requestHistorySection).getByText("request-script-success-story"),
     ).toBeTruthy();

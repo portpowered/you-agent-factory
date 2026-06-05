@@ -5,11 +5,8 @@ import { GridLayout, useContainerWidth } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 
+import { DashboardHeading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-} from "../../../components/ui/dashboard-typography";
 import { ScrollArea } from "../../../components/ui/scroll-area";
 import { cn } from "../../../lib/cn";
 import { getAgentBentoMessages } from "../messages/agent-bento";
@@ -79,9 +76,9 @@ const BENTO_DRAG_CANCEL_SELECTOR =
 const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-hidden";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
-  "flex min-h-13 cursor-grab items-center justify-between gap-3 border-outline px-3.5 py-3 active:cursor-grabbing";
+  "relative z-10 flex min-h-13 shrink-0 cursor-grab items-center justify-between gap-3 border-b border-outline bg-surface-container-high px-3.5 py-3 active:cursor-grabbing";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
-  "min-h-11 flex-wrap items-start gap-2 px-3 py-2.5";
+  "min-h-11 flex-wrap items-center gap-2 px-3 py-2.5";
 const BENTO_CARD_HEADER_TOOLS_CLASS =
   "flex min-w-0 shrink-0 items-center gap-2";
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
@@ -89,7 +86,7 @@ const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
 const BENTO_CARD_BODY_SCROLL_CLASS = "min-h-0 flex-1";
 const BENTO_CARD_BODY_CLASS = cn(
   "grid h-full min-h-0 gap-2.5 px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
-  DASHBOARD_BODY_TEXT_CLASS,
+  "af-dashboard-body-text",
 );
 const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 px-3 pt-3 pb-4 [&>*]:pb-1";
 
@@ -365,25 +362,27 @@ export function AgentBentoCardHeader({
       data-bento-drag-handle="true"
     >
       <div className="min-w-0 flex-1">
-        <h3
-          className={cn(
-            "m-0 min-w-0 flex-1 [overflow-wrap:anywhere]",
-            DASHBOARD_SECTION_HEADING_CLASS,
-          )}
+        <DashboardHeading
+          as="h3"
+          className="m-0 min-w-0 flex-1 [overflow-wrap:anywhere]"
         >
           {title}
-        </h3>
+        </DashboardHeading>
       </div>
-      {headerAction ? (
-        <div
-          className={cn(
-            BENTO_CARD_HEADER_TOOLS_CLASS,
-            compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
-          )}
-        >
-          {headerAction}
-        </div>
-      ) : null}
+      <div
+        className={cn(
+          BENTO_CARD_HEADER_TOOLS_CLASS,
+          compactChrome && BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS,
+        )}
+      >
+        {headerAction ?? (
+          <span
+            aria-hidden="true"
+            className="block h-10 w-10 shrink-0"
+            data-bento-header-action-spacer="true"
+          />
+        )}
+      </div>
     </header>
   );
 }

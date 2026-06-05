@@ -4,6 +4,7 @@ import {
   workStatePhaseSwatchClassName,
 } from "../lib/factory-graph-work-state-phase-styling";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { FactoryGraphEditorFloatingSurface } from "./factory-graph-editor-floating-surface";
 
 export function FactoryGraphEditorWorkStatePhaseLegend({
   locale,
@@ -18,10 +19,11 @@ export function FactoryGraphEditorWorkStatePhaseLegend({
   const messages = getFactoryGraphEditorMessages(locale);
 
   return (
-    <section
+    <FactoryGraphEditorFloatingSurface
       aria-label={messages.workStatePhaseLegendAriaLabel}
-      className="pointer-events-auto absolute right-4 top-4 z-20 flex flex-wrap items-center gap-2 rounded-full border border-outline bg-surface-container-high px-3 py-2 shadow-af-panel backdrop-blur-[16px] max-md:left-4 max-md:right-4 max-md:top-4"
+      className="px-3 py-2"
       data-factory-graph-work-state-phase-legend=""
+      placement="topRightInset"
     >
       <ul className="m-0 flex list-none flex-wrap items-center gap-2 p-0">
         {WORK_STATE_PHASE_LEGEND_ORDER.map((phase) => (
@@ -40,6 +42,6 @@ export function FactoryGraphEditorWorkStatePhaseLegend({
           </li>
         ))}
       </ul>
-    </section>
+    </FactoryGraphEditorFloatingSurface>
   );
 }

@@ -4,9 +4,8 @@ import { useId } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
-import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
-import { cn } from "../../../lib/cn";
+import { DashboardHeading } from "../../../components/ui";
+import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";
@@ -54,9 +53,9 @@ function CurrentActivityCardHeading({
 
   return (
     <div>
-      <h2 className={cn("m-0", DASHBOARD_SECTION_HEADING_CLASS)} id={headingID}>
+      <DashboardHeading as="h2" className="m-0" id={headingID}>
         {messages.title}
-      </h2>
+      </DashboardHeading>
     </div>
   );
 }
@@ -138,12 +137,9 @@ export function ReactFlowCurrentActivityCardView(
 
   return (
     <GraphEditorPlacementProvider>
-      <section
+      <DashboardPanelShell
         aria-labelledby={headingID}
-        className={cn(
-          DASHBOARD_PANEL_SHELL_CLASS,
-          "relative flex h-full min-h-0 min-w-0 flex-col",
-        )}
+        className="relative flex h-full min-h-0 min-w-0 flex-col"
       >
         {showHeaderActions ? (
           <div className="mb-4">
@@ -195,7 +191,7 @@ export function ReactFlowCurrentActivityCardView(
           readyImportPreviewState={readyImportPreviewState}
           shouldRenderImportPreviewDialog={shouldRenderImportPreviewDialog}
         />
-      </section>
+      </DashboardPanelShell>
     </GraphEditorPlacementProvider>
   );
 }

@@ -1,4 +1,8 @@
 import {
+  WorkstationKind,
+  WorkstationType,
+} from "../../../api/generated/openapi";
+import {
   type EditableWorkstationBehavior,
   workstationBehaviorRequiresPrompt,
 } from "../../current-factory-definition/lib/workstation-behavior";
@@ -17,16 +21,16 @@ import {
 } from "../lib/factory-graph-editor-additions";
 import type { getFactoryGraphEditorMessages } from "../messages/editor";
 import {
-  FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS,
-  FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS,
+  FactoryGraphEditorAddField,
   FactoryGraphEditorPromptBodyField,
   FactoryGraphEditorSelectField,
   FactoryGraphEditorTextField,
 } from "./factory-graph-editor-add-dialog-fields";
+import { Checkbox } from "../../../components/ui";
 
 const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
-  "MODEL_WORKSTATION",
-  "LOGICAL_MOVE",
+  WorkstationType.WorkstationTypeModelWorkstation,
+  WorkstationType.WorkstationTypeLogicalMove,
 ] as const satisfies readonly EditableWorkstationType[];
 
 export function FactoryGraphEditorAddWorkstationFields({
@@ -101,7 +105,7 @@ export function FactoryGraphEditorAddWorkstationFields({
         }))}
         value={draft.behavior}
       />
-      {draft.behavior === "CRON" && draft.cron ? (
+      {draft.behavior === WorkstationKind.WorkstationKindCron && draft.cron ? (
         <FactoryGraphEditorAddWorkstationCronFields
           cron={draft.cron}
           errors={errors}
@@ -173,26 +177,27 @@ function FactoryGraphEditorAddWorkstationCronFields({
         }}
         value={cron.schedule}
       />
-      <div className={FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS}>
-        <label
-          className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS}
-          htmlFor="factory-graph-add-cron-trigger-at-start"
-        >
-          <input
-            checked={cron.triggerAtStart}
-            className="mr-2 size-4 rounded border border-outline"
-            id="factory-graph-add-cron-trigger-at-start"
-            onChange={(event) => {
-              onChange({
-                ...cron,
-                triggerAtStart: event.currentTarget.checked,
-              });
-            }}
-            type="checkbox"
-          />
-          {messages.cronTriggerAtStartFieldLabel}
-        </label>
-      </div>
+      <FactoryGraphEditorAddField
+        inputId="factory-graph-add-cron-trigger-at-start"
+        label={
+          <>
+            <Checkbox
+              checked={cron.triggerAtStart}
+              className="mr-2"
+              id="factory-graph-add-cron-trigger-at-start"
+              onChange={(event) => {
+                onChange({
+                  ...cron,
+                  triggerAtStart: event.currentTarget.checked,
+                });
+              }}
+            />
+            {messages.cronTriggerAtStartFieldLabel}
+          </>
+        }
+      >
+        {null}
+      </FactoryGraphEditorAddField>
       <FactoryGraphEditorTextField
         error={errors.cronJitter}
         helpText={messages.cronJitterFieldHint}

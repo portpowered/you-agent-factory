@@ -2,7 +2,6 @@ import { render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../components/ui/dashboard-typography";
 import { ProviderSessionWidget } from "../../provider-session-detail/components/provider-session-widget";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { SubmitWorkCard } from "../../submit-work/components/submit-work-card";
@@ -46,7 +45,7 @@ function expectSharedBentoCardHeaderSeam(
     level: 3,
     name: title,
   });
-  expect(titleHeading.className).toContain(DASHBOARD_SECTION_HEADING_CLASS);
+  expect(titleHeading.className).toContain("af-dashboard-section-heading");
 
   expect(cardHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
   expect(cardHeader?.className).toContain("cursor-grab");
@@ -107,7 +106,7 @@ describe("dashboard widget header seam", () => {
       title: messages.title,
     });
     expect(
-      within(card).getByRole("heading", { level: 3, name: messages.idleTitle }),
+      within(card).getByRole("heading", { level: 2, name: messages.idleTitle }),
     ).toBeTruthy();
     expect(
       within(card.querySelector("header") as HTMLElement).queryByRole(

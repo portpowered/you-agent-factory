@@ -8,6 +8,7 @@ describe("Button", () => {
       <>
         <Button>Primary action</Button>
         <Button tone="destructive">Delete</Button>
+        <Button tone="warning">Save changes</Button>
       </>,
     );
 
@@ -15,6 +16,9 @@ describe("Button", () => {
       name: "Primary action",
     });
     const destructiveButton = screen.getByRole("button", { name: "Delete" });
+    const warningButton = screen.getByRole("button", {
+      name: "Save changes",
+    });
 
     expect(
       primaryButton.className.includes("hover:bg-on-primary-container"),
@@ -29,6 +33,8 @@ describe("Button", () => {
     expect(
       destructiveButton.className.includes("hover:border-af-danger-hover"),
     ).toBe(true);
+    expect(warningButton.className).toContain("bg-warning-container");
+    expect(warningButton.className).toContain("hover:bg-warning-container");
     expect(destructiveButton.className.includes("brightness-")).toBe(false);
   });
 
@@ -43,5 +49,33 @@ describe("Button", () => {
 
     expect(projectedLabel.className).toContain("min-h-9");
     expect(projectedLabel.className).toContain("border-outline");
+  });
+
+  it("supports compact pill controls for disclosure and filter affordances", () => {
+    render(
+      <Button size="pill" tone="outline">
+        Toggle legend
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Toggle legend" });
+
+    expect(button.className).toContain("rounded-full");
+    expect(button.className).toContain("min-h-9");
+    expect(button.className).toContain("px-3");
+  });
+
+  it("supports compact circular icon controls", () => {
+    render(
+      <Button aria-label="Close panel" size="iconPill" tone="outline">
+        x
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Close panel" });
+
+    expect(button.className).toContain("rounded-full");
+    expect(button.className).toContain("h-10");
+    expect(button.className).toContain("w-10");
   });
 });

@@ -1,4 +1,9 @@
-import { Button } from "../../../components/ui";
+import {
+  Button,
+  DashboardLabel,
+  DashboardText,
+  SurfacePanel,
+} from "../../../components/ui";
 import type { FactoryPngDropState } from "../../import/hooks/use-factory-png-drop";
 import type { ReadFactoryImportPngError } from "../../import/lib/factory-png-import";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
@@ -74,17 +79,23 @@ export function GraphDropOverlay({ dropState, locale }: GraphDropOverlayProps) {
   }
 
   return (
-    <div
-      className="pointer-events-none absolute inset-4 z-10 grid place-items-center rounded-2xl border border-dashed border-primary bg-surface-container-high p-5 text-center shadow-af-panel backdrop-blur-lg"
+    <SurfacePanel
+      className="pointer-events-none absolute inset-4 z-10 grid place-items-center border-dashed border-primary text-center shadow-af-panel backdrop-blur-lg"
       data-current-activity-drop-overlay={dropState.status}
+      radius="2xl"
     >
       <div className="grid max-w-sm gap-2">
-        <p className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary">
+        <DashboardLabel
+          as="p"
+          className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary"
+        >
           {copy.title}
-        </p>
-        <p className="m-0 text-sm text-on-surface-variant">{copy.message}</p>
+        </DashboardLabel>
+        <DashboardText className="m-0 text-sm text-on-surface-variant">
+          {copy.message}
+        </DashboardText>
       </div>
-    </div>
+    </SurfacePanel>
   );
 }
 

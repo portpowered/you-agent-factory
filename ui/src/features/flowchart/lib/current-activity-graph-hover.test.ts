@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CURRENT_ACTIVITY_GRAPH_EDGE_HOVER_CLASS,
-  CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS,
   currentActivityGraphEdgeHoverClassName,
   currentActivityGraphNodeHoverClassName,
-  FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS,
   factoryGraphEditorEdgeHoverClassName,
 } from "./current-activity-graph-hover";
+
+const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
+  "transition-[border-color,box-shadow] hover:border-primary hover:shadow-af-accent-chip";
+const CURRENT_ACTIVITY_GRAPH_EDGE_HOVER_CLASS = "agent-flow-edge--hoverable";
+const FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS =
+  "agent-factory-editor-edge--hoverable";
 
 describe("currentActivityGraphNodeHoverClassName", () => {
   it("returns accent hover classes for a neutral node", () => {

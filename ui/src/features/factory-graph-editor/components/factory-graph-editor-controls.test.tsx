@@ -134,7 +134,7 @@ describe("factory graph editor toolbar controls", () => {
     await user.hover(deleteButton);
     expect(
       await screen.findByRole("tooltip", {
-        name: "Remove nodes or edges from the graph",
+        name: "Remove",
       }),
     ).toBeTruthy();
   });
@@ -149,7 +149,7 @@ describe("factory graph editor toolbar controls", () => {
     await user.hover(addButton);
     expect(
       await screen.findByRole("tooltip", {
-        name: "Add a graph entity",
+        name: "Add",
       }),
     ).toBeTruthy();
 
@@ -159,7 +159,7 @@ describe("factory graph editor toolbar controls", () => {
     addButton.focus();
     expect(
       await screen.findByRole("tooltip", {
-        name: "Add a graph entity",
+        name: "Add",
       }),
     ).toBeTruthy();
   });
@@ -275,15 +275,15 @@ describe("factory graph editor toolbar tooltip placement", () => {
     const toolbarTooltips = [
       {
         buttonName: "Delete",
-        tooltipName: "Remove nodes or edges from the graph",
+        tooltipName: "Remove",
       },
       {
         buttonName: "Connect",
-        tooltipName: "Connect nodes on the graph",
+        tooltipName: "Connect",
       },
       {
         buttonName: "Show or hide",
-        tooltipName: "Show or hide node classes on the graph",
+        tooltipName: "Show",
       },
       {
         buttonName: "Save changes",

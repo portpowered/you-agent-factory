@@ -1,3 +1,4 @@
+import { WorkstationType } from "../../../api/generated/openapi";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 
 export function findClassifierGraphEditorUnsupportedWorkstationName(
@@ -5,7 +6,8 @@ export function findClassifierGraphEditorUnsupportedWorkstationName(
 ): string | undefined {
   const classifierWorkstation = factoryDefinition?.workstations?.find(
     (workstation) =>
-      workstation.type === "CLASSIFIER_WORKSTATION" ||
+      workstation.type ===
+        WorkstationType.WorkstationTypeClassifierWorkstation ||
       (workstation.classificationRoutes?.length ?? 0) > 0,
   );
 

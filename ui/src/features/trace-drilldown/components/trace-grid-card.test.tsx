@@ -63,11 +63,6 @@ vi.mock("@xyflow/react", async () => ({
 
 import type { DashboardTrace } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-} from "../../../components/ui/dashboard-typography";
 import { expectNoVerticalScrollContainer } from "../lib/trace-grid-card-scroll-test-helpers";
 import { TraceGridBentoCard } from "./trace-grid-card";
 
@@ -201,13 +196,13 @@ describe("TraceGridBentoCard ready state", () => {
       }),
     ).toBeTruthy();
     const table = within(card).getByRole("table");
-    expect(table.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
+    expect(table.className).toContain("text-sm");
     const caption = within(card).getByText("Trace dispatch grid");
-    expect(caption.className).toContain(DASHBOARD_SUPPORTING_LABEL_CLASS);
+    expect(caption.className).toContain("text-left");
     const inputHeader = within(card).getByRole("columnheader", {
       name: "Input items",
     });
-    expect(inputHeader.className).toContain(DASHBOARD_SUPPORTING_LABEL_CLASS);
+    expect(inputHeader.className).toContain("uppercase");
     expect(within(card).getAllByText("Plan").length).toBeGreaterThan(0);
     expect(within(card).getAllByText("Implement").length).toBeGreaterThan(0);
     const dispatchPill = within(card)
@@ -218,8 +213,7 @@ describe("TraceGridBentoCard ready state", () => {
         "Expected dispatch pill to render in the trace grid table.",
       );
     }
-    expect(dispatchPill.className).toContain(DASHBOARD_SUPPORTING_CODE_CLASS);
-    expect(dispatchPill.className).toContain("border-info-border");
+    expect(dispatchPill.className).toContain("border-af-info-border");
     expect(dispatchPill.className).toContain("bg-info-container");
     expect(dispatchPill.className).toContain("py-0.5");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
@@ -231,7 +225,7 @@ describe("TraceGridBentoCard ready state", () => {
     expectNoVerticalScrollContainer(tableScroller as Element, {
       requireOverflowYClip: true,
     });
-    expect(table.className).toContain("min-w-[640px]");
+    expect(table.className).toContain("min-w-2xl");
     expect(
       await within(card).findByRole("region", { name: "Batch relation graph" }),
     ).toBeTruthy();
@@ -423,17 +417,22 @@ describe("TraceGridBentoCard state handling", () => {
       />,
     );
 
-    expect(screen.getByText("Trace history unavailable")).toBeTruthy();
+    expect(screen.getByText("Trace history unavailable").className).toContain(
+      "af-dashboard-section-heading",
+    );
 
     rerender(
       <TraceGridBentoCard
         state={{ status: "loading", workID: "work-active" }}
       />,
     );
-    expect(screen.getByText("Loading trace")).toBeTruthy();
+    expect(screen.getByText("Loading trace").className).toContain(
+      "af-dashboard-section-heading",
+    );
     expect(
-      screen.getByText("Reconstructing dispatch history for work-active."),
-    ).toBeTruthy();
+      screen.getByText("Reconstructing dispatch history for work-active.")
+        .className,
+    ).toContain("af-dashboard-body-text");
     expect(container.querySelectorAll(".animate-pulse")).toHaveLength(3);
 
     rerender(
@@ -441,8 +440,12 @@ describe("TraceGridBentoCard state handling", () => {
         state={{ status: "error", message: "network failed" }}
       />,
     );
-    expect(screen.getByText("Trace lookup failed")).toBeTruthy();
-    expect(screen.getByText("network failed")).toBeTruthy();
+    expect(screen.getByText("Trace lookup failed").className).toContain(
+      "af-dashboard-section-heading",
+    );
+    expect(screen.getByText("network failed").className).toContain(
+      "af-dashboard-body-text",
+    );
   });
 });
 

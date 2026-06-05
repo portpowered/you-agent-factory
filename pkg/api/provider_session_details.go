@@ -476,12 +476,11 @@ func (p *codexSessionParser) appendFunctionCall(itemType string, payload map[str
 		Status:    stringPtrIfNotEmpty(firstStringField(payload, "status")),
 	}
 	p.summary.FunctionCalls = append(p.summary.FunctionCalls, call)
-	p.transcript = append(p.transcript, factoryapi.ProviderSessionTranscriptEntry{
+	p.appendTranscriptEntry(factoryapi.ProviderSessionTranscriptEntry{
 		Arguments:  call.Arguments,
 		CallId:     call.CallId,
 		LineNumber: intPtr(lineNumber),
 		Name:       call.Name,
-		Order:      len(p.transcript) + 1,
 		SourceType: stringPtrIfNotEmpty(itemType),
 		Status:     call.Status,
 		Timestamp:  timestamp,
@@ -534,11 +533,10 @@ func (p *codexSessionParser) appendReasoning(sourceType string, payload map[stri
 		EncryptedContent: stringPtrIfNotEmpty(encryptedContent),
 	}
 	p.summary.Reasoning = append(p.summary.Reasoning, reasoning)
-	p.transcript = append(p.transcript, factoryapi.ProviderSessionTranscriptEntry{
+	p.appendTranscriptEntry(factoryapi.ProviderSessionTranscriptEntry{
 		Encrypted:        reasoning.Encrypted,
 		EncryptedContent: reasoning.EncryptedContent,
 		LineNumber:       intPtr(lineNumber),
-		Order:            len(p.transcript) + 1,
 		SourceType:       stringPtrIfNotEmpty(sourceType),
 		Summary:          reasoning.Summary,
 		Text:             reasoning.Text,
@@ -563,9 +561,8 @@ func (p *codexSessionParser) appendEventMessageTranscript(
 		entryType = factoryapi.ProviderSessionTranscriptEntryType("assistant_message")
 	}
 
-	p.transcript = append(p.transcript, factoryapi.ProviderSessionTranscriptEntry{
+	p.appendTranscriptEntry(factoryapi.ProviderSessionTranscriptEntry{
 		LineNumber: intPtr(lineNumber),
-		Order:      len(p.transcript) + 1,
 		SourceType: stringPtrIfNotEmpty(payloadType),
 		Text:       stringPtrIfNotEmpty(firstMessageText(payload)),
 		Timestamp:  timestamp,
@@ -586,9 +583,8 @@ func (p *codexSessionParser) appendResponseMessage(
 		entryType = factoryapi.ProviderSessionTranscriptEntryType("user_message")
 	}
 
-	p.transcript = append(p.transcript, factoryapi.ProviderSessionTranscriptEntry{
+	p.appendTranscriptEntry(factoryapi.ProviderSessionTranscriptEntry{
 		LineNumber: intPtr(lineNumber),
-		Order:      len(p.transcript) + 1,
 		SourceType: stringPtrIfNotEmpty("message"),
 		Text:       stringPtrIfNotEmpty(firstMessageText(payload)),
 		Timestamp:  timestamp,
@@ -607,11 +603,10 @@ func (p *codexSessionParser) appendToolOutputTranscript(
 	name *string,
 	turnIndex *int,
 ) {
-	p.transcript = append(p.transcript, factoryapi.ProviderSessionTranscriptEntry{
+	p.appendTranscriptEntry(factoryapi.ProviderSessionTranscriptEntry{
 		CallId:     stringPtrIfNotEmpty(callID),
 		LineNumber: intPtr(lineNumber),
 		Name:       name,
-		Order:      len(p.transcript) + 1,
 		Output:     stringPtrIfNotEmpty(output),
 		SourceType: stringPtrIfNotEmpty(itemType),
 		Status:     stringPtrIfNotEmpty(status),
@@ -619,6 +614,42 @@ func (p *codexSessionParser) appendToolOutputTranscript(
 		TurnIndex:  turnIndex,
 		Type:       factoryapi.ProviderSessionTranscriptEntryType("tool_output"),
 	})
+}
+
+func (p *codexSessionParser) appendTranscriptEntry(entry factoryapi.ProviderSessionTranscriptEntry) {
+	if len(p.transcript) > 0 && isDuplicateTranscriptMessage(p.transcript[len(p.transcript)-1], entry) {
+		return
+	}
+	entry.Order = len(p.transcript) + 1
+	p.transcript = append(p.transcript, entry)
+}
+
+func isDuplicateTranscriptMessage(previous, next factoryapi.ProviderSessionTranscriptEntry) bool {
+	if previous.Type != next.Type || !isTranscriptMessageType(next.Type) {
+		return false
+	}
+	if stringValue(previous.Text) == "" || stringValue(previous.Text) != stringValue(next.Text) {
+		return false
+	}
+	if intValue(previous.TurnIndex) != intValue(next.TurnIndex) {
+		return false
+	}
+	return isCodexMirrorMessageSource(previous.SourceType, next.SourceType)
+}
+
+func isTranscriptMessageType(entryType factoryapi.ProviderSessionTranscriptEntryType) bool {
+	return entryType == factoryapi.UserMessage || entryType == factoryapi.AssistantMessage
+}
+
+func isCodexMirrorMessageSource(previous, next *string) bool {
+	previousSource := stringValue(previous)
+	nextSource := stringValue(next)
+	return isCodexMessageMirrorSource(previousSource, nextSource) ||
+		isCodexMessageMirrorSource(nextSource, previousSource)
+}
+
+func isCodexMessageMirrorSource(eventMessageSource, responseItemSource string) bool {
+	return (eventMessageSource == "agent_message" || eventMessageSource == "user_message") && responseItemSource == "message"
 }
 
 func (p *codexSessionParser) recordTokenUsage(payload map[string]any) {
@@ -676,7 +707,7 @@ func firstMessageText(payload map[string]any) string {
 			}
 		}
 		if len(parts) > 0 {
-			return truncateSessionText(strings.Join(parts, "\n\n"))
+			return strings.Join(parts, "\n\n")
 		}
 	}
 	if value := firstCompactField(payload, "content"); value != "" {
@@ -775,22 +806,14 @@ func compactSessionValue(value any) string {
 	case nil:
 		return ""
 	case string:
-		return truncateSessionText(strings.TrimSpace(typed))
+		return strings.TrimSpace(typed)
 	default:
 		encoded, err := json.Marshal(typed)
 		if err != nil {
 			return ""
 		}
-		return truncateSessionText(string(encoded))
+		return string(encoded)
 	}
-}
-
-func truncateSessionText(value string) string {
-	const maxSessionSummaryTextLength = 1000
-	if len(value) <= maxSessionSummaryTextLength {
-		return value
-	}
-	return value[:maxSessionSummaryTextLength] + "..."
 }
 
 func intPtrIfPresent(value int, ok bool) *int {

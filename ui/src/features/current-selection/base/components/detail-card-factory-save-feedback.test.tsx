@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import {
   DetailCardFactorySaveFeedback,
   mergeDetailCardSaveFieldErrors,
@@ -37,6 +37,64 @@ describe("DetailCardFactorySaveFeedback", () => {
       />,
     );
     expect(container.firstChild).toBeNull();
+  });
+
+  it("renders success feedback with alert copy that inherits the success tone", () => {
+    render(
+      <DetailCardFactorySaveFeedback
+        messages={messages}
+        saveState={{ status: "success" }}
+      />,
+    );
+
+    const status = screen.getByRole("status");
+    const copy = screen.getByText(messages.successMessage);
+
+    expect(status.className).toContain("bg-success-container");
+    expect(copy.className).toContain("af-dashboard-body-text");
+    expect(copy.className).toContain("!text-current");
+  });
+
+  it("renders stale-version warnings with supporting detail copy", () => {
+    render(
+      <DetailCardFactorySaveFeedback
+        messages={messages}
+        saveState={{
+          message: "Running factory changed on disk.",
+          status: "warning",
+        }}
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    const detail = screen.getByText(messages.staleVersionDetail);
+
+    expect(alert.className).toContain("bg-warning-container");
+    expect(
+      screen.getByText("Running factory changed on disk.").className,
+    ).toContain("!text-current");
+    expect(detail.className).toContain("af-dashboard-supporting-text");
+    expect(detail.className).toContain("text-on-surface-subtle");
+  });
+
+  it("renders save errors with inherited danger alert copy", () => {
+    render(
+      <DetailCardFactorySaveFeedback
+        messages={messages}
+        saveState={{
+          errorMessage: "Could not write factory.json.",
+          status: "error",
+        }}
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    const copy = screen.getByText(
+      "Saving failed. Could not write factory.json.",
+    );
+
+    expect(alert.className).toContain("bg-error-container");
+    expect(copy.className).toContain("!text-current");
   });
 });
 

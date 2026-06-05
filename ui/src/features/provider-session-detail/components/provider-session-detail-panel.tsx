@@ -1,20 +1,26 @@
 import type { ReactNode } from "react";
 import type { ProviderSessionDetailResponse } from "../../../api/provider-session-details";
 import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { getLocalDateTimeDisplay } from "../../../components/ui/formatters";
-import { LocalizedTimezoneNote } from "../../../components/ui/localized-timezone-note";
-import { DETAIL_COPY_CLASS } from "../../../components/ui/widget-frame";
+  AlertPanel,
+  DashboardHeading,
+  DashboardLabel,
+  DashboardText,
+} from "../../../components/ui";
+import { DetailCopy } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { PROVIDER_SESSION_CARD_CLASS } from "../../current-selection/base/public";
+import { CurrentSelectionHistoryCard } from "../../current-selection/history/public";
 import { useProviderSessionDetail } from "../hooks/use-provider-session-detail";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
+import {
+  DetailMetric,
+  TimestampMetricValue,
+} from "./provider-session-detail-metrics";
+import {
+  ProviderSessionExpandableSection,
+  SectionMetricPreview,
+  TranscriptSectionPreview,
+} from "./provider-session-detail-section";
 import { TranscriptSection } from "./provider-session-transcript";
 
 export interface ProviderSessionDetailPanelProps {
@@ -50,14 +56,6 @@ function LoadedProviderSessionDetailPanel({
 }) {
   const messages = getProviderSessionDetailMessages(locale);
   const detailState = useProviderSessionDetail(selectedProviderSession);
-  const localizedSessionKind = messages.localizeSessionKind(
-    selectedProviderSession.kind,
-  );
-  const sessionLabel = [
-    selectedProviderSession.provider,
-    localizedSessionKind,
-    selectedProviderSession.id,
-  ].join(" / ");
   const detail =
     detailState.status === "empty" ||
     detailState.status === "empty-transcript" ||
@@ -69,52 +67,29 @@ function LoadedProviderSessionDetailPanel({
   return (
     <section
       aria-label={messages.selectedSessionHeading}
-      className={cn(
-        "mt-4 grid gap-3 border-t border-outline pt-4",
-        PROVIDER_SESSION_SANS_CLASS,
-      )}
+      className={cn("grid gap-6", PROVIDER_SESSION_SANS_CLASS)}
     >
-      <div className="grid gap-3">
-        <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-          {messages.selectedSessionHeading}
-        </h4>
-        <LocalizedTimezoneNote
-          locale={locale}
-          timezoneLabel={messages.localizedTimezoneLabel}
-        >
-          {messages.localizedTimezoneContext}
-        </LocalizedTimezoneNote>
-        <div className="grid gap-3">
-          <DetailMetric
-            label={messages.sessionLabel}
-            value={sessionLabel}
-            code
+      <ProviderSessionExpandableSection
+        heading={messages.selectedSessionHeading}
+        locale={locale}
+        preview={
+          <SectionMetricPreview
+            items={[
+              {
+                label: messages.sessionIdLabel,
+                value: selectedProviderSession.id,
+              },
+            ]}
           />
-          <DetailMetric
-            label={messages.sessionStatusLabel}
-            value={getSessionStatusText(detailState.status, messages)}
-          />
-          <DetailMetric
-            label={messages.providerLabel}
-            value={selectedProviderSession.provider}
-            code
-          />
-          <DetailMetric
-            label={messages.kindLabel}
-            value={localizedSessionKind}
-          />
+        }
+      >
+        <div className="grid gap-4">
           <DetailMetric
             label={messages.sessionIdLabel}
             value={selectedProviderSession.id}
-            code
-          />
-          <DetailMetric
-            label={messages.dispatchLabel}
-            value={selectedProviderSession.dispatchID}
-            code
           />
         </div>
-      </div>
+      </ProviderSessionExpandableSection>
       {detailState.status === "loading" ? (
         <StatusNotice>{messages.loadingState}</StatusNotice>
       ) : null}
@@ -132,13 +107,10 @@ function LoadedProviderSessionDetailPanel({
           <SourceFileSection detail={detail} locale={locale} />
           {detailState.status !== "empty" &&
           detailState.status !== "success" ? (
-            <SecondarySection
-              description={messages.sessionAnalysisDescription}
-              heading={messages.sessionAnalysisHeading}
-            >
+            <SessionAnalysisSection detail={detail} locale={locale}>
               <ParseOverview detail={detail} locale={locale} />
               <TokenUsageSection detail={detail} locale={locale} />
-            </SecondarySection>
+            </SessionAnalysisSection>
           ) : null}
           {detailState.status === "empty" ? (
             <StatusNotice>{messages.emptyState}</StatusNotice>
@@ -159,21 +131,69 @@ function LoadedProviderSessionDetailPanel({
           ) : null}
           {detailState.status === "success" ? (
             <>
-              <TranscriptSection detail={detail} locale={locale} />
-              <SecondarySection
-                description={messages.sessionAnalysisDescription}
-                heading={messages.sessionAnalysisHeading}
+              <ProviderSessionExpandableSection
+                heading={messages.transcriptHeading}
+                locale={locale}
+                preview={
+                  <TranscriptSectionPreview detail={detail} locale={locale} />
+                }
               >
+                <TranscriptSection
+                  detail={detail}
+                  locale={locale}
+                  showHeading={false}
+                />
+              </ProviderSessionExpandableSection>
+              <SessionAnalysisSection detail={detail} locale={locale}>
                 <ParseOverview detail={detail} locale={locale} />
                 <TokenUsageSection detail={detail} locale={locale} />
                 <TurnsSection detail={detail} locale={locale} />
-              </SecondarySection>
+              </SessionAnalysisSection>
               <ParseDiagnosticsSection detail={detail} locale={locale} />
             </>
           ) : null}
         </>
       ) : null}
     </section>
+  );
+}
+
+function SessionAnalysisSection({
+  children,
+  detail,
+  locale,
+}: {
+  children: ReactNode;
+  detail: SessionDetail;
+  locale?: string;
+}) {
+  const messages = getProviderSessionDetailMessages(locale);
+
+  return (
+    <ProviderSessionExpandableSection
+      heading={messages.sessionAnalysisHeading}
+      locale={locale}
+      preview={
+        <SectionMetricPreview
+          items={[
+            {
+              label: messages.eventCountLabel,
+              value: detail.parse.eventCount,
+            },
+            {
+              label: messages.turnsHeading,
+              value: detail.parse.turns.length,
+            },
+            {
+              label: messages.totalLabel,
+              value: detail.parse.tokenUsage?.totalTokens ?? 0,
+            },
+          ]}
+        />
+      }
+    >
+      {children}
+    </ProviderSessionExpandableSection>
   );
 }
 
@@ -187,11 +207,21 @@ function SourceFileSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.sourceHeading}
-      </h5>
-      <div className="grid gap-3">
+    <ProviderSessionExpandableSection
+      heading={messages.sourceHeading}
+      locale={locale}
+      preview={
+        <SectionMetricPreview
+          items={[
+            {
+              label: messages.relativePathLabel,
+              value: detail.source.relativePath,
+            },
+          ]}
+        />
+      }
+    >
+      <div className="grid gap-4">
         <DetailMetric
           label={messages.relativePathLabel}
           value={detail.source.relativePath}
@@ -211,7 +241,7 @@ function SourceFileSection({
           }
         />
       </div>
-    </section>
+    </ProviderSessionExpandableSection>
   );
 }
 
@@ -223,43 +253,14 @@ function StatusNotice({
   tone?: "default" | "error";
 }) {
   return (
-    <p
-      className={cn(
-        "m-0 rounded-lg border px-3 py-2.5",
-        tone === "error"
-          ? "border-af-danger-border bg-error-container text-on-error-container"
-          : "border-outline bg-surface-container-low text-on-surface-variant",
-        DASHBOARD_BODY_TEXT_CLASS,
-      )}
+    <AlertPanel
+      radius="lg"
       role={tone === "error" ? "alert" : "status"}
+      tone={tone === "error" ? "danger" : "info"}
     >
       {children}
-    </p>
+    </AlertPanel>
   );
-}
-
-function getSessionStatusText(
-  status: ReturnType<typeof useProviderSessionDetail>["status"],
-  messages: ReturnType<typeof getProviderSessionDetailMessages>,
-) {
-  switch (status) {
-    case "idle":
-      return messages.unavailableState;
-    case "loading":
-      return messages.loadingState;
-    case "not-found":
-      return messages.missingState;
-    case "error":
-      return messages.unavailableState;
-    case "empty":
-      return messages.emptyState;
-    case "empty-transcript":
-      return messages.emptyTranscriptState;
-    case "parse-error":
-      return messages.parseErrorState;
-    case "success":
-      return messages.readyState;
-  }
 }
 
 function ParseOverview({
@@ -272,11 +273,25 @@ function ParseOverview({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.parseSummaryHeading}
-      </h5>
-      <div className="grid gap-3">
+    <ProviderSessionExpandableSection
+      heading={messages.parseSummaryHeading}
+      locale={locale}
+      preview={
+        <SectionMetricPreview
+          items={[
+            {
+              label: messages.eventCountLabel,
+              value: detail.parse.eventCount,
+            },
+            {
+              label: messages.lineCountLabel,
+              value: detail.parse.lineCount,
+            },
+          ]}
+        />
+      }
+    >
+      <div className="grid gap-4">
         <DetailMetric
           label={messages.eventCountLabel}
           value={detail.parse.eventCount}
@@ -294,7 +309,7 @@ function ParseOverview({
           value={detail.parse.unknownEventCount}
         />
       </div>
-    </section>
+    </ProviderSessionExpandableSection>
   );
 }
 
@@ -309,12 +324,34 @@ function TokenUsageSection({
   const tokenUsage = detail.parse.tokenUsage;
 
   return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.tokenUsageHeading}
-      </h5>
+    <ProviderSessionExpandableSection
+      heading={messages.tokenUsageHeading}
+      locale={locale}
+      preview={
+        tokenUsage ? (
+          <SectionMetricPreview
+            items={[
+              {
+                label: messages.inputLabel,
+                value: tokenUsage.inputTokens ?? 0,
+              },
+              {
+                label: messages.outputLabel,
+                value: tokenUsage.outputTokens ?? 0,
+              },
+              {
+                label: messages.totalLabel,
+                value: tokenUsage.totalTokens ?? 0,
+              },
+            ]}
+          />
+        ) : (
+          <DetailCopy>{messages.tokenUsageUnavailable}</DetailCopy>
+        )
+      }
+    >
       {tokenUsage ? (
-        <div className="grid gap-3">
+        <div className="grid gap-4">
           <DetailMetric
             label={messages.inputLabel}
             value={tokenUsage.inputTokens ?? 0}
@@ -337,9 +374,9 @@ function TokenUsageSection({
           />
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.tokenUsageUnavailable}</p>
+        <DetailCopy>{messages.tokenUsageUnavailable}</DetailCopy>
       )}
-    </section>
+    </ProviderSessionExpandableSection>
   );
 }
 
@@ -353,30 +390,52 @@ function TurnsSection({
   const messages = getProviderSessionDetailMessages(locale);
 
   return (
-    <section className="grid gap-2.5">
-      <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.turnsHeading}
-      </h5>
+    <ProviderSessionExpandableSection
+      heading={messages.turnsHeading}
+      locale={locale}
+      preview={
+        detail.parse.turns.length > 0 ? (
+          <SectionMetricPreview
+            items={[
+              {
+                label: messages.turnsHeading,
+                value: detail.parse.turns.length,
+              },
+              {
+                label: messages.eventsLabel,
+                value: detail.parse.turns.reduce(
+                  (total, turn) => total + turn.eventCount,
+                  0,
+                ),
+              },
+            ]}
+          />
+        ) : (
+          <DetailCopy>{messages.turnsUnavailable}</DetailCopy>
+        )
+      }
+    >
       {detail.parse.turns.length > 0 ? (
-        <div className="grid gap-3">
+        <div className="grid gap-4">
           {detail.parse.turns.map((turn) => (
-            <article className={PROVIDER_SESSION_CARD_CLASS} key={turn.index}>
+            <article className="grid gap-3 py-1.5" key={turn.index}>
               <div className="grid gap-1">
-                <strong>{messages.turnLabel({ index: turn.index })}</strong>
-                <div
-                  className={cn(
-                    "text-on-surface-subtle",
-                    DASHBOARD_SUPPORTING_TEXT_CLASS,
-                  )}
+                <DashboardLabel>
+                  {messages.turnLabel({ index: turn.index })}
+                </DashboardLabel>
+                <DashboardText
+                  as="div"
+                  className="text-on-surface-subtle"
+                  variant="supporting"
                 >
                   <TimestampMetricValue
                     locale={locale}
                     timestamp={turn.startedAt}
                     unavailableLabel={messages.noTimestamp}
                   />
-                </div>
+                </DashboardText>
               </div>
-              <div className="mt-2 grid gap-3">
+              <div className="grid gap-4">
                 <DetailMetric
                   label={messages.eventsLabel}
                   value={turn.eventCount}
@@ -398,9 +457,9 @@ function TurnsSection({
           ))}
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.turnsUnavailable}</p>
+        <DetailCopy>{messages.turnsUnavailable}</DetailCopy>
       )}
-    </section>
+    </ProviderSessionExpandableSection>
   );
 }
 
@@ -421,31 +480,43 @@ function ParseDiagnosticsSection({
   }
 
   return (
-    <SecondarySection
-      description={messages.maintainerDiagnosticsDescription}
+    <ProviderSessionExpandableSection
       heading={messages.maintainerDiagnosticsHeading}
+      locale={locale}
+      preview={
+        <SectionMetricPreview
+          items={[
+            {
+              label: messages.malformedLineCountLabel,
+              value: detail.parse.parseErrors.length,
+            },
+            {
+              label: messages.unknownEventCountLabel,
+              value: detail.parse.unknownEvents.length,
+            },
+          ]}
+        />
+      }
     >
-      <section className="grid gap-2.5">
-        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>
+      <section className="grid gap-3">
+        <DashboardHeading as="h5">
           {messages.parseErrorsHeading}
-        </h5>
+        </DashboardHeading>
         <div className="grid gap-3">
           {detail.parse.parseErrors.map((error) => (
-            <article
-              className={PROVIDER_SESSION_CARD_CLASS}
+            <CurrentSelectionHistoryCard
               key={`parse-error-${error.lineNumber}`}
             >
               <strong>
                 {messages.lineLabel({ lineNumber: error.lineNumber })}
               </strong>
-              <p className={cn("m-0 mt-1.5", DASHBOARD_BODY_TEXT_CLASS)}>
+              <DashboardText className="m-0 mt-1.5">
                 {error.message}
-              </p>
-            </article>
+              </DashboardText>
+            </CurrentSelectionHistoryCard>
           ))}
           {detail.parse.unknownEvents.map((event) => (
-            <article
-              className={PROVIDER_SESSION_CARD_CLASS}
+            <CurrentSelectionHistoryCard
               key={`unknown-event-${event.lineNumber}`}
             >
               <strong>
@@ -453,11 +524,9 @@ function ParseDiagnosticsSection({
                   lineNumber: event.lineNumber,
                 })}
               </strong>
-              <p
-                className={cn(
-                  "m-0 mt-1.5 text-on-surface-subtle",
-                  DASHBOARD_SUPPORTING_TEXT_CLASS,
-                )}
+              <DashboardText
+                className="m-0 mt-1.5 text-on-surface-subtle"
+                variant="supporting"
               >
                 {[
                   event.type ? `type=${event.type}` : null,
@@ -465,119 +534,11 @@ function ParseDiagnosticsSection({
                 ]
                   .filter(Boolean)
                   .join(" / ")}
-              </p>
-            </article>
+              </DashboardText>
+            </CurrentSelectionHistoryCard>
           ))}
         </div>
       </section>
-    </SecondarySection>
-  );
-}
-
-function SecondarySection({
-  children,
-  description,
-  heading,
-}: {
-  children: ReactNode;
-  description: string;
-  heading: string;
-}) {
-  return (
-    <section className="grid gap-4 rounded-xl border border-outline bg-surface-container-low p-4">
-      <div className="grid gap-1">
-        <h5 className={DASHBOARD_SECTION_HEADING_CLASS}>{heading}</h5>
-        <p
-          className={cn(
-            "m-0 text-on-surface-subtle",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {description}
-        </p>
-      </div>
-      <div className="grid gap-3">{children}</div>
-    </section>
-  );
-}
-
-function DetailMetric({
-  code = false,
-  label,
-  value,
-}: {
-  code?: boolean;
-  label: string;
-  value: number | string | ReactNode;
-}) {
-  const metricValue = code ? (
-    <code className={`${DASHBOARD_BODY_CODE_CLASS} [overflow-wrap:anywhere]`}>
-      {value}
-    </code>
-  ) : (
-    value
-  );
-  const wrapperClassName = cn("mt-1", DASHBOARD_BODY_TEXT_CLASS);
-
-  return (
-    <div className={PROVIDER_SESSION_CARD_CLASS}>
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      {typeof value === "string" || typeof value === "number" ? (
-        <p className={cn("m-0 [overflow-wrap:anywhere]", wrapperClassName)}>
-          {metricValue}
-        </p>
-      ) : (
-        <div className={cn("[overflow-wrap:anywhere]", wrapperClassName)}>
-          {metricValue}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function TimestampMetricValue({
-  locale,
-  timestamp,
-  unavailableLabel,
-}: {
-  locale?: string;
-  timestamp?: string | null;
-  unavailableLabel: string;
-}) {
-  const messages = getProviderSessionDetailMessages(locale);
-  const timestampDisplay = getLocalDateTimeDisplay(
-    timestamp,
-    unavailableLabel,
-    locale,
-  );
-
-  if (!timestampDisplay.rawTimestamp) {
-    return timestampDisplay.label;
-  }
-
-  return (
-    <span className="grid gap-1">
-      <span title={timestampDisplay.rawTimestamp}>
-        {timestampDisplay.label}
-      </span>
-      <details className="grid gap-1">
-        <summary
-          className={cn(
-            "w-fit cursor-pointer text-on-surface-subtle underline decoration-dotted underline-offset-2",
-            DASHBOARD_SUPPORTING_TEXT_CLASS,
-          )}
-        >
-          {messages.rawTimestampDetailsLabel}
-        </summary>
-        <code
-          className={cn(
-            "w-fit rounded-md border border-outline bg-surface-container-low px-2 py-1",
-            DASHBOARD_BODY_CODE_CLASS,
-          )}
-        >
-          {timestampDisplay.rawTimestamp}
-        </code>
-      </details>
-    </span>
+    </ProviderSessionExpandableSection>
   );
 }

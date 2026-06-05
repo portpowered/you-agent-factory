@@ -1,6 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
-import { INFERENCE_ATTEMPT_DETAIL_CLASS } from "../../base/components/detail-card-shared";
 import {
   inferenceAttempt,
   workstationRequest,
@@ -145,7 +144,7 @@ it("keeps inference-backed request and response detail inside inference attempts
   expect(responseDetails.getByText("trace-active-story")).toBeTruthy();
   expect(
     currentSelection.getByText("Dispatch ID").closest("dl")?.className,
-  ).toContain(INFERENCE_ATTEMPT_DETAIL_CLASS);
+  ).toContain("af-dashboard-body-text");
   expect(currentSelection.getByText("1m 3s")).toBeTruthy();
   expect(
     requestDetails.queryByText(/Inference attempts when available/),

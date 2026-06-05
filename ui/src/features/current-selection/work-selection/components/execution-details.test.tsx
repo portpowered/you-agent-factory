@@ -49,7 +49,6 @@ describe("ExecutionDetailsSection", () => {
         details={details}
         now={DETAIL_CARD_NOW}
         onSelectTraceID={onSelectTraceID}
-        traceTargetId="trace"
       />,
     );
 
@@ -57,13 +56,15 @@ describe("ExecutionDetailsSection", () => {
     expect(within(section).getByText("dispatch-review")).toBeTruthy();
     expect(within(section).getByText("Review")).toBeTruthy();
     expect(
-      within(section).getByRole("link", { name: "trace-alpha (selected)" }),
+      within(section).getByRole("button", {
+        name: "trace-alpha (selected)",
+      }),
     ).toBeTruthy();
     expect(
-      within(section).getByRole("link", { name: "trace-beta" }),
+      within(section).getByRole("button", { name: "trace-beta" }),
     ).toBeTruthy();
     expect(
-      within(section).getByRole("link", { name: "Open trace" }),
+      within(section).getByRole("button", { name: "Open trace" }),
     ).toBeTruthy();
     const traceIdValue = within(section)
       .getByText("trace-alpha (selected)")
@@ -107,8 +108,12 @@ describe("ExecutionDetailsSection", () => {
       ),
     ).toBeTruthy();
 
-    fireEvent.click(within(section).getByRole("link", { name: "trace-beta" }));
-    fireEvent.click(within(section).getByRole("link", { name: "Open trace" }));
+    fireEvent.click(
+      within(section).getByRole("button", { name: "trace-beta" }),
+    );
+    fireEvent.click(
+      within(section).getByRole("button", { name: "Open trace" }),
+    );
 
     expect(onSelectTraceID).toHaveBeenNthCalledWith(1, "trace-beta");
     expect(onSelectTraceID).toHaveBeenNthCalledWith(2, "trace-alpha");
@@ -129,7 +134,6 @@ describe("ExecutionDetailsSection", () => {
         details={details}
         now={DETAIL_CARD_NOW}
         showInferenceAttempts={false}
-        traceTargetId="trace"
       />,
     );
 
@@ -155,7 +159,7 @@ describe("ExecutionDetailsSection", () => {
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(section).queryByRole("link", { name: "Open trace" }),
+      within(section).queryByRole("button", { name: "Open trace" }),
     ).toBeNull();
     expect(
       within(section).queryByRole("region", { name: "Workstation request" }),
@@ -181,7 +185,6 @@ describe("ExecutionDetailsSection", () => {
           activeTraceID="trace-alpha"
           details={details}
           now={DETAIL_CARD_NOW}
-          traceTargetId="trace"
         />
       </CurrentSelectionLocaleProvider>,
     );
@@ -198,10 +201,10 @@ describe("ExecutionDetailsSection", () => {
       ),
     ).toBeNull();
     expect(
-      within(section).getByRole("link", { name: "trace-alpha（已选中）" }),
+      within(section).getByRole("button", { name: "trace-alpha（已选中）" }),
     ).toBeTruthy();
     expect(
-      within(section).getByRole("link", { name: "打开追踪" }),
+      within(section).getByRole("button", { name: "打开追踪" }),
     ).toBeTruthy();
     expect(
       within(section).getByText("当前所选工作项暂时没有推理事件。"),
@@ -404,7 +407,6 @@ describe("InferenceAttemptsSection", () => {
           activeTraceID="trace-alpha"
           details={details}
           now={DETAIL_CARD_NOW}
-          traceTargetId="trace"
         />
       </CurrentSelectionLocaleProvider>,
     );

@@ -1,0 +1,174 @@
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+
+import type { DashboardStreamState } from "../../../api/dashboard/types";
+import type { FactorySessionSummary } from "../../../api/factory-sessions";
+import { cn } from "../../../lib/cn";
+import {
+  sessionCloseLabel,
+  sessionTabLabel,
+  sessionTabSecondaryPath,
+} from "../lib/dashboard-session-tabs-utils";
+import type { getHeaderControlsMessages } from "../messages/header-controls";
+
+const SESSION_TAB_ITEM_CLASS =
+  "group relative flex min-h-0 h-full min-w-0 shrink-0 items-stretch self-stretch transition-colors";
+const SESSION_TAB_BUTTON_CLASS =
+  "min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+const SESSION_TAB_CLOSE_BUTTON_CLASS =
+  "px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+const SESSION_TAB_ACTIVE_CLASS = cn(
+  "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-surface-container-low text-on-surface",
+  "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-surface-container-low)_1rem)]",
+  "after:pointer-events-none after:absolute after:-right-4 after:-bottom-0 after:h-4 after:w-4 after:bg-[radial-gradient(circle_at_top_right,transparent_1rem,var(--color-surface-container-low)_1rem)]",
+);
+const SESSION_TAB_INACTIVE_CLASS =
+  "rounded-t-xl rounded-b-none text-on-surface-variant hover:bg-af-overlay hover:text-on-surface";
+const SESSION_TAB_ACTIVE_BUTTON_CLASS =
+  "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
+const SESSION_TAB_INACTIVE_BUTTON_CLASS =
+  "flex min-w-0 flex-1 flex-col items-start rounded-tl-xl px-3 py-2";
+const SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS =
+  "flex items-center justify-center text-on-surface-subtle transition-colors hover:text-on-surface";
+const SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS = cn(
+  "rounded-tr-xl text-on-surface-disabled transition-colors",
+  "group-hover:text-on-surface-variant",
+  "hover:bg-af-overlay hover:text-on-surface-variant",
+  "group-focus-within:bg-af-overlay-focus group-focus-within:text-on-surface",
+  "focus-visible:bg-af-overlay-focus focus-visible:text-on-surface",
+);
+
+export function OpenSessionButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      aria-haspopup="dialog"
+      aria-label={label}
+      className={cn(
+        "flex shrink-0 self-stretch items-center rounded-t-2xl bg-transparent px-3 py-2 text-on-surface-variant transition-colors",
+        "hover:bg-af-overlay-subtle hover:text-on-surface",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring",
+      )}
+      onClick={onClick}
+      type="button"
+    >
+      <span aria-hidden="true" className="text-lg leading-none">
+        +
+      </span>
+    </button>
+  );
+}
+
+export function SessionTabButton({
+  active,
+  buttonRef,
+  closeDisabled,
+  controlsID,
+  messages,
+  onClick,
+  onClose,
+  onKeyDown,
+  session,
+  streamStatus,
+  tabID,
+}: {
+  active: boolean;
+  buttonRef: (element: HTMLButtonElement | null) => void;
+  closeDisabled: boolean;
+  controlsID: string;
+  messages: ReturnType<typeof getHeaderControlsMessages>;
+  onClick: () => void;
+  onClose: () => void;
+  onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
+  session: FactorySessionSummary;
+  streamStatus: DashboardStreamState["status"];
+  tabID: string;
+}) {
+  const label = sessionTabLabel(session);
+  const secondaryPath = sessionTabSecondaryPath(session.folderPath);
+  return (
+    <div
+      className={cn(
+        SESSION_TAB_ITEM_CLASS,
+        active ? SESSION_TAB_ACTIVE_CLASS : SESSION_TAB_INACTIVE_CLASS,
+      )}
+      title={`${session.folderPath} (${session.id})`}
+    >
+      <button
+        aria-controls={controlsID}
+        aria-label={label}
+        aria-selected={active}
+        className={cn(
+          SESSION_TAB_BUTTON_CLASS,
+          active
+            ? SESSION_TAB_ACTIVE_BUTTON_CLASS
+            : SESSION_TAB_INACTIVE_BUTTON_CLASS,
+        )}
+        id={tabID}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        ref={buttonRef}
+        role="tab"
+        tabIndex={active ? 0 : -1}
+        type="button"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <SessionTabStatusIndicator status={streamStatus} />
+          <span className="truncate text-sm font-semibold">{label}</span>
+        </span>
+        <span
+          className="block truncate text-[11px] text-on-surface-subtle"
+          title={session.folderPath}
+        >
+          {secondaryPath}
+        </span>
+      </button>
+      <button
+        aria-label={sessionCloseLabel(session, messages)}
+        className={cn(
+          SESSION_TAB_CLOSE_BUTTON_CLASS,
+          active
+            ? SESSION_TAB_ACTIVE_CONTROL_BUTTON_CLASS
+            : SESSION_TAB_INACTIVE_CLOSE_BUTTON_CLASS,
+        )}
+        disabled={closeDisabled}
+        onClick={onClose}
+        type="button"
+      >
+        {closeDisabled ? messages.closingSessionButtonLabel : "×"}
+      </button>
+    </div>
+  );
+}
+
+function SessionTabStatusIndicator({
+  status,
+}: {
+  status: DashboardStreamState["status"];
+}) {
+  return (
+    <span aria-hidden="true" className="relative inline-flex size-2.5 shrink-0">
+      {status === "live" ? (
+        <span
+          className={cn(
+            "absolute -inset-1 animate-ping rounded-full",
+            "bg-[var(--color-af-session-live-ping)]",
+          )}
+          data-testid="dashboard-session-live-ping"
+        />
+      ) : null}
+      <span
+        className={cn(
+          "absolute inset-0 rounded-full",
+          status === "live" && "bg-success",
+          status === "connecting" && "bg-primary",
+          status === "offline" && "bg-error",
+        )}
+      />
+    </span>
+  );
+}

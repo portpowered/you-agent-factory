@@ -1,19 +1,17 @@
 import type { DashboardWorkMoveOperation } from "../../../../api/dashboard/types";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
+import { CurrentSelectionBadge } from "../../base/components/current-selection-pill";
+import { CurrentSelectionDescriptionList } from "../../base/public";
 import {
-  CURRENT_SELECTION_BADGE_CLASS,
-  EXECUTION_PILL_CLASS,
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
-  PROVIDER_SESSION_CARD_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
+import { InferenceAttemptDetail } from "../../work-selection/public";
 import {
   requestOutcome,
   requestStartedAt,
@@ -22,29 +20,11 @@ import {
 import type { SelectedWorkRequestHistoryItem } from "../lib/detail-card-types";
 
 function OperationKindBadge({ label }: { label: string }) {
-  return (
-    <span
-      className={cn(
-        CURRENT_SELECTION_BADGE_CLASS,
-        "border-info-border bg-info-container text-info",
-      )}
-    >
-      {label}
-    </span>
-  );
+  return <CurrentSelectionBadge tone="info">{label}</CurrentSelectionBadge>;
 }
 
 export function WorkstationOperationKindBadge({ label }: { label: string }) {
-  return (
-    <span
-      className={cn(
-        CURRENT_SELECTION_BADGE_CLASS,
-        "border-outline bg-surface-container-high text-on-surface-variant",
-      )}
-    >
-      {label}
-    </span>
-  );
+  return <CurrentSelectionBadge tone="neutral">{label}</CurrentSelectionBadge>;
 }
 
 function formatMoveOccurredAt(
@@ -76,19 +56,14 @@ export function OperatorMoveHistoryCard({
   );
 
   return (
-    <article
+    <CurrentSelectionHistoryCard
       aria-label={messages.operatorMoveRowAccessibleLabel(transition)}
-      className={PROVIDER_SESSION_CARD_CLASS}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong className="min-w-0 [overflow-wrap:anywhere]">
-            {messages.operatorMoveTitle}
-          </strong>
-          <OperationKindBadge label={messages.moveOperationKindBadge} />
-        </div>
-      </div>
-      <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+      <CurrentSelectionHistoryCardHeader
+        badges={<OperationKindBadge label={messages.moveOperationKindBadge} />}
+        title={messages.operatorMoveTitle}
+      />
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.moveTransitionLabel}
           value={transition}
@@ -105,8 +80,8 @@ export function OperatorMoveHistoryCard({
             locale,
           )}
         />
-      </dl>
-    </article>
+      </CurrentSelectionDescriptionList>
+    </CurrentSelectionHistoryCard>
   );
 }
 
@@ -127,46 +102,33 @@ export function LogicalMoveDispatchHistoryCard({
   const isCurrentDispatch = currentDispatchID === request.dispatch_id;
 
   return (
-    <article
+    <CurrentSelectionHistoryCard
       aria-label={messages.logicalMoveDispatchRowAccessibleLabel(
         request.workstation_name,
         request.dispatch_id,
       )}
-      className={cn(
-        PROVIDER_SESSION_CARD_CLASS,
-        isCurrentDispatch &&
-          "border-primary bg-primary-container text-on-surface",
-      )}
+      className={isCurrentDispatch ? "text-on-surface" : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong className="min-w-0 [overflow-wrap:anywhere]">
-            {title || messages.logicalMoveDispatchTitle}
-          </strong>
-          <div className="flex flex-wrap items-center gap-2">
-            <p
-              className={cn(
-                "m-0 text-on-surface-variant",
-                DASHBOARD_BODY_TEXT_CLASS,
-              )}
-            >
-              {outcome
-                ? enumMessages.localizeOutcome(outcome)
-                : enumMessages.localizeOutcome("PENDING")}
-            </p>
+      <CurrentSelectionHistoryCardHeader
+        badges={
+          <>
             <OperationKindBadge label={messages.moveOperationKindBadge} />
             {isCurrentDispatch ? (
-              <span className={CURRENT_SELECTION_BADGE_CLASS}>
+              <CurrentSelectionBadge>
                 {messages.currentDispatchBadge}
-              </span>
+              </CurrentSelectionBadge>
             ) : null}
-          </div>
-        </div>
-        <span className={EXECUTION_PILL_CLASS}>
-          {request.dispatch_id || messages.unknownDispatchId}
-        </span>
-      </div>
-      <dl className={cn("mt-2.5", INFERENCE_ATTEMPT_DETAIL_CLASS)}>
+          </>
+        }
+        identifier={request.dispatch_id || messages.unknownDispatchId}
+        subtitle={
+          outcome
+            ? enumMessages.localizeOutcome(outcome)
+            : enumMessages.localizeOutcome("PENDING")
+        }
+        title={title || messages.logicalMoveDispatchTitle}
+      />
+      <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.workstationLabel}
           value={request.workstation_name}
@@ -179,7 +141,7 @@ export function LogicalMoveDispatchHistoryCard({
             locale,
           )}
         />
-      </dl>
-    </article>
+      </CurrentSelectionDescriptionList>
+    </CurrentSelectionHistoryCard>
   );
 }

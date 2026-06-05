@@ -5,16 +5,17 @@ import type {
   FactorySessionTarget,
 } from "../../../api/factory-sessions";
 import {
+  AlertPanel,
   Button,
+  DashboardText,
   DialogContent,
   DialogHeader,
   DialogTitle,
   Input,
   StandardListSelection,
   StandardListSelectionItem,
+  SurfacePanel,
 } from "../../../components/ui";
-import { DASHBOARD_BODY_TEXT_CLASS } from "../../../components/ui/dashboard-typography";
-import { cn } from "../../../lib/cn";
 import {
   type FolderValidationState,
   factorySessionTargetOptionValue,
@@ -22,13 +23,6 @@ import {
   selectedFactorySessionTarget,
 } from "../lib/dashboard-session-tabs-utils";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
-
-const SESSION_DIALOG_ERROR_CLASS =
-  "rounded-xl border border-af-danger-border bg-error-container px-3 py-2 text-sm text-on-error-container";
-const SESSION_DIALOG_STATUS_CLASS =
-  "rounded-xl border border-primary bg-primary-container px-3 py-2 text-sm text-on-surface";
-const SESSION_TARGET_PICKER_CLASS =
-  "grid gap-3 rounded-2xl border border-outline bg-surface-container-low p-4";
 
 export function OpenSessionDialog({
   dialogError,
@@ -79,15 +73,12 @@ export function OpenSessionDialog({
     >
       <DialogHeader>
         <DialogTitle>{messages.openSessionDialogTitle}</DialogTitle>
-        <p
-          className={cn(
-            "text-sm leading-6 text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
+        <DashboardText
+          className="text-sm leading-6 text-on-surface-variant"
           id={dialogDescriptionID}
         >
           {messages.openSessionDialogDescription}
-        </p>
+        </DashboardText>
       </DialogHeader>
       <form className="grid gap-4" onSubmit={onInspectFolder}>
         <div className="grid gap-2">
@@ -111,33 +102,26 @@ export function OpenSessionDialog({
               value={folderPath}
             />
           </div>
-          <p
-            className={cn(
-              "text-sm text-on-surface-variant",
-              DASHBOARD_BODY_TEXT_CLASS,
-            )}
+          <DashboardText
+            className="text-sm text-on-surface-variant"
             id={folderHelperTextID}
           >
             {messages.sessionFolderHelperText}
-          </p>
+          </DashboardText>
         </div>
         {validationStatusMessage ? (
-          <p
-            className={
-              folderValidation.status === "error"
-                ? SESSION_DIALOG_ERROR_CLASS
-                : SESSION_DIALOG_STATUS_CLASS
-            }
+          <AlertPanel
             aria-live="polite"
             role={folderValidation.status === "error" ? "alert" : "status"}
+            tone={folderValidation.status === "error" ? "danger" : "info"}
           >
             {validationStatusMessage}
-          </p>
+          </AlertPanel>
         ) : null}
         {dialogError && folderValidation.status !== "error" ? (
-          <p className={SESSION_DIALOG_ERROR_CLASS} role="alert">
+          <AlertPanel role="alert" tone="danger">
             {dialogError.message}
-          </p>
+          </AlertPanel>
         ) : null}
         {showInspectSubmit ? (
           <div className="flex justify-end">
@@ -193,48 +177,44 @@ function InitNewFactoryConfirmation({
     );
 
   return (
-    <section
+    <SurfacePanel
       aria-labelledby="init-new-factory-confirmation-title"
-      className={SESSION_TARGET_PICKER_CLASS}
+      asChild
+      radius="2xl"
+      surface="low"
     >
-      <p
-        className={cn(
-          "text-sm leading-6 text-on-surface",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-        id="init-new-factory-confirmation-title"
-      >
-        {description}
-      </p>
-      <p
-        className={cn(
-          "break-all font-mono text-xs text-on-surface-subtle",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
-      >
-        {folderPath}
-      </p>
-      <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
-        <Button
-          disabled={isPending}
-          onClick={onCancel}
-          tone="outline"
-          type="button"
+      <section className="grid gap-3">
+        <DashboardText
+          className="text-sm leading-6 text-on-surface"
+          id="init-new-factory-confirmation-title"
         >
-          {messages.openSessionCancelCreateFactoryLabel}
-        </Button>
-        <Button
-          aria-busy={isPending}
-          disabled={isPending}
-          onClick={onConfirm}
-          type="button"
-        >
-          {isPending
-            ? messages.openSessionCreateFactoryPendingLabel
-            : messages.openSessionCreateFactoryLabel}
-        </Button>
-      </div>
-    </section>
+          {description}
+        </DashboardText>
+        <DashboardText className="break-all font-mono text-xs text-on-surface-subtle">
+          {folderPath}
+        </DashboardText>
+        <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
+          <Button
+            disabled={isPending}
+            onClick={onCancel}
+            tone="outline"
+            type="button"
+          >
+            {messages.openSessionCancelCreateFactoryLabel}
+          </Button>
+          <Button
+            aria-busy={isPending}
+            disabled={isPending}
+            onClick={onConfirm}
+            type="button"
+          >
+            {isPending
+              ? messages.openSessionCreateFactoryPendingLabel
+              : messages.openSessionCreateFactoryLabel}
+          </Button>
+        </div>
+      </section>
+    </SurfacePanel>
   );
 }
 
@@ -254,37 +234,39 @@ function SessionTargetPicker({
     (targets.length === 1 ? targets[0] : null);
 
   return (
-    <section className={SESSION_TARGET_PICKER_CLASS}>
-      <StandardListSelection
-        disabled={isPending}
-        selectionAnnouncement={selectedTarget?.label}
-      >
-        {targets.map((target) => {
-          const targetValue = factorySessionTargetOptionValue(target);
-          const isSelected =
-            selectedTarget != null &&
-            factorySessionTargetOptionValue(selectedTarget) === targetValue;
+    <SurfacePanel asChild className="grid gap-3" radius="2xl" surface="low">
+      <section>
+        <StandardListSelection
+          disabled={isPending}
+          selectionAnnouncement={selectedTarget?.label}
+        >
+          {targets.map((target) => {
+            const targetValue = factorySessionTargetOptionValue(target);
+            const isSelected =
+              selectedTarget != null &&
+              factorySessionTargetOptionValue(selectedTarget) === targetValue;
 
-          return (
-            <StandardListSelectionItem
-              key={`${target.ref.kind}:${target.ref.name ?? ""}:${target.factoryDir}`}
-              onClick={() => {
-                onOpenTarget(targetValue);
-              }}
-              selected={isSelected}
-            >
-              <span className="flex min-h-16 w-full flex-col items-start justify-center px-1 py-1 text-sm">
-                <span className="font-semibold text-on-surface">
-                  {target.label}
+            return (
+              <StandardListSelectionItem
+                key={`${target.ref.kind}:${target.ref.name ?? ""}:${target.factoryDir}`}
+                onClick={() => {
+                  onOpenTarget(targetValue);
+                }}
+                selected={isSelected}
+              >
+                <span className="flex min-h-16 w-full flex-col items-start justify-center px-1 py-1 text-sm">
+                  <span className="font-semibold text-on-surface">
+                    {target.label}
+                  </span>
+                  <span className="truncate text-xs text-on-surface-subtle">
+                    {target.factoryDir}
+                  </span>
                 </span>
-                <span className="truncate text-xs text-on-surface-subtle">
-                  {target.factoryDir}
-                </span>
-              </span>
-            </StandardListSelectionItem>
-          );
-        })}
-      </StandardListSelection>
-    </section>
+              </StandardListSelectionItem>
+            );
+          })}
+        </StandardListSelection>
+      </section>
+    </SurfacePanel>
   );
 }

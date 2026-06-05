@@ -1,5 +1,4 @@
-import { DASHBOARD_SUPPORTING_TEXT_CLASS } from "../../../../components/ui/dashboard-typography";
-import { cn } from "../../../../lib/cn";
+import { FormWarning } from "../../../../components/ui";
 import type {
   EditableWorkstationOverwriteField,
   WorkstationDetailCardProps,
@@ -23,13 +22,8 @@ export function EditableConfigurationServerChangedHint({
   }
 
   return (
-    <p
-      className={cn(
-        "m-0 text-on-warning-container",
-        DASHBOARD_SUPPORTING_TEXT_CLASS,
-      )}
-    >
+    <FormWarning>
       {messages.editableConfigurationServerFieldChangedHint}
-    </p>
+    </FormWarning>
   );
 }

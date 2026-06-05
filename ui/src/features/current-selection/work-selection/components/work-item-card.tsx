@@ -2,7 +2,7 @@ import {
   formatList,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
-import { WIDGET_SUBTITLE_CLASS } from "../../../../components/ui/widget-frame";
+import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import {
   getWorkContentInspectMessages,
   WorkContentReadOnlyList,
@@ -28,7 +28,6 @@ export function WorkItemDetailCard({
   selectedProviderSessionKey,
   selection,
   workstationRequests,
-  traceTargetId = "trace",
   widgetId = "current-selection",
 }: WorkItemDetailCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
@@ -42,9 +41,7 @@ export function WorkItemDetailCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <p className={WIDGET_SUBTITLE_CLASS}>
-        {formatWorkItemLabel(selection.workItem)}
-      </p>
+      <WidgetSubtitle>{formatWorkItemLabel(selection.workItem)}</WidgetSubtitle>
       <dl>
         <div>
           <dt>{messages.workIdLabel}</dt>
@@ -98,7 +95,6 @@ export function WorkItemDetailCard({
             ? relationshipGraph.selectedWork.label
             : formatWorkItemLabel(selection.workItem)
         }
-        traceTargetId={traceTargetId}
       />
       <SelectedWorkDispatchHistorySection
         activeTraceID={activeTraceID}
@@ -112,7 +108,6 @@ export function WorkItemDetailCard({
         requests={workstationRequests}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selection.workItem.work_id}
-        traceTargetId={traceTargetId}
         workstationKind={selectedNode?.workstation_kind}
       />
     </SelectionDetailLayout>

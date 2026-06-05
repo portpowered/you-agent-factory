@@ -4,11 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
+import { DashboardText, Textarea } from "../ui";
 import { cn } from "../../lib/cn";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../ui/dashboard-typography";
 import {
   registerWorkstationGuardSelectorCompletionProvider,
   registerWorkstationGuardSelectorMonaco,
@@ -206,22 +203,14 @@ function GuardSelectorEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <p
-        className={cn(
-          "m-0 text-on-surface-variant",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-      >
+      <DashboardText className="m-0 text-on-surface-variant" variant="supporting">
         {message}
-      </p>
-      <textarea
+      </DashboardText>
+      <Textarea
         aria-label={ariaLabel}
-        className={cn(
-          "m-0 w-full resize-none border-0 bg-transparent p-0 text-on-surface outline-none",
-          DASHBOARD_BODY_TEXT_CLASS,
-        )}
         defaultValue={value}
         readOnly
+        variant="plain"
       />
     </div>
   );

@@ -7,10 +7,11 @@ import {
 
 import { cn } from "../../../lib/cn";
 import {
-  CHOOSE_FILE_FIELD_GROUP_CLASS,
   type ChooseFileShellClassNameOptions,
   chooseFileShellClassName,
 } from "../lib/choose-file-shell";
+
+const CHOOSE_FILE_FIELD_GROUP_CLASS = "space-y-2";
 
 export interface ChooseFileFieldProps extends ChooseFileShellClassNameOptions {
   afterControl?: ReactNode;

@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
 
 import type { WorkChartModel } from "../lib/trends";
-import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-contract";
+import {
+  expectSingleWorkOutcomeCardHeader,
+  expectWorkOutcomeCardFillsChartBody,
+} from "../lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { WorkOutcomeWidget } from "./work-outcome-widget";
 
@@ -126,6 +129,7 @@ describe("WorkOutcomeWidget", () => {
       cardTitle: messages.chart.cardTitle,
       headerActionLabel: "Remove chart",
     });
+    expectWorkOutcomeCardFillsChartBody(card, messages.chart.cardRegionLabel);
   });
 
   it("keeps the localized card title in the bento header for zh-CN", () => {

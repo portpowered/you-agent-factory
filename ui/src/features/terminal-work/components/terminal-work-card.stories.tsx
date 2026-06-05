@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
-import {
-  STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
-} from "../../../components/ui/standard-list-selection";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
 } from "./terminal-work-card";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
+
+const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
+  "border-af-danger-border bg-error-container text-on-error";
+const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
+  "border-outline-variant bg-surface-container-low text-on-surface";
 
 const failedAttempt: DashboardProviderSessionAttempt = {
   dispatch_id: "dispatch-repair-failed",

@@ -1,37 +1,31 @@
-import { useEffect, useState } from "react";
 import type { DashboardProviderSession } from "../../../../api/dashboard/types";
 
-import { ExpandablePanelTrigger } from "../../../../components/ui";
 import {
-  DASHBOARD_BODY_CODE_CLASS,
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_CODE_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+  ButtonLink,
+  DashboardCode,
+  DashboardText,
+} from "../../../../components/ui";
 import { getProviderSessionLogTarget } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
-import { cn } from "../../../../lib/cn";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import {
   getLoadableProviderSessionRef,
   providerSessionSelectionKey,
 } from "../../../provider-session-detail/lib/provider-session-ref";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
-import {
-  CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-  CURRENT_SELECTION_BADGE_CLASS,
-  CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS,
-  CurrentSelectionSectionHeader,
-  EXECUTION_PILL_CLASS,
-  PROVIDER_SESSION_CARD_CLASS,
-  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
-  REQUEST_SELECTION_STATUS_CLASS,
-  WORK_SELECTION_BUTTON_CLASS,
-} from "../../base/components/detail-card-shared";
+import { CurrentSelectionBadge } from "../../base/components/current-selection-pill";
+import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
+import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import type {
   CollapsibleProviderSessionAttemptsProps,
   ProviderSessionAttemptsProps,
   ProviderSessionLogAccessProps,
 } from "../../base/components/detail-card-types";
+import { CurrentSelectionSupportingText } from "../../base/public";
+import {
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
@@ -94,7 +88,6 @@ export function CollapsibleProviderSessionAttempts({
   workstationKind,
   workstationRequestsByDispatchID,
 }: CollapsibleProviderSessionAttemptsProps) {
-  const [expanded, setExpanded] = useState(false);
   const historyID = `workstation-run-history-${resetKey}`;
   const itemCountLabel = historyItemCountLabel
     ? historyItemCountLabel(attempts.length)
@@ -104,54 +97,33 @@ export function CollapsibleProviderSessionAttempts({
   const resolvedExpandActionLabel = expandActionLabel ?? messages.expandAction;
   const resolvedTitle = title ?? messages.runHistoryHeading;
 
-  useEffect(() => {
-    setExpanded(false);
-  }, []);
-
   return (
-    <section
-      aria-labelledby={`${historyID}-heading`}
-      className="mt-4 grid gap-2.5"
+    <CurrentSelectionExpandableSection
+      contentId={historyID}
+      headingId={`${historyID}-heading`}
+      resetKey={resetKey}
+      supportingText={itemCountLabel}
+      title={resolvedTitle}
+      toggleLabel={(expanded) =>
+        expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel
+      }
     >
-      <CurrentSelectionSectionHeader
-        action={
-          <ExpandablePanelTrigger
-            controlsID={historyID}
-            expanded={expanded}
-            onClick={() => setExpanded((current) => !current)}
-            type="button"
-            variant="section"
-          >
-            {expanded ? resolvedCollapseActionLabel : resolvedExpandActionLabel}
-          </ExpandablePanelTrigger>
-        }
-        headingId={`${historyID}-heading`}
-        supportingText={itemCountLabel}
-        title={resolvedTitle}
+      <ProviderSessionAttemptList
+        attempts={attempts}
+        currentDispatchID={currentDispatchID}
+        emptyMessage={emptyMessage}
+        messages={messages}
+        onSelectProviderSession={onSelectProviderSession}
+        onSelectWorkID={onSelectWorkID}
+        onSelectWorkstationRequest={onSelectWorkstationRequest}
+        renderHeading={renderHeading}
+        selectedProviderSessionKey={selectedProviderSessionKey}
+        selectedRequestDispatchID={selectedRequestDispatchID}
+        selectedWorkID={selectedWorkID}
+        workstationKind={workstationKind}
+        workstationRequestsByDispatchID={workstationRequestsByDispatchID}
       />
-      {expanded ? (
-        <div
-          className={CURRENT_SELECTION_EXPANDABLE_SECTION_BODY_CLASS}
-          id={historyID}
-        >
-          <ProviderSessionAttemptList
-            attempts={attempts}
-            currentDispatchID={currentDispatchID}
-            emptyMessage={emptyMessage}
-            messages={messages}
-            onSelectProviderSession={onSelectProviderSession}
-            onSelectWorkID={onSelectWorkID}
-            onSelectWorkstationRequest={onSelectWorkstationRequest}
-            renderHeading={renderHeading}
-            selectedProviderSessionKey={selectedProviderSessionKey}
-            selectedRequestDispatchID={selectedRequestDispatchID}
-            selectedWorkID={selectedWorkID}
-            workstationKind={workstationKind}
-            workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-          />
-        </div>
-      ) : null}
-    </section>
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -222,7 +194,7 @@ function ProviderSessionAttemptList({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   if (attempts.length === 0) {
-    return <p className={DETAIL_COPY_CLASS}>{emptyMessage}</p>;
+    return <DetailCopy>{emptyMessage}</DetailCopy>;
   }
 
   return (
@@ -247,74 +219,53 @@ function ProviderSessionAttemptList({
           selectedRequestDispatchID === attempt.dispatch_id;
 
         return (
-          <article
-            className={cn(
-              PROVIDER_SESSION_CARD_CLASS,
-              isCurrentDispatch && CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-            )}
+          <CurrentSelectionHistoryCard
+            highlighted={isCurrentDispatch}
             key={`${attempt.dispatch_id}-${attempt.provider_session?.id}`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <strong>{renderHeading(attempt)}</strong>
-              <span className={EXECUTION_PILL_CLASS}>
-                {attempt.dispatch_id}
-              </span>
-            </div>
-            <div className="mt-2 grid gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <p
-                  className={cn(
-                    "m-0 text-on-surface-variant",
-                    DASHBOARD_BODY_TEXT_CLASS,
-                  )}
-                >
-                  {outcome.label}
-                </p>
-                {isCurrentDispatch ? (
-                  <span className={CURRENT_SELECTION_BADGE_CLASS}>
+            <CurrentSelectionHistoryCardHeader
+              badges={
+                isCurrentDispatch ? (
+                  <CurrentSelectionBadge>
                     {messages.currentDispatchLabel}
-                  </span>
-                ) : null}
-              </div>
-              {outcome.rawOutcomeLabel ? (
-                <p className={DASHBOARD_SUPPORTING_CODE_CLASS}>
+                  </CurrentSelectionBadge>
+                ) : null
+              }
+              identifier={attempt.dispatch_id}
+              subtitle={outcome.label}
+              title={renderHeading(attempt)}
+            />
+            {outcome.rawOutcomeLabel ? (
+              <div className="mt-2 grid gap-1">
+                <DashboardCode as="p" className="m-0" size="supporting">
                   {outcome.rawOutcomeLabel}
-                </p>
-              ) : null}
-            </div>
+                </DashboardCode>
+              </div>
+            ) : null}
             {loadableProviderSession && onSelectProviderSession ? (
-              <button
+              <CurrentSelectionSelectableButton
                 aria-label={messages.selectProviderSessionLabel(
                   providerSessionLabel,
                   attempt.dispatch_id,
                 )}
-                aria-pressed={providerSessionSelected}
-                className={cn(
-                  "mt-2",
-                  PROVIDER_SESSION_SELECTION_BUTTON_CLASS,
-                  providerSessionSelected &&
-                    CURRENT_SELECTION_ACCENT_SURFACE_CLASS,
-                )}
+                className="mt-2"
                 onClick={() => onSelectProviderSession(loadableProviderSession)}
-                type="button"
+                selected={providerSessionSelected}
+                variant="card"
               >
-                <span className={DASHBOARD_SUPPORTING_TEXT_CLASS}>
+                <DashboardText as="span" variant="supporting">
                   {providerSessionSelected
                     ? messages.providerSessionSelectedAction
                     : messages.providerSessionSelectAction}
-                </span>
-                <code className={DASHBOARD_BODY_CODE_CLASS}>
-                  {providerSessionLabel}
-                </code>
-              </button>
+                </DashboardText>
+                <DashboardCode>{providerSessionLabel}</DashboardCode>
+              </CurrentSelectionSelectableButton>
             ) : (
               <div className="mt-2 grid gap-1">
-                <code className={DASHBOARD_BODY_CODE_CLASS}>
-                  {providerSessionLabel}
-                </code>
-                <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                <DashboardCode>{providerSessionLabel}</DashboardCode>
+                <CurrentSelectionSupportingText tone="status">
                   {messages.providerSessionSelectionUnavailable}
-                </p>
+                </CurrentSelectionSupportingText>
               </div>
             )}
             <ProviderSessionLogAccess
@@ -331,53 +282,49 @@ function ProviderSessionAttemptList({
                     const selected = selectedWorkID === workItem.work_id;
 
                     return (
-                      <button
+                      <CurrentSelectionSelectableButton
                         aria-label={messages.selectWorkItemLabel(
                           workItem.display_name || workItem.work_id,
                         )}
-                        aria-pressed={selected}
-                        className={WORK_SELECTION_BUTTON_CLASS}
                         key={`${attempt.dispatch_id}-${workItem.work_id}`}
                         onClick={() => onSelectWorkID(workItem.work_id)}
-                        type="button"
+                        selected={selected}
                       >
                         {selected
                           ? messages.workSelectedAction
                           : messages.openNamedWorkItemAction(
                               workItem.display_name || workItem.work_id,
                             )}
-                      </button>
+                      </CurrentSelectionSelectableButton>
                     );
                   })
                 ) : null
               ) : (
-                <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                <CurrentSelectionSupportingText tone="status">
                   {messages.workDetailsUnavailable(attempt.dispatch_id)}
-                </p>
+                </CurrentSelectionSupportingText>
               )}
               {onSelectWorkstationRequest ? (
                 request ? (
-                  <button
+                  <CurrentSelectionSelectableButton
                     aria-label={messages.selectWorkstationRequestLabel(
                       request.dispatch_id,
                     )}
-                    aria-pressed={requestSelected}
-                    className={WORK_SELECTION_BUTTON_CLASS}
                     onClick={() => onSelectWorkstationRequest(request)}
-                    type="button"
+                    selected={requestSelected}
                   >
                     {requestSelected
                       ? messages.requestSelectedAction
                       : messages.openRequestDetailsAction}
-                  </button>
+                  </CurrentSelectionSelectableButton>
                 ) : (
-                  <p className={REQUEST_SELECTION_STATUS_CLASS}>
+                  <CurrentSelectionSupportingText tone="status">
                     {messages.requestDetailsUnavailable(attempt.dispatch_id)}
-                  </p>
+                  </CurrentSelectionSupportingText>
                 )
               ) : null}
             </div>
-          </article>
+          </CurrentSelectionHistoryCard>
         );
       })}
     </div>
@@ -394,25 +341,19 @@ function ProviderSessionLogAccess({
   return (
     <div className="mt-2 grid min-w-0 gap-1">
       {logTarget ? (
-        <a
-          className={cn(
-            "w-fit rounded-lg font-bold text-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-af-accent",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
+        <ButtonLink
+          className="w-fit"
           href={logTarget.href}
+          size="sm"
           title={logTarget.display}
+          tone="outline"
         >
           {messages.providerSessionLogAction}
-        </a>
+        </ButtonLink>
       ) : (
-        <span
-          className={cn(
-            "font-bold text-on-surface-variant",
-            DASHBOARD_BODY_TEXT_CLASS,
-          )}
-        >
+        <DashboardText as="span" className="font-bold text-on-surface-variant">
           {messages.providerSessionLogUnavailable}
-        </span>
+        </DashboardText>
       )}
     </div>
   );

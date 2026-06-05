@@ -1,4 +1,8 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import {
+  WorkstationKind,
+  WorkstationType,
+} from "../../../api/generated/openapi";
 import { resolveEditableWorkstationBehavior } from "./workstation-behavior";
 import { resolveEditableWorkstationType } from "./workstation-type";
 
@@ -38,7 +42,7 @@ export function isClassifierWorkstation(
   workstation: WorkstationProgressOutcomeRouteContext,
 ): boolean {
   return (
-    workstation.type === "CLASSIFIER_WORKSTATION" ||
+    workstation.type === WorkstationType.WorkstationTypeClassifierWorkstation ||
     (workstation.classificationRoutes?.length ?? 0) > 0
   );
 }
@@ -50,23 +54,26 @@ export function workstationSupportsProgressOutcomeRoutes(
     return false;
   }
 
-  if (resolveEditableWorkstationType(workstation) === "LOGICAL_MOVE") {
+  if (
+    resolveEditableWorkstationType(workstation) ===
+    WorkstationType.WorkstationTypeLogicalMove
+  ) {
     return false;
   }
 
   const behavior = resolveEditableWorkstationBehavior(workstation);
-  if (behavior === "REPEATER") {
+  if (behavior === WorkstationKind.WorkstationKindRepeater) {
     return true;
   }
 
-  if (behavior !== "STANDARD") {
+  if (behavior !== WorkstationKind.WorkstationKindStandard) {
     return true;
   }
 
   const workstationType = resolveEditableWorkstationType(workstation);
   if (
-    workstationType !== "MODEL_WORKSTATION" &&
-    workstationType !== "MODEL_INVOKE"
+    workstationType !== WorkstationType.WorkstationTypeModelWorkstation &&
+    workstationType !== WorkstationType.WorkstationTypeModelInvoke
   ) {
     return true;
   }
@@ -78,7 +85,10 @@ export function workstationSupportsProgressOutcomeRoutes(
 export function workstationSupportsProgressOutcomeFailureRoute(
   workstation: WorkstationProgressOutcomeRouteContext,
 ): boolean {
-  return resolveEditableWorkstationType(workstation) !== "LOGICAL_MOVE";
+  return (
+    resolveEditableWorkstationType(workstation) !==
+    WorkstationType.WorkstationTypeLogicalMove
+  );
 }
 
 /** True when Continue/Reject connect anchors are omitted for missing stop markers on a standard model processor. */
@@ -90,14 +100,14 @@ export function workstationHasZAxisIncompleteForConnections(
   }
 
   const behavior = resolveEditableWorkstationBehavior(workstation);
-  if (behavior !== "STANDARD") {
+  if (behavior !== WorkstationKind.WorkstationKindStandard) {
     return false;
   }
 
   const workstationType = resolveEditableWorkstationType(workstation);
   if (
-    workstationType !== "MODEL_WORKSTATION" &&
-    workstationType !== "MODEL_INVOKE"
+    workstationType !== WorkstationType.WorkstationTypeModelWorkstation &&
+    workstationType !== WorkstationType.WorkstationTypeModelInvoke
   ) {
     return false;
   }

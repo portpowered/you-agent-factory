@@ -69,6 +69,10 @@ describe("feature surface color roles (US-009)", () => {
       ),
       "utf8",
     );
+    const sessionTab = readFileSync(
+      join(FEATURES_ROOT, "header/components/dashboard-session-tab.tsx"),
+      "utf8",
+    );
     const sessionTabs = readFileSync(
       join(FEATURES_ROOT, "header/components/dashboard-session-tabs.tsx"),
       "utf8",
@@ -77,6 +81,6 @@ describe("feature surface color roles (US-009)", () => {
     expect(nodeShell).toContain("border-outline bg-surface");
     expect(nodeShell).toContain("text-on-surface");
     expect(sessionTabs).toMatch(/\btext-on-surface(-variant)?\b/);
-    expect(sessionTabs).toMatch(/\bbg-surface-container-(low|high)\b/);
+    expect(sessionTab).toMatch(/\bbg-surface-container-(low|high)\b/);
   });
 });

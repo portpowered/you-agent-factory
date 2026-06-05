@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -658,6 +659,30 @@ func TestParseCodexSessionDetails_EmitsMixedTranscriptChronologically(t *testing
 	assertMixedCodexSessionTranscript(t, parsed)
 }
 
+func TestParseCodexSessionDetails_PreservesLongMessageContent(t *testing.T) {
+	longPart := strings.Repeat("skill description ", 90) + "final-visible-tail"
+	session := strings.Join([]string{
+		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"permissions block"},{"type":"input_text","text":` + strconv.Quote(longPart) + `}]}}`,
+	}, "\n")
+
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+
+	if len(parsed.Transcript) != 1 {
+		t.Fatalf("transcript = %#v, want one developer message transcript entry", parsed.Transcript)
+	}
+	got := stringValue(parsed.Transcript[0].Text)
+	if !strings.Contains(got, "permissions block") || !strings.Contains(got, "final-visible-tail") {
+		t.Fatalf("transcript text length = %d, want full joined message content with tail; text=%q", len(got), got)
+	}
+	if strings.HasSuffix(got, "...") {
+		t.Fatalf("transcript text = %q, want no backend truncation suffix", got)
+	}
+}
+
 func assertCodexSessionSummaryCoreCounts(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
@@ -930,22 +955,4 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEve
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
-}
-
-func TestGetProviderSessionDetails_FailsForAmbiguousTimestampPrefixedMatches(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-	sessionDir := filepath.Join(root, "2026", "05", "19")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("create provider session fixture directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(sessionDir, "rollout-2026-05-20T17-45-24-sess_123.jsonl"), []byte(`{"type":"session_meta","id":"sess_123"}`), 0o600); err != nil {
-		t.Fatalf("write second timestamp-prefixed provider session fixture: %v", err)
-	}
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "multiple provider session files match session identifier")
 }

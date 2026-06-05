@@ -6,22 +6,23 @@ import {
   type PromptEditorDiagnosticsPanelLabels,
 } from "../../../../components/prompt-editor";
 import { VerticalResizableWidth } from "../../../../components/prompt-editor/vertical-resizable-width";
-import { ExpandablePanelTrigger } from "../../../../components/ui";
+import {
+  DashboardLabel,
+  DashboardText,
+  ExpandablePanelTrigger,
+  FormError,
+  SurfacePanel,
+} from "../../../../components/ui";
 import {
   Collapsible,
   CollapsibleContent,
 } from "../../../../components/ui/collapsible";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import {
-  CURRENT_SELECTION_CODE_SUBTLE_CLASS,
-  CURRENT_SELECTION_FORM_FIELD_CLASS,
-  CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionFormField,
+  CurrentSelectionSubtleCode,
+  CurrentSelectionSupportingText,
+} from "../../base/public";
 import type {
   EditableWorkstationPromptHelpState,
   WorkstationDetailCardProps,
@@ -64,7 +65,6 @@ export function EditableConfigurationPromptInput({
             state.promptDiagnostics.length > 0
               ? "border-af-danger-border focus-visible:border-af-danger focus-visible:ring-af-focus-ring"
               : undefined,
-            DASHBOARD_BODY_TEXT_CLASS,
           )}
           diagnostics={state.promptDiagnostics}
           hasDiagnostics={state.promptDiagnostics.length > 0}
@@ -89,14 +89,11 @@ function editableConfigurationPromptDiagnosticsLabels(
   messages: ReturnType<typeof getWorkstationDetailMessages>,
 ): PromptEditorDiagnosticsPanelLabels {
   return {
-    diagnosticsHeading:
-      messages.editableConfigurationPromptDiagnosticsHeading,
-    diagnosticsSummary:
-      messages.editableConfigurationPromptDiagnosticsSummary,
+    diagnosticsHeading: messages.editableConfigurationPromptDiagnosticsHeading,
+    diagnosticsSummary: messages.editableConfigurationPromptDiagnosticsSummary,
     validationErrorPrefix:
       messages.editableConfigurationPromptValidationErrorPrefix,
-    validationLoading:
-      messages.editableConfigurationPromptValidationLoading,
+    validationLoading: messages.editableConfigurationPromptValidationLoading,
     variableDiagnosticLabel:
       messages.editableConfigurationPromptVariableDiagnosticLabel,
   };
@@ -114,13 +111,12 @@ function EditableConfigurationPromptFeedback({
     { status: "ready" }
   >;
 }) {
-  const diagnosticsLabels = editableConfigurationPromptDiagnosticsLabels(
-    messages,
-  );
+  const diagnosticsLabels =
+    editableConfigurationPromptDiagnosticsLabels(messages);
 
   if (state.promptHelpState.status !== "ready") {
     return (
-      <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
+      <CurrentSelectionFormField>
         <EditableConfigurationNonReadyPromptHelpMessage
           messages={messages}
           promptHelpState={state.promptHelpState}
@@ -131,7 +127,7 @@ function EditableConfigurationPromptFeedback({
           labels={diagnosticsLabels}
           validationState={state.promptValidationState}
         />
-      </div>
+      </CurrentSelectionFormField>
     );
   }
 
@@ -154,35 +150,32 @@ function EditableConfigurationNonReadyPromptHelpMessage({
   promptHelpState,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
-  promptHelpState: Exclude<EditableWorkstationPromptHelpState, { status: "ready" }>;
+  promptHelpState: Exclude<
+    EditableWorkstationPromptHelpState,
+    { status: "ready" }
+  >;
 }) {
   if (promptHelpState.status === "loading") {
     return (
-      <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
+      <CurrentSelectionSupportingText>
         {messages.editableConfigurationPromptHelpLoading}
-      </p>
+      </CurrentSelectionSupportingText>
     );
   }
 
   if (promptHelpState.status === "error") {
     return (
-      <p
-        className={cn(
-          "m-0 text-on-error-container",
-          DASHBOARD_SUPPORTING_TEXT_CLASS,
-        )}
-        role="alert"
-      >
+      <FormError>
         {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
         {promptHelpState.errorMessage}
-      </p>
+      </FormError>
     );
   }
 
   return (
-    <p className={CURRENT_SELECTION_NOTICE_SUBTLE_CLASS}>
+    <CurrentSelectionSupportingText>
       {promptHelpState.message}
-    </p>
+    </CurrentSelectionSupportingText>
   );
 }
 
@@ -206,10 +199,7 @@ function EditableConfigurationPromptDiagnosticsReservedRegion({
   visuallyHidden?: boolean;
 }) {
   return (
-    <div
-      className="min-h-24"
-      data-prompt-diagnostics-reserved="true"
-    >
+    <div className="min-h-24" data-prompt-diagnostics-reserved="true">
       <div className={cn(visuallyHidden && "invisible")}>
         <PromptEditorDiagnosticsPanel
           diagnostics={diagnostics}
@@ -259,19 +249,14 @@ function EditableConfigurationReadyPromptFeedback({
   }, [state.promptDiagnostics.length]);
 
   return (
-    <div className={CURRENT_SELECTION_FORM_FIELD_CLASS}>
+    <CurrentSelectionFormField>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p
-          className={cn(
-            "m-0 min-w-0 flex-1",
-            CURRENT_SELECTION_NOTICE_SUBTLE_CLASS,
-          )}
-        >
+        <CurrentSelectionSupportingText className="min-w-0 flex-1">
           {messages.editableConfigurationPromptAutocompleteSummary(
             promptHelpState.contract.availableVariables.length,
             promptHelpState.contract.inputCount,
           )}
-        </p>
+        </CurrentSelectionSupportingText>
         <ExpandablePanelTrigger
           aria-label={
             expanded
@@ -302,7 +287,7 @@ function EditableConfigurationReadyPromptFeedback({
           />
         </CollapsibleContent>
       </Collapsible>
-    </div>
+    </CurrentSelectionFormField>
   );
 }
 
@@ -364,38 +349,33 @@ function PromptContractList({
 }) {
   return (
     <div className="grid gap-1">
-      <h5 className={cn("m-0", DASHBOARD_SUPPORTING_LABEL_CLASS)}>{heading}</h5>
+      <DashboardLabel as="h5" className="m-0">
+        {heading}
+      </DashboardLabel>
       <ul className="m-0 grid list-none gap-1 p-0">
         {items.map((item) => (
-          <li
-            className="grid min-w-0 gap-1 rounded-lg border border-outline bg-surface-container-high p-2"
+          <SurfacePanel
+            asChild
+            className="grid min-w-0 gap-1"
             key={item.key}
+            padding="compact"
+            radius="lg"
           >
-            <code
-              className={cn(
-                CURRENT_SELECTION_CODE_SUBTLE_CLASS,
-                "[overflow-wrap:anywhere]",
-              )}
-            >
-              {item.label}
-            </code>
-            <p
-              className={cn(
-                "m-0 text-on-surface-subtle [overflow-wrap:anywhere]",
-                DASHBOARD_SUPPORTING_TEXT_CLASS,
-              )}
-            >
-              {item.detail}
-            </p>
-            <code
-              className={cn(
-                CURRENT_SELECTION_CODE_SUBTLE_CLASS,
-                "[overflow-wrap:anywhere]",
-              )}
-            >
-              {item.example}
-            </code>
-          </li>
+            <li>
+              <CurrentSelectionSubtleCode className="[overflow-wrap:anywhere]">
+                {item.label}
+              </CurrentSelectionSubtleCode>
+              <DashboardText
+                className="m-0 text-on-surface-subtle [overflow-wrap:anywhere]"
+                variant="supporting"
+              >
+                {item.detail}
+              </DashboardText>
+              <CurrentSelectionSubtleCode className="[overflow-wrap:anywhere]">
+                {item.example}
+              </CurrentSelectionSubtleCode>
+            </li>
+          </SurfacePanel>
         ))}
       </ul>
     </div>

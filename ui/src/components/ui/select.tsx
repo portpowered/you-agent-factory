@@ -1,8 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { forwardRef, type SelectHTMLAttributes } from "react";
 
-import { cn } from "../../lib/cn";
-import { INPUT_CLASS } from "./input";
+import { inputVariants } from "./input";
 
 export type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
 
@@ -11,7 +10,9 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="relative">
         <select
-          className={cn(INPUT_CLASS, "appearance-none pr-10", className)}
+          className={inputVariants({
+            className: `appearance-none pr-10 ${className ?? ""}`,
+          })}
           ref={ref}
           {...props}
         >

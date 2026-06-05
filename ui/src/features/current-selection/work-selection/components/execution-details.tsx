@@ -1,28 +1,27 @@
-import { DASHBOARD_SECTION_HEADING_CLASS } from "../../../../components/ui/dashboard-typography";
 import {
   formatDurationFromISO,
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../components/ui/formatters";
-import { DETAIL_COPY_CLASS } from "../../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
   useCurrentSelectionShellMessages,
 } from "../../base/components/current-selection-locale";
 import {
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  InferenceAttemptDetail,
-  RUNTIME_DETAIL_CODE_CLASS,
-  RUNTIME_DETAIL_VALUE_CLASS,
-  RUNTIME_DETAILS_SECTION_CLASS,
-  TRACE_ACTION_LINK_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionContentSection,
+  CurrentSelectionDescriptionList,
+  CurrentSelectionDetailItem,
+  CurrentSelectionDetailSection,
+  CurrentSelectionTraceButton,
+} from "../../base/public";
 import type {
   ExecutionDetailsSectionProps,
   InferenceAttemptsSectionProps,
 } from "../lib/detail-card-types";
 import { InferenceAttemptCard } from "./inference-attempt";
+import { InferenceAttemptDetail } from "./inference-attempt-detail";
 
 export function ExecutionDetailsSection({
   activeTraceID,
@@ -30,97 +29,78 @@ export function ExecutionDetailsSection({
   now,
   onSelectTraceID,
   showInferenceAttempts = true,
-  traceTargetId,
 }: ExecutionDetailsSectionProps) {
   const messages = useCurrentSelectionShellMessages();
   const locale = useCurrentSelectionLocale();
   const hasTraceIDs = details.traceIDs.length > 0;
 
   return (
-    <section
-      aria-label={messages.executionDetailsRegionLabel}
-      className={RUNTIME_DETAILS_SECTION_CLASS}
+    <CurrentSelectionDetailSection
+      ariaLabel={messages.executionDetailsRegionLabel}
+      title={messages.executionDetailsHeading}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.executionDetailsHeading}
-      </h4>
-      <dl>
-        <div>
-          <dt>{messages.dispatchIdLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {details.dispatchID ? (
-              <code className={RUNTIME_DETAIL_CODE_CLASS}>
-                {details.dispatchID}
-              </code>
-            ) : (
-              messages.dispatchIdUnavailable
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.workstationLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {details.workstationName || messages.workstationUnavailable}
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.elapsedLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {details.elapsedStartTimestamp
+      <CurrentSelectionDescriptionList>
+        <CurrentSelectionDetailItem
+          code={Boolean(details.dispatchID)}
+          label={messages.dispatchIdLabel}
+          value={details.dispatchID || messages.dispatchIdUnavailable}
+        />
+        <CurrentSelectionDetailItem
+          label={messages.workstationLabel}
+          value={details.workstationName || messages.workstationUnavailable}
+        />
+        <CurrentSelectionDetailItem
+          label={messages.elapsedLabel}
+          value={
+            details.elapsedStartTimestamp
               ? formatDurationFromISO(
                   details.elapsedStartTimestamp,
                   now,
                   locale,
                   messages.elapsedUnavailable,
                 )
-              : messages.elapsedUnavailable}
-          </dd>
-        </div>
+              : messages.elapsedUnavailable
+          }
+        />
         <div>
           <dt>{messages.traceIdsLabel}</dt>
           <dd className="grid gap-1.5">
             {hasTraceIDs ? (
               details.traceIDs.map((traceID) => (
-                <a
-                  className={TRACE_ACTION_LINK_CLASS}
-                  href={`#${traceTargetId}`}
+                <CurrentSelectionTraceButton
+                  activeTraceID={activeTraceID}
                   key={traceID}
-                  onClick={() => onSelectTraceID?.(traceID)}
-                >
-                  {traceID}
-                  {activeTraceID === traceID
-                    ? messages.selectedTraceSuffix
-                    : ""}
-                </a>
+                  onSelectTraceID={onSelectTraceID}
+                  selectedTraceSuffix={messages.selectedTraceSuffix}
+                  traceID={traceID}
+                />
               ))
             ) : (
-              <span className={RUNTIME_DETAIL_VALUE_CLASS}>
+              <span className="min-w-0 [overflow-wrap:anywhere]">
                 {messages.traceUnavailable}
               </span>
             )}
           </dd>
         </div>
-      </dl>
+      </CurrentSelectionDescriptionList>
       {hasTraceIDs ? (
         <div className="grid gap-2">
-          <a
-            className={TRACE_ACTION_LINK_CLASS}
-            href={`#${traceTargetId}`}
-            onClick={() =>
-              onSelectTraceID?.(activeTraceID ?? details.traceIDs[0] ?? "")
-            }
+          <CurrentSelectionTraceButton
+            activeTraceID={activeTraceID}
+            onSelectTraceID={onSelectTraceID}
+            traceID={activeTraceID ?? details.traceIDs[0] ?? ""}
           >
             {messages.openTraceAction}
-          </a>
+          </CurrentSelectionTraceButton>
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>{messages.traceUnavailable}</p>
+        <DetailCopy>{messages.traceUnavailable}</DetailCopy>
       )}
       <WorkstationRequestProjectionSection details={details} />
       {showInferenceAttempts ? (
         <InferenceAttemptsSection attempts={details.inferenceAttempts} />
       ) : null}
-    </section>
+    </CurrentSelectionDetailSection>
   );
 }
 
@@ -130,13 +110,10 @@ export function InferenceAttemptsSection({
   const messages = useCurrentSelectionShellMessages();
 
   return (
-    <section
+    <CurrentSelectionContentSection
       aria-label={messages.inferenceAttemptsRegionLabel}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+      title={messages.inferenceAttemptsHeading}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.inferenceAttemptsHeading}
-      </h4>
       {attempts.length > 0 ? (
         <div className="grid gap-3">
           {attempts.map((attempt) => (
@@ -147,11 +124,9 @@ export function InferenceAttemptsSection({
           ))}
         </div>
       ) : (
-        <p className={DETAIL_COPY_CLASS}>
-          {messages.inferenceAttemptsEmptyState}
-        </p>
+        <DetailCopy>{messages.inferenceAttemptsEmptyState}</DetailCopy>
       )}
-    </section>
+    </CurrentSelectionContentSection>
   );
 }
 
@@ -174,14 +149,11 @@ function WorkstationRequestProjectionSection({
   );
 
   return (
-    <section
+    <CurrentSelectionContentSection
       aria-label={messages.workstationRequestRegionLabel}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+      title={messages.workstationRequestHeading}
     >
-      <h4 className={DASHBOARD_SECTION_HEADING_CLASS}>
-        {messages.workstationRequestHeading}
-      </h4>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
+      <CurrentSelectionDescriptionList>
         <InferenceAttemptDetail
           label="dispatchedCount"
           value={counts.dispatchedCount ?? counts.dispatched_count}
@@ -226,7 +198,7 @@ function WorkstationRequestProjectionSection({
           label="failureMessage"
           value={response?.failureMessage ?? response?.failure_message}
         />
-      </dl>
-    </section>
+      </CurrentSelectionDescriptionList>
+    </CurrentSelectionContentSection>
   );
 }

@@ -23,6 +23,7 @@ import {
   ActivityGraphNodeShell,
   type PlaceNodeType,
 } from "./current-activity-node-shell";
+import { CurrentActivityWorkProgressMarker } from "./current-activity-work-progress-marker";
 import type { GraphSemanticIconKind } from "./graph-semantic-icon";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
 
@@ -214,35 +215,25 @@ function statePositionMarkers(count: number, locale?: string): ReactNode {
 
   if (count > STATE_NODE_DOT_LIMIT) {
     return (
-      <span
-        aria-label={activeItemCountLabel(count, locale)}
-        className="inline-flex min-h-5 min-w-7 items-center justify-center rounded-full border border-af-success-border bg-success-container px-2 font-mono text-[0.76rem] font-bold leading-none text-success"
+      <CurrentActivityWorkProgressMarker
+        ariaLabel={activeItemCountLabel(count, locale)}
+        className="inline-flex min-h-5 min-w-7 rounded-full px-2 text-[0.76rem]"
+        count={count}
         data-state-work-progress="numeric"
-        role="status"
-      >
-        {count}
-      </span>
+        kind="numeric"
+      />
     );
   }
 
   return (
-    <span
-      aria-label={activeItemCountLabel(count, locale)}
+    <CurrentActivityWorkProgressMarker
+      ariaLabel={activeItemCountLabel(count, locale)}
       className="inline-grid grid-cols-[repeat(5,0.5rem)] justify-center gap-1"
       data-state-work-progress="dots"
-      role="status"
-    >
-      {Array.from({ length: count }, (_, dotNumber) => dotNumber + 1).map(
-        (dotNumber) => (
-          <span
-            key={`${count}-${dotNumber}`}
-            aria-hidden="true"
-            className="h-2 w-2 rounded-full bg-success"
-            data-state-work-progress-dot={String(dotNumber - 1)}
-          />
-        ),
-      )}
-    </span>
+      dotCount={count}
+      dotDataAttribute="data-state-work-progress-dot"
+      kind="dots"
+    />
   );
 }
 

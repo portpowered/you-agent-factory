@@ -1,7 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
-import { DashboardMutationDialog } from "./mutation-dialog";
+import {
+  DashboardMessagePanel,
+  DashboardMutationDialog,
+} from "./mutation-dialog";
 
 describe("DashboardMutationDialog", () => {
   it("assigns unique accessible title and description ids per dialog instance", () => {
@@ -139,8 +142,8 @@ describe("DashboardMutationDialog", () => {
 
     expect(headerClose.className).toContain("rounded-full");
     expect(headerClose.className).toContain("hover:bg-af-overlay");
-    expect(headerClose.className).toContain("focus-visible:outline-2");
-    expect(headerClose.className).toContain("outline-af-focus-ring");
+    expect(headerClose.className).toContain("focus-visible:ring-2");
+    expect(headerClose.className).toContain("focus-visible:ring-af-focus-ring");
   });
 
   it("renders footer actions in an end-aligned flex wrapper", () => {
@@ -160,5 +163,31 @@ describe("DashboardMutationDialog", () => {
     expect(footerWrapper?.className).toContain("flex");
     expect(footerWrapper?.className).toContain("justify-end");
     expect(footerWrapper?.className).toContain("gap-3");
+  });
+});
+
+describe("DashboardMessagePanel", () => {
+  it("renders neutral and error message panels through shared alert tones", () => {
+    render(
+      <>
+        <DashboardMessagePanel role="status" title="Ready">
+          Import preview ready.
+        </DashboardMessagePanel>
+        <DashboardMessagePanel role="alert" title="Failed" tone="error">
+          Import failed.
+        </DashboardMessagePanel>
+      </>,
+    );
+
+    expect(screen.getByRole("status").className).toContain(
+      "bg-surface-container-low",
+    );
+    expect(screen.getByRole("alert").className).toContain("bg-error-container");
+    expect(screen.getByText("Import preview ready.").className).toContain(
+      "af-dashboard-supporting-text",
+    );
+    expect(screen.getByText("Import failed.").className).toContain(
+      "!text-current",
+    );
   });
 });

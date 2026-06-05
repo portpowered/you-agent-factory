@@ -1,11 +1,7 @@
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+import { DashboardLabel, DashboardText } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
-import { cn } from "../../../../lib/cn";
-import { CurrentSelectionSectionHeader } from "../../base/components/detail-card-shared";
+import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
+import { CurrentSelectionSupportingText } from "../../base/public";
 import type { ResourceDetailState } from "../lib/detail-card-types";
 import {
   resourceShowsModelFields,
@@ -16,10 +12,10 @@ import type { getResourceDetailMessages } from "../messages/resource-detail";
 function SummaryField({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid gap-0.5">
-      <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>{label}</span>
-      <span className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+      <DashboardLabel>{label}</DashboardLabel>
+      <DashboardText as="span" className="m-0 text-on-surface">
         {value}
-      </span>
+      </DashboardText>
     </div>
   );
 }
@@ -97,18 +93,13 @@ export function ResourceDetailContextSection({
           title={messages.referencingWorkersHeading}
         />
         {workerNames.length > 0 ? (
-          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+          <DashboardText className="m-0 text-on-surface">
             {formatList(workerNames)}
-          </p>
+          </DashboardText>
         ) : (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
+          <CurrentSelectionSupportingText>
             {messages.referencingWorkersEmpty}
-          </p>
+          </CurrentSelectionSupportingText>
         )}
       </section>
 
@@ -121,18 +112,13 @@ export function ResourceDetailContextSection({
           title={messages.referencingWorkstationsHeading}
         />
         {workstationNames.length > 0 ? (
-          <p className={cn("m-0 text-on-surface", DASHBOARD_BODY_TEXT_CLASS)}>
+          <DashboardText className="m-0 text-on-surface">
             {formatList(workstationNames)}
-          </p>
+          </DashboardText>
         ) : (
-          <p
-            className={cn(
-              "m-0 text-on-surface-variant",
-              DASHBOARD_SUPPORTING_TEXT_CLASS,
-            )}
-          >
+          <CurrentSelectionSupportingText>
             {messages.referencingWorkstationsEmpty}
-          </p>
+          </CurrentSelectionSupportingText>
         )}
       </section>
     </div>

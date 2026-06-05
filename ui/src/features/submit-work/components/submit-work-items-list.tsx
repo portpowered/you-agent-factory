@@ -1,10 +1,8 @@
-import { DashboardIconButtonShell, Textarea } from "../../../components/ui";
 import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SUPPORTING_LABEL_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import { cn } from "../../../lib/cn";
+  DashboardIconButtonShell,
+  DashboardText,
+  Textarea,
+} from "../../../components/ui";
 import { WorkContentItemShell } from "../../work-content/public";
 import { submitWorkItemRowTypeLabel } from "../lib/submit-work-item-type-label";
 import type { getSubmitWorkMessages } from "../messages/submit-work";
@@ -15,15 +13,6 @@ import type {
 } from "./submit-work-card";
 import { FileSubmissionItemEditor } from "./submit-work-file-input";
 
-const FIELD_LABEL_CLASS = DASHBOARD_SUPPORTING_LABEL_CLASS;
-const HELP_TEXT_CLASS = cn(
-  "max-w-xl leading-relaxed text-on-surface-variant",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
-const VALIDATION_TEXT_CLASS = cn(
-  "text-on-error-container",
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-);
 export function SubmissionItemsList({
   controlsDisabled,
   draft,
@@ -56,7 +45,6 @@ export function SubmissionItemsList({
             headerActions={
               <DashboardIconButtonShell
                 aria-label={messages.removeItemLabel(typeLabel, index + 1)}
-                className="text-on-surface-subtle hover:border-af-danger-border hover:bg-error-container hover:text-on-error-container"
                 disabled={controlsDisabled}
                 onClick={() => {
                   if (controlsDisabled) {
@@ -64,6 +52,7 @@ export function SubmissionItemsList({
                   }
                   onRemoveItem(item.id);
                 }}
+                tone="dangerGhost"
               >
                 <svg
                   aria-hidden="true"
@@ -136,7 +125,6 @@ function TextSubmissionItemEditor({
       <Textarea
         aria-label={itemLabel}
         aria-describedby={requestHint ? requestTextHintID : undefined}
-        className={DASHBOARD_BODY_TEXT_CLASS}
         disabled={disabled}
         id={requestTextID}
         onChange={(event) => onChange(item.id, event.target.value)}
@@ -144,9 +132,13 @@ function TextSubmissionItemEditor({
         value={item.text}
       />
       {requestHint ? (
-        <p className={HELP_TEXT_CLASS} id={requestTextHintID}>
+        <DashboardText
+          className="max-w-xl leading-relaxed text-on-surface-variant"
+          id={requestTextHintID}
+          variant="supporting"
+        >
           {requestHint}
-        </p>
+        </DashboardText>
       ) : null}
     </>
   );
@@ -170,14 +162,11 @@ function FileSubmissionItemEditorShell({
   return (
     <FileSubmissionItemEditor
       disabled={disabled}
-      fieldLabelClassName={FIELD_LABEL_CLASS}
-      helpTextClassName={HELP_TEXT_CLASS}
       inputID={`${widgetId}-${item.id}-file`}
       item={item}
       locale={locale}
       messages={messages}
       onStageFileItems={(files: File[]) => onStageFileItems(item.id, files)}
-      validationTextClassName={VALIDATION_TEXT_CLASS}
     />
   );
 }

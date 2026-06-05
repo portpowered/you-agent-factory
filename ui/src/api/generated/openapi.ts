@@ -475,7 +475,7 @@ export interface components {
      * @description Supported dashboard submit-work item types for multimodal submission.
      * @enum {string}
      */
-    SubmitWorkItemType: "text" | "image" | "video" | "audio" | "document";
+    SubmitWorkItemType: SubmitWorkItemType;
     SubmitWorkFileItemCommonFields: {
       url: components["schemas"]["SubmitWorkContentURLProperty"];
       /** @description Backend-owned staged file reference preserved for later dispatch. */
@@ -488,29 +488,29 @@ export interface components {
     /** @description Ordered inline text submission item. */
     SubmitWorkTextItem: {
       /** @enum {unknown} */
-      type: "text";
+      type: SubmitWorkTextItemType;
       /** @description Authored inline text preserved in item order. */
       text: string;
     };
     /** @description Ordered image submission item backed by one staged file reference. */
     SubmitWorkImageItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
       /** @enum {unknown} */
-      type: "image";
+      type: SubmitWorkImageItemType;
     };
     /** @description Ordered video submission item backed by one staged file reference. */
     SubmitWorkVideoItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
       /** @enum {unknown} */
-      type: "video";
+      type: SubmitWorkVideoItemType;
     };
     /** @description Ordered audio submission item backed by one staged file reference. */
     SubmitWorkAudioItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
       /** @enum {unknown} */
-      type: "audio";
+      type: SubmitWorkAudioItemType;
     };
     /** @description Ordered document submission item backed by one staged file reference. */
     SubmitWorkDocumentItem: components["schemas"]["SubmitWorkFileItemCommonFields"] & {
       /** @enum {unknown} */
-      type: "document";
+      type: SubmitWorkDocumentItemType;
     };
     StageSubmitWorkFileRequest: {
       /** @description Structured submit-work item kind this file will back. Text is not allowed. */
@@ -654,7 +654,7 @@ export interface components {
      * @description Requested direct-invocation response mode.
      * @enum {string}
      */
-    ModelInvocationResponseMode: "METADATA" | "AUDIO_STREAM";
+    ModelInvocationResponseMode: ModelInvocationResponseMode;
     ModelInvocationResponse: {
       /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
       modelName: string;
@@ -683,7 +683,7 @@ export interface components {
      * @description Outcome of a managed local-model asset pull request.
      * @enum {string}
      */
-    ModelPullOutcome: "PULLED" | "ALREADY_PRESENT";
+    ModelPullOutcome: ModelPullOutcome;
     ModelPullResponse: {
       /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
       modelName: string;
@@ -707,11 +707,7 @@ export interface components {
      * @description Source used to resolve one invocation slot binding.
      * @enum {string}
      */
-    ResolvedModelOperationBindingSource:
-      | "INPUT"
-      | "CONFIG"
-      | "DEFAULT"
-      | "OMITTED";
+    ResolvedModelOperationBindingSource: ResolvedModelOperationBindingSource;
     ModelCapability: {
       /** @description Customer-authored worker name that exposes this capability declaration. */
       worker: string;
@@ -741,21 +737,17 @@ export interface components {
      * @description Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
      * @enum {string}
      */
-    ModelStatus: "READY" | "UNAVAILABLE";
+    ModelStatus: ModelStatus;
     /**
      * @description Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
      * @enum {string}
      */
-    ModelLoadState: "UNLOADED" | "NOT_APPLICABLE";
+    ModelLoadState: ModelLoadState;
     /**
      * @description Stable machine-readable error family for broader client grouping.
      * @enum {string}
      */
-    ErrorFamily:
-      | "BAD_REQUEST"
-      | "CONFLICT"
-      | "NOT_FOUND"
-      | "INTERNAL_SERVER_ERROR";
+    ErrorFamily: ErrorFamily;
     ErrorResponse: {
       message: string;
       family: components["schemas"]["ErrorFamily"];
@@ -763,16 +755,7 @@ export interface components {
        * @description Stable machine-readable error code.
        * @enum {string}
        */
-      code:
-        | "BAD_REQUEST"
-        | "INVALID_FACTORY_NAME"
-        | "FACTORY_ALREADY_EXISTS"
-        | "INVALID_FACTORY"
-        | "FACTORY_NOT_IDLE"
-        | "STALE_FACTORY_VERSION"
-        | "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-        | "NOT_FOUND"
-        | "INTERNAL_ERROR";
+      code: ErrorResponseCode;
       /** @description Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields. */
       targets?: components["schemas"]["FactoryValidationTarget"][];
     };
@@ -805,7 +788,7 @@ export interface components {
     };
     FactorySessionTargetRef: {
       /** @enum {string} */
-      kind: "default" | "named";
+      kind: FactorySessionTargetRefKind;
       name?: string;
     };
     FactorySessionTarget: {
@@ -852,12 +835,12 @@ export interface components {
      * @description Canonical provider value for provider-session detail requests that can be loaded by the API.
      * @enum {string}
      */
-    LoadableProviderSessionProvider: "codex" | "cursor";
+    LoadableProviderSessionProvider: LoadableProviderSessionProvider;
     /**
      * @description Canonical provider-session identifier kind for provider-session detail requests that can be loaded by the API.
      * @enum {string}
      */
-    LoadableProviderSessionKind: "session_id";
+    LoadableProviderSessionKind: LoadableProviderSessionKind;
     ProviderSessionSourceMetadata: {
       /** @description Path to the loaded session file relative to the configured provider sessions root. */
       relativePath: string;
@@ -970,13 +953,7 @@ export interface components {
      * @description Canonical transcript entry type used by the dashboard transcript view.
      * @enum {string}
      */
-    ProviderSessionTranscriptEntryType:
-      | "user_message"
-      | "assistant_message"
-      | "reasoning"
-      | "tool_call"
-      | "tool_output"
-      | "system_event";
+    ProviderSessionTranscriptEntryType: ProviderSessionTranscriptEntryType;
     ProviderSessionTranscriptEntry: {
       /** @description Stable chronological order of the transcript entry in the session stream. */
       order: number;
@@ -1078,16 +1055,13 @@ export interface components {
       traceId?: string;
       content?: components["schemas"]["WorkContent"];
       /** @enum {string} */
-      payloadStatus?: "RESOLVED" | "UNAVAILABLE" | "LOADING" | "ERROR";
+      payloadStatus?: FactoryWorldWorkItemRefPayloadStatus;
       payloadUnavailableReason?: string;
       lineageLogicalWorkId?: string;
       /** @enum {string} */
-      lineageSourceKind?: "WORK_REQUEST" | "DISPATCH_RESPONSE_OUTPUT";
+      lineageSourceKind?: FactoryWorldWorkItemRefLineageSourceKind;
       /** @enum {string} */
-      lineageContinuity?:
-        | "INITIAL_SUBMISSION"
-        | "SAME_WORK_ID_CONTINUATION"
-        | "NEW_DOWNSTREAM_WORK";
+      lineageContinuity?: FactoryWorldWorkItemRefLineageContinuity;
       lineageParentWorkIds?: string[];
     };
     FactoryWorldTokenView: {
@@ -1134,18 +1108,11 @@ export interface components {
       capabilities?: components["schemas"]["FactoryWorldRunnerCapabilitiesView"];
     };
     /** @enum {string} */
-    FactoryWorldRunnerBaselineCapability:
-      | "prompt_submission"
-      | "tool_execution";
+    FactoryWorldRunnerBaselineCapability: FactoryWorldRunnerBaselineCapability;
     /** @enum {string} */
-    FactoryWorldRunnerOptionalCapability:
-      | "image_input"
-      | "session_resume"
-      | "structured_output"
-      | "working_directory"
-      | "worktree";
+    FactoryWorldRunnerOptionalCapability: FactoryWorldRunnerOptionalCapability;
     /** @enum {string} */
-    FactoryWorldRunnerOptionalCapabilityStatus: "supported" | "unsupported";
+    FactoryWorldRunnerOptionalCapabilityStatus: FactoryWorldRunnerOptionalCapabilityStatus;
     FactoryWorldRunnerOptionalCapabilitySupportView: {
       capability: components["schemas"]["FactoryWorldRunnerOptionalCapability"];
       status: components["schemas"]["FactoryWorldRunnerOptionalCapabilityStatus"];
@@ -1201,7 +1168,7 @@ export interface components {
        * @description Version of the factory event envelope schema.
        * @enum {string}
        */
-      schemaVersion: "agent-factory.event.v1";
+      schemaVersion: FactoryEventSchemaVersion;
       /** @description Stable event identifier. Record/replay artifacts must preserve this value. */
       id: string;
       type: components["schemas"]["FactoryEventType"];
@@ -1228,23 +1195,7 @@ export interface components {
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
      * @enum {string}
      */
-    FactoryEventType:
-      | "RUN_REQUEST"
-      | "INITIAL_STRUCTURE_REQUEST"
-      | "FACTORY_CHANGE"
-      | "WORK_REQUEST"
-      | "RELATIONSHIP_CHANGE_REQUEST"
-      | "DISPATCH_REQUEST"
-      | "MODEL_REQUEST"
-      | "MODEL_RESPONSE"
-      | "INFERENCE_REQUEST"
-      | "INFERENCE_RESPONSE"
-      | "SCRIPT_REQUEST"
-      | "SCRIPT_RESPONSE"
-      | "DISPATCH_RESPONSE"
-      | "WORK_STATE_CHANGE"
-      | "FACTORY_STATE_RESPONSE"
-      | "RUN_RESPONSE";
+    FactoryEventType: FactoryEventType;
     FactoryEventContext: {
       /** @description Append-only event-log sequence number. */
       sequence: number;
@@ -1274,7 +1225,7 @@ export interface components {
      * @description Origin of a WORK_STATE_CHANGE event.
      * @enum {string}
      */
-    WorkStateChangeSource: "api" | "cli" | "cascading-failure";
+    WorkStateChangeSource: WorkStateChangeSource;
     /** @description Ordered reference to one consumed work item on a dispatch boundary. Dispatch-request payloads keep only the consumed work identity here; work type, trace, display, and other work facts must be derived from prior WORK_REQUEST events plus FactoryEvent.context. */
     DispatchConsumedWorkRef: {
       /** @description Canonical work identity for one consumed dispatch input. */
@@ -1535,48 +1486,37 @@ export interface components {
      * @description Result category returned by a provider inference attempt.
      * @enum {string}
      */
-    InferenceOutcome: "SUCCEEDED" | "FAILED";
+    InferenceOutcome: InferenceOutcome;
     /**
      * @description Result category returned by one public script execution boundary.
      * @enum {string}
      */
-    ScriptExecutionOutcome:
-      | "SUCCEEDED"
-      | "FAILED_EXIT_CODE"
-      | "TIMED_OUT"
-      | "PROCESS_ERROR";
+    ScriptExecutionOutcome: ScriptExecutionOutcome;
     /**
      * @description Stable failure classification for script responses without a normal process exit code.
      * @enum {string}
      */
-    ScriptFailureType: "TIMEOUT" | "PROCESS_ERROR";
+    ScriptFailureType: ScriptFailureType;
     /**
      * @description Lifecycle state of the running factory.
      * @enum {string}
      */
-    FactoryState: "IDLE" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED";
+    FactoryState: FactoryState;
     /**
      * @description Result category returned by a workstation execution.
      * @enum {string}
      */
-    WorkOutcome: "ACCEPTED" | "CONTINUE" | "REJECTED" | "FAILED";
+    WorkOutcome: WorkOutcome;
     /**
      * @description Stable machine-readable failure family used to decide retry and routing behavior for failed work.
      * @enum {string}
      */
-    WorkFailureFamily: "terminal" | "retryable" | "throttle";
+    WorkFailureFamily: WorkFailureFamily;
     /**
      * @description Stable machine-readable failure type used to classify failed work across providers and runtimes.
      * @enum {string}
      */
-    WorkFailureType:
-      | "auth_failure"
-      | "permanent_bad_request"
-      | "throttled"
-      | "internal_server_error"
-      | "timeout"
-      | "unknown"
-      | "misconfigured";
+    WorkFailureType: WorkFailureType;
     ProviderFailureMetadata: {
       family?: components["schemas"]["WorkFailureFamily"];
       type?: components["schemas"]["WorkFailureType"];
@@ -1650,7 +1590,7 @@ export interface components {
      * @default REPLACE_CURRENT
      * @enum {string}
      */
-    FactorySaveMode: "REPLACE_CURRENT" | "UPSERT_NAMED_AND_ACTIVATE";
+    FactorySaveMode: FactorySaveMode;
     /**
      * @description Session-scoped factory submission payload for PUT /factory-sessions/{session_id}/factory.
      * @example {
@@ -1938,7 +1878,7 @@ export interface components {
        * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
        * @enum {string}
        */
-      type: "SCRIPT" | "DOC" | "INPUT" | "ROOT_HELPER";
+      type: BundledFileType;
       /** @description Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected. */
       targetPath: string;
       content: components["schemas"]["BundledFileContent"];
@@ -1949,7 +1889,7 @@ export interface components {
        * @description Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
        * @enum {string}
        */
-      encoding: "utf-8";
+      encoding: BundledFileContentEncoding;
       /** @description Inline bundled file content carried in the manifest. Files under factory/scripts/, factory/docs/, and supported root helper paths are only bundled when they appear in bundledFiles. */
       inline: string;
     };
@@ -1963,7 +1903,7 @@ export interface components {
      * @description Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
      * @enum {string}
      */
-    InputKind: "DEFAULT";
+    InputKind: InputKind;
     /** @description A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy. */
     WorkType: {
       /** @description Customer-authored work type name referenced by workstation inputs, outputs, and submitted work. */
@@ -1984,7 +1924,7 @@ export interface components {
      * @description Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
      * @enum {string}
      */
-    WorkStateType: "INITIAL" | "PROCESSING" | "TERMINAL" | "FAILED";
+    WorkStateType: WorkStateType;
     /** @description Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas. */
     Resource: {
       /** @description Resource name referenced from worker requirements and workstation resourceUsage entries. */
@@ -2006,7 +1946,7 @@ export interface components {
      * @description Uppercase resource families supported by the public factory-config contract.
      * @enum {string}
      */
-    ResourceType: "MODEL" | "PROVIDER_QUOTA" | "INVOCATION_SLOT";
+    ResourceType: ResourceType;
     /** @description A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script. */
     Worker: {
       /** @description Worker name referenced by Workstation.worker. */
@@ -2050,28 +1990,22 @@ export interface components {
      * @description Worker implementation families supported by the public factory-config contract.
      * @enum {string}
      */
-    WorkerType: "MODEL_WORKER" | "SCRIPT_WORKER" | "HOSTED_WORKER";
+    WorkerType: WorkerType;
     /**
      * @description Canonical model-provider identifiers supported by model workers in factory config.
      * @enum {string}
      */
-    WorkerModelProvider:
-      | "CLAUDE"
-      | "CODEX"
-      | "CURSOR"
-      | "GEMINI"
-      | "KIRO"
-      | "OPENCODE";
+    WorkerModelProvider: WorkerModelProvider;
     /**
      * @description Provider locality for a model worker capability declaration.
      * @enum {string}
      */
-    WorkerModelLocality: "LOCAL" | "CLOUD";
+    WorkerModelLocality: WorkerModelLocality;
     /**
      * @description Concrete worker-provider wrappers supported by the public factory-config contract.
      * @enum {string}
      */
-    WorkerProvider: "SCRIPT_WRAP";
+    WorkerProvider: WorkerProvider;
     /** @description One provider-agnostic operation exposed by a model worker, such as `TTS`. */
     ModelOperation: {
       name: components["schemas"]["ModelOperationName"];
@@ -2093,21 +2027,17 @@ export interface components {
      * @description Uppercase content-part categories supported by worker model-operation capability slots.
      * @enum {string}
      */
-    ModelOperationContentType: "TEXT" | "IMAGE" | "AUDIO" | "JSON" | "BINARY";
+    ModelOperationContentType: ModelOperationContentType;
     /**
      * @description Stable built-in runner identifiers supported by factory and workstation runner selection.
      * @enum {string}
      */
-    RunnerID: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode";
+    RunnerID: RunnerID;
     /**
      * @description Configuration layer that supplied the resolved built-in runner selection for a dispatch.
      * @enum {string}
      */
-    RunnerSelectionSource:
-      | "workstation"
-      | "factory"
-      | "legacy_provider"
-      | "default";
+    RunnerSelectionSource: RunnerSelectionSource;
     /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
     Workstation: {
       /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */
@@ -2183,16 +2113,12 @@ export interface components {
      * @default STANDARD
      * @enum {string}
      */
-    WorkstationKind: "STANDARD" | "REPEATER" | "CRON" | "POLLER";
+    WorkstationKind: WorkstationKind;
     /**
      * @description Runtime workstation implementation types supported by the public factory-config contract.
      * @enum {string}
      */
-    WorkstationType:
-      | "MODEL_WORKSTATION"
-      | "MODEL_INVOKE"
-      | "LOGICAL_MOVE"
-      | "CLASSIFIER_WORKSTATION";
+    WorkstationType: WorkstationType;
     /** @description Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported. */
     WorkstationCron: {
       /** @description Standard five-field cron expression used to produce internal time work while the factory service is running. */
@@ -2211,14 +2137,7 @@ export interface components {
      * @description Guard condition attached to a workstation or one of its specific inputs.
      * @enum {string}
      */
-    GuardType:
-      | "VISIT_COUNT"
-      | "MATCHES_FIELDS"
-      | "ALL_CHILDREN_COMPLETE"
-      | "ANY_CHILD_FAILED"
-      | "SAME_NAME"
-      | "SAME_TRACE_ID"
-      | "INFERENCE_THROTTLE_GUARD";
+    GuardType: GuardType;
     /** @description Shared guard attached either to a workstation as a whole or to one specific workstation input. */
     Guard: {
       /** @description Guard condition to evaluate for this workstation-level or input-level attachment. */
@@ -2268,7 +2187,7 @@ export interface components {
        * @description High-level grouping for the variable reference.
        * @enum {string}
        */
-      category: "ROOT" | "INPUT" | "HISTORY" | "CONTEXT" | "MAP_ACCESS";
+      category: PromptTemplateVariableReferenceCategory;
       /** @description User-readable description of what the variable resolves to. */
       description: string;
       /** @description Go template snippet that shows how to reference the variable. */
@@ -2301,7 +2220,7 @@ export interface components {
        * @description Diagnostic classification for prompt-template validation.
        * @enum {string}
        */
-      kind: "SYNTAX_ERROR" | "INVALID_VARIABLE" | "UNAVAILABLE_VARIABLE";
+      kind: PromptTemplateDiagnosticKind;
       /** @description User-readable explanation of the validation failure. */
       message: string;
       /** @description Canonical variable path or access pattern involved in the diagnostic when available. */
@@ -2315,32 +2234,17 @@ export interface components {
      * @description Validation severity for one factory validation target.
      * @enum {string}
      */
-    FactoryValidationSeverity: "error" | "warning" | "hint";
+    FactoryValidationSeverity: FactoryValidationSeverity;
     /**
      * @description Factory-domain component type referenced by one validation target subject.
      * @enum {string}
      */
-    FactoryValidationSubjectType:
-      | "FACTORY"
-      | "WORKSTATION"
-      | "WORK_TYPE"
-      | "WORK_STATE"
-      | "WORKER"
-      | "RESOURCE"
-      | "ROUTE";
+    FactoryValidationSubjectType: FactoryValidationSubjectType;
     /**
      * @description Factory-domain location within the subject component referenced by one validation target.
      * @enum {string}
      */
-    FactoryValidationSubjectLocation:
-      | "ON_REJECTION"
-      | "ON_FAILURE"
-      | "OUTPUTS"
-      | "INPUTS"
-      | "STATES"
-      | "TERMINAL"
-      | "REFERENCE"
-      | "DEFINITION";
+    FactoryValidationSubjectLocation: FactoryValidationSubjectLocation;
     FactoryValidationSubject: {
       type: components["schemas"]["FactoryValidationSubjectType"];
       /** @description Stable component identifier or name for the affected factory component. */
@@ -2400,7 +2304,7 @@ export interface components {
      * @description Kind of work request accepted by the factory.
      * @enum {string}
      */
-    WorkRequestType: "FACTORY_REQUEST_BATCH";
+    WorkRequestType: WorkRequestType;
     /** @description A piece of work. */
     Work: {
       /** @description A human readable name for the work, not unique */
@@ -2443,14 +2347,7 @@ export interface components {
      * @description Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
      * @enum {string}
      */
-    WorkContentPartType:
-      | "text"
-      | "image"
-      | "TEXT"
-      | "IMAGE"
-      | "AUDIO"
-      | "JSON"
-      | "BINARY";
+    WorkContentPartType: WorkContentPartType;
     /** @description Optional metadata attached to one work content part. */
     WorkContentMetadata: {
       [key: string]: unknown;
@@ -2471,35 +2368,35 @@ export interface components {
     /** @description Ordered inline text content for one work item. */
     WorkTextContentPart: components["schemas"]["WorkContentCommonFields"] & {
       /** @enum {unknown} */
-      type: "text" | "TEXT";
+      type: WorkTextContentPartType;
       /** @description Inline text content preserved in canonical part order. */
       text: string;
     };
     /** @description Ordered image content for one work item. */
     WorkImageContentPart: components["schemas"]["WorkContentCommonFields"] & {
       /** @enum {unknown} */
-      type: "image" | "IMAGE";
+      type: WorkImageContentPartType;
       url: components["schemas"]["WorkContentURLProperty"];
       file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
     };
     /** @description Ordered audio content for one work item. */
     WorkAudioContentPart: components["schemas"]["WorkContentCommonFields"] & {
       /** @enum {unknown} */
-      type: "AUDIO";
+      type: WorkAudioContentPartType;
       url: components["schemas"]["WorkContentURLProperty"];
       file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
     };
     /** @description Ordered JSON content for one work item. */
     WorkJsonContentPart: components["schemas"]["WorkContentCommonFields"] & {
       /** @enum {unknown} */
-      type: "JSON";
+      type: WorkJsonContentPartType;
       /** @description Arbitrary JSON value preserved in canonical part order. */
       json: unknown;
     };
     /** @description Ordered binary content for one work item. */
     WorkBinaryContentPart: components["schemas"]["WorkContentCommonFields"] & {
       /** @enum {unknown} */
-      type: "BINARY";
+      type: WorkBinaryContentPartType;
       url: components["schemas"]["WorkContentURLProperty"];
       file?: components["schemas"]["WorkContentDeprecatedFileProperty"];
     };
@@ -2514,7 +2411,7 @@ export interface components {
      * @description Relationship category between two pieces of work.
      * @enum {string}
      */
-    RelationType: "DEPENDS_ON" | "PARENT_CHILD" | "SPAWNED_BY";
+    RelationType: RelationType;
     /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:. */
     WorkContentURLProperty: string;
     /**
@@ -2552,12 +2449,12 @@ export interface components {
      * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
      * @enum {string}
      */
-    WorkTypeHandlingBehavior: "DEFAULT";
+    WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
     /**
      * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.
      * @enum {string}
      */
-    HostedWorkerProvider: "LINEAR";
+    HostedWorkerProvider: HostedWorkerProvider;
     /** @description Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields. */
     HostedWorkerAuth: {
       /** @description Referenced secret name that resolves the hosted provider API key at runtime. */
@@ -2684,7 +2581,7 @@ export interface components {
     /** @description Optional current work state type filter. */
     StateType: components["schemas"]["WorkStateType"];
     /** @description Optional list-work sort field. Use state.type to order by current work state type. */
-    SortBy: "state.type";
+    SortBy: ComponentsParametersSortBy;
     /** @description Optional work name filter. Matches when the work name contains this value, case-insensitively. */
     WorkListName: string;
     /** @description Optional work type name filter. Matches when workTypeName equals this value exactly. */
@@ -3330,3 +3227,590 @@ export interface operations {
     };
   };
 }
+export const SubmitWorkItemType = {
+  SubmitWorkItemTypeText: "text",
+  SubmitWorkItemTypeImage: "image",
+  SubmitWorkItemTypeVideo: "video",
+  SubmitWorkItemTypeAudio: "audio",
+  SubmitWorkItemTypeDocument: "document",
+} as const;
+export type SubmitWorkItemType =
+  (typeof SubmitWorkItemType)[keyof typeof SubmitWorkItemType];
+export const SubmitWorkTextItemType = {
+  text: "text",
+} as const;
+export type SubmitWorkTextItemType =
+  (typeof SubmitWorkTextItemType)[keyof typeof SubmitWorkTextItemType];
+export const SubmitWorkImageItemType = {
+  image: "image",
+} as const;
+export type SubmitWorkImageItemType =
+  (typeof SubmitWorkImageItemType)[keyof typeof SubmitWorkImageItemType];
+export const SubmitWorkVideoItemType = {
+  video: "video",
+} as const;
+export type SubmitWorkVideoItemType =
+  (typeof SubmitWorkVideoItemType)[keyof typeof SubmitWorkVideoItemType];
+export const SubmitWorkAudioItemType = {
+  audio: "audio",
+} as const;
+export type SubmitWorkAudioItemType =
+  (typeof SubmitWorkAudioItemType)[keyof typeof SubmitWorkAudioItemType];
+export const SubmitWorkDocumentItemType = {
+  document: "document",
+} as const;
+export type SubmitWorkDocumentItemType =
+  (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const ModelInvocationResponseMode = {
+  METADATA: "METADATA",
+  AUDIO_STREAM: "AUDIO_STREAM",
+} as const;
+export type ModelInvocationResponseMode =
+  (typeof ModelInvocationResponseMode)[keyof typeof ModelInvocationResponseMode];
+export const ModelPullOutcome = {
+  PULLED: "PULLED",
+  ALREADY_PRESENT: "ALREADY_PRESENT",
+} as const;
+export type ModelPullOutcome =
+  (typeof ModelPullOutcome)[keyof typeof ModelPullOutcome];
+export const ResolvedModelOperationBindingSource = {
+  INPUT: "INPUT",
+  CONFIG: "CONFIG",
+  DEFAULT: "DEFAULT",
+  OMITTED: "OMITTED",
+} as const;
+export type ResolvedModelOperationBindingSource =
+  (typeof ResolvedModelOperationBindingSource)[keyof typeof ResolvedModelOperationBindingSource];
+export const ModelStatus = {
+  READY: "READY",
+  UNAVAILABLE: "UNAVAILABLE",
+} as const;
+export type ModelStatus = (typeof ModelStatus)[keyof typeof ModelStatus];
+export const ModelLoadState = {
+  UNLOADED: "UNLOADED",
+  NOT_APPLICABLE: "NOT_APPLICABLE",
+} as const;
+export type ModelLoadState =
+  (typeof ModelLoadState)[keyof typeof ModelLoadState];
+export const ErrorFamily = {
+  // Request payload or parameter validation failed.
+  ErrorFamilyBadRequest: "BAD_REQUEST",
+  // The request conflicts with current resource state.
+  ErrorFamilyConflict: "CONFLICT",
+  // The requested resource does not exist.
+  ErrorFamilyNotFound: "NOT_FOUND",
+  // The server failed while handling an otherwise valid request.
+  ErrorFamilyInternalServerError: "INTERNAL_SERVER_ERROR",
+} as const;
+export type ErrorFamily = (typeof ErrorFamily)[keyof typeof ErrorFamily];
+export const ErrorResponseCode = {
+  // Request payload or parameter validation failed.
+  BAD_REQUEST: "BAD_REQUEST",
+  // Named factory name validation failed.
+  INVALID_FACTORY_NAME: "INVALID_FACTORY_NAME",
+  // Submitted named factory already exists.
+  FACTORY_ALREADY_EXISTS: "FACTORY_ALREADY_EXISTS",
+  // Submitted named factory payload failed validation.
+  INVALID_FACTORY: "INVALID_FACTORY",
+  // Current factory runtime is not idle and cannot activate a new named factory.
+  FACTORY_NOT_IDLE: "FACTORY_NOT_IDLE",
+  // Submitted editable factory definition was based on an older version than the current definition.
+  STALE_FACTORY_VERSION: "STALE_FACTORY_VERSION",
+  // Operator move requestId was already applied for this session.
+  MOVE_WORK_REQUEST_ALREADY_APPLIED: "MOVE_WORK_REQUEST_ALREADY_APPLIED",
+  // The requested resource does not exist.
+  NOT_FOUND: "NOT_FOUND",
+  // The server failed while handling an otherwise valid request.
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+} as const;
+export type ErrorResponseCode =
+  (typeof ErrorResponseCode)[keyof typeof ErrorResponseCode];
+export const FactorySessionTargetRefKind = {
+  default: "default",
+  named: "named",
+} as const;
+export type FactorySessionTargetRefKind =
+  (typeof FactorySessionTargetRefKind)[keyof typeof FactorySessionTargetRefKind];
+export const LoadableProviderSessionProvider = {
+  Codex: "codex",
+  Cursor: "cursor",
+} as const;
+export type LoadableProviderSessionProvider =
+  (typeof LoadableProviderSessionProvider)[keyof typeof LoadableProviderSessionProvider];
+export const LoadableProviderSessionKind = {
+  SessionID: "session_id",
+} as const;
+export type LoadableProviderSessionKind =
+  (typeof LoadableProviderSessionKind)[keyof typeof LoadableProviderSessionKind];
+export const ProviderSessionTranscriptEntryType = {
+  user_message: "user_message",
+  assistant_message: "assistant_message",
+  reasoning: "reasoning",
+  tool_call: "tool_call",
+  tool_output: "tool_output",
+  system_event: "system_event",
+} as const;
+export type ProviderSessionTranscriptEntryType =
+  (typeof ProviderSessionTranscriptEntryType)[keyof typeof ProviderSessionTranscriptEntryType];
+export const FactoryWorldWorkItemRefPayloadStatus = {
+  RESOLVED: "RESOLVED",
+  UNAVAILABLE: "UNAVAILABLE",
+  LOADING: "LOADING",
+  ERROR: "ERROR",
+} as const;
+export type FactoryWorldWorkItemRefPayloadStatus =
+  (typeof FactoryWorldWorkItemRefPayloadStatus)[keyof typeof FactoryWorldWorkItemRefPayloadStatus];
+export const FactoryWorldWorkItemRefLineageSourceKind = {
+  WORK_REQUEST: "WORK_REQUEST",
+  DISPATCH_RESPONSE_OUTPUT: "DISPATCH_RESPONSE_OUTPUT",
+} as const;
+export type FactoryWorldWorkItemRefLineageSourceKind =
+  (typeof FactoryWorldWorkItemRefLineageSourceKind)[keyof typeof FactoryWorldWorkItemRefLineageSourceKind];
+export const FactoryWorldWorkItemRefLineageContinuity = {
+  INITIAL_SUBMISSION: "INITIAL_SUBMISSION",
+  SAME_WORK_ID_CONTINUATION: "SAME_WORK_ID_CONTINUATION",
+  NEW_DOWNSTREAM_WORK: "NEW_DOWNSTREAM_WORK",
+} as const;
+export type FactoryWorldWorkItemRefLineageContinuity =
+  (typeof FactoryWorldWorkItemRefLineageContinuity)[keyof typeof FactoryWorldWorkItemRefLineageContinuity];
+export const FactoryWorldRunnerBaselineCapability = {
+  prompt_submission: "prompt_submission",
+  tool_execution: "tool_execution",
+} as const;
+export type FactoryWorldRunnerBaselineCapability =
+  (typeof FactoryWorldRunnerBaselineCapability)[keyof typeof FactoryWorldRunnerBaselineCapability];
+export const FactoryWorldRunnerOptionalCapability = {
+  image_input: "image_input",
+  session_resume: "session_resume",
+  structured_output: "structured_output",
+  working_directory: "working_directory",
+  worktree: "worktree",
+} as const;
+export type FactoryWorldRunnerOptionalCapability =
+  (typeof FactoryWorldRunnerOptionalCapability)[keyof typeof FactoryWorldRunnerOptionalCapability];
+export const FactoryWorldRunnerOptionalCapabilityStatus = {
+  supported: "supported",
+  unsupported: "unsupported",
+} as const;
+export type FactoryWorldRunnerOptionalCapabilityStatus =
+  (typeof FactoryWorldRunnerOptionalCapabilityStatus)[keyof typeof FactoryWorldRunnerOptionalCapabilityStatus];
+export const FactoryEventSchemaVersion = {
+  // Initial unified Agent Factory event schema.
+  agent_factory_event_v1: "agent-factory.event.v1",
+} as const;
+export type FactoryEventSchemaVersion =
+  (typeof FactoryEventSchemaVersion)[keyof typeof FactoryEventSchemaVersion];
+export const FactoryEventType = {
+  // A factory run request was recorded and its effective runtime configuration is known.
+  FactoryEventTypeRunRequest: "RUN_REQUEST",
+  // The static factory topology and configured resources are available before work moves.
+  FactoryEventTypeInitialStructureRequest: "INITIAL_STRUCTURE_REQUEST",
+  // The running factory definition changed and a canonical replacement topology is now active.
+  FactoryEventTypeFactoryChange: "FACTORY_CHANGE",
+  // Work entered the factory as a normalized request.
+  FactoryEventTypeWorkRequest: "WORK_REQUEST",
+  // A relationship-change request between work items was recorded.
+  FactoryEventTypeRelationshipChangeRequest: "RELATIONSHIP_CHANGE_REQUEST",
+  // A workstation request began processing a set of input work.
+  FactoryEventTypeDispatchRequest: "DISPATCH_REQUEST",
+  // A model-backed worker invocation request is about to enter resource, load, and execution boundaries.
+  FactoryEventTypeModelRequest: "MODEL_REQUEST",
+  // A model-backed worker invocation returned with resource, load, output, and failure evidence.
+  FactoryEventTypeModelResponse: "MODEL_RESPONSE",
+  // A model-worker provider attempt is about to send a prompt to the provider.
+  FactoryEventTypeInferenceRequest: "INFERENCE_REQUEST",
+  // A model-worker provider attempt returned from the provider boundary.
+  FactoryEventTypeInferenceResponse: "INFERENCE_RESPONSE",
+  // A script-backed worker is about to invoke one concrete command attempt.
+  FactoryEventTypeScriptRequest: "SCRIPT_REQUEST",
+  // A script-backed worker command attempt returned or failed before a normal exit.
+  FactoryEventTypeScriptResponse: "SCRIPT_RESPONSE",
+  // A workstation response finished processing and produced an outcome.
+  FactoryEventTypeDispatchResponse: "DISPATCH_RESPONSE",
+  // A work item moved between authored marking states.
+  FactoryEventTypeWorkStateChange: "WORK_STATE_CHANGE",
+  // The factory lifecycle state response was recorded.
+  FactoryEventTypeFactoryStateResponse: "FACTORY_STATE_RESPONSE",
+  // A factory run response ended and final metadata is available.
+  FactoryEventTypeRunResponse: "RUN_RESPONSE",
+} as const;
+export type FactoryEventType =
+  (typeof FactoryEventType)[keyof typeof FactoryEventType];
+export const WorkStateChangeSource = {
+  // Operator move through the HTTP API.
+  WorkStateChangeSourceAPI: "api",
+  // Operator move through the CLI.
+  WorkStateChangeSourceCLI: "cli",
+  // Automatic cascade propagation after a dependency failure.
+  WorkStateChangeSourceCascadingFailure: "cascading-failure",
+} as const;
+export type WorkStateChangeSource =
+  (typeof WorkStateChangeSource)[keyof typeof WorkStateChangeSource];
+export const InferenceOutcome = {
+  // The provider attempt returned a successful response.
+  InferenceOutcomeSucceeded: "SUCCEEDED",
+  // The provider attempt failed before returning a successful response.
+  InferenceOutcomeFailed: "FAILED",
+} as const;
+export type InferenceOutcome =
+  (typeof InferenceOutcome)[keyof typeof InferenceOutcome];
+export const ScriptExecutionOutcome = {
+  // The command started and exited with code 0.
+  ScriptExecutionOutcomeSucceeded: "SUCCEEDED",
+  // The command started and exited with a non-zero status code.
+  ScriptExecutionOutcomeFailedExitCode: "FAILED_EXIT_CODE",
+  // The command did not finish before the execution timeout expired.
+  ScriptExecutionOutcomeTimedOut: "TIMED_OUT",
+  // The command failed before returning a normal process exit code.
+  ScriptExecutionOutcomeProcessError: "PROCESS_ERROR",
+} as const;
+export type ScriptExecutionOutcome =
+  (typeof ScriptExecutionOutcome)[keyof typeof ScriptExecutionOutcome];
+export const ScriptFailureType = {
+  // The command exceeded its execution deadline before returning an exit code.
+  ScriptFailureTypeTimeout: "TIMEOUT",
+  // The command could not be started or was interrupted before returning an exit code.
+  ScriptFailureTypeProcessError: "PROCESS_ERROR",
+} as const;
+export type ScriptFailureType =
+  (typeof ScriptFailureType)[keyof typeof ScriptFailureType];
+export const FactoryState = {
+  // The factory has no active work and is waiting to start or receive input.
+  FactoryStateIdle: "IDLE",
+  // The factory is actively processing work.
+  FactoryStateRunning: "RUNNING",
+  // The factory is intentionally paused and should not schedule new work.
+  FactoryStatePaused: "PAUSED",
+  // The factory finished all required work successfully.
+  FactoryStateCompleted: "COMPLETED",
+  // The factory stopped because work or runtime execution failed.
+  FactoryStateFailed: "FAILED",
+} as const;
+export type FactoryState = (typeof FactoryState)[keyof typeof FactoryState];
+export const WorkOutcome = {
+  // The workstation accepted the input and completed its intended work.
+  WorkOutcomeAccepted: "ACCEPTED",
+  // The workstation made partial progress and should follow the continue route for another iteration.
+  WorkOutcomeContinue: "CONTINUE",
+  // The workstation completed normally but rejected the input for business reasons.
+  WorkOutcomeRejected: "REJECTED",
+  // The workstation could not complete because execution crashed, timed out, or hit a system error.
+  WorkOutcomeFailed: "FAILED",
+} as const;
+export type WorkOutcome = (typeof WorkOutcome)[keyof typeof WorkOutcome];
+export const WorkFailureFamily = {
+  // The failure is final and should not be retried automatically.
+  WorkFailureFamilyTerminal: "terminal",
+  // The failure may succeed on a later retry without manual intervention.
+  WorkFailureFamilyRetryable: "retryable",
+  // The failure indicates upstream throttling and should follow throttling-specific retry behavior.
+  WorkFailureFamilyThrottle: "throttle",
+} as const;
+export type WorkFailureFamily =
+  (typeof WorkFailureFamily)[keyof typeof WorkFailureFamily];
+export const WorkFailureType = {
+  // Authentication or authorization failed and operator action is required.
+  WorkFailureTypeAuthFailure: "auth_failure",
+  // The request is invalid in a non-retryable way and should be fixed before retrying.
+  WorkFailureTypePermanentBadRequest: "permanent_bad_request",
+  // The dependency rejected the request because of throttling or capacity limits.
+  WorkFailureTypeThrottled: "throttled",
+  // The dependency or runtime failed with a retryable internal error.
+  WorkFailureTypeInternalServerError: "internal_server_error",
+  // The work exceeded a configured deadline before completing.
+  WorkFailureTypeTimeout: "timeout",
+  // The runtime could not classify the failure into a more specific stable type.
+  WorkFailureTypeUnknown: "unknown",
+  // The worker or runtime was misconfigured and requires operator intervention.
+  WorkFailureTypeMisconfigured: "misconfigured",
+} as const;
+export type WorkFailureType =
+  (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const FactorySaveMode = {
+  // Replace the factory already current in the selected live session.
+  FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",
+  // Create or replace a named factory under the session root and activate it in that session.
+  FactorySaveModeUpsertNamedAndActivate: "UPSERT_NAMED_AND_ACTIVATE",
+} as const;
+export type FactorySaveMode =
+  (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const BundledFileType = {
+  SCRIPT: "SCRIPT",
+  DOC: "DOC",
+  INPUT: "INPUT",
+  ROOT_HELPER: "ROOT_HELPER",
+} as const;
+export type BundledFileType =
+  (typeof BundledFileType)[keyof typeof BundledFileType];
+export const BundledFileContentEncoding = {
+  utf_8: "utf-8",
+} as const;
+export type BundledFileContentEncoding =
+  (typeof BundledFileContentEncoding)[keyof typeof BundledFileContentEncoding];
+export const InputKind = {
+  // Opaque input accepted by the factory without a specialized input schema.
+  InputKindDefault: "DEFAULT",
+} as const;
+export type InputKind = (typeof InputKind)[keyof typeof InputKind];
+export const WorkStateType = {
+  // Work is newly submitted and waiting for its first processing step.
+  WorkStateTypeINITIAL: "INITIAL",
+  // Work is in progress and can continue through additional workstation steps.
+  WorkStateTypePROCESSING: "PROCESSING",
+  // Work completed successfully and should not be scheduled for more processing.
+  WorkStateTypeTERMINAL: "TERMINAL",
+  // Work reached a failed terminal state.
+  WorkStateTypeFAILED: "FAILED",
+} as const;
+export type WorkStateType = (typeof WorkStateType)[keyof typeof WorkStateType];
+export const ResourceType = {
+  // Local or embedded model capacity resource.
+  ResourceTypeModel: "MODEL",
+  // Cloud-provider quota resource for one provider or model lane.
+  ResourceTypeProviderQuota: "PROVIDER_QUOTA",
+  // Generic invocation concurrency slot resource.
+  ResourceTypeInvocationSlot: "INVOCATION_SLOT",
+} as const;
+export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
+export const WorkerType = {
+  // Model-backed worker that renders prompts and dispatches through the configured model provider.
+  WorkerTypeModelWorker: "MODEL_WORKER",
+  // Script-backed worker that executes a configured command instead of calling a model provider.
+  WorkerTypeScriptWorker: "SCRIPT_WORKER",
+  // Repository-owned hosted worker implementation selected by type-specific runtime code instead of a subprocess.
+  WorkerTypeHostedWorker: "HOSTED_WORKER",
+} as const;
+export type WorkerType = (typeof WorkerType)[keyof typeof WorkerType];
+export const WorkerModelProvider = {
+  // Claude model execution routed through the `claude` provider command.
+  WorkerModelProviderClaude: "CLAUDE",
+  // Codex model execution routed through the `codex` provider command.
+  WorkerModelProviderCodex: "CODEX",
+  // Cursor model execution routed through the `agent` provider command.
+  WorkerModelProviderCursor: "CURSOR",
+  // Gemini model execution routed through the `gemini` provider command.
+  WorkerModelProviderGemini: "GEMINI",
+  // Kiro model execution routed through the `kiro-cli` provider command.
+  WorkerModelProviderKiro: "KIRO",
+  // OpenCode model execution routed through the `opencode` provider command.
+  WorkerModelProviderOpenCode: "OPENCODE",
+} as const;
+export type WorkerModelProvider =
+  (typeof WorkerModelProvider)[keyof typeof WorkerModelProvider];
+export const WorkerModelLocality = {
+  // The model runs through local embedded or host-managed inference resources.
+  WorkerModelLocalityLocal: "LOCAL",
+  // The model runs through a remote cloud-backed provider.
+  WorkerModelLocalityCloud: "CLOUD",
+} as const;
+export type WorkerModelLocality =
+  (typeof WorkerModelLocality)[keyof typeof WorkerModelLocality];
+export const WorkerProvider = {
+  // Public worker executor adapter that shells out through the configured worker command path.
+  WorkerProviderScriptWrap: "SCRIPT_WRAP",
+} as const;
+export type WorkerProvider =
+  (typeof WorkerProvider)[keyof typeof WorkerProvider];
+export const ModelOperationContentType = {
+  // Textual content.
+  ModelOperationContentTypeText: "TEXT",
+  // Image content.
+  ModelOperationContentTypeImage: "IMAGE",
+  // Audio content.
+  ModelOperationContentTypeAudio: "AUDIO",
+  // Structured JSON content.
+  ModelOperationContentTypeJSON: "JSON",
+  // Opaque binary content.
+  ModelOperationContentTypeBinary: "BINARY",
+} as const;
+export type ModelOperationContentType =
+  (typeof ModelOperationContentType)[keyof typeof ModelOperationContentType];
+export const RunnerID = {
+  // Codex runner selected through the shared runner contract.
+  RunnerIDCodex: "codex",
+  // Gemini runner selected through the shared runner contract.
+  RunnerIDGemini: "gemini",
+  // Kiro runner selected through the shared runner contract.
+  RunnerIDKiro: "kiro",
+  // Cursor CLI runner selected through the shared runner contract.
+  RunnerIDCursorCLI: "cursor-cli",
+  // OpenCode runner selected through the shared runner contract.
+  RunnerIDOpenCode: "opencode",
+} as const;
+export type RunnerID = (typeof RunnerID)[keyof typeof RunnerID];
+export const RunnerSelectionSource = {
+  // Workstation-level runner override resolved the dispatch target.
+  workstation: "workstation",
+  // Factory-level default runner resolved the dispatch target.
+  factory: "factory",
+  // Worker modelProvider compatibility resolved the dispatch target when no explicit runner override is set.
+  legacy_provider: "legacy_provider",
+  // The documented default Codex runner resolved the dispatch target.
+  default: "default",
+} as const;
+export type RunnerSelectionSource =
+  (typeof RunnerSelectionSource)[keyof typeof RunnerSelectionSource];
+export const WorkstationKind = {
+  // Schedules when its inputs are ready and emits configured outputs.
+  WorkstationKindStandard: "STANDARD",
+  // Re-runs when observed inputs change and can loop rejected work back to an earlier state.
+  WorkstationKindRepeater: "REPEATER",
+  // Produces internal time work from a cron schedule and dispatches through the normal worker path when inputs are ready.
+  WorkstationKindCron: "CRON",
+  // Binds a poller-capable worker that emits canonical ingress work under service supervision.
+  WorkstationKindPoller: "POLLER",
+} as const;
+export type WorkstationKind =
+  (typeof WorkstationKind)[keyof typeof WorkstationKind];
+export const WorkstationType = {
+  // Model-backed workstation that renders prompts and dispatches work through the configured worker.
+  WorkstationTypeModelWorkstation: "MODEL_WORKSTATION",
+  // Provider-agnostic model-operation workstation that selects a worker by declared capability and uppercase operation contract.
+  WorkstationTypeModelInvoke: "MODEL_INVOKE",
+  // Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
+  WorkstationTypeLogicalMove: "LOGICAL_MOVE",
+  // Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
+  WorkstationTypeClassifierWorkstation: "CLASSIFIER_WORKSTATION",
+} as const;
+export type WorkstationType =
+  (typeof WorkstationType)[keyof typeof WorkstationType];
+export const GuardType = {
+  // Allows or blocks work based on how many times a workstation has already handled it.
+  GuardTypeVisitCount: "VISIT_COUNT",
+  // Requires all candidate workstation inputs to resolve the same configured field value.
+  GuardTypeMatchesFields: "MATCHES_FIELDS",
+  // This input is available only after all matching child work completes.
+  GuardTypeAllChildrenComplete: "ALL_CHILDREN_COMPLETE",
+  // This input is available when any matching child work fails.
+  GuardTypeAnyChildFailed: "ANY_CHILD_FAILED",
+  // This input is available only when its token name exactly matches the bound token name from another input.
+  GuardTypeSameName: "SAME_NAME",
+  // This input is available only when its token trace identity exactly matches the bound token trace identity from another input.
+  GuardTypeSameTraceID: "SAME_TRACE_ID",
+  // Blocks factory dispatch when provider or model throttle history still falls inside the authored refresh window.
+  GuardTypeInferenceThrottle: "INFERENCE_THROTTLE_GUARD",
+} as const;
+export type GuardType = (typeof GuardType)[keyof typeof GuardType];
+export const PromptTemplateVariableReferenceCategory = {
+  ROOT: "ROOT",
+  INPUT: "INPUT",
+  HISTORY: "HISTORY",
+  CONTEXT: "CONTEXT",
+  MAP_ACCESS: "MAP_ACCESS",
+} as const;
+export type PromptTemplateVariableReferenceCategory =
+  (typeof PromptTemplateVariableReferenceCategory)[keyof typeof PromptTemplateVariableReferenceCategory];
+export const PromptTemplateDiagnosticKind = {
+  SYNTAX_ERROR: "SYNTAX_ERROR",
+  INVALID_VARIABLE: "INVALID_VARIABLE",
+  UNAVAILABLE_VARIABLE: "UNAVAILABLE_VARIABLE",
+} as const;
+export type PromptTemplateDiagnosticKind =
+  (typeof PromptTemplateDiagnosticKind)[keyof typeof PromptTemplateDiagnosticKind];
+export const FactoryValidationSeverity = {
+  FactoryValidationSeverityError: "error",
+  FactoryValidationSeverityWarning: "warning",
+  FactoryValidationSeverityHint: "hint",
+} as const;
+export type FactoryValidationSeverity =
+  (typeof FactoryValidationSeverity)[keyof typeof FactoryValidationSeverity];
+export const FactoryValidationSubjectType = {
+  FactoryValidationSubjectTypeFactory: "FACTORY",
+  FactoryValidationSubjectTypeWorkstation: "WORKSTATION",
+  FactoryValidationSubjectTypeWorkType: "WORK_TYPE",
+  FactoryValidationSubjectTypeWorkState: "WORK_STATE",
+  FactoryValidationSubjectTypeWorker: "WORKER",
+  FactoryValidationSubjectTypeResource: "RESOURCE",
+  FactoryValidationSubjectTypeRoute: "ROUTE",
+} as const;
+export type FactoryValidationSubjectType =
+  (typeof FactoryValidationSubjectType)[keyof typeof FactoryValidationSubjectType];
+export const FactoryValidationSubjectLocation = {
+  FactoryValidationSubjectLocationOnRejection: "ON_REJECTION",
+  FactoryValidationSubjectLocationOnFailure: "ON_FAILURE",
+  FactoryValidationSubjectLocationOutputs: "OUTPUTS",
+  FactoryValidationSubjectLocationInputs: "INPUTS",
+  FactoryValidationSubjectLocationStates: "STATES",
+  FactoryValidationSubjectLocationTerminal: "TERMINAL",
+  FactoryValidationSubjectLocationReference: "REFERENCE",
+  FactoryValidationSubjectLocationDefinition: "DEFINITION",
+} as const;
+export type FactoryValidationSubjectLocation =
+  (typeof FactoryValidationSubjectLocation)[keyof typeof FactoryValidationSubjectLocation];
+export const WorkRequestType = {
+  // Normalized request containing one or more work items and their relationships.
+  WorkRequestTypeFactoryRequestBatch: "FACTORY_REQUEST_BATCH",
+} as const;
+export type WorkRequestType =
+  (typeof WorkRequestType)[keyof typeof WorkRequestType];
+export const WorkContentPartType = {
+  // Legacy inline text content.
+  WorkContentPartTypeText: "text",
+  // Legacy image content referenced by file path.
+  WorkContentPartTypeImage: "image",
+  // Canonical uppercase inline text content.
+  WorkContentPartTypeTextUpper: "TEXT",
+  // Canonical uppercase image content referenced by file path.
+  WorkContentPartTypeImageUpper: "IMAGE",
+  // Audio content referenced by file path or artifact.
+  WorkContentPartTypeAudio: "AUDIO",
+  // JSON content preserved in canonical part order.
+  WorkContentPartTypeJSON: "JSON",
+  // Binary content referenced by file path or artifact.
+  WorkContentPartTypeBinary: "BINARY",
+} as const;
+export type WorkContentPartType =
+  (typeof WorkContentPartType)[keyof typeof WorkContentPartType];
+export const WorkTextContentPartType = {
+  text: "text",
+  TEXT: "TEXT",
+} as const;
+export type WorkTextContentPartType =
+  (typeof WorkTextContentPartType)[keyof typeof WorkTextContentPartType];
+export const WorkImageContentPartType = {
+  image: "image",
+  IMAGE: "IMAGE",
+} as const;
+export type WorkImageContentPartType =
+  (typeof WorkImageContentPartType)[keyof typeof WorkImageContentPartType];
+export const WorkAudioContentPartType = {
+  AUDIO: "AUDIO",
+} as const;
+export type WorkAudioContentPartType =
+  (typeof WorkAudioContentPartType)[keyof typeof WorkAudioContentPartType];
+export const WorkJsonContentPartType = {
+  JSON: "JSON",
+} as const;
+export type WorkJsonContentPartType =
+  (typeof WorkJsonContentPartType)[keyof typeof WorkJsonContentPartType];
+export const WorkBinaryContentPartType = {
+  BINARY: "BINARY",
+} as const;
+export type WorkBinaryContentPartType =
+  (typeof WorkBinaryContentPartType)[keyof typeof WorkBinaryContentPartType];
+export const RelationType = {
+  // Source work cannot proceed until the target work reaches the required state.
+  RelationTypeDependsOn: "DEPENDS_ON",
+  // Target work is a child of the source work.
+  RelationTypeParentChild: "PARENT_CHILD",
+  // Target work was generated by a workstation handling the source work.
+  RelationTypeSpawnedBy: "SPAWNED_BY",
+} as const;
+export type RelationType = (typeof RelationType)[keyof typeof RelationType];
+export const WorkTypeHandlingBehavior = {
+  // Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior.
+  WorkTypeHandlingBehaviorDefault: "DEFAULT",
+} as const;
+export type WorkTypeHandlingBehavior =
+  (typeof WorkTypeHandlingBehavior)[keyof typeof WorkTypeHandlingBehavior];
+export const HostedWorkerProvider = {
+  // Built-in hosted poller integration for the Linear GraphQL API.
+  HostedWorkerProviderLinear: "LINEAR",
+} as const;
+export type HostedWorkerProvider =
+  (typeof HostedWorkerProvider)[keyof typeof HostedWorkerProvider];
+export const ComponentsParametersSortBy = {
+  state_type: "state.type",
+} as const;
+export type ComponentsParametersSortBy =
+  (typeof ComponentsParametersSortBy)[keyof typeof ComponentsParametersSortBy];

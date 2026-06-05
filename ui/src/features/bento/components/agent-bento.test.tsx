@@ -8,7 +8,6 @@ import {
 import { afterEach, beforeEach } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { DASHBOARD_PANEL_SHELL_CLASS } from "../../../components/ui/dashboard-shell";
 import { NoSelectionDetailCard } from "../../current-selection/base/public";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { WorkTotalsCard } from "../../work-totals/components/work-totals-card";
@@ -111,7 +110,8 @@ describe("AgentBentoLayout", () => {
     ).toBeTruthy();
     expect(screen.getByText("Trace dispatches stay visible.")).toBeTruthy();
     expect(activityCard.dataset.dashboardPanelShell).toBe("grid-card");
-    expect(activityCard.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(activityCard.className).toContain("border-outline");
+    expect(activityCard.className).toContain("bg-surface-container-high");
     expect(getGridItem("Current activity").dataset.bentoCardId).toBe(
       "activity",
     );
@@ -438,11 +438,11 @@ describe("AgentBentoLayout", () => {
     expect(board).toBeTruthy();
     expect(workTotals.dataset.dashboardPanelShell).toBe("grid-card");
     expect(currentSelection.dataset.dashboardPanelShell).toBe("grid-card");
-    expect(workTotals.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(workTotals.className).toContain("border-outline");
     expect(within(workTotals).getByLabelText("work totals")).toBeTruthy();
     expect(within(workTotals).getByText("In progress")).toBeTruthy();
     expect(within(workTotals).getByText("Completed")).toBeTruthy();
-    expect(currentSelection.className).toContain(DASHBOARD_PANEL_SHELL_CLASS);
+    expect(currentSelection.className).toContain("bg-surface-container-high");
     expect(
       within(currentSelection).getByRole("button", { name: "Undo selection" }),
     ).toHaveProperty("disabled", true);

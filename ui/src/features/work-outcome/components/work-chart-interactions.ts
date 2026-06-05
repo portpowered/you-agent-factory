@@ -125,15 +125,54 @@ function readPointerTick(
     return null;
   }
 
-  const rect = event.currentTarget.getBoundingClientRect();
-  if (!Number.isFinite(rect.width) || rect.width <= 0) {
+  const bounds = readChartPlotBounds(event.currentTarget);
+  if (!Number.isFinite(bounds.width) || bounds.width <= 0) {
     return null;
   }
 
   const relativeX = Math.min(
-    Math.max(event.clientX - rect.left, 0),
-    rect.width,
+    Math.max(event.clientX - bounds.left, 0),
+    bounds.width,
   );
-  const rowIndex = Math.round((relativeX / rect.width) * (rows.length - 1));
+  const rowIndex = Math.round((relativeX / bounds.width) * (rows.length - 1));
   return rows[rowIndex]?.tick ?? null;
+}
+
+function readChartPlotBounds(container: HTMLDivElement): {
+  left: number;
+  width: number;
+} {
+  const gridLine = container.querySelector<SVGLineElement>(
+    ".recharts-cartesian-grid-horizontal line",
+  );
+  const svg = gridLine?.ownerSVGElement;
+  if (gridLine && svg) {
+    const x1 = Number(gridLine.getAttribute("x1"));
+    const x2 = Number(gridLine.getAttribute("x2"));
+    const svgRect = svg.getBoundingClientRect();
+    const viewBoxWidth =
+      svg.viewBox?.baseVal?.width ||
+      Number(svg.getAttribute("width")) ||
+      svgRect.width;
+
+    if (
+      Number.isFinite(x1) &&
+      Number.isFinite(x2) &&
+      Number.isFinite(svgRect.width) &&
+      Number.isFinite(viewBoxWidth) &&
+      svgRect.width > 0 &&
+      viewBoxWidth > 0
+    ) {
+      const scaleX = svgRect.width / viewBoxWidth;
+      const left = svgRect.left + Math.min(x1, x2) * scaleX;
+      const width = Math.abs(x2 - x1) * scaleX;
+
+      if (Number.isFinite(left) && Number.isFinite(width) && width > 0) {
+        return { left, width };
+      }
+    }
+  }
+
+  const rect = container.getBoundingClientRect();
+  return { left: rect.left, width: rect.width };
 }

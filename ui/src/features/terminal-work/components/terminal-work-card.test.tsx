@@ -1,17 +1,14 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/types";
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_TEXT_CLASS,
-} from "../../../components/ui/dashboard-typography";
-import {
-  STANDARD_LIST_SELECTION_ROW_DANGER_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS,
-  STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS,
-} from "../../../components/ui/standard-list-selection";
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
+
+const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
+  "border-af-danger-border bg-error-container text-on-error";
+const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
+  "border-outline-variant bg-surface-container-low text-on-surface";
+const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
+  "border-af-success-border bg-success-container text-on-success-container";
 
 const failedAttempt: DashboardProviderSessionAttempt = {
   dispatch_id: "dispatch-repair-failed",
@@ -57,9 +54,11 @@ describe("CompletedFailedWorkstationCard", () => {
       name: messages.rowTitle("failed"),
     });
     expect(completedHeading.className).toContain(
-      DASHBOARD_SECTION_HEADING_CLASS,
+      "af-dashboard-section-heading",
     );
-    expect(failedHeading.className).toContain(DASHBOARD_SECTION_HEADING_CLASS);
+    expect(failedHeading.className).toContain(
+      "af-dashboard-section-heading",
+    );
     const completedTitle = completedHeading.closest(
       "[data-terminal-work-title]",
     );
@@ -103,7 +102,7 @@ describe("CompletedFailedWorkstationCard", () => {
     ).toContain("text-on-error");
     const doneStoryButton = screen.getByRole("button", { name: /Done Story/ });
     expect(doneStoryButton.getAttribute("aria-label")).toBe("Done Story");
-    expect(doneStoryButton.className).toContain(DASHBOARD_BODY_TEXT_CLASS);
+    expect(doneStoryButton.className).toContain("af-dashboard-body-text");
     expect(doneStoryButton.className).toContain("text-on-success-container");
     expect(doneStoryButton).toBeTruthy();
     const failedStoryButton = screen.getByRole("button", {
@@ -113,12 +112,12 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(failedStoryButton.className).toContain("text-on-error");
     expect(failedStoryButton).toBeTruthy();
     const failedMeta = screen.getByText("Failed at setup-workspace");
-    expect(failedMeta.className).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
+    expect(failedMeta.className).toContain("af-dashboard-supporting-text");
     expect(failedMeta).toBeTruthy();
     expect(
       within(completedRow as HTMLElement).getByText(messages.itemCountLabel(1))
         .className,
-    ).toContain(DASHBOARD_SUPPORTING_TEXT_CLASS);
+    ).toContain("af-dashboard-supporting-text");
 
     fireEvent.click(doneStoryButton);
     expect(onSelectItem).toHaveBeenCalledWith(
@@ -277,11 +276,11 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(firstCompletedRegion?.id).not.toBe(secondCompletedRegion?.id);
 
     const firstCompletedHeading = screen.getAllByRole("heading", {
-      level: 4,
+      level: 5,
       name: messages.rowTitle("completed"),
     })[0];
     const secondCompletedHeading = screen.getAllByRole("heading", {
-      level: 4,
+      level: 5,
       name: messages.rowTitle("completed"),
     })[1];
     expect(firstCompletedHeading?.id).toBe(

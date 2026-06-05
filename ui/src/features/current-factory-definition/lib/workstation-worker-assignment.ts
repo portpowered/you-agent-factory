@@ -1,4 +1,5 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import { WorkstationType } from "../../../api/generated/openapi";
 import { resolveEditableWorkstationType } from "./workstation-type";
 
 type CanonicalWorkstation = NonNullable<
@@ -8,5 +9,8 @@ type CanonicalWorkstation = NonNullable<
 export function workstationRequiresWorkerAssignment(
   workstation: Pick<CanonicalWorkstation, "type">,
 ): boolean {
-  return resolveEditableWorkstationType(workstation) !== "LOGICAL_MOVE";
+  return (
+    resolveEditableWorkstationType(workstation) !==
+    WorkstationType.WorkstationTypeLogicalMove
+  );
 }

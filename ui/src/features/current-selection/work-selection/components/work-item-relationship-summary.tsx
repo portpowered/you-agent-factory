@@ -1,11 +1,15 @@
-import { DASHBOARD_SUPPORTING_LABEL_CLASS } from "../../../../components/ui/dashboard-typography";
+import {
+  DashboardCode,
+  DashboardLabel,
+  surfacePanelVariants,
+} from "../../../../components/ui";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import {
-  INFERENCE_ATTEMPT_DETAIL_CLASS,
-  RUNTIME_DETAIL_CODE_CLASS,
-  RUNTIME_DETAIL_VALUE_CLASS,
-  TRACE_ACTION_LINK_CLASS,
-} from "../../base/components/detail-card-shared";
+  CurrentSelectionDescriptionList,
+  CurrentSelectionDetailItem,
+  CurrentSelectionDetailValue,
+  CurrentSelectionTraceButton,
+} from "../../base/public";
 import type { SelectedWorkRelationshipNode } from "../lib/selected-work-relationship-graph";
 
 export function FocusedRelationshipSummary({
@@ -13,72 +17,65 @@ export function FocusedRelationshipSummary({
   messages,
   node,
   onSelectTraceID,
-  traceTargetId,
 }: {
   activeTraceID?: string | null;
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
   node: SelectedWorkRelationshipNode;
   onSelectTraceID?: (traceID: string) => void;
-  traceTargetId: string;
 }) {
   const traceID = node.traceID;
 
   return (
     <section
       aria-label={messages.relationshipFocusSummaryHeading}
-      className="grid gap-3 rounded-xl border border-outline bg-surface-container-high p-3"
+      className={surfacePanelVariants({
+        className: "grid gap-3",
+      })}
     >
       <div className="grid gap-1">
-        <span className={DASHBOARD_SUPPORTING_LABEL_CLASS}>
+        <DashboardLabel>
           {messages.relationshipFocusSummaryHeading}
-        </span>
-        <code className="min-w-0 break-words text-sm leading-5 text-on-surface">
+        </DashboardLabel>
+        <DashboardCode className="min-w-0 break-words text-sm leading-5 text-on-surface">
           {node.label}
-        </code>
+        </DashboardCode>
       </div>
-      <dl className={INFERENCE_ATTEMPT_DETAIL_CLASS}>
-        <div>
-          <dt>{messages.workIdLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            <code className={RUNTIME_DETAIL_CODE_CLASS}>{node.workID}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.workTypeLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {node.workTypeID ?? messages.relationshipMetadataUnavailable}
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.stateLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {node.state ?? messages.relationshipMetadataUnavailable}
-          </dd>
-        </div>
+      <CurrentSelectionDescriptionList>
+        <CurrentSelectionDetailItem
+          code
+          label={messages.workIdLabel}
+          value={node.workID}
+        />
+        <CurrentSelectionDetailItem
+          label={messages.workTypeLabel}
+          value={node.workTypeID ?? messages.relationshipMetadataUnavailable}
+        />
+        <CurrentSelectionDetailItem
+          label={messages.stateLabel}
+          value={node.state ?? messages.relationshipMetadataUnavailable}
+        />
         <div>
           <dt>{messages.traceIdsLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
+          <CurrentSelectionDetailValue>
             {traceID ?? messages.relationshipMetadataUnavailable}
             {traceID && activeTraceID === traceID
               ? messages.selectedTraceSuffix
               : ""}
-          </dd>
+          </CurrentSelectionDetailValue>
         </div>
-        <div>
-          <dt>{messages.relationshipRoleLabel}</dt>
-          <dd className={RUNTIME_DETAIL_VALUE_CLASS}>
-            {messages.relationshipCurrentSelectionBadge}
-          </dd>
-        </div>
-      </dl>
+        <CurrentSelectionDetailItem
+          label={messages.relationshipRoleLabel}
+          value={messages.relationshipCurrentSelectionBadge}
+        />
+      </CurrentSelectionDescriptionList>
       {traceID && onSelectTraceID ? (
-        <a
-          className={TRACE_ACTION_LINK_CLASS}
-          href={`#${traceTargetId}`}
-          onClick={() => onSelectTraceID(traceID)}
+        <CurrentSelectionTraceButton
+          activeTraceID={activeTraceID}
+          onSelectTraceID={onSelectTraceID}
+          traceID={traceID}
         >
           {messages.relationshipOpenTraceAction}
-        </a>
+        </CurrentSelectionTraceButton>
       ) : null}
     </section>
   );

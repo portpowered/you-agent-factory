@@ -379,9 +379,13 @@ describe("DashboardImportPreviewDialog", () => {
       name: messages.title,
     });
     const alert = within(previewDialog).getByRole("alert");
+    const title = within(alert).getByText(messages.activationErrorTitle);
+    const copy = within(alert).getByText(expectedCopy);
 
     expect(alert.textContent).toContain(messages.activationErrorTitle);
     expect(alert.textContent).toContain(expectedCopy);
+    expect(title.className).toContain("af-dashboard-section-heading");
+    expect(copy.className).toContain("af-dashboard-body-text");
   });
 
   it("dismisses the dashboard-owned preview after a successful activation", async () => {

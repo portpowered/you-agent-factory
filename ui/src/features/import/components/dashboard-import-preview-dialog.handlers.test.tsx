@@ -1,5 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import {
+  cloneElement,
+  type ElementType,
+  isValidElement,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 import { getImportPreviewDialogMessages } from "../messages/import-preview-dialog";
 
 const dialogEventState = {
@@ -8,8 +15,36 @@ const dialogEventState = {
 };
 
 vi.mock("../../../components/ui", () => ({
+  AlertPanel: ({ children, ...props }: HTMLAttributes<HTMLDivElement>) => (
+    <div {...props}>{children}</div>
+  ),
   Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
+  ),
+  DashboardDescriptionList: ({
+    children,
+    ...props
+  }: HTMLAttributes<HTMLDListElement>) => <dl {...props}>{children}</dl>,
+  DashboardHeading: ({
+    as: Component = "h3",
+    children,
+    ...props
+  }: HTMLAttributes<HTMLElement> & { as?: ElementType }) => (
+    <Component {...props}>{children}</Component>
+  ),
+  DashboardLabel: ({
+    as: Component = "span",
+    children,
+    ...props
+  }: HTMLAttributes<HTMLElement> & { as?: ElementType }) => (
+    <Component {...props}>{children}</Component>
+  ),
+  DashboardText: ({
+    as: Component = "p",
+    children,
+    ...props
+  }: HTMLAttributes<HTMLElement> & { as?: ElementType }) => (
+    <Component {...props}>{children}</Component>
   ),
   Dialog: ({
     children,
@@ -73,6 +108,19 @@ vi.mock("../../../components/ui", () => ({
     <div>{children}</div>
   ),
   DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+  SurfacePanel: ({
+    asChild,
+    children,
+    ...props
+  }: HTMLAttributes<HTMLDivElement> & {
+    asChild?: boolean;
+    children: ReactNode;
+  }) =>
+    asChild && isValidElement(children) ? (
+      cloneElement(children, props)
+    ) : (
+      <div {...props}>{children}</div>
+    ),
 }));
 
 import { FactoryImportPreviewDialog } from "./dashboard-import-preview-dialog";

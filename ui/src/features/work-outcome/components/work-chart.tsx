@@ -16,13 +16,8 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "../../../components/ui/chart";
-import { Skeleton } from "../../../components/ui/skeleton";
-import {
-  EMPTY_STATE_CLASS,
-  EMPTY_STATE_COMPACT_CLASS,
-} from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { DASHBOARD_CHART_AXIS_LABEL_CLASS } from "../lib/chart-contract";
+import { dashboardChartAxisLabelClassName } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
 import {
   buildWorkChartData,
@@ -36,27 +31,18 @@ import {
   type WorkChartZoomRange,
 } from "./work-chart-interactions";
 import {
-  WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS,
   type WorkChartPresentation,
   workChartPresentationClasses,
 } from "./work-chart-presentation";
+import { WorkChartStatusPanel } from "./work-chart-status-panel";
 
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
 
-export {
-  WORK_CHART_EMBEDDED_READY_CLASS,
-  WORK_CHART_READY_CLASS,
-  type WorkChartPresentation,
-} from "./work-chart-presentation";
-export const WORK_CHART_AXIS_LABEL_CLASS = DASHBOARD_CHART_AXIS_LABEL_CLASS;
+export type { WorkChartPresentation } from "./work-chart-presentation";
+const WORK_CHART_AXIS_LABEL_CLASS = dashboardChartAxisLabelClassName();
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
-export const WORK_CHART_LEGEND_CONTENT_CLASS =
-  "flex-nowrap justify-center gap-x-2 gap-y-1 pt-0 sm:justify-start";
-export const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
-export const WORK_CHART_LEGEND_SWATCH_CLASS = "h-2 w-2";
-// tailwind-exception: intrinsic-sizing
-const WORK_CHART_STATUS_PANEL_CLASS =
-  "flex h-full min-h-[14rem] min-w-0 w-full flex-1 flex-col justify-center";
+const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
+const WORK_CHART_LEGEND_SWATCH_CLASS = "h-2 w-2";
 const WORK_CHART_SHELL_CLASS =
   "flex h-full min-h-0 min-w-0 w-full flex-1 flex-col gap-3";
 const WORK_CHART_Y_AXIS_WIDTH = 52;
@@ -356,7 +342,7 @@ function WorkChartLegendRow({
       data-work-chart-legend-density="compact"
     >
       <ChartLegendContent
-        className={WORK_CHART_LEGEND_CONTENT_CLASS}
+        className="flex-nowrap justify-center gap-x-2 gap-y-1 pt-0 sm:justify-start"
         getToggleLabel={(label, hidden) =>
           hidden
             ? chartMessages.showSeriesLabel(label)
@@ -442,49 +428,6 @@ function WorkChartLines({
       type="linear"
     />
   ));
-}
-
-interface WorkChartStatusPanelProps {
-  ariaBusy?: boolean;
-  loading?: boolean;
-  message: string;
-  presentation: WorkChartPresentation;
-  role: "alert" | "status";
-  title: string;
-}
-
-function WorkChartStatusPanel({
-  ariaBusy = false,
-  loading = false,
-  message,
-  presentation,
-  role,
-  title,
-}: WorkChartStatusPanelProps) {
-  const embedded = presentation === "embedded";
-  return (
-    <div
-      aria-busy={ariaBusy || undefined}
-      aria-live={role === "alert" ? "assertive" : "polite"}
-      className={cn(
-        embedded ? WORK_CHART_EMBEDDED_STATUS_PANEL_CLASS : EMPTY_STATE_CLASS,
-        embedded ? null : EMPTY_STATE_COMPACT_CLASS,
-        embedded ? null : WORK_CHART_STATUS_PANEL_CLASS,
-        embedded ? WORK_CHART_STATUS_PANEL_CLASS : null,
-      )}
-      data-work-chart-presentation={presentation}
-      role={role}
-    >
-      {loading ? (
-        <div aria-hidden="true" className="grid w-full gap-3">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-28 w-full" />
-        </div>
-      ) : null}
-      <h3>{title}</h3>
-      <p>{message}</p>
-    </div>
-  );
 }
 
 function formatAxisNumber(value: number): string {

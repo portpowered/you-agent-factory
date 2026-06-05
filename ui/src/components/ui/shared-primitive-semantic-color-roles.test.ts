@@ -13,7 +13,7 @@ describe("shared primitive semantic color roles", () => {
   it("maps standard list accent rows to primary accent tokens, not semantic info", () => {
     const source = readComponentSource("standard-list-selection.tsx");
 
-    expect(source).toContain("STANDARD_LIST_SELECTION_ROW_ACCENT_CLASS");
+    expect(source).not.toContain("export const STANDARD_LIST_SELECTION");
     expect(source).toContain("border-primary bg-primary-container");
     expect(source).not.toContain("STANDARD_LIST_SELECTION_ROW_INFO_CLASS");
     expect(source).not.toContain("border-af-info-border");
@@ -31,8 +31,8 @@ describe("shared primitive semantic color roles", () => {
   it("keeps the default button tone on primary accent tokens, not warning or success", () => {
     const source = readComponentSource("button.tsx");
 
-    expect(source).toContain("border-primary bg-primary");
-    expect(source).not.toContain("af-warning");
+    expect(source).toMatch(/default:\s*\n?\s*"border-primary bg-primary/);
+    expect(source).toMatch(/warning:\s*\n?\s*"border-af-warning-border/);
     expect(source).not.toContain("af-success");
   });
 });

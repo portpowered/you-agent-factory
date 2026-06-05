@@ -2,8 +2,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
-import type { WorkChartModel } from "../lib/trends";
+import {
+  buildWorkChartModel,
+  type WorkChartModel,
+} from "../lib/trends";
+import { buildWorkOutcomeTimelineSamplesFromEvents } from "../hooks/useWorkOutcomeChart";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { WorkChartCard } from "./d3-information-card";
 import {
@@ -122,6 +127,225 @@ const zeroValuedFailedSeriesModel: WorkChartModel = {
       : seriesEntry,
   ),
 };
+
+const edgeZoomWorkChartModel: WorkChartModel = {
+  delta: { queued: -25, inFlight: 0, completed: 25, failed: 0 },
+  failureGroups: [],
+  points: Array.from({ length: 26 }, (_, index) => ({
+    label: `Tick ${index}`,
+    observedAt: index * 1000,
+    order: index,
+    tick: index,
+  })),
+  rangeID: "session",
+  rangeLabel: "Session",
+  samples: Array.from({ length: 26 }, (_, index) => ({
+    completedCount: index,
+    dispatchedCount: index,
+    failedByWorkType: {},
+    failedCount: 0,
+    failedWorkLabels: [],
+    inFlightCount: 1,
+    observedAt: index * 1000,
+    queuedCount: 25 - index,
+    tick: index,
+  })),
+  series: [
+    {
+      key: "queued",
+      label: "Queued",
+      points: Array.from({ length: 26 }, (_, index) => ({
+        label: `Queued: ${25 - index}`,
+        observedAt: index * 1000,
+        order: index,
+        value: 25 - index,
+      })),
+      unit: "count",
+    },
+    {
+      key: "completed",
+      label: "Completed",
+      points: Array.from({ length: 26 }, (_, index) => ({
+        label: `Completed: ${index}`,
+        observedAt: index * 1000,
+        order: index,
+        value: index,
+      })),
+      unit: "count",
+    },
+    {
+      key: "inFlight",
+      label: "In-flight",
+      points: Array.from({ length: 26 }, (_, index) => ({
+        label: "In-flight: 1",
+        observedAt: index * 1000,
+        order: index,
+        value: 1,
+      })),
+      unit: "count",
+    },
+    {
+      key: "failed",
+      label: "Failed/retried",
+      points: Array.from({ length: 26 }, (_, index) => ({
+        label: "Failed: 0",
+        observedAt: index * 1000,
+        order: index,
+        value: 0,
+      })),
+      unit: "count",
+    },
+  ],
+};
+
+const liveSessionLikeModel = buildWorkChartModel(
+  buildWorkOutcomeTimelineSamplesFromEvents(
+    [
+      workOutcomeEvent("run-started", 0, FACTORY_EVENT_TYPES.runRequest, {
+        factory: {
+          resources: [{ capacity: 10, name: "executor-slot" }],
+          workTypes: [
+            {
+              name: "plan",
+              states: [
+                { name: "init", type: "INITIAL" },
+                { name: "complete", type: "TERMINAL" },
+                { name: "failed", type: "FAILED" },
+              ],
+            },
+          ],
+          workers: [],
+          workstations: [],
+        },
+        recordedAt: "2026-06-04T10:28:25.842914Z",
+      }),
+      workOutcomeEvent("work-request", 1, FACTORY_EVENT_TYPES.workRequest, {
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "Plan A",
+            traceId: "trace-plan-a",
+            workId: "plan-a",
+            workTypeName: "plan",
+          },
+          {
+            name: "Plan B",
+            traceId: "trace-plan-b",
+            workId: "plan-b",
+            workTypeName: "plan",
+          },
+        ],
+      }),
+      workOutcomeEvent(
+        "dispatch-request-plan-a",
+        2,
+        FACTORY_EVENT_TYPES.dispatchRequest,
+        {
+          inputs: [{ workId: "plan-a" }],
+          transitionId: "setup-workspace",
+        },
+        { dispatchId: "dispatch-plan-a" },
+      ),
+      workOutcomeEvent(
+        "dispatch-request-plan-b",
+        2,
+        FACTORY_EVENT_TYPES.dispatchRequest,
+        {
+          inputs: [{ workId: "plan-b" }],
+          transitionId: "setup-workspace",
+        },
+        { dispatchId: "dispatch-plan-b" },
+      ),
+      workOutcomeEvent(
+        "dispatch-response-plan-a",
+        4,
+        FACTORY_EVENT_TYPES.dispatchResponse,
+        {
+          durationMillis: 100,
+          outcome: "ACCEPTED",
+          outputWork: [
+            {
+              name: "Plan A",
+              state: "complete",
+              traceId: "trace-plan-a",
+              workId: "plan-a",
+              workTypeName: "plan",
+            },
+          ],
+          transitionId: "setup-workspace",
+        },
+        { dispatchId: "dispatch-plan-a" },
+      ),
+      workOutcomeEvent(
+        "dispatch-response-plan-b",
+        6,
+        FACTORY_EVENT_TYPES.dispatchResponse,
+        {
+          durationMillis: 100,
+          failureMessage: "setup failed",
+          failureReason: "workspace bootstrap failed",
+          outcome: "FAILED",
+          outputWork: [
+            {
+              name: "Plan B",
+              state: "failed",
+              traceId: "trace-plan-b",
+              workId: "plan-b",
+              workTypeName: "plan",
+            },
+          ],
+          transitionId: "setup-workspace",
+        },
+        { dispatchId: "dispatch-plan-b" },
+      ),
+      workOutcomeEvent("work-request-2", 7, FACTORY_EVENT_TYPES.workRequest, {
+        type: "FACTORY_REQUEST_BATCH",
+        works: [
+          {
+            name: "Plan C",
+            traceId: "trace-plan-c",
+            workId: "plan-c",
+            workTypeName: "plan",
+          },
+        ],
+      }),
+      workOutcomeEvent(
+        "dispatch-request-plan-c",
+        11,
+        FACTORY_EVENT_TYPES.dispatchRequest,
+        {
+          inputs: [{ workId: "plan-c" }],
+          transitionId: "setup-workspace",
+        },
+        { dispatchId: "dispatch-plan-c" },
+      ),
+      workOutcomeEvent(
+        "dispatch-response-plan-c",
+        12,
+        FACTORY_EVENT_TYPES.dispatchResponse,
+        {
+          durationMillis: 100,
+          outcome: "ACCEPTED",
+          outputWork: [
+            {
+              name: "Plan C",
+              state: "complete",
+              traceId: "trace-plan-c",
+              workId: "plan-c",
+              workTypeName: "plan",
+            },
+          ],
+          transitionId: "setup-workspace",
+        },
+        { dispatchId: "dispatch-plan-c" },
+      ),
+    ],
+    12,
+  ),
+  "session",
+  0,
+  "en",
+);
 
 const OUTCOME_SERIES: readonly WorkChartSeriesDefinition[] = [
   {
@@ -412,6 +636,46 @@ describe("WorkChart", () => {
     expect(within(overlay as HTMLElement).getByText("Work count")).toBeTruthy();
   });
 
+  it("renders visible SVG line paths for a live-session-like event timeline model", () => {
+    render(
+      <WorkChart
+        ariaLabel="Live session work chart"
+        model={liveSessionLikeModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "Live session work chart" });
+    const svg = chart.querySelector("svg");
+
+    expect(svg).toBeTruthy();
+    expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      "0,1,2,4,6,7,11,12",
+    );
+    expect(chart.textContent).toContain("Completed");
+    expect(chart.textContent).toContain("Failed");
+
+    const renderedSeries = Array.from(
+      chart.querySelectorAll<HTMLElement>("[data-chart-series]"),
+    );
+    expect(
+      renderedSeries.map((node) => node.getAttribute("data-chart-series")),
+    ).toEqual(["queued", "completed", "inFlight", "failed"]);
+
+    const visibleCurves = Array.from(
+      chart.querySelectorAll<SVGPathElement>("path.recharts-curve"),
+    ).filter((path) => {
+      const d = path.getAttribute("d");
+      return typeof d === "string" && d.length > 0;
+    });
+
+    expect(visibleCurves.length).toBeGreaterThanOrEqual(4);
+    expect(
+      visibleCurves.some((path) => path.getAttribute("d")?.includes("L")),
+    ).toBe(true);
+  });
+
   it("keeps missing series points absent instead of fabricating zero-valued rows", () => {
     render(
       <WorkChart
@@ -535,6 +799,61 @@ describe("WorkChart", () => {
       "10,20,40",
     );
     expect(screen.queryByText("已缩放到刻度 10-20")).toBeNull();
+  });
+
+  it("maps drag selection to the rendered plot bounds so the final tick is reachable", () => {
+    render(
+      <WorkChart
+        ariaLabel="Work chart edge zoom"
+        model={edgeZoomWorkChartModel}
+        series={OUTCOME_SERIES}
+      />,
+    );
+
+    const chart = screen.getByRole("img", { name: "Work chart edge zoom" });
+    const svg = chart.querySelector<SVGSVGElement>("svg");
+    const gridLine = chart.querySelector<SVGLineElement>(
+      ".recharts-cartesian-grid-horizontal line",
+    );
+
+    expect(svg).toBeTruthy();
+    expect(gridLine).toBeTruthy();
+    vi.spyOn(chart, "getBoundingClientRect").mockReturnValue({
+      bottom: 240,
+      height: 240,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+    vi.spyOn(svg as SVGSVGElement, "getBoundingClientRect").mockReturnValue({
+      bottom: 240,
+      height: 240,
+      left: 0,
+      right: 400,
+      toJSON: () => ({}),
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+    });
+    Object.defineProperty(svg, "viewBox", {
+      configurable: true,
+      value: { baseVal: { width: 400 } },
+    });
+    gridLine?.setAttribute("x1", "70");
+    gridLine?.setAttribute("x2", "372");
+
+    fireEvent.mouseDown(chart, { clientX: 221, clientY: 168 });
+    fireEvent.mouseMove(chart, { clientX: 372, clientY: 168 });
+    fireEvent.mouseUp(chart, { clientX: 372, clientY: 168 });
+
+    expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
+      Array.from({ length: 13 }, (_, index) => String(index + 13)).join(","),
+    );
   });
 
   it("keeps the reset zoom button above the chart interaction surface and keyboard operable", async () => {
@@ -687,3 +1006,23 @@ describe("WorkChart", () => {
     ).toBeNull();
   });
 });
+
+function workOutcomeEvent(
+  id: string,
+  tick: number,
+  type: FactoryEvent["type"],
+  payload: FactoryEvent["payload"],
+  context: Partial<FactoryEvent["context"]> = {},
+): FactoryEvent {
+  return {
+    context: {
+      eventTime: `2026-06-04T10:28:${String(tick).padStart(2, "0")}.000Z`,
+      sequence: tick,
+      tick,
+      ...context,
+    },
+    id,
+    payload,
+    type,
+  };
+}

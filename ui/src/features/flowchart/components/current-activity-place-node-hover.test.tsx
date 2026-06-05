@@ -5,7 +5,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import type { StatePositionNodeData } from "./current-activity-place-node";
 import { StatePositionNodeView } from "./current-activity-place-node";
-import { CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS } from "../lib/current-activity-graph-hover";
+
+const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
+  "transition-[border-color,box-shadow] hover:border-primary hover:shadow-af-accent-chip";
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
