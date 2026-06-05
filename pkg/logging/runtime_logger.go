@@ -1,11 +1,13 @@
 package logging
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -67,6 +69,46 @@ type RuntimeLogSink struct {
 	rootDir      string
 	startTimeUTC time.Time
 	config       RuntimeLogConfig
+}
+
+var errRuntimeLogSinkClosed = errors.New("runtime log sink closed")
+
+type runtimeLogWriter struct {
+	mu     sync.Mutex
+	writer *lumberjack.Logger
+	closed bool
+}
+
+func newRuntimeLogWriter(writer *lumberjack.Logger) *runtimeLogWriter {
+	return &runtimeLogWriter{writer: writer}
+}
+
+func (w *runtimeLogWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return 0, errRuntimeLogSinkClosed
+	}
+	return w.writer.Write(p)
+}
+
+func (w *runtimeLogWriter) Sync() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return nil
+	}
+	return nil
+}
+
+func (w *runtimeLogWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.closed {
+		return nil
+	}
+	w.closed = true
+	return w.writer.Close()
 }
 
 // Logger returns the zap logger enriched with runtime logging fields and the
@@ -194,13 +236,14 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 	}
 
 	runtimeLogConfig := normalizeRuntimeLogConfig(config)
-	writer := &lumberjack.Logger{
+	rollingWriter := &lumberjack.Logger{
 		Filename:   path,
 		MaxSize:    runtimeLogConfig.MaxSize,
 		MaxBackups: runtimeLogConfig.MaxBackups,
 		MaxAge:     runtimeLogConfig.MaxAge,
 		Compress:   runtimeLogConfig.Compress,
 	}
+	writer := newRuntimeLogWriter(rollingWriter)
 
 	encoderCfg := zap.NewProductionEncoderConfig()
 	encoderCfg.TimeKey = "ts"
