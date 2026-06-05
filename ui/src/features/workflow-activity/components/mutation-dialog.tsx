@@ -1,10 +1,12 @@
 import { type ReactNode, useId } from "react";
 import {
   AlertPanel,
+  AlertPanelText,
   Button,
   DashboardHeading,
   DashboardLabel,
   DashboardText,
+  SurfacePanel,
 } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
@@ -79,79 +81,80 @@ export function DashboardMutationDialog({
           type="button"
         />
       ) : null}
-      <section
+      <SurfacePanel
         aria-describedby={description ? descriptionId : undefined}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="pointer-events-auto relative z-10 w-full overflow-hidden rounded-3xl border border-outline bg-surface-container-high shadow-af-panel"
+        asChild
+        className="pointer-events-auto relative z-10 w-full overflow-hidden shadow-af-panel"
+        padding="none"
+        radius="3xl"
         role="dialog"
       >
-        <div
-          className={cn(
-            DIALOG_CONTENT_CLASS,
-            media ? DIALOG_CONTENT_WITH_MEDIA_CLASS : undefined,
-          )}
-        >
-          {media ? <div>{media}</div> : null}
+        <section>
+          <div
+            className={cn(
+              DIALOG_CONTENT_CLASS,
+              media ? DIALOG_CONTENT_WITH_MEDIA_CLASS : undefined,
+            )}
+          >
+            {media ? <div>{media}</div> : null}
 
-          <div className="grid content-start gap-4">
-            <header className="flex items-start justify-between gap-4">
-              <div className="grid gap-2">
-                <DashboardLabel
-                  as="p"
-                  className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary"
-                >
-                  {resolvedFlowLabel}
-                </DashboardLabel>
-                <DashboardHeading
-                  as="h2"
-                  className="m-0"
-                  id={titleId}
-                >
-                  {title}
-                </DashboardHeading>
-                {description ? (
-                  <DashboardText className="m-0" id={descriptionId}>
-                    {description}
-                  </DashboardText>
-                ) : null}
-              </div>
-
-              {showCloseButton && onClose ? (
-                <Button
-                  aria-label={resolvedCloseLabel}
-                  className="h-10 min-h-10 w-10 rounded-full bg-surface-container-low text-on-surface-variant"
-                  disabled={closeDisabled}
-                  onClick={onClose}
-                  size="icon"
-                  tone="outline"
-                  type="button"
-                >
-                  <svg
-                    aria-hidden="true"
-                    fill="none"
-                    height="18"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1.8"
-                    viewBox="0 0 24 24"
-                    width="18"
+            <div className="grid content-start gap-4">
+              <header className="flex items-start justify-between gap-4">
+                <div className="grid gap-2">
+                  <DashboardLabel
+                    as="p"
+                    className="mb-0 text-xs font-bold uppercase tracking-[0.16em] text-primary"
                   >
-                    <path d="M6 6l12 12" />
-                    <path d="M18 6L6 18" />
-                  </svg>
-                </Button>
-              ) : null}
-            </header>
+                    {resolvedFlowLabel}
+                  </DashboardLabel>
+                  <DashboardHeading as="h2" className="m-0" id={titleId}>
+                    {title}
+                  </DashboardHeading>
+                  {description ? (
+                    <DashboardText className="m-0" id={descriptionId}>
+                      {description}
+                    </DashboardText>
+                  ) : null}
+                </div>
 
-            {children}
-            {footer ? (
-              <div className="flex flex-wrap justify-end gap-3">{footer}</div>
-            ) : null}
+                {showCloseButton && onClose ? (
+                  <Button
+                    aria-label={resolvedCloseLabel}
+                    className="text-on-surface-variant"
+                    disabled={closeDisabled}
+                    onClick={onClose}
+                    size="iconPill"
+                    tone="secondary"
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      fill="none"
+                      height="18"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                      viewBox="0 0 24 24"
+                      width="18"
+                    >
+                      <path d="M6 6l12 12" />
+                      <path d="M18 6L6 18" />
+                    </svg>
+                  </Button>
+                ) : null}
+              </header>
+
+              {children}
+              {footer ? (
+                <div className="flex flex-wrap justify-end gap-3">{footer}</div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </SurfacePanel>
     </div>
   );
 }
@@ -178,9 +181,9 @@ export function DashboardMessagePanel({
       <div className="flex items-start justify-between gap-4">
         <div className="grid gap-1">
           <DashboardHeading as="h3">{title}</DashboardHeading>
-          <DashboardText as="div" className="m-0 text-sm" variant="supporting">
+          <AlertPanelText as="div" variant="supporting">
             {children}
-          </DashboardText>
+          </AlertPanelText>
         </div>
         {action}
       </div>

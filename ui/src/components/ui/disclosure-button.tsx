@@ -1,7 +1,6 @@
 import { forwardRef } from "react";
 
 import { Button, type ButtonProps } from "./button";
-import { cn } from "../../lib/cn";
 
 export interface DisclosureButtonProps extends ButtonProps {
   controlsID: string;

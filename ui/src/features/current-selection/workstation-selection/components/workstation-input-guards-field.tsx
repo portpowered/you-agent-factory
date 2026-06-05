@@ -3,6 +3,8 @@ import { useId } from "react";
 import {
   DashboardLabel,
   DashboardText,
+  FormDescription,
+  FormError,
   Input,
   Select,
   SurfacePanel,
@@ -40,9 +42,9 @@ export function EditableConfigurationWorkstationInputGuardsField({
         <DashboardLabel as="h5" className="m-0">
           {messages.workstationInputGuardsHeading}
         </DashboardLabel>
-        <DashboardText className="m-0 text-on-surface-variant">
+        <FormDescription variant="body">
           {messages.workstationInputGuardsEmpty}
-        </DashboardText>
+        </FormDescription>
       </CurrentSelectionFormField>
     );
   }
@@ -216,9 +218,9 @@ function PeerInputGuardFields({
         {matchInputFieldLabel}
       </DashboardLabel>
       {peerWorkTypes.length === 0 ? (
-        <DashboardText className="m-0 text-on-surface-variant">
+        <FormDescription variant="body">
           {messages.workstationInputGuardPeersEmpty}
-        </DashboardText>
+        </FormDescription>
       ) : (
         <Select
           id={matchInputFieldId}
@@ -278,9 +280,9 @@ function ParentInputGuardFields({
           {messages.inputGuardParentInputFieldLabel}
         </DashboardLabel>
         {peerWorkTypes.length === 0 ? (
-          <DashboardText className="m-0 text-on-surface-variant">
+          <FormDescription variant="body">
             {messages.workstationInputGuardPeersEmpty}
-          </DashboardText>
+          </FormDescription>
         ) : (
           <Select
             id={parentInputFieldId}
@@ -336,15 +338,7 @@ function ParentInputGuardFields({
 }
 
 function GuardFieldError({ message }: { message: string }) {
-  return (
-    <DashboardText
-      className="m-0 text-on-error-container"
-      role="alert"
-      variant="supporting"
-    >
-      {message}
-    </DashboardText>
-  );
+  return <FormError>{message}</FormError>;
 }
 
 function resolveFieldError(

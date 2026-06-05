@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
-import { AlertPanel } from "./alert-panel";
+import { AlertPanel, AlertPanelText } from "./alert-panel";
 
 describe("AlertPanel", () => {
   it.each([
@@ -32,5 +32,25 @@ describe("AlertPanel", () => {
     );
 
     expect(screen.getByText("Inline warning").className).toContain("min-h-0");
+  });
+
+  it("renders alert copy that inherits the panel tone", () => {
+    render(
+      <AlertPanel tone="danger">
+        <AlertPanelText>Primary alert copy</AlertPanelText>
+        <AlertPanelText as="span" variant="supporting">
+          Supporting alert copy
+        </AlertPanelText>
+      </AlertPanel>,
+    );
+
+    const body = screen.getByText("Primary alert copy");
+    const supporting = screen.getByText("Supporting alert copy");
+
+    expect(body.className).toContain("af-dashboard-body-text");
+    expect(body.className).toContain("!text-current");
+    expect(supporting.tagName).toBe("SPAN");
+    expect(supporting.className).toContain("af-dashboard-supporting-text");
+    expect(supporting.className).toContain("!text-current");
   });
 });

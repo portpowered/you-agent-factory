@@ -139,6 +139,60 @@ describe("dashboard trend cards", () => {
     );
   });
 
+  it("renders empty trend cards through shared empty-state copy primitives", () => {
+    render(
+      <>
+        <FailureTrendCard
+          model={{
+            currentFailed: 0,
+            failureDelta: 0,
+            groups: [],
+            path: null,
+            points: [],
+            rangeLabel: "15m",
+          }}
+          onRangeChange={() => undefined}
+          rangeID="15m"
+        />
+        <ReworkTrendCard
+          model={{
+            currentWorkLabel: "",
+            path: null,
+            points: [],
+            retryOrReworkCount: 0,
+            terminalOutcome: "APPROVED",
+          }}
+        />
+        <TimingTrendCard
+          model={{
+            averageDurationMillis: 0,
+            currentWorkLabel: "",
+            fastestDurationMillis: 0,
+            latestDurationMillis: 0,
+            path: null,
+            points: [],
+            slowestDurationMillis: 0,
+          }}
+        />
+      </>,
+    );
+
+    expect(screen.getByText("No failure samples").className).toContain(
+      "af-dashboard-section-heading",
+    );
+    expect(
+      screen.getByText(
+        "Failure trend data appears after the event stream receives work history.",
+      ).className,
+    ).toContain("af-dashboard-body-text");
+    expect(screen.getAllByText("No selected trace")).toHaveLength(2);
+    expect(
+      screen.getByText(
+        "Select active work with retained trace history to compare dispatch timing.",
+      ).className,
+    ).toContain("af-dashboard-body-text");
+  });
+
   it("applies shared typography helpers to trend labels, summaries, and supporting copy", () => {
     render(
       <>
@@ -178,13 +232,14 @@ describe("dashboard trend cards", () => {
     const failureScope = within(resolvedFailureCard);
     const reworkScope = within(resolvedReworkCard);
     const timingScope = within(resolvedTimingCard);
-    const toolbar = failureScope.getByText("Time range").closest("div");
+    const toolbar = failureScope.getByText("Time range").closest("div")
+      ?.parentElement;
     const summary = failureScope.getByText("Failed in range").closest("dl");
     const failedInRangeMetric = failureScope
       .getByText("Failed in range")
       .closest("div");
 
-    expect(failureScope.getByText("Time range").tagName).toBe("SPAN");
+    expect(failureScope.getByText("Time range").tagName).toBe("LABEL");
     expect(failureScope.getByLabelText("Time range").tagName).toBe("SELECT");
     expect(
       requireValue(toolbar, "expected failure trend toolbar").className,

@@ -112,8 +112,6 @@ describe("TerminalWorkSummaryCard", () => {
     ).toBeTruthy();
     expect(screen.getByText("dispatch-done-story")).toBeTruthy();
     expect(screen.getByText("trace-done-story")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "Open trace" }).getAttribute("href"),
-    ).toBe("#trace");
+    expect(screen.getByRole("button", { name: "Open trace" })).toBeTruthy();
   });
 });

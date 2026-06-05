@@ -25,6 +25,9 @@ export { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-w
 
 import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show-menu";
 import { FactoryGraphEditorFloatingSurface } from "./factory-graph-editor-floating-surface";
+import { FactoryGraphEditorMenuHeader } from "./factory-graph-editor-menu-header";
+import { FactoryGraphEditorMenuItemButton } from "./factory-graph-editor-menu-item-button";
+import { FactoryGraphEditorMenuItemCopy } from "./factory-graph-editor-menu-item-copy";
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
@@ -319,37 +322,27 @@ function FactoryGraphEditorAddMenu({
         side="top"
         sideOffset={12}
       >
-        <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-on-surface">
-            {messages.toolbarVisibilityMenuTitle}
-          </p>
-          <p className="m-0 text-xs leading-5 text-on-surface-variant">
-            {messages.toolbarVisibilityMenuDescription}
-          </p>
-        </div>
+        <FactoryGraphEditorMenuHeader
+          description={messages.toolbarVisibilityMenuDescription}
+          title={messages.toolbarVisibilityMenuTitle}
+        />
         <div className="grid gap-1">
           {actions.map((action) => (
-            <DashboardActionButton
+            <FactoryGraphEditorMenuItemButton
               aria-label={action.label}
-              className="min-h-0 w-full justify-start rounded-2xl border-transparent px-3 py-2 text-left [&>span]:grid [&>span]:w-full [&>span]:justify-items-start"
               disabled={action.disabled}
               key={action.id}
               onClick={() => {
                 onAction(action.id);
                 onOpenChange?.(false);
               }}
-              tone="ghost"
               type="button"
             >
-              <span className="text-sm font-semibold text-on-surface">
-                {action.label}
-              </span>
-              {action.description ? (
-                <span className="text-xs leading-5 text-on-surface-variant">
-                  {action.description}
-                </span>
-              ) : null}
-            </DashboardActionButton>
+              <FactoryGraphEditorMenuItemCopy
+                description={action.description}
+                label={action.label}
+              />
+            </FactoryGraphEditorMenuItemButton>
           ))}
         </div>
       </PopoverContent>
@@ -439,14 +432,7 @@ export function FactoryGraphEditorActionPopover({
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent align="start" className="grid gap-3" sideOffset={12}>
-        <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-on-surface">{title}</p>
-          {description ? (
-            <p className="m-0 text-xs leading-5 text-on-surface-variant">
-              {description}
-            </p>
-          ) : null}
-        </div>
+        <FactoryGraphEditorMenuHeader description={description} title={title} />
         {children}
       </PopoverContent>
     </Popover>

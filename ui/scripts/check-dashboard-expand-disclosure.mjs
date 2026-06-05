@@ -101,6 +101,10 @@ function collectDisclosureUsage(sourceText, filePath) {
         imports.standardExpandableSection = true;
       }
 
+      if (modulePath.includes("current-selection-expandable-section")) {
+        imports.currentSelectionExpandableSection = true;
+      }
+
       if (modulePath.includes("detail-card-shared")) {
         const importClause = node.importClause;
         if (

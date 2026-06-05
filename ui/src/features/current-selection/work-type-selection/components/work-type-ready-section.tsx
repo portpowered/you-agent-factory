@@ -1,6 +1,7 @@
 import { type ReactNode, useId } from "react";
 
 import {
+  Checkbox,
   DashboardLabel,
   DashboardStatusPill,
   Input,
@@ -144,20 +145,18 @@ export function WorkTypeReadySection({
             className="flex items-center gap-2"
             htmlFor="editable-work-type-handling-behavior-default"
           >
-            <input
+            <Checkbox
               aria-describedby={handlingBehaviorDescribedBy || undefined}
               aria-invalid={
                 validationErrors.handlingBehavior ? "true" : undefined
               }
               checked={hasDefaultHandlingBehavior}
-              className="size-4 rounded border border-outline"
               id="editable-work-type-handling-behavior-default"
               onChange={(event) =>
                 state.onHandlingBehaviorChange(
                   event.target.checked ? ["DEFAULT"] : null,
                 )
               }
-              type="checkbox"
             />
             {messages.handlingBehaviorDefaultLabel}
           </DashboardLabel>

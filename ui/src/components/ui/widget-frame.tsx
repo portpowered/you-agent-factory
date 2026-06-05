@@ -4,6 +4,7 @@ import { AgentBentoCard } from "../../features/bento/components/agent-bento";
 import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SECTION_HEADING_CLASS,
   DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "./dashboard-typography";
@@ -73,6 +74,45 @@ export function DashboardEmptyState({
     >
       {children}
     </div>
+  );
+}
+
+export interface DashboardEmptyStateTitleProps
+  extends HTMLAttributes<HTMLElement> {
+  as?: ElementType;
+  children: ReactNode;
+}
+
+export function DashboardEmptyStateTitle({
+  as: Component = "h3",
+  children,
+  className,
+  ...props
+}: DashboardEmptyStateTitleProps) {
+  return (
+    <Component
+      className={cn(DASHBOARD_SECTION_HEADING_CLASS, className)}
+      {...props}
+    >
+      {children}
+    </Component>
+  );
+}
+
+export interface DashboardEmptyStateTextProps
+  extends HTMLAttributes<HTMLParagraphElement> {
+  children: ReactNode;
+}
+
+export function DashboardEmptyStateText({
+  children,
+  className,
+  ...props
+}: DashboardEmptyStateTextProps) {
+  return (
+    <p className={cn("m-0", DASHBOARD_BODY_TEXT_CLASS, className)} {...props}>
+      {children}
+    </p>
   );
 }
 

@@ -7,6 +7,7 @@ import {
 import { cn } from "../../../../lib/cn";
 import type { EditableWorkTypeValues } from "../../../current-factory-definition/lib/work-type-editable-values";
 import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
+import { CurrentSelectionSupportingText } from "../../base/public";
 import { workStateGraphNodeId } from "../lib/work-state-graph-node-id";
 import type { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 
@@ -20,20 +21,13 @@ function WorkTypeStateRowContent({
   return (
     <div className="grid min-w-0 gap-1">
       <div className="grid min-w-0 gap-1">
-        <DashboardLabel>
-          {messages.stateNameColumnLabel}
-        </DashboardLabel>
-        <DashboardText
-          as="span"
-          className="min-w-0 [overflow-wrap:anywhere]"
-        >
+        <DashboardLabel>{messages.stateNameColumnLabel}</DashboardLabel>
+        <DashboardText as="span" className="min-w-0 [overflow-wrap:anywhere]">
           {state.name}
         </DashboardText>
       </div>
       <div className="grid min-w-0 gap-1">
-        <DashboardLabel>
-          {messages.stateTypeColumnLabel}
-        </DashboardLabel>
+        <DashboardLabel>{messages.stateTypeColumnLabel}</DashboardLabel>
         <DashboardText
           as="span"
           className="min-w-0 [overflow-wrap:anywhere]"
@@ -66,9 +60,9 @@ export function WorkTypeStatesList({
         title={messages.statesHeading}
       />
       {states == null || states.length === 0 ? (
-        <DashboardText className="m-0 text-on-surface-variant">
+        <CurrentSelectionSupportingText>
           {messages.statesEmpty}
-        </DashboardText>
+        </CurrentSelectionSupportingText>
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {states.map((state) => {

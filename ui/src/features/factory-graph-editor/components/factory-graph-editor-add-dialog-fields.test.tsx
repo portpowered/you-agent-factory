@@ -21,11 +21,19 @@ describe("FactoryGraphEditor add dialog fields", () => {
     );
 
     const input = screen.getByLabelText("Node name");
+    const help = screen.getByText("Names become factory node identifiers.");
+    const error = screen.getByRole("alert");
+
     expect(input.className).toContain("bg-surface");
-    expect(screen.getByText("Names become factory node identifiers.")).toBeTruthy();
-    expect(screen.getByText("Use a unique name.").className).toContain(
-      "text-on-error-container",
+    expect(screen.getByText("Node name").className).toContain("font-semibold");
+    expect(screen.getByText("Node name").className).toContain(
+      "text-on-surface",
     );
+    expect(help.className).toContain("af-dashboard-supporting-text");
+    expect(error.textContent).toBe("Use a unique name.");
+    expect(error.className).toContain("af-dashboard-supporting-text");
+    expect(error.className).toContain("font-medium");
+    expect(error.className).toContain("text-on-error-container");
 
     fireEvent.change(input, { target: { value: "beta" } });
     expect(onChange).toHaveBeenCalledWith("beta");

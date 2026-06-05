@@ -2,6 +2,7 @@ export {
   type FactoryDocumentSaveInput,
   useFactoryDocumentSave,
 } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
+export * from "../components/current-selection-content-section";
 export * from "../components/current-selection-description-list";
 export * from "../components/current-selection-detail-feedback";
 export * from "../components/current-selection-detail-item";
@@ -24,6 +25,7 @@ export {
 export * from "../components/current-selection-section-header";
 export * from "../components/current-selection-selectable-button";
 export * from "../components/current-selection-supporting-text";
+export * from "../components/current-selection-trace-button";
 export {
   DetailCardFactorySaveFeedback,
   type DetailCardFactorySaveFeedbackMessages,

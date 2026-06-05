@@ -1,4 +1,3 @@
-import { Button, DashboardHeading } from "../../../../components/ui";
 import {
   formatDurationFromISO,
   formatDurationMillis,
@@ -11,9 +10,11 @@ import {
   useCurrentSelectionShellMessages,
 } from "../../base/components/current-selection-locale";
 import {
+  CurrentSelectionContentSection,
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailItem,
   CurrentSelectionDetailSection,
+  CurrentSelectionTraceButton,
 } from "../../base/public";
 import type {
   ExecutionDetailsSectionProps,
@@ -28,7 +29,6 @@ export function ExecutionDetailsSection({
   now,
   onSelectTraceID,
   showInferenceAttempts = true,
-  traceTargetId,
 }: ExecutionDetailsSectionProps) {
   const messages = useCurrentSelectionShellMessages();
   const locale = useCurrentSelectionLocale();
@@ -67,23 +67,13 @@ export function ExecutionDetailsSection({
           <dd className="grid gap-1.5">
             {hasTraceIDs ? (
               details.traceIDs.map((traceID) => (
-                <Button
-                  asChild
-                  className="w-fit rounded-lg"
+                <CurrentSelectionTraceButton
+                  activeTraceID={activeTraceID}
                   key={traceID}
-                  size="sm"
-                  tone="outline"
-                >
-                  <a
-                    href={`#${traceTargetId}`}
-                    onClick={() => onSelectTraceID?.(traceID)}
-                  >
-                    {traceID}
-                    {activeTraceID === traceID
-                      ? messages.selectedTraceSuffix
-                      : ""}
-                  </a>
-                </Button>
+                  onSelectTraceID={onSelectTraceID}
+                  selectedTraceSuffix={messages.selectedTraceSuffix}
+                  traceID={traceID}
+                />
               ))
             ) : (
               <span className="min-w-0 [overflow-wrap:anywhere]">
@@ -95,16 +85,13 @@ export function ExecutionDetailsSection({
       </CurrentSelectionDescriptionList>
       {hasTraceIDs ? (
         <div className="grid gap-2">
-          <Button asChild className="w-fit rounded-lg" size="sm" tone="outline">
-            <a
-              href={`#${traceTargetId}`}
-              onClick={() =>
-                onSelectTraceID?.(activeTraceID ?? details.traceIDs[0] ?? "")
-              }
-            >
-              {messages.openTraceAction}
-            </a>
-          </Button>
+          <CurrentSelectionTraceButton
+            activeTraceID={activeTraceID}
+            onSelectTraceID={onSelectTraceID}
+            traceID={activeTraceID ?? details.traceIDs[0] ?? ""}
+          >
+            {messages.openTraceAction}
+          </CurrentSelectionTraceButton>
         </div>
       ) : (
         <DetailCopy>{messages.traceUnavailable}</DetailCopy>
@@ -123,13 +110,10 @@ export function InferenceAttemptsSection({
   const messages = useCurrentSelectionShellMessages();
 
   return (
-    <section
+    <CurrentSelectionContentSection
       aria-label={messages.inferenceAttemptsRegionLabel}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+      title={messages.inferenceAttemptsHeading}
     >
-      <DashboardHeading as="h4" className="m-0">
-        {messages.inferenceAttemptsHeading}
-      </DashboardHeading>
       {attempts.length > 0 ? (
         <div className="grid gap-3">
           {attempts.map((attempt) => (
@@ -142,7 +126,7 @@ export function InferenceAttemptsSection({
       ) : (
         <DetailCopy>{messages.inferenceAttemptsEmptyState}</DetailCopy>
       )}
-    </section>
+    </CurrentSelectionContentSection>
   );
 }
 
@@ -165,13 +149,10 @@ function WorkstationRequestProjectionSection({
   );
 
   return (
-    <section
+    <CurrentSelectionContentSection
       aria-label={messages.workstationRequestRegionLabel}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+      title={messages.workstationRequestHeading}
     >
-      <DashboardHeading as="h4" className="m-0">
-        {messages.workstationRequestHeading}
-      </DashboardHeading>
       <CurrentSelectionDescriptionList>
         <InferenceAttemptDetail
           label="dispatchedCount"
@@ -218,6 +199,6 @@ function WorkstationRequestProjectionSection({
           value={response?.failureMessage ?? response?.failure_message}
         />
       </CurrentSelectionDescriptionList>
-    </section>
+    </CurrentSelectionContentSection>
   );
 }

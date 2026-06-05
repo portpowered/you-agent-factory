@@ -1,6 +1,7 @@
 import { DashboardLabel, DashboardText } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
+import { CurrentSelectionSupportingText } from "../../base/public";
 import type { ResourceDetailState } from "../lib/detail-card-types";
 import {
   resourceShowsModelFields,
@@ -96,12 +97,9 @@ export function ResourceDetailContextSection({
             {formatList(workerNames)}
           </DashboardText>
         ) : (
-          <DashboardText
-            className="m-0 text-on-surface-variant"
-            variant="supporting"
-          >
+          <CurrentSelectionSupportingText>
             {messages.referencingWorkersEmpty}
-          </DashboardText>
+          </CurrentSelectionSupportingText>
         )}
       </section>
 
@@ -118,12 +116,9 @@ export function ResourceDetailContextSection({
             {formatList(workstationNames)}
           </DashboardText>
         ) : (
-          <DashboardText
-            className="m-0 text-on-surface-variant"
-            variant="supporting"
-          >
+          <CurrentSelectionSupportingText>
             {messages.referencingWorkstationsEmpty}
-          </DashboardText>
+          </CurrentSelectionSupportingText>
         )}
       </section>
     </div>

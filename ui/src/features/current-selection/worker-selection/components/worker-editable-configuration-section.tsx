@@ -3,8 +3,11 @@ import { type ReactNode, useId } from "react";
 
 import {
   AlertPanel,
+  AlertPanelText,
+  Checkbox,
   DashboardLabel,
   DashboardText,
+  FormWarning,
   Input,
   Select,
   Textarea,
@@ -69,10 +72,7 @@ export function WorkerEditableConfigurationSection({
         </CurrentSelectionDetailFeedback>
       ) : null}
       {state?.status === "error" ? (
-        <CurrentSelectionDetailFeedback
-          role="alert"
-          tone="danger"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {messages.editableConfigurationErrorPrefix} {state.errorMessage}
         </CurrentSelectionDetailFeedback>
       ) : null}
@@ -360,12 +360,9 @@ function WorkerEditableConfigurationOverwriteWarning({
 
   return (
     <AlertPanel tone="warning">
-      <DashboardText
-        className="m-0 text-on-warning-container"
-        role="alert"
-      >
+      <AlertPanelText role="alert">
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
-      </DashboardText>
+      </AlertPanelText>
     </AlertPanel>
   );
 }
@@ -384,12 +381,9 @@ function WorkerEditableConfigurationServerChangedHint({
   }
 
   return (
-    <DashboardText
-      className="m-0 text-on-warning-container"
-      variant="supporting"
-    >
+    <FormWarning>
       {messages.editableConfigurationServerFieldChangedHint}
-    </DashboardText>
+    </FormWarning>
   );
 }
 
@@ -409,15 +403,12 @@ function WorkerEditableConfigurationSharedImpactWarning({
 
   return (
     <AlertPanel tone="warning">
-      <DashboardText
-        className="m-0 text-on-warning-container"
-        role="alert"
-      >
+      <AlertPanelText role="alert">
         {messages.editableConfigurationSharedImpactWarning(
           state.draft.name.trim() || workerName,
           formatList(workstationNames),
         )}
-      </DashboardText>
+      </AlertPanelText>
     </AlertPanel>
   );
 }
@@ -651,7 +642,7 @@ function ModelWorkerSkipPermissionsField({
       errorMessage={validationErrors.skipPermissions}
       fieldId="editable-worker-skip-permissions"
       input={
-        <input
+        <Checkbox
           aria-describedby={
             validationErrors.skipPermissions
               ? "editable-worker-skip-permissions-error"
@@ -659,12 +650,10 @@ function ModelWorkerSkipPermissionsField({
           }
           aria-invalid={validationErrors.skipPermissions ? "true" : undefined}
           checked={state.draft.skipPermissions}
-          className="size-4 rounded border border-outline"
           id="editable-worker-skip-permissions"
           onChange={(event) =>
             state.onSkipPermissionsChange(event.target.checked)
           }
-          type="checkbox"
         />
       }
       label={messages.skipPermissionsFieldLabel}
@@ -870,10 +859,7 @@ function WorkerEditableConfigurationFieldHelp({
   children: ReactNode;
 }) {
   return (
-    <DashboardText
-      className="m-0 text-on-surface-subtle"
-      variant="supporting"
-    >
+    <DashboardText className="m-0 text-on-surface-subtle" variant="supporting">
       {children}
     </DashboardText>
   );
@@ -900,10 +886,7 @@ function WorkerEditableConfigurationField({
       {input}
       {supportingContent}
       {errorMessage ? (
-        <CurrentSelectionDetailFeedback
-          id={`${fieldId}-error`}
-          tone="danger"
-        >
+        <CurrentSelectionDetailFeedback id={`${fieldId}-error`} tone="danger">
           {errorMessage}
         </CurrentSelectionDetailFeedback>
       ) : null}

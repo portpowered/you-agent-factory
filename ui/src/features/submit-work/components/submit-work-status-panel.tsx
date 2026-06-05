@@ -1,4 +1,4 @@
-import { AlertPanel } from "../../../components/ui";
+import { AlertPanel, AlertPanelText } from "../../../components/ui";
 import type { SubmitWorkStatus } from "./submit-work-card";
 
 const SUBMIT_WORK_STATUS_TONE_BY_KIND: Record<
@@ -33,7 +33,7 @@ export function SubmitWorkStatusPanel({
       tone={SUBMIT_WORK_STATUS_TONE_BY_KIND[status.kind]}
       variant="empty"
     >
-      {status.message}
+      <AlertPanelText>{status.message}</AlertPanelText>
     </AlertPanel>
   );
 }

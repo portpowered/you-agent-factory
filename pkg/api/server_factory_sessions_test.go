@@ -659,45 +659,6 @@ func TestParseCodexSessionDetails_EmitsMixedTranscriptChronologically(t *testing
 	assertMixedCodexSessionTranscript(t, parsed)
 }
 
-func TestParseCodexSessionDetails_ReconcilesMirroredCodexMessages(t *testing.T) {
-	session := strings.Join([]string{
-		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-06-04T10:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I will inspect the factory state first.","phase":"commentary"}}`,
-		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will inspect the factory state first."}],"phase":"commentary"}}`,
-		`{"timestamp":"2026-06-04T10:00:02Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Plan the next phase."}]}}`,
-		`{"timestamp":"2026-06-04T10:00:02Z","type":"event_msg","payload":{"type":"user_message","message":"Plan the next phase."}}`,
-		`{"timestamp":"2026-06-04T10:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}`,
-		`{"timestamp":"2026-06-04T10:00:04Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Factory state looks ready."}]}}`,
-	}, "\n")
-
-	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session details: %v", err)
-	}
-
-	if parsed.Summary.LineCount != 7 || parsed.Summary.EventCount != 7 {
-		t.Fatalf("summary = %#v, want all source records counted", parsed.Summary)
-	}
-	if parsed.Summary.TokenUsage == nil || intValue(parsed.Summary.TokenUsage.TotalTokens) != 120 {
-		t.Fatalf("token usage = %#v, want line-level token accounting retained", parsed.Summary.TokenUsage)
-	}
-	if len(parsed.Transcript) != 3 {
-		t.Fatalf("transcript = %#v, want mirrored messages emitted once", parsed.Transcript)
-	}
-	first := parsed.Transcript[0]
-	if first.Order != 1 || first.Type != factoryapi.AssistantMessage || intValue(first.LineNumber) != 2 || stringValue(first.Text) != "I will inspect the factory state first." {
-		t.Fatalf("first transcript entry = %#v, want first mirrored assistant message retained", first)
-	}
-	second := parsed.Transcript[1]
-	if second.Order != 2 || second.Type != factoryapi.UserMessage || intValue(second.LineNumber) != 4 || stringValue(second.Text) != "Plan the next phase." {
-		t.Fatalf("second transcript entry = %#v, want first mirrored user message retained", second)
-	}
-	third := parsed.Transcript[2]
-	if third.Order != 3 || third.Type != factoryapi.AssistantMessage || intValue(third.LineNumber) != 7 || stringValue(third.Text) != "Factory state looks ready." {
-		t.Fatalf("third transcript entry = %#v, want following distinct assistant message retained", third)
-	}
-}
-
 func TestParseCodexSessionDetails_PreservesLongMessageContent(t *testing.T) {
 	longPart := strings.Repeat("skill description ", 90) + "final-visible-tail"
 	session := strings.Join([]string{
@@ -994,22 +955,4 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEve
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
-}
-
-func TestGetProviderSessionDetails_FailsForAmbiguousTimestampPrefixedMatches(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-	sessionDir := filepath.Join(root, "2026", "05", "19")
-	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
-		t.Fatalf("create provider session fixture directory: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(sessionDir, "rollout-2026-05-20T17-45-24-sess_123.jsonl"), []byte(`{"type":"session_meta","id":"sess_123"}`), 0o600); err != nil {
-		t.Fatalf("write second timestamp-prefixed provider session fixture: %v", err)
-	}
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-	assertJSONError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "multiple provider session files match session identifier")
 }

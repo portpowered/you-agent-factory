@@ -1,7 +1,6 @@
 import {
   DashboardCode,
   DashboardDescriptionList,
-  DashboardHeading,
   DashboardText,
   SurfacePanel,
 } from "../../../../components/ui";
@@ -23,7 +22,10 @@ import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,
 } from "../../base/components/detail-card-shared";
-import { CurrentSelectionSelectableButton } from "../../base/public";
+import {
+  CurrentSelectionContentSection,
+  CurrentSelectionSelectableButton,
+} from "../../base/public";
 import type {
   StateNodeDetailCardProps,
   StatePositionWorkListItemProps,
@@ -78,10 +80,7 @@ export function StateNodeDetailCard({
           <dd>{tokenCount}</dd>
         </div>
       </dl>
-      <section className="mt-4 grid gap-2.5 [&_h4]:m-0">
-        <DashboardHeading as="h4" className="m-0">
-          {messages.currentWorkHeading}
-        </DashboardHeading>
+      <CurrentSelectionContentSection title={messages.currentWorkHeading}>
         {visibleWorkItems.length > 0 ? (
           <StatePositionWorkList
             failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
@@ -98,7 +97,7 @@ export function StateNodeDetailCard({
             )}
           </DetailCopy>
         )}
-      </section>
+      </CurrentSelectionContentSection>
     </SelectionDetailLayout>
   );
 }
@@ -140,19 +139,12 @@ function StatePositionWorkListItem({
     <>
       <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
       {workID ? (
-        <DashboardCode
-          className="text-on-surface-variant"
-          size="supporting"
-        >
+        <DashboardCode className="text-on-surface-variant" size="supporting">
           {workID}
         </DashboardCode>
       ) : null}
       {startedAt ? (
-        <DashboardText
-          as="time"
-          dateTime={startedAt}
-          title={startedAt}
-        >
+        <DashboardText as="time" dateTime={startedAt} title={startedAt}>
           {messages.startedAtLabel}{" "}
           {formatLocalDateTime(
             startedAt,

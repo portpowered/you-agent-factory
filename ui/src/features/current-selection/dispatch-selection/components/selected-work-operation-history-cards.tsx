@@ -1,17 +1,16 @@
 import type { DashboardWorkMoveOperation } from "../../../../api/dashboard/types";
-import { DashboardText } from "../../../../components/ui";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
-import {
-  CurrentSelectionBadge,
-  CurrentSelectionExecutionPill,
-} from "../../base/components/current-selection-pill";
+import { CurrentSelectionBadge } from "../../base/components/current-selection-pill";
 import { CurrentSelectionDescriptionList } from "../../base/public";
-import { CurrentSelectionHistoryCard } from "../../history/public";
+import {
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
 import { InferenceAttemptDetail } from "../../work-selection/public";
 import {
   requestOutcome,
@@ -60,14 +59,10 @@ export function OperatorMoveHistoryCard({
     <CurrentSelectionHistoryCard
       aria-label={messages.operatorMoveRowAccessibleLabel(transition)}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong className="min-w-0 [overflow-wrap:anywhere]">
-            {messages.operatorMoveTitle}
-          </strong>
-          <OperationKindBadge label={messages.moveOperationKindBadge} />
-        </div>
-      </div>
+      <CurrentSelectionHistoryCardHeader
+        badges={<OperationKindBadge label={messages.moveOperationKindBadge} />}
+        title={messages.operatorMoveTitle}
+      />
       <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.moveTransitionLabel}
@@ -114,29 +109,25 @@ export function LogicalMoveDispatchHistoryCard({
       )}
       className={isCurrentDispatch ? "text-on-surface" : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong className="min-w-0 [overflow-wrap:anywhere]">
-            {title || messages.logicalMoveDispatchTitle}
-          </strong>
-          <div className="flex flex-wrap items-center gap-2">
-            <DashboardText className="m-0 text-on-surface-variant">
-              {outcome
-                ? enumMessages.localizeOutcome(outcome)
-                : enumMessages.localizeOutcome("PENDING")}
-            </DashboardText>
+      <CurrentSelectionHistoryCardHeader
+        badges={
+          <>
             <OperationKindBadge label={messages.moveOperationKindBadge} />
             {isCurrentDispatch ? (
               <CurrentSelectionBadge>
                 {messages.currentDispatchBadge}
               </CurrentSelectionBadge>
             ) : null}
-          </div>
-        </div>
-        <CurrentSelectionExecutionPill>
-          {request.dispatch_id || messages.unknownDispatchId}
-        </CurrentSelectionExecutionPill>
-      </div>
+          </>
+        }
+        identifier={request.dispatch_id || messages.unknownDispatchId}
+        subtitle={
+          outcome
+            ? enumMessages.localizeOutcome(outcome)
+            : enumMessages.localizeOutcome("PENDING")
+        }
+        title={title || messages.logicalMoveDispatchTitle}
+      />
       <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.workstationLabel}

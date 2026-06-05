@@ -1,9 +1,9 @@
 import {
   AlertPanel,
+  AlertPanelText,
   CodePanel,
   DashboardCode,
   DashboardLabel,
-  DashboardText,
   SurfacePanel,
 } from "../../components/ui";
 import { cn } from "../../lib/cn";
@@ -55,18 +55,10 @@ export function PromptEditorDiagnosticsPanel({
 
   if (validationState.status === "error") {
     return (
-      <AlertPanel
-        className="min-h-24"
-        id={id}
-        role="alert"
-        tone="danger"
-      >
-        <DashboardText
-          className="m-0 text-on-error-container"
-          variant="supporting"
-        >
+      <AlertPanel className="min-h-24" id={id} role="alert" tone="danger">
+        <AlertPanelText variant="supporting">
           {labels.validationErrorPrefix} {validationState.errorMessage}
-        </DashboardText>
+        </AlertPanelText>
       </AlertPanel>
     );
   }
@@ -85,15 +77,8 @@ export function PromptEditorDiagnosticsPanel({
   }
 
   return (
-    <AlertPanel
-      className="min-h-24"
-      id={id}
-      role="alert"
-      tone="danger"
-    >
-      <DashboardText className="m-0 text-on-error-container">
-        {labels.diagnosticsSummary}
-      </DashboardText>
+    <AlertPanel className="min-h-24" id={id} role="alert" tone="danger">
+      <AlertPanelText>{labels.diagnosticsSummary}</AlertPanelText>
       <div className="grid gap-2">
         <DashboardLabel as="h5" className="m-0">
           {labels.diagnosticsHeading}
@@ -108,13 +93,11 @@ export function PromptEditorDiagnosticsPanel({
               radius="lg"
             >
               <li>
-                <DashboardText className="m-0 text-on-error-container">
+                <AlertPanelText>
                   {formatDiagnosticListMessage(diagnostic, labels)}
-                </DashboardText>
+                </AlertPanelText>
                 {diagnostic.path ? (
-                  <DashboardCode
-                    className="text-xs text-on-surface-variant [overflow-wrap:anywhere]"
-                  >
+                  <DashboardCode className="text-xs text-on-surface-variant [overflow-wrap:anywhere]">
                     {diagnostic.path}
                   </DashboardCode>
                 ) : null}

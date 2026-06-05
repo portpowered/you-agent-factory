@@ -1,4 +1,4 @@
-import { AlertPanel, DashboardText } from "../../../../components/ui";
+import { AlertPanel, AlertPanelText } from "../../../../components/ui";
 import type { DetailCardSaveState } from "../hooks/detail-card-save-types";
 
 export type DetailCardFactorySaveFeedbackMessages = {
@@ -20,9 +20,7 @@ export function DetailCardFactorySaveFeedback<
   if (saveState?.status === "success") {
     return (
       <AlertPanel role="status" tone="success">
-        <DashboardText className="m-0">
-          {messages.successMessage}
-        </DashboardText>
+        <AlertPanelText>{messages.successMessage}</AlertPanelText>
       </AlertPanel>
     );
   }
@@ -30,15 +28,10 @@ export function DetailCardFactorySaveFeedback<
   if (saveState?.status === "warning") {
     return (
       <AlertPanel role="alert" tone="warning">
-        <DashboardText className="m-0">
-          {saveState.message}
-        </DashboardText>
-        <DashboardText
-          className="m-0 text-on-surface-subtle"
-          variant="supporting"
-        >
+        <AlertPanelText>{saveState.message}</AlertPanelText>
+        <AlertPanelText className="text-on-surface-subtle" variant="supporting">
           {messages.staleVersionDetail}
-        </DashboardText>
+        </AlertPanelText>
       </AlertPanel>
     );
   }
@@ -46,9 +39,9 @@ export function DetailCardFactorySaveFeedback<
   if (saveState?.status === "error") {
     return (
       <AlertPanel role="alert" tone="danger">
-        <DashboardText className="m-0">
+        <AlertPanelText>
           {messages.errorPrefix} {saveState.errorMessage}
-        </DashboardText>
+        </AlertPanelText>
       </AlertPanel>
     );
   }

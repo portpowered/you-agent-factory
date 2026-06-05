@@ -179,7 +179,6 @@ function renderCurrentSelectionDetailCard({
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedTrace={selectedTrace}
         selection={selection}
-        traceTargetId="trace"
         widgetId={widgetId}
         workstationRequests={selectedWorkRequestHistory}
       />

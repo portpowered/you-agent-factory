@@ -10,6 +10,7 @@ import {
   DashboardLabel,
   DashboardText,
   ExpandablePanelTrigger,
+  FormError,
   SurfacePanel,
 } from "../../../../components/ui";
 import {
@@ -164,14 +165,10 @@ function EditableConfigurationNonReadyPromptHelpMessage({
 
   if (promptHelpState.status === "error") {
     return (
-      <DashboardText
-        className="m-0 text-on-error-container"
-        role="alert"
-        variant="supporting"
-      >
+      <FormError>
         {messages.editableConfigurationPromptHelpErrorPrefix}{" "}
         {promptHelpState.errorMessage}
-      </DashboardText>
+      </FormError>
     );
   }
 

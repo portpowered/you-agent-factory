@@ -1,4 +1,3 @@
-import { DashboardText } from "../../../../components/ui";
 import {
   formatDurationMillis,
   formatLocalDateTime,
@@ -10,14 +9,14 @@ import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
-import {
-  CurrentSelectionBadge,
-  CurrentSelectionExecutionPill,
-} from "../../base/components/current-selection-pill";
+import { CurrentSelectionBadge } from "../../base/components/current-selection-pill";
 import { normalizeDetailText } from "../../base/components/detail-card-shared";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
 import { CurrentSelectionDescriptionList } from "../../base/public";
-import { CurrentSelectionHistoryCard } from "../../history/public";
+import {
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
 import {
   InferenceAttemptDetail,
   WorkItemPayloadList,
@@ -61,7 +60,6 @@ interface DispatchHistoryCardProps {
   request: SelectedWorkRequestHistoryItem;
   selectedProviderSessionKey?: string | null;
   selectedWorkID: string;
-  traceTargetId: string;
 }
 
 export function DispatchHistoryCard({
@@ -73,7 +71,6 @@ export function DispatchHistoryCard({
   request,
   selectedProviderSessionKey,
   selectedWorkID,
-  traceTargetId,
 }: DispatchHistoryCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
   const locale = useCurrentSelectionLocale();
@@ -116,7 +113,6 @@ export function DispatchHistoryCard({
             onSelectTraceID={onSelectTraceID}
             onSelectWorkID={onSelectWorkID}
             selectedWorkID={selectedWorkID}
-            traceTargetId={traceTargetId}
             view={view}
           />
           <DispatchScriptAttemptsSection
@@ -135,7 +131,6 @@ export function DispatchHistoryCard({
             onSelectTraceID={onSelectTraceID}
             onSelectWorkID={onSelectWorkID}
             selectedWorkID={selectedWorkID}
-            traceTargetId={traceTargetId}
             view={view}
           />
           <DispatchInferenceAttemptsSection
@@ -227,17 +222,9 @@ function DispatchHistoryHeader({
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="grid min-w-0 gap-1">
-        <strong className="min-w-0 [overflow-wrap:anywhere]">
-          {title || dispatchID || messages.unknownDispatchTitle}
-        </strong>
-        <div className="flex flex-wrap items-center gap-2">
-          <DashboardText className="m-0 text-on-surface-variant">
-            {outcome
-              ? enumMessages.localizeOutcome(outcome)
-              : enumMessages.localizeOutcome("PENDING")}
-          </DashboardText>
+    <CurrentSelectionHistoryCardHeader
+      badges={
+        <>
           <WorkstationOperationKindBadge
             label={messages.workstationOperationKindBadge}
           />
@@ -246,12 +233,16 @@ function DispatchHistoryHeader({
               {messages.currentDispatchBadge}
             </CurrentSelectionBadge>
           ) : null}
-        </div>
-      </div>
-      <CurrentSelectionExecutionPill>
-        {dispatchID || messages.unknownDispatchId}
-      </CurrentSelectionExecutionPill>
-    </div>
+        </>
+      }
+      identifier={dispatchID || messages.unknownDispatchId}
+      subtitle={
+        outcome
+          ? enumMessages.localizeOutcome(outcome)
+          : enumMessages.localizeOutcome("PENDING")
+      }
+      title={title || dispatchID || messages.unknownDispatchTitle}
+    />
   );
 }
 
@@ -336,7 +327,6 @@ function DispatchResponseSection({
   onSelectTraceID,
   onSelectWorkID,
   selectedWorkID,
-  traceTargetId,
   view,
 }: {
   activeTraceID?: string | null;
@@ -344,7 +334,6 @@ function DispatchResponseSection({
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
-  traceTargetId: string;
   view: DispatchHistoryView;
 }) {
   return (
@@ -362,7 +351,6 @@ function DispatchResponseSection({
         onSelectTraceID={onSelectTraceID}
         selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
-        traceTargetId={traceTargetId}
       />
     </DispatchDetailSection>
   );
@@ -374,7 +362,6 @@ function DispatchTraceSection({
   onSelectTraceID,
   onSelectWorkID,
   selectedWorkID,
-  traceTargetId,
   view,
 }: {
   activeTraceID?: string | null;
@@ -382,7 +369,6 @@ function DispatchTraceSection({
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID: string;
-  traceTargetId: string;
   view: DispatchHistoryView;
 }) {
   return (
@@ -400,7 +386,6 @@ function DispatchTraceSection({
         onSelectTraceID={onSelectTraceID}
         selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
-        traceTargetId={traceTargetId}
       />
     </DispatchDetailSection>
   );

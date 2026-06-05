@@ -40,6 +40,11 @@ describe("SurfacePanel", () => {
   it("exposes variant class generation for non-component consumers", () => {
     expect(
       surfacePanelVariants({
+        radius: "3xl",
+      }),
+    ).toContain("rounded-3xl");
+    expect(
+      surfacePanelVariants({
         padding: "compact",
         radius: "full",
         surface: "low",

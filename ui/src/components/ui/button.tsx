@@ -12,7 +12,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     | "secondary"
     | "ghost"
     | "warning";
-  size?: "default" | "icon" | "lg" | "pill" | "sm";
+  size?: "default" | "icon" | "iconPill" | "lg" | "pill" | "sm";
 }
 
 const BUTTON_BASE_CLASS =
@@ -34,6 +34,7 @@ const BUTTON_TONE_CLASS: Record<NonNullable<ButtonProps["tone"]>, string> = {
 const BUTTON_SIZE_CLASS: Record<NonNullable<ButtonProps["size"]>, string> = {
   default: "px-4 py-2.5 text-sm",
   icon: "h-11 w-11 px-0 py-0",
+  iconPill: "h-10 min-h-10 w-10 rounded-full px-0 py-0",
   lg: "px-5 py-3 text-base",
   pill: "min-h-9 rounded-full px-3 py-2 text-xs",
   sm: "min-h-9 rounded-lg px-3 py-2 text-xs",

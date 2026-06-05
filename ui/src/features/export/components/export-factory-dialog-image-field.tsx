@@ -1,8 +1,11 @@
-import { DashboardLabel, DashboardText } from "../../../components/ui";
 import {
-  ChooseFileField,
-  ChooseFileNativeInput,
-} from "../../choose-file/public";
+  DashboardText,
+  FileInput,
+  FormDescription,
+  FormError,
+  FormLabel,
+} from "../../../components/ui";
+import { ChooseFileField } from "../../choose-file/public";
 
 export interface ExportFactoryDialogImageFieldProps {
   imageDescription: string;
@@ -37,18 +40,14 @@ export function ExportFactoryDialogImageField({
             </DashboardText>
           ) : null}
           {imageValidationMessage ? (
-            <DashboardText
-              className="m-0 text-sm font-medium text-on-error-container"
-              id={imageValidationId}
-              variant="supporting"
-            >
+            <FormError id={imageValidationId}>
               {imageValidationMessage}
-            </DashboardText>
+            </FormError>
           ) : null}
         </>
       }
       control={
-        <ChooseFileNativeInput
+        <FileInput
           accept="image/*"
           aria-describedby={
             imageValidationMessage ? imageValidationId : undefined
@@ -65,21 +64,9 @@ export function ExportFactoryDialogImageField({
           }}
         />
       }
-      description={
-        <DashboardText className="m-0" variant="supporting">
-          {imageDescription}
-        </DashboardText>
-      }
+      description={<FormDescription>{imageDescription}</FormDescription>}
       disabled={isExporting}
-      label={
-        <DashboardLabel
-          as="label"
-          className="block text-sm font-semibold text-on-surface"
-          htmlFor="export-factory-image"
-        >
-          {imageLabel}
-        </DashboardLabel>
-      }
+      label={<FormLabel htmlFor="export-factory-image">{imageLabel}</FormLabel>}
     />
   );
 }

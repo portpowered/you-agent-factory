@@ -1,7 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
-import { DashboardMessagePanel, DashboardMutationDialog } from "./mutation-dialog";
+import {
+  DashboardMessagePanel,
+  DashboardMutationDialog,
+} from "./mutation-dialog";
 
 describe("DashboardMutationDialog", () => {
   it("assigns unique accessible title and description ids per dialog instance", () => {
@@ -179,8 +182,12 @@ describe("DashboardMessagePanel", () => {
     expect(screen.getByRole("status").className).toContain(
       "bg-surface-container-low",
     );
-    expect(screen.getByRole("alert").className).toContain(
-      "bg-error-container",
+    expect(screen.getByRole("alert").className).toContain("bg-error-container");
+    expect(screen.getByText("Import preview ready.").className).toContain(
+      "af-dashboard-supporting-text",
+    );
+    expect(screen.getByText("Import failed.").className).toContain(
+      "!text-current",
     );
   });
 });

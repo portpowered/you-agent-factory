@@ -1,5 +1,4 @@
 import {
-  DashboardActionButton,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -7,6 +6,9 @@ import {
 import type { FactoryGraphNodeKind } from "../lib/factory-graph-draft-types";
 import { FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS } from "../lib/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { FactoryGraphEditorMenuHeader } from "./factory-graph-editor-menu-header";
+import { FactoryGraphEditorMenuItemButton } from "./factory-graph-editor-menu-item-button";
+import { FactoryGraphEditorMenuItemCopy } from "./factory-graph-editor-menu-item-copy";
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 export function FactoryGraphEditorHideShowMenu({
@@ -50,42 +52,32 @@ export function FactoryGraphEditorHideShowMenu({
         side="top"
         sideOffset={12}
       >
-        <div className="grid gap-1">
-          <p className="m-0 text-sm font-semibold text-on-surface">
-            {messages.toolbarHideShowMenuTitle}
-          </p>
-          <p className="m-0 text-xs leading-5 text-on-surface-variant">
-            {messages.toolbarHideShowMenuDescription}
-          </p>
-        </div>
+        <FactoryGraphEditorMenuHeader
+          description={messages.toolbarHideShowMenuDescription}
+          title={messages.toolbarHideShowMenuTitle}
+        />
         <div className="grid gap-1" role="menu">
           {FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS.map((kind) => {
             const visible = !hiddenNodeClasses.has(kind);
             const label = messages.kindLabel(kind);
 
             return (
-              <DashboardActionButton
+              <FactoryGraphEditorMenuItemButton
                 aria-checked={visible}
                 aria-label={label}
-                className="min-h-0 w-full justify-start rounded-2xl border-transparent px-3 py-2 text-left [&>span]:grid [&>span]:w-full [&>span]:justify-items-start"
                 key={kind}
                 onClick={() => onToggleHiddenNodeClass(kind)}
                 role="menuitemcheckbox"
-                tone="ghost"
                 type="button"
               >
                 <span className="flex w-full items-center justify-between gap-3">
-                  <span className="grid justify-items-start gap-0.5">
-                    <span className="text-sm font-semibold text-on-surface">
-                      {label}
-                    </span>
-                    <span className="text-xs leading-5 text-on-surface-variant">
-                      {messages.nodeClassVisibilityDescription(kind)}
-                    </span>
-                  </span>
+                  <FactoryGraphEditorMenuItemCopy
+                    description={messages.nodeClassVisibilityDescription(kind)}
+                    label={label}
+                  />
                   {visible ? <MenuCheckIcon /> : null}
                 </span>
-              </DashboardActionButton>
+              </FactoryGraphEditorMenuItemButton>
             );
           })}
         </div>

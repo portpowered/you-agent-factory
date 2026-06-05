@@ -17,7 +17,6 @@ export interface ExecutionDetailsSectionProps {
   now: number;
   onSelectTraceID?: (traceID: string) => void;
   showInferenceAttempts?: boolean;
-  traceTargetId: string;
 }
 
 export interface InferenceAttemptsSectionProps {
@@ -53,7 +52,6 @@ export interface WorkItemDetailCardProps {
   selection: DashboardWorkItemSelection;
   selectedTrace?: DashboardTrace;
   workstationRequests: SelectedWorkRequestHistoryItem[];
-  traceTargetId?: string;
   widgetId?: string;
 }
 

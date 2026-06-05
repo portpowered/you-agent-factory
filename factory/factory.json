@@ -97,7 +97,7 @@
   },
   "version": {
     "logical": 1780219232503513601,
-    "physical": "2026-06-04T10:28:25.828255Z"
+    "physical": "2026-06-05T10:45:12.725426Z"
   },
   "workTypes": [
     {
@@ -425,7 +425,7 @@
         }
       ],
       "type": "MODEL_WORKSTATION",
-      "worker": "processor",
+      "worker": "planner",
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {

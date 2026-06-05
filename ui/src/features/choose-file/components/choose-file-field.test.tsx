@@ -65,7 +65,7 @@ describe("ChooseFileField", () => {
             className="custom-native-input"
           />
         }
-        label={<label>Cover image</label>}
+        label={<span>Cover image</span>}
       />,
     );
 

@@ -14,6 +14,10 @@ import {
   DialogTitle,
   SurfacePanel,
 } from "../../../components/ui";
+import {
+  DashboardEmptyStateText,
+  DashboardEmptyStateTitle,
+} from "../../../components/ui/widget-frame";
 import type { FactoryImportActivationState } from "../hooks/use-factory-import-activation";
 import type { FactoryImportPreviewState } from "../hooks/use-factory-import-preview";
 import { allocateImportCreateFactoryName } from "../lib/allocate-import-create-factory-name";
@@ -118,10 +122,12 @@ function FactoryImportActivationErrorPanel({
       variant="empty"
     >
       <div className="grid gap-1">
-        <h3>{messages.activationErrorTitle}</h3>
-        <DashboardText className="m-0 text-sm" variant="supporting">
+        <DashboardEmptyStateTitle>
+          {messages.activationErrorTitle}
+        </DashboardEmptyStateTitle>
+        <DashboardEmptyStateText>
           {factoryImportActivationErrorCopy(error, locale)}
-        </DashboardText>
+        </DashboardEmptyStateText>
       </div>
     </AlertPanel>
   );

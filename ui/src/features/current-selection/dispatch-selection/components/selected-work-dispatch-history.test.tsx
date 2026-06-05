@@ -14,7 +14,6 @@ describe("SelectedWorkDispatchHistorySection", () => {
           operationHistory={[]}
           requests={[]}
           selectedWorkID="work-ops"
-          traceTargetId="trace-ops"
         />
       </CurrentSelectionLocaleProvider>,
     );
@@ -40,7 +39,6 @@ describe("SelectedWorkDispatchHistorySection", () => {
             }),
           ]}
           selectedWorkID="work-legacy"
-          traceTargetId="trace-legacy"
         />
       </CurrentSelectionLocaleProvider>,
     );

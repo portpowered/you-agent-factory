@@ -3,8 +3,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
   AlertPanel,
+  AlertPanelText,
   Button,
-  DashboardLabel,
   DashboardText,
   Dialog,
   DialogContent,
@@ -12,6 +12,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  FormDescription,
+  FormError,
+  FormField,
+  FormLabel,
   Input,
 } from "../../../components/ui";
 import type { CurrentFactoryExportFailure } from "../hooks/use-current-factory-export";
@@ -146,14 +150,10 @@ function ExportFactoryDialogForm({
 }) {
   return (
     <div className="space-y-5">
-      <div className="space-y-2">
-        <DashboardLabel
-          as="label"
-          className="block text-sm font-semibold text-on-surface"
-          htmlFor="export-factory-name"
-        >
+      <FormField>
+        <FormLabel htmlFor="export-factory-name">
           {messages.nameLabel}
-        </DashboardLabel>
+        </FormLabel>
         <Input
           aria-describedby={
             formState.nameValidationMessage
@@ -177,19 +177,13 @@ function ExportFactoryDialogForm({
           type="text"
           value={formState.exportName}
         />
-        <DashboardText className="m-0" variant="supporting">
-          {messages.nameDescription}
-        </DashboardText>
+        <FormDescription>{messages.nameDescription}</FormDescription>
         {formState.nameValidationMessage ? (
-          <DashboardText
-            className="m-0 text-sm font-medium text-on-error-container"
-            id={formState.nameValidationId}
-            variant="supporting"
-          >
+          <FormError id={formState.nameValidationId}>
             {formState.nameValidationMessage}
-          </DashboardText>
+          </FormError>
         ) : null}
-      </div>
+      </FormField>
 
       <ExportFactoryDialogImageField
         imageDescription={messages.imageDescription}
@@ -224,25 +218,27 @@ function ExportFactoryDialogMessages({
     <>
       {isPreparing ? (
         <AlertPanel role="status" tone="danger">
-          {messages.loadingStatus}
+          <AlertPanelText>{messages.loadingStatus}</AlertPanelText>
         </AlertPanel>
       ) : null}
 
       {preparationFailure && factory === null && !isPreparing ? (
         <AlertPanel role="status" tone="danger">
-          {preparationFailure.message}
+          <AlertPanelText>{preparationFailure.message}</AlertPanelText>
         </AlertPanel>
       ) : null}
 
       {dialogState.status === "error" ? (
         <AlertPanel role="alert" tone="danger">
-          {dialogState.message}
+          <AlertPanelText>{dialogState.message}</AlertPanelText>
         </AlertPanel>
       ) : null}
 
       {dialogState.status === "success" ? (
         <AlertPanel aria-live="polite" role="status" tone="success">
-          {messages.successMessage(dialogState.filename)}
+          <AlertPanelText>
+            {messages.successMessage(dialogState.filename)}
+          </AlertPanelText>
         </AlertPanel>
       ) : null}
     </>

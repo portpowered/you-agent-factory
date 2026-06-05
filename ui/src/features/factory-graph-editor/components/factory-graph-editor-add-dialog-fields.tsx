@@ -4,15 +4,16 @@ import {
   FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,
 } from "../../../components/prompt-editor";
-import { Input, Select, Textarea } from "../../../components/ui";
+import {
+  FormDescription,
+  FormError,
+  FormField,
+  FormLabel,
+  Input,
+  Select,
+  Textarea,
+} from "../../../components/ui";
 
-const FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS = "grid gap-2";
-const FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS =
-  "text-sm font-semibold text-on-surface";
-const FACTORY_GRAPH_ADD_FIELD_HELP_CLASS =
-  "m-0 text-xs leading-5 text-on-surface-variant";
-const FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS =
-  "m-0 text-sm text-on-error-container";
 const FACTORY_GRAPH_ADD_INPUT_CLASS = "bg-surface";
 
 export function FactoryGraphEditorAddField({
@@ -29,24 +30,20 @@ export function FactoryGraphEditorAddField({
   label: ReactNode;
 }) {
   const labelContent = inputId ? (
-    <label className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS} htmlFor={inputId}>
-      {label}
-    </label>
+    <FormLabel htmlFor={inputId}>{label}</FormLabel>
   ) : (
-    <p className={FACTORY_GRAPH_ADD_FIELD_LABEL_CLASS}>{label}</p>
+    <FormLabel as="p" className="m-0">
+      {label}
+    </FormLabel>
   );
 
   return (
-    <div className={FACTORY_GRAPH_ADD_FIELD_GROUP_CLASS}>
+    <FormField className="grid gap-2">
       {labelContent}
       {children}
-      {helpText ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_HELP_CLASS}>{helpText}</p>
-      ) : null}
-      {error ? (
-        <p className={FACTORY_GRAPH_ADD_FIELD_ERROR_CLASS}>{error}</p>
-      ) : null}
-    </div>
+      {helpText ? <FormDescription>{helpText}</FormDescription> : null}
+      {error ? <FormError>{error}</FormError> : null}
+    </FormField>
   );
 }
 

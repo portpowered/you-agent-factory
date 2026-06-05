@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 
-import { AlertPanel, DashboardIconButtonShell } from "../../../components/ui";
+import {
+  AlertPanel,
+  AlertPanelText,
+  DashboardIconButtonShell,
+} from "../../../components/ui";
 
 export type FactoryGraphEditorNoticeTone = "danger" | "neutral" | "warning";
 
@@ -40,7 +44,7 @@ export function FactoryGraphEditorNotice({
             </DashboardIconButtonShell>
           ) : null}
         </div>
-        <div className="m-0 text-sm leading-6">{children}</div>
+        <AlertPanelText as="div">{children}</AlertPanelText>
       </section>
     </AlertPanel>
   );

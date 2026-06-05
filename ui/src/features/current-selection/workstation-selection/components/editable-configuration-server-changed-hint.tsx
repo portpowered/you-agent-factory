@@ -1,4 +1,4 @@
-import { DashboardText } from "../../../../components/ui";
+import { FormWarning } from "../../../../components/ui";
 import type {
   EditableWorkstationOverwriteField,
   WorkstationDetailCardProps,
@@ -22,11 +22,8 @@ export function EditableConfigurationServerChangedHint({
   }
 
   return (
-    <DashboardText
-      className="m-0 text-on-warning-container"
-      variant="supporting"
-    >
+    <FormWarning>
       {messages.editableConfigurationServerFieldChangedHint}
-    </DashboardText>
+    </FormWarning>
   );
 }

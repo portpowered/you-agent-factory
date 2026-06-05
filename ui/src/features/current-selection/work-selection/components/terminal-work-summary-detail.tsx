@@ -60,11 +60,7 @@ export function TerminalWorkSummaryCard({
         <DetailCopy>{messages.failureDetailsUnavailable}</DetailCopy>
       ) : null}
       {executionDetails ? (
-        <ExecutionDetailsSection
-          details={executionDetails}
-          now={now}
-          traceTargetId="trace"
-        />
+        <ExecutionDetailsSection details={executionDetails} now={now} />
       ) : null}
     </SelectionDetailLayout>
   );

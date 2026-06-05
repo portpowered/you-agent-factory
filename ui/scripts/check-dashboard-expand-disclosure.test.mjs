@@ -82,7 +82,7 @@ test("scanDashboardExpandDisclosure accepts StandardExpandableSection ownership"
 test("scanDashboardExpandDisclosure accepts CurrentSelectionExpandableSection ownership", async () => {
   const tempRoot = await createUiTree({
     "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx": `
-      import { CurrentSelectionExpandableSection } from "../../base/components/detail-card-shared";
+      import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 
       export function WorkstationDetailCard() {
         return (

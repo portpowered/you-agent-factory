@@ -33,7 +33,6 @@ function renderOperationHistoryItem({
   onSelectWorkID,
   selectedProviderSessionKey,
   selectedWorkID,
-  traceTargetId,
 }: {
   activeTraceID?: string | null;
   currentDispatchID?: string | null;
@@ -43,7 +42,6 @@ function renderOperationHistoryItem({
   onSelectWorkID?: (workID: string) => void;
   selectedProviderSessionKey?: string | null;
   selectedWorkID: string;
-  traceTargetId: string;
 }) {
   switch (item.kind) {
     case "operator-move":
@@ -74,7 +72,6 @@ function renderOperationHistoryItem({
           request={item.request}
           selectedProviderSessionKey={selectedProviderSessionKey}
           selectedWorkID={selectedWorkID}
-          traceTargetId={traceTargetId}
         />
       );
   }
@@ -92,7 +89,6 @@ export function SelectedWorkDispatchHistorySection({
   requests,
   selectedProviderSessionKey,
   selectedWorkID,
-  traceTargetId,
   workstationKind,
 }: SelectedWorkDispatchHistorySectionProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
@@ -148,7 +144,6 @@ export function SelectedWorkDispatchHistorySection({
                 onSelectWorkID,
                 selectedProviderSessionKey,
                 selectedWorkID,
-                traceTargetId,
               }),
             )}
           </div>
@@ -202,7 +197,6 @@ export function SelectedWorkDispatchHistorySection({
               request={request}
               selectedProviderSessionKey={selectedProviderSessionKey}
               selectedWorkID={selectedWorkID}
-              traceTargetId={traceTargetId}
             />
           ))}
         </div>

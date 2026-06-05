@@ -23,6 +23,12 @@ describe("FactoryGraphEditorNotice", () => {
     expect(
       screen.getByRole("heading", { name: "Topology save failed" }),
     ).toBeTruthy();
+    expect(screen.getByText("Save could not complete.").className).toContain(
+      "!text-current",
+    );
+    expect(screen.getByText("Save could not complete.").className).toContain(
+      "af-dashboard-body-text",
+    );
 
     const dismissButton = screen.getByRole("button", { name: "Dismiss" });
     expect(dismissButton.className).toContain("h-9");
@@ -42,5 +48,8 @@ describe("FactoryGraphEditorNotice", () => {
     expect(screen.getByRole("status").className).toContain(
       "bg-warning-container",
     );
+    expect(
+      screen.getByText("Review the draft before leaving.").className,
+    ).toContain("!text-current");
   });
 });

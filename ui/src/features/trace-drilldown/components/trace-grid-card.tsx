@@ -34,6 +34,8 @@ import {
 } from "../../../components/ui/table";
 import {
   DashboardEmptyState,
+  DashboardEmptyStateText,
+  DashboardEmptyStateTitle,
   DashboardWidgetFrame,
 } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
@@ -96,14 +98,20 @@ function renderTraceState(
     case "idle":
       return (
         <div>
-          <h2>{messages.idleTitle}</h2>
+          <DashboardEmptyStateTitle as="h2">
+            {messages.idleTitle}
+          </DashboardEmptyStateTitle>
         </div>
       );
     case "loading":
       return (
         <div>
-          <h3>{messages.loadingTitle}</h3>
-          <p>{messages.loadingMessage(state.workID)}</p>
+          <DashboardEmptyStateTitle>
+            {messages.loadingTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.loadingMessage(state.workID)}
+          </DashboardEmptyStateText>
           <div aria-hidden="true" className="grid gap-2 pt-2">
             <Skeleton className="h-4 w-full max-w-48" />
             <Skeleton className="h-24 w-full" />
@@ -114,15 +122,21 @@ function renderTraceState(
     case "empty":
       return (
         <div>
-          <h3>{messages.emptyTitle}</h3>
-          <p>{messages.emptyMessage}</p>
+          <DashboardEmptyStateTitle>
+            {messages.emptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.emptyMessage}
+          </DashboardEmptyStateText>
         </div>
       );
     case "error":
       return (
         <div>
-          <h3>{messages.errorTitle}</h3>
-          <p>{state.message}</p>
+          <DashboardEmptyStateTitle>
+            {messages.errorTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>{state.message}</DashboardEmptyStateText>
         </div>
       );
     case "ready":
@@ -226,7 +240,9 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </dd>
         </div>
         <div>
-          <DashboardLabel as="dt">{messages.batchRelationsLabel}</DashboardLabel>
+          <DashboardLabel as="dt">
+            {messages.batchRelationsLabel}
+          </DashboardLabel>
           <dd>
             {trace.relations && trace.relations.length > 0 ? (
               <TraceRelationFlow
@@ -243,7 +259,7 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
 
       {trace.dispatches.length > 0 ? (
         <Table
-          className="min-w-[640px]"
+          className="min-w-2xl"
           containerClassName="min-w-0 overscroll-x-contain"
           containerProps={
             {
@@ -256,15 +272,11 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           </TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead scope="col">
-                {messages.dispatchColumnLabel}
-              </TableHead>
+              <TableHead scope="col">{messages.dispatchColumnLabel}</TableHead>
               <TableHead scope="col">
                 {messages.workstationColumnLabel}
               </TableHead>
-              <TableHead scope="col">
-                {messages.outcomeColumnLabel}
-              </TableHead>
+              <TableHead scope="col">{messages.outcomeColumnLabel}</TableHead>
               <TableHead scope="col">
                 {messages.inputItemsColumnLabel}
               </TableHead>
@@ -318,8 +330,12 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
         </Table>
       ) : (
         <DashboardEmptyState compact>
-          <h3>{messages.noTraceHistoryTitle}</h3>
-          <p>{messages.noTraceHistoryMessage}</p>
+          <DashboardEmptyStateTitle>
+            {messages.noTraceHistoryTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.noTraceHistoryMessage}
+          </DashboardEmptyStateText>
         </DashboardEmptyState>
       )}
     </div>

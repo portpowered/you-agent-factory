@@ -1,7 +1,15 @@
-import { forwardRef } from "react";
+import {
+  forwardRef,
+  type ElementType,
+  type HTMLAttributes,
+  type ReactNode,
+} from "react";
 
 import { cn } from "../../lib/cn";
-import { DASHBOARD_BODY_TEXT_CLASS } from "./dashboard-typography";
+import {
+  DASHBOARD_BODY_TEXT_CLASS,
+  DASHBOARD_SUPPORTING_TEXT_CLASS,
+} from "./dashboard-typography";
 import { SurfacePanel, type SurfacePanelProps } from "./surface-panel";
 
 type AlertPanelTone = "danger" | "info" | "neutral" | "success" | "warning";
@@ -58,6 +66,33 @@ export const AlertPanel = forwardRef<HTMLDivElement, AlertPanelProps>(
         )}
         padding={padding}
         radius={radius}
+        ref={ref}
+        {...props}
+      />
+    );
+  },
+);
+
+export interface AlertPanelTextProps extends HTMLAttributes<HTMLElement> {
+  as?: ElementType;
+  children?: ReactNode;
+  variant?: "body" | "supporting";
+}
+
+export const AlertPanelText = forwardRef<HTMLElement, AlertPanelTextProps>(
+  function AlertPanelText(
+    { as: Component = "p", className, variant = "body", ...props },
+    ref,
+  ) {
+    return (
+      <Component
+        className={cn(
+          "m-0 !text-current",
+          variant === "body"
+            ? DASHBOARD_BODY_TEXT_CLASS
+            : DASHBOARD_SUPPORTING_TEXT_CLASS,
+          className,
+        )}
         ref={ref}
         {...props}
       />

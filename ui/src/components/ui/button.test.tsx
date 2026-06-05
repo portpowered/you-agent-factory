@@ -64,4 +64,18 @@ describe("Button", () => {
     expect(button.className).toContain("min-h-9");
     expect(button.className).toContain("px-3");
   });
+
+  it("supports compact circular icon controls", () => {
+    render(
+      <Button aria-label="Close panel" size="iconPill" tone="outline">
+        x
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Close panel" });
+
+    expect(button.className).toContain("rounded-full");
+    expect(button.className).toContain("h-10");
+    expect(button.className).toContain("w-10");
+  });
 });

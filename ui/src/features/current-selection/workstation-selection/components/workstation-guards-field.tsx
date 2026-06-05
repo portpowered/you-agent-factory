@@ -5,6 +5,8 @@ import {
   DashboardActionButton,
   DashboardLabel,
   DashboardText,
+  FormDescription,
+  FormError,
   Input,
   Select,
   SurfacePanel,
@@ -44,9 +46,9 @@ export function EditableConfigurationWorkstationGuardsField({
         {messages.workstationGuardsHeading}
       </DashboardLabel>
       {guards.length === 0 ? (
-        <DashboardText className="m-0 text-on-surface-variant">
+        <FormDescription variant="body">
           {messages.workstationGuardsEmpty}
-        </DashboardText>
+        </FormDescription>
       ) : (
         <ul className="m-0 grid list-none gap-2 p-0">
           {guards.map((guard, index) => (
@@ -206,15 +208,15 @@ function VisitCountGuardFields({
           {messages.visitCountGuardWorkstationFieldLabel}
         </DashboardLabel>
         {workstationOptionsState.status === "error" ? (
-          <DashboardText className="m-0 text-on-error-container" role="alert">
+          <FormError>
             {messages.editableConfigurationWorkstationUnavailablePrefix}{" "}
             {workstationOptionsState.message}
-          </DashboardText>
+          </FormError>
         ) : null}
         {workstationOptionsState.status === "empty" ? (
-          <DashboardText className="m-0 text-on-surface-variant">
+          <FormDescription variant="body">
             {workstationOptionsState.message}
-          </DashboardText>
+          </FormDescription>
         ) : null}
         {workstationOptionsState.status === "ready" ? (
           <Select
@@ -345,16 +347,7 @@ function MatchesFieldsGuardFields({
 }
 
 function GuardFieldError({ id, message }: { id?: string; message: string }) {
-  return (
-    <DashboardText
-      className="m-0 text-on-error-container"
-      id={id}
-      role="alert"
-      variant="supporting"
-    >
-      {message}
-    </DashboardText>
-  );
+  return <FormError id={id}>{message}</FormError>;
 }
 
 function resolveWorkstationGuardFieldError(

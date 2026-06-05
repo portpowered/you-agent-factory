@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 
-import { DashboardLabel, DashboardText, Input } from "../../../../components/ui";
+import {
+  Checkbox,
+  DashboardLabel,
+  DashboardText,
+  FormDescription,
+  FormError,
+  Input,
+} from "../../../../components/ui";
 import { CurrentSelectionFormField } from "../../base/public";
 import type {
   EditableWorkstationOverwriteField,
@@ -139,27 +146,19 @@ function EditableConfigurationCronField({
         {label}
       </DashboardLabel>
       {input}
-      <DashboardText
-        className="m-0 text-on-surface-subtle"
+      <FormDescription
+        className="text-on-surface-subtle"
         id={`${fieldId}-hint`}
-        variant="supporting"
       >
         {hint}
-      </DashboardText>
+      </FormDescription>
       <EditableConfigurationServerChangedHint
         fieldName={overwriteFieldName}
         messages={messages}
         state={state}
       />
       {errorMessage ? (
-        <DashboardText
-          className="m-0 text-on-error-container"
-          id={`${fieldId}-error`}
-          role="alert"
-          variant="supporting"
-        >
-          {errorMessage}
-        </DashboardText>
+        <FormError id={`${fieldId}-error`}>{errorMessage}</FormError>
       ) : null}
     </CurrentSelectionFormField>
   );
@@ -186,14 +185,12 @@ function EditableConfigurationCronTriggerAtStartField({
         className="inline-flex items-center gap-2 text-on-surface"
         htmlFor={fieldId}
       >
-        <input
+        <Checkbox
           checked={cron.triggerAtStart}
-          className="size-4 rounded border border-outline"
           id={fieldId}
           onChange={(event) =>
             state.onCronTriggerAtStartChange(event.target.checked)
           }
-          type="checkbox"
         />
         {messages.cronTriggerAtStartFieldLabel}
       </DashboardText>
@@ -203,14 +200,9 @@ function EditableConfigurationCronTriggerAtStartField({
         state={state}
       />
       {state.validationErrors.cronTriggerAtStart ? (
-        <DashboardText
-          className="m-0 text-on-error-container"
-          id={`${fieldId}-error`}
-          role="alert"
-          variant="supporting"
-        >
+        <FormError id={`${fieldId}-error`}>
           {state.validationErrors.cronTriggerAtStart}
-        </DashboardText>
+        </FormError>
       ) : null}
     </CurrentSelectionFormField>
   );

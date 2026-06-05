@@ -3,8 +3,11 @@ import { type ReactNode, useId } from "react";
 
 import {
   AlertPanel,
+  AlertPanelText,
   DashboardLabel,
   DashboardText,
+  FormDescription,
+  FormError,
   Input,
   Select,
   surfacePanelVariants,
@@ -73,10 +76,7 @@ export function EditableConfigurationSection({
         </CurrentSelectionDetailFeedback>
       ) : null}
       {state?.status === "error" ? (
-        <CurrentSelectionDetailFeedback
-          role="alert"
-          tone="danger"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {messages.editableConfigurationErrorPrefix} {state.errorMessage}
         </CurrentSelectionDetailFeedback>
       ) : null}
@@ -322,12 +322,9 @@ function EditableConfigurationOverwriteWarning({
 
   return (
     <AlertPanel tone="warning">
-      <DashboardText
-        className="m-0 text-on-warning-container"
-        role="alert"
-      >
+      <AlertPanelText role="alert">
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
-      </DashboardText>
+      </AlertPanelText>
     </AlertPanel>
   );
 }
@@ -344,21 +341,18 @@ function EditableConfigurationWorkerInput({
 }) {
   if (state.workerOptionsState.status === "empty") {
     return (
-      <DashboardText className="m-0 text-on-surface-variant">
+      <FormDescription variant="body">
         {state.workerOptionsState.message}
-      </DashboardText>
+      </FormDescription>
     );
   }
 
   if (state.workerOptionsState.status === "error") {
     return (
-      <DashboardText
-        className="m-0 text-on-error-container"
-        role="alert"
-      >
+      <FormError>
         {messages.editableConfigurationWorkerUnavailablePrefix}{" "}
         {state.workerOptionsState.message}
-      </DashboardText>
+      </FormError>
     );
   }
 
@@ -434,10 +428,7 @@ function EditableConfigurationSharedWorkerHint({
   }
 
   return (
-    <DashboardText
-      className="m-0 text-on-surface-subtle"
-      variant="supporting"
-    >
+    <DashboardText className="m-0 text-on-surface-subtle" variant="supporting">
       {messages.editableConfigurationSharedWorkerScopeHint(
         valueOrFallback(state.draft.workerName, messages.notConfiguredValue),
         formatList(sharedWorkstationNames),
@@ -558,10 +549,7 @@ function EditableConfigurationField({
       {input}
       {supportingContent}
       {errorMessage ? (
-        <CurrentSelectionDetailFeedback
-          id={`${fieldId}-error`}
-          tone="danger"
-        >
+        <CurrentSelectionDetailFeedback id={`${fieldId}-error`} tone="danger">
           {errorMessage}
         </CurrentSelectionDetailFeedback>
       ) : null}

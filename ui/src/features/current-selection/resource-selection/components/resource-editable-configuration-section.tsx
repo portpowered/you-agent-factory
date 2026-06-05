@@ -2,8 +2,10 @@ import { type ReactNode, useId } from "react";
 
 import {
   AlertPanel,
+  AlertPanelText,
   DashboardLabel,
   DashboardText,
+  FormWarning,
   Input,
   Select,
 } from "../../../../components/ui";
@@ -16,6 +18,7 @@ import {
   CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
   CurrentSelectionLabel,
+  CurrentSelectionSupportingText,
 } from "../../base/public";
 import { formatEditableResourceOverwriteFieldLabels } from "../editing/editable-resource-overwrite-fields";
 import type {
@@ -68,10 +71,7 @@ export function ResourceEditableConfigurationSection({
           </CurrentSelectionDetailFeedback>
         ) : null}
         {state?.status === "error" ? (
-          <CurrentSelectionDetailFeedback
-            role="alert"
-            tone="danger"
-          >
+          <CurrentSelectionDetailFeedback role="alert" tone="danger">
             {messages.editableConfigurationErrorPrefix} {state.errorMessage}
           </CurrentSelectionDetailFeedback>
         ) : null}
@@ -414,12 +414,9 @@ function ResourceRuntimeContextSection({
             {formatList(workerNames)}
           </DashboardText>
         ) : (
-          <DashboardText
-            className="m-0 text-on-surface-variant"
-            variant="supporting"
-          >
+          <CurrentSelectionSupportingText>
             {messages.referencingWorkersEmpty}
-          </DashboardText>
+          </CurrentSelectionSupportingText>
         )}
       </section>
 
@@ -436,12 +433,9 @@ function ResourceRuntimeContextSection({
             {formatList(workstationNames)}
           </DashboardText>
         ) : (
-          <DashboardText
-            className="m-0 text-on-surface-variant"
-            variant="supporting"
-          >
+          <CurrentSelectionSupportingText>
             {messages.referencingWorkstationsEmpty}
-          </DashboardText>
+          </CurrentSelectionSupportingText>
         )}
       </section>
     </>
@@ -466,12 +460,9 @@ function ResourceEditableConfigurationOverwriteWarning({
 
   return (
     <AlertPanel tone="warning">
-      <DashboardText
-        className="m-0 text-on-warning-container"
-        role="alert"
-      >
+      <AlertPanelText role="alert">
         {messages.editableConfigurationOverwriteWarning(formattedFields)}
-      </DashboardText>
+      </AlertPanelText>
     </AlertPanel>
   );
 }
@@ -490,12 +481,9 @@ function ResourceEditableConfigurationServerChangedHint({
   }
 
   return (
-    <DashboardText
-      className="m-0 text-on-warning-container"
-      variant="supporting"
-    >
+    <FormWarning>
       {messages.editableConfigurationServerFieldChangedHint}
-    </DashboardText>
+    </FormWarning>
   );
 }
 
@@ -516,16 +504,13 @@ function ResourceEditableConfigurationSharedImpactWarning({
 
   return (
     <AlertPanel tone="warning">
-      <DashboardText
-        className="m-0 text-on-warning-container"
-        role="alert"
-      >
+      <AlertPanelText role="alert">
         {messages.editableConfigurationSharedImpactWarning(
           state.draft.name.trim() || resourceName,
           formatList(workerNames),
           formatList(workstationNames),
         )}
-      </DashboardText>
+      </AlertPanelText>
     </AlertPanel>
   );
 }
@@ -577,10 +562,7 @@ function ResourceEditableConfigurationField({
       {input}
       {supportingContent}
       {errorMessage ? (
-        <CurrentSelectionDetailFeedback
-          id={`${fieldId}-error`}
-          tone="danger"
-        >
+        <CurrentSelectionDetailFeedback id={`${fieldId}-error`} tone="danger">
           {errorMessage}
         </CurrentSelectionDetailFeedback>
       ) : null}

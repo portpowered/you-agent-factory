@@ -616,3 +616,72 @@ func TestDecodeStrictJSON_MultiObjectPayload(t *testing.T) {
 		t.Fatalf("validation message = %q, want single-object payload message", message)
 	}
 }
+
+func TestGetProviderSessionDetails_FailsForAmbiguousTimestampPrefixedMatches(t *testing.T) {
+	root := t.TempDir()
+	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
+	sessionDir := filepath.Join(root, "2026", "05", "19")
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatalf("create provider session fixture directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(sessionDir, "rollout-2026-05-20T17-45-24-sess_123.jsonl"), []byte(`{"type":"session_meta","id":"sess_123"}`), 0o600); err != nil {
+		t.Fatalf("write second timestamp-prefixed provider session fixture: %v", err)
+	}
+
+	srv := newTestServerWithCodexRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusInternalServerError, "INTERNAL_ERROR", "multiple provider session files match session identifier")
+}
+
+func TestParseCodexSessionDetails_ReconcilesMirroredCodexMessages(t *testing.T) {
+	session := strings.Join([]string{
+		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-06-04T10:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"I will inspect the factory state first.","phase":"commentary"}}`,
+		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I will inspect the factory state first."}],"phase":"commentary"}}`,
+		`{"timestamp":"2026-06-04T10:00:02Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Plan the next phase."}]}}`,
+		`{"timestamp":"2026-06-04T10:00:02Z","type":"event_msg","payload":{"type":"user_message","message":"Plan the next phase."}}`,
+		`{"timestamp":"2026-06-04T10:00:03Z","type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":100,"output_tokens":20,"total_tokens":120}}}}`,
+		`{"timestamp":"2026-06-04T10:00:04Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Factory state looks ready."}]}}`,
+	}, "\n")
+
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+
+	assertMirroredCodexMessageSummary(t, parsed.Summary)
+	assertMirroredCodexMessageTranscript(t, parsed)
+}
+
+func assertMirroredCodexMessageSummary(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
+	t.Helper()
+
+	if summary.LineCount != 7 || summary.EventCount != 7 {
+		t.Fatalf("summary = %#v, want all source records counted", summary)
+	}
+	if summary.TokenUsage == nil || intValue(summary.TokenUsage.TotalTokens) != 120 {
+		t.Fatalf("token usage = %#v, want line-level token accounting retained", summary.TokenUsage)
+	}
+}
+
+func assertMirroredCodexMessageTranscript(t *testing.T, parsed parsedCodexSessionDetails) {
+	t.Helper()
+
+	if len(parsed.Transcript) != 3 {
+		t.Fatalf("transcript = %#v, want mirrored messages emitted once", parsed.Transcript)
+	}
+	assertMirroredCodexMessageTranscriptEntry(t, parsed, 0, factoryapi.AssistantMessage, 2, "I will inspect the factory state first.", "first mirrored assistant message retained")
+	assertMirroredCodexMessageTranscriptEntry(t, parsed, 1, factoryapi.UserMessage, 4, "Plan the next phase.", "first mirrored user message retained")
+	assertMirroredCodexMessageTranscriptEntry(t, parsed, 2, factoryapi.AssistantMessage, 7, "Factory state looks ready.", "following distinct assistant message retained")
+}
+
+func assertMirroredCodexMessageTranscriptEntry(t *testing.T, parsed parsedCodexSessionDetails, index int, wantType factoryapi.ProviderSessionTranscriptEntryType, wantLine int, wantText string, wantDescription string) {
+	t.Helper()
+
+	entry := parsed.Transcript[index]
+	if entry.Order != index+1 || entry.Type != wantType || intValue(entry.LineNumber) != wantLine || stringValue(entry.Text) != wantText {
+		t.Fatalf("transcript[%d] = %#v, want %s", index, entry, wantDescription)
+	}
+}

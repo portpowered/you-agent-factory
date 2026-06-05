@@ -28,7 +28,6 @@ export function WorkItemDetailCard({
   selectedProviderSessionKey,
   selection,
   workstationRequests,
-  traceTargetId = "trace",
   widgetId = "current-selection",
 }: WorkItemDetailCardProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
@@ -96,7 +95,6 @@ export function WorkItemDetailCard({
             ? relationshipGraph.selectedWork.label
             : formatWorkItemLabel(selection.workItem)
         }
-        traceTargetId={traceTargetId}
       />
       <SelectedWorkDispatchHistorySection
         activeTraceID={activeTraceID}
@@ -110,7 +108,6 @@ export function WorkItemDetailCard({
         requests={workstationRequests}
         selectedProviderSessionKey={selectedProviderSessionKey}
         selectedWorkID={selection.workItem.work_id}
-        traceTargetId={traceTargetId}
         workstationKind={selectedNode?.workstation_kind}
       />
     </SelectionDetailLayout>

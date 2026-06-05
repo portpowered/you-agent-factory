@@ -17,16 +17,19 @@ describe("SubmitWorkStatusPanel", () => {
       </>,
     );
 
-    expect(screen.getByText("Choose a work type.").id).toBe(
-      "submit-guidance",
-    );
-    expect(screen.getByText("Choose a work type.").className).toContain(
+    const statuses = screen.getAllByRole("status");
+    const guidanceCopy = screen.getByText("Choose a work type.");
+    const submittingCopy = screen.getByText("Submitting work.");
+
+    expect(statuses).toHaveLength(2);
+    expect(document.getElementById("submit-guidance")?.className).toContain(
       "bg-surface-container-low",
     );
-    expect(screen.getByText("Submitting work.").className).toContain(
+    expect(document.getElementById("submit-progress")?.className).toContain(
       "bg-info-container",
     );
-    expect(screen.getAllByRole("status")).toHaveLength(2);
+    expect(guidanceCopy.className).toContain("!text-current");
+    expect(submittingCopy.className).toContain("af-dashboard-body-text");
   });
 
   it("renders success and failure states with semantic alert tones", () => {
@@ -50,15 +53,19 @@ describe("SubmitWorkStatusPanel", () => {
       </>,
     );
 
-    expect(screen.getByText("Submitted.").className).toContain(
+    expect(document.getElementById("submit-success")?.className).toContain(
       "bg-success-container",
     );
     expect(screen.getAllByRole("alert")).toHaveLength(2);
-    expect(screen.getByText("Submit failed.").className).toContain(
+    expect(document.getElementById("submit-error")?.className).toContain(
       "bg-error-container",
     );
-    expect(screen.getByText("Add at least one item.").className).toContain(
+    expect(document.getElementById("submit-validation")?.className).toContain(
       "bg-error-container",
+    );
+    expect(screen.getByText("Submitted.").className).toContain("!text-current");
+    expect(screen.getByText("Submit failed.").className).toContain(
+      "af-dashboard-body-text",
     );
   });
 });

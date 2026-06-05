@@ -31,6 +31,7 @@ const WORK_PROGRESS_NUMERIC_MARKER_CLASS_NAME =
   "items-center justify-center border border-af-success-border bg-success-container font-mono font-bold leading-none text-success";
 const WORK_PROGRESS_DOTS_MARKER_CLASS_NAME =
   "items-center justify-center border border-af-success-border bg-success-container";
+const WORK_PROGRESS_DOT_CLASS_NAME = "h-2 w-2";
 
 export function CurrentActivityWorkProgressMarker(
   props: CurrentActivityWorkProgressMarkerProps,
@@ -53,7 +54,7 @@ export function CurrentActivityWorkProgressMarker(
   const {
     ariaLabel,
     className,
-    dotClassName = "h-2 w-2",
+    dotClassName = WORK_PROGRESS_DOT_CLASS_NAME,
     dotCount,
     dotDataAttribute,
     kind: _kind,

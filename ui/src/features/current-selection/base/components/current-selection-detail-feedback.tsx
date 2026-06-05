@@ -1,39 +1,54 @@
 import { forwardRef, type HTMLAttributes } from "react";
 
-import { DashboardText } from "../../../../components/ui";
+import { FormDescription, FormError } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 
 type CurrentSelectionDetailFeedbackTone = "danger" | "neutral";
+type CurrentSelectionDetailFeedbackRole = "alert" | "status";
 
 export interface CurrentSelectionDetailFeedbackProps
   extends HTMLAttributes<HTMLParagraphElement> {
   tone?: CurrentSelectionDetailFeedbackTone;
 }
 
-const CURRENT_SELECTION_DETAIL_FEEDBACK_TONE_CLASS: Record<
-  CurrentSelectionDetailFeedbackTone,
-  string
-> = {
-  danger: "text-on-error-container",
-  neutral: "text-on-surface-variant",
-};
-
 export const CurrentSelectionDetailFeedback = forwardRef<
   HTMLParagraphElement,
   CurrentSelectionDetailFeedbackProps
 >(function CurrentSelectionDetailFeedback(
-  { className, tone = "neutral", ...props },
+  { className, role, tone = "neutral", ...props },
   ref,
 ) {
+  if (tone === "danger") {
+    return (
+      <FormError
+        className={className}
+        ref={ref}
+        role={getFeedbackErrorRole(role)}
+        {...props}
+      />
+    );
+  }
+
   return (
-    <DashboardText
-      className={cn(
-        "m-0",
-        CURRENT_SELECTION_DETAIL_FEEDBACK_TONE_CLASS[tone],
-        className,
-      )}
+    <FormDescription
+      className={cn("text-on-surface-variant", className)}
       ref={ref}
+      variant="body"
       {...props}
     />
   );
 });
+
+function getFeedbackErrorRole(
+  role: HTMLAttributes<HTMLParagraphElement>["role"],
+): CurrentSelectionDetailFeedbackRole {
+  if (role === "alert") {
+    return "alert";
+  }
+
+  if (role === "status") {
+    return "status";
+  }
+
+  return "status";
+}

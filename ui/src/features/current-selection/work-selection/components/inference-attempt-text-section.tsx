@@ -9,10 +9,7 @@ export function InferenceAttemptTextSection({
   return (
     <div className="grid gap-1">
       <DashboardLabel>{label}</DashboardLabel>
-      <AuthoredBodyText
-        className="min-h-[20rem] md:min-h-[26rem] lg:min-h-[min(70vh,36rem)]"
-        value={value}
-      />
+      <AuthoredBodyText className="min-h-80 md:min-h-96" value={value} />
     </div>
   );
 }

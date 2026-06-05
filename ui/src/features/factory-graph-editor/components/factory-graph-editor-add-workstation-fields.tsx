@@ -26,6 +26,7 @@ import {
   FactoryGraphEditorSelectField,
   FactoryGraphEditorTextField,
 } from "./factory-graph-editor-add-dialog-fields";
+import { Checkbox } from "../../../components/ui";
 
 const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
   WorkstationType.WorkstationTypeModelWorkstation,
@@ -180,9 +181,9 @@ function FactoryGraphEditorAddWorkstationCronFields({
         inputId="factory-graph-add-cron-trigger-at-start"
         label={
           <>
-            <input
+            <Checkbox
               checked={cron.triggerAtStart}
-              className="mr-2 size-4 rounded border border-outline"
+              className="mr-2"
               id="factory-graph-add-cron-trigger-at-start"
               onChange={(event) => {
                 onChange({
@@ -190,7 +191,6 @@ function FactoryGraphEditorAddWorkstationCronFields({
                   triggerAtStart: event.currentTarget.checked,
                 });
               }}
-              type="checkbox"
             />
             {messages.cronTriggerAtStartFieldLabel}
           </>

@@ -1,7 +1,7 @@
 import type { DashboardProviderSession } from "../../../../api/dashboard/types";
 
 import {
-  Button,
+  ButtonLink,
   DashboardCode,
   DashboardText,
 } from "../../../../components/ui";
@@ -13,10 +13,7 @@ import {
 } from "../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
-import {
-  CurrentSelectionBadge,
-  CurrentSelectionExecutionPill,
-} from "../../base/components/current-selection-pill";
+import { CurrentSelectionBadge } from "../../base/components/current-selection-pill";
 import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
 import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import type {
@@ -25,7 +22,10 @@ import type {
   ProviderSessionLogAccessProps,
 } from "../../base/components/detail-card-types";
 import { CurrentSelectionSupportingText } from "../../base/public";
-import { CurrentSelectionHistoryCard } from "../../history/public";
+import {
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
@@ -223,29 +223,25 @@ function ProviderSessionAttemptList({
             highlighted={isCurrentDispatch}
             key={`${attempt.dispatch_id}-${attempt.provider_session?.id}`}
           >
-            <div className="flex items-start justify-between gap-3">
-              <strong>{renderHeading(attempt)}</strong>
-              <CurrentSelectionExecutionPill>
-                {attempt.dispatch_id}
-              </CurrentSelectionExecutionPill>
-            </div>
-            <div className="mt-2 grid gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <DashboardText className="m-0 text-on-surface-variant">
-                  {outcome.label}
-                </DashboardText>
-                {isCurrentDispatch ? (
+            <CurrentSelectionHistoryCardHeader
+              badges={
+                isCurrentDispatch ? (
                   <CurrentSelectionBadge>
                     {messages.currentDispatchLabel}
                   </CurrentSelectionBadge>
-                ) : null}
-              </div>
-              {outcome.rawOutcomeLabel ? (
+                ) : null
+              }
+              identifier={attempt.dispatch_id}
+              subtitle={outcome.label}
+              title={renderHeading(attempt)}
+            />
+            {outcome.rawOutcomeLabel ? (
+              <div className="mt-2 grid gap-1">
                 <DashboardCode as="p" className="m-0" size="supporting">
                   {outcome.rawOutcomeLabel}
                 </DashboardCode>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
             {loadableProviderSession && onSelectProviderSession ? (
               <CurrentSelectionSelectableButton
                 aria-label={messages.selectProviderSessionLabel(
@@ -262,9 +258,7 @@ function ProviderSessionAttemptList({
                     ? messages.providerSessionSelectedAction
                     : messages.providerSessionSelectAction}
                 </DashboardText>
-                <DashboardCode>
-                  {providerSessionLabel}
-                </DashboardCode>
+                <DashboardCode>{providerSessionLabel}</DashboardCode>
               </CurrentSelectionSelectableButton>
             ) : (
               <div className="mt-2 grid gap-1">
@@ -347,16 +341,17 @@ function ProviderSessionLogAccess({
   return (
     <div className="mt-2 grid min-w-0 gap-1">
       {logTarget ? (
-        <Button asChild className="w-fit rounded-lg" size="sm" tone="outline">
-          <a href={logTarget.href} title={logTarget.display}>
-            {messages.providerSessionLogAction}
-          </a>
-        </Button>
-      ) : (
-        <DashboardText
-          as="span"
-          className="font-bold text-on-surface-variant"
+        <ButtonLink
+          className="w-fit"
+          href={logTarget.href}
+          size="sm"
+          title={logTarget.display}
+          tone="outline"
         >
+          {messages.providerSessionLogAction}
+        </ButtonLink>
+      ) : (
+        <DashboardText as="span" className="font-bold text-on-surface-variant">
           {messages.providerSessionLogUnavailable}
         </DashboardText>
       )}

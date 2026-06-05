@@ -1,5 +1,4 @@
 import {
-  Button,
   DashboardCode,
   DashboardLabel,
   surfacePanelVariants,
@@ -9,6 +8,7 @@ import {
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailItem,
   CurrentSelectionDetailValue,
+  CurrentSelectionTraceButton,
 } from "../../base/public";
 import type { SelectedWorkRelationshipNode } from "../lib/selected-work-relationship-graph";
 
@@ -17,13 +17,11 @@ export function FocusedRelationshipSummary({
   messages,
   node,
   onSelectTraceID,
-  traceTargetId,
 }: {
   activeTraceID?: string | null;
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
   node: SelectedWorkRelationshipNode;
   onSelectTraceID?: (traceID: string) => void;
-  traceTargetId: string;
 }) {
   const traceID = node.traceID;
 
@@ -71,14 +69,13 @@ export function FocusedRelationshipSummary({
         />
       </CurrentSelectionDescriptionList>
       {traceID && onSelectTraceID ? (
-        <Button asChild className="w-fit rounded-lg" size="sm" tone="outline">
-          <a
-            href={`#${traceTargetId}`}
-            onClick={() => onSelectTraceID(traceID)}
-          >
-            {messages.relationshipOpenTraceAction}
-          </a>
-        </Button>
+        <CurrentSelectionTraceButton
+          activeTraceID={activeTraceID}
+          onSelectTraceID={onSelectTraceID}
+          traceID={traceID}
+        >
+          {messages.relationshipOpenTraceAction}
+        </CurrentSelectionTraceButton>
       ) : null}
     </section>
   );

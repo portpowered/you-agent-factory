@@ -1,44 +1,25 @@
 import {
   AlertPanel,
-  DashboardHeading,
-  DashboardStatusPill,
+  AlertPanelText,
   SurfacePanel,
 } from "../../../../components/ui";
-import { cn } from "../../../../lib/cn";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
-import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
 import {
-  CurrentSelectionLabel,
+  CurrentSelectionContentSection,
   CurrentSelectionSupportingText,
 } from "../../base/public";
-import type {
-  SelectedWorkRelationshipEdge,
-  SelectedWorkRelationshipGraph,
-  SelectedWorkRelationshipNode,
-} from "../lib/selected-work-relationship-graph";
+import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
+import {
+  buildRelationshipGroups,
+  buildWorkRelationships,
+  findRelationshipItems,
+} from "../lib/work-item-relationship-groups";
+import {
+  RelationshipLane,
+  RelationshipLegend,
+  RelationshipNodeCard,
+} from "./work-item-relationship-map";
 import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
-
-interface RelatedWorkItem {
-  description: string;
-  edgeLabel: string;
-  group: RelationshipGroupKey;
-  key: string;
-  node: SelectedWorkRelationshipNode;
-  workID: string;
-  workLabel: string;
-}
-
-type RelationshipGroupKey =
-  | "parent"
-  | "depends-on"
-  | "required-by"
-  | "child"
-  | "related";
-
-interface RelationshipGroup {
-  key: RelationshipGroupKey;
-  items: RelatedWorkItem[];
-}
 
 export function WorkRelationshipsSection({
   activeTraceID,
@@ -47,7 +28,6 @@ export function WorkRelationshipsSection({
   onSelectWorkID,
   relationshipGraph,
   selectedWorkLabel,
-  traceTargetId,
 }: {
   activeTraceID?: string | null;
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
@@ -55,28 +35,26 @@ export function WorkRelationshipsSection({
   onSelectWorkID?: (workID: string) => void;
   relationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkLabel: string;
-  traceTargetId: string;
 }) {
   const relationships = buildWorkRelationships(relationshipGraph, messages);
   const relationshipGroups = buildRelationshipGroups(relationships);
   const graphStatus = relationshipGraph?.status ?? "loading";
 
   return (
-    <section
+    <CurrentSelectionContentSection
       aria-label={messages.workRelationshipsHeading}
-      className="mt-4 grid gap-2.5 [&_h4]:m-0"
+      title={messages.workRelationshipsHeading}
     >
-      <DashboardHeading as="h4" className="m-0">
-        {messages.workRelationshipsHeading}
-      </DashboardHeading>
       {graphStatus === "loading" ? (
         <CurrentSelectionSupportingText role="status">
           {messages.workRelationshipsLoading}
         </CurrentSelectionSupportingText>
       ) : relationshipGraph?.status === "error" ? (
         <AlertPanel role="alert" tone="danger">
-          <p className="m-0">{messages.workRelationshipsError}</p>
-          <p className="m-0 text-sm">{relationshipGraph.message}</p>
+          <AlertPanelText>{messages.workRelationshipsError}</AlertPanelText>
+          <AlertPanelText variant="supporting">
+            {relationshipGraph.message}
+          </AlertPanelText>
         </AlertPanel>
       ) : relationships.length > 0 ? (
         <SurfacePanel className="grid gap-3">
@@ -130,7 +108,6 @@ export function WorkRelationshipsSection({
               messages={messages}
               node={relationshipGraph.selectedWork}
               onSelectTraceID={onSelectTraceID}
-              traceTargetId={traceTargetId}
             />
           ) : null}
           <RelationshipLane
@@ -145,422 +122,6 @@ export function WorkRelationshipsSection({
           {messages.workRelationshipsEmpty}
         </CurrentSelectionSupportingText>
       )}
-    </section>
+    </CurrentSelectionContentSection>
   );
 }
-
-function buildWorkRelationships(
-  relationshipGraph: SelectedWorkRelationshipGraph | undefined,
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-): RelatedWorkItem[] {
-  if (!relationshipGraph || relationshipGraph.status !== "ready") {
-    return [];
-  }
-
-  const nodesByID = new Map<string, SelectedWorkRelationshipNode>(
-    relationshipGraph.relatedWork.map((node) => [node.workID, node]),
-  );
-
-  return relationshipGraph.edges
-    .flatMap((edge) =>
-      buildRelationshipItems(edge, nodesByID.get(edge.targetWorkID), messages),
-    )
-    .sort(
-      (left, right) =>
-        left.description.localeCompare(right.description) ||
-        left.workLabel.localeCompare(right.workLabel),
-    );
-}
-
-function buildRelationshipItems(
-  edge: SelectedWorkRelationshipEdge,
-  relatedNode: SelectedWorkRelationshipNode | undefined,
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-): RelatedWorkItem[] {
-  if (!relatedNode) {
-    return [];
-  }
-
-  const label = relationshipLabel(edge.relationship, messages);
-  return [
-    {
-      description: edge.requiredState
-        ? messages.relationshipStateLabel(label, edge.requiredState)
-        : label,
-      edgeLabel: label,
-      group: relationshipGroup(edge.relationship),
-      key: `${edge.relationship}:${edge.sourceWorkID}:${edge.targetWorkID}:${edge.requiredState ?? ""}`,
-      node: relatedNode,
-      workID: relatedNode.workID,
-      workLabel: relatedNode.label,
-    },
-  ];
-}
-
-function relationshipLabel(
-  relationship: SelectedWorkRelationshipEdge["relationship"],
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-): string {
-  switch (relationship) {
-    case "PARENT":
-      return messages.relationshipParentLabel;
-    case "CHILD":
-      return messages.relationshipChildLabel;
-    case "DEPENDS_ON":
-      return messages.relationshipDependsOnLabel;
-    case "REQUIRED_BY":
-      return messages.relationshipRequiredByLabel;
-    default:
-      return messages.relationshipRelatedLabel;
-  }
-}
-
-function RelationshipLane({
-  className,
-  items,
-  label,
-  messages,
-  onSelectWorkID,
-}: {
-  className?: string;
-  items: RelatedWorkItem[];
-  label: string;
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
-  onSelectWorkID?: (workID: string) => void;
-}) {
-  if (items.length === 0) {
-    return null;
-  }
-
-  return (
-    <SurfacePanel
-      asChild
-      aria-label={messages.relationshipLaneAriaLabel(label)}
-      className={cn("grid gap-2", className)}
-    >
-      <section>
-        <div className="flex items-center gap-2">
-          <RelationshipDirectionBadge label={label} messages={messages} />
-          <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
-        </div>
-        <ul className="m-0 grid list-none gap-2 p-0">
-          {items.map((relationship) => (
-            <li key={relationship.key}>
-              <SurfacePanel asChild className="grid gap-2" radius="lg">
-                <article>
-                  <div className="flex items-center gap-2">
-                    <DashboardStatusPill
-                      aria-hidden="true"
-                      className="min-h-6 px-2 py-0.5 text-[11px]"
-                      tone={relationshipPillTone(relationship.group)}
-                    >
-                      {relationshipDirectionGlyph(label, messages)}
-                    </DashboardStatusPill>
-                    <CurrentSelectionLabel>
-                      {relationship.description}
-                    </CurrentSelectionLabel>
-                  </div>
-                  <RelationshipNodeCard
-                    heading={relationship.edgeLabel}
-                    label={relationship.workLabel}
-                    messages={messages}
-                    node={relationship.node}
-                    onSelectWorkID={onSelectWorkID}
-                  />
-                </article>
-              </SurfacePanel>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </SurfacePanel>
-  );
-}
-
-function RelationshipLegend({
-  messages,
-}: {
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
-}) {
-  return (
-    <SurfacePanel
-      asChild
-      aria-label={messages.relationshipLegendHeading}
-      className="grid gap-2"
-      radius="lg"
-    >
-      <section>
-        <CurrentSelectionLabel>
-          {messages.relationshipLegendHeading}
-        </CurrentSelectionLabel>
-        <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-          {relationshipLegendItems(messages).map((item) => (
-            <li key={item.label}>
-              <DashboardStatusPill tone={item.tone}>
-                <span aria-hidden="true">{item.glyph}</span>
-                <span>{item.label}</span>
-              </DashboardStatusPill>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </SurfacePanel>
-  );
-}
-
-function RelationshipNodeCard({
-  ariaCurrent,
-  className,
-  heading,
-  isSelected = false,
-  label,
-  messages,
-  node,
-  onSelectWorkID,
-}: {
-  ariaCurrent?: "true";
-  className?: string;
-  heading: string;
-  isSelected?: boolean;
-  label: string;
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
-  node?: SelectedWorkRelationshipNode;
-  onSelectWorkID?: (workID: string) => void;
-}) {
-  const metadata = buildRelationshipMetadata(node, messages);
-
-  return (
-    <SurfacePanel
-      aria-current={ariaCurrent}
-      className={cn("grid min-w-0 gap-2", className)}
-      data-selected-work-relationship-node={isSelected ? "selected" : "related"}
-      tone={isSelected ? "selected" : "default"}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <CurrentSelectionLabel>{heading}</CurrentSelectionLabel>
-        {isSelected ? (
-          <DashboardStatusPill tone="active">
-            {messages.relationshipCurrentSelectionBadge}
-          </DashboardStatusPill>
-        ) : null}
-      </div>
-      {node && onSelectWorkID && !isSelected ? (
-        <CurrentSelectionSelectableButton
-          aria-label={messages.relatedWorkSelectLabel(label)}
-          className="w-full justify-start"
-          onClick={() => onSelectWorkID(node.workID)}
-        >
-          <span className="min-w-0 break-words text-left leading-5">
-            {label}
-          </span>
-        </CurrentSelectionSelectableButton>
-      ) : (
-        <code className="min-w-0 break-words text-sm leading-5 text-on-surface">
-          {label}
-        </code>
-      )}
-      <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
-        {metadata.map((item) => (
-          <li key={item.key}>
-            <DashboardStatusPill
-              className="min-h-6 max-w-full gap-1 px-2 py-0.5 text-[11px]"
-              tone={item.tone}
-            >
-              <span>{item.label}</span>
-              <code className="min-w-0 break-words text-[11px] font-semibold">
-                {item.value}
-              </code>
-            </DashboardStatusPill>
-          </li>
-        ))}
-      </ul>
-    </SurfacePanel>
-  );
-}
-
-function buildRelationshipMetadata(
-  node: SelectedWorkRelationshipNode | undefined,
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-) {
-  return [
-    {
-      key: "state",
-      label: messages.stateLabel,
-      tone: "active" as const,
-      value: node?.state ?? messages.relationshipMetadataUnavailable,
-    },
-    {
-      key: "work-type",
-      label: messages.workTypeLabel,
-      tone: "neutral" as const,
-      value: node?.workTypeID ?? messages.relationshipMetadataUnavailable,
-    },
-    {
-      key: "trace-id",
-      label: messages.traceIdsLabel,
-      tone: "warning" as const,
-      value: node?.traceID ?? messages.relationshipMetadataUnavailable,
-    },
-  ];
-}
-
-function relationshipLegendItems(
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-) {
-  return [
-    {
-      glyph: relationshipDirectionGlyph(
-        messages.relationshipParentLabel,
-        messages,
-      ),
-      label: messages.relationshipParentLegend,
-      tone: "active" as const,
-    },
-    {
-      glyph: relationshipDirectionGlyph(
-        messages.relationshipDependsOnLabel,
-        messages,
-      ),
-      label: messages.relationshipDependsOnLegend,
-      tone: "warning" as const,
-    },
-    {
-      glyph: relationshipDirectionGlyph(
-        messages.relationshipRequiredByLabel,
-        messages,
-      ),
-      label: messages.relationshipRequiredByLegend,
-      tone: "neutral" as const,
-    },
-    {
-      glyph: relationshipDirectionGlyph(
-        messages.relationshipChildLabel,
-        messages,
-      ),
-      label: messages.relationshipChildLegend,
-      tone: "active" as const,
-    },
-  ];
-}
-
-function relationshipDirectionGlyph(
-  label: string,
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-) {
-  switch (label) {
-    case messages.relationshipParentLabel:
-      return "↑";
-    case messages.relationshipDependsOnLabel:
-      return "←";
-    case messages.relationshipRequiredByLabel:
-      return "→";
-    case messages.relationshipChildLabel:
-      return "↓";
-    default:
-      return "•";
-  }
-}
-
-function buildRelationshipGroups(
-  relationships: RelatedWorkItem[],
-): RelationshipGroup[] {
-  const grouped = new Map<RelationshipGroupKey, RelatedWorkItem[]>();
-
-  for (const relationship of relationships) {
-    const items = grouped.get(relationship.group) ?? [];
-    items.push(relationship);
-    grouped.set(relationship.group, items);
-  }
-
-  return relationshipGroupOrder
-    .map((groupKey) => ({
-      key: groupKey,
-      items:
-        grouped
-          .get(groupKey)
-          ?.sort(
-            (left, right) =>
-              left.description.localeCompare(right.description) ||
-              left.workLabel.localeCompare(right.workLabel),
-          ) ?? [],
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
-function findRelationshipItems(
-  groups: RelationshipGroup[],
-  key: RelationshipGroupKey,
-): RelatedWorkItem[] {
-  return groups.find((group) => group.key === key)?.items ?? [];
-}
-
-function relationshipGroup(
-  relationship: SelectedWorkRelationshipEdge["relationship"],
-): RelationshipGroupKey {
-  switch (relationship) {
-    case "PARENT":
-      return "parent";
-    case "CHILD":
-      return "child";
-    case "DEPENDS_ON":
-      return "depends-on";
-    case "REQUIRED_BY":
-      return "required-by";
-    default:
-      return "related";
-  }
-}
-
-function RelationshipDirectionBadge({
-  label,
-  messages,
-}: {
-  label: string;
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
-}) {
-  return (
-    <DashboardStatusPill
-      aria-hidden="true"
-      className="h-8 min-h-8 w-8 px-0 py-0 text-sm font-bold"
-      tone={relationshipDirectionTone(label, messages)}
-      typography="none"
-    >
-      {relationshipDirectionGlyph(label, messages)}
-    </DashboardStatusPill>
-  );
-}
-
-function relationshipDirectionTone(
-  label: string,
-  messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>,
-) {
-  switch (label) {
-    case messages.relationshipParentLabel:
-    case messages.relationshipChildLabel:
-      return "active" as const;
-    case messages.relationshipDependsOnLabel:
-      return "warning" as const;
-    default:
-      return "neutral" as const;
-  }
-}
-
-function relationshipPillTone(group: RelationshipGroupKey) {
-  switch (group) {
-    case "parent":
-    case "child":
-      return "active" as const;
-    case "depends-on":
-      return "warning" as const;
-    default:
-      return "neutral" as const;
-  }
-}
-
-const relationshipGroupOrder: RelationshipGroupKey[] = [
-  "parent",
-  "depends-on",
-  "required-by",
-  "child",
-  "related",
-];

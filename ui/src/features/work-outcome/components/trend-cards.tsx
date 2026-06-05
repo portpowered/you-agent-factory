@@ -1,7 +1,4 @@
-import type { ComponentPropsWithoutRef, ReactNode } from "react";
-
 import {
-  DashboardDescriptionList,
   DashboardLabel,
   DashboardText,
   Select,
@@ -13,6 +10,8 @@ import {
 } from "../../../components/ui/formatters";
 import {
   DashboardEmptyState,
+  DashboardEmptyStateText,
+  DashboardEmptyStateTitle,
   DashboardWidgetFrame,
   DetailCopy,
   WidgetSubtitle,
@@ -31,6 +30,7 @@ import {
   type TimingTrendModel,
 } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
+import { TrendSummaryGrid, TrendSummaryMetric } from "./trend-summary";
 
 interface FailureTrendCardProps {
   className?: string;
@@ -73,6 +73,7 @@ export function FailureTrendCard({
   widgetId = "failure-trend",
 }: FailureTrendCardProps) {
   const messages = getWorkOutcomeMessages(locale).trends;
+  const rangeSelectId = `${widgetId}-failure-range`;
   const changeRange = (value: string) => {
     if (isThroughputRangeID(value)) {
       onRangeChange(value);
@@ -88,15 +89,16 @@ export function FailureTrendCard({
     >
       <div className="mb-4 flex flex-col items-start justify-between gap-3 md:flex-row">
         <WidgetSubtitle>{messages.failureSummary}</WidgetSubtitle>
-        <label className="grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36">
-          <DashboardLabel>
+        <div className="grid w-full gap-1 md:w-auto md:shrink-0 md:basis-36">
+          <DashboardLabel as="label" htmlFor={rangeSelectId}>
             {messages.rangeLabel}
           </DashboardLabel>
           <Select
             aria-label={messages.rangeLabel}
             className="rounded-lg border-primary py-2"
-            value={rangeID}
+            id={rangeSelectId}
             onChange={(event) => changeRange(event.target.value)}
+            value={rangeID}
           >
             {THROUGHPUT_RANGE_OPTIONS.map((option) => (
               <option key={option.id} value={option.id}>
@@ -104,7 +106,7 @@ export function FailureTrendCard({
               </option>
             ))}
           </Select>
-        </label>
+        </div>
       </div>
 
       <TrendSummaryGrid>
@@ -151,8 +153,12 @@ export function FailureTrendCard({
         </svg>
       ) : (
         <DashboardEmptyState compact>
-          <h3>{messages.failureEmptyTitle}</h3>
-          <p>{messages.failureEmptyMessage}</p>
+          <DashboardEmptyStateTitle>
+            {messages.failureEmptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.failureEmptyMessage}
+          </DashboardEmptyStateText>
         </DashboardEmptyState>
       )}
 
@@ -257,8 +263,12 @@ export function ReworkTrendCard({
         </svg>
       ) : (
         <DashboardEmptyState compact>
-          <h3>{messages.reworkEmptyTitle}</h3>
-          <p>{messages.reworkEmptyMessage}</p>
+          <DashboardEmptyStateTitle>
+            {messages.reworkEmptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.reworkEmptyMessage}
+          </DashboardEmptyStateText>
         </DashboardEmptyState>
       )}
     </DashboardWidgetFrame>
@@ -344,8 +354,12 @@ export function TimingTrendCard({
         </>
       ) : (
         <DashboardEmptyState compact>
-          <h3>{messages.reworkEmptyTitle}</h3>
-          <p>{messages.timingEmptyMessage}</p>
+          <DashboardEmptyStateTitle>
+            {messages.reworkEmptyTitle}
+          </DashboardEmptyStateTitle>
+          <DashboardEmptyStateText>
+            {messages.timingEmptyMessage}
+          </DashboardEmptyStateText>
         </DashboardEmptyState>
       )}
     </DashboardWidgetFrame>
@@ -370,40 +384,6 @@ function TrendAxes() {
         y2="106"
       />
     </>
-  );
-}
-
-function TrendSummaryGrid({
-  children,
-  className,
-  ...props
-}: ComponentPropsWithoutRef<"dl">) {
-  return (
-    <DashboardDescriptionList
-      className={cn("mb-4 grid-cols-1 gap-3 md:grid-cols-3", className)}
-      {...props}
-    >
-      {children}
-    </DashboardDescriptionList>
-  );
-}
-
-function TrendSummaryMetric({
-  label,
-  value,
-}: {
-  label: string;
-  value: ReactNode;
-}) {
-  return (
-    <SurfacePanel asChild radius="lg" surface="low">
-      <div>
-        <DashboardLabel as="dt" className="mb-1">{label}</DashboardLabel>
-        <WidgetSubtitle as="dd" className="m-0">
-          {value}
-        </WidgetSubtitle>
-      </div>
-    </SurfacePanel>
   );
 }
 

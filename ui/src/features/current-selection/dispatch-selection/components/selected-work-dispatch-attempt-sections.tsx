@@ -4,7 +4,6 @@ import type {
   DashboardScriptRequest,
   DashboardScriptResponse,
 } from "../../../../api/dashboard/types";
-import { DashboardText } from "../../../../components/ui";
 import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { DetailCopy } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
@@ -14,9 +13,11 @@ import {
   useCurrentSelectionLocale,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
-import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
 import { CurrentSelectionDescriptionList } from "../../base/public";
-import { CurrentSelectionHistoryCard } from "../../history/public";
+import {
+  CurrentSelectionHistoryCard,
+  CurrentSelectionHistoryCardHeader,
+} from "../../history/public";
 import {
   InferenceAttemptCard,
   InferenceAttemptDetail,
@@ -152,21 +153,13 @@ function ScriptRequestAttemptCard({
 
   return (
     <CurrentSelectionHistoryCard>
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong>
-            {messages.requestAttemptLabel(
-              String(attemptNumber ?? messages.pendingAttemptLabel),
-            )}
-          </strong>
-          <DashboardText className="m-0 text-on-surface-variant">
-            {enumMessages.localizeOutcome("PENDING")}
-          </DashboardText>
-        </div>
-        <CurrentSelectionExecutionPill>
-          {requestID ?? messages.scriptRequestPlaceholderId}
-        </CurrentSelectionExecutionPill>
-      </div>
+      <CurrentSelectionHistoryCardHeader
+        identifier={requestID ?? messages.scriptRequestPlaceholderId}
+        subtitle={enumMessages.localizeOutcome("PENDING")}
+        title={messages.requestAttemptLabel(
+          String(attemptNumber ?? messages.pendingAttemptLabel),
+        )}
+      />
       <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.scriptRequestIdLabel}
@@ -238,23 +231,17 @@ function ScriptResponseAttemptCard({
 
   return (
     <CurrentSelectionHistoryCard>
-      <div className="flex items-start justify-between gap-3">
-        <div className="grid min-w-0 gap-1">
-          <strong>
-            {messages.responseAttemptLabel(
-              String(attemptNumber ?? messages.completedAttemptLabel),
-            )}
-          </strong>
-          <DashboardText className="m-0 text-on-surface-variant">
-            {scriptResponse.outcome
-              ? enumMessages.localizeOutcome(scriptResponse.outcome)
-              : enumMessages.localizeOutcome("RECORDED")}
-          </DashboardText>
-        </div>
-        <CurrentSelectionExecutionPill>
-          {requestID ?? messages.scriptResponsePlaceholderId}
-        </CurrentSelectionExecutionPill>
-      </div>
+      <CurrentSelectionHistoryCardHeader
+        identifier={requestID ?? messages.scriptResponsePlaceholderId}
+        subtitle={
+          scriptResponse.outcome
+            ? enumMessages.localizeOutcome(scriptResponse.outcome)
+            : enumMessages.localizeOutcome("RECORDED")
+        }
+        title={messages.responseAttemptLabel(
+          String(attemptNumber ?? messages.completedAttemptLabel),
+        )}
+      />
       <CurrentSelectionDescriptionList className="mt-2.5">
         <InferenceAttemptDetail
           label={messages.scriptRequestIdLabel}

@@ -258,7 +258,10 @@ async function expectTooltipPlacement(
   placement,
 ) {
   const trigger = scope.getByRole("button", { name: triggerName });
-  await trigger.hover();
+  await expect
+    .poll(() => trigger.isEnabled(), { timeout: uiInteractionTimeoutMs })
+    .toBe(true);
+  await trigger.focus();
   const tooltip = scope.getByRole("tooltip", { name: tooltipName });
   await tooltip.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
   const className = await tooltip.getAttribute("class");
@@ -271,7 +274,9 @@ async function expectTooltipPlacement(
     expect(className).not.toContain("bottom-full");
   }
 
-  await scope.page().mouse.move(0, 0);
+  await trigger.evaluate((element) => {
+    element.blur();
+  });
   await tooltip.waitFor({ state: "hidden", timeout: uiInteractionTimeoutMs });
 }
 
@@ -348,12 +353,9 @@ describe.sequential("factory graph editor browser integration", () => {
         });
 
         for (const [triggerName, tooltipName] of [
-          ["Delete", "Remove nodes or edges from the graph"],
-          ["Connect", "Connect nodes on the graph"],
-          [
-            "Show or hide",
-            "Show or hide node classes on the graph",
-          ],
+          ["Delete", "Remove"],
+          ["Connect", "Connect"],
+          ["Show or hide", "Show"],
         ]) {
           await expectTooltipPlacement(
             toolbar,

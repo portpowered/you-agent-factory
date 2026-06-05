@@ -38,7 +38,12 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx",
+      "src/features/current-selection/workstation-selection/components/workstation-active-work-list.tsx",
+  },
+  {
+    owner: "expandable-panel-trigger",
+    relativeFilePath:
+      "src/features/current-selection/workstation-selection/components/workstation-request-history-section.tsx",
   },
   {
     owner: "expandable-panel-trigger",
@@ -53,7 +58,12 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/work-selection/components/inference-attempt.tsx",
+      "src/features/current-selection/work-selection/components/inference-attempt-summary-header.tsx",
+  },
+  {
+    owner: "expandable-panel-trigger",
+    relativeFilePath:
+      "src/features/current-selection/work-selection/components/inference-attempt-body-sections.tsx",
   },
   {
     owner: "expandable-panel-trigger",

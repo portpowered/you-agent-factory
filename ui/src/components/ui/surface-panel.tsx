@@ -4,7 +4,7 @@ import { forwardRef, type HTMLAttributes } from "react";
 import { cn } from "../../lib/cn";
 
 type SurfacePanelPadding = "compact" | "default" | "none";
-type SurfacePanelRadius = "lg" | "xl" | "2xl" | "full";
+type SurfacePanelRadius = "lg" | "xl" | "2xl" | "3xl" | "full";
 type SurfacePanelSurface = "high" | "low";
 type SurfacePanelTone = "default" | "accent" | "selected";
 
@@ -26,6 +26,7 @@ const SURFACE_PANEL_RADIUS_CLASS: Record<SurfacePanelRadius, string> = {
   lg: "rounded-lg",
   xl: "rounded-xl",
   "2xl": "rounded-2xl",
+  "3xl": "rounded-3xl",
   full: "rounded-full",
 };
 const SURFACE_PANEL_SURFACE_CLASS: Record<SurfacePanelSurface, string> = {

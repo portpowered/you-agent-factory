@@ -32,7 +32,6 @@ describe("dispatch-selection/public detail components", () => {
           fallbackProviderSessions={[]}
           requests={[]}
           selectedWorkID="work-public-smoke"
-          traceTargetId="trace-public-smoke"
         />
       </CurrentSelectionLocaleProvider>,
     );
