@@ -38,16 +38,23 @@ type OpenResult struct {
 	FolderPath      string
 }
 
+// SessionState tracks session-owned runtime metadata that should stay attached
+// to the live session rather than mutable service-global configuration.
+type SessionState struct {
+	FactoryDir       string
+	FolderPath       string
+	ExecutionBaseDir string
+}
+
 // LiveSession tracks one live factory session and its runtime handle.
 // Handle is typed by the composition root (for example *service.liveRuntimeHandle).
 type LiveSession struct {
-	ID         string
-	FactoryDir string
-	FolderPath string
-	Handle     any
-	IsDefault  bool
-	Project    string
-	Target     TargetRef
+	ID string
+	SessionState
+	Handle    any
+	IsDefault bool
+	Project   string
+	Target    TargetRef
 }
 
 // NewSessionID allocates a unique live session identifier.

@@ -36,7 +36,7 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	submitter workRequestSubmitter,
 ) {
-	if runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || sidecars == nil || submitter == nil {
+	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || sidecars == nil || submitter == nil {
 		return
 	}
 
@@ -183,8 +183,8 @@ func (fs *FactoryService) runScriptPoller(
 }
 
 func (fs *FactoryService) pollerCommandRunner() workers.CommandRunner {
-	if fs != nil && fs.cfg != nil && fs.cfg.CommandRunnerOverride != nil {
-		return fs.cfg.CommandRunnerOverride
+	if fs != nil && fs.coordinatorPolicy().commandRunnerOverride != nil {
+		return fs.coordinatorPolicy().commandRunnerOverride
 	}
 	return workers.ExecCommandRunner{}
 }
@@ -446,7 +446,7 @@ func (fs *FactoryService) startCronWatchersForRuntime(
 	runtimeCfg interfaces.RuntimeWorkstationLookup,
 	submitter workRequestSubmitter,
 ) {
-	if runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || submitter == nil {
+	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) != interfaces.RuntimeModeService || factoryCfg == nil || runtimeCfg == nil || submitter == nil {
 		return
 	}
 
@@ -698,14 +698,14 @@ func (fs *FactoryService) cronWorkflowIdentity(factoryDir string) string {
 	if fs == nil {
 		return ""
 	}
-	if fs.cfg != nil && fs.cfg.WorkflowID != "" {
-		return fs.cfg.WorkflowID
+	if fs.coordinatorPolicy().workflowID != "" {
+		return fs.coordinatorPolicy().workflowID
 	}
 	if factoryDir != "" {
 		return factoryDir
 	}
-	if fs.cfg != nil {
-		return fs.cfg.Dir
+	if fs != nil {
+		return fs.coordinatorPolicy().dir
 	}
 	return ""
 }

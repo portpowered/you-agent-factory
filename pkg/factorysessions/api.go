@@ -79,19 +79,23 @@ func NewLiveSession(
 	sessionID string,
 	factoryDir string,
 	folderPath string,
+	executionBaseDir string,
 	target TargetRef,
 	handle any,
 	isDefault bool,
 	project string,
 ) *LiveSession {
 	return &LiveSession{
-		ID:         sessionID,
-		FactoryDir: factoryDir,
-		FolderPath: folderPath,
-		Handle:     handle,
-		IsDefault:  isDefault,
-		Project:    project,
-		Target:     target,
+		ID: sessionID,
+		SessionState: SessionState{
+			FactoryDir:       factoryDir,
+			FolderPath:       folderPath,
+			ExecutionBaseDir: executionBaseDir,
+		},
+		Handle:    handle,
+		IsDefault: isDefault,
+		Project:   project,
+		Target:    target,
 	}
 }
 

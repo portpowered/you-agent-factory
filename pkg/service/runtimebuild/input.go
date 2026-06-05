@@ -3,15 +3,31 @@ package runtimebuild
 import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
 
-// BuildInput is the canonical input for constructing one runnable runtime bundle.
-type BuildInput struct {
+// SessionSpecInput is the shared constructor input for deriving one immutable
+// session build spec from service-level runtime policy plus session-owned state.
+type SessionSpecInput struct {
 	Dir                   string
 	FolderPath            string
 	SessionID             string
+	ExecutionBaseDir      string
+	LoadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
+	RuntimeInstanceID     string
+	SideEffects           *replay.SideEffects
+	AdditionalFactoryOpts []factory.FactoryOption
+}
+
+// SessionBuildSpec is the immutable input contract for constructing one
+// session-owned runtime bundle.
+type SessionBuildSpec struct {
+	Dir                   string
+	FolderPath            string
+	SessionID             string
+	ExecutionBaseDir      string
 	LoadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
 	BaseLogger            *zap.Logger
 	RuntimeInstanceID     string

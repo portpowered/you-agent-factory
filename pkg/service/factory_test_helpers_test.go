@@ -15,6 +15,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
@@ -35,7 +36,14 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 	if svc == nil {
 		return
 	}
-	svc.setStartupBundle(bundle)
+	if svc.sessions == nil {
+		svc.sessions = factorysessions.NewRegistry()
+	}
+	handle := &liveRuntimeHandle{runtime: bundle, runDone: make(chan struct{})}
+	svc.registerLiveSession(defaultFactorySessionID, handle, FactorySessionTarget{
+		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+	}, true)
+	svc.setRunState(context.Background(), defaultFactorySessionID)
 }
 
 type recordingDiagnosticsProvider struct{}

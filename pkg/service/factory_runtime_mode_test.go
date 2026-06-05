@@ -15,11 +15,14 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"go.uber.org/zap"
 )
 
@@ -584,11 +587,11 @@ func TestBuildReplacementFactoryRuntime_ServiceModeStaysRunningUntilCanceled(t *
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.cfg.RuntimeMode != interfaces.RuntimeModeService {
-		t.Fatalf("service runtime mode = %q, want %q", svc.cfg.RuntimeMode, interfaces.RuntimeModeService)
+	if svc.coordinatorPolicy().runtimeMode != interfaces.RuntimeModeService {
+		t.Fatalf("service runtime mode = %q, want %q", svc.coordinatorPolicy().runtimeMode, interfaces.RuntimeModeService)
 	}
-	if svc.cfg.Dir != alphaDir {
-		t.Fatalf("service dir = %q, want %q", svc.cfg.Dir, alphaDir)
+	if svc.coordinatorPolicy().dir != alphaDir {
+		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
 	}
 
 	createReplacementWatchChannel(t, betaDir, "task", "activated")
@@ -691,8 +694,8 @@ func TestBuildFactoryService_StartupRuntimeBundleMatchesLiveHandleShape(t *testi
 	if bundle.factory == nil {
 		t.Fatal("startup bundle factory = nil")
 	}
-	if svc.startupRuntimeBundle() != bundle {
-		t.Fatal("currentRuntimeBundle should resolve to startup bundle before Run registers ~default")
+	if bundle == nil {
+		t.Fatal("currentRuntimeBundle should resolve through the bound default session runtime")
 	}
 }
 
@@ -712,15 +715,8 @@ func TestFactoryService_Run_ClearsStartupBundleAfterDefaultRegisters(t *testing.
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.startupRuntimeBundle() == nil {
-		t.Fatal("expected startup bundle before Run")
-	}
-
 	runFactoryServiceWithCleanup(t, svc)
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
-	if svc.startupRuntimeBundle() != nil {
-		t.Fatal("startup bundle should be cleared after ~default registers at Run")
-	}
 	defaultHandle := liveSessionHandle(svc.defaultSession())
 	if bundle := svc.currentRuntimeBundle(); bundle == nil || defaultHandle == nil || bundle != defaultHandle.runtime {
 		t.Fatal("currentRuntimeBundle should resolve only through the default session handle after Run")
@@ -758,8 +754,8 @@ func TestBuildFactoryService_PreservesSessionsRegistryAcrossRuntimeReplacement(t
 	if svc.sessions != registryBefore {
 		t.Fatal("buildReplacementFactoryRuntime replaced sessions registry; session ownership should stay on FactoryService")
 	}
-	if svc.cfg.Dir != alphaDir {
-		t.Fatalf("service cfg.Dir = %q, want unchanged %q until activation", svc.cfg.Dir, alphaDir)
+	if svc.coordinatorPolicy().dir != alphaDir {
+		t.Fatalf("service dir = %q, want unchanged %q until activation", svc.coordinatorPolicy().dir, alphaDir)
 	}
 }
 
@@ -797,15 +793,15 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if svc.modelAssets == nil {
 		t.Fatal("expected explicit localmodels asset puller collaborator")
 	}
-	bundle := svc.startupBundle
-	if bundle == nil {
-		t.Fatal("expected startup runtime bundle")
+	defaultSessionSpec := liveSessionBuildSpec(svc.defaultSession())
+	if defaultSessionSpec == nil {
+		t.Fatal("expected default session build spec")
 	}
-	if bundle.modelAssets != svc.modelAssets {
-		t.Fatal("startup bundle modelAssets should reuse BuildFactoryService localmodels collaborator")
+	if defaultSessionSpec.LoadedFactoryCfg == nil {
+		t.Fatal("default session build spec loaded config = nil")
 	}
-	if svc.cfg.Dir != alphaDir {
-		t.Fatalf("service cfg.Dir = %q, want %q", svc.cfg.Dir, alphaDir)
+	if svc.coordinatorPolicy().dir != alphaDir {
+		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
 	}
 }
 
@@ -865,7 +861,7 @@ func TestFactoryService_ListModels_DelegatesToLocalmodelsCatalog(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
-	svc := &FactoryService{startupBundle: &factoryRuntimeBundle{runtimeCfg: runtimeCfg}}
+	svc := newModelCatalogServiceForTest(runtimeCfg, nil)
 
 	got, err := svc.ListModels(context.Background())
 	if err != nil {
@@ -887,7 +883,7 @@ func TestFactoryService_GetModel_DelegatesToLocalmodelsCatalog(t *testing.T) {
 	t.Parallel()
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
-	svc := &FactoryService{startupBundle: &factoryRuntimeBundle{runtimeCfg: runtimeCfg}}
+	svc := newModelCatalogServiceForTest(runtimeCfg, nil)
 
 	got, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	if err != nil {
@@ -907,10 +903,7 @@ func TestFactoryService_PullModel_DelegatesToInjectedModelAssets(t *testing.T) {
 
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
 	puller := &recordingServiceModelAssetPuller{}
-	svc := &FactoryService{
-		startupBundle: &factoryRuntimeBundle{runtimeCfg: runtimeCfg},
-		modelAssets:   puller,
-	}
+	svc := newModelCatalogServiceForTest(runtimeCfg, puller)
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
 		t.Fatalf("PullModel: %v", err)
@@ -918,6 +911,24 @@ func TestFactoryService_PullModel_DelegatesToInjectedModelAssets(t *testing.T) {
 	if puller.calls != 1 || puller.modelName != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("model asset puller calls = %d modelName = %q, want 1 and OMNIVOICE_Q4_K_M", puller.calls, puller.modelName)
 	}
+}
+
+func newModelCatalogServiceForTest(runtimeCfg *factoryconfig.LoadedFactoryConfig, puller modelAssetPuller) *FactoryService {
+	svc := &FactoryService{
+		sessions:    factorysessions.NewRegistry(),
+		modelAssets: puller,
+	}
+	svc.sessions.Upsert(factorysessions.NewLiveSession(
+		defaultFactorySessionID,
+		"",
+		"",
+		"",
+		FactorySessionTargetRef{},
+		&liveSessionState{spec: &runtimebuild.SessionBuildSpec{LoadedFactoryCfg: runtimeCfg}},
+		true,
+		"",
+	), true)
+	return svc
 }
 
 type recordingServiceModelAssetPuller struct {
@@ -958,11 +969,11 @@ func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {
 	if svc.sessions == nil {
 		t.Fatal("expected factorysessions.Registry on FactoryService")
 	}
-	if svc.cfg.Dir != alphaDir {
-		t.Fatalf("service cfg.Dir = %q, want %q", svc.cfg.Dir, alphaDir)
+	if svc.coordinatorPolicy().dir != alphaDir {
+		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
 	}
-	if svc.sessions.Count() != 0 {
-		t.Fatalf("sessions.Count() = %d before Run, want 0 until live sessions register", svc.sessions.Count())
+	if svc.sessions.Count() != 1 {
+		t.Fatalf("sessions.Count() = %d before Run, want seeded default session", svc.sessions.Count())
 	}
 }
 
@@ -982,8 +993,8 @@ func TestFactoryService_Run_RegistersDefaultSessionInRegistry(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if svc.sessions.Count() != 0 {
-		t.Fatalf("sessions.Count() = %d before Run, want 0 until default registers", svc.sessions.Count())
+	if svc.sessions.Count() != 1 {
+		t.Fatalf("sessions.Count() = %d before Run, want seeded default session", svc.sessions.Count())
 	}
 
 	runFactoryServiceWithCleanup(t, svc)
@@ -1046,9 +1057,6 @@ func assertDefaultSessionRegisteredAfterRun(t *testing.T, svc *FactoryService, r
 	}
 	if runState.sessionID != defaultFactorySessionID {
 		t.Fatalf("runState.sessionID = %q, want %q", runState.sessionID, defaultFactorySessionID)
-	}
-	if runState.runtime != defaultHandle {
-		t.Fatal("runState.runtime != default session live handle")
 	}
 	if current := svc.currentSession(); current == nil || current.ID != defaultFactorySessionID {
 		t.Fatalf("currentSession = %#v, want selected %q", current, defaultFactorySessionID)

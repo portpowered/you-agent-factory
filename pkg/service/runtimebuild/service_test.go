@@ -8,22 +8,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 )
 
-func TestService_BuildReplacementAndBuildFromLoadedConfigShareBuilder(t *testing.T) {
+func TestService_BuildReplacementAndBuildShareBuilder(t *testing.T) {
 	t.Parallel()
 
 	buildCalls := 0
-	build := func(context.Context, runtimebuild.BuildInput) (any, error) {
+	build := func(context.Context, runtimebuild.SessionBuildSpec) (any, error) {
 		buildCalls++
 		return "bundle", nil
 	}
 	svc := runtimebuild.New(runtimebuild.Config{}, factory.EnsureClock(nil), nil, build)
 
-	if _, err := svc.BuildFromLoadedConfig(context.Background(), runtimebuild.BuildInput{
+	if _, err := svc.Build(context.Background(), runtimebuild.SessionBuildSpec{
 		Dir:        "/tmp/alpha",
 		FolderPath: "/tmp",
 		SessionID:  "~default",
 	}); err != nil {
-		t.Fatalf("BuildFromLoadedConfig: %v", err)
+		t.Fatalf("Build: %v", err)
 	}
 	if buildCalls != 1 {
 		t.Fatalf("build calls after startup path = %d, want 1", buildCalls)

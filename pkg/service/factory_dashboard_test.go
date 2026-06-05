@@ -275,9 +275,9 @@ func TestFactoryService_RenderDashboardLogsEventProjectionErrors(t *testing.T) {
 			core, observedLogs := observer.New(zap.ErrorLevel)
 			renderCalls := 0
 			svc := &FactoryService{
-				cfg: &FactoryServiceConfig{
+				policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{
 					SimpleDashboardRenderer: func(SimpleDashboardRenderInput) { renderCalls++ },
-				},
+				}),
 				logger: zap.New(core),
 			}
 			bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
@@ -342,19 +342,19 @@ func TestBuildFactoryService_ConfigWithAllOptions(t *testing.T) {
 	}
 
 	// Verify config was preserved.
-	if svc.cfg.MockWorkersConfig == nil {
+	if svc.coordinatorPolicy().mockWorkersConfig == nil {
 		t.Error("expected MockWorkersConfig to be set")
 	}
-	if svc.cfg.Port != 9999 {
-		t.Errorf("expected Port 9999, got %d", svc.cfg.Port)
+	if svc.coordinatorPolicy().port != 9999 {
+		t.Errorf("expected Port 9999, got %d", svc.coordinatorPolicy().port)
 	}
-	if svc.cfg.WorkFile != workFile {
-		t.Errorf("expected WorkFile %q, got %q", workFile, svc.cfg.WorkFile)
+	if svc.coordinatorPolicy().workFile != workFile {
+		t.Errorf("expected WorkFile %q, got %q", workFile, svc.coordinatorPolicy().workFile)
 	}
-	if svc.cfg.SimpleDashboardRenderer == nil {
+	if svc.coordinatorPolicy().simpleDashboardRenderer == nil {
 		t.Error("expected SimpleDashboardRenderer to be set")
 	}
-	if svc.cfg.APIServerStarter == nil {
+	if svc.coordinatorPolicy().apiServerStarter == nil {
 		t.Error("expected APIServerStarter to be set")
 	}
 

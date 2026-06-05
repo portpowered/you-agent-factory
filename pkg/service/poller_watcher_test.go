@@ -44,7 +44,7 @@ func TestRunScriptPoller_SubmitsCanonicalWorkRequestStdoutToFactoryService(t *te
 	}
 	submitted := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
 	poller := newCanonicalScriptPollerWorkstation()
@@ -100,7 +100,7 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdoutToFactoryService(t *test
 	}
 	submitted := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
 	poller := newCanonicalScriptPollerWorkstation()
@@ -151,7 +151,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
@@ -223,7 +223,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BatchModeDoesNotStartScriptPoll
 		outcomes: []pollerRunOutcome{{waitForCancel: true}},
 	}
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch, CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeBatch, CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
 	poller := newCanonicalScriptPollerWorkstation()
@@ -293,7 +293,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		HostedLinearEndpoint:   server.URL,
 	}
 	svc := &FactoryService{
-		cfg:           svcCfg,
+		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.NewNop(),
 		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
 	}
@@ -378,7 +378,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		HostedLinearEndpoint:   server.URL,
 	}
 	svc := &FactoryService{
-		cfg:           svcCfg,
+		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.New(logCore),
 		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
 	}
@@ -438,7 +438,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 	logCore, observedLogs := observer.New(zap.WarnLevel)
 	svcCfg := &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}
 	svc := &FactoryService{
-		cfg:           svcCfg,
+		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.New(logCore),
 		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
 	}
@@ -504,7 +504,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_RestartsScriptPollerOnMalformed
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
@@ -550,7 +550,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsScriptPollerAndLogsLifecycl
 	}
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.New(logCore),
 	}
 	poller := newCanonicalScriptPollerWorkstation()
@@ -598,7 +598,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsPriorScriptPollerBeforeRepl
 		},
 	}
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
 	oldPoller := interfaces.FactoryWorkstationConfig{
@@ -662,7 +662,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 	}
 	newFactory := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
 		logger: zap.NewNop(),
 	}
 	oldHandle := newScriptPollerRuntimeHandle(t, "linear-ingress-old", oldFactory)
@@ -1010,7 +1010,7 @@ func TestFactoryService_CronTickTimeoutFailureIsClassifiedAndBounded(t *testing.
 	}
 	svc := &FactoryService{logger: zap.New(logCore)}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		factory: mock,
+		factory:    mock,
 		runtimeCfg: newLoadedFactoryConfigForServiceTest(t, "", &interfaces.FactoryConfig{Workstations: []interfaces.FactoryWorkstationConfig{{Name: "poll-for-work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "1ms"}}}}, nil, nil),
 	})
 
@@ -1267,12 +1267,12 @@ func requiredInputCronFactoryConfigWithExpiry(schedule, expiryWindow string) map
 		"workers": []map[string]string{{"name": "cron-worker"}},
 		"workstations": []map[string]any{
 			{
-				"name":     "poll-with-input",
-				"behavior": "CRON",
-				"worker":   "cron-worker",
-				"cron":     cron,
-				"inputs":   []map[string]string{{"workType": "signal", "state": "init"}},
-				"outputs":  []map[string]string{{"workType": "task", "state": "init"}},
+				"name":       "poll-with-input",
+				"behavior":   "CRON",
+				"worker":     "cron-worker",
+				"cron":       cron,
+				"inputs":     []map[string]string{{"workType": "signal", "state": "init"}},
+				"outputs":    []map[string]string{{"workType": "task", "state": "init"}},
 				"onContinue": []map[string]string{{"workType": "signal", "state": "complete"}},
 			},
 		},
@@ -1374,7 +1374,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 		return nil
 	}
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
@@ -1461,7 +1461,7 @@ func TestFactoryService_StartCronWatchersForRuntime_DisablesInvalidSchedulesWith
 		},
 	)
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
 		logger: zap.New(logCore),
 		clock:  fakeClock,
 	}
@@ -1634,7 +1634,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 	currentFactory := &aggregateSnapshotFactory{}
 	replacementFactory := &aggregateSnapshotFactory{}
 	svc := &FactoryService{
-		cfg:    &FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService}),
 		logger: zap.NewNop(),
 		clock:  fakeClock,
 	}

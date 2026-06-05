@@ -220,10 +220,12 @@ type splitLayoutDefaultSaveHost struct {
 
 func (h *splitLayoutDefaultSaveHost) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
 	return &factorysessions.LiveSession{
-		ID:         sessionID,
-		FactoryDir: h.sessionRootDir,
-		FolderPath: h.sessionRootDir,
-		IsDefault:  true,
+		ID: sessionID,
+		SessionState: factorysessions.SessionState{
+			FactoryDir: h.sessionRootDir,
+			FolderPath: h.sessionRootDir,
+		},
+		IsDefault: true,
 	}, nil
 }
 

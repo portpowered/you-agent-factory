@@ -45,8 +45,8 @@ func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
 		return fs.modelAssets
 	}
 	cacheDir := ""
-	if fs != nil && fs.cfg != nil {
-		cacheDir = strings.TrimSpace(fs.cfg.ModelCacheDir)
+	if fs != nil {
+		cacheDir = strings.TrimSpace(fs.coordinatorPolicy().modelCacheDir)
 	}
 	puller := newModelAssetPuller(cacheDir)
 	if fs != nil {
@@ -149,7 +149,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 	if runtimeCfg == nil || factoryCfg == nil {
 		return nil, fmt.Errorf("runtime config is required")
 	}
-	logger := logging.NewZapLogger(fs.logger, fs.cfg != nil && fs.cfg.Verbose)
+	logger := logging.NewZapLogger(fs.logger, fs != nil && fs.coordinatorPolicy().verbose)
 	bundle := fs.currentRuntimeBundle()
 	var modelResources *localModelResourceLimiter
 	var localModels *managedLocalModelManager
@@ -184,31 +184,31 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 }
 
 func (fs *FactoryService) factoryRunnerID() string {
-	if fs == nil || fs.cfg == nil {
+	if fs == nil {
 		return ""
 	}
-	return fs.cfg.RunnerID
+	return fs.coordinatorPolicy().runnerID
 }
 
 func (fs *FactoryService) providerOverride() workers.Provider {
-	if fs == nil || fs.cfg == nil {
+	if fs == nil {
 		return nil
 	}
-	return fs.cfg.ProviderOverride
+	return fs.coordinatorPolicy().providerOverride
 }
 
 func (fs *FactoryService) providerCommandRunnerOverride() workers.CommandRunner {
-	if fs == nil || fs.cfg == nil {
+	if fs == nil {
 		return nil
 	}
-	return fs.cfg.ProviderCommandRunnerOverride
+	return fs.coordinatorPolicy().providerCommandRunnerOverride
 }
 
 func (fs *FactoryService) commandRunnerOverride() workers.CommandRunner {
-	if fs == nil || fs.cfg == nil {
+	if fs == nil {
 		return nil
 	}
-	return fs.cfg.CommandRunnerOverride
+	return fs.coordinatorPolicy().commandRunnerOverride
 }
 
 func modelInvocationBindingsFromGenerated(values *[]factoryapi.WorkstationOperationBinding) []interfaces.ModelOperationBinding {
