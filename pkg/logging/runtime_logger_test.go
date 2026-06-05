@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type runtimeLogHomeFixture struct {
@@ -133,9 +132,13 @@ func TestBuildRuntimeLoggerUsesConfiguredRollingPolicy(t *testing.T) {
 	}
 	defer sink.Close()
 
-	rollingWriter, ok := sink.writer.(*lumberjack.Logger)
+	logWriter, ok := sink.writer.(*runtimeLogWriter)
 	if !ok {
-		t.Fatalf("expected runtime logger to use lumberjack writer, got %T", sink.writer)
+		t.Fatalf("expected runtime logger to use wrapped writer, got %T", sink.writer)
+	}
+	rollingWriter := logWriter.writer
+	if rollingWriter == nil {
+		t.Fatal("wrapped runtime logger writer = nil, want lumberjack writer")
 	}
 	if rollingWriter.MaxSize != 3 {
 		t.Fatalf("rolling MaxSize = %d, want %d", rollingWriter.MaxSize, 3)
@@ -173,9 +176,13 @@ func TestBuildRuntimeLoggerRotatesLogFiles(t *testing.T) {
 	defer sink.Close()
 
 	payload := strings.Repeat("x", 200*1024)
-	rollingWriter, ok := sink.writer.(*lumberjack.Logger)
+	logWriter, ok := sink.writer.(*runtimeLogWriter)
 	if !ok {
-		t.Fatalf("expected runtime logger to use lumberjack writer, got %T", sink.writer)
+		t.Fatalf("expected runtime logger to use wrapped writer, got %T", sink.writer)
+	}
+	rollingWriter := logWriter.writer
+	if rollingWriter == nil {
+		t.Fatal("wrapped runtime logger writer = nil, want lumberjack writer")
 	}
 	if rollingWriter.Filename != sink.Path() {
 		t.Fatalf("rolling writer filename = %q, want active runtime log path %q", rollingWriter.Filename, sink.Path())
@@ -203,16 +210,45 @@ func TestBuildRuntimeLoggerRotatesLogFiles(t *testing.T) {
 		t.Fatalf("expected rotated runtime logs, got %d files: %v", len(matches), matches)
 	}
 
-	basePath := sink.Path()
+	assertRotatedRuntimeLogMatches(t, sink.Path(), matches)
+}
+
+func TestBuildRuntimeLoggerDoesNotRecreateFileAfterClose(t *testing.T) {
+	logDir := t.TempDir()
+	sink, err := BuildRuntimeLogger(zap.NewNop(), "runtime-close-guard", logDir, RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+
+	logger := sink.Logger()
+	logger.Info("before close")
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close(runtime log sink): %v", err)
+	}
+	if err := os.Remove(sink.Path()); err != nil {
+		t.Fatalf("remove runtime log path after close: %v", err)
+	}
+
+	logger.Info("after close should not recreate file")
+
+	if _, err := os.Stat(sink.Path()); !os.IsNotExist(err) {
+		t.Fatalf("runtime log path exists after close and late write, stat err = %v", err)
+	}
+}
+
+func assertRotatedRuntimeLogMatches(t *testing.T, basePath string, matches []string) {
+	t.Helper()
+
 	baseDir := filepath.Dir(basePath)
-	basePrefix := strings.TrimSuffix(filepath.Base(basePath), runtimeLogExtension)
+	baseName := filepath.Base(basePath)
+	basePrefix := strings.TrimSuffix(baseName, runtimeLogExtension)
 	sawBackup := false
 	for _, path := range matches {
 		if filepath.Dir(path) != baseDir {
 			t.Fatalf("rotated runtime log %q is outside active log directory %q", path, baseDir)
 		}
 		base := filepath.Base(path)
-		if base == filepath.Base(basePath) {
+		if base == baseName {
 			continue
 		}
 		sawBackup = true
