@@ -10,6 +10,11 @@ Use this guide when you need to discover live factory sessions, confirm a
 service is listening, inspect the active factory on a running host, read session
 status from the API, or route submit and work commands to a non-default session.
 
+Each live session owns its own runtime state. The service coordinates and
+routes requests between sessions, but runtime state such as loaded factory,
+event history, current work, and relative execution-path resolution is scoped
+to the addressed session id.
+
 For the end-to-end agent playbook (read order, submission ingress, operator
 loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
@@ -212,3 +217,4 @@ pre-submit checklist.
 - `you docs work` — `you submit`, `POST /factory-sessions/{session_id}/work`, and verification commands
 - `you docs config` — `factory.json` topology and portability
 - `you docs batch-inputs` — batch ingress when the factory is already running
+- `docs/architecture/session-runtime-ownership.md` — maintainer reference for service/session ownership and state boundaries

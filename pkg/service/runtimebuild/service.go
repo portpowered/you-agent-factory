@@ -12,8 +12,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// BundleBuilder constructs a runnable runtime bundle from canonical build input.
-type BundleBuilder func(ctx context.Context, input BuildInput) (any, error)
+// BundleBuilder constructs a runnable runtime bundle from an immutable session
+// build spec.
+type BundleBuilder func(ctx context.Context, spec SessionBuildSpec) (any, error)
 
 // Service owns the single runtime build path for session open and post-save activation.
 type Service struct {
@@ -33,57 +34,96 @@ func New(cfg Config, clock factory.Clock, baseLogger *zap.Logger, build BundleBu
 	}
 }
 
-// BuildFromLoadedConfig builds a runtime bundle from an already-loaded factory config.
-// Startup and replacement flows both use this entry point.
-func (s *Service) BuildFromLoadedConfig(ctx context.Context, input BuildInput) (any, error) {
+// Build builds a runtime bundle from an immutable session build spec.
+func (s *Service) Build(ctx context.Context, spec SessionBuildSpec) (any, error) {
 	if s == nil || s.build == nil {
 		return nil, fmt.Errorf("runtime build service is required")
 	}
-	return s.build(ctx, input)
+	return s.build(ctx, spec)
 }
 
-// BuildReplacement loads runtime config from factoryDir and builds a replacement bundle.
-// Session open, named activation, and post-save activation all route through this path.
-func (s *Service) BuildReplacement(
+// BuildSpec derives an immutable session build spec for startup, session open,
+// named activation, and post-save activation.
+func (s *Service) BuildSpec(
 	ctx context.Context,
-	folderPath string,
-	factoryDir string,
-	sessionID string,
-) (any, error) {
+	input SessionSpecInput,
+) (SessionBuildSpec, error) {
 	if s == nil || s.build == nil {
-		return nil, fmt.Errorf("runtime build service is required")
+		return SessionBuildSpec{}, fmt.Errorf("runtime build service is required")
 	}
 	baseLogger := s.baseLogger
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()
 	}
-	loadedFactoryCfg, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, s.cfg.WorkstationLoader)
-	if err != nil {
-		return nil, fmt.Errorf("load factory config: %w", err)
+	loadedFactoryCfg := input.LoadedFactoryCfg
+	if loadedFactoryCfg == nil {
+		var err error
+		loadedFactoryCfg, err = configload.LoadRuntimeConfigFromFactoryDir(input.Dir, s.cfg.WorkstationLoader)
+		if err != nil {
+			return SessionBuildSpec{}, fmt.Errorf("load factory config: %w", err)
+		}
 	}
-	logger := NewSessionLogger(baseLogger, sessionID, folderPath, loadedFactoryCfg.FactoryDir())
+	logger := NewSessionLogger(baseLogger, input.SessionID, input.FolderPath, loadedFactoryCfg.FactoryDir())
 	WarnPortableBundledReplacementReport(
 		logger,
 		"named factory activation replaced portable bundled files",
 		loadedFactoryCfg.PortableBundledFileReplacements(),
 	)
-	loadedFactoryCfg.SetRuntimeBaseDir(s.cfg.ExecutionBaseDir)
+	loadedFactoryCfg.SetRuntimeBaseDir(input.ExecutionBaseDir)
 	clock := factory.EnsureClock(s.clock)
-	recordPath := SessionScopedRecordPath(s.cfg.RecordPath, sessionID)
-	return s.build(ctx, BuildInput{
-		Dir:                   factoryDir,
-		FolderPath:            folderPath,
-		SessionID:             sessionID,
+	recordPath := SessionScopedRecordPath(s.cfg.RecordPath, input.SessionID)
+	runtimeInstanceID := strings.TrimSpace(input.RuntimeInstanceID)
+	if runtimeInstanceID == "" {
+		runtimeInstanceID = uuid.NewString()
+	}
+	return SessionBuildSpec{
+		Dir:                   input.Dir,
+		FolderPath:            input.FolderPath,
+		SessionID:             input.SessionID,
+		ExecutionBaseDir:      input.ExecutionBaseDir,
 		LoadedFactoryCfg:      loadedFactoryCfg,
 		BaseLogger:            baseLogger,
-		RuntimeInstanceID:     uuid.NewString(),
+		RuntimeInstanceID:     runtimeInstanceID,
 		Clock:                 clock,
 		RecordPath:            recordPath,
 		WorkflowID:            s.cfg.WorkflowID,
-		ProviderOverride:      providerOverrideForMode(&s.cfg, nil),
+		ProviderOverride:      providerOverrideForMode(&s.cfg, input.SideEffects),
 		ProviderCommandRunner: providerCommandRunnerForMode(&s.cfg, loadedFactoryCfg),
-		CommandRunnerOverride: commandRunnerOverrideForMode(&s.cfg, loadedFactoryCfg, nil),
+		CommandRunnerOverride: commandRunnerOverrideForMode(&s.cfg, loadedFactoryCfg, input.SideEffects),
+		AdditionalFactoryOpts: input.AdditionalFactoryOpts,
+	}, nil
+}
+
+// BuildReplacementSpec loads runtime config from factoryDir and derives a build
+// spec for session open, named activation, and post-save activation.
+func (s *Service) BuildReplacementSpec(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+	executionBaseDir string,
+) (SessionBuildSpec, error) {
+	return s.BuildSpec(ctx, SessionSpecInput{
+		Dir:              factoryDir,
+		FolderPath:       folderPath,
+		SessionID:        sessionID,
+		ExecutionBaseDir: executionBaseDir,
 	})
+}
+
+// BuildReplacement derives a build spec and constructs the replacement bundle.
+func (s *Service) BuildReplacement(
+	ctx context.Context,
+	folderPath string,
+	factoryDir string,
+	sessionID string,
+	executionBaseDir string,
+) (any, error) {
+	spec, err := s.BuildReplacementSpec(ctx, folderPath, factoryDir, sessionID, executionBaseDir)
+	if err != nil {
+		return nil, err
+	}
+	return s.Build(ctx, spec)
 }
 
 // SessionScopedRecordPath substitutes per-session recording tokens in record paths.

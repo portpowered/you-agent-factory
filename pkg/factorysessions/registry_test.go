@@ -5,8 +5,8 @@ import "testing"
 func TestRegistry_UpsertSelectAndRemove(t *testing.T) {
 	registry := NewRegistry()
 
-	defaultSession := NewLiveSession(DefaultSessionID, "/factories/alpha", "/workspace", TargetRef{Kind: TargetKindDefault}, "handle-default", true, "alpha")
-	betaSession := NewLiveSession("session-beta", "/factories/beta", "/workspace", TargetRef{Kind: TargetKindNamed, Name: "beta"}, "handle-beta", false, "beta")
+	defaultSession := NewLiveSession(DefaultSessionID, "/factories/alpha", "/workspace", "/workspace", TargetRef{Kind: TargetKindDefault}, "handle-default", true, "alpha")
+	betaSession := NewLiveSession("session-beta", "/factories/beta", "/workspace", "/workspace", TargetRef{Kind: TargetKindNamed, Name: "beta"}, "handle-beta", false, "beta")
 
 	registry.Upsert(defaultSession, true)
 	if got := registry.Current(); got != defaultSession {

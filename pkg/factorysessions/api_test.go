@@ -12,6 +12,7 @@ func TestListSummaries_OrdersDefaultSessionFirst(t *testing.T) {
 		"session-b",
 		"/factories/b",
 		"/workspace",
+		"/workspace",
 		TargetRef{Kind: TargetKindNamed, Name: "b"},
 		nil,
 		false,
@@ -20,6 +21,7 @@ func TestListSummaries_OrdersDefaultSessionFirst(t *testing.T) {
 	registry.Upsert(NewLiveSession(
 		DefaultSessionID,
 		"/factories/default",
+		"/workspace",
 		"/workspace",
 		TargetRef{Kind: TargetKindDefault},
 		nil,
@@ -39,12 +41,14 @@ func TestListSummaries_OrdersDefaultSessionFirst(t *testing.T) {
 func TestSummaryResponse_MapsLiveSessionFields(t *testing.T) {
 	name := "beta"
 	summary := SummaryResponse(&LiveSession{
-		ID:         "session-1",
-		FactoryDir: "/factories/beta",
-		FolderPath: "/workspace",
-		IsDefault:  false,
-		Project:    "beta-project",
-		Target:     TargetRef{Kind: TargetKindNamed, Name: name},
+		ID: "session-1",
+		SessionState: SessionState{
+			FactoryDir: "/factories/beta",
+			FolderPath: "/workspace",
+		},
+		IsDefault: false,
+		Project:   "beta-project",
+		Target:    TargetRef{Kind: TargetKindNamed, Name: name},
 	})
 	if summary.Id != "session-1" || summary.Project != "beta-project" {
 		t.Fatalf("summary = %#v, want mapped session fields", summary)

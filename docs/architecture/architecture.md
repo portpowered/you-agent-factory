@@ -30,6 +30,39 @@ flowchart LR
 
 The loop is intentionally closed: workers and agents do not mutate the world directly. They produce outputs that re-enter the system as events, which keeps the state transition history explicit and replayable.
 
+## Service and Session Boundaries
+
+Multi-session runtime hosting adds a second architecture boundary on top of the
+core loop:
+
+- the service coordinates sessions
+- each session owns one runtime
+- runtime construction is driven by immutable session build inputs
+
+```mermaid
+flowchart LR
+    api[API and CLI]
+    svc[FactoryService Coordinator]
+    reg[Session Registry]
+    build[Runtime Builder]
+    persist[Factory Persistence]
+    s1[SessionRuntime A]
+    s2[SessionRuntime B]
+    models[Model Runtime and Providers]
+
+    api --> svc
+    svc --> reg
+    svc --> build
+    svc --> persist
+    build --> s1
+    build --> s2
+    s1 --> models
+    s2 --> models
+```
+
+The important rule is that `FactoryService` routes and coordinates, but does
+not become the canonical owner of per-session runtime state.
+
 ## Event Stream
 
 The world is derived from an ordered event stream rather than a collection of opaque mutable objects. This stream is the durable source of truth for replay, synchronization, and historical inspection.

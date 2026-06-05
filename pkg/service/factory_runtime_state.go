@@ -15,9 +15,9 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -524,52 +524,6 @@ func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error
 	return nil
 }
 
-func (fs *FactoryService) startupRuntimeBundle() *factoryRuntimeBundle {
-	if fs == nil {
-		return nil
-	}
-	fs.runtimeMu.RLock()
-	defer fs.runtimeMu.RUnlock()
-	return fs.startupBundle
-}
-
-func (fs *FactoryService) setStartupBundle(runtimeBundle *factoryRuntimeBundle) {
-	if fs == nil {
-		return
-	}
-	fs.runtimeMu.Lock()
-	defer fs.runtimeMu.Unlock()
-	fs.startupBundle = runtimeBundle
-}
-
-func (fs *FactoryService) clearStartupBundle() {
-	if fs == nil {
-		return
-	}
-	fs.runtimeMu.Lock()
-	defer fs.runtimeMu.Unlock()
-	fs.startupBundle = nil
-}
-
-func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBundle) {
-	if fs == nil || fs.cfg == nil {
-		return
-	}
-	fs.runtimeMu.Lock()
-	defer fs.runtimeMu.Unlock()
-	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.dir) == "" {
-		if strings.TrimSpace(fs.factoryRootDir) != "" {
-			fs.cfg.Dir = fs.factoryRootDir
-		}
-		return
-	}
-	fs.cfg.Dir = runtimeBundle.dir
-}
-
-func (fs *FactoryService) resetActiveSessionDir() {
-	fs.syncActiveSessionDir(nil)
-}
-
 func (fs *FactoryService) currentRunState() *serviceRunState {
 	fs.runMu.RLock()
 	defer fs.runMu.RUnlock()
@@ -577,15 +531,15 @@ func (fs *FactoryService) currentRunState() *serviceRunState {
 }
 
 func (fs *FactoryService) currentLiveRuntime() *liveRuntimeHandle {
-	fs.runMu.RLock()
-	defer fs.runMu.RUnlock()
-	if fs.runState == nil {
+	runState := fs.currentRunState()
+	if runState == nil {
 		return nil
 	}
-	return fs.runState.runtime
+	session := fs.sessionByID(runState.sessionID)
+	return liveSessionHandle(session)
 }
 
-func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, runtime *liveRuntimeHandle) {
+func (fs *FactoryService) setRunState(ctx context.Context, sessionID string) {
 	fs.runMu.Lock()
 	defer fs.runMu.Unlock()
 	if ctx == nil {
@@ -595,7 +549,6 @@ func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, run
 	fs.runState = &serviceRunState{
 		ctx:       ctx,
 		sessionID: sessionID,
-		runtime:   runtime,
 	}
 }
 
@@ -720,13 +673,14 @@ func (fs *FactoryService) GetFactoryEvents(ctx context.Context) ([]factoryapi.Fa
 }
 
 func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
-	data, err := os.ReadFile(fs.cfg.WorkFile)
+	workFile := fs.coordinatorPolicy().workFile
+	data, err := os.ReadFile(workFile)
 	if err != nil {
-		return fmt.Errorf("read work file %s: %w", fs.cfg.WorkFile, err)
+		return fmt.Errorf("read work file %s: %w", workFile, err)
 	}
 	workRequest, err := requests.ParseCanonicalWorkRequestJSON(data)
 	if err != nil {
-		return fmt.Errorf("parse work file %s: %w", fs.cfg.WorkFile, err)
+		return fmt.Errorf("parse work file %s: %w", workFile, err)
 	}
 	activeFactory := fs.currentFactory()
 	if activeFactory == nil {
@@ -735,7 +689,7 @@ func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
 	if _, err := activeFactory.SubmitWorkRequest(ctx, workRequest); err != nil {
 		return fmt.Errorf("submit initial work: %w", err)
 	}
-	fs.logger.Info("submitted initial work", zap.String("file", fs.cfg.WorkFile))
+	fs.logger.Info("submitted initial work", zap.String("file", workFile))
 	return nil
 }
 
@@ -750,16 +704,21 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
 		return bundle.runtimeCfg
 	}
+	if session := fs.defaultSession(); session != nil {
+		if spec := liveSessionBuildSpec(session); spec != nil {
+			return spec.LoadedFactoryCfg
+		}
+	}
 	return nil
 }
 
 func (fs *FactoryService) workflowID() string {
-	if fs == nil || fs.cfg == nil {
+	if fs == nil {
 		return ""
 	}
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
-	return fs.cfg.WorkflowID
+	return fs.coordinatorPolicy().workflowID
 }
 
 func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
@@ -906,12 +865,13 @@ func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 }
 
 func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
-	if !serviceMode || fs.cfg.WorkFile == "" || fs.cfg.APIServerReady == nil || fs.cfg.Port <= 0 || fs.cfg.APIServerStarter == nil {
+	policy := fs.coordinatorPolicy()
+	if !serviceMode || policy.workFile == "" || policy.apiServerReady == nil || policy.port <= 0 || policy.apiServerStarter == nil {
 		return nil
 	}
 	apiServerExit := fs.apiServerExit
 	select {
-	case <-fs.cfg.APIServerReady:
+	case <-policy.apiServerReady:
 	case err := <-apiServerExit:
 		return startupReadinessError(err)
 	case <-ctx.Done():

@@ -37,27 +37,28 @@ import (
 // BuildFactoryService loads factory.json from the config directory, constructs
 // the petri net, factory runtime, file watcher, and session metrics.
 func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {
-	if err := validateReplayModeConfig(cfg); err != nil {
+	normalizedCfg := cloneFactoryServiceConfig(cfg)
+	if err := validateReplayModeConfig(normalizedCfg); err != nil {
 		return nil, err
 	}
-	root, err := ResolveFactoryServiceRoot(cfg)
+	root, err := ResolveFactoryServiceRoot(normalizedCfg)
 	if err != nil {
 		return nil, err
 	}
-	load, err := LoadFactoryConfigForCompose(cfg, root)
+	load, err := LoadFactoryConfigForCompose(normalizedCfg, root)
 	if err != nil {
 		return nil, err
 	}
-	clock := ServiceClockForCompose(cfg, load)
-	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	clock := ServiceClockForCompose(normalizedCfg, load)
+	collaborators := NewFactoryServiceCollaborators(normalizedCfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
 	shell, err := ComposeFactoryService(
 		ctx,
-		cfg,
+		normalizedCfg,
 		root,
 		collaborators,
 		load,
 		clock,
-		NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		NewHostedWorkersConfig(normalizedCfg, root.BaseLogger, clock),
 	)
 	if err != nil {
 		return nil, err
@@ -65,11 +66,48 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	return AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg)), nil
 }
 
+func cloneFactoryServiceConfig(cfg *FactoryServiceConfig) *FactoryServiceConfig {
+	if cfg == nil {
+		return nil
+	}
+	cloned := *cfg
+	if cfg.ExtraOptions != nil {
+		cloned.ExtraOptions = append([]factory.FactoryOption(nil), cfg.ExtraOptions...)
+	}
+	return &cloned
+}
+
 func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller) modelAssetPuller {
 	if cfg != nil && cfg.ModelAssets != nil {
 		return cfg.ModelAssets
 	}
 	return production
+}
+
+func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordinatorPolicy {
+	if cfg == nil {
+		return serviceCoordinatorPolicy{}
+	}
+	return serviceCoordinatorPolicy{
+		dir:                           cfg.Dir,
+		executionBaseDir:              cfg.ExecutionBaseDir,
+		runtimeMode:                   cfg.RuntimeMode,
+		port:                          cfg.Port,
+		verbose:                       cfg.Verbose,
+		runtimeInstanceID:             cfg.RuntimeInstanceID,
+		workFile:                      cfg.WorkFile,
+		workflowID:                    cfg.WorkflowID,
+		mockWorkersConfig:             cfg.MockWorkersConfig,
+		simpleDashboardRenderer:       cfg.SimpleDashboardRenderer,
+		apiServerStarter:              cfg.APIServerStarter,
+		apiServerReady:                cfg.APIServerReady,
+		workstationLoader:             cfg.WorkstationLoader,
+		modelCacheDir:                 cfg.ModelCacheDir,
+		runnerID:                      cfg.RunnerID,
+		providerOverride:              cfg.ProviderOverride,
+		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
+		commandRunnerOverride:         cfg.CommandRunnerOverride,
+	}
 }
 
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
@@ -176,7 +214,7 @@ func buildRuntimeBundle(
 	ctx context.Context,
 	input runtimeBundleBuildInput,
 ) (*factoryRuntimeBundle, error) {
-	logSink, runtimeInstanceID, err := buildRuntimeLogSink(input.cfg, input.baseLogger, input.runtimeInstanceID)
+	logSink, err := buildRuntimeLogSink(input.buildConfig, input.baseLogger, input.runtimeInstanceID)
 	if err != nil {
 		return nil, err
 	}
@@ -186,9 +224,6 @@ func buildRuntimeBundle(
 			_ = logSink.Close()
 		}
 	}()
-	if input.cfg != nil && runtimeInstanceID != "" {
-		input.cfg.RuntimeInstanceID = runtimeInstanceID
-	}
 	sessionID := strings.TrimSpace(input.sessionID)
 	if sessionID == "" {
 		sessionID = defaultFactorySessionID
@@ -202,12 +237,12 @@ func buildRuntimeBundle(
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}
 
-	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
+	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.buildConfig.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
 	localModels := input.prefetchedLocalModels
 	if localModels.manager == nil {
-		localModels = newRuntimeLocalModelDependencies(input.cfg)
+		localModels = newRuntimeLocalModelDependencies(input.buildConfig)
 	}
 	workerOpts, err := loadRuntimeBundleWorkerOptions(input, logger, effectiveFactoryRunnerID, eventHistory, localModels)
 	if err != nil {
@@ -231,8 +266,8 @@ func loadRuntimeBundleWorkerOptions(
 		effectiveFactoryRunnerID,
 		input.loadedFactoryCfg,
 		runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
-		logging.NewZapLogger(logger, input.cfg.Verbose),
-		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
+		logging.NewZapLogger(logger, input.buildConfig.Verbose),
+		input.buildConfig.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
 		input.providerCommandRunner,
 		input.commandRunnerOverride,
@@ -260,7 +295,7 @@ func assembleRuntimeBundle(
 	workerOpts []factory.FactoryOption,
 ) (*factoryRuntimeBundle, error) {
 	recording, err := buildRuntimeRecorder(
-		input.cfg,
+		input.buildConfig,
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
 		input.loadedFactoryCfg,
@@ -274,8 +309,8 @@ func assembleRuntimeBundle(
 
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
-		factory.WithRuntimeMode(input.cfg.RuntimeMode),
-		factory.WithLogger(logging.NewZapLogger(logger, input.cfg.Verbose)),
+		factory.WithRuntimeMode(input.buildConfig.RuntimeMode),
+		factory.WithLogger(logging.NewZapLogger(logger, input.buildConfig.Verbose)),
 		factory.WithRuntimeConfig(input.loadedFactoryCfg),
 		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID)),
 		factory.WithClock(input.clock),
@@ -290,7 +325,7 @@ func assembleRuntimeBundle(
 	}
 	opts = append(opts, input.additionalFactoryOpts...)
 	opts = append(opts, workerOpts...)
-	opts = append(opts, input.cfg.ExtraOptions...)
+	opts = append(opts, input.buildConfig.ExtraOptions...)
 
 	activeFactory, err := runtime.New(opts...)
 	if err != nil {
@@ -320,24 +355,21 @@ func assembleRuntimeBundle(
 }
 
 func buildRuntimeLogSink(
-	cfg *FactoryServiceConfig,
+	cfg runtimebuild.Config,
 	baseLogger *zap.Logger,
 	runtimeInstanceID string,
-) (*logging.RuntimeLogSink, string, error) {
+) (*logging.RuntimeLogSink, error) {
 	if baseLogger == nil {
 		baseLogger = zap.NewNop()
 	}
 	if strings.TrimSpace(runtimeInstanceID) == "" {
 		runtimeInstanceID = uuid.NewString()
 	}
-	if cfg == nil {
-		return nil, runtimeInstanceID, fmt.Errorf("factory service config is required to build runtime log sink")
-	}
 	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
 	if err != nil {
-		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
+		return nil, fmt.Errorf("build runtime logger: %w", err)
 	}
-	return logSink, runtimeInstanceID, nil
+	return logSink, nil
 }
 
 // localModelDomain wires pkg/localmodels runtime dependencies constructed at
@@ -348,7 +380,7 @@ type localModelDomain struct {
 	manager   *managedLocalModelManager
 }
 
-func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) localModelDomain {
+func newRuntimeLocalModelDependencies(cfg runtimebuild.Config) localModelDomain {
 	modelResources := newLocalModelResourceLimiter()
 	modelAssets := newModelAssetPuller(strings.TrimSpace(cfg.ModelCacheDir))
 	localModelRuntime := cfg.LocalModelRuntimeOverride
@@ -398,7 +430,7 @@ func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clo
 }
 
 func buildRuntimeRecorder(
-	cfg *FactoryServiceConfig,
+	cfg runtimebuild.Config,
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
 	runtimeCfg interfaces.RuntimeDefinitionLookup,
@@ -452,43 +484,6 @@ func buildRuntimeListener(
 	), nil
 }
 
-func providerOverrideForMode(cfg *FactoryServiceConfig, sideEffects *replay.SideEffects) workers.Provider {
-	if cfg.ProviderOverride != nil || sideEffects == nil {
-		return cfg.ProviderOverride
-	}
-	return sideEffects
-}
-
-func commandRunnerOverrideForMode(
-	cfg *FactoryServiceConfig,
-	runtimeCfg interfaces.RuntimeDefinitionLookup,
-	sideEffects *replay.SideEffects,
-) workers.CommandRunner {
-	next := cfg.CommandRunnerOverride
-	if next == nil && sideEffects != nil {
-		next = sideEffects
-	}
-	if cfg.MockWorkersConfig == nil {
-		return next
-	}
-	return &workers.MockWorkerCommandRunner{
-		Config:        cfg.MockWorkersConfig,
-		RuntimeConfig: runtimeCfg,
-		Next:          next,
-	}
-}
-
-func providerCommandRunnerForMode(cfg *FactoryServiceConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) workers.CommandRunner {
-	if cfg.MockWorkersConfig == nil {
-		return cfg.ProviderCommandRunnerOverride
-	}
-	return &workers.MockWorkerCommandRunner{
-		Config:        cfg.MockWorkersConfig,
-		RuntimeConfig: runtimeCfg,
-		Next:          cfg.ProviderCommandRunnerOverride,
-	}
-}
-
 func (fs *FactoryService) dashboardLoop(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -512,7 +507,7 @@ func (fs *FactoryService) renderDashboard(ctx context.Context) {
 		}
 		return
 	}
-	fs.cfg.SimpleDashboardRenderer(input)
+	fs.coordinatorPolicy().simpleDashboardRenderer(input)
 }
 
 func (fs *FactoryService) buildSimpleDashboardRenderInput(ctx context.Context, now time.Time) (SimpleDashboardRenderInput, error) {
@@ -826,16 +821,17 @@ func newRuntimeBuildService(
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
 ) *runtimebuild.Service {
+	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
-		runtimeBuildConfigFromService(cfg),
+		buildCfg,
 		clock,
 		baseLogger,
-		func(ctx context.Context, input runtimebuild.BuildInput) (any, error) {
+		func(ctx context.Context, input runtimebuild.SessionBuildSpec) (any, error) {
 			bundleInput := runtimeBundleBuildInput{
 				dir:                   input.Dir,
 				folderPath:            input.FolderPath,
 				sessionID:             input.SessionID,
-				cfg:                   cfg,
+				buildConfig:           buildCfg,
 				loadedFactoryCfg:      input.LoadedFactoryCfg,
 				baseLogger:            input.BaseLogger,
 				runtimeInstanceID:     input.RuntimeInstanceID,

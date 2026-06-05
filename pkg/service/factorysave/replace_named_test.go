@@ -111,9 +111,11 @@ type splitLayoutNamedSaveHost struct {
 
 func (h *splitLayoutNamedSaveHost) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
 	return &factorysessions.LiveSession{
-		ID:         sessionID,
-		FactoryDir: h.sessionRootDir,
-		FolderPath: h.sessionRootDir,
+		ID: sessionID,
+		SessionState: factorysessions.SessionState{
+			FactoryDir: h.sessionRootDir,
+			FolderPath: h.sessionRootDir,
+		},
 	}, nil
 }
 
