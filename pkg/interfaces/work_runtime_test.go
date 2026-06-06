@@ -835,6 +835,20 @@ func TestCanonicalProviderSessionProvider(t *testing.T) {
 	}
 }
 
+func TestProviderSessionMetadataFromGenerated_CanonicalizesLegacyCursorProvider(t *testing.T) {
+	session := ProviderSessionMetadataFromGenerated(&factoryapi.ProviderSessionMetadata{
+		Provider: stringPtr("agent"),
+		Kind:     stringPtr("session_id"),
+		Id:       stringPtr("cursor-session-123"),
+	})
+	if session == nil {
+		t.Fatal("session = nil, want canonical provider session metadata")
+	}
+	if session.Provider != "cursor" || session.Kind != "session_id" || session.ID != "cursor-session-123" {
+		t.Fatalf("session = %#v, want canonical cursor session metadata", session)
+	}
+}
+
 func assertNilMatches(t *testing.T, wantNil bool, gotNil bool, field string) {
 	t.Helper()
 	if wantNil != gotNil {

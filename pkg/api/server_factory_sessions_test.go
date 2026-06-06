@@ -558,6 +558,23 @@ func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testi
 	}
 }
 
+func TestGetProviderSessionDetails_LoadsLegacyAgentCursorSessionFromConfiguredRoot(t *testing.T) {
+	root, sessionID := writeCursorProviderSessionFixture(t)
+
+	srv := newTestServerWithCursorRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=agent&kind=session_id&id="+sessionID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
+	if string(resp.ProviderSession.Provider) != "cursor" || string(resp.ProviderSession.Kind) != "session_id" || resp.ProviderSession.Id != sessionID {
+		t.Fatalf("provider session = %#v, want canonical cursor session_id %s", resp.ProviderSession, sessionID)
+	}
+}
+
 func assertProviderSessionResponseIdentity(t *testing.T, resp factoryapi.ProviderSessionDetailResponse) {
 	t.Helper()
 
@@ -910,6 +927,14 @@ func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
 }
 
+func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t *testing.T) {
+	srv := newTestServerWithCursorRoot(t.TempDir())
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=agent&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
 func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
 	root := t.TempDir()
 	core, logs := observer.New(zap.InfoLevel)
@@ -980,6 +1005,22 @@ func TestGetProviderSessionDetails_CursorRejectsPathLikeAndMalformedIdentifiers(
 		"/provider-sessions/detail?provider=cursor&kind=session_id&id=../secret",
 		"/provider-sessions/detail?provider=cursor&kind=session_id&id=/tmp/store.db",
 		"/provider-sessions/detail?provider=cursor&kind=session_id&id=session.with.dot",
+	} {
+		t.Run(target, func(t *testing.T) {
+			srv := newTestServerWithCursorRoot(t.TempDir())
+			req := httptest.NewRequest("GET", target, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a cursor session_id identifier without path separators")
+		})
+	}
+}
+
+func TestGetProviderSessionDetails_LegacyAgentCursorRejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
+	for _, target := range []string{
+		"/provider-sessions/detail?provider=agent&kind=session_id&id=../secret",
+		"/provider-sessions/detail?provider=agent&kind=session_id&id=/tmp/store.db",
+		"/provider-sessions/detail?provider=agent&kind=session_id&id=session.with.dot",
 	} {
 		t.Run(target, func(t *testing.T) {
 			srv := newTestServerWithCursorRoot(t.TempDir())

@@ -39,6 +39,11 @@ func (s *Server) GetProviderSessionDetails(
 	r *http.Request,
 	params factoryapi.GetProviderSessionDetailsParams,
 ) {
+	provider, ok := normalizeLoadableProviderSessionProvider(params.Provider)
+	if !ok {
+		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
+		return
+	}
 	if params.Kind != factoryapi.LoadableProviderSessionKindSessionID {
 		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
 		return
@@ -48,25 +53,22 @@ func (s *Server) GetProviderSessionDetails(
 		details factoryapi.ProviderSessionDetailResponse
 		err     error
 	)
-	switch params.Provider {
+	switch provider {
 	case factoryapi.Codex:
 		details, err = loadProviderSessionDetails(s.codexSessionsRoot, string(params.Id))
 	case factoryapi.Cursor:
 		details, err = providersessioncursor.LoadDetails(s.cursorSessionsRoot, string(params.Id))
-	default:
-		s.writeError(w, http.StatusBadRequest, "invalid request parameter", "BAD_REQUEST")
-		return
 	}
 	if err != nil {
 		switch {
 		case errors.Is(err, errInvalidProviderSessionIdentifier),
 			errors.Is(err, providersessioncursor.ErrInvalidProviderSessionIdentifier):
-			message := invalidProviderSessionIdentifierMessage(params.Provider)
+			message := invalidProviderSessionIdentifierMessage(provider)
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
 			return
 		case errors.Is(err, errProviderSessionNotFound),
 			errors.Is(err, providersessioncursor.ErrProviderSessionNotFound):
-			if params.Provider == factoryapi.Cursor {
+			if provider == factoryapi.Cursor {
 				s.logCursorProviderSessionLookupNotFound(params.Kind, string(params.Id))
 			}
 			s.writeError(w, http.StatusNotFound, "provider session not found", "NOT_FOUND")
@@ -83,6 +85,17 @@ func (s *Server) GetProviderSessionDetails(
 	}
 
 	s.writeJSON(w, http.StatusOK, details)
+}
+
+func normalizeLoadableProviderSessionProvider(provider factoryapi.LoadableProviderSessionProvider) (factoryapi.LoadableProviderSessionProvider, bool) {
+	switch strings.TrimSpace(string(provider)) {
+	case string(factoryapi.Codex):
+		return factoryapi.Codex, true
+	case string(factoryapi.Cursor), "agent", "cursor-agent":
+		return factoryapi.Cursor, true
+	default:
+		return "", false
+	}
 }
 
 func (s *Server) logCursorProviderSessionLookupNotFound(kind factoryapi.LoadableProviderSessionKind, requestedID string) {
