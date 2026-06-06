@@ -27,12 +27,20 @@ export function registerWorkstationGuardSelectorMonaco(monaco: MonacoModule) {
     WORKSTATION_GUARD_SELECTOR_LANGUAGE_ID,
     WORKSTATION_GUARD_SELECTOR_MONARCH_LANGUAGE,
   );
-  monaco.editor.defineTheme(
-    WORKSTATION_GUARD_SELECTOR_THEME_ID,
-    buildWorkstationGuardSelectorTheme(),
-  );
+  applyWorkstationGuardSelectorTheme(monaco);
 
   workstationGuardSelectorMonacoRegistered = true;
+}
+
+export function applyWorkstationGuardSelectorTheme(
+  monaco: MonacoModule,
+  root: Element | null = document.documentElement,
+) {
+  monaco.editor.defineTheme(
+    WORKSTATION_GUARD_SELECTOR_THEME_ID,
+    buildWorkstationGuardSelectorTheme(root),
+  );
+  monaco.editor.setTheme(WORKSTATION_GUARD_SELECTOR_THEME_ID);
 }
 
 export function resetWorkstationGuardSelectorMonacoRegistrationForTests() {
