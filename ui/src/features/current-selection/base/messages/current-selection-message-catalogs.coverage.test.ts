@@ -112,13 +112,9 @@ const invokeDispatchHistory = (
     case "requestAttemptLabel":
     case "responseAttemptLabel":
       return [formatter("pending" as never)];
-    case "relationshipLaneAriaLabel":
-    case "relatedWorkSelectLabel":
     case "selectWorkItemAccessibleLabel":
     case "openWorkItemActionLabel":
       return [formatter("Review Story" as never)];
-    case "relationshipStateLabel":
-      return [formatter("Dependency" as never, "accepted" as never)];
     case "formatMoveTransition":
       return [formatter("init" as never, "review" as never)];
     case "localizeMoveSource":
