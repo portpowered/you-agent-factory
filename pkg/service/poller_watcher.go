@@ -277,6 +277,9 @@ func scriptPollerCommandRequest(
 			workDir = filepath.Clean(filepath.Join(baseDir, filepath.FromSlash(workDir)))
 		}
 	}
+	if workDir == "" {
+		workDir = pollerRuntimeWorkingDirectory(runtimeCfg)
+	}
 
 	req := workers.CommandRequest{
 		Command:         resolvePortableFactoryScriptReference(runtimeCfg.FactoryDir(), workerDef.Command),
@@ -287,6 +290,20 @@ func scriptPollerCommandRequest(
 		WorkstationName: workstation.Name,
 	}
 	return req, nil
+}
+
+func pollerRuntimeWorkingDirectory(runtimeCfg interfaces.RuntimeConfigLookup) string {
+	if runtimeCfg == nil {
+		return ""
+	}
+	baseDir := strings.TrimSpace(runtimeCfg.RuntimeBaseDir())
+	if baseDir == "" {
+		baseDir = strings.TrimSpace(runtimeCfg.FactoryDir())
+	}
+	if baseDir == "" {
+		return ""
+	}
+	return filepath.Clean(baseDir)
 }
 
 func scriptPollerExecutionTimeout(workstation interfaces.FactoryWorkstationConfig, workerDef *interfaces.WorkerConfig) (time.Duration, error) {
