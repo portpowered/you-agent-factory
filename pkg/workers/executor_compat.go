@@ -20,6 +20,9 @@ type NoopExecutor = workerexecutor.NoopExecutor
 type WorkstationExecutor = workerexecutor.WorkstationExecutor
 type WorkerPool = workerexecutor.WorkerPool
 type WorkerRunner = workerexecutor.WorkerRunner
+type WorkerExecutor = workerexecutor.WorkerExecutor
+type WorkstationRequestExecutor = workerexecutor.WorkstationRequestExecutor
+type Runner = workerexecutor.Runner
 
 const (
 	WorkLogEventWorkerPoolSubmitted         = workerexecutor.WorkLogEventWorkerPoolSubmitted
