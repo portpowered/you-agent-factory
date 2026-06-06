@@ -270,7 +270,7 @@ export function CurrentActivityGraphViewport({
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
-          "relative h-full min-h-96 overflow-hidden rounded-3xl border transition-colors",
+          "relative h-full min-h-96 overflow-hidden rounded-3xl border shadow-none transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-primary bg-primary-container",
@@ -288,6 +288,7 @@ export function CurrentActivityGraphViewport({
         onDrop={imports.onDrop}
       >
         <ReactFlow
+          className="shadow-none"
           connectionLineStyle={{
             stroke: "var(--color-primary)",
             strokeWidth: 2.4,

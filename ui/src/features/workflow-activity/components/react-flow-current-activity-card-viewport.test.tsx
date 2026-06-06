@@ -13,19 +13,21 @@ vi.mock("@xyflow/react", async () => {
     Background: () => <div data-testid="graph-background" />,
     Controls: () => <div data-testid="graph-controls" />,
     ReactFlow: ({
+      className,
       children,
       edges,
       nodes,
       onEdgeClick,
       onNodeClick,
     }: {
+      className?: string;
       children: ReactNode;
       edges?: Edge[];
       nodes?: Node[];
       onEdgeClick?: (_event: unknown, edge: Edge) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
     }) => (
-      <div data-testid="mock-react-flow">
+      <div className={className} data-testid="mock-react-flow">
         {(nodes ?? []).map((node) => (
           <button
             key={node.id}
@@ -271,6 +273,22 @@ describe("CurrentActivityGraphViewport", () => {
 
     expect(handleEditorNodeClick).not.toHaveBeenCalled();
     expect(handleEditorEdgeClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current-activity graph shell and React Flow canvas flat", () => {
+    renderViewport();
+
+    const graphFrame = screen.getByRole("region", {
+      name: "Work graph viewport",
+    });
+    const reactFlow = screen.getByTestId("mock-react-flow");
+
+    expect(graphFrame.className).toContain("shadow-none");
+    expect(graphFrame.className).not.toContain("shadow-af-card");
+    expect(graphFrame.className).not.toContain("shadow-af-panel");
+    expect(reactFlow.className).toContain("shadow-none");
+    expect(reactFlow.className).not.toContain("shadow-af-card");
+    expect(reactFlow.className).not.toContain("shadow-af-panel");
   });
 });
 
