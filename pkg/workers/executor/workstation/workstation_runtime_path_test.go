@@ -102,6 +102,9 @@ func TestWorkstationExecutor_DefaultsEmptyExecutionPathToRuntimeBaseDirectoryAcr
 			if mock.dispatch.WorkingDirectory != runtimeBaseDir {
 				t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, runtimeBaseDir)
 			}
+			if mock.dispatch.WorkingDirectoryAuthored {
+				t.Fatal("WorkingDirectoryAuthored = true, want false for default runtime root")
+			}
 			if mock.dispatch.UserMessage != "Work from "+runtimeBaseDir {
 				t.Fatalf("user message = %q, want runtime root", mock.dispatch.UserMessage)
 			}
@@ -152,6 +155,9 @@ func TestWorkstationExecutor_ResolvesTemplatedWorkingDirectoryFromSessionContext
 	}
 	if mock.dispatch.WorkingDirectory != wantDir {
 		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, wantDir)
+	}
+	if !mock.dispatch.WorkingDirectoryAuthored {
+		t.Fatal("WorkingDirectoryAuthored = false, want true for templated workstation path")
 	}
 	if mock.dispatch.UserMessage != "Work from "+wantDir {
 		t.Fatalf("user message = %q, want %q", mock.dispatch.UserMessage, "Work from "+wantDir)

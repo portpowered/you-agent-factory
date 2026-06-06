@@ -351,7 +351,7 @@ func requiredRunnerOptionalCapabilities(request interfaces.WorkstationExecutionR
 	if request.OutputSchema != "" {
 		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityStructuredOutput)
 	}
-	if request.WorkingDirectory != "" {
+	if request.WorkingDirectoryAuthored && request.WorkingDirectory != "" {
 		capabilities = append(capabilities, interfaces.RunnerOptionalCapabilityWorkingDirectory)
 	}
 	if shouldRequireWorktreeRunnerCapability(request) {
