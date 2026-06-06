@@ -1167,6 +1167,7 @@ func (s *stubFactoryCoordinator) replaceSessionRuntime(context.Context, *factory
 	return nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this delegation test keeps the public model facade call sequence and payload assertions together on one compatibility seam.
 func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 	t.Parallel()
 
@@ -1218,6 +1219,7 @@ func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this delegation test keeps the session-lifecycle facade sequence and collaborator assertions together on one compatibility seam.
 func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	t.Parallel()
 
