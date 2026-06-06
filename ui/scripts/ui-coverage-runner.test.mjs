@@ -1,4 +1,11 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +15,7 @@ import {
   buildMainCoveredShardPhase,
   buildUiCoverageMergePhases,
   buildUiCoveragePhases,
+  cleanCoverageArtifacts,
   defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
   defaultShardMainCoveredMaxWorkers,
@@ -231,6 +239,25 @@ test("buildUiCoverageMergePhases runs follow-on phases without the main pass", (
     "Blob report merge pass",
     "Standalone script-style test",
   ]);
+});
+
+test("cleanCoverageArtifacts recreates coverage temp and blob report directories", () => {
+  const cwd = process.cwd();
+  const tempDir = mkdtempSync(join(tmpdir(), "ui-coverage-clean-"));
+
+  try {
+    process.chdir(tempDir);
+    mkdirSync("coverage/old", { recursive: true });
+    mkdirSync(".vitest-reports/old", { recursive: true });
+
+    cleanCoverageArtifacts();
+
+    expect(existsSync("coverage/.tmp")).toBe(true);
+    expect(existsSync(".vitest-reports")).toBe(true);
+  } finally {
+    process.chdir(cwd);
+    rmSync(tempDir, { force: true, recursive: true });
+  }
 });
 
 test("findMissingShardBlobIndices reports absent shard blobs", () => {
