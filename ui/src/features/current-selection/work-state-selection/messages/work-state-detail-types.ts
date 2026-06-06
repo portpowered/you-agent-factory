@@ -28,5 +28,6 @@ export interface WorkStateDetailMessages {
   editableConfigurationValidationStatus: string;
   localizeWorkStateType: (stateType: EditableWorkStateDraft["type"]) => string;
   nameFieldLabel: string;
+  summaryHeading: string;
   typeFieldLabel: string;
 }
