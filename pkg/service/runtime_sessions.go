@@ -342,11 +342,15 @@ func (c *runtimeFactoryCoordinator) GetEngineStateSnapshotForSession(ctx context
 }
 
 func (fs *FactoryService) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
-	return fs.requireCoordinator().GetCurrentFactoryForSession(ctx, sessionID)
+	return fs.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
-	fs := c.service
+func (c *runtimeFactoryCoordinator) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+	return c.service.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (s *runtimeFactoryDefinitionService) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+	fs := s.service
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
