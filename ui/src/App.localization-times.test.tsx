@@ -91,9 +91,7 @@ function selectReviewRequest(dispatchID: string): void {
   ensureRequestHistoryExpanded(selection);
   fireEvent.click(
     within(requestHistorySection(selection)).getByRole("button", {
-      name: new RegExp(
-        `\\(${dispatchID.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)$`,
-      ),
+      name: `Select workstation request ${dispatchID}`,
     }),
   );
 }
