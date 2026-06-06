@@ -1,4 +1,7 @@
-import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
+import {
+  CurrentSelectionBodyLayout,
+  SelectionDetailLayout,
+} from "../../base/public";
 import type { WorkstationDetailCardProps } from "../lib/detail-card-types";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { WorkstationActiveWorkList } from "./workstation-active-work-list";
@@ -34,57 +37,58 @@ export function WorkstationDetailCard({
 
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
-      <p className="type-display-large">{selectedNode.workstation_name}</p>
-      <WorkstationSummary
-        activeRunCount={activeExecutions.length}
-        editableConfigurationState={editableConfigurationState}
-        historyCount={
-          hasProjectedRequestHistory
-            ? workstationRequests.length
-            : providerSessions.length
-        }
-        historyLabel={
-          hasProjectedRequestHistory
-            ? messages.historicalRequestsLabel
-            : messages.historicalRunsLabel
-        }
-        messages={messages}
-        selectedNode={selectedNode}
-      />
-      <EditableConfigurationSection
-        key={`editable-configuration:${selectedNode.node_id}`}
-        messages={messages}
-        saveState={saveState}
-        state={editableConfigurationState}
-      />
-      <WorkstationActiveWorkList
-        executions={activeExecutions}
-        messages={messages}
-        now={now}
-        onSelectWorkID={onSelectWorkID}
-        onSelectWorkstationRequest={onSelectWorkstationRequest}
-        selectedNodeID={selectedNode.node_id}
-        selectedRequest={selectedRequest}
-        selectedWorkID={selectedWorkID}
-        workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-      />
-      <WorkstationHistorySection
-        collapseActionLabel={messages.collapseAction}
-        expandActionLabel={messages.expandAction}
-        messages={messages}
-        now={now}
-        onSelectProviderSession={onSelectProviderSession}
-        onSelectWorkID={onSelectWorkID}
-        onSelectWorkstationRequest={onSelectWorkstationRequest}
-        providerSessions={providerSessions}
-        selectedNodeID={selectedNode.node_id}
-        selectedProviderSessionKey={selectedProviderSessionKey}
-        selectedRequest={selectedRequest}
-        selectedWorkID={selectedWorkID}
-        workstationKind={selectedNode.workstation_kind}
-        workstationRequests={workstationRequests}
-        workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-      />
+      <CurrentSelectionBodyLayout title={selectedNode.workstation_name}>
+        <WorkstationSummary
+          activeRunCount={activeExecutions.length}
+          editableConfigurationState={editableConfigurationState}
+          historyCount={
+            hasProjectedRequestHistory
+              ? workstationRequests.length
+              : providerSessions.length
+          }
+          historyLabel={
+            hasProjectedRequestHistory
+              ? messages.historicalRequestsLabel
+              : messages.historicalRunsLabel
+          }
+          messages={messages}
+          selectedNode={selectedNode}
+        />
+        <EditableConfigurationSection
+          key={`editable-configuration:${selectedNode.node_id}`}
+          messages={messages}
+          saveState={saveState}
+          state={editableConfigurationState}
+        />
+        <WorkstationActiveWorkList
+          executions={activeExecutions}
+          messages={messages}
+          now={now}
+          onSelectWorkID={onSelectWorkID}
+          onSelectWorkstationRequest={onSelectWorkstationRequest}
+          selectedNodeID={selectedNode.node_id}
+          selectedRequest={selectedRequest}
+          selectedWorkID={selectedWorkID}
+          workstationRequestsByDispatchID={workstationRequestsByDispatchID}
+        />
+        <WorkstationHistorySection
+          collapseActionLabel={messages.collapseAction}
+          expandActionLabel={messages.expandAction}
+          messages={messages}
+          now={now}
+          onSelectProviderSession={onSelectProviderSession}
+          onSelectWorkID={onSelectWorkID}
+          onSelectWorkstationRequest={onSelectWorkstationRequest}
+          providerSessions={providerSessions}
+          selectedNodeID={selectedNode.node_id}
+          selectedProviderSessionKey={selectedProviderSessionKey}
+          selectedRequest={selectedRequest}
+          selectedWorkID={selectedWorkID}
+          workstationKind={selectedNode.workstation_kind}
+          workstationRequests={workstationRequests}
+          workstationRequestsByDispatchID={workstationRequestsByDispatchID}
+        />
+      </CurrentSelectionBodyLayout>
     </SelectionDetailLayout>
   );
 }
