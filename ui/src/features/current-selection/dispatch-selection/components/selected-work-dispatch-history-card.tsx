@@ -315,6 +315,7 @@ function DispatchRequestSection({
         }}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
+        variant="plain"
         workItems={view.inputWorkItems}
       />
     </DispatchDetailSection>
