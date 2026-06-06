@@ -24,6 +24,7 @@ func InjectFactoryService(
 		provideRuntimeBuildService,
 		provideFactoryServiceCollaborators,
 		provideHostedWorkersConfig,
+		provideFactoryCore,
 		provideFactoryService,
 	)
 	return nil, nil

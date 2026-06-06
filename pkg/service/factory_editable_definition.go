@@ -23,10 +23,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// FactoryDefinitionService owns current-factory read models for the phase-one
+// compatibility facade.
+type FactoryDefinitionService interface {
+	GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error)
+	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
+}
+
 // GetCurrentFactory returns the canonical current factory definition together
 // with durable optimistic-concurrency metadata.
 func (fs *FactoryService) GetCurrentFactory(ctx context.Context) (factoryapi.Factory, error) {
-	return fs.GetCurrentNamedFactory(ctx)
+	return fs.requireDefinitions().GetCurrentNamedFactory(ctx)
 }
 
 func (fs *FactoryService) buildSessionEditableFactoryReplacement(
@@ -45,14 +52,39 @@ func (fs *FactoryService) buildSessionEditableFactoryReplacement(
 
 // GetCurrentNamedFactory returns the durable current named-factory read model
 // resolved entirely from the persisted pointer and canonical on-disk layout.
-func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.Factory, error) {
+func (fs *FactoryService) GetCurrentNamedFactory(ctx context.Context) (factoryapi.Factory, error) {
+	return fs.requireDefinitions().GetCurrentNamedFactory(ctx)
+}
+
+type runtimeFactoryDefinitionService struct {
+	service *FactoryService
+}
+
+var _ FactoryDefinitionService = (*runtimeFactoryDefinitionService)(nil)
+
+func newFactoryDefinitionService(fs *FactoryService) FactoryDefinitionService {
+	return &runtimeFactoryDefinitionService{service: fs}
+}
+
+func (fs *FactoryService) requireDefinitions() FactoryDefinitionService {
+	if fs == nil {
+		return newFactoryDefinitionService(nil)
+	}
+	if fs.definitions == nil {
+		fs.definitions = newFactoryDefinitionService(fs)
+	}
+	return fs.definitions
+}
+
+func (s *runtimeFactoryDefinitionService) GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error) {
+	fs := s.service
 	if fs == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory service is required")
 	}
 
 	rootDir := fs.factoryRootDir
-	if rootDir == "" {
-		rootDir = fs.coordinatorPolicy().dir
+	if rootDir == "" && fs.cfg != nil {
+		rootDir = fs.cfg.Dir
 	}
 	name, err := configpersist.ReadCurrentFactoryPointer(rootDir)
 	if err != nil {
@@ -69,7 +101,11 @@ func (fs *FactoryService) GetCurrentNamedFactory(_ context.Context) (factoryapi.
 	if err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("resolve current factory %q: %w", name, err)
 	}
-	current, err := configload.LoadRuntimeConfig(factoryDir, fs.coordinatorPolicy().workstationLoader)
+	var workstationLoader factoryconfig.WorkstationLoader
+	if fs.cfg != nil {
+		workstationLoader = fs.cfg.WorkstationLoader
+	}
+	current, err := configload.LoadRuntimeConfig(factoryDir, workstationLoader)
 	if err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("load current factory %q: %w", name, err)
 	}
@@ -86,7 +122,11 @@ func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, 
 		}
 		factoryDir = resolved
 	}
-	current, err := configload.LoadRuntimeConfig(factoryDir, fs.coordinatorPolicy().workstationLoader)
+	var workstationLoader factoryconfig.WorkstationLoader
+	if fs.cfg != nil {
+		workstationLoader = fs.cfg.WorkstationLoader
+	}
+	current, err := configload.LoadRuntimeConfig(factoryDir, workstationLoader)
 	if err != nil {
 		return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("load current factory definition: %w", err)
 	}
@@ -307,10 +347,10 @@ func wireFactorySaveCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) 
 }
 
 func (fs *FactoryService) workstationLoaderFromConfig() factoryconfig.WorkstationLoader {
-	if fs == nil {
+	if fs == nil || fs.cfg == nil {
 		return nil
 	}
-	return fs.coordinatorPolicy().workstationLoader
+	return fs.cfg.WorkstationLoader
 }
 
 func (fs *FactoryService) withActivationLock(fn func() error) error {
@@ -380,7 +420,7 @@ type LocalModelDomain = localModelDomain
 
 // NewLocalModelDomain constructs the local-model collaborator group for a build.
 func NewLocalModelDomain(cfg *FactoryServiceConfig) LocalModelDomain {
-	return newRuntimeLocalModelDependencies(runtimeBuildConfigFromService(cfg))
+	return newRuntimeLocalModelDependencies(cfg)
 }
 
 // FactoryServiceCollaborators groups explicit S6 composition collaborators.
@@ -398,7 +438,7 @@ func NewFactoryServiceCollaborators(
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
 ) FactoryServiceCollaborators {
-	startupLocalModels := newRuntimeLocalModelDependencies(runtimeBuildConfigFromService(cfg))
+	startupLocalModels := newRuntimeLocalModelDependencies(cfg)
 	return FactoryServiceCollaborators{
 		Sessions:     sessions,
 		LocalModels:  startupLocalModels,
@@ -480,11 +520,129 @@ func NewHostedWorkersConfig(
 type ComposeCollaboratorSnapshot struct {
 	SessionsInitialized      bool
 	RuntimeBuildInitialized  bool
+	LocalModelsInitialized   bool
 	ModelAssetsInitialized   bool
 	FactorySaveInitialized   bool
+	DefinitionsInitialized   bool
 	HostedWorkersLoggerReady bool
 	BundleModelResources     bool
 	BundleLocalModels        bool
+}
+
+// FactoryCore owns the normalized runtime graph assembled before transport
+// facades or runtime loops begin.
+type FactoryCore struct {
+	cfg           *FactoryServiceConfig
+	root          FactoryServiceRoot
+	collaborators FactoryServiceCollaborators
+	hostedWorkers hostedworkers.Config
+	clock         factory.Clock
+	startupBundle *factoryRuntimeBundle
+	logger        *zap.Logger
+	modelAssets   modelAssetPuller
+}
+
+// FactoryRootDir returns the canonical factory root selected at build time.
+func (core *FactoryCore) FactoryRootDir() string {
+	if core == nil {
+		return ""
+	}
+	return core.root.FactoryRootDir
+}
+
+// BaseLogger returns the base logger used for runtime graph assembly.
+func (core *FactoryCore) BaseLogger() *zap.Logger {
+	if core == nil {
+		return nil
+	}
+	return core.root.BaseLogger
+}
+
+// Logger returns the startup runtime logger.
+func (core *FactoryCore) Logger() *zap.Logger {
+	if core == nil {
+		return nil
+	}
+	return core.logger
+}
+
+// Clock returns the normalized service clock.
+func (core *FactoryCore) Clock() factory.Clock {
+	if core == nil {
+		return nil
+	}
+	return core.clock
+}
+
+// Sessions returns the live session registry collaborator owned by the core.
+func (core *FactoryCore) Sessions() *factorysessions.Registry {
+	if core == nil {
+		return nil
+	}
+	return core.collaborators.Sessions
+}
+
+// RuntimeBuild returns the runtime-build collaborator owned by the core.
+func (core *FactoryCore) RuntimeBuild() *runtimebuild.Service {
+	if core == nil {
+		return nil
+	}
+	return core.collaborators.RuntimeBuild
+}
+
+// LocalModels returns the startup local-model collaborator group.
+func (core *FactoryCore) LocalModels() LocalModelDomain {
+	if core == nil {
+		return LocalModelDomain{}
+	}
+	return core.collaborators.LocalModels
+}
+
+// HostedWorkers returns the hosted-worker config built for this runtime graph.
+func (core *FactoryCore) HostedWorkers() hostedworkers.Config {
+	if core == nil {
+		return hostedworkers.Config{}
+	}
+	return core.hostedWorkers
+}
+
+// StartupBundle returns the pre-run runtime bundle built during composition.
+func (core *FactoryCore) StartupBundle() *factoryRuntimeBundle {
+	if core == nil {
+		return nil
+	}
+	return core.startupBundle
+}
+
+// ModelAssetPuller returns the explicit model asset collaborator used by
+// direct model operations.
+func (core *FactoryCore) ModelAssetPuller() modelAssetPuller {
+	if core == nil {
+		return nil
+	}
+	return core.modelAssets
+}
+
+// ComposeCollaboratorSnapshot reports initialized core collaborators for
+// equivalence tests.
+func (core *FactoryCore) ComposeCollaboratorSnapshot() ComposeCollaboratorSnapshot {
+	if core == nil {
+		return ComposeCollaboratorSnapshot{}
+	}
+	bundle := core.StartupBundle()
+	snapshot := ComposeCollaboratorSnapshot{
+		SessionsInitialized:      core.Sessions() != nil,
+		RuntimeBuildInitialized:  core.RuntimeBuild() != nil,
+		LocalModelsInitialized:   core.LocalModels().manager != nil,
+		ModelAssetsInitialized:   core.ModelAssetPuller() != nil,
+		DefinitionsInitialized:   true,
+		HostedWorkersLoggerReady: core.HostedWorkers().Logger != nil,
+	}
+	if bundle != nil {
+		snapshot.BundleModelResources = bundle.modelResources != nil
+		snapshot.BundleLocalModels = bundle.localModels != nil
+	}
+	return snapshot
 }
 
 // ComposeCollaboratorSnapshot reports initialized S6 collaborators for equivalence tests.
@@ -492,14 +650,21 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 	if fs == nil {
 		return ComposeCollaboratorSnapshot{}
 	}
-	bundle := fs.currentRuntimeBundle()
 	snapshot := ComposeCollaboratorSnapshot{
-		SessionsInitialized:      fs.sessions != nil,
-		RuntimeBuildInitialized:  fs.runtimeBuild != nil,
-		ModelAssetsInitialized:   fs.modelAssets != nil,
-		FactorySaveInitialized:   fs.factorySave != nil,
-		HostedWorkersLoggerReady: fs.hostedWorkers.Logger != nil,
+		FactorySaveInitialized: fs.factorySave != nil,
+		DefinitionsInitialized: fs.definitions != nil,
 	}
+	if fs.core != nil {
+		coreSnapshot := fs.core.ComposeCollaboratorSnapshot()
+		coreSnapshot.FactorySaveInitialized = snapshot.FactorySaveInitialized
+		coreSnapshot.DefinitionsInitialized = snapshot.DefinitionsInitialized
+		return coreSnapshot
+	}
+	bundle := fs.currentRuntimeBundle()
+	snapshot.SessionsInitialized = fs.sessions != nil
+	snapshot.RuntimeBuildInitialized = fs.runtimeBuild != nil
+	snapshot.ModelAssetsInitialized = fs.modelAssets != nil
+	snapshot.HostedWorkersLoggerReady = fs.hostedWorkers.Logger != nil
 	if bundle != nil {
 		snapshot.BundleModelResources = bundle.modelResources != nil
 		snapshot.BundleLocalModels = bundle.localModels != nil
@@ -511,6 +676,33 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 // Wire composition.
 type FactoryServiceShell struct {
 	Service *FactoryService
+}
+
+// BuildFactoryCore constructs the normalized runtime graph without attaching a
+// transport-facing compatibility facade.
+func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryCore, error) {
+	if err := validateReplayModeConfig(cfg); err != nil {
+		return nil, err
+	}
+	root, err := ResolveFactoryServiceRoot(cfg)
+	if err != nil {
+		return nil, err
+	}
+	load, err := LoadFactoryConfigForCompose(cfg, root)
+	if err != nil {
+		return nil, err
+	}
+	clock := ServiceClockForCompose(cfg, load)
+	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	return ComposeFactoryCore(
+		ctx,
+		cfg,
+		root,
+		collaborators,
+		load,
+		clock,
+		NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+	)
 }
 
 // AssembleFactoryService finishes service composition from explicit inputs.
@@ -563,75 +755,104 @@ func ComposeFactoryService(
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
 ) (FactoryServiceShell, error) {
-	if err := validateReplayModeConfig(cfg); err != nil {
+	core, err := ComposeFactoryCore(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
+	if err != nil {
 		return FactoryServiceShell{}, err
 	}
-	serviceBuilt := false
+	return FactoryServiceShell{Service: NewFactoryServiceFromCore(core)}, nil
+}
+
+// ComposeFactoryCore constructs a FactoryCore using explicit composition
+// collaborators without attaching runtime loops or transport facades.
+func ComposeFactoryCore(
+	ctx context.Context,
+	cfg *FactoryServiceConfig,
+	root FactoryServiceRoot,
+	collaborators FactoryServiceCollaborators,
+	load FactoryConfigLoadResult,
+	clock factory.Clock,
+	hostedWorkers hostedworkers.Config,
+) (*FactoryCore, error) {
+	if err := validateReplayModeConfig(cfg); err != nil {
+		return nil, err
+	}
+	coreBuilt := false
 	var runtimeBundle *factoryRuntimeBundle
 	defer func() {
-		if !serviceBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
+		if !coreBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
 			_ = runtimeBundle.logSink.Close()
 		}
 	}()
 	if cfg.ReplayPath == "" {
 		resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(cfg.Dir)
 		if err != nil {
-			return FactoryServiceShell{}, fmt.Errorf("resolve factory dir: %w", err)
+			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
 		resolvedDir, err = factorysessions.AbsolutizeFactoryDirectory(resolvedDir)
 		if err != nil {
-			return FactoryServiceShell{}, fmt.Errorf("resolve factory dir: %w", err)
+			return nil, fmt.Errorf("resolve factory dir: %w", err)
 		}
 		cfg.Dir = resolvedDir
 	}
 
 	replaySideEffects, replayFactoryOpts, err := replayFactoryModeOptions(load.ReplayArtifact)
 	if err != nil {
-		return FactoryServiceShell{}, err
+		return nil, err
 	}
-	defaultSessionSpec, err := collaborators.RuntimeBuild.BuildSpec(ctx, runtimebuild.SessionSpecInput{
+	runtimeBundleAny, err := collaborators.RuntimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
 		Dir:                   cfg.Dir,
 		FolderPath:            root.FactoryRootDir,
 		SessionID:             defaultFactorySessionID,
-		ExecutionBaseDir:      cfg.ExecutionBaseDir,
 		LoadedFactoryCfg:      load.LoadedFactoryCfg,
+		BaseLogger:            root.BaseLogger,
 		RuntimeInstanceID:     cfg.RuntimeInstanceID,
-		SideEffects:           replaySideEffects,
+		Clock:                 clock,
+		RecordPath:            runtimebuild.SessionScopedRecordPath(cfg.RecordPath, defaultFactorySessionID),
+		WorkflowID:            cfg.WorkflowID,
+		ProviderOverride:      providerOverrideForMode(cfg, replaySideEffects),
+		ProviderCommandRunner: providerCommandRunnerForMode(cfg, load.LoadedFactoryCfg),
+		CommandRunnerOverride: commandRunnerOverrideForMode(cfg, load.LoadedFactoryCfg, replaySideEffects),
 		AdditionalFactoryOpts: replayFactoryOpts,
 	})
 	if err != nil {
-		return FactoryServiceShell{}, err
-	}
-	runtimeBundleAny, err := collaborators.RuntimeBuild.Build(ctx, defaultSessionSpec)
-	if err != nil {
-		return FactoryServiceShell{}, err
+		return nil, err
 	}
 	runtimeBundle = asRuntimeBundle(runtimeBundleAny)
-	if runtimeBundle == nil {
-		return FactoryServiceShell{}, fmt.Errorf("default runtime bundle is required")
-	}
 
-	service := &FactoryService{
-		factoryRootDir: root.FactoryRootDir,
-		sessions:       collaborators.Sessions,
-		hostedWorkers:  hostedWorkers,
-		policy:         serviceCoordinatorPolicyFromConfig(cfg),
-		modelAssets:    wireModelAssetPuller(cfg, collaborators.LocalModels.assets),
-		baseLogger:     root.BaseLogger,
-		logger:         runtimeBundle.logger,
-		clock:          clock,
-		runtimeBuild:   collaborators.RuntimeBuild,
+	coreBuilt = true
+	return &FactoryCore{
+		cfg:           cfg,
+		root:          root,
+		collaborators: collaborators,
+		hostedWorkers: hostedWorkers,
+		clock:         clock,
+		startupBundle: runtimeBundle,
+		logger:        runtimeBundle.logger,
+		modelAssets:   wireModelAssetPuller(cfg, collaborators.LocalModels.assets),
+	}, nil
+}
+
+// NewFactoryServiceFromCore wraps a built core in the phase-one compatibility
+// facade returned to CLI and HTTP entrypoints.
+func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
+	if core == nil {
+		return nil
 	}
-	service.sessions.Upsert(factorysessions.NewLiveSession(
-		defaultFactorySessionID,
-		runtimeBundle.dir,
-		runtimeBundle.folderPath,
-		runtimeBundle.runtimeCfg.RuntimeBaseDir(),
-		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
-		&liveSessionState{bundle: runtimeBundle, spec: &defaultSessionSpec},
-		true,
-		filepath.Base(runtimeBundle.folderPath),
-	), true)
-	serviceBuilt = true
-	return FactoryServiceShell{Service: service}, nil
+	svc := &FactoryService{
+		core:           core,
+		factoryRootDir: core.FactoryRootDir(),
+		sessions:       core.Sessions(),
+		hostedWorkers:  core.HostedWorkers(),
+		startupBundle:  core.StartupBundle(),
+		cfg:            core.cfg,
+		modelAssets:    core.ModelAssetPuller(),
+		baseLogger:     core.BaseLogger(),
+		logger:         core.Logger(),
+		clock:          core.Clock(),
+		runtimeBuild:   core.RuntimeBuild(),
+	}
+	svc.modelService = newFactoryModelService(svc)
+	svc.coordinator = newFactoryCoordinator(svc)
+	svc.definitions = newFactoryDefinitionService(svc)
+	return svc
 }
