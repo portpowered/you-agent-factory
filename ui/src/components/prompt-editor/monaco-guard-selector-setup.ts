@@ -1,7 +1,5 @@
-import {
-  WORKSTATION_GUARD_SELECTOR_MONARCH_LANGUAGE,
-  WORKSTATION_GUARD_SELECTOR_THEME,
-} from "./monaco-guard-selector-language";
+import { WORKSTATION_GUARD_SELECTOR_MONARCH_LANGUAGE } from "./monaco-guard-selector-language";
+import { buildWorkstationGuardSelectorTheme } from "./monaco-theme";
 
 type MonacoModule = typeof import("monaco-editor");
 
@@ -31,7 +29,7 @@ export function registerWorkstationGuardSelectorMonaco(monaco: MonacoModule) {
   );
   monaco.editor.defineTheme(
     WORKSTATION_GUARD_SELECTOR_THEME_ID,
-    WORKSTATION_GUARD_SELECTOR_THEME,
+    buildWorkstationGuardSelectorTheme(),
   );
 
   workstationGuardSelectorMonacoRegistered = true;
