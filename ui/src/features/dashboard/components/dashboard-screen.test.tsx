@@ -5,6 +5,10 @@ import { getHeaderControlsMessages } from "../../header/messages/header-controls
 import { DashboardScreen } from "./dashboard-screen";
 
 const EXPECTED_DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
+const VERTICAL_SCROLL_CLASS_PATTERN =
+  /(?:^|\s)(?:overflow-(?:auto|scroll)|overflow-y-(?:auto|scroll))(?:\s|$)/;
+const VIEWPORT_HEIGHT_CLAMP_CLASS_PATTERN =
+  /(?:^|\s)(?:h-(?:screen|dvh|svh|lvh)|max-h-(?:screen|dvh|svh|lvh))(?:\s|$)/;
 
 let dashboardSnapshotState: ReturnType<
   typeof import("../hooks/useDashboardSnapshot").useDashboardSnapshot
@@ -30,7 +34,11 @@ function StatusPanelProbe({
 vi.mock("../../bento/public", () => ({
   DashboardBento: ({ locale }: { locale?: string }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
-    return <section>Dashboard bento {resolvedLocale}</section>;
+    return (
+      <section data-testid="dashboard-bento-probe">
+        Dashboard bento {resolvedLocale}
+      </section>
+    );
   },
 }));
 
@@ -56,13 +64,40 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(() => dashboardSnapshotState),
 }));
 
-describe("DashboardScreen", () => {
-  function expectDashboardShellContract() {
-    expect(screen.getByRole("main").className).toBe(
-      EXPECTED_DASHBOARD_SHELL_CLASS,
-    );
+function expectDashboardShellContract() {
+  const shell = screen.getByRole("main");
+
+  expect(shell.className).toBe(EXPECTED_DASHBOARD_SHELL_CLASS);
+  expectElementDoesNotOwnVerticalScroll(shell);
+  expect(shell.getAttribute("class")).not.toMatch(
+    VIEWPORT_HEIGHT_CLAMP_CLASS_PATTERN,
+  );
+}
+
+function expectElementDoesNotOwnVerticalScroll(element: HTMLElement) {
+  expect(element.getAttribute("class") ?? "").not.toMatch(
+    VERTICAL_SCROLL_CLASS_PATTERN,
+  );
+  expect(window.getComputedStyle(element).overflowY).not.toMatch(
+    /^(auto|scroll)$/,
+  );
+}
+
+function expectNoNestedDashboardScrollOwnerBetweenBentoAndShell() {
+  const shell = screen.getByRole("main");
+  const bento = screen.getByTestId("dashboard-bento-probe");
+  let currentElement: HTMLElement | null = bento;
+
+  while (currentElement && currentElement !== shell) {
+    expectElementDoesNotOwnVerticalScroll(currentElement);
+    currentElement = currentElement.parentElement;
   }
 
+  expect(currentElement).toBe(shell);
+  expectDashboardShellContract();
+}
+
+describe("DashboardScreen", () => {
   beforeEach(() => {
     dashboardSnapshotState = {
       error: null,
@@ -149,6 +184,18 @@ describe("DashboardScreen", () => {
     expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
+  });
+
+  it("does not introduce a nested vertical scroll owner on the success path", () => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: false,
+      snapshot: {} as never,
+    };
+
+    render(<DashboardScreen />);
+
+    expectNoNestedDashboardScrollOwnerBetweenBentoAndShell();
   });
 
   it("keeps the header visible and renders an empty workspace state when no live session remains", () => {

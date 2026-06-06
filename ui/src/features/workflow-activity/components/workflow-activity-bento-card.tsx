@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from "react";
+import { type HTMLAttributes, type ReactNode, useEffect } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AgentBentoCard } from "../../bento/public";
@@ -88,8 +88,16 @@ export function WorkflowActivityBentoCard({
 
   return (
     <AgentBentoCard
+      bodyClassName="h-full max-h-full min-h-0 overflow-hidden"
+      bodyProps={
+        {
+          "data-workflow-activity-graph-body": "",
+          style: { height: "100%", maxHeight: "100%", overflow: "hidden" },
+        } as HTMLAttributes<HTMLDivElement>
+      }
       bodyScroll={false}
       chromeDensity="compact"
+      className="h-full max-h-full min-h-0 overflow-hidden"
       headerAction={
         <CurrentActivityGraphHeaderActions
           key={`graph-editor-header-${editor.editorMode}-${editor.draftState.hasChanges}`}
@@ -108,9 +116,13 @@ export function WorkflowActivityBentoCard({
           onToggle={editor.handleEditorModeToggle}
         />
       }
+      style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       title={messages.widgetTitle}
     >
-      <section className="relative h-full min-h-0 min-w-0">
+      <section
+        className="relative h-full max-h-full min-h-0 min-w-0 overflow-hidden"
+        style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
+      >
         <ReactFlowCurrentActivityCardView
           editor={editor}
           importController={importController}

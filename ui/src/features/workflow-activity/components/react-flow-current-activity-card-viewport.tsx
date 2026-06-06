@@ -259,7 +259,10 @@ export function CurrentActivityGraphViewport({
   );
 
   return (
-    <div className="relative min-h-96 flex-1">
+    <div
+      className="relative max-h-full min-h-96 flex-1 overflow-hidden"
+      style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
+    >
       <DashboardFlowAxisLegend
         className="absolute left-4 right-4 top-4 z-10"
         defaultExpanded={false}
@@ -272,7 +275,7 @@ export function CurrentActivityGraphViewport({
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
-          "relative h-full min-h-96 overflow-hidden rounded-3xl border shadow-none transition-colors",
+          "relative h-full max-h-full min-h-96 overflow-hidden rounded-3xl border shadow-none transition-colors",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-primary bg-primary-container",
@@ -285,6 +288,7 @@ export function CurrentActivityGraphViewport({
         )}
         data-current-activity-flow
         ref={flowContainerRef}
+        style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
         onDragEnter={imports.onDragEnter}
         onDragLeave={imports.onDragLeave}
         onDragOver={imports.onDragOver}

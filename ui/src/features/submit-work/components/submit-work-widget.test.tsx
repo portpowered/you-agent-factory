@@ -83,6 +83,35 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(submitButton.className).toContain("justify-center");
   });
 
+  it("keeps primary form content in page flow without a nested vertical scrollport", () => {
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget
+        submitWorkTypes={[
+          { work_type_name: "story" },
+          { work_type_name: "task" },
+        ]}
+      />,
+    );
+
+    const card = screen.getByRole("article", { name: "Submit work" });
+    const primaryContent = card.querySelector(
+      "[data-submit-work-primary-content]",
+    );
+
+    if (!(primaryContent instanceof HTMLElement)) {
+      throw new Error("Expected submit-work primary content region.");
+    }
+
+    expect(primaryContent.className).not.toMatch(/overflow-y-(auto|scroll)/);
+    expect(window.getComputedStyle(primaryContent).overflowY).not.toBe("auto");
+    expect(window.getComputedStyle(primaryContent).overflowY).not.toBe(
+      "scroll",
+    );
+    expect(
+      within(card).getByRole("list", { name: "Submission items" }),
+    ).toBeTruthy();
+  });
+
   it("orders submit-work header tools left of the header drag surface", () => {
     render(
       <SubmitWorkCard
@@ -1185,9 +1214,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     expect(screen.getByRole("status").textContent).toBe(
       "Sending your request...",
     );
-    expect(screen.getByRole("status").className).toContain(
-      "bg-info-container",
-    );
+    expect(screen.getByRole("status").className).toContain("bg-info-container");
     expect(submittingStatus.className).toContain("af-dashboard-body-text");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
