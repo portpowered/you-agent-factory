@@ -493,7 +493,7 @@ describe("TraceWorkstationPath layout", () => {
 });
 
 describe("TraceWorkstationPath semantics", () => {
-  it("renders semantic workstation path tones and muted supporting copy", async () => {
+  it("renders factory-style workstation identity without dispatch metadata", async () => {
     render(
       <TraceWorkstationPath
         dispatches={[
@@ -516,22 +516,23 @@ describe("TraceWorkstationPath semantics", () => {
 
     expect(screen.queryByText("Dispatch")).toBeNull();
     expect(screen.getAllByText("Workstation").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Accepted")).toBeNull();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(screen.queryByText(/^In:/)).toBeNull();
+    expect(screen.queryByText(/^Out:/)).toBeNull();
 
     const acceptedNode = screen.getByText("dispatch-plan").closest("article");
     if (!acceptedNode) {
       throw new Error("Expected accepted workstation node to render.");
     }
-    expect(acceptedNode.className).toContain("border-af-success-border");
-    expect(acceptedNode.className).toContain("bg-success-container");
+    expect(acceptedNode.className).toContain("border-primary");
+    expect(acceptedNode.className).toContain("bg-primary-container");
 
     const failedNode = screen.getByText("dispatch-repair").closest("article");
     if (!failedNode) {
       throw new Error("Expected failed workstation node to render.");
     }
-    expect(failedNode.className).toContain("border-af-danger-border");
-    expect(failedNode.className).toContain("bg-error-container");
-
-    const inputSummary = screen.getAllByText(/^In:/)[0];
-    expect(inputSummary.className).toContain("text-on-surface-variant");
+    expect(failedNode.className).toContain("border-primary");
+    expect(failedNode.className).toContain("bg-primary-container");
   });
 });
