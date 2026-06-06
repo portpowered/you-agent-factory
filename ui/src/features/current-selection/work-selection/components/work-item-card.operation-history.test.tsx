@@ -86,6 +86,7 @@ describe("WorkItemDetailCard operation history", () => {
     const operatorMoveCard = within(operationsRegion).getByRole("article", {
       name: "Operator move init → review",
     });
+    expect(operatorMoveCard.className).toContain("bg-surface-container-low");
     expect(within(operatorMoveCard).getByText("Operator move")).toBeTruthy();
     expect(within(operatorMoveCard).getByText("Move")).toBeTruthy();
     expect(within(operatorMoveCard).getByText("CLI")).toBeTruthy();
@@ -98,6 +99,7 @@ describe("WorkItemDetailCard operation history", () => {
     const workstationCard = within(operationsRegion).getByRole("article", {
       name: "Workstation dispatch Active Story dispatch-model",
     });
+    expect(workstationCard.className).toContain("bg-surface-container-low");
     expect(
       within(workstationCard).getAllByText("Workstation").length,
     ).toBeGreaterThan(0);
@@ -128,6 +130,7 @@ describe("WorkItemDetailCard operation history", () => {
     const logicalMoveCard = within(operationsRegion).getByRole("article", {
       name: "Logical move dispatch Logical Move dispatch-logical-move",
     });
+    expect(logicalMoveCard.className).toContain("bg-surface-container-low");
     expect(within(logicalMoveCard).getByText("Logical Move")).toBeTruthy();
     expect(within(logicalMoveCard).getByText("Move")).toBeTruthy();
     expect(
