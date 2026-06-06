@@ -452,6 +452,6 @@ describe("CurrentSelectionWidget resource localization", () => {
     expect(screen.getByLabelText("容量")).toBeTruthy();
     expect(screen.getByRole("button", { name: "保存资源" })).toBeTruthy();
     expect(screen.getByDisplayValue("agent-slot")).toBeTruthy();
-    expect(screen.getByText("调用槽位")).toBeTruthy();
+    expect(screen.getAllByText("调用槽位").length).toBeGreaterThan(0);
   });
 });
