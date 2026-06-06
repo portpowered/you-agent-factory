@@ -49,9 +49,12 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	if err != nil {
 		return nil, err
 	}
+	clock := ServiceClockForCompose(cfg, load)
+	collaborators := NewFactoryServiceCollaborators(cfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
+	return AssembleFactoryService(
 	clock := ServiceClockForCompose(normalizedCfg, load)
 	collaborators := NewFactoryServiceCollaborators(normalizedCfg, clock, root.BaseLogger, NewFactorySessionsRegistry())
-	shell, err := ComposeFactoryService(
+	return AssembleFactoryService(
 		ctx,
 		normalizedCfg,
 		root,
@@ -60,10 +63,6 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 		clock,
 		NewHostedWorkersConfig(normalizedCfg, root.BaseLogger, clock),
 	)
-	if err != nil {
-		return nil, err
-	}
-	return AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg)), nil
 }
 
 func cloneFactoryServiceConfig(cfg *FactoryServiceConfig) *FactoryServiceConfig {
