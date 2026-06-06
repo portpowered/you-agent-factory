@@ -231,11 +231,15 @@ describe("TraceRelationFlow", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen
-          .getByRole("region", { name: "Batch relation graph" })
-          .getAttribute("data-dashboard-graph-frame"),
-      ).toBe("true");
+      const graphFrame = screen.getByRole("region", {
+        name: "Batch relation graph",
+      });
+      expect(graphFrame.getAttribute("data-dashboard-graph-frame")).toBe(
+        "true",
+      );
+      expect(graphFrame.className).toContain("shadow-none");
+      expect(graphFrame.className).not.toContain("shadow-af-card");
+      expect(graphFrame.className).not.toContain("shadow-af-panel");
     });
 
     expect(

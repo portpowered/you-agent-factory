@@ -44,7 +44,7 @@ export function DashboardGraphFrame({
   return (
     <section
       className={cn(
-        "relative min-h-0 w-full min-w-0 overflow-hidden rounded-3xl border transition-colors",
+        "relative min-h-0 w-full min-w-0 overflow-hidden rounded-3xl border shadow-none transition-colors",
         className,
       )}
       data-dashboard-graph-frame="true"
