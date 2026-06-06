@@ -221,6 +221,40 @@ func TestProjectInitialStructure_RuntimeConfig_ProjectsLoadedWorkerMetadata(t *t
 	}
 }
 
+func TestProjectInitialStructure_RuntimeConfig_ProjectsFactoryNameFromSharedLookup(t *testing.T) {
+	net := representativeProjectionNet()
+	runtimeConfig := projectionRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{Name: "runtime-factory"},
+	}
+
+	got := ProjectInitialStructure(net, runtimeConfig)
+
+	if got.Name != "runtime-factory" {
+		t.Fatalf("Name = %q, want runtime factory config name", got.Name)
+	}
+}
+
+func TestProjectInitialStructure_RuntimeConfig_MissingFactoryLookupLeavesNameEmpty(t *testing.T) {
+	net := representativeProjectionNet()
+
+	got := ProjectInitialStructure(net, runtimeDefinitionOnlyFixture{})
+
+	if got.Name != "" {
+		t.Fatalf("Name = %q, want empty when runtime config has no shared factory config lookup", got.Name)
+	}
+}
+
+func TestProjectInitialStructure_RuntimeConfig_NilFactoryConfigLeavesNameEmpty(t *testing.T) {
+	net := representativeProjectionNet()
+	runtimeConfig := projectionRuntimeConfig{}
+
+	got := ProjectInitialStructure(net, runtimeConfig)
+
+	if got.Name != "" {
+		t.Fatalf("Name = %q, want empty when runtime factory config is nil", got.Name)
+	}
+}
+
 func TestProjectInitialStructure_RuntimeConfig_MissingWorkerKeepsWorkstationTopology(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
@@ -569,6 +603,23 @@ func assertSingleConstraint(t *testing.T, constraints []interfaces.FactoryConstr
 }
 
 type projectionRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
+
+type runtimeDefinitionOnlyFixture struct {
+	Workers      map[string]*interfaces.WorkerConfig
+	Workstations map[string]*interfaces.FactoryWorkstationConfig
+}
+
+var _ interfaces.RuntimeDefinitionLookup = runtimeDefinitionOnlyFixture{}
+
+func (f runtimeDefinitionOnlyFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
+	worker, ok := f.Workers[name]
+	return worker, ok
+}
+
+func (f runtimeDefinitionOnlyFixture) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := f.Workstations[name]
+	return workstation, ok
+}
 
 func projectionNetWithOrderedNonSuccessRoutes() *state.Net {
 	return &state.Net{
