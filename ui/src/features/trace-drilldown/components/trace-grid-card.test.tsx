@@ -367,6 +367,8 @@ describe("TraceGridBentoCard graph sizing", () => {
     const card = screen.getByRole("article", { name: "Trace drill-down" });
     expect(within(card).getByText("Dispatch flow")).toBeTruthy();
     expect(within(card).queryByTestId("trace-card-react-flow")).toBeNull();
+    expect(card.dataset.dashboardPanelShell).toBe("grid-card");
+    expect(card.className).toContain("shadow-af-card");
 
     const viewports = card.querySelectorAll("[data-trace-graph-viewport]");
     expect(viewports).toHaveLength(2);
@@ -377,7 +379,9 @@ describe("TraceGridBentoCard graph sizing", () => {
         (frame) =>
           frame.className.includes("resize") &&
           frame.className.includes("min-w-80") &&
-          frame.className.includes("max-w-full"),
+          frame.className.includes("max-w-full") &&
+          !frame.className.includes("shadow-af-card") &&
+          !frame.className.includes("shadow-af-panel"),
       ),
     ).toBe(true);
     expect(

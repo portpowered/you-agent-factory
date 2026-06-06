@@ -362,7 +362,7 @@
   }
 
   [data-bento-card-id] {
-    overflow: hidden;
+    overflow: visible;
   }
 
   [data-bento-card-id] > .react-resizable-handle {

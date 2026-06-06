@@ -112,8 +112,12 @@ describe("AgentBentoLayout", () => {
     expect(activityCard.dataset.dashboardPanelShell).toBe("grid-card");
     expect(activityCard.className).toContain("border-outline");
     expect(activityCard.className).toContain("bg-surface-container-high");
+    expect(activityCard.className).toContain("shadow-af-card");
     expect(getGridItem("Current activity").dataset.bentoCardId).toBe(
       "activity",
+    );
+    expect(getGridItem("Current activity").className).toContain(
+      "overflow-visible",
     );
     expect(getGridItem("Trace grid").dataset.bentoCardId).toBe("trace");
     expect(activityTitle.className).toContain("af-dashboard-section-heading");
@@ -123,6 +127,94 @@ describe("AgentBentoLayout", () => {
     expect(
       screen.queryByRole("button", { name: "Move Current activity" }),
     ).toBeNull();
+  });
+
+  it("keeps bento elevation on the card while graph-bearing interiors stay flat", () => {
+    render(
+      <AgentBentoLayout
+        cards={[
+          {
+            id: "activity",
+            widgetType: "activity",
+            children: (
+              <AgentBentoCard title="Current activity">
+                <section
+                  aria-label="Current activity graph"
+                  className="shadow-none"
+                  data-current-activity-flow
+                >
+                  <div className="react-flow shadow-none" />
+                </section>
+              </AgentBentoCard>
+            ),
+          },
+          {
+            id: "trace",
+            widgetType: "trace",
+            children: (
+              <AgentBentoCard title="Trace grid">
+                <section
+                  aria-label="Trace graph"
+                  className="shadow-none"
+                  data-dashboard-graph-frame
+                >
+                  <div className="react-flow shadow-none" />
+                </section>
+              </AgentBentoCard>
+            ),
+          },
+          {
+            id: "work-totals",
+            widgetType: "work-totals",
+            children: (
+              <WorkTotalsCard
+                completedCount={3}
+                dispatchedCount={5}
+                failedCount={1}
+                inFlightDispatchCount={2}
+              />
+            ),
+          },
+        ]}
+        initialWidth={1180}
+        layout={[
+          { h: 4, id: "activity", widgetType: "activity", w: 4, x: 0, y: 0 },
+          { h: 4, id: "trace", widgetType: "trace", w: 4, x: 4, y: 0 },
+          {
+            h: 2,
+            id: "work-totals",
+            widgetType: "work-totals",
+            w: 4,
+            x: 8,
+            y: 0,
+          },
+        ]}
+      />,
+    );
+
+    for (const cardTitle of ["Current activity", "Trace grid", "Work totals"]) {
+      const card = screen.getByRole("article", { name: cardTitle });
+      const gridItem = getGridItem(cardTitle);
+
+      expect(gridItem.className).toContain("overflow-visible");
+      expect(card.dataset.dashboardPanelShell).toBe("grid-card");
+      expect(card.className).toContain("shadow-af-card");
+    }
+
+    const activityGraph = screen.getByRole("region", {
+      name: "Current activity graph",
+    });
+    const traceGraph = screen.getByRole("region", { name: "Trace graph" });
+
+    for (const graphFrame of [activityGraph, traceGraph]) {
+      expect(graphFrame.className).toContain("shadow-none");
+      expect(graphFrame.className).not.toContain("shadow-af-card");
+      expect(graphFrame.className).not.toContain("shadow-af-panel");
+      const reactFlowCanvas = graphFrame.querySelector(".react-flow");
+      expect(reactFlowCanvas?.className).toContain("shadow-none");
+      expect(reactFlowCanvas?.className).not.toContain("shadow-af-card");
+      expect(reactFlowCanvas?.className).not.toContain("shadow-af-panel");
+    }
   });
 
   it("keeps movement enabled and updates grid position during pointer interaction", async () => {

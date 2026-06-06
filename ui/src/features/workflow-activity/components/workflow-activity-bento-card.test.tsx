@@ -266,8 +266,13 @@ describe("WorkflowActivityBentoCard", () => {
     expect(await screen.findByRole("heading", { name: "工厂图" })).toBeTruthy();
     const graphCard = screen.getByRole("article", { name: "工厂图" });
     const graphHeader = graphCard.querySelector("header");
+    const graphViewport = screen.getByRole("region", {
+      name: messages.viewportLabel,
+    });
 
     expect(graphHeader).toBeTruthy();
+    expect(graphCard.dataset.dashboardPanelShell).toBe("grid-card");
+    expect(graphCard.className).toContain("shadow-af-card");
     expect(graphHeader?.className).toContain("min-h-11");
     expect(graphHeader?.className).toContain("px-3");
     expect(
@@ -287,9 +292,10 @@ describe("WorkflowActivityBentoCard", () => {
     expect(
       within(graphCard).queryByRole("heading", { name: "当前活动" }),
     ).toBeNull();
-    expect(
-      screen.getByRole("region", { name: messages.viewportLabel }),
-    ).toBeTruthy();
+    expect(graphViewport).toBeTruthy();
+    expect(graphViewport.className).toContain("shadow-none");
+    expect(graphViewport.className).not.toContain("shadow-af-card");
+    expect(graphViewport.className).not.toContain("shadow-af-panel");
     expect(screen.queryByRole("complementary")).toBeNull();
     expect(
       screen.queryByRole("button", { name: /collapse inspector/i }),
