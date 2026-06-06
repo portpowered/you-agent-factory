@@ -666,7 +666,7 @@ func (fs *FactoryService) stopFactorySession(sessionID string) error {
 	if runState != nil && runState.sessionID == sessionID {
 		successor := fs.nextLiveSessionAfterStop(sessionID)
 		if successor != nil {
-			fs.setRunState(runState.ctx, successor.ID)
+			fs.setRunState(runState.ctx, successor.ID, liveSessionHandle(successor))
 		} else {
 			fs.clearRunState()
 		}
@@ -768,7 +768,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		restoreCurrentSidecars = true
 		defer func() {
 			if restoreCurrentSidecars {
-				fs.restoreLiveRuntimeSidecars(serviceCtx, handle)
+				fs.restoreLiveRuntimeSidecars(runState)
 			}
 		}()
 	}
@@ -797,7 +797,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		session.Project,
 	), isActiveSession)
 	if isActiveSession {
-		fs.setRunState(serviceCtx, session.ID)
+		fs.setRunState(serviceCtx, session.ID, replacementHandle)
 	}
 	if err := fs.stopLiveRuntime(handle); err != nil && !errors.Is(err, context.Canceled) {
 		fs.logger.Warn("prior session runtime shutdown failed", zap.Error(err), zap.String("session_id", session.ID))

@@ -564,6 +564,52 @@ func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error
 	return nil
 }
 
+func (fs *FactoryService) startupRuntimeBundle() *factoryRuntimeBundle {
+	if fs == nil {
+		return nil
+	}
+	fs.runtimeMu.RLock()
+	defer fs.runtimeMu.RUnlock()
+	return fs.startupBundle
+}
+
+func (fs *FactoryService) setStartupBundle(runtimeBundle *factoryRuntimeBundle) {
+	if fs == nil {
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	fs.startupBundle = runtimeBundle
+}
+
+func (fs *FactoryService) clearStartupBundle() {
+	if fs == nil {
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	fs.startupBundle = nil
+}
+
+func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBundle) {
+	if fs == nil || fs.cfg == nil {
+		return
+	}
+	fs.runtimeMu.Lock()
+	defer fs.runtimeMu.Unlock()
+	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.dir) == "" {
+		if strings.TrimSpace(fs.factoryRootDir) != "" {
+			fs.cfg.Dir = fs.factoryRootDir
+		}
+		return
+	}
+	fs.cfg.Dir = runtimeBundle.dir
+}
+
+func (fs *FactoryService) resetActiveSessionDir() {
+	fs.syncActiveSessionDir(nil)
+}
+
 func (fs *FactoryService) currentRunState() *serviceRunState {
 	fs.runMu.RLock()
 	defer fs.runMu.RUnlock()
@@ -571,15 +617,15 @@ func (fs *FactoryService) currentRunState() *serviceRunState {
 }
 
 func (fs *FactoryService) currentLiveRuntime() *liveRuntimeHandle {
-	runState := fs.currentRunState()
-	if runState == nil {
+	fs.runMu.RLock()
+	defer fs.runMu.RUnlock()
+	if fs.runState == nil {
 		return nil
 	}
-	session := fs.sessionByID(runState.sessionID)
-	return liveSessionHandle(session)
+	return fs.runState.runtime
 }
 
-func (fs *FactoryService) setRunState(ctx context.Context, sessionID string) {
+func (fs *FactoryService) setRunState(ctx context.Context, sessionID string, runtime *liveRuntimeHandle) {
 	fs.runMu.Lock()
 	defer fs.runMu.Unlock()
 	if ctx == nil {
@@ -589,6 +635,7 @@ func (fs *FactoryService) setRunState(ctx context.Context, sessionID string) {
 	fs.runState = &serviceRunState{
 		ctx:       ctx,
 		sessionID: sessionID,
+		runtime:   runtime,
 	}
 }
 

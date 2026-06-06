@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -130,6 +129,12 @@ type runtimeBundleBuildInput struct {
 	prefetchedLocalModels localModelDomain
 }
 
+type liveSessionState struct {
+	bundle *factoryRuntimeBundle
+	handle *liveRuntimeHandle
+	spec   *runtimebuild.SessionBuildSpec
+}
+
 // FactoryService is an instantiation of a factory along with its runtime
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
@@ -149,6 +154,7 @@ type FactoryService struct {
 	runtimeBuild   *runtimebuild.Service
 	hostedWorkers  hostedworkers.Config
 	factoryRootDir string
+	policy         serviceCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
 	startupBundle *factoryRuntimeBundle
 	cfg           *FactoryServiceConfig
@@ -396,11 +402,35 @@ func (fs *FactoryService) buildReplacementFactoryRuntime(
 	if fs == nil || fs.runtimeBuild == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
-	bundle, err := fs.runtimeBuild.BuildReplacement(ctx, folderPath, factoryDir, sessionID)
+	bundle, err := fs.runtimeBuild.BuildReplacement(
+		ctx,
+		folderPath,
+		factoryDir,
+		sessionID,
+		fs.replacementExecutionBaseDir(folderPath, factoryDir, sessionID),
+	)
 	if err != nil {
 		return nil, err
 	}
 	return asRuntimeBundle(bundle), nil
+}
+
+func (fs *FactoryService) replacementExecutionBaseDir(folderPath string, factoryDir string, sessionID string) string {
+	if session := fs.sessionByID(sessionID); session != nil {
+		if executionBaseDir := strings.TrimSpace(session.ExecutionBaseDir); executionBaseDir != "" {
+			return executionBaseDir
+		}
+	}
+	if folderPath = strings.TrimSpace(folderPath); folderPath != "" {
+		return folderPath
+	}
+	if factoryDir = strings.TrimSpace(factoryDir); factoryDir != "" {
+		return factoryDir
+	}
+	if fs != nil {
+		return strings.TrimSpace(fs.coordinatorPolicy().executionBaseDir)
+	}
+	return ""
 }
 
 // Run starts the file watcher, dashboard, API server, and factory engine.
@@ -570,6 +600,7 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 		defaultSessionTargetFromRuntimeBundle(runtimeBundle, fs.factoryRootDir),
 		true,
 	)
+	fs.clearStartupBundle()
 	fs.setRunState(runCtx, defaultFactorySessionID, currentRuntime)
 	if err := fs.waitForLiveRuntimeStart(ctx, currentRuntime); err != nil {
 		return nil, fs.handleDefaultRuntimeStartFailure(ctx, currentRuntime, err)
@@ -683,28 +714,6 @@ func (fs *FactoryService) requireIdleRuntime(ctx context.Context) error {
 	return nil
 }
 
-func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
-	if snapshot == nil {
-		return false
-	}
-	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 {
-		return true
-	}
-	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType == interfaces.DataTypeResource {
-			continue
-		}
-		if snapshot.Topology == nil {
-			return true
-		}
-		category := snapshot.Topology.StateCategoryForPlace(token.PlaceID)
-		if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
-			return true
-		}
-	}
-	return false
-}
-
 func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 	if fs == nil {
 		return nil
@@ -747,24 +756,6 @@ func (fs *FactoryService) publishFactoryChangeEvent(
 		return
 	}
 	currentRuntime.runtime.eventHistory.RecordFactoryChange(snapshot.TickCount+1, payload, eventTime)
-}
-
-func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factoryapi.FactoryChangeEventPayload, bool) {
-	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
-			continue
-		}
-		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
-		if err != nil {
-			return factoryapi.FactoryChangeEventPayload{}, false
-		}
-		return factoryapi.FactoryChangeEventPayload{
-			Factory:         payload.Factory,
-			Metadata:        payload.Metadata,
-			SourceDirectory: payload.SourceDirectory,
-		}, true
-	}
-	return factoryapi.FactoryChangeEventPayload{}, false
 }
 
 func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *factoryRuntimeBundle) *liveRuntimeHandle {

@@ -55,6 +55,91 @@ func wireModelAssetPuller(cfg *FactoryServiceConfig, production modelAssetPuller
 	return production
 }
 
+type serviceCoordinatorPolicy struct {
+	dir                           string
+	executionBaseDir              string
+	runtimeMode                   interfaces.RuntimeMode
+	port                          int
+	verbose                       bool
+	runtimeInstanceID             string
+	workFile                      string
+	workflowID                    string
+	mockWorkersConfig             *factoryconfig.MockWorkersConfig
+	simpleDashboardRenderer       SimpleDashboardRenderer
+	apiServerStarter              APIServerStarter
+	apiServerReady                <-chan struct{}
+	workstationLoader             factoryconfig.WorkstationLoader
+	modelCacheDir                 string
+	runnerID                      string
+	providerOverride              workers.Provider
+	providerCommandRunnerOverride workers.CommandRunner
+	commandRunnerOverride         workers.CommandRunner
+}
+
+func (fs *FactoryService) coordinatorPolicy() serviceCoordinatorPolicy {
+	if fs == nil {
+		return serviceCoordinatorPolicy{}
+	}
+	if hasExplicitServiceCoordinatorPolicy(fs.policy) {
+		return fs.policy
+	}
+	return serviceCoordinatorPolicyFromConfig(fs.cfg)
+}
+
+func hasExplicitServiceCoordinatorPolicy(policy serviceCoordinatorPolicy) bool {
+	return hasExplicitServiceCoordinatorValuePolicy(policy) || hasExplicitServiceCoordinatorReferencePolicy(policy)
+}
+
+func hasExplicitServiceCoordinatorValuePolicy(policy serviceCoordinatorPolicy) bool {
+	return policy.dir != "" ||
+		policy.executionBaseDir != "" ||
+		policy.runtimeMode != "" ||
+		policy.port != 0 ||
+		policy.verbose ||
+		policy.runtimeInstanceID != "" ||
+		policy.workFile != "" ||
+		policy.workflowID != "" ||
+		policy.modelCacheDir != "" ||
+		policy.runnerID != ""
+}
+
+func hasExplicitServiceCoordinatorReferencePolicy(policy serviceCoordinatorPolicy) bool {
+	return policy.mockWorkersConfig != nil ||
+		policy.simpleDashboardRenderer != nil ||
+		policy.apiServerStarter != nil ||
+		policy.apiServerReady != nil ||
+		policy.workstationLoader != nil ||
+		policy.providerOverride != nil ||
+		policy.providerCommandRunnerOverride != nil ||
+		policy.commandRunnerOverride != nil
+}
+
+func serviceCoordinatorPolicyFromConfig(cfg *FactoryServiceConfig) serviceCoordinatorPolicy {
+	if cfg == nil {
+		return serviceCoordinatorPolicy{}
+	}
+	return serviceCoordinatorPolicy{
+		dir:                           cfg.Dir,
+		executionBaseDir:              cfg.ExecutionBaseDir,
+		runtimeMode:                   cfg.RuntimeMode,
+		port:                          cfg.Port,
+		verbose:                       cfg.Verbose,
+		runtimeInstanceID:             cfg.RuntimeInstanceID,
+		workFile:                      cfg.WorkFile,
+		workflowID:                    cfg.WorkflowID,
+		mockWorkersConfig:             cfg.MockWorkersConfig,
+		simpleDashboardRenderer:       cfg.SimpleDashboardRenderer,
+		apiServerStarter:              cfg.APIServerStarter,
+		apiServerReady:                cfg.APIServerReady,
+		workstationLoader:             cfg.WorkstationLoader,
+		modelCacheDir:                 cfg.ModelCacheDir,
+		runnerID:                      cfg.RunnerID,
+		providerOverride:              cfg.ProviderOverride,
+		providerCommandRunnerOverride: cfg.ProviderCommandRunnerOverride,
+		commandRunnerOverride:         cfg.CommandRunnerOverride,
+	}
+}
+
 func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, error) {
 	factoryRootDir, err := factorysessions.AbsolutizeFactoryDirectory(cfg.Dir)
 	if err != nil {
@@ -809,11 +894,12 @@ func newRuntimeBuildService(
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
 ) *runtimebuild.Service {
+	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
-		runtimeBuildConfigFromService(cfg),
+		buildCfg,
 		clock,
 		baseLogger,
-		func(ctx context.Context, input runtimebuild.BuildInput) (any, error) {
+		func(ctx context.Context, input runtimebuild.SessionBuildSpec) (any, error) {
 			bundleInput := runtimeBundleBuildInput{
 				dir:                   input.Dir,
 				folderPath:            input.FolderPath,

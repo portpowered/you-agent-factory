@@ -799,25 +799,37 @@ func ComposeFactoryCore(
 	if err != nil {
 		return nil, err
 	}
-	runtimeBundleAny, err := collaborators.RuntimeBuild.BuildFromLoadedConfig(ctx, runtimebuild.BuildInput{
+	defaultSessionSpec, err := collaborators.RuntimeBuild.BuildSpec(ctx, runtimebuild.SessionSpecInput{
 		Dir:                   cfg.Dir,
 		FolderPath:            root.FactoryRootDir,
 		SessionID:             defaultFactorySessionID,
+		ExecutionBaseDir:      cfg.ExecutionBaseDir,
 		LoadedFactoryCfg:      load.LoadedFactoryCfg,
-		BaseLogger:            root.BaseLogger,
 		RuntimeInstanceID:     cfg.RuntimeInstanceID,
-		Clock:                 clock,
-		RecordPath:            runtimebuild.SessionScopedRecordPath(cfg.RecordPath, defaultFactorySessionID),
-		WorkflowID:            cfg.WorkflowID,
-		ProviderOverride:      providerOverrideForMode(cfg, replaySideEffects),
-		ProviderCommandRunner: providerCommandRunnerForMode(cfg, load.LoadedFactoryCfg),
-		CommandRunnerOverride: commandRunnerOverrideForMode(cfg, load.LoadedFactoryCfg, replaySideEffects),
+		SideEffects:           replaySideEffects,
 		AdditionalFactoryOpts: replayFactoryOpts,
 	})
 	if err != nil {
 		return nil, err
 	}
+	runtimeBundleAny, err := collaborators.RuntimeBuild.Build(ctx, defaultSessionSpec)
+	if err != nil {
+		return nil, err
+	}
 	runtimeBundle = asRuntimeBundle(runtimeBundleAny)
+	if runtimeBundle == nil {
+		return nil, fmt.Errorf("default runtime bundle is required")
+	}
+	collaborators.Sessions.Upsert(factorysessions.NewLiveSession(
+		defaultFactorySessionID,
+		runtimeBundle.dir,
+		runtimeBundle.folderPath,
+		runtimeBundle.runtimeCfg.RuntimeBaseDir(),
+		FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
+		&liveSessionState{bundle: runtimeBundle, spec: &defaultSessionSpec},
+		true,
+		filepath.Base(runtimeBundle.folderPath),
+	), true)
 
 	coreBuilt = true
 	return &FactoryCore{
@@ -843,6 +855,7 @@ func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
 		factoryRootDir: core.FactoryRootDir(),
 		sessions:       core.Sessions(),
 		hostedWorkers:  core.HostedWorkers(),
+		policy:         serviceCoordinatorPolicyFromConfig(core.cfg),
 		startupBundle:  core.StartupBundle(),
 		cfg:            core.cfg,
 		modelAssets:    core.ModelAssetPuller(),
