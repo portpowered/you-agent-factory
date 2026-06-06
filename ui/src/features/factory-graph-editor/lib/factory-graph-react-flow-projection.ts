@@ -145,8 +145,6 @@ const EDGE_COLOR_BY_KIND = {
 const COLUMN_X = 232;
 const ROW_Y = 118;
 
-const EMPTY_SET: ReadonlySet<string> = new Set();
-
 export function projectFactoryGraphToReactFlow(
   options: FactoryGraphTopology | ProjectFactoryGraphToReactFlowOptions,
 ): FactoryGraphReactFlowProjection {
@@ -746,15 +744,4 @@ function validationMessagesByNodeId(
     messages.set(error.target.id, error.message);
   }
   return messages;
-}
-
-export function emptyFactoryGraphReactFlowEditorOverlay(): FactoryGraphReactFlowEditorOverlay {
-  return {
-    canEditConnections: false,
-    pendingAdditionEdgeIds: EMPTY_SET,
-    pendingAdditionNodeIds: EMPTY_SET,
-    pendingConnectionSource: null,
-    pendingRemovalEdgeIds: EMPTY_SET,
-    pendingRemovalNodeIds: EMPTY_SET,
-  };
 }

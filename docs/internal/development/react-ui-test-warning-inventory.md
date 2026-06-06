@@ -1,8 +1,9 @@
-# React UI unit test warning inventory
+# React UI unit test warning inventory closeout
 
-**Captured (UTC):** 2026-06-02  
-**Maintained lane:** `make ui-test` / `cd ui && bun run test:unit` (Vitest, excludes `integration/*.integration.test.mjs`)  
-**Capture tooling:** `ui/vite.config.warning-inventory.ts` + `ui/src/testing/warning-inventory-capture.setup.ts` (hooks `console.warn` / `console.error` per test case; summarize with `node ui/scripts/summarize-warning-inventory.mjs`)
+**Historical inventory captured (UTC):** 2026-06-02
+**Closeout status (UTC):** The June 2026 warning inventory is complete, and the one-off capture tooling has been removed. This document is a cleanup record, not a runnable maintenance playbook.
+**Maintained enforcement lane:** `make ui-test` / `cd ui && bun run test:unit` (Vitest, excludes `integration/*.integration.test.mjs`)
+**Maintained guard implementation:** `ui/src/testing/strict-console-guard.ts` with suite wiring in `ui/src/testing/guarded-suite-console.setup.ts`
 
 ## Executive summary
 
@@ -15,18 +16,18 @@ Focused runs across App shell (`src/App.*.test.tsx`), all `src/features/current-
 | 3 | React `act(...)` — App / selection shell | ~40 | `DashboardBento`, `DashboardScreenContent`, `SelectionHarness`, `CurrentSelectionWidgetSaveNotifications`, etc. |
 | 4 | Missing / duplicate React keys | 4 | Provider-session selection, execution details lists |
 
-## Methodology
+## Historical methodology
 
 1. Installed UI deps (`cd ui && bun install`).
-2. Ran Vitest with `vite.config.warning-inventory.ts` (120s test timeout, standard `vitest.setup.ts` plus capture setup).
+2. Ran Vitest with the temporary warning-inventory Vite configuration, using the standard `vitest.setup.ts` plus a temporary console capture setup.
 3. Suites executed (append mode for `console-entries.jsonl`):
    - All `src/App.*.test.tsx` (14 files; 4 tests timed out at 30s default before inventory config — re-run used 120s timeout).
    - `src/features/current-selection/**` by subdomain (`workstation-selection`, `worker-selection`, `work-type-selection`, `work-state-selection`, `work-selection`, `resource-selection`, `components`, `hooks`, `base`, `dispatch-selection`, `public`; empty filter dirs skipped: `state`, `editing`, `lib`, `messages`).
    - `src/App.layout-graph.test.tsx`, `src/testing/graph-editor-harness.test.ts`.
    - Sample: `src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-layout.test.tsx`, `src/features/workflow-activity/lib/react-flow-current-activity-card-graph.test.ts` (no additional console lines).
-4. Aggregated with `node ui/scripts/summarize-warning-inventory.mjs` and ad-hoc grouping by component suffix in `act` messages.
+4. Aggregated the captured JSONL output and grouped entries by component suffix in `act` messages.
 
-**Note:** Hooked capture only records calls that reach `console.error` / `console.warn` after setup. Vitest’s default console intercept remains enabled; messages still reached our hooks in this pass.
+**Note:** The deleted capture path only recorded calls that reached `console.error` / `console.warn` after setup. Vitest’s default console intercept remained enabled; messages still reached the temporary hooks in this pass.
 
 ## Ranked categories
 
@@ -127,24 +128,22 @@ These were explicitly checked for but **did not appear** in hooked output (may s
 - Radix / accessibility dialog description warnings
 - Deprecated React API warnings
 
-Re-run the full maintained lane with capture setup after major UI dependency upgrades to refresh this list.
+After major UI dependency upgrades, rerun the maintained guarded unit-test lane and update this closeout only if new console categories require documented follow-up.
 
-## Commands for maintainers
+## Maintainer guidance
+
+```bash
+make ui-test
+```
+
+For focused UI verification, run the maintained unit-test lane from the UI package:
 
 ```bash
 cd ui
-rm -rf .warning-inventory
-bunx vitest run --config vite.config.warning-inventory.ts --exclude 'integration/*.integration.test.mjs' src/App.export-submit.test.tsx
-node scripts/summarize-warning-inventory.mjs
-# Inspect .warning-inventory/ranked-warnings.json and console-entries.jsonl
+bun run test:unit
 ```
 
-Append additional suites:
-
-```bash
-VITEST_WARNING_INVENTORY_APPEND=1 bunx vitest run --config vite.config.warning-inventory.ts --exclude 'integration/*.integration.test.mjs' src/features/current-selection/components
-node scripts/summarize-warning-inventory.mjs
-```
+Ongoing console enforcement belongs in `ui/src/testing/strict-console-guard.ts` and the guarded-suite setup in `ui/src/testing/guarded-suite-console.setup.ts`. Add narrow, reasoned allowlist entries only when a suite has an intentional console path that cannot be removed without changing the behavior under test.
 
 ## App shell cleanup (story 002)
 
