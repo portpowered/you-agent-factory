@@ -612,10 +612,7 @@ func (h *FactoryEventHistory) factoryRunnerID() string {
 	if override != "" {
 		return override
 	}
-	type factoryConfigProvider interface {
-		FactoryConfig() *interfaces.FactoryConfig
-	}
-	provider, ok := h.runtimeConfig.(factoryConfigProvider)
+	provider, ok := h.runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
 	if !ok {
 		return ""
 	}
