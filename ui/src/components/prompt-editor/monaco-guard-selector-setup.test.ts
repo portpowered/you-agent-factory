@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  applyWorkstationGuardSelectorTheme,
   buildWorkstationGuardSelectorCompletionItems,
   registerWorkstationGuardSelectorCompletionProvider,
   registerWorkstationGuardSelectorMonaco,
@@ -14,18 +15,19 @@ describe("registerWorkstationGuardSelectorMonaco", () => {
     const register = vi.fn();
     const setMonarchTokensProvider = vi.fn();
     const defineTheme = vi.fn();
+    const setTheme = vi.fn();
 
     resetWorkstationGuardSelectorMonacoRegistrationForTests();
 
     registerWorkstationGuardSelectorMonaco({
-      editor: { defineTheme },
+      editor: { defineTheme, setTheme },
       languages: {
         register,
         setMonarchTokensProvider,
       },
     } as unknown as typeof import("monaco-editor"));
     registerWorkstationGuardSelectorMonaco({
-      editor: { defineTheme },
+      editor: { defineTheme, setTheme },
       languages: {
         register,
         setMonarchTokensProvider,
@@ -45,6 +47,32 @@ describe("registerWorkstationGuardSelectorMonaco", () => {
         inherit: true,
       }),
     );
+    expect(setTheme).toHaveBeenCalledTimes(1);
+    expect(setTheme).toHaveBeenCalledWith(WORKSTATION_GUARD_SELECTOR_THEME_ID);
+  });
+
+  it("applies a light-biased guard-selector theme from the current palette tokens", () => {
+    const defineTheme = vi.fn();
+    const setTheme = vi.fn();
+
+    document.documentElement.style.setProperty("--color-surface", "#F7F2E8");
+    document.documentElement.style.setProperty("--color-on-surface", "#091117");
+
+    applyWorkstationGuardSelectorTheme({
+      editor: { defineTheme, setTheme },
+    } as unknown as typeof import("monaco-editor"));
+
+    expect(defineTheme).toHaveBeenCalledWith(
+      WORKSTATION_GUARD_SELECTOR_THEME_ID,
+      expect.objectContaining({
+        base: "vs",
+        colors: expect.objectContaining({
+          "editor.background": "#F7F2E8",
+          "editor.foreground": "#091117",
+        }),
+      }),
+    );
+    expect(setTheme).toHaveBeenCalledWith(WORKSTATION_GUARD_SELECTOR_THEME_ID);
   });
 });
 

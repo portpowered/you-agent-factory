@@ -88,6 +88,7 @@ export function WorkflowActivityBentoCard({
 
   return (
     <AgentBentoCard
+      bodyScroll={false}
       chromeDensity="compact"
       headerAction={
         <CurrentActivityGraphHeaderActions
