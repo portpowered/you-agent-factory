@@ -567,11 +567,11 @@ export const SelectedWorkDispatchHistorySmoke = {
     ).toBeVisible();
     expect(within(erroredCard).queryByText("Current dispatch")).toBeNull();
 
-    const traceLink = within(erroredCard).getByRole("link", {
+    const traceButton = within(erroredCard).getByRole("button", {
       name: /^trace-active-story/,
     });
-    await expect(traceLink).toBeVisible();
-    expect(traceLink.getAttribute("href")).toBe("#trace");
+    await expect(traceButton).toBeVisible();
+    expect(traceButton.getAttribute("aria-pressed")).toBe("false");
 
     const scriptSuccessCard = dispatchHistoryCard(
       dispatchHistory,
