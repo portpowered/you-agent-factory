@@ -1,5 +1,5 @@
-// Package workers defines worker executor interfaces and implementations for
-// script and model-based workers.
+// Package workers defines worker dispatcher contracts and compatibility helpers
+// for script and model-based workers.
 package workers
 
 import (
@@ -8,25 +8,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
-
-// WorkerExecutor is the side-effect interface — what actually happens when
-// a transition fires. This is the only place where external I/O occurs.
-// Everything else in the factory is pure CPN state manipulation.
-type WorkerExecutor interface {
-	Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error)
-}
-
-// WorkstationRequestExecutor handles worker-owned execution requests after the
-// dispatch-owned contract has been resolved for one workstation invocation.
-type WorkstationRequestExecutor interface {
-	Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error)
-}
-
-// Runner executes one shared runner request and returns the normalized runner
-// result used by standard orchestration flows.
-type Runner interface {
-	Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error)
-}
 
 // Dispatcher manages worker execution. It supports two execution modes:
 //   - Synchronous (via Tick): all queued dispatches are executed inline; used

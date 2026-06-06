@@ -114,6 +114,41 @@ func TestWorkLogFieldsAddsStableExecutionFields(t *testing.T) {
 	}
 }
 
+func TestRootExecutionInterfaceAliasesAcceptImplementations(t *testing.T) {
+	worker := WorkerExecutor(stubWorkerExecutor{
+		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+	})
+	workerResult, err := worker.Execute(context.Background(), interfaces.WorkDispatch{})
+	if err != nil {
+		t.Fatalf("worker executor returned error: %v", err)
+	}
+	if workerResult.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("worker result outcome = %q, want %q", workerResult.Outcome, interfaces.OutcomeAccepted)
+	}
+
+	workstation := WorkstationRequestExecutor(stubWorkstationRequestExecutor{})
+	workstationResult, err := workstation.Execute(context.Background(), interfaces.WorkstationExecutionRequest{})
+	if err != nil {
+		t.Fatalf("workstation request executor returned error: %v", err)
+	}
+	if workstationResult.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("workstation result outcome = %q, want %q", workstationResult.Outcome, interfaces.OutcomeAccepted)
+	}
+
+	runner := Runner(stubRunner{})
+	runnerResult, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{})
+	if err != nil {
+		t.Fatalf("runner returned error: %v", err)
+	}
+	if runnerResult.Content != "ok" {
+		t.Fatalf("runner content = %q, want %q", runnerResult.Content, "ok")
+	}
+}
+
+var _ WorkerExecutor = stubWorkerExecutor{}
+var _ WorkstationRequestExecutor = stubWorkstationRequestExecutor{}
+var _ Runner = stubRunner{}
+
 type stubProvider struct {
 	lastRequest interfaces.ProviderInferenceRequest
 	response    interfaces.InferenceResponse
@@ -130,4 +165,16 @@ type stubWorkerExecutor struct {
 
 func (s stubWorkerExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
 	return s.result, nil
+}
+
+type stubWorkstationRequestExecutor struct{}
+
+func (stubWorkstationRequestExecutor) Execute(_ context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+	return interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}, nil
+}
+
+type stubRunner struct{}
+
+func (stubRunner) Execute(_ context.Context, _ interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+	return interfaces.RunnerExecutionResult{Content: "ok"}, nil
 }
