@@ -51,6 +51,7 @@ type EmbeddedRuntimeConfig struct {
 }
 
 var _ interfaces.RuntimeConfigLookup = (*EmbeddedRuntimeConfig)(nil)
+var _ interfaces.RuntimeFactoryConfigLookup = (*EmbeddedRuntimeConfig)(nil)
 
 // FactoryConfig returns the embedded canonical public factory configuration.
 func (c *EmbeddedRuntimeConfig) FactoryConfig() *interfaces.FactoryConfig {

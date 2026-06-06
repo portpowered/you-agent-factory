@@ -592,6 +592,14 @@ func (s *runtimeLookupWorkstationStub) Workstation(name string) (*FactoryWorksta
 	return workstation, ok
 }
 
+type runtimeFactoryConfigLookupStub struct {
+	factory *FactoryConfig
+}
+
+func (s *runtimeFactoryConfigLookupStub) FactoryConfig() *FactoryConfig {
+	return s.factory
+}
+
 func TestFirstRuntimeDefinitionLookup_ReturnsFirstNonNilCandidate(t *testing.T) {
 	t.Parallel()
 
@@ -655,6 +663,34 @@ func TestFirstRuntimeWorkstationLookup_ReturnsNilWhenEveryCandidateIsNil(t *test
 
 	if got := FirstRuntimeWorkstationLookup(nil, nil); got != nil {
 		t.Fatalf("FirstRuntimeWorkstationLookup() = %p, want nil", got)
+	}
+}
+
+func TestFirstRuntimeFactoryConfigLookup_ReturnsFirstNonNilCandidate(t *testing.T) {
+	t.Parallel()
+
+	first := &runtimeFactoryConfigLookupStub{
+		factory: &FactoryConfig{Name: "alpha"},
+	}
+	second := &runtimeFactoryConfigLookupStub{
+		factory: &FactoryConfig{Name: "beta"},
+	}
+
+	got := FirstRuntimeFactoryConfigLookup(nil, first, second)
+	if got != first {
+		t.Fatalf("FirstRuntimeFactoryConfigLookup() returned %p, want first non-nil candidate %p", got, first)
+	}
+
+	if factory := got.FactoryConfig(); factory == nil || factory.Name != "alpha" {
+		t.Fatalf("FirstRuntimeFactoryConfigLookup() did not preserve the selected lookup behavior, got factory=%#v", factory)
+	}
+}
+
+func TestFirstRuntimeFactoryConfigLookup_ReturnsNilWhenEveryCandidateIsNil(t *testing.T) {
+	t.Parallel()
+
+	if got := FirstRuntimeFactoryConfigLookup(nil, nil); got != nil {
+		t.Fatalf("FirstRuntimeFactoryConfigLookup() = %p, want nil", got)
 	}
 }
 
