@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
@@ -101,6 +103,84 @@ func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *tes
 	harness.waitIdle(t, defaultFactorySessionID, "default runtime after beta stop")
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_KeepsSessionWorkingDirectoriesIsolatedAcrossRoots(t *testing.T) {
+	rootOne := t.TempDir()
+	rootTwo := t.TempDir()
+	writeFactoryJSON(t, rootOne, sessionScriptWorkingDirectoryFactoryConfig("alpha"))
+	writeFactoryJSON(t, rootTwo, sessionScriptWorkingDirectoryFactoryConfig("beta"))
+	writeScriptWorkerAgentsMD(t, rootOne, "script-worker")
+	writeScriptWorkerAgentsMD(t, rootTwo, "script-worker")
+	writeSessionRuntimeLookupWorkstationAgentsMD(t, rootOne, "run-script", "workspace-alpha")
+	writeSessionRuntimeLookupWorkstationAgentsMD(t, rootTwo, "run-script", "workspace-beta")
+
+	runner := &sessionCapturingCommandRunner{}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:                   rootOne,
+		ExecutionBaseDir:      rootOne,
+		RuntimeMode:           interfaces.RuntimeModeService,
+		CommandRunnerOverride: runner,
+		Logger:                zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	harness := &runningSessionService{
+		rootDir:   rootOne,
+		svc:       svc,
+		runErrCh:  runErrCh,
+		cancelRun: cancelRun,
+	}
+	defer harness.stop(t)
+
+	openResult, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), rootTwo, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(root two): %v", err)
+	}
+	if openResult == nil || openResult.SessionID == "" {
+		t.Fatalf("open result = %#v, want session id", openResult)
+	}
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	secondSession := harness.requireSession(t, openResult.SessionID)
+	if defaultSession.FolderPath != rootOne {
+		t.Fatalf("default session folder path = %q, want %q", defaultSession.FolderPath, rootOne)
+	}
+	if secondSession.FolderPath != rootTwo {
+		t.Fatalf("second session folder path = %q, want %q", secondSession.FolderPath, rootTwo)
+	}
+	if liveSessionHandle(defaultSession).runtime.dir != rootOne {
+		t.Fatalf("default runtime dir = %q, want %q", liveSessionHandle(defaultSession).runtime.dir, rootOne)
+	}
+	if liveSessionHandle(secondSession).runtime.dir != rootTwo {
+		t.Fatalf("second runtime dir = %q, want %q", liveSessionHandle(secondSession).runtime.dir, rootTwo)
+	}
+
+	submitSessionWork(t, defaultSession, "alpha-work", "trace-alpha-work")
+	submitSessionWork(t, secondSession, "beta-work", "trace-beta-work")
+	waitForSessionEventsToContain(t, defaultSession, "alpha-work", time.Second)
+	waitForSessionEventsToContain(t, secondSession, "beta-work", time.Second)
+
+	requests := runner.waitForRequests(t, 2, time.Second)
+	workDirs := map[string]int{}
+	for _, request := range requests {
+		workDirs[request.WorkDir]++
+	}
+
+	defaultWorkingDir := filepath.Join(rootOne, "workspace-alpha")
+	secondWorkingDir := filepath.Join(rootTwo, "workspace-beta")
+	if workDirs[defaultWorkingDir] != 1 || workDirs[secondWorkingDir] != 1 {
+		t.Fatalf("command workdirs = %#v, want one request for %q and one for %q", workDirs, defaultWorkingDir, secondWorkingDir)
+	}
+}
+
 func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts(t *testing.T) {
 	recordPath := t.TempDir() + "/recording.json"
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
@@ -145,6 +225,83 @@ func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts
 	assertSessionRuntimeLogPathsAreDistinct(t, harness.runtimeLogDir, defaultSession, firstBeta, secondBeta)
 	for _, session := range []*liveFactorySession{defaultSession, firstBeta, secondBeta} {
 		assertSessionRuntimeLogRecord(t, session)
+	}
+}
+
+type sessionCapturingCommandRunner struct {
+	mu       sync.Mutex
+	requests []workers.CommandRequest
+}
+
+func (r *sessionCapturingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
+	r.mu.Lock()
+	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	r.mu.Unlock()
+	return workers.CommandResult{Stdout: []byte("ok")}, nil
+}
+
+func (r *sessionCapturingCommandRunner) waitForRequests(t *testing.T, want int, wait time.Duration) []workers.CommandRequest {
+	t.Helper()
+
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		r.mu.Lock()
+		if len(r.requests) >= want {
+			requests := append([]workers.CommandRequest(nil), r.requests...)
+			r.mu.Unlock()
+			return requests
+		}
+		r.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	t.Fatalf("timed out waiting for %d command requests; got %d", want, len(r.requests))
+	return nil
+}
+
+func sessionScriptWorkingDirectoryFactoryConfig(name string) map[string]any {
+	return map[string]any{
+		"name": name,
+		"id":   name,
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "script-worker",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "run-script",
+				"worker":    "script-worker",
+				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+		},
+	}
+}
+
+func writeSessionRuntimeLookupWorkstationAgentsMD(t *testing.T, factoryDir, workstationName, relativeWorkingDir string) {
+	t.Helper()
+
+	wsDir := filepath.Join(factoryDir, "workstations", workstationName)
+	if err := os.MkdirAll(wsDir, 0o755); err != nil {
+		t.Fatalf("create workstation dir: %v", err)
+	}
+	agentsMD := "---\ntype: MODEL_WORKSTATION\nworker: script-worker\nworkingDirectory: " + relativeWorkingDir + "\n---\nRun the script.\n"
+	if err := os.WriteFile(filepath.Join(wsDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
 	}
 }
 

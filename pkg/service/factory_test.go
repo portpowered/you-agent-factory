@@ -345,12 +345,13 @@ func TestFactoryService_Pause_RequiresActiveRuntimeAndWrapsPauseErrors(t *testin
 		t.Fatalf("Pause without runtime error = %v, want runtime unavailable", err)
 	}
 
-	svc.setStartupBundle(&factoryRuntimeBundle{factory: &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}})
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: &aggregateSnapshotFactory{pauseErr: fmt.Errorf("pause failed")}})
 	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "pause factory: pause failed") {
 		t.Fatalf("Pause wrapped error = %v, want wrapped pause failure", err)
 	}
 
-	svc.setStartupBundle(&factoryRuntimeBundle{factory: &aggregateSnapshotFactory{}})
+	svc = &FactoryService{}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{factory: &aggregateSnapshotFactory{}})
 	if err := svc.Pause(context.Background()); err != nil {
 		t.Fatalf("Pause success error = %v", err)
 	}
@@ -366,10 +367,10 @@ func TestFactoryService_CurrentRuntimeBundleAndDirComparisonHelpers(t *testing.T
 		t.Fatalf("empty service currentRuntimeBundle = %#v, want nil", bundle)
 	}
 
-	svc.cfg = &FactoryServiceConfig{Dir: "C:/factory"}
+	svc.policy = serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{Dir: "C:/factory"})
 	mockFactory := &aggregateSnapshotFactory{}
 	runtimeCfg := &config.LoadedFactoryConfig{}
-	svc.setStartupBundle(&factoryRuntimeBundle{
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		dir:        "C:/factory",
 		factory:    mockFactory,
 		runtimeCfg: runtimeCfg,
@@ -378,11 +379,11 @@ func TestFactoryService_CurrentRuntimeBundleAndDirComparisonHelpers(t *testing.T
 	if bundle == nil {
 		t.Fatal("expected populated currentRuntimeBundle")
 	}
-	if bundle.dir != svc.cfg.Dir || bundle.factory != mockFactory || bundle.runtimeCfg != runtimeCfg {
+	if bundle.dir != svc.coordinatorPolicy().dir || bundle.factory != mockFactory || bundle.runtimeCfg != runtimeCfg {
 		t.Fatalf("currentRuntimeBundle = %#v, want startup bundle fields", bundle)
 	}
 
-	if factorysessions.SameFactoryDir("", svc.cfg.Dir) {
+	if factorysessions.SameFactoryDir("", svc.coordinatorPolicy().dir) {
 		t.Fatal("SameFactoryDir should reject blank paths")
 	}
 	if !factorysessions.SameFactoryDir("C:/factory/./named", "C:/factory/named") {
@@ -560,7 +561,6 @@ func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
 			t.Fatalf("logSink.Close: %v", err)
 		}
 	}
-	closeBundle(svc.startupRuntimeBundle())
 	closeBundle(svc.currentRuntimeBundle())
 	if svc.sessions != nil {
 		for _, sessionID := range svc.sessions.IDs() {
@@ -911,8 +911,8 @@ func TestBuildFactoryService_ResolvesCurrentFactoryFromNamedLayoutPointer(t *tes
 	}
 
 	wantDir := filepath.Join(rootDir, "alpha")
-	if svc.cfg.Dir != wantDir {
-		t.Fatalf("service dir = %q, want %q", svc.cfg.Dir, wantDir)
+	if svc.coordinatorPolicy().dir != wantDir {
+		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, wantDir)
 	}
 	runtimeCfg := svc.currentRuntimeConfig()
 	if runtimeCfg == nil {
@@ -953,8 +953,8 @@ func TestFactoryService_ActivateNamedFactory_SwapsPersistedFactoryAndUpdatesCurr
 	}
 
 	wantDir := filepath.Join(rootDir, "beta")
-	if svc.cfg.Dir != wantDir {
-		t.Fatalf("service dir = %q, want %q", svc.cfg.Dir, wantDir)
+	if svc.coordinatorPolicy().dir != filepath.Join(rootDir, "alpha") {
+		t.Fatalf("service dir = %q, want unchanged startup dir %q", svc.coordinatorPolicy().dir, filepath.Join(rootDir, "alpha"))
 	}
 	runtimeCfg := svc.currentRuntimeConfig()
 	if runtimeCfg == nil {
@@ -1021,7 +1021,7 @@ func TestFactoryService_ActivateNamedFactory_RejectsNonIdleRuntime(t *testing.T)
 	svc := &FactoryService{
 		logger: zap.NewNop(),
 	}
-	svc.setStartupBundle(&factoryRuntimeBundle{
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
 		factory: &aggregateSnapshotFactory{
 			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 				RuntimeStatus: interfaces.RuntimeStatusActive,
@@ -1062,7 +1062,7 @@ func TestFactoryService_RequireIdleRuntime_TargetsActiveRunSession(t *testing.T)
 	svc.registerLiveSession("session-beta", betaHandle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindNamed, Name: "beta"},
 	}, false)
-	svc.setRunState(context.Background(), "session-beta", betaHandle)
+	svc.setRunState(context.Background(), "session-beta")
 
 	err := svc.requireIdleRuntime(context.Background())
 	if err == nil {
@@ -1105,8 +1105,8 @@ func TestFactoryService_ActivateNamedFactory_RollsBackCurrentPointerWhenReplacem
 	}
 
 	wantCurrentDir := filepath.Join(rootDir, "alpha")
-	if svc.cfg.Dir != wantCurrentDir {
-		t.Fatalf("service dir after failed activation = %q, want %q", svc.cfg.Dir, wantCurrentDir)
+	if svc.coordinatorPolicy().dir != wantCurrentDir {
+		t.Fatalf("service dir after failed activation = %q, want %q", svc.coordinatorPolicy().dir, wantCurrentDir)
 	}
 	runtimeCfg := svc.currentRuntimeConfig()
 	if runtimeCfg == nil {
@@ -1307,10 +1307,9 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	startupBundle := svc.currentRuntimeBundle()
-	if startupBundle != nil && startupBundle.logSink != nil {
+	if bundle := svc.currentRuntimeBundle(); bundle != nil && bundle.logSink != nil {
 		defer func() {
-			if err := startupBundle.logSink.Close(); err != nil {
+			if err := bundle.logSink.Close(); err != nil {
 				t.Fatalf("Close(runtime log sink): %v", err)
 			}
 		}()
@@ -2256,9 +2255,7 @@ func TestFactoryService_GetCurrentFactory_FallsBackToRootRuntimeWhenPointerMissi
 func TestFactoryService_GetCurrentFactory_ReturnsNotFoundWhenPointerMissingWithoutRuntimeFallback(t *testing.T) {
 	rootDir := t.TempDir()
 	svc := &FactoryService{
-		cfg: &FactoryServiceConfig{
-			Dir: rootDir,
-		},
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{Dir: rootDir}),
 	}
 
 	_, err := svc.GetCurrentFactory(context.Background())
@@ -2278,9 +2275,7 @@ func TestFactoryService_GetCurrentFactory_WrapsMissingPersistedFactoryDir(t *tes
 	}
 
 	svc := &FactoryService{
-		cfg: &FactoryServiceConfig{
-			Dir: rootDir,
-		},
+		policy:         serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{Dir: rootDir}),
 		factoryRootDir: rootDir,
 	}
 

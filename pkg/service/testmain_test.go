@@ -11,13 +11,13 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"go.uber.org/zap"
 	"net/http"
 	"net/http/httptest"
@@ -193,7 +193,7 @@ func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalM
 	}
 	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
 	svc.modelAssets = puller
-	if bundle := svc.startupRuntimeBundle(); bundle != nil {
+	if bundle := liveSessionBundle(svc.defaultSession()); bundle != nil {
 		bundle.modelAssets = puller
 		bundle.localModels = newManagedLocalModelManager(puller, runtime)
 	}
@@ -499,11 +499,11 @@ func TestBuildFactoryService_MockWorkersConfigPassedThrough(t *testing.T) {
 	if snap.FactoryState != string(interfaces.FactoryStateIdle) {
 		t.Errorf("expected IDLE state, got %s", snap.FactoryState)
 	}
-	if svc.cfg.MockWorkersConfig == nil {
+	if svc.coordinatorPolicy().mockWorkersConfig == nil {
 		t.Fatal("expected mock-worker config to be preserved")
 	}
-	if len(svc.cfg.MockWorkersConfig.MockWorkers) != 0 {
-		t.Fatalf("mock worker count = %d, want empty default accept config", len(svc.cfg.MockWorkersConfig.MockWorkers))
+	if len(svc.coordinatorPolicy().mockWorkersConfig.MockWorkers) != 0 {
+		t.Fatalf("mock worker count = %d, want empty default accept config", len(svc.coordinatorPolicy().mockWorkersConfig.MockWorkers))
 	}
 }
 
