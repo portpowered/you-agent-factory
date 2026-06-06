@@ -7,7 +7,7 @@ import {
 } from "./dispatch-detail-sections";
 
 describe("dispatch detail sections", () => {
-  it("renders a labeled bordered detail section", () => {
+  it("renders a standard detail section heading and region", () => {
     render(
       <DispatchDetailSection title="Failure details">
         <p>Provider timed out.</p>
@@ -15,11 +15,14 @@ describe("dispatch detail sections", () => {
     );
 
     const section = screen.getByRole("region", { name: "Failure details" });
+    const heading = screen.getByRole("heading", {
+      level: 4,
+      name: "Failure details",
+    });
 
     expect(section.className).toContain("border-t");
-    expect(screen.getByText("Failure details").className).toContain(
-      "af-dashboard-supporting-label",
-    );
+    expect(section.className).toContain("pt-4");
+    expect(heading.className).toContain("m-0");
   });
 
   it("renders text, code, and link detail entries", () => {

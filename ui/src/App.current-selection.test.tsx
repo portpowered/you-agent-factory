@@ -771,8 +771,13 @@ describe("App current selection", () => {
     });
     expect(within(workDetail).getByText(activeWorkID)).toBeTruthy();
     expect(
+      within(workDetail).getByRole("heading", {
+        name: "Work operations",
+      }),
+    ).toBeTruthy();
+    expect(
       within(workDetail).queryByRole("heading", {
-        name: "Request details",
+        name: "Request history",
       }),
     ).toBeNull();
 
