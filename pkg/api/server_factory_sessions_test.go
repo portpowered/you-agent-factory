@@ -527,6 +527,35 @@ func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testin
 	assertProviderSessionParseDiagnostics(t, resp.Parse)
 }
 
+func TestGetProviderSessionDetails_LoadsCursorSessionFromConfiguredRoot(t *testing.T) {
+	root, sessionID := writeCursorProviderSessionFixture(t)
+
+	srv := newTestServerWithCursorRoot(root)
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id="+sessionID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
+	if string(resp.ProviderSession.Provider) != "cursor" || string(resp.ProviderSession.Kind) != "session_id" || resp.ProviderSession.Id != sessionID {
+		t.Fatalf("provider session = %#v, want cursor session_id %s", resp.ProviderSession, sessionID)
+	}
+	if resp.Source.RelativePath != "workspace-hash/"+sessionID+"/store.db" || resp.Source.SizeBytes == 0 {
+		t.Fatalf("source = %#v, want rooted cursor store.db metadata", resp.Source)
+	}
+	if resp.Parse.EventCount != 1 || resp.Parse.LineCount < 1 {
+		t.Fatalf("parse summary = %#v, want one readable cursor event", resp.Parse)
+	}
+	if len(resp.Transcript) != 1 || stringValue(resp.Transcript[0].Text) != "Hello from API fixture" {
+		t.Fatalf("transcript = %#v, want one readable cursor transcript entry", resp.Transcript)
+	}
+	if resp.Parse.TokenUsage == nil || intValue(resp.Parse.TokenUsage.InputTokens) != 100 || intValue(resp.Parse.TokenUsage.TotalTokens) != 175 {
+		t.Fatalf("token usage = %#v, want aggregated cursor usage metadata", resp.Parse.TokenUsage)
+	}
+}
+
 func assertProviderSessionResponseIdentity(t *testing.T, resp factoryapi.ProviderSessionDetailResponse) {
 	t.Helper()
 
@@ -871,6 +900,14 @@ func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
 }
 
+func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {
+	srv := newTestServerWithCursorRoot(t.TempDir())
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
 func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing.T) {
 	root := t.TempDir()
 	writeNamedProviderSessionFixture(t, root, "rollout-backup-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
@@ -895,6 +932,22 @@ func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *tes
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+		})
+	}
+}
+
+func TestGetProviderSessionDetails_CursorRejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
+	for _, target := range []string{
+		"/provider-sessions/detail?provider=cursor&kind=session_id&id=../secret",
+		"/provider-sessions/detail?provider=cursor&kind=session_id&id=/tmp/store.db",
+		"/provider-sessions/detail?provider=cursor&kind=session_id&id=session.with.dot",
+	} {
+		t.Run(target, func(t *testing.T) {
+			srv := newTestServerWithCursorRoot(t.TempDir())
+			req := httptest.NewRequest("GET", target, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a cursor session_id identifier without path separators")
 		})
 	}
 }
