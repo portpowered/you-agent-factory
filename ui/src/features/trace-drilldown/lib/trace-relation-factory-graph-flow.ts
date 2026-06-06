@@ -14,9 +14,13 @@ import {
   type TraceRelationNodeOverlay,
 } from "./trace-relation-factory-graph";
 
+const TRACE_RELATION_SOURCE_HANDLE_ID = "trace-relation-source";
+const TRACE_RELATION_TARGET_HANDLE_ID = "trace-relation-target";
+
 export type TraceRelationFlowNodeData = FactoryGraphReactFlowNode["data"] &
   TraceRelationNodeOverlay & {
     factoryNodeId: string;
+    isSelectedWork: boolean;
     locale?: string;
     onSelectWorkID?: (workID: string) => void;
     selectable: boolean;
@@ -38,9 +42,10 @@ export function buildTraceRelationFactoryGraphFlow(
   relations: DashboardWorkRelation[],
   options: ProjectTraceRelationsToFactoryGraphOptions & {
     onSelectWorkID?: (workID: string) => void;
+    selectedWorkID?: string | null;
   } = {},
 ): TraceRelationFactoryGraphFlow {
-  const { locale, onSelectWorkID, workItemsByWorkId } = options;
+  const { locale, onSelectWorkID, selectedWorkID, workItemsByWorkId } = options;
   const traceProjection = projectTraceRelationsToFactoryGraph(relations, {
     locale,
     workItemsByWorkId,
@@ -59,15 +64,22 @@ export function buildTraceRelationFactoryGraphFlow(
     }
 
     const endpointKey = overlay.endpointKey;
+    const isSelectedWork = Boolean(
+      selectedWorkID && overlay.workID === selectedWorkID,
+    );
     nodes.push({
       ...node,
       data: {
         ...node.data,
         ...overlay,
+        connectionAnchors: traceRelationConnectionAnchors(
+          node.data.connectionAnchors,
+        ),
         factoryNodeId: node.id,
+        isSelectedWork,
         locale,
         onSelectWorkID,
-        selectable: Boolean(overlay.workID && onSelectWorkID),
+        selectable: Boolean(overlay.workID && onSelectWorkID && !isSelectedWork),
       },
       id: endpointKey,
       sourcePosition: Position.Right,
@@ -94,12 +106,14 @@ export function buildTraceRelationFactoryGraphFlow(
       },
       source:
         traceProjection.endpointKeyByNodeId.get(edge.source) ?? edge.source,
+      sourceHandle: edge.sourceHandle ?? TRACE_RELATION_SOURCE_HANDLE_ID,
       style: {
         ...edge.style,
         ...relationEdgeStyle(relationLike),
       },
       target:
         traceProjection.endpointKeyByNodeId.get(edge.target) ?? edge.target,
+      targetHandle: edge.targetHandle ?? TRACE_RELATION_TARGET_HANDLE_ID,
     };
   });
 
@@ -109,6 +123,41 @@ export function buildTraceRelationFactoryGraphFlow(
     nodes,
     topology: traceProjection.topology,
   };
+}
+
+function traceRelationConnectionAnchors(
+  anchors: FactoryGraphReactFlowNode["data"]["connectionAnchors"],
+): FactoryGraphReactFlowNode["data"]["connectionAnchors"] {
+  const hasSource = anchors.some(
+    (anchor) => anchor.id === TRACE_RELATION_SOURCE_HANDLE_ID,
+  );
+  const hasTarget = anchors.some(
+    (anchor) => anchor.id === TRACE_RELATION_TARGET_HANDLE_ID,
+  );
+
+  return [
+    ...anchors,
+    ...(hasTarget
+      ? []
+      : [
+          {
+            id: TRACE_RELATION_TARGET_HANDLE_ID,
+            label: TRACE_RELATION_TARGET_HANDLE_ID,
+            side: "left" as const,
+            type: "target" as const,
+          },
+        ]),
+    ...(hasSource
+      ? []
+      : [
+          {
+            id: TRACE_RELATION_SOURCE_HANDLE_ID,
+            label: TRACE_RELATION_SOURCE_HANDLE_ID,
+            side: "right" as const,
+            type: "source" as const,
+          },
+        ]),
+  ];
 }
 
 function relationFromEdgeOverlay(

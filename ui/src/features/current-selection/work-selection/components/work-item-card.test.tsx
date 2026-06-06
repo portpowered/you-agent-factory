@@ -102,6 +102,20 @@ function getTraceGraphNodeButton(
   return button;
 }
 
+function getTraceGraphNodeShell(
+  container: HTMLElement,
+  label: string,
+): HTMLElement {
+  const nodeText = within(container).getByText(label);
+  const shell = nodeText.closest("article");
+
+  if (!(shell instanceof HTMLElement)) {
+    throw new Error(`expected trace graph node shell for ${label}`);
+  }
+
+  return shell;
+}
+
 function buildRelationshipGraph(
   workItem: DashboardWorkItemRef,
 ): SelectedWorkRelationshipGraph {
@@ -1120,6 +1134,7 @@ describe("WorkItemDetailCard relationship graph", () => {
   });
 
   it("renders work relationships with the shared trace relation graph surface", async () => {
+    const user = userEvent.setup();
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
     const onSelectWorkID = vi.fn();
@@ -1167,6 +1182,13 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(within(traceGraph).queryByText("ready")).toBeNull();
     expect(within(traceGraph).queryByText("queued")).toBeNull();
     expect(within(traceGraph).queryByText("trace-parent-story")).toBeNull();
+    expect(
+      traceGraph.querySelector('button[aria-label="Active Story"]'),
+    ).toBeNull();
+
+    const activeNode = getTraceGraphNodeShell(traceGraph, "Active Story");
+    expect(activeNode.className).toContain("border-primary");
+    expect(activeNode.className).toContain("bg-primary-container");
 
     const focusedSummary = within(relationshipGraph).getByRole("region", {
       name: "Focused work summary",
@@ -1176,9 +1198,18 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(within(focusedSummary).getByText("Current selection")).toBeTruthy();
     expect(within(focusedSummary).getByText("work-active-story")).toBeTruthy();
 
-    fireEvent.click(getTraceGraphNodeButton(traceGraph, "Dependency Story"));
+    fireEvent.click(activeNode);
+    expect(onSelectWorkID).not.toHaveBeenCalled();
 
-    expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
+    await user.click(getTraceGraphNodeButton(traceGraph, "Dependency Story"));
+    getTraceGraphNodeButton(traceGraph, "Parent Story").focus();
+    await user.keyboard("{Enter}");
+
+    expect(onSelectWorkID).toHaveBeenNthCalledWith(
+      1,
+      "work-dependency-story",
+    );
+    expect(onSelectWorkID).toHaveBeenNthCalledWith(2, "work-parent-story");
   });
 
   it("keeps focused-node trace actions in the graph summary when trace inspection is available", async () => {
@@ -1398,6 +1429,12 @@ describe("WorkItemDetailCard relationship graph", () => {
 
     expect(within(traceGraph).getByText("Parent Story")).toBeTruthy();
     expect(getTraceGraphNodeButton(traceGraph, "Active Story")).toBeTruthy();
+    expect(
+      traceGraph.querySelector('button[aria-label="Parent Story"]'),
+    ).toBeNull();
+    expect(getTraceGraphNodeShell(traceGraph, "Parent Story").className).toContain(
+      "border-primary",
+    );
     expect(
       within(
         screen.getByRole("region", { name: "Focused work summary" }),

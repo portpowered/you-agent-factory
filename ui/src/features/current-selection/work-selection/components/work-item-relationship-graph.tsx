@@ -56,6 +56,7 @@ export function WorkRelationshipsSection({
             locale={locale}
             onSelectWorkID={onSelectWorkID}
             relations={relationships}
+            selectedWorkID={readyRelationshipGraph.selectedWork.workID}
           />
           <FocusedRelationshipSummary
             activeTraceID={activeTraceID}
