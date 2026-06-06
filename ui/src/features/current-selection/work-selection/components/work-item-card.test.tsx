@@ -1,7 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import { dashboardWorkstationRequestFixtures } from "../../../../components/dashboard/fixtures";
 import {
   formatDurationMillis,
@@ -86,6 +87,19 @@ function expandAttemptBody(
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
 
   return within(attemptCard).getByRole("region", { name: bodyLabel });
+}
+
+function getTraceGraphNodeButton(
+  container: HTMLElement,
+  label: string,
+): HTMLButtonElement {
+  const button = container.querySelector(`button[aria-label="${label}"]`);
+
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error(`expected trace graph node button for ${label}`);
+  }
+
+  return button;
 }
 
 function buildRelationshipGraph(
@@ -1094,7 +1108,18 @@ describe("WorkItemDetailCard request-detail fallbacks", () => {
 });
 
 describe("WorkItemDetailCard relationship graph", () => {
-  it("renders work relationships as a graph-shaped surface and keeps related work selectable", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("renders work relationships with the shared trace relation graph surface", async () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
     const onSelectWorkID = vi.fn();
@@ -1126,40 +1151,23 @@ describe("WorkItemDetailCard relationship graph", () => {
     const relationshipGraph = screen.getByRole("region", {
       name: "Work relationships",
     });
+    const traceGraph = await within(relationshipGraph).findByRole("region", {
+      name: "Batch relation graph",
+    });
 
-    expect(within(relationshipGraph).getByText("Selected work")).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Relationship key",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText(
-        "Parent work above the current selection",
-      ),
-    ).toBeTruthy();
-    const selectedRelationshipNode = relationshipGraph.querySelector(
-      '[data-selected-work-relationship-node="selected"]',
-    );
+    expect(traceGraph.getAttribute("data-dashboard-graph-frame")).toBe("true");
+    expect(traceGraph.getAttribute("data-trace-relation-flow")).not.toBeNull();
+    expect(within(traceGraph).getByText("Active Story")).toBeTruthy();
+    expect(within(traceGraph).getByText("Parent Story")).toBeTruthy();
+    expect(within(traceGraph).getByText("Dependency Story")).toBeTruthy();
+    expect(within(traceGraph).getByText("Blocked Story")).toBeTruthy();
+    expect(within(traceGraph).getByText("Child Story")).toBeTruthy();
+    expect(within(traceGraph).queryByText("Selected work")).toBeNull();
+    expect(within(traceGraph).queryByText("Relationship key")).toBeNull();
+    expect(within(traceGraph).queryByText("ready")).toBeNull();
+    expect(within(traceGraph).queryByText("queued")).toBeNull();
+    expect(within(traceGraph).queryByText("trace-parent-story")).toBeNull();
 
-    if (!(selectedRelationshipNode instanceof HTMLElement)) {
-      throw new Error("expected selected relationship node");
-    }
-
-    expect(
-      within(selectedRelationshipNode).getByText("Active Story").className,
-    ).toContain("text-on-surface");
-    expect(
-      within(selectedRelationshipNode).getByText("Current selection"),
-    ).toBeTruthy();
-    expect(selectedRelationshipNode.getAttribute("aria-current")).toBe("true");
-    expect(
-      within(selectedRelationshipNode).getByText("in_progress"),
-    ).toBeTruthy();
-    expect(within(selectedRelationshipNode).getByText("story")).toBeTruthy();
-    expect(
-      within(selectedRelationshipNode).getByText("trace-active-story"),
-    ).toBeTruthy();
     const focusedSummary = within(relationshipGraph).getByRole("region", {
       name: "Focused work summary",
     });
@@ -1167,62 +1175,13 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(within(focusedSummary).getByText("Relationship role")).toBeTruthy();
     expect(within(focusedSummary).getByText("Current selection")).toBeTruthy();
     expect(within(focusedSummary).getByText("work-active-story")).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Parent relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Depends on relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Required by relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("region", {
-        name: "Child relationships",
-      }),
-    ).toBeTruthy();
-    expect(
-      within(
-        within(relationshipGraph).getByRole("region", {
-          name: "Parent relationships",
-        }),
-      ).getByText("Parent Story"),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("trace-parent-story"),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Depends on (ready)"),
-    ).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByText("Required by (approved)"),
-    ).toBeTruthy();
-    expect(within(relationshipGraph).getByText("queued")).toBeTruthy();
-    expect(within(relationshipGraph).getByText("dependency")).toBeTruthy();
-    expect(
-      within(
-        within(relationshipGraph).getByRole("region", {
-          name: "Child relationships",
-        }),
-      ).getByText("Child Story"),
-    ).toBeTruthy();
 
-    fireEvent.click(
-      within(relationshipGraph).getByRole("button", {
-        name: "Select related work item Dependency Story",
-      }),
-    );
+    fireEvent.click(getTraceGraphNodeButton(traceGraph, "Dependency Story"));
 
     expect(onSelectWorkID).toHaveBeenCalledWith("work-dependency-story");
   });
 
-  it("keeps focused-node trace actions in the graph summary when trace inspection is available", () => {
+  it("keeps focused-node trace actions in the graph summary when trace inspection is available", async () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
     const onSelectTraceID = vi.fn();
@@ -1252,6 +1211,10 @@ describe("WorkItemDetailCard relationship graph", () => {
       />,
     );
 
+    await within(
+      screen.getByRole("region", { name: "Work relationships" }),
+    ).findByRole("region", { name: "Batch relation graph" });
+
     const focusedSummary = screen.getByRole("region", {
       name: "Focused work summary",
     });
@@ -1267,7 +1230,7 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(onSelectTraceID).toHaveBeenCalledWith("trace-active-story");
   });
 
-  it("renders missing focused-node trace metadata explicitly when no trace is available", () => {
+  it("renders missing focused-node trace metadata explicitly when no trace is available", async () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
 
@@ -1319,6 +1282,10 @@ describe("WorkItemDetailCard relationship graph", () => {
       />,
     );
 
+    await within(
+      screen.getByRole("region", { name: "Work relationships" }),
+    ).findByRole("region", { name: "Batch relation graph" });
+
     const focusedSummary = screen.getByRole("region", {
       name: "Focused work summary",
     });
@@ -1329,7 +1296,7 @@ describe("WorkItemDetailCard relationship graph", () => {
     ).toBeNull();
   });
 
-  it("re-centers the graph when the current work selection changes", () => {
+  it("re-renders the graph when the current work selection changes", async () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
     const onSelectWorkID = vi.fn();
@@ -1365,11 +1332,11 @@ describe("WorkItemDetailCard relationship graph", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: "Select related work item Parent Story",
-      }),
-    );
+    const initialTraceGraph = await within(
+      screen.getByRole("region", { name: "Work relationships" }),
+    ).findByRole("region", { name: "Batch relation graph" });
+
+    fireEvent.click(getTraceGraphNodeButton(initialTraceGraph, "Parent Story"));
 
     expect(onSelectWorkID).toHaveBeenCalledWith("work-parent-story");
 
@@ -1425,23 +1392,12 @@ describe("WorkItemDetailCard relationship graph", () => {
     const relationshipGraph = screen.getByRole("region", {
       name: "Work relationships",
     });
-    const selectedRelationshipNode = relationshipGraph.querySelector(
-      '[data-selected-work-relationship-node="selected"]',
-    );
+    const traceGraph = await within(relationshipGraph).findByRole("region", {
+      name: "Batch relation graph",
+    });
 
-    if (!(selectedRelationshipNode instanceof HTMLElement)) {
-      throw new Error("expected recentered selected relationship node");
-    }
-
-    expect(
-      within(selectedRelationshipNode).getByText("Current selection"),
-    ).toBeTruthy();
-    expect(within(selectedRelationshipNode).getByText("done")).toBeTruthy();
-    expect(
-      within(relationshipGraph).getByRole("button", {
-        name: "Select related work item Active Story",
-      }),
-    ).toBeTruthy();
+    expect(within(traceGraph).getByText("Parent Story")).toBeTruthy();
+    expect(getTraceGraphNodeButton(traceGraph, "Active Story")).toBeTruthy();
     expect(
       within(
         screen.getByRole("region", { name: "Focused work summary" }),

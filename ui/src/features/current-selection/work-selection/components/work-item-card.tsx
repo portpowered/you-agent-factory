@@ -85,16 +85,11 @@ export function WorkItemDetailCard({
       />
       <WorkRelationshipsSection
         activeTraceID={activeTraceID}
+        locale={locale}
         messages={messages}
         onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
         relationshipGraph={relationshipGraph}
-        selectedWorkLabel={
-          relationshipGraph?.status !== "loading" &&
-          relationshipGraph?.selectedWork.label
-            ? relationshipGraph.selectedWork.label
-            : formatWorkItemLabel(selection.workItem)
-        }
       />
       <SelectedWorkDispatchHistorySection
         activeTraceID={activeTraceID}
