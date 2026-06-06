@@ -52,6 +52,12 @@ available without widening the default feedback loop.
 ## Shared Support
 
 - Cross-package functional helpers belong in `tests/functional/internal/support`.
+- `tests/functional/internal/support.StartFunctionalAPIServer` is the
+  canonical Wire-backed HTTP harness for backend transport regressions: it
+  builds runtime services through `compose.InjectFactoryService`, so runtime
+  API smoke coverage for `/status`, `/models`, session routes, and factory
+  activation should prefer that seam over hand-built HTTP doubles when the
+  goal is startup-path parity.
 - Keep package-local helpers next to the tests until a second behavior package
   needs them, then promote them into the support package instead of importing
   or copying another package's `*_test.go` helpers.
