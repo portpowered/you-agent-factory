@@ -24,6 +24,7 @@ export type {
 } from "../lib/selected-work-relationship-graph";
 
 export { buildSelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
+export { projectSelectedWorkRelationshipGraphToDashboardRelations } from "../lib/selected-work-relationship-relations";
 export type {
   SelectedWorkItemExecutionDetails,
   SelectWorkItemExecutionDetailsInput,
