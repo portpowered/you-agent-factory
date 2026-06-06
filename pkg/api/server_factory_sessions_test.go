@@ -22,6 +22,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing.T) {
@@ -906,6 +908,43 @@ func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
+	root := t.TempDir()
+	core, logs := observer.New(zap.InfoLevel)
+	srv := NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: root})
+
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+
+	entries := logs.FilterMessage("cursor provider session lookup not found").AllUntimed()
+	if len(entries) != 1 {
+		t.Fatalf("cursor not-found diagnostic count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["provider"] != "cursor" {
+		t.Fatalf("provider field = %#v, want cursor", fields["provider"])
+	}
+	if fields["lookup_kind"] != "session_id" {
+		t.Fatalf("lookup_kind field = %#v, want session_id", fields["lookup_kind"])
+	}
+	if fields["requested_id"] != "missing-session" {
+		t.Fatalf("requested_id field = %#v, want missing-session", fields["requested_id"])
+	}
+	if fields["searched_root"] != root {
+		t.Fatalf("searched_root field = %#v, want %q", fields["searched_root"], root)
+	}
+	if fields["root_configured"] != true {
+		t.Fatalf("root_configured field = %#v, want true", fields["root_configured"])
+	}
 }
 
 func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing.T) {

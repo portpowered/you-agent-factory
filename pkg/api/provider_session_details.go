@@ -66,6 +66,9 @@ func (s *Server) GetProviderSessionDetails(
 			return
 		case errors.Is(err, errProviderSessionNotFound),
 			errors.Is(err, providersessioncursor.ErrProviderSessionNotFound):
+			if params.Provider == factoryapi.Cursor {
+				s.logCursorProviderSessionLookupNotFound(params.Kind, string(params.Id))
+			}
 			s.writeError(w, http.StatusNotFound, "provider session not found", "NOT_FOUND")
 			return
 		case errors.Is(err, errAmbiguousProviderSessionFile),
@@ -80,6 +83,23 @@ func (s *Server) GetProviderSessionDetails(
 	}
 
 	s.writeJSON(w, http.StatusOK, details)
+}
+
+func (s *Server) logCursorProviderSessionLookupNotFound(kind factoryapi.LoadableProviderSessionKind, requestedID string) {
+	fields := []zap.Field{
+		zap.String("provider", string(factoryapi.Cursor)),
+		zap.String("lookup_kind", string(kind)),
+		zap.String("requested_id", requestedID),
+	}
+	if s.cursorSessionsRoot == "" {
+		fields = append(fields, zap.Bool("root_configured", false))
+	} else {
+		fields = append(fields,
+			zap.Bool("root_configured", true),
+			zap.String("searched_root", string(s.cursorSessionsRoot)),
+		)
+	}
+	s.logger.Info("cursor provider session lookup not found", fields...)
 }
 
 func invalidProviderSessionIdentifierMessage(provider factoryapi.LoadableProviderSessionProvider) string {
