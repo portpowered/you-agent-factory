@@ -283,11 +283,11 @@ describe("TraceRelationFlow", () => {
     }
     expect(implementNode.className).toContain("border-af-success-border");
     expect(implementNode.className).toContain("bg-success-container");
-    expect(within(implementButton).getByText("Parent-child")).toBeTruthy();
-    expect(within(implementButton).getByText("Done")).toBeTruthy();
-    expect(screen.queryByText("Work items")).toBeNull();
-    expect(screen.getAllByText("Work state").length).toBeGreaterThan(0);
-    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(within(implementButton).getByText("Implement story")).toBeTruthy();
+    expect(screen.queryByText("Parent-child")).toBeNull();
+    expect(screen.queryByText("Done")).toBeNull();
+    expect(screen.queryByText("Work state")).toBeNull();
+    expect(screen.queryByText("Failed")).toBeNull();
 
     fireEvent.click(implementButton);
     expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
@@ -388,12 +388,35 @@ describe("TraceRelationFlow localization", () => {
       expect(screen.getByRole("region", { name: "批次关系图" })).toBeTruthy();
     });
 
-    expect(screen.getAllByText("派生自").length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("未知状态：escalated_review").length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByText("Review story")).toBeTruthy();
+    expect(screen.getByText("Fix story")).toBeTruthy();
     expect(renderedEdges()[0]?.ariaLabel).toBe(
       "派生自关系：从 Review story 到 Fix story，要求 未知状态：escalated_review",
     );
+  });
+
+  it("renders fallback node labels when relation names are missing", async () => {
+    render(
+      <TraceRelationFlow
+        locale="zh-CN"
+        relations={[
+          {
+            request_id: "request-missing-source-name",
+            source_work_id: "",
+            source_work_name: "",
+            target_work_id: "work-target",
+            target_work_name: "",
+            type: "RELATED_TO",
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("region", { name: "批次关系图" })).toBeTruthy();
+    });
+
+    expect(screen.getByText("未知来源")).toBeTruthy();
+    expect(screen.getByText("work-target")).toBeTruthy();
   });
 });

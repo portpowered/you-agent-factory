@@ -103,7 +103,7 @@ describe("Trace relation factory graph node", () => {
     cleanup();
   });
 
-  it("renders work-type relation chrome with default tone when relation states are empty", () => {
+  it("renders only the work label while preserving neutral relation chrome", () => {
     render(
       <RelationNode
         {...relationNodeProps({
@@ -121,8 +121,9 @@ describe("Trace relation factory graph node", () => {
       />,
     );
 
-    expect(screen.getByText("Work type")).toBeTruthy();
-    expect(screen.getByText("Depends on")).toBeTruthy();
+    expect(screen.getByText("Story A")).toBeTruthy();
+    expect(screen.queryByText("Work type")).toBeNull();
+    expect(screen.queryByText("Depends on")).toBeNull();
     const node = screen.getByText("Story A").closest("article");
     if (!node) {
       throw new Error("Expected relation node shell to render.");
@@ -131,7 +132,7 @@ describe("Trace relation factory graph node", () => {
     expect(node.className).toContain("bg-surface");
   });
 
-  it("renders resource and worker relation semantic icons", () => {
+  it("does not render semantic icons or metadata badges for non-work nodes", () => {
     render(
       <RelationNode
         {...relationNodeProps({
@@ -148,9 +149,8 @@ describe("Trace relation factory graph node", () => {
         })}
       />,
     );
-    expect(
-      screen.getByLabelText("Worker").getAttribute("data-graph-semantic-icon"),
-    ).toBe("active-work");
+    expect(screen.getByText("Worker A")).toBeTruthy();
+    expect(screen.queryByLabelText("Worker")).toBeNull();
 
     cleanup();
 
@@ -170,11 +170,8 @@ describe("Trace relation factory graph node", () => {
         })}
       />,
     );
-    expect(
-      screen
-        .getByLabelText("Resource")
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("resource");
+    expect(screen.getByText("GPU")).toBeTruthy();
+    expect(screen.queryByLabelText("Resource")).toBeNull();
   });
 
   it("invokes onSelectWorkID for selectable relation endpoints", () => {
@@ -201,9 +198,8 @@ describe("Trace relation factory graph node", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Story B" }));
     expect(onSelectWorkID).toHaveBeenCalledWith("work-b");
-    expect(screen.getByText("Failed").className).toContain(
-      "bg-error-container",
-    );
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(screen.queryByText("Retry")).toBeNull();
     const node = screen.getByText("Story B").closest("article");
     if (!node) {
       throw new Error("Expected relation node shell to render.");

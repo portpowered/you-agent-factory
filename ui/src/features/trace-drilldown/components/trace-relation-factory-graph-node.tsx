@@ -4,7 +4,6 @@ import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
-  ActivityGraphNodeBadge,
   activityGraphNodeSurfaceClassName,
   activityGraphNodeTitleClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
@@ -12,10 +11,7 @@ import {
   ActivityGraphNodeShell,
   type PlaceNodeType,
 } from "../../flowchart/components/current-activity-node-shell";
-import type { GraphSemanticIconKind } from "../../flowchart/components/graph-semantic-icon";
-import { GraphSemanticIcon } from "../../flowchart/components/graph-semantic-icon";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
-import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 const RELATION_NODE_ACTIVE_CLASS =
   "hover:border-primary hover:bg-primary-container";
@@ -25,7 +21,6 @@ const RELATION_NODE_CLASS =
 function TraceRelationFactoryGraphNode({
   data,
 }: NodeProps<TraceRelationFlowNode>) {
-  const messages = getTraceDrilldownMessages(data.locale);
   const shellClassName = cn(
     RELATION_NODE_CLASS,
     relationNodeToneClassName(data.relationStates),
@@ -40,41 +35,7 @@ function TraceRelationFactoryGraphNode({
       }))}
       nodeType={relationShellNodeType(data.kind)}
     >
-      <div className="grid h-full min-w-0 content-start gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className="flex min-h-5 shrink-0 items-center"
-            data-factory-entity-semantic-icon
-            title={data.kindLabel}
-          >
-            <GraphSemanticIcon
-              className={cn("h-4 w-4", semanticIconClassName(data.kind))}
-              kind={semanticIconKind(data.kind)}
-              label={data.kindLabel}
-            />
-          </span>
-          <ActivityGraphNodeBadge weight="label">
-            {data.kindLabel}
-          </ActivityGraphNodeBadge>
-          {data.relationTypes.slice(0, 1).map((relationType) => (
-            <ActivityGraphNodeBadge
-              key={relationType}
-              tone="info"
-              weight="label"
-            >
-              {messages.localizeRelationType(relationType)}
-            </ActivityGraphNodeBadge>
-          ))}
-          {data.relationStates.slice(0, 1).map((relationState) => (
-            <ActivityGraphNodeBadge
-              key={relationState}
-              tone={relationStateToneClassName(relationState)}
-              weight="label"
-            >
-              {messages.localizeRelationState(relationState)}
-            </ActivityGraphNodeBadge>
-          ))}
-        </div>
+      <div className="grid h-full min-w-0 content-center">
         <DashboardText
           className={cn(
             "m-0 [overflow-wrap:anywhere]",
@@ -124,36 +85,6 @@ function relationShellNodeType(
       return "resource";
     case "worker":
       return "worker";
-  }
-}
-
-function semanticIconKind(kind: FactoryGraphNodeKind): GraphSemanticIconKind {
-  switch (kind) {
-    case "resource":
-      return "resource";
-    case "worker":
-      return "active-work";
-    case "workstation":
-      return "workstation";
-    case "work-type":
-      return "constraint";
-    case "work-state":
-      return "queue";
-  }
-}
-
-function semanticIconClassName(kind: FactoryGraphNodeKind): string {
-  switch (kind) {
-    case "resource":
-      return "text-success";
-    case "worker":
-      return "text-info";
-    case "workstation":
-      return "text-on-surface";
-    case "work-type":
-      return "text-info";
-    case "work-state":
-      return "text-on-surface-variant";
   }
 }
 
