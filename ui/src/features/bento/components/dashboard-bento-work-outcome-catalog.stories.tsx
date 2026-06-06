@@ -1,12 +1,13 @@
-import { expect, within } from "storybook/test";
+import { expect, waitFor, within } from "storybook/test";
 
 import "../../../styles.css";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
-} from "../../work-outcome/lib/work-chart-legend-story-contract";
-import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-story-contract";
+} from "../../work-outcome/lib/work-chart-legend-contract";
+import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-contract";
+import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
@@ -22,6 +23,22 @@ export default {
   title: "you-agent-factory/Dashboard/Bento Cards",
   tags: ["test"],
 };
+
+async function expectWorkOutcomeChartLegendAndAxisContract(
+  card: HTMLElement,
+  chart: HTMLElement,
+): Promise<void> {
+  const chartMessages = getWorkOutcomeMessages().chart;
+
+  await waitFor(() => {
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart, {
+      xAxisLabel: chartMessages.xAxisLabel,
+      yAxisLabel: chartMessages.yAxisLabel,
+    });
+    expectWorkChartLegendClearOfCardTitle(card);
+  });
+}
 
 export const WorkOutcomeChart = {
   render: () =>
@@ -46,13 +63,15 @@ export const WorkOutcomeChart = {
     const chart = within(card).getByRole("img", {
       name: "Work outcome chart for Session",
     });
+    const chartMessages = getWorkOutcomeMessages().chart;
 
     await expect(chart).toBeVisible();
     expectBentoHeaderDragSurface(card, "Work outcome chart");
-    expectSingleWorkOutcomeCardHeader(card);
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
-    expectWorkChartLegendClearOfCardTitle(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
+    await expectWorkOutcomeChartLegendAndAxisContract(card, chart);
   },
 };
 
@@ -80,11 +99,13 @@ export const WorkOutcomeChartNarrow = {
     const chart = within(card).getByRole("img", {
       name: "Work outcome chart for Session",
     });
+    const chartMessages = getWorkOutcomeMessages().chart;
 
-    expectSingleWorkOutcomeCardHeader(card);
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
-    expectWorkChartLegendClearOfCardTitle(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
+    await expectWorkOutcomeChartLegendAndAxisContract(card, chart);
 
     const frame = canvasElement.firstElementChild;
     if (!(frame instanceof HTMLElement)) {
@@ -111,7 +132,11 @@ export const WorkOutcomeChartLoading = {
     await expect(await within(card).findByRole("status")).toHaveTextContent(
       "Loading work outcome samples",
     );
-    expectSingleWorkOutcomeCardHeader(card);
+    const chartMessages = getWorkOutcomeMessages().chart;
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -130,7 +155,11 @@ export const WorkOutcomeChartEmpty = {
     await expect(await within(card).findByRole("status")).toHaveTextContent(
       "No work outcome samples",
     );
-    expectSingleWorkOutcomeCardHeader(card);
+    const chartMessages = getWorkOutcomeMessages().chart;
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -150,6 +179,10 @@ export const WorkOutcomeChartError = {
     await expect(await within(card).findByRole("alert")).toHaveTextContent(
       "Work outcome chart unavailable",
     );
-    expectSingleWorkOutcomeCardHeader(card);
+    const chartMessages = getWorkOutcomeMessages().chart;
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };

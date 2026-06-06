@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import "../../../styles.css";
 import {
@@ -11,9 +11,10 @@ import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
-} from "../lib/work-chart-legend-story-contract";
+} from "../lib/work-chart-legend-contract";
 import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
-import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-story-contract";
+import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-contract";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
 import { WorkOutcomeWidget } from "./work-outcome-widget";
@@ -155,14 +156,13 @@ const RESIZABLE_WORK_OUTCOME_LAYOUT: AgentBentoLayoutItem[] = [
 
 async function expectWorkOutcomeChartContract(
   card: HTMLElement,
+  locale?: string,
 ): Promise<void> {
+  const chartMessages = getWorkOutcomeMessages(locale).chart;
   const chart = within(card).getByRole("img", {
-    name: "Work outcome chart for 15m",
+    name: chartMessages.ariaLabel("15m"),
   });
 
-  expect(chart).toBeVisible();
-  expect(within(card).getByText("Ticks")).toBeVisible();
-  expect(within(card).getByText("Work count")).toBeVisible();
   expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
   expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe("10,20,40");
   expect(chart.getAttribute("data-chart-presentation")).toBe("embedded");
@@ -179,21 +179,34 @@ async function expectWorkOutcomeChartContract(
   expect(overlay?.className).toContain("px-0");
   expect(overlay?.className).toContain("pb-3");
   expect(overlay?.className).toContain("pt-0");
-  const responsiveContainer = chart.querySelector<HTMLElement>(
-    ".recharts-responsive-container",
-  );
-  const svg = chart.querySelector<SVGElement>("svg");
+  expectSingleWorkOutcomeCardHeader(card, {
+    cardRegionLabel: chartMessages.cardRegionLabel,
+    cardTitle: chartMessages.cardTitle,
+  });
+  await waitFor(() => {
+    const responsiveContainer = chart.querySelector<HTMLElement>(
+      ".recharts-responsive-container",
+    );
+    const svg = chart.querySelector<SVGElement>("svg");
 
-  expect(responsiveContainer).not.toBeNull();
-  expect(svg).not.toBeNull();
-  expect(
-    (responsiveContainer?.getBoundingClientRect().height ?? 0) > 0,
-  ).toBe(true);
-  expect((svg?.getBoundingClientRect().height ?? 0) > 0).toBe(true);
-  expectSingleWorkOutcomeCardHeader(card);
-  expectWorkChartCompactLegendContract(chart);
-  expectWorkChartAxisLabelsVisible(chart);
-  expectWorkChartLegendClearOfCardTitle(card);
+    expect(chart).toBeVisible();
+    expect(within(card).getByText(chartMessages.xAxisLabel)).toBeVisible();
+    expect(
+      within(overlay as HTMLElement).getByText(chartMessages.yAxisLabel),
+    ).toBeVisible();
+    expect(responsiveContainer).not.toBeNull();
+    expect(svg).not.toBeNull();
+    expect((responsiveContainer?.getBoundingClientRect().height ?? 0) > 0).toBe(
+      true,
+    );
+    expect((svg?.getBoundingClientRect().height ?? 0) > 0).toBe(true);
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart, {
+      xAxisLabel: chartMessages.xAxisLabel,
+      yAxisLabel: chartMessages.yAxisLabel,
+    });
+    expectWorkChartLegendClearOfCardTitle(card);
+  });
 }
 
 function expectNoOverflowInStoryShell(canvasElement: HTMLElement): void {
@@ -375,8 +388,12 @@ export const EmptyData = {
     });
 
     const emptyState = within(card).getByRole("status");
+    const chartMessages = getWorkOutcomeMessages().chart;
     expectCenteredStatusPanel(emptyState);
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -400,8 +417,12 @@ export const LoadingData = {
     });
 
     const loadingState = within(card).getByRole("status");
+    const chartMessages = getWorkOutcomeMessages().chart;
     expectCenteredStatusPanel(loadingState);
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
@@ -426,8 +447,12 @@ export const ErrorState = {
     });
 
     const alert = within(card).getByRole("alert");
+    const chartMessages = getWorkOutcomeMessages().chart;
     expectCenteredStatusPanel(alert);
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
@@ -469,14 +494,30 @@ export const LocalizedZhCN = {
     }),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
+    const chartMessages = getWorkOutcomeMessages("zh-CN").chart;
     const card = await canvas.findByRole("article", { name: "工作结果图表" });
     const chart = within(card).getByRole("img", { name: "15m 的工作结果图表" });
 
     await expect(chart).toBeVisible();
-    await expect(within(card).getByText("刻度")).toBeVisible();
-    await expect(within(card).getByText("工作计数")).toBeVisible();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
-    expectSingleWorkOutcomeCardHeader(card, { locale: "zh-CN" });
+    await waitFor(() => {
+      const overlay = chart.querySelector<HTMLElement>(
+        "[data-work-chart-overlay='true']",
+      );
+
+      expect(within(card).getByText("刻度")).toBeVisible();
+      expect(
+        within(overlay as HTMLElement).getByText("工作计数"),
+      ).toBeVisible();
+      expectWorkChartAxisLabelsVisible(chart, {
+        xAxisLabel: chartMessages.xAxisLabel,
+        yAxisLabel: chartMessages.yAxisLabel,
+      });
+    });
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -499,9 +540,15 @@ export const ZoomInteraction = {
     const chart = within(card).getByRole("img", {
       name: "Work outcome chart for 15m",
     });
+    const chartMessages = getWorkOutcomeMessages().chart;
 
-    expectSingleWorkOutcomeCardHeader(card);
-    expectWorkChartCompactLegendContract(chart);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
+    await waitFor(() => {
+      expectWorkChartCompactLegendContract(chart);
+    });
     expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
       "10,20,40",
     );
