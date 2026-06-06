@@ -372,6 +372,75 @@ func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t
 	assertEventTimeUTCJSON(t, events[0], "2026-04-22T16:30:00Z")
 }
 
+func TestFactoryEventHistory_RecordWorkstationRequest_UsesFactoryRunnerOverrideMetadata(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+		eventHistoryRuntimeConfig{
+			Factory: &interfaces.FactoryConfig{Runner: "codex"},
+		},
+	)
+	history.SetFactoryRunnerOverride("  gemini  ")
+
+	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDGemini {
+		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDGemini)
+	}
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceFactory) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceFactory)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationRequest_UsesSharedFactoryConfigRunnerMetadata(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+		eventHistoryRuntimeConfig{
+			Factory: &interfaces.FactoryConfig{Runner: "  opencode  "},
+		},
+	)
+
+	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDOpenCode {
+		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDOpenCode)
+	}
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceFactory) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceFactory)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationRequest_DefaultsRunnerMetadataWithoutFactoryConfigCapability(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+		eventHistoryDefinitionOnlyRuntimeConfig{},
+	)
+
+	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDCodex {
+		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDCodex)
+	}
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceDefault) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceDefault)
+	}
+}
+
+func TestFactoryEventHistory_RecordWorkstationRequest_DefaultsRunnerMetadataWhenFactoryConfigNil(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+		eventHistoryRuntimeConfig{},
+	)
+
+	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
+	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDCodex {
+		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDCodex)
+	}
+	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceDefault) {
+		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceDefault)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailureDetails(t *testing.T) {
 	eventTime := time.Date(2026, 4, 17, 9, 30, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
@@ -756,6 +825,50 @@ func TestFailureDetailsForResult_FailedWithoutDetailsUsesUnavailableMessage(t *t
 }
 
 type eventHistoryRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
+
+type eventHistoryDefinitionOnlyRuntimeConfig struct {
+	Workers      map[string]*interfaces.WorkerConfig
+	Workstations map[string]*interfaces.FactoryWorkstationConfig
+}
+
+func (c eventHistoryDefinitionOnlyRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+	worker, ok := c.Workers[name]
+	return worker, ok
+}
+
+func (c eventHistoryDefinitionOnlyRuntimeConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := c.Workstations[name]
+	return workstation, ok
+}
+
+func dispatchRequestMetadataForEventHistoryTest(t *testing.T, history *FactoryEventHistory) *factoryapi.DispatchRequestEventMetadata {
+	t.Helper()
+	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
+		DispatchID: "dispatch-runner",
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID:      "dispatch-runner",
+			TransitionID:    "build",
+			WorkerType:      "builder",
+			WorkstationName: "Build",
+			Execution: interfaces.ExecutionMetadata{
+				ReplayKey: "replay-runner",
+			},
+		},
+	}, time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC))
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchRequestEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch request payload: %v", err)
+	}
+	if payload.Metadata == nil {
+		t.Fatal("metadata = nil, want dispatch metadata")
+	}
+	return payload.Metadata
+}
 
 func eventHistoryProjectionNet() *state.Net {
 	return &state.Net{

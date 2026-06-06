@@ -24,11 +24,18 @@ type RuntimeDefinitionLookup interface {
 	Worker(name string) (*WorkerConfig, bool)
 }
 
+// RuntimeFactoryConfigLookup resolves the effective runtime factory config when
+// a consumer needs optional access to factory-level settings.
+type RuntimeFactoryConfigLookup interface {
+	FactoryConfig() *FactoryConfig
+}
+
 // RuntimeConfigLookup exposes the canonical public runtime-facing lookup
 // contract for consumers that need runtime definitions plus path-aware
 // execution lookups.
 type RuntimeConfigLookup interface {
 	RuntimeDefinitionLookup
+	RuntimeFactoryConfigLookup
 	FactoryDir() string
 	RuntimeBaseDir() string
 }
@@ -46,6 +53,12 @@ func firstNonNilLookup[T comparable](lookups ...T) T {
 // FirstRuntimeDefinitionLookup returns the first non-nil runtime definition
 // lookup from the provided candidates.
 func FirstRuntimeDefinitionLookup(lookups ...RuntimeDefinitionLookup) RuntimeDefinitionLookup {
+	return firstNonNilLookup(lookups...)
+}
+
+// FirstRuntimeFactoryConfigLookup returns the first non-nil runtime factory
+// config lookup from the provided candidates.
+func FirstRuntimeFactoryConfigLookup(lookups ...RuntimeFactoryConfigLookup) RuntimeFactoryConfigLookup {
 	return firstNonNilLookup(lookups...)
 }
 

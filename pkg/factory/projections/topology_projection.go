@@ -33,10 +33,7 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 }
 
 func runtimeFactoryName(runtimeConfig interfaces.RuntimeDefinitionLookup) string {
-	type factoryConfigReader interface {
-		FactoryConfig() *interfaces.FactoryConfig
-	}
-	reader, ok := runtimeConfig.(factoryConfigReader)
+	reader, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
 	if !ok || reader.FactoryConfig() == nil {
 		return ""
 	}

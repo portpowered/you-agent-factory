@@ -24,6 +24,7 @@ type RuntimeDefinitionLookupFixture struct {
 }
 
 var _ interfaces.RuntimeDefinitionLookup = RuntimeDefinitionLookupFixture{}
+var _ interfaces.RuntimeFactoryConfigLookup = RuntimeDefinitionLookupFixture{}
 
 func (f RuntimeDefinitionLookupFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
 	worker, ok := f.Workers[name]
@@ -50,6 +51,7 @@ type RuntimeConfigLookupFixture struct {
 }
 
 var _ interfaces.RuntimeConfigLookup = RuntimeConfigLookupFixture{}
+var _ interfaces.RuntimeFactoryConfigLookup = RuntimeConfigLookupFixture{}
 
 func (f RuntimeConfigLookupFixture) FactoryDir() string {
 	return f.FactoryPath

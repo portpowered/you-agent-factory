@@ -40,8 +40,8 @@ All previously inventoried generic lookup doubles now route through `pkg/testuti
 That means the shared helper can stay narrow:
 
 - a workstation-only fixture for `Workstation(name)`
-- a definition fixture for `Worker(name)` plus `Workstation(name)`
-- a full runtime-config fixture for `FactoryDir()`, `RuntimeBaseDir()`, `Worker(name)`, and `Workstation(name)`
+- a definition fixture for `Worker(name)` plus `Workstation(name)`, while also satisfying the optional `interfaces.RuntimeFactoryConfigLookup` seam when a test needs `FactoryConfig()`
+- a full runtime-config fixture for `FactoryDir()`, `RuntimeBaseDir()`, `Worker(name)`, and `Workstation(name)`, while also satisfying the optional `interfaces.RuntimeFactoryConfigLookup` seam when a test needs `FactoryConfig()`
 
 ## Initial Migration Targets
 

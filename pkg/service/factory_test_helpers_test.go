@@ -557,6 +557,7 @@ func configFixtureWithWorkerAndWorkstation(workerName, workstationName string, w
 type configRuntimeFixture struct {
 	workers      map[string]*interfaces.WorkerConfig
 	workstations map[string]*interfaces.FactoryWorkstationConfig
+	factory      *interfaces.FactoryConfig
 }
 
 func (f configRuntimeFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
@@ -567,6 +568,10 @@ func (f configRuntimeFixture) Worker(name string) (*interfaces.WorkerConfig, boo
 func (f configRuntimeFixture) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
 	workstation, ok := f.workstations[name]
 	return workstation, ok
+}
+
+func (f configRuntimeFixture) FactoryConfig() *interfaces.FactoryConfig {
+	return f.factory
 }
 
 func (configRuntimeFixture) FactoryDir() string     { return "" }

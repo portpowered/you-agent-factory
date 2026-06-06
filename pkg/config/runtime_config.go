@@ -21,6 +21,7 @@ type LoadedFactoryConfig struct {
 }
 
 var _ interfaces.RuntimeConfigLookup = (*LoadedFactoryConfig)(nil)
+var _ interfaces.RuntimeFactoryConfigLookup = (*LoadedFactoryConfig)(nil)
 
 // NewLoadedFactoryConfig builds the effective runtime configuration from a
 // canonical factory config plus optional runtime-loaded definitions.
