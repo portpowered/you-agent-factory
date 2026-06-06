@@ -5,11 +5,6 @@
     "name": "scripts/summarize-warning-inventory.mjs"
   },
   {
-    "file": "src/features/factory-graph-editor/lib/factory-graph-operations.ts",
-    "kind": "export",
-    "name": "validateFactoryGraphState"
-  },
-  {
     "file": "src/features/factory-graph-editor/lib/factory-graph-react-flow-projection.ts",
     "kind": "export",
     "name": "emptyFactoryGraphReactFlowEditorOverlay"
