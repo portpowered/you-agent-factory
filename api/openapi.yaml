@@ -3853,6 +3853,9 @@ components:
         - name
         - states
       properties:
+        id:
+          type: string
+          description: Optional durable public identifier for this work type. When present, graph and layout references should use this id instead of the mutable name.
         name:
           type: string
           description: Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
@@ -3874,6 +3877,9 @@ components:
         - name
         - type
       properties:
+        id:
+          type: string
+          description: Optional durable public identifier for this state within its work type. When present, graph and layout references should use this id instead of the mutable name.
         name:
           type: string
           description: Customer-authored state name referenced by workstation inputs and outputs.
@@ -3906,6 +3912,9 @@ components:
         - name
         - capacity
       properties:
+        id:
+          type: string
+          description: Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name.
         name:
           type: string
           description: Resource name referenced from worker requirements and workstation resourceUsage entries.
@@ -3950,6 +3959,9 @@ components:
       required:
         - name
       properties:
+        id:
+          type: string
+          description: Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
         name:
           type: string
           description: Worker name referenced by Workstation.worker.
@@ -4175,7 +4187,7 @@ components:
       properties:
         id:
           type: string
-          description: Optional stable identifier for this workstation in serialized runtime and replay payloads.
+          description: Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name.
         name:
           type: string
           description: Customer-authored workstation name used by guards, diagnostics, and authored references.

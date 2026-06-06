@@ -90,11 +90,13 @@ func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.Work
 		states := make([]interfaces.StateConfig, len(workType.States))
 		for si, state := range workType.States {
 			states[si] = interfaces.StateConfig{
+				ID:   stringValue(state.Id),
 				Name: state.Name,
 				Type: interfaces.StateType(state.Type),
 			}
 		}
 		values[i] = interfaces.WorkTypeConfig{
+			ID:               stringValue(workType.Id),
 			Name:             workType.Name,
 			States:           states,
 			HandlingBehavior: workTypeHandlingBehaviorInternalFromAPI(workType.HandlingBehavior),
@@ -107,6 +109,7 @@ func resourcesInternalFromAPI(resources []factoryapi.Resource) []interfaces.Reso
 	values := make([]interfaces.ResourceConfig, len(resources))
 	for i, resource := range resources {
 		values[i] = interfaces.ResourceConfig{
+			ID:         stringValue(resource.Id),
 			Name:       resource.Name,
 			Type:       internalFactoryResourceTypeFromPublic(enumStringValue(resource.Type)),
 			Capacity:   resource.Capacity,
@@ -182,6 +185,7 @@ func workersInternalFromAPI(workers []factoryapi.Worker) ([]interfaces.WorkerCon
 
 func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 	return interfaces.WorkerConfig{
+		ID:               stringValue(worker.Id),
 		Name:             worker.Name,
 		Type:             internalFactoryWorkerTypeFromPublic(valueOrEmpty(worker.Type)),
 		Provider:         internalFactoryHostedWorkerProviderFromPublic(string(valueOrEmpty(worker.Provider))),
@@ -878,4 +882,3 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 		return interfaces.GuardType(strings.TrimSpace(string(value)))
 	}
 }
-

@@ -1906,6 +1906,8 @@ export interface components {
     InputKind: InputKind;
     /** @description A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy. */
     WorkType: {
+      /** @description Optional durable public identifier for this work type. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Customer-authored work type name referenced by workstation inputs, outputs, and submitted work. */
       name: string;
       /** @description Lifecycle states available for work items of this type. */
@@ -1915,6 +1917,8 @@ export interface components {
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
+      /** @description Optional durable public identifier for this state within its work type. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Customer-authored state name referenced by workstation inputs and outputs. */
       name: string;
       /** @description Lifecycle category for this state, such as initial, processing, terminal, or failed. */
@@ -1927,6 +1931,8 @@ export interface components {
     WorkStateType: WorkStateType;
     /** @description Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas. */
     Resource: {
+      /** @description Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Resource name referenced from worker requirements and workstation resourceUsage entries. */
       name: string;
       /** @description Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`. */
@@ -1949,6 +1955,8 @@ export interface components {
     ResourceType: ResourceType;
     /** @description A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script. */
     Worker: {
+      /** @description Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Worker name referenced by Workstation.worker. */
       name: string;
       /** @description Worker implementation family to instantiate for this definition. */
@@ -2040,7 +2048,7 @@ export interface components {
     RunnerSelectionSource: RunnerSelectionSource;
     /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
     Workstation: {
-      /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */
+      /** @description Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name. */
       id?: string;
       /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
       name: string;

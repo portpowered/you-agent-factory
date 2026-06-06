@@ -1918,6 +1918,9 @@ type Resource struct {
 	// Capacity Total units of this resource available to the factory at one time.
 	Capacity int `json:"capacity"`
 
+	// Id Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name.
+	Id *string `json:"id,omitempty"`
+
 	// LoadPolicy Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
 	LoadPolicy *string `json:"loadPolicy,omitempty"`
 
@@ -2575,6 +2578,9 @@ type WorkRequestType string
 
 // WorkState A lifecycle state that a work item can occupy inside one work type.
 type WorkState struct {
+	// Id Optional durable public identifier for this state within its work type. When present, graph and layout references should use this id instead of the mutable name.
+	Id *string `json:"id,omitempty"`
+
 	// Name Customer-authored state name referenced by workstation inputs and outputs.
 	Name string `json:"name"`
 
@@ -2644,6 +2650,9 @@ type WorkType struct {
 	// HandlingBehavior Optional CLI routing markers for this work type. Factories used with you run --factory must declare handlingBehavior DEFAULT on exactly one work type.
 	HandlingBehavior *[]WorkTypeHandlingBehavior `json:"handlingBehavior,omitempty"`
 
+	// Id Optional durable public identifier for this work type. When present, graph and layout references should use this id instead of the mutable name.
+	Id *string `json:"id,omitempty"`
+
 	// Name Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
 	Name string `json:"name"`
 
@@ -2670,6 +2679,9 @@ type Worker struct {
 
 	// ExecutorProvider Concrete worker-provider wrappers supported by the public factory-config contract.
 	ExecutorProvider *WorkerProvider `json:"executorProvider,omitempty"`
+
+	// Id Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
+	Id *string `json:"id,omitempty"`
 
 	// Linear Provider-specific poller configuration for the built-in hosted Linear worker.
 	Linear *HostedLinearWorkerConfig `json:"linear,omitempty"`
@@ -2744,7 +2756,7 @@ type Workstation struct {
 	// Guards Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
 	Guards *[]Guard `json:"guards,omitempty"`
 
-	// Id Optional stable identifier for this workstation in serialized runtime and replay payloads.
+	// Id Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name.
 	Id *string `json:"id,omitempty"`
 
 	// Inputs Work states this workstation can consume before it dispatches.

@@ -44,6 +44,109 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 	assertCanonicalWorkstationSchema(t, cfg)
 }
 
+func TestFactoryConfigFromOpenAPIJSON_MapsOptionalGraphableEntityIDs(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"stable-id-factory",
+		"workTypes": [
+			{"id":"work-type-story","name":"story","states":[
+				{"id":"state-ready","name":"ready","type":"INITIAL"},
+				{"id":"state-done","name":"done","type":"TERMINAL"}
+			]}
+		],
+		"resources": [{"id":"resource-agent-slot","name":"agent-slot","capacity":2}],
+		"workers": [{"id":"worker-executor","name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"workstation-execute-story",
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"ready"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	if cfg.WorkTypes[0].ID != "work-type-story" {
+		t.Fatalf("work type id = %q", cfg.WorkTypes[0].ID)
+	}
+	if cfg.WorkTypes[0].States[0].ID != "state-ready" {
+		t.Fatalf("work state id = %q", cfg.WorkTypes[0].States[0].ID)
+	}
+	if cfg.Resources[0].ID != "resource-agent-slot" {
+		t.Fatalf("resource id = %q", cfg.Resources[0].ID)
+	}
+	if cfg.Workers[0].ID != "worker-executor" {
+		t.Fatalf("worker id = %q", cfg.Workers[0].ID)
+	}
+
+	public := FactoryConfigToOpenAPI(cfg)
+	if public.WorkTypes == nil || (*public.WorkTypes)[0].Id == nil || *(*public.WorkTypes)[0].Id != "work-type-story" {
+		t.Fatalf("public work type id = %#v", public.WorkTypes)
+	}
+	if (*public.WorkTypes)[0].States[0].Id == nil || *(*public.WorkTypes)[0].States[0].Id != "state-ready" {
+		t.Fatalf("public work state id = %#v", (*public.WorkTypes)[0].States[0].Id)
+	}
+	if public.Resources == nil || (*public.Resources)[0].Id == nil || *(*public.Resources)[0].Id != "resource-agent-slot" {
+		t.Fatalf("public resource id = %#v", public.Resources)
+	}
+	if public.Workers == nil || (*public.Workers)[0].Id == nil || *(*public.Workers)[0].Id != "worker-executor" {
+		t.Fatalf("public worker id = %#v", public.Workers)
+	}
+
+	canonical, err := MarshalCanonicalFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		t.Fatalf("unmarshal canonical config: %v", err)
+	}
+	workType := decoded["workTypes"].([]any)[0].(map[string]any)
+	if workType["id"] != "work-type-story" {
+		t.Fatalf("canonical work type id = %#v", workType["id"])
+	}
+	state := workType["states"].([]any)[0].(map[string]any)
+	if state["id"] != "state-ready" {
+		t.Fatalf("canonical work state id = %#v", state["id"])
+	}
+	resource := decoded["resources"].([]any)[0].(map[string]any)
+	if resource["id"] != "resource-agent-slot" {
+		t.Fatalf("canonical resource id = %#v", resource["id"])
+	}
+	worker := decoded["workers"].([]any)[0].(map[string]any)
+	if worker["id"] != "worker-executor" {
+		t.Fatalf("canonical worker id = %#v", worker["id"])
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_AllowsLegacyNameKeyedGraphableEntities(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"legacy-name-keyed-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],
+		"resources": [{"name":"agent-slot","capacity":2}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"workstation-execute-story",
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"ready"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	if cfg.WorkTypes[0].ID != "" || cfg.WorkTypes[0].States[0].ID != "" || cfg.Resources[0].ID != "" || cfg.Workers[0].ID != "" {
+		t.Fatalf("legacy ids should remain empty, got workType=%q state=%q resource=%q worker=%q", cfg.WorkTypes[0].ID, cfg.WorkTypes[0].States[0].ID, cfg.Resources[0].ID, cfg.Workers[0].ID)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"cron-factory",

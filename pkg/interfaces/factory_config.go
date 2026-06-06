@@ -165,13 +165,15 @@ const (
 const WorkTypeHandlingBehaviorDefault = "DEFAULT"
 
 type WorkTypeConfig struct {
-	Name              string   `json:"name"`
-	States            []StateConfig `json:"states"`
-	HandlingBehavior  []string `json:"handlingBehavior,omitempty"`
+	ID               string        `json:"id,omitempty" yaml:"id,omitempty"`
+	Name             string        `json:"name"`
+	States           []StateConfig `json:"states"`
+	HandlingBehavior []string      `json:"handlingBehavior,omitempty"`
 }
 
 // StateConfig declares a state within a work type.
 type StateConfig struct {
+	ID   string    `json:"id,omitempty" yaml:"id,omitempty"`
 	Name string    `json:"name"`
 	Type StateType `json:"type"`
 }
@@ -186,6 +188,7 @@ const (
 )
 
 type ResourceConfig struct {
+	ID         string `json:"id,omitempty" yaml:"id,omitempty"`
 	Name       string `json:"name"`
 	Type       string `json:"type,omitempty"`
 	Capacity   int    `json:"capacity"`
@@ -259,7 +262,8 @@ type WorkflowConfig struct {
 	Paths []TransitionConfig `json:"transitions"`
 }
 
-// FactoryWorkstationConfig is the factory.json workstation topology entry.
+// FactoryWorkstationConfig is the factory.json workstation topology entry. ID is
+// the durable public workstation identifier for graph and layout references.
 // It also carries flattened runtime workstation fields when factory.json embeds
 // AGENTS.md-equivalent workstation configuration directly.
 type FactoryWorkstationConfig struct {
@@ -453,6 +457,7 @@ type ResolvedModelOperationBinding struct {
 // WorkerConfig is the canonical worker configuration used by factory.json,
 // worker AGENTS.md frontmatter, and loaded runtime config.
 type WorkerConfig struct {
+	ID               string                    `json:"id,omitempty" yaml:"id,omitempty"`
 	Name             string                    `json:"name" yaml:"name,omitempty"`
 	Type             string                    `json:"type" yaml:"type"`
 	Provider         string                    `json:"provider,omitempty" yaml:"provider,omitempty"`

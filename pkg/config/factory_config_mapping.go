@@ -191,11 +191,13 @@ func workTypesAPIFromInternal(workTypes []interfaces.WorkTypeConfig) *[]factorya
 		states := make([]factoryapi.WorkState, len(workType.States))
 		for stateIndex, state := range workType.States {
 			states[stateIndex] = factoryapi.WorkState{
+				Id:   stringPtrIfNotEmpty(state.ID),
 				Name: state.Name,
 				Type: factoryapi.WorkStateType(state.Type),
 			}
 		}
 		result[i] = factoryapi.WorkType{
+			Id:               stringPtrIfNotEmpty(workType.ID),
 			Name:             workType.Name,
 			States:           states,
 			HandlingBehavior: workTypeHandlingBehaviorAPIFromInternal(workType.HandlingBehavior),
@@ -211,6 +213,7 @@ func resourcesAPIFromInternal(resources []interfaces.ResourceConfig) *[]factorya
 	result := make([]factoryapi.Resource, len(resources))
 	for i, resource := range resources {
 		result[i] = factoryapi.Resource{
+			Id:         stringPtrIfNotEmpty(resource.ID),
 			Name:       resource.Name,
 			Type:       resourceTypePtrIfNotEmpty(resource.Type),
 			Capacity:   resource.Capacity,
@@ -448,6 +451,7 @@ func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.W
 		return nil
 	}
 	return &factoryapi.Worker{
+		Id:               stringPtrIfNotEmpty(def.ID),
 		Type:             workerTypePtrIfNotEmpty(def.Type),
 		Provider:         hostedWorkerProviderPtrIfNotEmpty(def.Provider),
 		Name:             def.Name,
