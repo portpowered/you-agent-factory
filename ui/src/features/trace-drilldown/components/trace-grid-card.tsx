@@ -38,7 +38,6 @@ import {
   DashboardEmptyStateTitle,
   DashboardWidgetFrame,
 } from "../../../components/ui/widget-frame";
-import { cn } from "../../../lib/cn";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
@@ -74,9 +73,9 @@ export function TraceGridBentoCard({
   return (
     <DashboardWidgetFrame
       bodyProps={
-        { "data-trace-card-scroll": "" } as HTMLAttributes<HTMLDivElement>
+        { "data-trace-card-body": "" } as HTMLAttributes<HTMLDivElement>
       }
-      className={cn("h-full min-h-0 overflow-hidden", className)}
+      className={className}
       headerAction={headerAction}
       title={title ?? messages.title}
       wide

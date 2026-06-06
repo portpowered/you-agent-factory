@@ -1,4 +1,4 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import type { Layout, LayoutItem } from "react-grid-layout";
 import { GridLayout, useContainerWidth } from "react-grid-layout";
@@ -49,6 +49,7 @@ export interface AgentBentoCardProps {
   className?: string;
   chromeDensity?: "compact" | "default";
   headerAction?: ReactNode;
+  style?: CSSProperties;
   title: string;
 }
 
@@ -304,6 +305,7 @@ export function AgentBentoCard({
   className = "",
   chromeDensity = "default",
   headerAction,
+  style,
   title,
 }: AgentBentoCardProps) {
   const cardClassName = cn(
@@ -344,6 +346,7 @@ export function AgentBentoCard({
       as="article"
       className={cardClassName}
       shellKind="grid-card"
+      style={style}
     >
       <AgentBentoCardHeader
         chromeDensity={chromeDensity}

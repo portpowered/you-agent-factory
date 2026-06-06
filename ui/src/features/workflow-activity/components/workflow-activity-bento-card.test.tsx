@@ -245,16 +245,38 @@ describe("WorkflowActivityBentoCard", () => {
     const viewport = await screen.findByRole("region", {
       name: messages.viewportLabel,
     });
+    const graphCard = screen.getByRole("article", {
+      name: messages.widgetTitle,
+    });
+    const graphBody = graphCard.querySelector(
+      "[data-workflow-activity-graph-body]",
+    );
     const workflowSection = viewport.closest<HTMLElement>(
       "section[aria-labelledby]",
     );
     const graphPanelShell = workflowSection?.parentElement;
 
+    expect(graphCard.className).toContain("h-full");
+    expect(graphCard.className).toContain("max-h-full");
+    expect(graphCard.className).toContain("min-h-0");
+    expect(graphCard.className).toContain("overflow-hidden");
+    expect(graphCard.style.height).toBe("100%");
+    expect(graphCard.style.maxHeight).toBe("100%");
+    expect(graphCard.style.overflow).toBe("hidden");
+    expect(graphBody?.className).toContain("h-full");
+    expect(graphBody?.className).toContain("max-h-full");
+    expect(graphBody?.className).toContain("min-h-0");
+    expect(graphBody?.className).toContain("overflow-hidden");
+    expect((graphBody as HTMLElement | null)?.style.height).toBe("100%");
+    expect((graphBody as HTMLElement | null)?.style.maxHeight).toBe("100%");
+    expect((graphBody as HTMLElement | null)?.style.overflow).toBe("hidden");
     expect(graphPanelShell?.tagName).toBe("SECTION");
     expect(graphPanelShell?.className).toContain("relative");
     expect(graphPanelShell?.className).toContain("h-full");
+    expect(graphPanelShell?.className).toContain("max-h-full");
     expect(graphPanelShell?.className).toContain("min-h-0");
     expect(graphPanelShell?.className).toContain("min-w-0");
+    expect(graphPanelShell?.className).toContain("overflow-hidden");
   });
 
   it("wraps the React Flow graph without a floating inspector", async () => {

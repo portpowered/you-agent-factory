@@ -139,7 +139,8 @@ export function ReactFlowCurrentActivityCardView(
     <GraphEditorPlacementProvider>
       <DashboardPanelShell
         aria-labelledby={headingID}
-        className="relative flex h-full min-h-0 min-w-0 flex-col"
+        className="relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden"
+        style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       >
         {showHeaderActions ? (
           <div className="mb-4">

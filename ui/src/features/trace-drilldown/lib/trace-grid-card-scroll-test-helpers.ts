@@ -40,18 +40,19 @@ export function expectNoVerticalScrollContainer(
   expect(style.overflowY).not.toBe("scroll");
 }
 
-export function expectAgentBentoScrollViewport(element: HTMLElement): void {
-  expect(element.hasAttribute("data-radix-scroll-area-viewport")).toBe(true);
+export function expectPageFlowCardBody(element: HTMLElement): void {
+  expect(element.hasAttribute("data-radix-scroll-area-viewport")).toBe(false);
+  expectNoVerticalScrollContainer(element);
 }
 
-export function findTraceCardScrollContainer(card: HTMLElement): HTMLElement {
-  const scrollContainer = card.querySelector("[data-trace-card-scroll]");
-  if (!(scrollContainer instanceof HTMLElement)) {
-    throw new Error("Expected trace card scroll container.");
+export function findTraceCardBody(card: HTMLElement): HTMLElement {
+  const cardBody = card.querySelector("[data-trace-card-body]");
+  if (!(cardBody instanceof HTMLElement)) {
+    throw new Error("Expected trace card body.");
   }
 
-  expectAgentBentoScrollViewport(scrollContainer);
-  return scrollContainer;
+  expectPageFlowCardBody(cardBody);
+  return cardBody;
 }
 
 export function findTraceDispatchTableRegion(card: HTMLElement): HTMLElement {
@@ -63,40 +64,18 @@ export function findTraceDispatchTableRegion(card: HTMLElement): HTMLElement {
   return tableRegion;
 }
 
-export function constrainTraceCardHeight(
-  card: HTMLElement,
-  heightPx: number,
-): HTMLElement {
-  Object.defineProperty(card, "clientHeight", {
-    configurable: true,
-    value: heightPx,
-  });
-  const scrollContainer = findTraceCardScrollContainer(card);
-  Object.defineProperty(scrollContainer, "clientHeight", {
-    configurable: true,
-    value: heightPx - 64,
-  });
-  Object.defineProperty(scrollContainer, "scrollHeight", {
-    configurable: true,
-    value: 2400,
-  });
-  scrollContainer.scrollTop = 0;
-  return scrollContainer;
-}
-
 export function expectNoVerticalScrollBetweenDispatchTableAndCardBody(
   card: HTMLElement,
 ): void {
-  const scrollContainer = findTraceCardScrollContainer(card);
+  const cardBody = findTraceCardBody(card);
   const tableRegion = findTraceDispatchTableRegion(card);
 
-  expectAgentBentoScrollViewport(scrollContainer);
-
   let current: Element | null = tableRegion;
-  while (current && current !== scrollContainer) {
+  while (current && current !== cardBody) {
     expectNoVerticalScrollContainer(current);
     current = current.parentElement;
   }
 
-  expect(current).toBe(scrollContainer);
+  expect(current).toBe(cardBody);
+  expectPageFlowCardBody(cardBody);
 }

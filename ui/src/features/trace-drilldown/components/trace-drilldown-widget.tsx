@@ -20,7 +20,7 @@ export function TraceDrilldownWidget({
   return (
     <TraceGridBentoCard
       // tailwind-exception: intrinsic-sizing
-      className="h-full min-h-[24rem]"
+      className="min-h-[24rem]"
       headerAction={headerAction}
       locale={locale}
       onSelectWorkID={onSelectWorkID}

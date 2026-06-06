@@ -3,9 +3,9 @@ import { type ReactNode, useState } from "react";
 
 import {
   Button,
+  DashboardIconButtonShell,
   DashboardLabel,
   DashboardText,
-  DashboardIconButtonShell,
   DashboardWidgetFrame,
   Input,
   Popover,
@@ -148,17 +148,18 @@ export function SubmitWorkCard({
       widgetId={widgetId}
     >
       <form
-        className="grid h-full min-h-0 content-start gap-3"
+        className="grid content-start gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
       >
-        <div className="grid min-h-0 content-start gap-4 overflow-y-auto pr-1">
+        <div
+          className="grid content-start gap-4"
+          data-submit-work-primary-content=""
+        >
           <div className="grid gap-2">
-            <label
-              htmlFor={requestNameID}
-            >
+            <label htmlFor={requestNameID}>
               <DashboardLabel>{messages.requestNameLabel}</DashboardLabel>
             </label>
             <Input

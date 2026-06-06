@@ -92,7 +92,10 @@ export function CurrentActivityGraphSurface({
   }
 
   return (
-    <div className="grid min-h-0 flex-1 gap-3">
+    <div
+      className="grid max-h-full min-h-0 flex-1 gap-3 overflow-hidden"
+      style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
+    >
       {showSaveFailureNotice ? (
         <FactoryGraphEditorNotice
           dismissLabel={messages.noticeDismissLabel}

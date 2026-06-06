@@ -2249,6 +2249,12 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(card?.className).toContain("relative");
     expect(card?.className).toContain("flex");
     expect(card?.className).toContain("h-full");
+    expect(card?.className).toContain("max-h-full");
+    expect(card?.className).toContain("min-h-0");
+    expect(card?.className).toContain("overflow-hidden");
+    expect((card as HTMLElement | null)?.style.height).toBe("100%");
+    expect((card as HTMLElement | null)?.style.maxHeight).toBe("100%");
+    expect((card as HTMLElement | null)?.style.overflow).toBe("hidden");
     expect(card?.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
@@ -2259,6 +2265,11 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(legend?.className).toContain("right-4");
     expect(legend?.className).toContain("top-4");
     expect(legend?.className).not.toMatch(PADDING_CLASS_PATTERN);
+    expect(viewport.className).toContain("max-h-full");
+    expect(viewport.className).toContain("overflow-hidden");
+    expect(viewport.style.height).toBe("100%");
+    expect(viewport.style.maxHeight).toBe("100%");
+    expect(viewport.style.overflow).toBe("hidden");
     expect(viewport.className).not.toMatch(PADDING_CLASS_PATTERN);
     expect(viewport.getAttribute("aria-describedby")).toMatch(
       /^workflow-graph-heading-/,
