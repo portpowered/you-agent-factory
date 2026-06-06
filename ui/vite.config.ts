@@ -129,7 +129,6 @@ export default defineConfig({
         "src/testing/app-shell-workflow-activity-stub.tsx",
         "src/testing/guarded-suite-console.setup.ts",
         "src/testing/replay-harness.ts",
-        "src/testing/warning-inventory-capture.setup.ts",
         "src/styles.css",
         "**/index.ts",
       ],
