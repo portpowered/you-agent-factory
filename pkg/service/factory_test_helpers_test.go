@@ -43,7 +43,7 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 	svc.registerLiveSession(defaultFactorySessionID, handle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}, true)
-	svc.setRunState(context.Background(), defaultFactorySessionID)
+	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
 }
 
 type recordingDiagnosticsProvider struct{}

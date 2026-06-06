@@ -1062,7 +1062,7 @@ func TestFactoryService_RequireIdleRuntime_TargetsActiveRunSession(t *testing.T)
 	svc.registerLiveSession("session-beta", betaHandle, FactorySessionTarget{
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindNamed, Name: "beta"},
 	}, false)
-	svc.setRunState(context.Background(), "session-beta")
+	svc.setRunState(context.Background(), "session-beta", betaHandle)
 
 	err := svc.requireIdleRuntime(context.Background())
 	if err == nil {

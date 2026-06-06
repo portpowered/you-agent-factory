@@ -20,14 +20,63 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
+// ModelService owns direct model catalog, pull, and invocation operations.
+// FactoryService keeps these methods only as a phase-one compatibility facade.
+type ModelService interface {
+	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
+	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
+	PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error)
+	InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error)
+}
+
+type modelServiceDependencies struct {
+	runtimeConfig           func() *factoryconfig.LoadedFactoryConfig
+	modelAssetPuller        func() modelAssetPuller
+	modelInvocationExecutor func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error)
+	factoryRunnerID         func() string
+}
+
+type runtimeModelService struct {
+	deps modelServiceDependencies
+}
+
+var _ ModelService = (*runtimeModelService)(nil)
+var _ apisurface.ModelAPI = (*runtimeModelService)(nil)
+
+func newModelService(deps modelServiceDependencies) ModelService {
+	return &runtimeModelService{deps: deps}
+}
+
+func newFactoryModelService(fs *FactoryService) ModelService {
+	if fs == nil {
+		return newModelService(modelServiceDependencies{})
+	}
+	return newModelService(modelServiceDependencies{
+		runtimeConfig:           fs.currentRuntimeConfig,
+		modelAssetPuller:        fs.modelAssetPuller,
+		modelInvocationExecutor: fs.modelInvocationExecutor,
+		factoryRunnerID:         fs.factoryRunnerID,
+	})
+}
+
+func (fs *FactoryService) requireModelService() ModelService {
+	if fs == nil {
+		return newFactoryModelService(nil)
+	}
+	fs.modelInitOnce.Do(func() {
+		if fs.modelService == nil {
+			fs.modelService = newFactoryModelService(fs)
+		}
+	})
+	return fs.modelService
+}
+
 func (fs *FactoryService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	_ = ctx
-	return localmodels.ListModels(fs.currentRuntimeConfig())
+	return fs.requireModelService().ListModels(ctx)
 }
 
 func (fs *FactoryService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	_ = ctx
-	return localmodels.GetModel(fs.currentRuntimeConfig(), modelName)
+	return fs.requireModelService().GetModel(ctx, modelName)
 }
 
 type modelAssetPuller = localmodels.AssetPuller
@@ -37,7 +86,7 @@ func newModelAssetPuller(cacheDir string) modelAssetPuller {
 }
 
 func (fs *FactoryService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	return localmodels.PullModel(fs.modelAssetPuller(), ctx, fs.currentRuntimeConfig(), modelName)
+	return fs.requireModelService().PullModel(ctx, modelName)
 }
 
 func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
@@ -58,7 +107,25 @@ func (fs *FactoryService) modelAssetPuller() modelAssetPuller {
 const directModelInvocationTransitionID = "direct-model-invocation"
 
 func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
-	runtimeCfg := fs.currentRuntimeConfig()
+	return fs.requireModelService().InvokeModel(ctx, modelName, request)
+}
+
+func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
+	_ = ctx
+	return localmodels.ListModels(s.currentRuntimeConfig())
+}
+
+func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	_ = ctx
+	return localmodels.GetModel(s.currentRuntimeConfig(), modelName)
+}
+
+func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
+	return localmodels.PullModel(s.modelAssetPuller(), ctx, s.currentRuntimeConfig(), modelName)
+}
+
+func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	runtimeCfg := s.currentRuntimeConfig()
 	if runtimeCfg == nil {
 		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory service runtime is not available")
 	}
@@ -71,7 +138,7 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
-	if err := fs.modelAssetPuller().EnsureModelAvailable(ctx, runtimeCfg, workerDef); err != nil {
+	if err := s.modelAssetPuller().EnsureModelAvailable(ctx, runtimeCfg, workerDef); err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
 
@@ -92,11 +159,11 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 		return apisurface.ModelInvocationResult{}, err
 	}
 
-	executor, err := fs.modelInvocationExecutor(runtimeCfg, factoryCfg, workerDef.Name)
+	executor, err := s.modelInvocationExecutor(runtimeCfg, factoryCfg, workerDef.Name)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
-	selection := interfaces.ResolveRunnerSelection("", fs.factoryRunnerID(), workerDef.ModelProvider)
+	selection := interfaces.ResolveRunnerSelection("", s.factoryRunnerID(), workerDef.ModelProvider)
 	workstationRequest := interfaces.WorkstationExecutionRequest{
 		Dispatch: interfaces.WorkDispatch{
 			DispatchID:      directModelInvocationTransitionID,
@@ -143,6 +210,38 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
+}
+
+func (s *runtimeModelService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
+	if s == nil || s.deps.runtimeConfig == nil {
+		return nil
+	}
+	return s.deps.runtimeConfig()
+}
+
+func (s *runtimeModelService) modelAssetPuller() modelAssetPuller {
+	if s == nil || s.deps.modelAssetPuller == nil {
+		return newModelAssetPuller("")
+	}
+	return s.deps.modelAssetPuller()
+}
+
+func (s *runtimeModelService) modelInvocationExecutor(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	factoryCfg *interfaces.FactoryConfig,
+	workerName string,
+) (workers.WorkstationRequestExecutor, error) {
+	if s == nil || s.deps.modelInvocationExecutor == nil {
+		return nil, fmt.Errorf("model invocation executor is not configured")
+	}
+	return s.deps.modelInvocationExecutor(runtimeCfg, factoryCfg, workerName)
+}
+
+func (s *runtimeModelService) factoryRunnerID() string {
+	if s == nil || s.deps.factoryRunnerID == nil {
+		return ""
+	}
+	return s.deps.factoryRunnerID()
 }
 
 func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {
