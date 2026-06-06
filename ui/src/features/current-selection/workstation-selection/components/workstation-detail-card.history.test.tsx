@@ -177,6 +177,13 @@ describe("WorkstationDetailCard request history", () => {
       within(requestHistorySection).getByRole("button", { name: "Expand" }),
     );
 
+    const requestHistoryList = within(requestHistorySection).getByRole("list");
+    expect(requestHistoryList.className).toContain("gap-2.5");
+    const requestHistoryRows =
+      within(requestHistoryList).getAllByRole("listitem");
+    expect(requestHistoryRows).toHaveLength(2);
+    expect(requestHistoryRows[0]?.className).toContain("rounded-lg");
+
     const pendingRuntimePill = within(requestHistorySection).getByText(
       "Elapsed: 0ms",
     );
