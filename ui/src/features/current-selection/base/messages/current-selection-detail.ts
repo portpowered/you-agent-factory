@@ -86,6 +86,7 @@ export interface CurrentSelectionDetailMessages {
   stderrLabel: string;
   stdoutEmpty: string;
   stdoutLabel: string;
+  summaryTitle: string;
   stateLabel: string;
   stateNodeIdLabel: string;
   totalDurationLabel: string;
@@ -245,6 +246,7 @@ const currentSelectionDetailMessagesByLocale = {
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
     stdoutLabel: "Stdout",
+    summaryTitle: "Summary",
     totalDurationLabel: "Total duration",
     totalDurationUnavailable:
       "Total duration is not available for this workstation request yet.",
@@ -381,6 +383,7 @@ const currentSelectionDetailMessagesByLocale = {
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
     stdoutLabel: "Stdout",
+    summaryTitle: "Summary",
     totalDurationLabel: "Total duration",
     totalDurationUnavailable:
       "Total duration is not available for this workstation request yet.",
@@ -517,6 +520,7 @@ const currentSelectionDetailMessagesByLocale = {
     stderrLabel: "Stderr",
     stdoutEmpty: "No stdout was recorded for this script response.",
     stdoutLabel: "Stdout",
+    summaryTitle: "Summary",
     totalDurationLabel: "Total duration",
     totalDurationUnavailable:
       "Total duration is not available for this workstation request yet.",
@@ -639,6 +643,7 @@ const currentSelectionDetailMessagesByLocale = {
     stderrLabel: "标准错误",
     stdoutEmpty: "此脚本响应没有记录 stdout。",
     stdoutLabel: "标准输出",
+    summaryTitle: "摘要",
     stateLabel: "状态",
     stateNodeIdLabel: "状态节点 ID",
     totalDurationLabel: "总耗时",

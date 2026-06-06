@@ -1,8 +1,33 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { workstationRequest } from "../../base/components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
 describe("WorkstationRequestDetailCard request fallbacks", () => {
+  it("renders the request title through the canonical body layout with expandable sections", () => {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-review-canonical", {
+          request_id: "request-canonical-story",
+        })}
+      />,
+    );
+
+    const currentSelection = screen.getByRole("article", {
+      name: "Current selection",
+    });
+    const title = currentSelection.querySelector(".type-display-large");
+    expect(title?.textContent).toBe("Active Story");
+
+    const summary = screen.getByRole("region", { name: "Summary" });
+    const summaryToggle = within(summary).getByRole("button", {
+      name: "Collapse",
+    });
+    expect(summaryToggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.click(summaryToggle);
+    expect(summaryToggle.getAttribute("aria-expanded")).toBe("false");
+  });
+
   it("renders request summary fallbacks when projected request identifiers are sparse", () => {
     render(
       <WorkstationRequestDetailCard

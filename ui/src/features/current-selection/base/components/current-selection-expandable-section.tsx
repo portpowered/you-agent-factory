@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { surfacePanelVariants } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
@@ -27,6 +27,9 @@ export function CurrentSelectionExpandableSection({
   title,
   toggleLabel,
 }: CurrentSelectionExpandableSectionProps) {
+  const generatedHeadingId = useId();
+  const resolvedHeadingId = headingId ?? generatedHeadingId;
+
   return (
     <StandardExpandableSection
       className={cn("mt-4 gap-2.5 py-0 [&_h4]:m-0", className)}
@@ -37,7 +40,7 @@ export function CurrentSelectionExpandableSection({
       contentID={contentId}
       defaultExpanded={defaultExpanded}
       heading={title}
-      headingID={headingId}
+      headingID={resolvedHeadingId}
       headingLevel={4}
       resetKey={resetKey}
       supportingText={supportingText}
