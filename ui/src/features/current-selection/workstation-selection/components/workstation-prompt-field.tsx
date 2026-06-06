@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useState } from "react";
 import {
   CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
   MonacoPromptEditor,
@@ -232,21 +232,9 @@ function EditableConfigurationReadyPromptFeedback({
   };
 }) {
   const [expanded, setExpanded] = useState(false);
-  const previousDiagnosticsCountRef = useRef(state.promptDiagnostics.length);
   const sectionId = useId();
   const contentId = `${sectionId}-prompt-feedback-content`;
   const promptHelpState = state.promptHelpState;
-
-  useEffect(() => {
-    if (
-      previousDiagnosticsCountRef.current === 0 &&
-      state.promptDiagnostics.length > 0
-    ) {
-      setExpanded(true);
-    }
-
-    previousDiagnosticsCountRef.current = state.promptDiagnostics.length;
-  }, [state.promptDiagnostics.length]);
 
   return (
     <CurrentSelectionFormField>
