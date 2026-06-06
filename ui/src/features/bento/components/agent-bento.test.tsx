@@ -103,9 +103,9 @@ describe("AgentBentoLayout", () => {
     const activityTitle = within(activityCard).getByRole("heading", {
       name: "Current activity",
     });
-    const activityBody = activityCard.querySelector(
-      "[data-radix-scroll-area-viewport]",
-    );
+    const activityBody = screen
+      .getByText("Active workstation graph goes here.")
+      .closest(".af-dashboard-body-text");
 
     expect(
       screen.getByRole("region", { name: "you-agent-factory bento board" }),
@@ -585,9 +585,33 @@ describe("AgentBentoLayout", () => {
 });
 
 describe("AgentBentoCard", () => {
-  it("scrolls overflowing bodies through the shared ScrollArea primitive", () => {
+  it("renders page-flow card bodies by default without a nested ScrollArea", () => {
     render(
-      <AgentBentoCard title="Submit work">
+      <AgentBentoCard
+        bodyProps={{ "data-testid": "submit-work-body" }}
+        title="Submit work"
+      >
+        <p>Long form body</p>
+      </AgentBentoCard>,
+    );
+
+    const card = screen.getByRole("article", { name: "Submit work" });
+    const body = screen.getByTestId("submit-work-body");
+
+    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeNull();
+    expect(card.className).not.toContain("h-full");
+    expect(card.className).not.toContain("overflow-hidden");
+    expect(body.className).toContain("af-dashboard-body-text");
+    expect(body.className).not.toContain("h-full");
+  });
+
+  it("supports explicit localized body scrolling through the shared ScrollArea primitive", () => {
+    render(
+      <AgentBentoCard
+        bodyProps={{ "data-testid": "submit-work-scroll-body" }}
+        bodyScroll
+        title="Submit work"
+      >
         <p>Long form body</p>
       </AgentBentoCard>,
     );
@@ -595,10 +619,13 @@ describe("AgentBentoCard", () => {
     const card = screen.getByRole("article", { name: "Submit work" });
     const viewport = card.querySelector("[data-radix-scroll-area-viewport]");
 
+    expect(card.className).toContain("h-full");
+    expect(card.className).toContain("overflow-hidden");
     expect(viewport).toBeTruthy();
     expect(viewport?.hasAttribute("data-radix-scroll-area-viewport")).toBe(
       true,
     );
+    expect(screen.getByTestId("submit-work-scroll-body")).toBe(viewport);
   });
 
   it("renders the canonical shared header with an h3 title and header drag handle", () => {
@@ -708,22 +735,26 @@ describe("AgentBentoCard", () => {
 
   it("supports compact shared chrome for dense dashboard cards", () => {
     render(
-      <AgentBentoCard chromeDensity="compact" title="Factory graph">
+      <AgentBentoCard
+        bodyProps={{ "data-testid": "factory-graph-body" }}
+        chromeDensity="compact"
+        title="Factory graph"
+      >
         <p>Graph content</p>
       </AgentBentoCard>,
     );
 
     const card = screen.getByRole("article", { name: "Factory graph" });
     const header = card.querySelector("header");
-    const viewport = card.querySelector("[data-radix-scroll-area-viewport]");
+    const body = screen.getByTestId("factory-graph-body");
 
     expect(header?.className).toContain("min-h-11");
     expect(header?.className).toContain("px-3");
     expect(header?.className).toContain("cursor-grab");
-    expect(viewport?.className).toContain("px-3");
-    expect(viewport?.className).toContain("pt-3");
-    expect(viewport?.className).toContain("pb-4");
-    expect(viewport?.className).toContain("gap-2");
+    expect(body.className).toContain("px-3");
+    expect(body.className).toContain("pt-3");
+    expect(body.className).toContain("pb-4");
+    expect(body.className).toContain("gap-2");
     expect(
       within(card).queryByRole("button", { name: "Move Factory graph" }),
     ).toBeNull();

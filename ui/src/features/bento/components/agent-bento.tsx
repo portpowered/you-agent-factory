@@ -74,7 +74,8 @@ const BENTO_DRAG_HANDLE_SELECTOR = "[data-bento-drag-handle='true']";
 const BENTO_DRAG_CANCEL_SELECTOR =
   "button,a,input,select,textarea,.react-resizable-handle";
 const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-clip";
-const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
+const BENTO_CARD_CLASS = "flex min-w-0 flex-col";
+const BENTO_CARD_SCROLL_CLASS = "h-full overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "relative z-10 flex min-h-13 shrink-0 cursor-grab items-center justify-between gap-3 border-b border-outline bg-surface-container-high px-3.5 py-3 active:cursor-grabbing";
 const BENTO_CARD_HEADER_COMPACT_CLASS =
@@ -84,8 +85,9 @@ const BENTO_CARD_HEADER_TOOLS_CLASS =
 const BENTO_CARD_HEADER_TOOLS_COMPACT_CLASS =
   "w-full flex-wrap justify-between gap-1.5 sm:w-auto sm:justify-end";
 const BENTO_CARD_BODY_SCROLL_CLASS = "min-h-0 flex-1";
+const BENTO_CARD_BODY_SCROLL_VIEWPORT_CLASS = "h-full";
 const BENTO_CARD_BODY_CLASS = cn(
-  "grid h-full min-h-0 gap-2.5 px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
+  "grid min-h-0 gap-2.5 px-3.5 pt-3.5 pb-4 [&>*]:pb-1 [&_p]:m-0",
   "af-dashboard-body-text",
 );
 const BENTO_CARD_BODY_COMPACT_CLASS = "gap-2 px-3 pt-3 pb-4 [&>*]:pb-1";
@@ -297,14 +299,18 @@ export function AgentBentoLayout({
 export function AgentBentoCard({
   bodyClassName = "",
   bodyProps,
-  bodyScroll = true,
+  bodyScroll = false,
   children,
   className = "",
   chromeDensity = "default",
   headerAction,
   title,
 }: AgentBentoCardProps) {
-  const cardClassName = cn(BENTO_CARD_CLASS, className);
+  const cardClassName = cn(
+    BENTO_CARD_CLASS,
+    bodyScroll && BENTO_CARD_SCROLL_CLASS,
+    className,
+  );
   const compactChrome = chromeDensity === "compact";
   const cardBodyClassName = cn(
     BENTO_CARD_BODY_CLASS,
@@ -322,7 +328,10 @@ export function AgentBentoCard({
     ) : (
       <ScrollArea
         className={BENTO_CARD_BODY_SCROLL_CLASS}
-        viewportClassName={cardBodyClassName}
+        viewportClassName={cn(
+          BENTO_CARD_BODY_SCROLL_VIEWPORT_CLASS,
+          cardBodyClassName,
+        )}
         viewportProps={bodyProps}
       >
         {children}
