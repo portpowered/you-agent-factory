@@ -33,8 +33,18 @@ function isGuardedSuiteTestFile(filePath: string): boolean {
 
 let disposeGuard: (() => void) | undefined;
 
+function isGuardedConsoleDisabled(): boolean {
+  const globalProcess = globalThis as typeof globalThis & {
+    process?: {
+      env?: Record<string, string | undefined>;
+    };
+  };
+
+  return globalProcess.process?.env?.VITEST_DISABLE_GUARDED_CONSOLE === "1";
+}
+
 beforeEach((context) => {
-  if (process.env.VITEST_DISABLE_GUARDED_CONSOLE === "1") {
+  if (isGuardedConsoleDisabled()) {
     return;
   }
 
@@ -47,7 +57,7 @@ beforeEach((context) => {
 });
 
 afterEach((context) => {
-  if (process.env.VITEST_DISABLE_GUARDED_CONSOLE === "1") {
+  if (isGuardedConsoleDisabled()) {
     return;
   }
 
