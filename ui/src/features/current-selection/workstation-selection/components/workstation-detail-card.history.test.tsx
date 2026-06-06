@@ -177,13 +177,23 @@ describe("WorkstationDetailCard request history", () => {
       within(requestHistorySection).getByRole("button", { name: "Expand" }),
     );
 
+    const requestHistoryList = within(requestHistorySection).getByRole("list");
+    expect(requestHistoryList.className).toContain("gap-2.5");
+    const requestHistoryRows =
+      within(requestHistoryList).getAllByRole("listitem");
+    expect(requestHistoryRows).toHaveLength(2);
+    expect(requestHistoryRows[0]?.className).toContain("rounded-lg");
+
     const pendingRuntimePill = within(requestHistorySection).getByText(
       "Elapsed: 0ms",
     );
     expect(pendingRuntimePill.className).toContain("border-af-info-border");
     expect(
-      within(requestHistorySection).getByText("request-script-success-story"),
-    ).toBeTruthy();
+      within(requestHistorySection).getAllByText("Active Story").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(requestHistorySection).queryByText("request-script-success-story"),
+    ).toBeNull();
     const successfulRuntimePill = within(requestHistorySection).getByText(
       "Total runtime: 222ms",
     );
@@ -192,13 +202,16 @@ describe("WorkstationDetailCard request history", () => {
     );
     expect(
       within(requestHistorySection).getByRole("button", {
-        name: "Select request request-script-success-story (dispatch-review-script-success)",
+        name: "Select workstation request dispatch-review-script-success",
       }),
     ).toBeTruthy();
+    expect(
+      within(requestHistorySection).getAllByText("Open request details").length,
+    ).toBeGreaterThan(0);
 
     fireEvent.click(
       within(requestHistorySection).getByRole("button", {
-        name: "Select request request-script-success-story (dispatch-review-script-success)",
+        name: "Select workstation request dispatch-review-script-success",
       }),
     );
 

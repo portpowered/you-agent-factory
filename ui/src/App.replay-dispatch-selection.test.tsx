@@ -15,10 +15,6 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   return value;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 async function selectReviewRequest(dispatchID: string): Promise<void> {
   const reviewWorkstationButton = screen.queryByRole("button", {
     name: "Select Review workstation",
@@ -45,7 +41,7 @@ async function selectReviewRequest(dispatchID: string): Promise<void> {
   );
   fireEvent.click(
     within(resolvedRequestHistorySection).getByRole("button", {
-      name: new RegExp(`\\(${escapeRegExp(dispatchID)}\\)$`),
+      name: `Select workstation request ${dispatchID}`,
     }),
   );
 }
