@@ -19,11 +19,12 @@ describe("registerWorkstationPromptMonaco", () => {
     const registerCompletionItemProvider = vi.fn();
     const setMonarchTokensProvider = vi.fn();
     const defineTheme = vi.fn();
+    const setTheme = vi.fn();
 
     resetWorkstationPromptMonacoRegistrationForTests();
 
     registerWorkstationPromptMonaco({
-      editor: { defineTheme },
+      editor: { defineTheme, setTheme },
       languages: {
         register,
         registerCompletionItemProvider,
@@ -31,7 +32,7 @@ describe("registerWorkstationPromptMonaco", () => {
       },
     } as unknown as typeof import("monaco-editor"));
     registerWorkstationPromptMonaco({
-      editor: { defineTheme },
+      editor: { defineTheme, setTheme },
       languages: {
         register,
         registerCompletionItemProvider,
@@ -92,6 +93,8 @@ describe("registerWorkstationPromptMonaco", () => {
         ]),
       }),
     );
+    expect(setTheme).toHaveBeenCalledTimes(1);
+    expect(setTheme).toHaveBeenCalledWith(WORKSTATION_PROMPT_THEME_ID);
   });
 
   it("builds inside-template and full-snippet completion inserts from the prompt-template contract", () => {

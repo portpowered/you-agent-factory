@@ -33,12 +33,20 @@ export function registerWorkstationPromptMonaco(monaco: MonacoModule) {
     WORKSTATION_PROMPT_LANGUAGE_ID,
     WORKSTATION_PROMPT_MONARCH_LANGUAGE,
   );
-  monaco.editor.defineTheme(
-    WORKSTATION_PROMPT_THEME_ID,
-    buildWorkstationPromptTheme(),
-  );
+  applyWorkstationPromptTheme(monaco);
 
   workstationPromptMonacoRegistered = true;
+}
+
+export function applyWorkstationPromptTheme(
+  monaco: MonacoModule,
+  root: Element | null = document.documentElement,
+) {
+  monaco.editor.defineTheme(
+    WORKSTATION_PROMPT_THEME_ID,
+    buildWorkstationPromptTheme(root),
+  );
+  monaco.editor.setTheme(WORKSTATION_PROMPT_THEME_ID);
 }
 
 export function resetWorkstationPromptMonacoRegistrationForTests() {

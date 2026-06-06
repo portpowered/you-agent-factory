@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach } from "vitest";
 
 import { MonacoPromptEditor } from "./monaco-prompt-editor";
+import { WORKSTATION_PROMPT_THEME_ID } from "./monaco-prompt-setup";
 
 const readyAutocompleteState = {
   contract: {
@@ -18,7 +20,56 @@ const readyAutocompleteState = {
   status: "ready" as const,
 };
 
+function resetPromptEditorPalette() {
+  document.documentElement.removeAttribute("data-color-palette");
+  document.documentElement.style.removeProperty("--color-surface");
+  document.documentElement.style.removeProperty("--color-on-surface");
+}
+
+function applyPromptEditorPalette({
+  ink,
+  palette,
+  surface,
+}: {
+  ink: string;
+  palette: string;
+  surface: string;
+}) {
+  document.documentElement.dataset.colorPalette = palette;
+  document.documentElement.style.setProperty("--color-surface", surface);
+  document.documentElement.style.setProperty("--color-on-surface", ink);
+}
+
+function expectSingleThemeApplication(wrapper: Element | null) {
+  expect(wrapper?.getAttribute("data-monaco-theme-application-count")).toBe(
+    "1",
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-count")).toBe("1");
+  expect(wrapper?.getAttribute("data-monaco-theme-bases")).toBe(
+    JSON.stringify(["vs-dark"]),
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-names")).toBe(
+    JSON.stringify([WORKSTATION_PROMPT_THEME_ID]),
+  );
+}
+
+function renderPromptEditorForPaletteRefresh() {
+  render(
+    <MonacoPromptEditor
+      ariaLabel="Prompt"
+      autocompleteState={readyAutocompleteState}
+      loadingMessage="Loading prompt editor."
+      modelPath="inmemory://model/test/workstation-prompt-palette-refresh"
+      onChange={() => {}}
+      startupErrorMessage="Prompt editor failed."
+      value="Initial prompt"
+    />,
+  );
+}
+
 describe("MonacoPromptEditor", () => {
+  beforeEach(resetPromptEditorPalette);
+
   it("wires Monaco markers, accessibility props, editing, scroll, and ready lifecycle", async () => {
     const onChange = vi.fn();
     const onMount = vi.fn();
@@ -67,6 +118,7 @@ describe("MonacoPromptEditor", () => {
     expect(wrapper?.getAttribute("data-monaco-marker-messages")).toContain(
       "Work ID is invalid.",
     );
+    expectSingleThemeApplication(wrapper);
     expect(onMount).toHaveBeenCalledTimes(1);
     expect(onReadyChange).toHaveBeenCalledWith(true);
     expect(onScrollChange).toHaveBeenCalledWith({
@@ -85,5 +137,45 @@ describe("MonacoPromptEditor", () => {
     unmount();
 
     expect(onReadyChange).toHaveBeenCalledWith(false);
+  });
+
+  it("redefines and reapplies the prompt theme when the dashboard palette changes", async () => {
+    applyPromptEditorPalette({
+      ink: "#F7F2E8",
+      palette: "factory-dark",
+      surface: "#091117",
+    });
+    renderPromptEditorForPaletteRefresh();
+
+    const promptEditor = screen.getByLabelText("Prompt");
+    const wrapper = promptEditor.parentElement;
+
+    await waitFor(() => {
+      expectSingleThemeApplication(wrapper);
+    });
+
+    applyPromptEditorPalette({
+      ink: "#091117",
+      palette: "factory-light",
+      surface: "#F7F2E8",
+    });
+
+    await waitFor(() => {
+      expect(wrapper?.getAttribute("data-monaco-theme-application-count")).toBe(
+        "2",
+      );
+    });
+
+    expect(wrapper?.getAttribute("data-monaco-theme-bases")).toBe(
+      JSON.stringify(["vs-dark", "vs"]),
+    );
+    expect(wrapper?.getAttribute("data-monaco-theme-set-count")).toBe("2");
+    expect(wrapper?.getAttribute("data-monaco-theme-set-names")).toBe(
+      JSON.stringify([
+        WORKSTATION_PROMPT_THEME_ID,
+        WORKSTATION_PROMPT_THEME_ID,
+      ]),
+    );
+    expect(screen.getByLabelText("Prompt")).toBe(promptEditor);
   });
 });
