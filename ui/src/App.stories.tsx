@@ -13,6 +13,8 @@ import {
   useSelectionHistoryStore,
 } from "./features/current-selection/base/public";
 import { DashboardScreen } from "./features/dashboard/public";
+import { getColorPaletteOptions } from "./features/header/messages/color-palette-options";
+import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
@@ -35,6 +37,8 @@ import { submitWorkCardQueryContract } from "./testing/submit-work-card-queries"
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
 const editableConfigurationDocument = buildEditableConfigurationDocument();
+const paletteVerificationMessages = getHeaderControlsMessages("en");
+const paletteVerificationOptions = getColorPaletteOptions("en");
 const editableConfigurationDocumentWithMonacoGuard =
   buildEditableConfigurationDocument(
     buildEditableConfigurationFactoryDefinition({
@@ -570,7 +574,56 @@ async function expectEditableConfigurationSaveBrowserFlow(
   await expect(saveButton).toBeEnabled();
 }
 
-async function expectFactoryGraphHeaderBrowserFlow(
+async function expectEditableConfigurationPaletteSwitchBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  await prepareEditableConfigurationReadyToSave(canvasElement);
+
+  const promptEditor = readMonacoEditorShell(
+    canvasElement,
+    "workstation-prompt",
+  );
+  const guardSelectorEditor = readMonacoEditorShell(
+    canvasElement,
+    "workstation-guard-selector",
+  );
+  expectMonacoEditorSurfaceToMatchPalette(promptEditor);
+  expectMonacoEditorSurfaceToMatchPalette(guardSelectorEditor);
+
+  const canvas = within(canvasElement);
+
+  for (const option of paletteVerificationOptions) {
+    await userEvent.click(
+      canvas.getByRole("button", {
+        name: paletteVerificationMessages.paletteMenuButtonLabel,
+      }),
+    );
+
+    const paletteMenu = await canvas.findByRole("menu", {
+      name: paletteVerificationMessages.paletteLabel,
+    });
+
+    await userEvent.click(
+      within(paletteMenu).getByRole("menuitemradio", {
+        name: option.label,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.colorPalette).toBe(option.id);
+    });
+    expect(readMonacoEditorShell(canvasElement, "workstation-prompt")).toBe(
+      promptEditor,
+    );
+    expect(
+      readMonacoEditorShell(canvasElement, "workstation-guard-selector"),
+    ).toBe(guardSelectorEditor);
+    expectMonacoEditorSurfaceToMatchPalette(promptEditor);
+    expectMonacoEditorSurfaceToMatchPalette(guardSelectorEditor);
+  }
+}
+
+async function _expectFactoryGraphHeaderBrowserFlow(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
@@ -645,6 +698,52 @@ function CurrentSelectionEditableConfigurationSaveStory() {
   }, []);
 
   return <App />;
+}
+
+function readMonacoEditorShell(
+  canvasElement: HTMLElement,
+  editorKind: "workstation-guard-selector" | "workstation-prompt",
+): HTMLElement {
+  const editorShell = canvasElement.querySelector<HTMLElement>(
+    `[data-monaco-editor="${editorKind}"]`,
+  );
+
+  return requireValue(
+    editorShell,
+    `expected ${editorKind} Monaco editor shell`,
+  );
+}
+
+function expectMonacoEditorSurfaceToMatchPalette(editorShell: HTMLElement) {
+  const editorSurface =
+    editorShell.querySelector<HTMLElement>(".monaco-editor-background") ??
+    editorShell.querySelector<HTMLElement>(".monaco-editor") ??
+    editorShell;
+
+  expect(normalizeComputedColor(editorSurface)).toBe(
+    resolveComputedPaletteSurfaceColor(),
+  );
+}
+
+function resolveComputedPaletteSurfaceColor() {
+  const probe = document.createElement("div");
+  probe.className = "bg-surface";
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+  const surfaceColor = normalizeColor(
+    window.getComputedStyle(probe).backgroundColor,
+  );
+  probe.remove();
+
+  return surfaceColor;
+}
+
+function normalizeComputedColor(element: HTMLElement) {
+  return normalizeColor(window.getComputedStyle(element).backgroundColor);
+}
+
+function normalizeColor(color: string) {
+  return color.replace(/\s+/g, "").toLowerCase();
 }
 
 function LocalePropagationStory() {
@@ -1101,6 +1200,25 @@ export const CurrentSelectionEditableConfigurationSaveDesktopVerification = {
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };
+
+export const CurrentSelectionEditableConfigurationPaletteSwitchDesktopVerification =
+  {
+    parameters: {
+      dashboardApi: {
+        fetchMocks: editableConfigurationVerificationFetchMocks(),
+        snapshot: semanticWorkflowDashboardSnapshot,
+      },
+    },
+    render: () => (
+      <div style={{ maxWidth: "100%", width: "1280px" }}>
+        <App />
+      </div>
+    ),
+    tags: ["test"],
+    play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+      await expectEditableConfigurationPaletteSwitchBrowserFlow(canvasElement);
+    },
+  };
 
 export const CurrentSelectionEditableConfigurationSaveNarrowVerification = {
   parameters: {

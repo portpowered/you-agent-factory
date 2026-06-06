@@ -5,6 +5,14 @@ import { beforeEach } from "vitest";
 import { MonacoGuardSelectorEditor } from "./monaco-guard-selector-editor";
 import { WORKSTATION_GUARD_SELECTOR_THEME_ID } from "./monaco-guard-selector-setup";
 
+const guardSelectorPaletteSequence = [
+  { ink: "#F7F2E8", palette: "factory-dark", surface: "#091117" },
+  { ink: "#091117", palette: "factory-light", surface: "#F7F2E8" },
+  { ink: "#E6E0E9", palette: "material-baseline", surface: "#1D1B20" },
+  { ink: "#E6EDF3", palette: "slate", surface: "#161B22" },
+  { ink: "#EEF2E4", palette: "olive", surface: "#1A1D15" },
+] as const;
+
 function resetGuardSelectorPalette() {
   document.documentElement.removeAttribute("data-color-palette");
   document.documentElement.style.removeProperty("--color-surface");
@@ -38,6 +46,23 @@ function expectSingleThemeApplication(wrapper: Element | null) {
   );
 }
 
+function expectGuardSelectorThemeBases(
+  wrapper: Element | null,
+  bases: string[],
+) {
+  expect(wrapper?.getAttribute("data-monaco-theme-bases")).toBe(
+    JSON.stringify(bases),
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-count")).toBe(
+    String(bases.length),
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-names")).toBe(
+    JSON.stringify(
+      new Array(bases.length).fill(WORKSTATION_GUARD_SELECTOR_THEME_ID),
+    ),
+  );
+}
+
 function renderGuardSelectorEditor(
   overrides?: Partial<ComponentProps<typeof MonacoGuardSelectorEditor>>,
 ) {
@@ -62,28 +87,25 @@ async function expectPaletteRefresh(
     expectSingleThemeApplication(wrapper);
   });
 
-  applyGuardSelectorPalette({
-    ink: "#091117",
-    palette: "factory-light",
-    surface: "#F7F2E8",
-  });
+  for (const [index, palette] of guardSelectorPaletteSequence
+    .slice(1)
+    .entries()) {
+    applyGuardSelectorPalette(palette);
 
-  await waitFor(() => {
-    expect(wrapper?.getAttribute("data-monaco-theme-application-count")).toBe(
-      "2",
-    );
-  });
+    await waitFor(() => {
+      expect(wrapper?.getAttribute("data-monaco-theme-application-count")).toBe(
+        String(index + 2),
+      );
+    });
+  }
 
-  expect(wrapper?.getAttribute("data-monaco-theme-bases")).toBe(
-    JSON.stringify(["vs-dark", "vs"]),
-  );
-  expect(wrapper?.getAttribute("data-monaco-theme-set-count")).toBe("2");
-  expect(wrapper?.getAttribute("data-monaco-theme-set-names")).toBe(
-    JSON.stringify([
-      WORKSTATION_GUARD_SELECTOR_THEME_ID,
-      WORKSTATION_GUARD_SELECTOR_THEME_ID,
-    ]),
-  );
+  expectGuardSelectorThemeBases(wrapper, [
+    "vs-dark",
+    "vs",
+    "vs-dark",
+    "vs-dark",
+    "vs-dark",
+  ]);
   expect(screen.getByLabelText("Field selector")).toBe(editor);
 }
 
@@ -182,11 +204,7 @@ describe("MonacoGuardSelectorEditor", () => {
   });
 
   it("redefines and reapplies the guard-selector theme when the dashboard palette changes", async () => {
-    applyGuardSelectorPalette({
-      ink: "#F7F2E8",
-      palette: "factory-dark",
-      surface: "#091117",
-    });
+    applyGuardSelectorPalette(guardSelectorPaletteSequence[0]);
     renderGuardSelectorEditor({
       modelPath:
         "inmemory://model/test/workstation-guard-selector/palette-refresh",

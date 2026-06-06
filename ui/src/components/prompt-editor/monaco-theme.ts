@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: Monaco theme derivation keeps palette token fallback precedence in one module.
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 
 const FALLBACK_THEME_TOKENS = {
@@ -39,6 +40,8 @@ export function buildWorkstationPromptTheme(
 ): MonacoEditorAPI.IStandaloneThemeData {
   const tokens = readMonacoThemeTokens(root);
   const base = resolveMonacoBase(tokens.surface);
+  const templateDelimiter = base === "vs" ? tokens.accentStrong : tokens.accent;
+  const templateKeyword = base === "vs" ? tokens.info : tokens.infoBright;
 
   return {
     base,
@@ -48,17 +51,20 @@ export function buildWorkstationPromptTheme(
       { foreground: toMonacoHex(tokens.ink), token: "text" },
       {
         fontStyle: "bold",
-        foreground: toMonacoHex(tokens.accent),
+        foreground: toMonacoHex(templateDelimiter),
         token: "delimiter.template",
       },
-      { foreground: toMonacoHex(tokens.infoBright), token: "keyword.template" },
+      { foreground: toMonacoHex(templateKeyword), token: "keyword.template" },
       {
         foreground: toMonacoHex(tokens.infoInk),
         token: "keyword.function.template",
       },
       { foreground: toMonacoHex(tokens.ink), token: "identifier.template" },
       { foreground: toMonacoHex(tokens.successText), token: "string.template" },
-      { foreground: toMonacoHex(tokens.accentStrong), token: "number.template" },
+      {
+        foreground: toMonacoHex(tokens.accentStrong),
+        token: "number.template",
+      },
       { foreground: toMonacoHex(tokens.dangerText), token: "variable.local" },
       { foreground: toMonacoHex(tokens.code), token: "variable.root" },
     ],
@@ -118,6 +124,7 @@ function buildSharedEditorColors(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Palette token resolution keeps stylesheet, computed-style, and probe fallback precedence in one place.
 function readMonacoThemeTokens(root: Element | null): MonacoThemeTokens {
   if (typeof window === "undefined" || !root) {
     return { ...FALLBACK_THEME_TOKENS };
@@ -128,59 +135,125 @@ function readMonacoThemeTokens(root: Element | null): MonacoThemeTokens {
   const probeTokens = readMonacoThemeProbeTokens(root);
 
   return {
-    accent: readCssColor(styles, [
-      "--color-primary",
-      "--color-af-accent",
-      "--color-af-foundation-accent",
-    ], pickUsableThemeColor(stylesheetTokens.accent, probeTokens.accent, FALLBACK_THEME_TOKENS.accent)),
-    accentStrong: readCssColor(styles, [
-      "--color-on-primary-container",
-      "--color-af-accent-hover",
-      "--color-af-foundation-accent-strong",
-    ], pickUsableThemeColor(stylesheetTokens.accentStrong, probeTokens.accentStrong, FALLBACK_THEME_TOKENS.accentStrong)),
-    code: readCssColor(styles, [
-      "--color-code",
-      "--color-af-code-ink",
-      "--color-af-foundation-code-ink",
-    ], pickUsableThemeColor(stylesheetTokens.code, probeTokens.code, FALLBACK_THEME_TOKENS.code)),
-    dangerText: readCssColor(styles, [
-      "--color-on-error-container",
-      "--color-af-danger-text",
-      "--color-af-foundation-danger-ink",
-    ], pickUsableThemeColor(stylesheetTokens.dangerText, probeTokens.dangerText, FALLBACK_THEME_TOKENS.dangerText)),
-    info: readCssColor(styles, [
-      "--color-info",
-      "--color-af-info",
-      "--color-af-foundation-info",
-    ], pickUsableThemeColor(stylesheetTokens.info, probeTokens.info, FALLBACK_THEME_TOKENS.info)),
-    infoBright: readCssColor(styles, [
-      "--color-af-foundation-info-bright",
-      "--color-info",
-      "--color-af-info",
-    ], pickUsableThemeColor(stylesheetTokens.infoBright, probeTokens.infoBright, FALLBACK_THEME_TOKENS.infoBright)),
-    infoInk: readCssColor(styles, [
-      "--color-on-info-container",
-      "--color-af-info-text",
-      "--color-af-foundation-info-ink",
-    ], pickUsableThemeColor(stylesheetTokens.infoInk, probeTokens.infoInk, FALLBACK_THEME_TOKENS.infoInk)),
-    ink: readCssColor(styles, [
-      "--color-on-surface",
-      "--color-af-text",
-      "--color-af-foundation-ink",
-    ], pickUsableThemeColor(stylesheetTokens.ink, probeTokens.ink, FALLBACK_THEME_TOKENS.ink)),
-    overlay: readCssColor(styles, [
-      "--color-af-foundation-overlay",
-    ], pickUsableThemeColor(stylesheetTokens.overlay, probeTokens.overlay, FALLBACK_THEME_TOKENS.overlay)),
-    successText: readCssColor(styles, [
-      "--color-on-success-container",
-      "--color-af-success-text",
-      "--color-af-foundation-success-ink",
-    ], pickUsableThemeColor(stylesheetTokens.successText, probeTokens.successText, FALLBACK_THEME_TOKENS.successText)),
-    surface: readCssColor(styles, [
-      "--color-surface",
-      "--color-af-surface",
-      "--color-af-foundation-surface",
-    ], pickUsableThemeColor(stylesheetTokens.surface, probeTokens.surface, FALLBACK_THEME_TOKENS.surface)),
+    accent: readCssColor(
+      styles,
+      ["--color-primary", "--color-af-accent", "--color-af-foundation-accent"],
+      pickUsableThemeColor(
+        stylesheetTokens.accent,
+        probeTokens.accent,
+        FALLBACK_THEME_TOKENS.accent,
+      ),
+    ),
+    accentStrong: readCssColor(
+      styles,
+      [
+        "--color-on-primary-container",
+        "--color-af-accent-hover",
+        "--color-af-foundation-accent-strong",
+      ],
+      pickUsableThemeColor(
+        stylesheetTokens.accentStrong,
+        probeTokens.accentStrong,
+        FALLBACK_THEME_TOKENS.accentStrong,
+      ),
+    ),
+    code: readCssColor(
+      styles,
+      ["--color-code", "--color-af-code-ink", "--color-af-foundation-code-ink"],
+      pickUsableThemeColor(
+        stylesheetTokens.code,
+        probeTokens.code,
+        FALLBACK_THEME_TOKENS.code,
+      ),
+    ),
+    dangerText: readCssColor(
+      styles,
+      [
+        "--color-on-error-container",
+        "--color-af-danger-text",
+        "--color-af-foundation-danger-ink",
+      ],
+      pickUsableThemeColor(
+        stylesheetTokens.dangerText,
+        probeTokens.dangerText,
+        FALLBACK_THEME_TOKENS.dangerText,
+      ),
+    ),
+    info: readCssColor(
+      styles,
+      ["--color-info", "--color-af-info", "--color-af-foundation-info"],
+      pickUsableThemeColor(
+        stylesheetTokens.info,
+        probeTokens.info,
+        FALLBACK_THEME_TOKENS.info,
+      ),
+    ),
+    infoBright: readCssColor(
+      styles,
+      ["--color-af-foundation-info-bright", "--color-info", "--color-af-info"],
+      pickUsableThemeColor(
+        stylesheetTokens.infoBright,
+        probeTokens.infoBright,
+        FALLBACK_THEME_TOKENS.infoBright,
+      ),
+    ),
+    infoInk: readCssColor(
+      styles,
+      [
+        "--color-on-info-container",
+        "--color-af-info-text",
+        "--color-af-foundation-info-ink",
+      ],
+      pickUsableThemeColor(
+        stylesheetTokens.infoInk,
+        probeTokens.infoInk,
+        FALLBACK_THEME_TOKENS.infoInk,
+      ),
+    ),
+    ink: readCssColor(
+      styles,
+      ["--color-on-surface", "--color-af-text", "--color-af-foundation-ink"],
+      pickUsableThemeColor(
+        stylesheetTokens.ink,
+        probeTokens.ink,
+        FALLBACK_THEME_TOKENS.ink,
+      ),
+    ),
+    overlay: readCssColor(
+      styles,
+      ["--color-af-foundation-overlay"],
+      pickUsableThemeColor(
+        stylesheetTokens.overlay,
+        probeTokens.overlay,
+        FALLBACK_THEME_TOKENS.overlay,
+      ),
+    ),
+    successText: readCssColor(
+      styles,
+      [
+        "--color-on-success-container",
+        "--color-af-success-text",
+        "--color-af-foundation-success-ink",
+      ],
+      pickUsableThemeColor(
+        stylesheetTokens.successText,
+        probeTokens.successText,
+        FALLBACK_THEME_TOKENS.successText,
+      ),
+    ),
+    surface: readCssColor(
+      styles,
+      [
+        "--color-surface",
+        "--color-af-surface",
+        "--color-af-foundation-surface",
+      ],
+      pickUsableThemeColor(
+        stylesheetTokens.surface,
+        probeTokens.surface,
+        FALLBACK_THEME_TOKENS.surface,
+      ),
+    ),
   };
 }
 
@@ -216,7 +289,11 @@ function readMonacoThemeStylesheetTokens(
       }
 
       const selectorText = rule.selectorText ?? "";
-      if (![...selectorsToMatch].some((selector) => selectorText.includes(selector))) {
+      if (
+        ![...selectorsToMatch].some((selector) =>
+          selectorText.includes(selector),
+        )
+      ) {
         continue;
       }
 
@@ -256,9 +333,7 @@ function readMonacoThemeStylesheetTokens(
   };
 }
 
-function readMonacoThemeProbeTokens(
-  root: Element,
-): Partial<MonacoThemeTokens> {
+function readMonacoThemeProbeTokens(root: Element): Partial<MonacoThemeTokens> {
   const document = root.ownerDocument;
   const container = document?.body;
   if (!document || !container) {
@@ -296,14 +371,18 @@ function readMonacoThemeProbeTokens(
   const accentStrong = accentElement
     ? window.getComputedStyle(accentElement).color
     : undefined;
-  const code = codeElement ? window.getComputedStyle(codeElement).color : undefined;
+  const code = codeElement
+    ? window.getComputedStyle(codeElement).color
+    : undefined;
   const dangerText = dangerElement
     ? window.getComputedStyle(dangerElement).color
     : undefined;
   const info = infoElement
     ? window.getComputedStyle(infoElement).backgroundColor
     : undefined;
-  const infoInk = infoElement ? window.getComputedStyle(infoElement).color : undefined;
+  const infoInk = infoElement
+    ? window.getComputedStyle(infoElement).color
+    : undefined;
   const successText = successElement
     ? window.getComputedStyle(successElement).color
     : undefined;
@@ -318,7 +397,9 @@ function readMonacoThemeProbeTokens(
     info,
     infoBright: infoInk,
     infoInk,
-    ink: surfaceElement ? window.getComputedStyle(surfaceElement).color : undefined,
+    ink: surfaceElement
+      ? window.getComputedStyle(surfaceElement).color
+      : undefined,
     overlay:
       surface && parseColor(surface)
         ? relativeLuminance(parseColor(surface) as RGBColor) >= 0.5
