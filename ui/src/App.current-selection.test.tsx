@@ -2097,7 +2097,7 @@ describe("App current selection", () => {
       ).toBeNull();
       expect(
         within(failedDetail).getByRole("heading", {
-          name: "Workstation dispatches",
+          name: "Work operations",
         }),
       ).toBeTruthy();
       expect(

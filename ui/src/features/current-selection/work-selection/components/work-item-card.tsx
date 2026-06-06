@@ -2,13 +2,17 @@ import {
   formatList,
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
-import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import {
   getWorkContentInspectMessages,
   WorkContentReadOnlyList,
 } from "../../../work-content/public";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
+import {
+  CurrentSelectionBodyLayout,
+  CurrentSelectionDescriptionList,
+  CurrentSelectionExpandableSection,
+} from "../../base/public";
 import { SelectedWorkDispatchHistorySection } from "../../dispatch-selection/public";
 import type { WorkItemDetailCardProps } from "../lib/detail-card-types";
 import { WorkRelationshipsSection } from "./work-item-relationship-graph";
@@ -41,75 +45,100 @@ export function WorkItemDetailCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <WidgetSubtitle>{formatWorkItemLabel(selection.workItem)}</WidgetSubtitle>
-      <dl>
-        <div>
-          <dt>{messages.workIdLabel}</dt>
-          <dd>{selection.workItem.work_id}</dd>
-        </div>
-        <div>
-          <dt>{messages.workTypeLabel}</dt>
-          <dd>
-            {selection.workItem.work_type_id ||
-              messages.currentSelectionUnavailableValue}
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.workstationLabel}</dt>
-          <dd>
-            {selectedNode?.workstation_name ??
-              executionDetails.workstationName ??
-              messages.workstationUnavailableValue}
-          </dd>
-        </div>
+      <CurrentSelectionBodyLayout title={formatWorkItemLabel(selection.workItem)}>
+        <CurrentSelectionExpandableSection
+          contentId={`${widgetId}-work-item-summary-content`}
+          defaultExpanded
+          headingId={`${widgetId}-work-item-summary-heading`}
+          title={messages.summaryHeading}
+          toggleLabel={(expanded) =>
+            expanded ? messages.collapseAction : messages.expandAction
+          }
+        >
+          <CurrentSelectionDescriptionList>
+            <div>
+              <dt>{messages.workIdLabel}</dt>
+              <dd>{selection.workItem.work_id}</dd>
+            </div>
+            <div>
+              <dt>{messages.workTypeLabel}</dt>
+              <dd>
+                {selection.workItem.work_type_id ||
+                  messages.currentSelectionUnavailableValue}
+              </dd>
+            </div>
+            <div>
+              <dt>{messages.workstationLabel}</dt>
+              <dd>
+                {selectedNode?.workstation_name ??
+                  executionDetails.workstationName ??
+                  messages.workstationUnavailableValue}
+              </dd>
+            </div>
 
-        <div>
-          <dt>{messages.runtimeLabelsLabel}</dt>
-          <dd>
-            {formatList(
-              selection.execution?.work_type_ids ??
-                [selection.workItem.work_type_id ?? ""].filter(Boolean),
-            )}
-          </dd>
-        </div>
-        <div>
-          <dt>{messages.workstationDispatchesLabel}</dt>
-          <dd>{displayedOperationCount}</dd>
-        </div>
-      </dl>
-      <WorkContentReadOnlyList
-        content={selection.workItem.content ?? []}
-        messages={workContentMessages}
-        payloadStatus={payloadStatus}
-        reason={payloadReason}
-      />
-      <WorkRelationshipsSection
-        activeTraceID={activeTraceID}
-        messages={messages}
-        onSelectTraceID={onSelectTraceID}
-        onSelectWorkID={onSelectWorkID}
-        relationshipGraph={relationshipGraph}
-        selectedWorkLabel={
-          relationshipGraph?.status !== "loading" &&
-          relationshipGraph?.selectedWork.label
-            ? relationshipGraph.selectedWork.label
-            : formatWorkItemLabel(selection.workItem)
-        }
-      />
-      <SelectedWorkDispatchHistorySection
-        activeTraceID={activeTraceID}
-        currentDispatchID={selection.dispatchId}
-        fallbackProviderSessions={dispatchAttempts}
-        locale={locale}
-        onSelectProviderSession={onSelectProviderSession}
-        onSelectTraceID={onSelectTraceID}
-        onSelectWorkID={onSelectWorkID}
-        operationHistory={operationHistory}
-        requests={workstationRequests}
-        selectedProviderSessionKey={selectedProviderSessionKey}
-        selectedWorkID={selection.workItem.work_id}
-        workstationKind={selectedNode?.workstation_kind}
-      />
+            <div>
+              <dt>{messages.runtimeLabelsLabel}</dt>
+              <dd>
+                {formatList(
+                  selection.execution?.work_type_ids ??
+                    [selection.workItem.work_type_id ?? ""].filter(Boolean),
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{messages.workstationDispatchesLabel}</dt>
+              <dd>{displayedOperationCount}</dd>
+            </div>
+          </CurrentSelectionDescriptionList>
+        </CurrentSelectionExpandableSection>
+        <CurrentSelectionExpandableSection
+          contentId={`${widgetId}-work-item-content-content`}
+          defaultExpanded
+          headingId={`${widgetId}-work-item-content-heading`}
+          title={workContentMessages.heading}
+          toggleLabel={(expanded) =>
+            expanded ? messages.collapseAction : messages.expandAction
+          }
+        >
+          <WorkContentReadOnlyList
+            content={selection.workItem.content ?? []}
+            landmark={false}
+            messages={workContentMessages}
+            payloadStatus={payloadStatus}
+            reason={payloadReason}
+            showHeading={false}
+          />
+        </CurrentSelectionExpandableSection>
+        <WorkRelationshipsSection
+          activeTraceID={activeTraceID}
+          messages={messages}
+          onSelectTraceID={onSelectTraceID}
+          onSelectWorkID={onSelectWorkID}
+          relationshipGraph={relationshipGraph}
+          widgetId={widgetId}
+          selectedWorkLabel={
+            relationshipGraph?.status !== "loading" &&
+            relationshipGraph?.selectedWork.label
+              ? relationshipGraph.selectedWork.label
+              : formatWorkItemLabel(selection.workItem)
+          }
+        />
+        <SelectedWorkDispatchHistorySection
+          activeTraceID={activeTraceID}
+          currentDispatchID={selection.dispatchId}
+          fallbackProviderSessions={dispatchAttempts}
+          locale={locale}
+          onSelectProviderSession={onSelectProviderSession}
+          onSelectTraceID={onSelectTraceID}
+          onSelectWorkID={onSelectWorkID}
+          operationHistory={operationHistory}
+          requests={workstationRequests}
+          selectedProviderSessionKey={selectedProviderSessionKey}
+          selectedWorkID={selection.workItem.work_id}
+          widgetId={widgetId}
+          workstationKind={selectedNode?.workstation_kind}
+        />
+      </CurrentSelectionBodyLayout>
     </SelectionDetailLayout>
   );
 }

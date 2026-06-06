@@ -100,6 +100,7 @@ export interface CurrentSelectionDispatchHistoryMessages {
   relationshipStateLabel: (label: string, requiredState: string) => string;
   selectedTraceSuffix: string;
   selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
+  summaryHeading: string;
   responseDetailsTitle: string;
   runtimeLabelsLabel: string;
   scriptAttemptsEmpty: string;
@@ -258,6 +259,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     selectedTraceSuffix: " (selected)",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `Select work item ${workItemLabel}`,
+    summaryHeading: "Summary",
     responseDetailsTitle: "Response details",
     runtimeLabelsLabel: "Runtime labels",
     scriptAttemptsEmpty: "No script response attempt has been recorded yet.",
@@ -410,6 +412,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     selectedTraceSuffix: "（選択中）",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `作業項目 ${workItemLabel} を選択`,
+    summaryHeading: "概要",
     responseDetailsTitle: "応答の詳細",
     runtimeLabelsLabel: "ランタイムラベル",
     scriptAttemptsEmpty:
@@ -559,6 +562,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     selectedTraceSuffix: " (선택됨)",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `작업 항목 ${workItemLabel} 선택`,
+    summaryHeading: "요약",
     responseDetailsTitle: "응답 세부 정보",
     runtimeLabelsLabel: "런타임 레이블",
     scriptAttemptsEmpty:
@@ -696,6 +700,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     selectedTraceSuffix: "（已选中）",
     selectWorkItemAccessibleLabel: (workItemLabel: string) =>
       `选择工作项 ${workItemLabel}`,
+    summaryHeading: "摘要",
     responseDetailsTitle: "响应详情",
     runtimeLabelsLabel: "运行时标签",
     scriptAttemptsEmpty: "这个分派暂时还没有记录脚本响应尝试。",

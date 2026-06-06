@@ -1,5 +1,7 @@
-import { DashboardHeading } from "../../../../components/ui";
+import type { ReactNode } from "react";
+
 import { DetailCopy } from "../../../../components/ui/widget-frame";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
 import { requestDispatchID } from "../../hooks/useCurrentSelection.request-helpers";
@@ -11,6 +13,36 @@ import {
   LogicalMoveDispatchHistoryCard,
   OperatorMoveHistoryCard,
 } from "./selected-work-operation-history-cards";
+
+type DispatchHistoryMessages = ReturnType<
+  typeof useCurrentSelectionDispatchHistoryMessages
+>;
+
+function SelectedWorkHistoryExpandableSection({
+  children,
+  idBase,
+  messages,
+  title,
+}: {
+  children: ReactNode;
+  idBase: string;
+  messages: DispatchHistoryMessages;
+  title: string;
+}) {
+  return (
+    <CurrentSelectionExpandableSection
+      contentId={`${idBase}-content`}
+      defaultExpanded
+      headingId={`${idBase}-heading`}
+      title={title}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
+      {children}
+    </CurrentSelectionExpandableSection>
+  );
+}
 
 function operationHistoryItemKey(
   item: SelectedWorkOperationHistoryItem,
@@ -89,6 +121,7 @@ export function SelectedWorkDispatchHistorySection({
   requests,
   selectedProviderSessionKey,
   selectedWorkID,
+  widgetId = "current-selection",
   workstationKind,
 }: SelectedWorkDispatchHistorySectionProps) {
   const messages = useCurrentSelectionDispatchHistoryMessages();
@@ -103,35 +136,36 @@ export function SelectedWorkDispatchHistorySection({
     fallbackProviderSessions.length > 0
   ) {
     return (
-      <ProviderSessionAttempts
-        attempts={fallbackProviderSessions}
-        currentDispatchID={currentDispatchID}
-        emptyMessage={messages.dispatchHistoryEmpty}
-        messages={providerSessionMessages}
-        onSelectProviderSession={onSelectProviderSession}
-        onSelectWorkID={onSelectWorkID}
-        renderHeading={(attempt) => fallbackHeading(attempt.workstation_name)}
-        selectedProviderSessionKey={selectedProviderSessionKey}
-        selectedWorkID={selectedWorkID}
-        title={messages.dispatchHistoryHeading}
-        workstationKind={workstationKind}
-      />
+      <SelectedWorkHistoryExpandableSection
+        idBase={`${widgetId}-work-item-operations`}
+        messages={messages}
+        title={messages.workOperationsHeading}
+      >
+        <ProviderSessionAttempts
+          attempts={fallbackProviderSessions}
+          currentDispatchID={currentDispatchID}
+          emptyMessage={messages.dispatchHistoryEmpty}
+          messages={providerSessionMessages}
+          onSelectProviderSession={onSelectProviderSession}
+          onSelectWorkID={onSelectWorkID}
+          renderHeading={(attempt) => fallbackHeading(attempt.workstation_name)}
+          selectedProviderSessionKey={selectedProviderSessionKey}
+          selectedWorkID={selectedWorkID}
+          showHeading={false}
+          title={messages.dispatchHistoryHeading}
+          workstationKind={workstationKind}
+        />
+      </SelectedWorkHistoryExpandableSection>
     );
   }
 
   if (usingOperationHistory) {
     return (
-      <section
-        aria-labelledby="selected-work-operation-history-heading"
-        className="mt-4 grid gap-2.5"
+      <SelectedWorkHistoryExpandableSection
+        idBase={`${widgetId}-work-item-operations`}
+        messages={messages}
+        title={messages.workOperationsHeading}
       >
-        <DashboardHeading
-          as="h4"
-          className="m-0"
-          id="selected-work-operation-history-heading"
-        >
-          {messages.workOperationsHeading}
-        </DashboardHeading>
         {operationHistory.length > 0 ? (
           <div className="grid gap-3">
             {operationHistory.map((item) =>
@@ -150,40 +184,41 @@ export function SelectedWorkDispatchHistorySection({
         ) : (
           <DetailCopy>{messages.workOperationsEmpty}</DetailCopy>
         )}
-      </section>
+      </SelectedWorkHistoryExpandableSection>
     );
   }
 
   if (requests.length === 0 && fallbackProviderSessions.length > 0) {
     return (
-      <ProviderSessionAttempts
-        attempts={fallbackProviderSessions}
-        currentDispatchID={currentDispatchID}
-        emptyMessage={messages.dispatchHistoryEmpty}
-        messages={providerSessionMessages}
-        onSelectProviderSession={onSelectProviderSession}
-        onSelectWorkID={onSelectWorkID}
-        renderHeading={(attempt) => fallbackHeading(attempt.workstation_name)}
-        selectedProviderSessionKey={selectedProviderSessionKey}
-        selectedWorkID={selectedWorkID}
+      <SelectedWorkHistoryExpandableSection
+        idBase={`${widgetId}-work-item-dispatches`}
+        messages={messages}
         title={messages.dispatchHistoryHeading}
-        workstationKind={workstationKind}
-      />
+      >
+        <ProviderSessionAttempts
+          attempts={fallbackProviderSessions}
+          currentDispatchID={currentDispatchID}
+          emptyMessage={messages.dispatchHistoryEmpty}
+          messages={providerSessionMessages}
+          onSelectProviderSession={onSelectProviderSession}
+          onSelectWorkID={onSelectWorkID}
+          renderHeading={(attempt) => fallbackHeading(attempt.workstation_name)}
+          selectedProviderSessionKey={selectedProviderSessionKey}
+          selectedWorkID={selectedWorkID}
+          showHeading={false}
+          title={messages.dispatchHistoryHeading}
+          workstationKind={workstationKind}
+        />
+      </SelectedWorkHistoryExpandableSection>
     );
   }
 
   return (
-    <section
-      aria-labelledby="selected-work-dispatch-history-heading"
-      className="mt-4 grid gap-2.5"
+    <SelectedWorkHistoryExpandableSection
+      idBase={`${widgetId}-work-item-dispatches`}
+      messages={messages}
+      title={messages.dispatchHistoryHeading}
     >
-      <DashboardHeading
-        as="h4"
-        className="m-0"
-        id="selected-work-dispatch-history-heading"
-      >
-        {messages.dispatchHistoryHeading}
-      </DashboardHeading>
       {requests.length > 0 ? (
         <div className="grid gap-3">
           {requests.map((request) => (
@@ -203,6 +238,6 @@ export function SelectedWorkDispatchHistorySection({
       ) : (
         <DetailCopy>{messages.dispatchHistoryEmpty}</DetailCopy>
       )}
-    </section>
+    </SelectedWorkHistoryExpandableSection>
   );
 }

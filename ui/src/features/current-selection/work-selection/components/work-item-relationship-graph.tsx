@@ -5,7 +5,7 @@ import {
 } from "../../../../components/ui";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import {
-  CurrentSelectionContentSection,
+  CurrentSelectionExpandableSection,
   CurrentSelectionSupportingText,
 } from "../../base/public";
 import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
@@ -28,6 +28,7 @@ export function WorkRelationshipsSection({
   onSelectWorkID,
   relationshipGraph,
   selectedWorkLabel,
+  widgetId = "current-selection",
 }: {
   activeTraceID?: string | null;
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
@@ -35,15 +36,21 @@ export function WorkRelationshipsSection({
   onSelectWorkID?: (workID: string) => void;
   relationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkLabel: string;
+  widgetId?: string;
 }) {
   const relationships = buildWorkRelationships(relationshipGraph, messages);
   const relationshipGroups = buildRelationshipGroups(relationships);
   const graphStatus = relationshipGraph?.status ?? "loading";
 
   return (
-    <CurrentSelectionContentSection
-      aria-label={messages.workRelationshipsHeading}
+    <CurrentSelectionExpandableSection
+      contentId={`${widgetId}-work-item-relationships-content`}
+      defaultExpanded
+      headingId={`${widgetId}-work-item-relationships-heading`}
       title={messages.workRelationshipsHeading}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
     >
       {graphStatus === "loading" ? (
         <CurrentSelectionSupportingText role="status">
@@ -122,6 +129,6 @@ export function WorkRelationshipsSection({
           {messages.workRelationshipsEmpty}
         </CurrentSelectionSupportingText>
       )}
-    </CurrentSelectionContentSection>
+    </CurrentSelectionExpandableSection>
   );
 }
