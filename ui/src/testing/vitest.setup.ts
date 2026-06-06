@@ -43,6 +43,7 @@ const mockedMonacoModule = {
   editor: {
     defineTheme: vi.fn(),
     setModelMarkers: vi.fn(),
+    setTheme: vi.fn(),
   },
   languages: {
     CompletionItemKind: { Variable: 4 },

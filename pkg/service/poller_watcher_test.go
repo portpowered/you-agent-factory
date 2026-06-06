@@ -139,6 +139,31 @@ func TestRunScriptPoller_SubmitsSubmitStyleRecordsStdoutToFactoryService(t *test
 	}
 }
 
+func TestScriptPollerCommandRequest_DefaultsEmptyWorkingDirectoryToRuntimeBaseDirectory(t *testing.T) {
+	factoryDir := t.TempDir()
+	runtimeBaseDir := t.TempDir()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
+		t,
+		factoryDir,
+		scriptPollerRuntimeConfigOptions{
+			poller: newCanonicalScriptPollerWorkstation(),
+		},
+	)
+	runtimeCfg.SetRuntimeBaseDir(runtimeBaseDir)
+
+	req, err := scriptPollerCommandRequest(
+		runtimeCfg,
+		newCanonicalScriptPollerWorkstation(),
+		newCanonicalScriptPollerWorker("--mode", "watch"),
+	)
+	if err != nil {
+		t.Fatalf("scriptPollerCommandRequest: %v", err)
+	}
+	if req.WorkDir != runtimeBaseDir {
+		t.Fatalf("poller workdir = %q, want %q", req.WorkDir, runtimeBaseDir)
+	}
+}
+
 func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndRestartsUnexpectedExit(t *testing.T) {
 	start := time.Date(2026, time.May, 22, 9, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)

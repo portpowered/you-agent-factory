@@ -784,6 +784,9 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	if svc.factorySave == nil {
 		t.Fatal("expected explicit factorysave collaborator")
 	}
+	if svc.definitions == nil {
+		t.Fatal("expected explicit factory definition collaborator")
+	}
 	if _, ok := svc.factorySave.(*factorysave.Service); !ok {
 		t.Fatalf("factorySave type = %T, want *factorysave.Service for production wiring", svc.factorySave)
 	}
@@ -855,6 +858,69 @@ func (s *recordingFactorySaveSaver) Save(
 	s.mode = mode
 	s.request = request
 	return request, nil
+}
+
+func TestFactoryService_GetCurrentFactory_DelegatesToInjectedDefinitions(t *testing.T) {
+	t.Parallel()
+
+	stub := &recordingFactoryDefinitions{
+		namedFactory: factoryapi.Factory{Name: factoryapi.FactoryName("delegated-current")},
+	}
+	svc := &FactoryService{definitions: stub}
+
+	got, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+	if got.Name != stub.namedFactory.Name {
+		t.Fatalf("current factory name = %q, want %q", got.Name, stub.namedFactory.Name)
+	}
+	if stub.namedCalls != 1 {
+		t.Fatalf("named definition calls = %d, want 1", stub.namedCalls)
+	}
+}
+
+func TestFactoryService_GetCurrentFactoryForSession_DelegatesToInjectedDefinitions(t *testing.T) {
+	t.Parallel()
+
+	const sessionID = "session-definition-proof"
+	stub := &recordingFactoryDefinitions{
+		sessionFactory: factoryapi.Factory{Name: factoryapi.FactoryName("delegated-session")},
+	}
+	svc := &FactoryService{definitions: stub}
+
+	got, err := svc.GetCurrentFactoryForSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if got.Name != stub.sessionFactory.Name {
+		t.Fatalf("session factory name = %q, want %q", got.Name, stub.sessionFactory.Name)
+	}
+	if stub.sessionCalls != 1 {
+		t.Fatalf("session definition calls = %d, want 1", stub.sessionCalls)
+	}
+	if stub.sessionID != sessionID {
+		t.Fatalf("session definition sessionID = %q, want %q", stub.sessionID, sessionID)
+	}
+}
+
+type recordingFactoryDefinitions struct {
+	namedFactory   factoryapi.Factory
+	sessionFactory factoryapi.Factory
+	sessionID      string
+	namedCalls     int
+	sessionCalls   int
+}
+
+func (s *recordingFactoryDefinitions) GetCurrentNamedFactory(context.Context) (factoryapi.Factory, error) {
+	s.namedCalls++
+	return s.namedFactory, nil
+}
+
+func (s *recordingFactoryDefinitions) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+	s.sessionCalls++
+	s.sessionID = sessionID
+	return s.sessionFactory, nil
 }
 
 func TestFactoryService_ListModels_DelegatesToLocalmodelsCatalog(t *testing.T) {
@@ -948,6 +1014,283 @@ func (p *recordingServiceModelAssetPuller) EnsureModelAvailable(context.Context,
 
 func (p *recordingServiceModelAssetPuller) ResolveModelCache(context.Context, *config.LoadedFactoryConfig, *interfaces.WorkerConfig) (localModelCacheLayout, error) {
 	return localModelCacheLayout{}, nil
+}
+
+type stubModelService struct {
+	listResult   factoryapi.ListModelsResponse
+	listErr      error
+	gotModel     factoryapi.ModelDetail
+	getErr       error
+	pullResult   apisurface.ModelPullResult
+	pullErr      error
+	invokeResult apisurface.ModelInvocationResult
+	invokeErr    error
+	calls        []string
+	modelNames   []string
+	requests     []factoryapi.ModelInvocationRequest
+}
+
+func (s *stubModelService) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	s.calls = append(s.calls, "list")
+	return s.listResult, s.listErr
+}
+
+func (s *stubModelService) GetModel(_ context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	s.calls = append(s.calls, "get")
+	s.modelNames = append(s.modelNames, modelName)
+	return s.gotModel, s.getErr
+}
+
+func (s *stubModelService) PullModel(_ context.Context, modelName string) (apisurface.ModelPullResult, error) {
+	s.calls = append(s.calls, "pull")
+	s.modelNames = append(s.modelNames, modelName)
+	return s.pullResult, s.pullErr
+}
+
+func (s *stubModelService) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	s.calls = append(s.calls, "invoke")
+	s.modelNames = append(s.modelNames, modelName)
+	s.requests = append(s.requests, request)
+	return s.invokeResult, s.invokeErr
+}
+
+type stubFactoryCoordinator struct {
+	listSessionsResult factoryapi.ListFactorySessionsResponse
+	openResult         factoryapi.OpenFactorySessionResponse
+	currentFactory     factoryapi.Factory
+	workSubmitResult   interfaces.WorkRequestSubmitResult
+	moveResult         interfaces.OperatorMoveResult
+	eventStream        *interfaces.FactoryEventStream
+	engineSnapshot     *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	calls              []string
+	sessionIDs         []string
+	folderPaths        []string
+	runtimeNames       []string
+}
+
+func (s *stubFactoryCoordinator) ActivateNamedFactory(_ context.Context, name string) error {
+	s.calls = append(s.calls, "activate")
+	s.runtimeNames = append(s.runtimeNames, name)
+	return nil
+}
+
+func (s *stubFactoryCoordinator) ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	s.calls = append(s.calls, "list-sessions")
+	return s.listSessionsResult, nil
+}
+
+func (s *stubFactoryCoordinator) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	s.calls = append(s.calls, "open-session")
+	if request.FolderPath != "" {
+		s.folderPaths = append(s.folderPaths, request.FolderPath)
+	}
+	return s.openResult, nil
+}
+
+func (s *stubFactoryCoordinator) CloseFactorySession(_ context.Context, sessionID string) error {
+	s.calls = append(s.calls, "close-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return nil
+}
+
+func (s *stubFactoryCoordinator) OpenFactorySessionFromFolder(_ context.Context, folderPath string, _ *FactorySessionTargetRef, _ bool, _ bool) (*FactorySessionOpenResult, error) {
+	s.calls = append(s.calls, "open-session-from-folder")
+	s.folderPaths = append(s.folderPaths, folderPath)
+	return &FactorySessionOpenResult{SessionID: "session-from-folder"}, nil
+}
+
+func (s *stubFactoryCoordinator) SubmitWorkRequestForSession(_ context.Context, sessionID string, _ interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	s.calls = append(s.calls, "submit-session-work")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.workSubmitResult, nil
+}
+
+func (s *stubFactoryCoordinator) MoveWorkForSession(_ context.Context, sessionID, _, _, _ string) (interfaces.OperatorMoveResult, error) {
+	s.calls = append(s.calls, "move-session-work")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.moveResult, nil
+}
+
+func (s *stubFactoryCoordinator) SubscribeFactoryEventsForSession(_ context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+	s.calls = append(s.calls, "subscribe-session-events")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.eventStream, nil
+}
+
+func (s *stubFactoryCoordinator) GetEngineStateSnapshotForSession(_ context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	s.calls = append(s.calls, "snapshot-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.engineSnapshot, nil
+}
+
+func (s *stubFactoryCoordinator) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+	s.calls = append(s.calls, "current-factory-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.currentFactory, nil
+}
+
+func (s *stubFactoryCoordinator) startDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error) {
+	s.calls = append(s.calls, "start-default-runtime")
+	return &liveRuntimeHandle{}, nil
+}
+
+func (s *stubFactoryCoordinator) startBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error {
+	s.calls = append(s.calls, "start-background-session")
+	return nil
+}
+
+func (s *stubFactoryCoordinator) startLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error {
+	s.calls = append(s.calls, "start-sidecars")
+	return nil
+}
+
+func (s *stubFactoryCoordinator) stopLiveRuntimeSidecars(*liveRuntimeHandle) {
+	s.calls = append(s.calls, "stop-sidecars")
+}
+
+func (s *stubFactoryCoordinator) restoreLiveRuntimeSidecars(*serviceRunState) {
+	s.calls = append(s.calls, "restore-sidecars")
+}
+
+func (s *stubFactoryCoordinator) stopLiveRuntime(*liveRuntimeHandle) error {
+	s.calls = append(s.calls, "stop-runtime")
+	return nil
+}
+
+func (s *stubFactoryCoordinator) shutdownOtherLiveSessions(*liveRuntimeHandle) error {
+	s.calls = append(s.calls, "shutdown-other-sessions")
+	return nil
+}
+
+func (s *stubFactoryCoordinator) replaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error {
+	s.calls = append(s.calls, "replace-session-runtime")
+	return nil
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this delegation test keeps the public model facade call sequence and payload assertions together on one compatibility seam.
+func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubModelService{
+		listResult:   factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "catalog-model"}}},
+		gotModel:     factoryapi.ModelDetail{Name: "detail-model"},
+		pullResult:   apisurface.ModelPullResult{ModelName: "pull-model"},
+		invokeResult: apisurface.ModelInvocationResult{ModelName: "invoke-model"},
+	}
+	svc := &FactoryService{modelService: stub}
+
+	listed, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	got, err := svc.GetModel(context.Background(), "detail-model")
+	if err != nil {
+		t.Fatalf("GetModel: %v", err)
+	}
+	pulled, err := svc.PullModel(context.Background(), "pull-model")
+	if err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	invoked, err := svc.InvokeModel(context.Background(), "invoke-model", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	if err != nil {
+		t.Fatalf("InvokeModel: %v", err)
+	}
+
+	if len(listed.Results) != 1 || listed.Results[0].Name != "catalog-model" {
+		t.Fatalf("ListModels result = %#v, want delegated catalog-model", listed)
+	}
+	if got.Name != "detail-model" {
+		t.Fatalf("GetModel result = %#v, want delegated detail-model", got)
+	}
+	if pulled.ModelName != "pull-model" {
+		t.Fatalf("PullModel result = %#v, want delegated pull-model", pulled)
+	}
+	if invoked.ModelName != "invoke-model" {
+		t.Fatalf("InvokeModel result = %#v, want delegated invoke-model", invoked)
+	}
+	if strings.Join(stub.calls, ",") != "list,get,pull,invoke" {
+		t.Fatalf("model service calls = %#v, want list,get,pull,invoke", stub.calls)
+	}
+	if len(stub.modelNames) != 3 || stub.modelNames[0] != "detail-model" || stub.modelNames[1] != "pull-model" || stub.modelNames[2] != "invoke-model" {
+		t.Fatalf("model names = %#v, want delegated model-name sequence", stub.modelNames)
+	}
+	if len(stub.requests) != 1 || stub.requests[0].Operation != "TTS" {
+		t.Fatalf("invoke requests = %#v, want delegated TTS request", stub.requests)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this delegation test keeps the session-lifecycle facade sequence and collaborator assertions together on one compatibility seam.
+func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubFactoryCoordinator{
+		listSessionsResult: factoryapi.ListFactorySessionsResponse{
+			Sessions: []factoryapi.FactorySessionSummary{{Id: "session-a"}},
+		},
+		openResult:       factoryapi.OpenFactorySessionResponse{},
+		workSubmitResult: interfaces.WorkRequestSubmitResult{RequestID: "request-1"},
+		moveResult:       interfaces.OperatorMoveResult{WorkID: "move-1"},
+		eventStream:      &interfaces.FactoryEventStream{},
+		engineSnapshot:   &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusIdle},
+	}
+	definitions := &recordingFactoryDefinitions{
+		sessionFactory: factoryapi.Factory{Name: "beta"},
+	}
+	svc := &FactoryService{coordinator: stub, definitions: definitions}
+
+	listed, err := svc.ListFactorySessions(context.Background())
+	if err != nil {
+		t.Fatalf("ListFactorySessions: %v", err)
+	}
+	folderPath := "/tmp/factory"
+	if _, err := svc.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{FolderPath: folderPath}); err != nil {
+		t.Fatalf("OpenFactorySession: %v", err)
+	}
+	if _, err := svc.OpenFactorySessionFromFolder(context.Background(), folderPath, nil, false, false); err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+	}
+	if err := svc.CloseFactorySession(context.Background(), "session-a"); err != nil {
+		t.Fatalf("CloseFactorySession: %v", err)
+	}
+	if err := svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory: %v", err)
+	}
+	current, err := svc.GetCurrentFactoryForSession(context.Background(), "session-a")
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if _, err := svc.SubmitWorkRequestForSession(context.Background(), "session-a", interfaces.WorkRequest{}); err != nil {
+		t.Fatalf("SubmitWorkRequestForSession: %v", err)
+	}
+	if _, err := svc.MoveWorkForSession(context.Background(), "session-a", "work-1", "done", "request-2"); err != nil {
+		t.Fatalf("MoveWorkForSession: %v", err)
+	}
+	if _, err := svc.SubscribeFactoryEventsForSession(context.Background(), "session-a"); err != nil {
+		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
+	}
+	snapshot, err := svc.GetEngineStateSnapshotForSession(context.Background(), "session-a")
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
+	}
+
+	if len(listed.Sessions) != 1 || listed.Sessions[0].Id != "session-a" {
+		t.Fatalf("ListFactorySessions result = %#v, want delegated session summary", listed)
+	}
+	if current.Name != "beta" {
+		t.Fatalf("GetCurrentFactoryForSession result = %#v, want delegated beta factory", current)
+	}
+	if snapshot == nil || snapshot.RuntimeStatus != interfaces.RuntimeStatusIdle {
+		t.Fatalf("GetEngineStateSnapshotForSession result = %#v, want delegated idle snapshot", snapshot)
+	}
+	if strings.Join(stub.calls[:9], ",") != "list-sessions,open-session,open-session-from-folder,close-session,activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
+		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence", stub.calls)
+	}
+	if len(stub.runtimeNames) != 1 || stub.runtimeNames[0] != "gamma" {
+		t.Fatalf("activation targets = %#v, want gamma", stub.runtimeNames)
+	}
+	if definitions.sessionCalls != 1 || definitions.sessionID != "session-a" {
+		t.Fatalf("definition collaborator session calls = %d sessionID = %q, want 1 and session-a", definitions.sessionCalls, definitions.sessionID)
+	}
 }
 
 func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {

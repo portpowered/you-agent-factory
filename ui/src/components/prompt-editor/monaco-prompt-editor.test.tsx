@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach } from "vitest";
 
 import { MonacoPromptEditor } from "./monaco-prompt-editor";
+import { WORKSTATION_PROMPT_THEME_ID } from "./monaco-prompt-setup";
 
 const readyAutocompleteState = {
   contract: {
@@ -18,7 +20,76 @@ const readyAutocompleteState = {
   status: "ready" as const,
 };
 
+const promptPaletteSequence = [
+  { ink: "#F7F2E8", palette: "factory-dark", surface: "#091117" },
+  { ink: "#091117", palette: "factory-light", surface: "#F7F2E8" },
+  { ink: "#E6E0E9", palette: "material-baseline", surface: "#1D1B20" },
+  { ink: "#E6EDF3", palette: "slate", surface: "#161B22" },
+  { ink: "#EEF2E4", palette: "olive", surface: "#1A1D15" },
+] as const;
+
+function resetPromptEditorPalette() {
+  document.documentElement.removeAttribute("data-color-palette");
+  document.documentElement.style.removeProperty("--color-surface");
+  document.documentElement.style.removeProperty("--color-on-surface");
+}
+
+function applyPromptEditorPalette({
+  ink,
+  palette,
+  surface,
+}: {
+  ink: string;
+  palette: string;
+  surface: string;
+}) {
+  document.documentElement.dataset.colorPalette = palette;
+  document.documentElement.style.setProperty("--color-surface", surface);
+  document.documentElement.style.setProperty("--color-on-surface", ink);
+}
+
+function expectSingleThemeApplication(wrapper: Element | null) {
+  expect(wrapper?.getAttribute("data-monaco-theme-application-count")).toBe(
+    "1",
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-count")).toBe("1");
+  expect(wrapper?.getAttribute("data-monaco-theme-bases")).toBe(
+    JSON.stringify(["vs-dark"]),
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-names")).toBe(
+    JSON.stringify([WORKSTATION_PROMPT_THEME_ID]),
+  );
+}
+
+function expectPromptThemeBases(wrapper: Element | null, bases: string[]) {
+  expect(wrapper?.getAttribute("data-monaco-theme-bases")).toBe(
+    JSON.stringify(bases),
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-count")).toBe(
+    String(bases.length),
+  );
+  expect(wrapper?.getAttribute("data-monaco-theme-set-names")).toBe(
+    JSON.stringify(new Array(bases.length).fill(WORKSTATION_PROMPT_THEME_ID)),
+  );
+}
+
+function renderPromptEditorForPaletteRefresh() {
+  render(
+    <MonacoPromptEditor
+      ariaLabel="Prompt"
+      autocompleteState={readyAutocompleteState}
+      loadingMessage="Loading prompt editor."
+      modelPath="inmemory://model/test/workstation-prompt-palette-refresh"
+      onChange={() => {}}
+      startupErrorMessage="Prompt editor failed."
+      value="Initial prompt"
+    />,
+  );
+}
+
 describe("MonacoPromptEditor", () => {
+  beforeEach(resetPromptEditorPalette);
+
   it("wires Monaco markers, accessibility props, editing, scroll, and ready lifecycle", async () => {
     const onChange = vi.fn();
     const onMount = vi.fn();
@@ -67,6 +138,7 @@ describe("MonacoPromptEditor", () => {
     expect(wrapper?.getAttribute("data-monaco-marker-messages")).toContain(
       "Work ID is invalid.",
     );
+    expectSingleThemeApplication(wrapper);
     expect(onMount).toHaveBeenCalledTimes(1);
     expect(onReadyChange).toHaveBeenCalledWith(true);
     expect(onScrollChange).toHaveBeenCalledWith({
@@ -85,5 +157,36 @@ describe("MonacoPromptEditor", () => {
     unmount();
 
     expect(onReadyChange).toHaveBeenCalledWith(false);
+  });
+
+  it("redefines and reapplies the prompt theme when the dashboard palette changes", async () => {
+    applyPromptEditorPalette(promptPaletteSequence[0]);
+    renderPromptEditorForPaletteRefresh();
+
+    const promptEditor = screen.getByLabelText("Prompt");
+    const wrapper = promptEditor.parentElement;
+
+    await waitFor(() => {
+      expectSingleThemeApplication(wrapper);
+    });
+
+    for (const [index, palette] of promptPaletteSequence.slice(1).entries()) {
+      applyPromptEditorPalette(palette);
+
+      await waitFor(() => {
+        expect(
+          wrapper?.getAttribute("data-monaco-theme-application-count"),
+        ).toBe(String(index + 2));
+      });
+    }
+
+    expectPromptThemeBases(wrapper, [
+      "vs-dark",
+      "vs",
+      "vs-dark",
+      "vs-dark",
+      "vs-dark",
+    ]);
+    expect(screen.getByLabelText("Prompt")).toBe(promptEditor);
   });
 });

@@ -1,12 +1,14 @@
-import Editor, { loader } from "@monaco-editor/react";
+import Editor from "@monaco-editor/react";
 import type { RefObject } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
-import { DashboardText, Textarea } from "../ui";
 import { cn } from "../../lib/cn";
+import { configureMonacoReactLoader } from "./monaco-react-loader";
+import { DashboardText, Textarea } from "../ui";
 import {
+  applyWorkstationGuardSelectorTheme,
   registerWorkstationGuardSelectorCompletionProvider,
   registerWorkstationGuardSelectorMonaco,
   WORKSTATION_GUARD_SELECTOR_LANGUAGE_ID,
@@ -51,7 +53,7 @@ let monacoSetupState: "error" | "ready" = "ready";
 if (import.meta.env.MODE !== "test") {
   try {
     registerWorkstationGuardSelectorMonaco(monaco);
-    loader.config({ monaco });
+    configureMonacoReactLoader(monaco);
   } catch {
     monacoSetupState = "error";
   }
@@ -148,6 +150,13 @@ function createGuardSelectorEditorMountHandler({
     editorInstance: MonacoEditorAPI.IStandaloneCodeEditor,
     monacoInstance: typeof import("monaco-editor"),
   ) => {
+    const themeObserver =
+      typeof MutationObserver === "undefined" || typeof document === "undefined"
+        ? null
+        : createGuardSelectorThemeObserver(
+            monacoInstance,
+            document.documentElement,
+          );
     const completionProvider =
       registerWorkstationGuardSelectorCompletionProvider(monacoInstance);
     const contentChangeListener = editorInstance.onDidChangeModelContent(() => {
@@ -167,11 +176,42 @@ function createGuardSelectorEditorMountHandler({
     });
 
     editorInstance.onDidDispose(() => {
+      themeObserver?.disconnect();
       completionProvider.dispose();
       contentChangeListener.dispose();
       suggestListener.dispose();
     });
   };
+}
+
+function createGuardSelectorThemeObserver(
+  monaco: typeof import("monaco-editor"),
+  root: HTMLElement,
+) {
+  const applyTheme = () => {
+    applyWorkstationGuardSelectorTheme(monaco, root);
+  };
+
+  applyTheme();
+
+  const observer = new MutationObserver((mutations) => {
+    if (
+      mutations.some(
+        (mutation) =>
+          mutation.type === "attributes" &&
+          mutation.attributeName === "data-color-palette",
+      )
+    ) {
+      applyTheme();
+    }
+  });
+
+  observer.observe(root, {
+    attributeFilter: ["data-color-palette"],
+    attributes: true,
+  });
+
+  return observer;
 }
 
 function GuardSelectorEditorFallbackState({

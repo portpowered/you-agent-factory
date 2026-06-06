@@ -335,9 +335,46 @@ function createProps(
 }
 
 describe("ReactFlowCurrentActivityCard coverage", () => {
+  const originalBoundingClientRect =
+    HTMLElement.prototype.getBoundingClientRect;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
     mockSetStoredNodePosition.mockReset();
+    HTMLElement.prototype.getBoundingClientRect = () =>
+      ({
+        bottom: 720,
+        height: 720,
+        left: 0,
+        right: 1280,
+        top: 0,
+        width: 1280,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    globalThis.ResizeObserver = class {
+      public constructor(private readonly callback: ResizeObserverCallback) {}
+
+      public disconnect(): void {}
+
+      public observe(target: Element): void {
+        this.callback(
+          [
+            {
+              contentRect: HTMLElement.prototype.getBoundingClientRect.call(
+                target,
+              ),
+              target,
+            } as ResizeObserverEntry,
+          ],
+          this as unknown as ResizeObserver,
+        );
+      }
+
+      public unobserve(): void {}
+    } as unknown as typeof ResizeObserver;
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: null,
@@ -353,6 +390,11 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     vi.mocked(useFactoryGraphDraftState).mockReturnValue(
       defaultDraftState as never,
     );
+  });
+
+  afterEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
+    globalThis.ResizeObserver = originalResizeObserver;
   });
 
   it("renders the empty topology fallback when no workstation nodes exist", async () => {
@@ -777,16 +819,23 @@ function renderViewport({
     typeof CurrentActivityGraphViewport
   >[0]["onEditorNodeClick"];
 }) {
+  const flowContainerRef = { current: null as HTMLElement | null };
+
   return render(
     <CurrentActivityGraphViewport
       activeTool={activeTool}
       addMenuActions={addMenuActions}
       canInteractWithEditor={editorMode}
+      canSaveDraft={false}
       editorMode={editorMode}
       edges={[]}
+      flowContainerRef={flowContainerRef}
       graphKey={graphKey}
+      handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}
+      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
+      headingID="test-heading"
       hiddenNodeClasses={new Set()}
       hideShowMenuOpen={false}
       imports={mockImportController}

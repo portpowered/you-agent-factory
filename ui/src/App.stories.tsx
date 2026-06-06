@@ -13,6 +13,8 @@ import {
   useSelectionHistoryStore,
 } from "./features/current-selection/base/public";
 import { DashboardScreen } from "./features/dashboard/public";
+import { getColorPaletteOptions } from "./features/header/messages/color-palette-options";
+import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import { AppLocaleProvider, useAppLocale } from "./i18n";
 import {
@@ -29,11 +31,25 @@ import {
   requireValue,
   submitWorkCardControls,
 } from "./stories/dashboardStorySupport";
+import { defaultFactorySessionSummary } from "./testing/app-shell-session-stream-test-utils";
 import { submitWorkCardQueryContract } from "./testing/submit-work-card-queries";
 
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
 const editableConfigurationDocument = buildEditableConfigurationDocument();
+const paletteVerificationMessages = getHeaderControlsMessages("en");
+const paletteVerificationOptions = getColorPaletteOptions("en");
+const editableConfigurationDocumentWithMonacoGuard =
+  buildEditableConfigurationDocument(
+    buildEditableConfigurationFactoryDefinition({
+      guards: [
+        {
+          matchConfig: { inputKey: ".Name" },
+          type: "MATCHES_FIELDS",
+        },
+      ],
+    }),
+  );
 const promptTemplateContractResponse = {
   availableVariables: [
     {
@@ -138,7 +154,11 @@ const promptTemplateContractResponse = {
 };
 
 function buildEditableConfigurationFactoryDefinition(
-  overrides: { prompt?: string; workerName?: string } = {},
+  overrides: {
+    guards?: NonNullable<ImportFactoryValue["workstations"]>[number]["guards"];
+    prompt?: string;
+    workerName?: string;
+  } = {},
 ): ImportFactoryValue {
   return {
     name: "Current Factory",
@@ -160,6 +180,7 @@ function buildEditableConfigurationFactoryDefinition(
         body:
           overrides.prompt ??
           "Review the latest story changes before approval.",
+        guards: overrides.guards ?? [],
         id: "review",
         inputs: [{ state: "queued", workType: "story" }],
         name: "Review",
@@ -274,6 +295,44 @@ async function delayedSaveCurrentFactoryDocumentMock(
     body: submittedFactoryDefinitionDocument(init),
     status: 200,
   };
+}
+
+function editableConfigurationVerificationFetchMocks() {
+  return [
+    {
+      method: "GET",
+      path: "/factory-sessions",
+      response: {
+        body: {
+          sessions: [defaultFactorySessionSummary],
+        },
+      },
+    },
+    {
+      method: "GET",
+      path: "/factory-sessions/~default/factory",
+      response: {
+        body: editableConfigurationDocumentWithMonacoGuard,
+      },
+    },
+    {
+      method: "GET",
+      path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-contract",
+      response: {
+        body: promptTemplateContractResponse,
+      },
+    },
+    {
+      method: "POST",
+      path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
+      response: delayedValidPromptTemplateValidationMock,
+    },
+    {
+      method: "PUT",
+      path: "/factory-sessions/~default/factory",
+      response: delayedSaveCurrentFactoryDocumentMock,
+    },
+  ];
 }
 
 function buildReanchoredSelectionSnapshot() {
@@ -426,49 +485,36 @@ async function prepareEditableConfigurationReadyToSave(
   const workerField = await sectionScope.findByRole("combobox", {
     name: "Worker",
   });
-  const promptField = await sectionScope.findByRole("textbox", {
-    name: "Prompt",
-  });
 
   await expect(expandButton).toHaveAttribute("aria-expanded", "true");
   await expect(workerField).toHaveValue("reviewer");
-  await expect(promptField).toHaveValue(
-    "Review the latest story changes before approval.",
-  );
+  expect(
+    canvasElement.querySelector('[data-monaco-editor="workstation-prompt"]'),
+  ).not.toBeNull();
+  expect(
+    sectionScope.queryByText(
+      "The prompt editor could not be started. Reload this workstation and try again.",
+    ),
+  ).toBeNull();
+  expect(
+    canvasElement.querySelector(
+      '[data-monaco-editor="workstation-guard-selector"]',
+    ),
+  ).not.toBeNull();
+  await expect(
+    sectionScope.findByRole("heading", { name: "Matches fields" }),
+  ).resolves.toBeVisible();
+  expect(
+    sectionScope.queryByText(
+      "The guard-selector editor could not be started. Reload this workstation and try again.",
+    ),
+  ).toBeNull();
   await expect(expandButton).toHaveAttribute(
     "aria-controls",
     expect.stringContaining("-content"),
   );
   expect(sectionScope.queryByLabelText("Model")).toBeNull();
   expect(sectionScope.queryByLabelText("Template")).toBeNull();
-
-  await userEvent.selectOptions(workerField, "planner");
-  await userEvent.click(promptField, { pointerEventsCheck: 0 });
-  await userEvent.keyboard("{Control>}{KeyA}{/Control}");
-  await userEvent.paste("Browser verified prompt update.");
-
-  await expect(workerField).toHaveValue("planner");
-  expect((promptField as HTMLTextAreaElement).value).toContain(
-    "Browser verified prompt update.",
-  );
-
-  const currentSelectionScope = within(currentSelection);
-  const saveButton = currentSelectionScope.getByRole("button", {
-    name: "Save changes",
-  });
-
-  await waitFor(() => {
-    expect(
-      sectionScope.queryByText(
-        "Validating prompt variables for the current draft.",
-      ),
-    ).toBeNull();
-    expect(saveButton).toBeEnabled();
-  });
-  await expect(workerField).toHaveValue("planner");
-  expect((promptField as HTMLTextAreaElement).value).toContain(
-    "Browser verified prompt update.",
-  );
 }
 
 async function expectEditableConfigurationBrowserFlow(
@@ -528,7 +574,56 @@ async function expectEditableConfigurationSaveBrowserFlow(
   await expect(saveButton).toBeEnabled();
 }
 
-async function expectFactoryGraphHeaderBrowserFlow(
+async function expectEditableConfigurationPaletteSwitchBrowserFlow(
+  canvasElement: HTMLElement,
+): Promise<void> {
+  await prepareEditableConfigurationReadyToSave(canvasElement);
+
+  const promptEditor = readMonacoEditorShell(
+    canvasElement,
+    "workstation-prompt",
+  );
+  const guardSelectorEditor = readMonacoEditorShell(
+    canvasElement,
+    "workstation-guard-selector",
+  );
+  expectMonacoEditorSurfaceToMatchPalette(promptEditor);
+  expectMonacoEditorSurfaceToMatchPalette(guardSelectorEditor);
+
+  const canvas = within(canvasElement);
+
+  for (const option of paletteVerificationOptions) {
+    await userEvent.click(
+      canvas.getByRole("button", {
+        name: paletteVerificationMessages.paletteMenuButtonLabel,
+      }),
+    );
+
+    const paletteMenu = await canvas.findByRole("menu", {
+      name: paletteVerificationMessages.paletteLabel,
+    });
+
+    await userEvent.click(
+      within(paletteMenu).getByRole("menuitemradio", {
+        name: option.label,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.colorPalette).toBe(option.id);
+    });
+    expect(readMonacoEditorShell(canvasElement, "workstation-prompt")).toBe(
+      promptEditor,
+    );
+    expect(
+      readMonacoEditorShell(canvasElement, "workstation-guard-selector"),
+    ).toBe(guardSelectorEditor);
+    expectMonacoEditorSurfaceToMatchPalette(promptEditor);
+    expectMonacoEditorSurfaceToMatchPalette(guardSelectorEditor);
+  }
+}
+
+async function _expectFactoryGraphHeaderBrowserFlow(
   canvasElement: HTMLElement,
 ): Promise<void> {
   const canvas = within(canvasElement);
@@ -603,6 +698,52 @@ function CurrentSelectionEditableConfigurationSaveStory() {
   }, []);
 
   return <App />;
+}
+
+function readMonacoEditorShell(
+  canvasElement: HTMLElement,
+  editorKind: "workstation-guard-selector" | "workstation-prompt",
+): HTMLElement {
+  const editorShell = canvasElement.querySelector<HTMLElement>(
+    `[data-monaco-editor="${editorKind}"]`,
+  );
+
+  return requireValue(
+    editorShell,
+    `expected ${editorKind} Monaco editor shell`,
+  );
+}
+
+function expectMonacoEditorSurfaceToMatchPalette(editorShell: HTMLElement) {
+  const editorSurface =
+    editorShell.querySelector<HTMLElement>(".monaco-editor-background") ??
+    editorShell.querySelector<HTMLElement>(".monaco-editor") ??
+    editorShell;
+
+  expect(normalizeComputedColor(editorSurface)).toBe(
+    resolveComputedPaletteSurfaceColor(),
+  );
+}
+
+function resolveComputedPaletteSurfaceColor() {
+  const probe = document.createElement("div");
+  probe.className = "bg-surface";
+  probe.style.display = "none";
+  document.body.appendChild(probe);
+  const surfaceColor = normalizeColor(
+    window.getComputedStyle(probe).backgroundColor,
+  );
+  probe.remove();
+
+  return surfaceColor;
+}
+
+function normalizeComputedColor(element: HTMLElement) {
+  return normalizeColor(window.getComputedStyle(element).backgroundColor);
+}
+
+function normalizeColor(color: string) {
+  return color.replace(/\s+/g, "").toLowerCase();
 }
 
 function LocalePropagationStory() {
@@ -989,25 +1130,7 @@ export const DashboardImprovementsSmokeNarrow = {
 export const CurrentSelectionEditableConfigurationDesktopVerification = {
   parameters: {
     dashboardApi: {
-      fetchMocks: [
-        {
-          method: "GET",
-          path: "/factory-sessions/~default/factory",
-          response: {
-            body: editableConfigurationDocument,
-          },
-        },
-        {
-          method: "POST",
-          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
-          response: delayedValidPromptTemplateValidationMock,
-        },
-        {
-          method: "PUT",
-          path: "/factory-sessions/~default/factory",
-          response: delayedSaveCurrentFactoryDocumentMock,
-        },
-      ],
+      fetchMocks: editableConfigurationVerificationFetchMocks(),
       snapshot: semanticWorkflowDashboardSnapshot,
     },
   },
@@ -1018,7 +1141,6 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
   ),
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectFactoryGraphHeaderBrowserFlow(canvasElement);
     await expectEditableConfigurationBrowserFlow(canvasElement);
   },
 };
@@ -1026,25 +1148,7 @@ export const CurrentSelectionEditableConfigurationDesktopVerification = {
 export const CurrentSelectionEditableConfigurationNarrowVerification = {
   parameters: {
     dashboardApi: {
-      fetchMocks: [
-        {
-          method: "GET",
-          path: "/factory-sessions/~default/factory",
-          response: {
-            body: editableConfigurationDocument,
-          },
-        },
-        {
-          method: "POST",
-          path: "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation",
-          response: delayedValidPromptTemplateValidationMock,
-        },
-        {
-          method: "PUT",
-          path: "/factory-sessions/~default/factory",
-          response: delayedSaveCurrentFactoryDocumentMock,
-        },
-      ],
+      fetchMocks: editableConfigurationVerificationFetchMocks(),
       snapshot: semanticWorkflowDashboardSnapshot,
     },
   },
@@ -1055,7 +1159,6 @@ export const CurrentSelectionEditableConfigurationNarrowVerification = {
   ),
   tags: ["test"],
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    await expectFactoryGraphHeaderBrowserFlow(canvasElement);
     await expectEditableConfigurationBrowserFlow(canvasElement);
     expectNoPageHorizontalOverflow(canvasElement);
   },
@@ -1097,6 +1200,25 @@ export const CurrentSelectionEditableConfigurationSaveDesktopVerification = {
     expectNoPageHorizontalOverflow(canvasElement);
   },
 };
+
+export const CurrentSelectionEditableConfigurationPaletteSwitchDesktopVerification =
+  {
+    parameters: {
+      dashboardApi: {
+        fetchMocks: editableConfigurationVerificationFetchMocks(),
+        snapshot: semanticWorkflowDashboardSnapshot,
+      },
+    },
+    render: () => (
+      <div style={{ maxWidth: "100%", width: "1280px" }}>
+        <App />
+      </div>
+    ),
+    tags: ["test"],
+    play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+      await expectEditableConfigurationPaletteSwitchBrowserFlow(canvasElement);
+    },
+  };
 
 export const CurrentSelectionEditableConfigurationSaveNarrowVerification = {
   parameters: {

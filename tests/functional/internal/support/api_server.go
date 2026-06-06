@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -71,10 +72,10 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		cfg.Configure(serviceCfg)
 	}
 
-	svc, err := service.BuildFactoryService(ctx, serviceCfg)
+	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
 	if err != nil {
 		cancel()
-		t.Fatalf("BuildFactoryService: %v", err)
+		t.Fatalf("InjectFactoryService: %v", err)
 	}
 
 	done := make(chan struct{})

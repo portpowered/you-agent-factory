@@ -42,22 +42,23 @@ type ExecutionMetadata struct {
 // resolved prompt, ordered inputs, runtime context, and worker selection needed
 // by inner executors.
 type WorkstationExecutionRequest struct {
-	Dispatch              WorkDispatch                    `json:"dispatch"`
-	WorkerType            string                          `json:"worker_type,omitempty"`
-	WorkstationType       string                          `json:"workstation_type,omitempty"`
-	RunnerID              string                          `json:"runner_id,omitempty"`
-	RunnerSelectionSource RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
-	ProjectID             string                          `json:"project_id,omitempty"`
-	FactorySessionID      string                          `json:"factory_session_id,omitempty"`
-	InputTokens           []any                           `json:"input_tokens,omitempty"`
-	ModelOperation        string                          `json:"model_operation,omitempty"`
-	ModelBindings         []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
-	SystemPrompt          string                          `json:"system_prompt,omitempty"`
-	UserMessage           string                          `json:"user_message,omitempty"`
-	OutputSchema          string                          `json:"output_schema,omitempty"`
-	EnvVars               map[string]string               `json:"env_vars,omitempty"`
-	Worktree              string                          `json:"worktree,omitempty"`
-	WorkingDirectory      string                          `json:"working_directory,omitempty"`
+	Dispatch                 WorkDispatch                    `json:"dispatch"`
+	WorkerType               string                          `json:"worker_type,omitempty"`
+	WorkstationType          string                          `json:"workstation_type,omitempty"`
+	RunnerID                 string                          `json:"runner_id,omitempty"`
+	RunnerSelectionSource    RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
+	ProjectID                string                          `json:"project_id,omitempty"`
+	FactorySessionID         string                          `json:"factory_session_id,omitempty"`
+	InputTokens              []any                           `json:"input_tokens,omitempty"`
+	ModelOperation           string                          `json:"model_operation,omitempty"`
+	ModelBindings            []ResolvedModelOperationBinding `json:"model_bindings,omitempty"`
+	SystemPrompt             string                          `json:"system_prompt,omitempty"`
+	UserMessage              string                          `json:"user_message,omitempty"`
+	OutputSchema             string                          `json:"output_schema,omitempty"`
+	EnvVars                  map[string]string               `json:"env_vars,omitempty"`
+	Worktree                 string                          `json:"worktree,omitempty"`
+	WorkingDirectory         string                          `json:"working_directory,omitempty"`
+	WorkingDirectoryAuthored bool                            `json:"working_directory_authored,omitempty"`
 }
 
 // ProviderInferenceRequest is the provider-owned request shape derived from one
