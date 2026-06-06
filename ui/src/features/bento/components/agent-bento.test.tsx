@@ -76,6 +76,13 @@ function getGridItem(cardTitle: string): HTMLElement {
   return gridItem;
 }
 
+function expectNoVerticalScrollContainer(element: HTMLElement) {
+  expect(element.className).not.toMatch(/overflow-y-(auto|scroll)/);
+  expect(window.getComputedStyle(element).overflowY).not.toMatch(
+    /^(auto|scroll)$/,
+  );
+}
+
 describe("AgentBentoLayout", () => {
   beforeEach(() => {
     Object.defineProperty(HTMLElement.prototype, "offsetParent", {
@@ -127,6 +134,30 @@ describe("AgentBentoLayout", () => {
     expect(
       screen.queryByRole("button", { name: "Move Current activity" }),
     ).toBeNull();
+  });
+
+  it("lets the board and grid grow without creating a vertical scroll container", () => {
+    renderBentoBoard();
+
+    const board = screen.getByRole("region", {
+      name: "you-agent-factory bento board",
+    });
+    const grid = board.querySelector(".react-grid-layout");
+    const activityItem = getGridItem("Current activity");
+
+    if (!(grid instanceof HTMLElement)) {
+      throw new Error(
+        "expected bento board to render a react-grid-layout root",
+      );
+    }
+
+    expect(board.className).toContain("overflow-x-clip");
+    expect(board.className).not.toContain("overflow-x-hidden");
+    expectNoVerticalScrollContainer(board);
+    expectNoVerticalScrollContainer(grid);
+    expectNoVerticalScrollContainer(activityItem);
+    expect(grid.className).toContain("min-h-px");
+    expect(grid.style.height).not.toBe("");
   });
 
   it("keeps bento elevation on the card while graph-bearing interiors stay flat", () => {

@@ -73,7 +73,7 @@ const BENTO_RESIZE_HANDLES = ["se", "s", "e"] as const;
 const BENTO_DRAG_HANDLE_SELECTOR = "[data-bento-drag-handle='true']";
 const BENTO_DRAG_CANCEL_SELECTOR =
   "button,a,input,select,textarea,.react-resizable-handle";
-const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-hidden";
+const BENTO_LAYOUT_CLASS = "min-w-0 w-full overflow-x-clip";
 const BENTO_CARD_CLASS = "flex h-full min-w-0 flex-col overflow-hidden";
 const BENTO_CARD_HEADER_CLASS =
   "relative z-10 flex min-h-13 shrink-0 cursor-grab items-center justify-between gap-3 border-b border-outline bg-surface-container-high px-3.5 py-3 active:cursor-grabbing";
