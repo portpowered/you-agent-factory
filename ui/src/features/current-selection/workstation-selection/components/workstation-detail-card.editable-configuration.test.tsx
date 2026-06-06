@@ -1921,6 +1921,64 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(screen.queryByText("Available variables")).toBeNull();
   });
 
+  it("keeps prompt variable help collapsed when diagnostics appear after the initial render", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const { rerender } = render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState()}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    expandEditableConfiguration();
+    expect(promptVariableHelpToggle().getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    expect(screen.queryByText("Available variables")).toBeNull();
+
+    rerender(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          prompt: "Use {{ (index .Inputs 1).Payload }} now.",
+          promptDiagnostics: [
+            {
+              endOffset: 33,
+              kind: "UNAVAILABLE_VARIABLE",
+              message: "Only input 0 is available.",
+              path: ".Inputs[1]",
+              sourceText: "(index .Inputs 1)",
+              startOffset: 7,
+            },
+          ],
+          validationErrors: {
+            prompt: "See prompt diagnostics below.",
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const toggle = promptVariableHelpToggle();
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Available variables")).toBeNull();
+    expect(screen.queryByText("Unavailable access")).toBeNull();
+
+    const editor = editableConfigurationSection().querySelector(
+      "[data-monaco-editor='workstation-prompt']",
+    );
+    expect(editor?.getAttribute("data-monaco-marker-count")).toBe("1");
+    expect(editor?.closest(".border-af-danger-border")?.className).toContain(
+      "border-af-danger-border",
+    );
+  });
+
   it("resets prompt variable help disclosure when the selected workstation changes", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const reviewNode = snapshot.topology.workstation_nodes_by_id.review;
