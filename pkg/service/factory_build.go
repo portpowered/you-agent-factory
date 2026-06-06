@@ -520,43 +520,6 @@ func buildRuntimeListener(
 	), nil
 }
 
-func providerOverrideForMode(cfg *FactoryServiceConfig, sideEffects *replay.SideEffects) workers.Provider {
-	if cfg.ProviderOverride != nil || sideEffects == nil {
-		return cfg.ProviderOverride
-	}
-	return sideEffects
-}
-
-func commandRunnerOverrideForMode(
-	cfg *FactoryServiceConfig,
-	runtimeCfg interfaces.RuntimeDefinitionLookup,
-	sideEffects *replay.SideEffects,
-) workers.CommandRunner {
-	next := cfg.CommandRunnerOverride
-	if next == nil && sideEffects != nil {
-		next = sideEffects
-	}
-	if cfg.MockWorkersConfig == nil {
-		return next
-	}
-	return &workers.MockWorkerCommandRunner{
-		Config:        cfg.MockWorkersConfig,
-		RuntimeConfig: runtimeCfg,
-		Next:          next,
-	}
-}
-
-func providerCommandRunnerForMode(cfg *FactoryServiceConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) workers.CommandRunner {
-	if cfg.MockWorkersConfig == nil {
-		return cfg.ProviderCommandRunnerOverride
-	}
-	return &workers.MockWorkerCommandRunner{
-		Config:        cfg.MockWorkersConfig,
-		RuntimeConfig: runtimeCfg,
-		Next:          cfg.ProviderCommandRunnerOverride,
-	}
-}
-
 func (fs *FactoryService) dashboardLoop(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()

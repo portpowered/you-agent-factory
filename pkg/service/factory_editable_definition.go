@@ -705,25 +705,6 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 	)
 }
 
-// AssembleFactoryService finishes service composition from explicit inputs.
-// Both manual and Wire-backed construction paths call this helper so the final
-// compatibility facade wiring remains identical.
-func AssembleFactoryService(
-	ctx context.Context,
-	cfg *FactoryServiceConfig,
-	root FactoryServiceRoot,
-	collaborators FactoryServiceCollaborators,
-	load FactoryConfigLoadResult,
-	clock factory.Clock,
-	hostedWorkers hostedworkers.Config,
-) (*FactoryService, error) {
-	shell, err := ComposeFactoryService(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
-	if err != nil {
-		return nil, err
-	}
-	return AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg)), nil
-}
-
 // ProvideFactorySaveCollaborator constructs the factorysave collaborator for a
 // built FactoryService shell.
 func ProvideFactorySaveCollaborator(

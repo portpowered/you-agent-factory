@@ -606,10 +606,6 @@ func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBund
 	fs.cfg.Dir = runtimeBundle.dir
 }
 
-func (fs *FactoryService) resetActiveSessionDir() {
-	fs.syncActiveSessionDir(nil)
-}
-
 func (fs *FactoryService) currentRunState() *serviceRunState {
 	fs.runMu.RLock()
 	defer fs.runMu.RUnlock()
