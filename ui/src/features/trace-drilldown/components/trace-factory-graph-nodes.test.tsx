@@ -72,6 +72,9 @@ describe("Trace dispatch factory graph node", () => {
     }
     expect(node.className).toContain("border-primary");
     expect(node.className).toContain("bg-primary-container");
+    expect(node.className).toContain("shadow-none");
+    expect(node.className).not.toContain("shadow-af-card");
+    expect(node.className).not.toContain("shadow-af-panel");
   });
 
   it("keeps the factory workstation surface for failure outcomes", () => {
@@ -99,6 +102,9 @@ describe("Trace dispatch factory graph node", () => {
     }
     expect(node.className).toContain("border-primary");
     expect(node.className).toContain("bg-primary-container");
+    expect(node.className).toContain("shadow-none");
+    expect(node.className).not.toContain("shadow-af-card");
+    expect(node.className).not.toContain("shadow-af-panel");
   });
 });
 
@@ -134,6 +140,9 @@ describe("Trace relation factory graph node", () => {
     }
     expect(node.className).toContain("border-outline");
     expect(node.className).toContain("bg-surface");
+    expect(node.className).toContain("shadow-none");
+    expect(node.className).not.toContain("shadow-af-card");
+    expect(node.className).not.toContain("shadow-af-panel");
   });
 
   it("does not render semantic icons or metadata badges for non-work nodes", () => {
@@ -217,5 +226,8 @@ describe("Trace relation factory graph node", () => {
       throw new Error("Expected relation node shell to render.");
     }
     expect(node.className).toContain("border-af-danger-border");
+    expect(node.className).toContain("shadow-none");
+    expect(node.className).not.toContain("shadow-af-card");
+    expect(node.className).not.toContain("shadow-af-panel");
   });
 });

@@ -16,7 +16,7 @@ import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-
 const RELATION_NODE_ACTIVE_CLASS =
   "hover:border-primary hover:bg-primary-container";
 const RELATION_NODE_CLASS =
-  "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";
+  "min-w-0 w-full justify-start overflow-hidden text-left shadow-none";
 
 function TraceRelationFactoryGraphNode({
   data,

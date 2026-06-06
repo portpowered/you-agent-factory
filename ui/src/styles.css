@@ -246,7 +246,7 @@
   }
 
   :is([data-current-activity-flow], [data-dashboard-graph-frame]) .react-flow {
-    @apply rounded-lg border border-af-border bg-af-surface-subtle;
+    @apply rounded-lg border border-af-border bg-af-surface-subtle shadow-none;
     --xy-controls-box-shadow: none;
     --xy-controls-button-background-color: var(--color-af-surface-raised);
     --xy-controls-button-background-color-hover: var(--color-af-overlay);

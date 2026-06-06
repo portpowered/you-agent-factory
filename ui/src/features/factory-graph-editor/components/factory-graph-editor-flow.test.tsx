@@ -273,6 +273,12 @@ describe("factory graph editor edge labels", () => {
 
     expect(reviewNode).not.toBeNull();
     expect(writerNode).not.toBeNull();
+    expect(reviewNode?.className).toContain("shadow-none");
+    expect(reviewNode?.className).not.toContain("shadow-af-card");
+    expect(reviewNode?.className).not.toContain("shadow-af-panel");
+    expect(writerNode?.className).toContain("shadow-none");
+    expect(writerNode?.className).not.toContain("shadow-af-card");
+    expect(writerNode?.className).not.toContain("shadow-af-panel");
     expect(
       reviewNode.querySelector(
         "[data-factory-entity-semantic-icon] [data-graph-semantic-icon='workstation']",

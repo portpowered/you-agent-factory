@@ -289,11 +289,13 @@ describe("TraceWorkstationPath explicit lineage", () => {
       ]);
     });
 
-    expect(
-      screen
-        .getByRole("region", { name: "Dispatch relationship graph" })
-        .getAttribute("data-dashboard-graph-frame"),
-    ).toBe("true");
+    const graphFrame = screen.getByRole("region", {
+      name: "Dispatch relationship graph",
+    });
+    expect(graphFrame.getAttribute("data-dashboard-graph-frame")).toBe("true");
+    expect(graphFrame.className).toContain("shadow-none");
+    expect(graphFrame.className).not.toContain("shadow-af-card");
+    expect(graphFrame.className).not.toContain("shadow-af-panel");
     expect(
       screen
         .getByTestId("trace-react-flow-controls")
