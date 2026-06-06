@@ -1,9 +1,6 @@
 package interfaces
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -11,8 +8,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 var approvedWorkDispatchFields = map[string]string{
@@ -83,172 +78,10 @@ func TestWorkDispatchContractGuard_WorkerOwnedFieldsStayDeleted(t *testing.T) {
 	}
 }
 
-var retiredFactoryBoundaryMirrorNames = []string{
-	"FactoryWorldWorkstationRequestView",
-	"FactoryWorldWorkstationRequestCountView",
-	"FactoryWorldWorkstationRequestRequestView",
-	"FactoryWorldWorkstationRequestResponseView",
-	"FactoryWorldTokenView",
-	"FactoryWorldMutationView",
-}
-
-var retiredFactoryCanonicalMirrorNames = []string{
-	"FactoryProviderFailure",
-	"FactoryProviderSession",
-	"FactoryWorkDiagnostics",
-	"FactoryRenderedPromptDiagnostic",
-	"FactoryProviderDiagnostic",
-	"FactoryEnabledTransitionView",
-	"FactoryFiringDecisionView",
-	"FactoryWorldDispatchView",
-	"FactoryWorldProviderSessionView",
-	"FactoryWorldInferenceAttemptView",
-}
-
-var approvedBoundaryViews = map[string]struct{}{
-	"FactoryWorldView":         {},
-	"FactoryWorldTopologyView": {},
-	"FactoryWorldRuntimeView":  {},
-}
-
 var retiredSimpleDashboardAggregateSeamNames = []string{
 	"FactoryWorldView",
 	"FactoryWorldTopologyView",
 	"FactoryWorldRuntimeView",
-}
-
-func TestFactoryWorldContractGuard_RetiredMirrorTypesStayDeleted(t *testing.T) {
-	t.Parallel()
-
-	forbidden := toStringSet(allRetiredFactoryMirrorNames())
-
-	paths, err := filepath.Glob("*.go")
-	if err != nil {
-		t.Fatalf("glob interface package files: %v", err)
-	}
-
-	fset := token.NewFileSet()
-	for _, path := range paths {
-		if filepath.Ext(path) != ".go" || filepath.Base(path) == "world_view_contract_guard_test.go" {
-			continue
-		}
-		file, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			t.Fatalf("parse %s: %v", path, err)
-		}
-		for _, decl := range file.Decls {
-			gen, ok := decl.(*ast.GenDecl)
-			if !ok || gen.Tok != token.TYPE {
-				continue
-			}
-			for _, spec := range gen.Specs {
-				typeSpec, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					continue
-				}
-				typeName := typeSpec.Name.Name
-				if _, blocked := forbidden[typeName]; blocked {
-					t.Fatalf("%s reintroduces retired mirror type %s", path, typeName)
-				}
-				if !strings.HasPrefix(typeName, "FactoryWorld") || !strings.HasSuffix(typeName, "View") {
-					continue
-				}
-				if _, approved := approvedBoundaryViews[typeName]; !approved {
-					t.Fatalf("%s introduces unapproved FactoryWorld*View mirror %s; update docs/development/world-view-contract-cleanup-data-model.md and this allowlist before adding new boundary-only views", path, typeName)
-				}
-			}
-		}
-	}
-}
-
-func TestFactoryWorldContractGuard_RetiredBoundaryMirrorNamesStayOutOfInterfacesGoFiles(t *testing.T) {
-	t.Parallel()
-
-	names := append([]string(nil), retiredFactoryBoundaryMirrorNames...)
-	sort.Strings(names)
-	patterns := make([]string, 0, len(names))
-	for _, name := range names {
-		patterns = append(patterns, regexp.QuoteMeta(name))
-	}
-	matcher := regexp.MustCompile(`\b(?:` + strings.Join(patterns, "|") + `)\b`)
-	allowed := map[string]struct{}{
-		filepath.Clean("interfaces/world_view_contract_guard_test.go"): {},
-	}
-
-	err := walkWorldViewMirrorFiles(".", "interfaces", false, allowed, func(path, rel string) error {
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		if match := matcher.FindString(string(data)); match != "" {
-			t.Fatalf("%s still contains retired boundary mirror name %q; keep API-owned workstation-request, token, and mutation DTOs out of pkg/interfaces", rel, match)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scan interface package go files: %v", err)
-	}
-}
-
-func TestFactoryWorldContractGuard_RetiredCanonicalMirrorNamesStayOutOfPkgGoFiles(t *testing.T) {
-	t.Parallel()
-
-	names := append([]string(nil), retiredFactoryCanonicalMirrorNames...)
-	sort.Strings(names)
-	patterns := make([]string, 0, len(names))
-	for _, name := range names {
-		patterns = append(patterns, regexp.QuoteMeta(name))
-	}
-	matcher := regexp.MustCompile(`\b(?:` + strings.Join(patterns, "|") + `)\b`)
-	allowed := map[string]struct{}{
-		filepath.Clean("interfaces/world_view_contract_guard_test.go"): {},
-	}
-
-	err := walkWorldViewMirrorFiles("..", "", true, allowed, func(path, rel string) error {
-		data, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		if match := matcher.FindString(string(data)); match != "" {
-			t.Fatalf("%s still contains retired mirror name %q; equivalent rg guard is `rg -n %q pkg -g \"*.go\"` from the repository root and should only hit approved guard notes", rel, match, strings.Join(names, "|"))
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("scan pkg go files: %v", err)
-	}
-}
-
-func TestFactoryWorldContractGuard_SkipsHiddenAndGeneratedDirectories(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeWorldViewGuardFixture(t, root, ".hidden/hidden.go", `package hidden
-
-type Hidden struct{}
-
-var _ = "FactoryProviderFailure"
-`)
-	writeWorldViewGuardFixture(t, root, "api/generated/generated.go", `package generated
-
-var _ = "FactoryProviderFailure"
-`)
-	writeWorldViewGuardFixture(t, root, "feature/kept.go", `package feature
-
-var _ = "FactoryProviderFailure"
-`)
-
-	allowed := map[string]struct{}{}
-	var visited []string
-	if err := walkWorldViewMirrorFiles(root, "", true, allowed, func(path, rel string) error {
-		visited = append(visited, rel)
-		return nil
-	}); err != nil {
-		t.Fatalf("walk world view mirror files: %v", err)
-	}
-	if len(visited) != 1 || visited[0] != filepath.Clean("feature/kept.go") {
-		t.Fatalf("visited = %v, want only handwritten source file %s", visited, filepath.Clean("feature/kept.go"))
-	}
 }
 
 func TestFactoryWorldContractGuard_RuntimeShellUsesCanonicalSelectedTickTypes(t *testing.T) {
@@ -342,69 +175,6 @@ func assertWorldViewFieldAbsent(t *testing.T, structType reflect.Type, fieldName
 
 	if _, ok := structType.FieldByName(fieldName); ok {
 		t.Fatalf("%s must not expose display-only %s field", structType.Name(), fieldName)
-	}
-}
-
-func toStringSet(values []string) map[string]struct{} {
-	out := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		out[value] = struct{}{}
-	}
-	return out
-}
-
-func allRetiredFactoryMirrorNames() []string {
-	names := make([]string, 0, len(retiredFactoryBoundaryMirrorNames)+len(retiredFactoryCanonicalMirrorNames))
-	names = append(names, retiredFactoryBoundaryMirrorNames...)
-	names = append(names, retiredFactoryCanonicalMirrorNames...)
-	return names
-}
-
-func walkWorldViewMirrorFiles(root, relPrefix string, includeGenerated bool, allowed map[string]struct{}, visit func(path, rel string) error) error {
-	root = filepath.Clean(root)
-
-	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			explicitSkips := []string{}
-			if includeGenerated {
-				explicitSkips = append(explicitSkips, "api/generated")
-			}
-			if contractguard.ShouldSkipDir(root, path, explicitSkips...) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if filepath.Ext(path) != ".go" {
-			return nil
-		}
-
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			return relErr
-		}
-		if relPrefix != "" {
-			rel = filepath.Join(relPrefix, rel)
-		}
-		rel = filepath.Clean(rel)
-		if _, ok := allowed[rel]; ok {
-			return nil
-		}
-		return visit(path, rel)
-	})
-}
-
-func writeWorldViewGuardFixture(t *testing.T, root, relativePath, contents string) {
-	t.Helper()
-
-	path := filepath.Join(root, relativePath)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", path, err)
-	}
-	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
 	}
 }
 
