@@ -234,6 +234,47 @@ func TestRunCommand_FactoryPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
 	}
 }
 
+func TestRunCommand_FactoryStdinPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetIn(strings.NewReader("Fix the stdin path\n"))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "-"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --factory with stdin prompt: %v", err)
+	}
+	if got.WorkFile == "" {
+		t.Fatal("expected generated work file for stdin factory prompt run")
+	}
+	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
+
+	workRequest, err := runcli.LoadWorkFile(got.WorkFile)
+	if err != nil {
+		t.Fatalf("LoadWorkFile: %v", err)
+	}
+	if len(workRequest.Works) != 1 || workRequest.Works[0].WorkTypeID != "story" {
+		t.Fatalf("works = %#v, want one story work item", workRequest.Works)
+	}
+	if payload, ok := workRequest.Works[0].Payload.(string); !ok || payload != "Fix the stdin path" {
+		t.Fatalf("payload = %#v, want stdin prompt text", workRequest.Works[0].Payload)
+	}
+}
+
 func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -263,6 +304,45 @@ func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 	}
 	if runCalled {
 		t.Fatal("run should not start for empty factory prompt")
+	}
+}
+
+func TestRunCommand_FactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetIn(strings.NewReader("Fix from stdin\n"))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix from args", "-"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected ambiguous positional and stdin prompt rejection")
+	}
+	for _, want := range []string{
+		runcli.InvocationErrorCodeAmbiguousInput,
+		string(runcli.InvocationInputSourcePositional),
+		string(runcli.InvocationInputSourceStdin),
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+	if runCalled {
+		t.Fatal("run should not start for ambiguous factory prompt input")
 	}
 }
 
