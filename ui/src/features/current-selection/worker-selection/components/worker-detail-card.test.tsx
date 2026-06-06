@@ -82,6 +82,13 @@ function editableConfigurationSection() {
   return section;
 }
 
+function expectPrimaryWorkerTitle(workerName: string) {
+  const panel = screen.getByRole("article", { name: "Current selection" });
+  const title = within(panel).getByText(workerName);
+
+  expect(title.classList.contains("type-display-large")).toBe(true);
+}
+
 function buildWorkerHeaderActions({
   canDiscard = false,
   canSave,
@@ -150,6 +157,14 @@ describe("WorkerDetailCard", () => {
   it("shows loading state while the current factory document is pending", () => {
     render(<WorkerDetailCard workerName="reviewer" />);
 
+    expectPrimaryWorkerTitle("reviewer");
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Collapse worker configuration editor",
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(
       screen.getByText(
         "Loading the current factory definition for this worker.",
@@ -202,7 +217,7 @@ describe("WorkerDetailCard", () => {
 
     render(<WorkerDetailCard workerName="reviewer" />);
 
-    expect(screen.getByText("reviewer")).toBeTruthy();
+    expectPrimaryWorkerTitle("reviewer");
     expect(
       screen.getByRole("heading", { name: "Worker configuration" }),
     ).toBeTruthy();

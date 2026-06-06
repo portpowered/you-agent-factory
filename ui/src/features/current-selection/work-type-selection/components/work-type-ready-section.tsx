@@ -42,7 +42,6 @@ export function WorkTypeEditableConfigurationSection({
 
   return (
     <CurrentSelectionExpandableSection
-      className="mt-0"
       contentId={contentId}
       defaultExpanded
       headingId={headingId}

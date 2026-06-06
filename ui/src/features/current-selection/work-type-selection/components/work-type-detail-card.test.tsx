@@ -114,6 +114,13 @@ function editableWorkTypeConfigurationForm() {
   return form;
 }
 
+function expectPrimaryWorkTypeTitle(workTypeName: string) {
+  const panel = screen.getByRole("article", { name: "Current selection" });
+  const title = within(panel).getByText(workTypeName);
+
+  expect(title.classList.contains("type-display-large")).toBe(true);
+}
+
 function WorkTypeDetailCardHarness({
   onSelectWorkStateGraphNode,
   workTypeName,
@@ -158,6 +165,14 @@ describe("WorkTypeDetailCard", () => {
 
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
+    expectPrimaryWorkTypeTitle("story");
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Collapse work type configuration editor",
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(
       screen.getByText(
         "Loading the current factory definition for this work type.",
@@ -196,6 +211,7 @@ describe("WorkTypeDetailCard", () => {
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     const panel = screen.getByRole("article", { name: "Current selection" });
+    expectPrimaryWorkTypeTitle("story");
     const nameInput = within(panel).getByLabelText("Work type");
 
     expect(nameInput.getAttribute("value")).toBe("story");

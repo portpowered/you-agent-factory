@@ -12,13 +12,10 @@ import {
 import { formatList } from "../../../../components/ui/formatters";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
-import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
   CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
-  CurrentSelectionLabel,
-  CurrentSelectionSupportingText,
 } from "../../base/public";
 import { formatEditableResourceOverwriteFieldLabels } from "../editing/editable-resource-overwrite-fields";
 import type {
@@ -31,6 +28,11 @@ import type {
 } from "../lib/detail-card-types";
 import type { EditableResourceValidationErrors } from "../lib/resource-editable-validation";
 import type { getResourceDetailMessages } from "../messages/resource-detail";
+import {
+  ResourceReferencingWorkersSection,
+  ResourceReferencingWorkstationsSection,
+  ResourceSummarySection,
+} from "./resource-detail-context-section";
 
 export function ResourceEditableConfigurationSection({
   detailState,
@@ -52,9 +54,8 @@ export function ResourceEditableConfigurationSection({
   const headingId = `${sectionId}-heading`;
 
   return (
-    <div className="grid gap-4 [&_h4]:m-0">
+    <>
       <CurrentSelectionExpandableSection
-        className="mt-0"
         contentId={contentId}
         defaultExpanded
         headingId={headingId}
@@ -95,7 +96,7 @@ export function ResourceEditableConfigurationSection({
         messages={messages}
         tokenCount={tokenCount}
       />
-    </div>
+    </>
   );
 }
 
@@ -377,67 +378,27 @@ function ResourceRuntimeContextSection({
   messages: ReturnType<typeof getResourceDetailMessages>;
   tokenCount?: number | null;
 }) {
-  const { workerNames, workstationNames } = detailState;
+  const { resource, workerNames, workstationNames } = detailState;
+  const typeLabel = resource.type
+    ? messages.localizeResourceType(resource.type)
+    : messages.notConfiguredValue;
 
   return (
     <>
-      {tokenCount !== null && tokenCount !== undefined ? (
-        <section
-          aria-labelledby="resource-runtime-heading"
-          className="grid gap-2"
-        >
-          <CurrentSelectionSectionHeader
-            headingId="resource-runtime-heading"
-            title={messages.summaryHeading}
-          />
-          <div className="grid gap-0.5">
-            <CurrentSelectionLabel>
-              {messages.tokenCountFieldLabel}
-            </CurrentSelectionLabel>
-            <DashboardText as="span" className="m-0 text-on-surface">
-              {String(tokenCount)}
-            </DashboardText>
-          </div>
-        </section>
-      ) : null}
-
-      <section
-        aria-labelledby="resource-referencing-workers-heading"
-        className="grid gap-2"
-      >
-        <CurrentSelectionSectionHeader
-          headingId="resource-referencing-workers-heading"
-          title={messages.referencingWorkersHeading}
-        />
-        {workerNames.length > 0 ? (
-          <DashboardText className="m-0 text-on-surface">
-            {formatList(workerNames)}
-          </DashboardText>
-        ) : (
-          <CurrentSelectionSupportingText>
-            {messages.referencingWorkersEmpty}
-          </CurrentSelectionSupportingText>
-        )}
-      </section>
-
-      <section
-        aria-labelledby="resource-referencing-workstations-heading"
-        className="grid gap-2"
-      >
-        <CurrentSelectionSectionHeader
-          headingId="resource-referencing-workstations-heading"
-          title={messages.referencingWorkstationsHeading}
-        />
-        {workstationNames.length > 0 ? (
-          <DashboardText className="m-0 text-on-surface">
-            {formatList(workstationNames)}
-          </DashboardText>
-        ) : (
-          <CurrentSelectionSupportingText>
-            {messages.referencingWorkstationsEmpty}
-          </CurrentSelectionSupportingText>
-        )}
-      </section>
+      <ResourceSummarySection
+        messages={messages}
+        resource={resource}
+        tokenCount={tokenCount}
+        typeLabel={typeLabel}
+      />
+      <ResourceReferencingWorkersSection
+        messages={messages}
+        workerNames={workerNames}
+      />
+      <ResourceReferencingWorkstationsSection
+        messages={messages}
+        workstationNames={workstationNames}
+      />
     </>
   );
 }
