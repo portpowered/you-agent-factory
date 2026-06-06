@@ -950,6 +950,95 @@ func (p *recordingServiceModelAssetPuller) ResolveModelCache(context.Context, *c
 	return localModelCacheLayout{}, nil
 }
 
+type stubModelService struct {
+	listResult   factoryapi.ListModelsResponse
+	listErr      error
+	gotModel     factoryapi.ModelDetail
+	getErr       error
+	pullResult   apisurface.ModelPullResult
+	pullErr      error
+	invokeResult apisurface.ModelInvocationResult
+	invokeErr    error
+	calls        []string
+	modelNames   []string
+	requests     []factoryapi.ModelInvocationRequest
+}
+
+func (s *stubModelService) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	s.calls = append(s.calls, "list")
+	return s.listResult, s.listErr
+}
+
+func (s *stubModelService) GetModel(_ context.Context, modelName string) (factoryapi.ModelDetail, error) {
+	s.calls = append(s.calls, "get")
+	s.modelNames = append(s.modelNames, modelName)
+	return s.gotModel, s.getErr
+}
+
+func (s *stubModelService) PullModel(_ context.Context, modelName string) (apisurface.ModelPullResult, error) {
+	s.calls = append(s.calls, "pull")
+	s.modelNames = append(s.modelNames, modelName)
+	return s.pullResult, s.pullErr
+}
+
+func (s *stubModelService) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	s.calls = append(s.calls, "invoke")
+	s.modelNames = append(s.modelNames, modelName)
+	s.requests = append(s.requests, request)
+	return s.invokeResult, s.invokeErr
+}
+
+func TestFactoryService_ModelMethodsDelegateToModelService(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubModelService{
+		listResult:   factoryapi.ListModelsResponse{Results: []factoryapi.ModelSummary{{Name: "catalog-model"}}},
+		gotModel:     factoryapi.ModelDetail{Name: "detail-model"},
+		pullResult:   apisurface.ModelPullResult{ModelName: "pull-model"},
+		invokeResult: apisurface.ModelInvocationResult{ModelName: "invoke-model"},
+	}
+	svc := &FactoryService{modelService: stub}
+
+	listed, err := svc.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	got, err := svc.GetModel(context.Background(), "detail-model")
+	if err != nil {
+		t.Fatalf("GetModel: %v", err)
+	}
+	pulled, err := svc.PullModel(context.Background(), "pull-model")
+	if err != nil {
+		t.Fatalf("PullModel: %v", err)
+	}
+	invoked, err := svc.InvokeModel(context.Background(), "invoke-model", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	if err != nil {
+		t.Fatalf("InvokeModel: %v", err)
+	}
+
+	if len(listed.Results) != 1 || listed.Results[0].Name != "catalog-model" {
+		t.Fatalf("ListModels result = %#v, want delegated catalog-model", listed)
+	}
+	if got.Name != "detail-model" {
+		t.Fatalf("GetModel result = %#v, want delegated detail-model", got)
+	}
+	if pulled.ModelName != "pull-model" {
+		t.Fatalf("PullModel result = %#v, want delegated pull-model", pulled)
+	}
+	if invoked.ModelName != "invoke-model" {
+		t.Fatalf("InvokeModel result = %#v, want delegated invoke-model", invoked)
+	}
+	if strings.Join(stub.calls, ",") != "list,get,pull,invoke" {
+		t.Fatalf("model service calls = %#v, want list,get,pull,invoke", stub.calls)
+	}
+	if len(stub.modelNames) != 3 || stub.modelNames[0] != "detail-model" || stub.modelNames[1] != "pull-model" || stub.modelNames[2] != "invoke-model" {
+		t.Fatalf("model names = %#v, want delegated model-name sequence", stub.modelNames)
+	}
+	if len(stub.requests) != 1 || stub.requests[0].Operation != "TTS" {
+		t.Fatalf("invoke requests = %#v, want delegated TTS request", stub.requests)
+	}
+}
+
 func TestBuildFactoryService_InitializesFactorySessionsRegistry(t *testing.T) {
 	rootDir := t.TempDir()
 	alphaDir := writeNamedFactoryFixture(t, rootDir, "alpha")
