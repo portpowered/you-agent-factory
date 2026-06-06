@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { NodeProps } from "@xyflow/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -174,8 +175,9 @@ describe("Trace relation factory graph node", () => {
     expect(screen.queryByLabelText("Resource")).toBeNull();
   });
 
-  it("invokes onSelectWorkID for selectable relation endpoints", () => {
+  it("invokes onSelectWorkID for selectable relation endpoints", async () => {
     const onSelectWorkID = vi.fn();
+    const user = userEvent.setup();
 
     render(
       <RelationNode
@@ -196,8 +198,15 @@ describe("Trace relation factory graph node", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Story B" }));
-    expect(onSelectWorkID).toHaveBeenCalledWith("work-b");
+    const button = screen.getByRole("button", { name: "Story B" });
+    fireEvent.click(button);
+    button.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+
+    expect(onSelectWorkID).toHaveBeenNthCalledWith(1, "work-b");
+    expect(onSelectWorkID).toHaveBeenNthCalledWith(2, "work-b");
+    expect(onSelectWorkID).toHaveBeenNthCalledWith(3, "work-b");
     expect(screen.queryByText("Failed")).toBeNull();
     expect(screen.queryByText("Retry")).toBeNull();
     const node = screen.getByText("Story B").closest("article");

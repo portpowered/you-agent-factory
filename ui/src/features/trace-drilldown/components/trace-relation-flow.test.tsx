@@ -390,9 +390,16 @@ describe("TraceRelationFlow localization", () => {
 
     expect(screen.getByText("Review story")).toBeTruthy();
     expect(screen.getByText("Fix story")).toBeTruthy();
+    expect(screen.queryByText("派生自")).toBeNull();
+    expect(screen.queryByText("未知状态：escalated_review")).toBeNull();
     expect(renderedEdges()[0]?.ariaLabel).toBe(
       "派生自关系：从 Review story 到 Fix story，要求 未知状态：escalated_review",
     );
+    expect(renderedEdges()[0]?.style).toMatchObject({
+      stroke: "var(--color-on-warning-container)",
+      strokeDasharray: "7 5",
+      strokeWidth: 2,
+    });
   });
 
   it("renders fallback node labels when relation names are missing", async () => {

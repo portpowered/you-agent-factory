@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -284,6 +284,8 @@ export function formatPhaseElapsed(phaseName, elapsedMs) {
 export function cleanCoverageArtifacts() {
   rmSync("coverage", { force: true, recursive: true });
   rmSync(".vitest-reports", { force: true, recursive: true });
+  mkdirSync("coverage/.tmp", { recursive: true });
+  mkdirSync(".vitest-reports", { recursive: true });
 }
 
 export function runTimedPhase(phase, spawn = spawnSync, options = {}) {
