@@ -6,7 +6,7 @@ import {
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
 } from "../../work-outcome/lib/work-chart-legend-contract";
-import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-story-contract";
+import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
@@ -63,10 +63,14 @@ export const WorkOutcomeChart = {
     const chart = within(card).getByRole("img", {
       name: "Work outcome chart for Session",
     });
+    const chartMessages = getWorkOutcomeMessages().chart;
 
     await expect(chart).toBeVisible();
     expectBentoHeaderDragSurface(card, "Work outcome chart");
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
     await expectWorkOutcomeChartLegendAndAxisContract(card, chart);
   },
 };
@@ -95,8 +99,12 @@ export const WorkOutcomeChartNarrow = {
     const chart = within(card).getByRole("img", {
       name: "Work outcome chart for Session",
     });
+    const chartMessages = getWorkOutcomeMessages().chart;
 
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
     await expectWorkOutcomeChartLegendAndAxisContract(card, chart);
 
     const frame = canvasElement.firstElementChild;
@@ -124,7 +132,11 @@ export const WorkOutcomeChartLoading = {
     await expect(await within(card).findByRole("status")).toHaveTextContent(
       "Loading work outcome samples",
     );
-    expectSingleWorkOutcomeCardHeader(card);
+    const chartMessages = getWorkOutcomeMessages().chart;
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -143,7 +155,11 @@ export const WorkOutcomeChartEmpty = {
     await expect(await within(card).findByRole("status")).toHaveTextContent(
       "No work outcome samples",
     );
-    expectSingleWorkOutcomeCardHeader(card);
+    const chartMessages = getWorkOutcomeMessages().chart;
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -163,6 +179,10 @@ export const WorkOutcomeChartError = {
     await expect(await within(card).findByRole("alert")).toHaveTextContent(
       "Work outcome chart unavailable",
     );
-    expectSingleWorkOutcomeCardHeader(card);
+    const chartMessages = getWorkOutcomeMessages().chart;
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };

@@ -13,7 +13,7 @@ import {
   expectWorkChartLegendClearOfCardTitle,
 } from "../lib/work-chart-legend-contract";
 import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
-import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-story-contract";
+import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { D3CompletionInformationCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
@@ -179,7 +179,10 @@ async function expectWorkOutcomeChartContract(
   expect(overlay?.className).toContain("px-0");
   expect(overlay?.className).toContain("pb-3");
   expect(overlay?.className).toContain("pt-0");
-  expectSingleWorkOutcomeCardHeader(card);
+  expectSingleWorkOutcomeCardHeader(card, {
+    cardRegionLabel: chartMessages.cardRegionLabel,
+    cardTitle: chartMessages.cardTitle,
+  });
   await waitFor(() => {
     const responsiveContainer = chart.querySelector<HTMLElement>(
       ".recharts-responsive-container",
@@ -385,8 +388,12 @@ export const EmptyData = {
     });
 
     const emptyState = within(card).getByRole("status");
+    const chartMessages = getWorkOutcomeMessages().chart;
     expectCenteredStatusPanel(emptyState);
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -410,8 +417,12 @@ export const LoadingData = {
     });
 
     const loadingState = within(card).getByRole("status");
+    const chartMessages = getWorkOutcomeMessages().chart;
     expectCenteredStatusPanel(loadingState);
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
@@ -436,8 +447,12 @@ export const ErrorState = {
     });
 
     const alert = within(card).getByRole("alert");
+    const chartMessages = getWorkOutcomeMessages().chart;
     expectCenteredStatusPanel(alert);
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
     expectNoOverflowInStoryShell(canvasElement);
   },
 };
@@ -499,7 +514,10 @@ export const LocalizedZhCN = {
         yAxisLabel: chartMessages.yAxisLabel,
       });
     });
-    expectSingleWorkOutcomeCardHeader(card, { locale: "zh-CN" });
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
   },
 };
 
@@ -522,8 +540,12 @@ export const ZoomInteraction = {
     const chart = within(card).getByRole("img", {
       name: "Work outcome chart for 15m",
     });
+    const chartMessages = getWorkOutcomeMessages().chart;
 
-    expectSingleWorkOutcomeCardHeader(card);
+    expectSingleWorkOutcomeCardHeader(card, {
+      cardRegionLabel: chartMessages.cardRegionLabel,
+      cardTitle: chartMessages.cardTitle,
+    });
     await waitFor(() => {
       expectWorkChartCompactLegendContract(chart);
     });
