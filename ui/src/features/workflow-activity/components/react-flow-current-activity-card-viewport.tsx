@@ -27,6 +27,7 @@ import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/fa
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
+import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
@@ -240,6 +241,8 @@ export function CurrentActivityGraphViewport({
     editorMode,
     nodes,
   });
+  const graphViewport =
+    useMeasuredCurrentActivityGraphViewport(flowContainerRef);
   const handleConnect = useCallback(
     (connection: Connection) => {
       onConnect?.({
@@ -266,7 +269,6 @@ export function CurrentActivityGraphViewport({
         locale={locale}
       />
       <section
-        ref={flowContainerRef}
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
@@ -282,65 +284,77 @@ export function CurrentActivityGraphViewport({
           imports.dropState,
         )}
         data-current-activity-flow
+        ref={flowContainerRef}
         onDragEnter={imports.onDragEnter}
         onDragLeave={imports.onDragLeave}
         onDragOver={imports.onDragOver}
         onDrop={imports.onDrop}
       >
-        <ReactFlow
-          connectionLineStyle={{
-            stroke: "var(--color-primary)",
-            strokeWidth: 2.4,
-          }}
-          edges={edges}
-          edgeTypes={edgeTypes}
-          fitView
-          fitViewOptions={initialFitViewOptions}
-          key={initialFitViewKey}
-          isValidConnection={isValidConnection}
-          maxZoom={2}
-          minZoom={0.25}
-          nodeTypes={nodeTypes}
-          nodes={nodes}
-          edgesFocusable={editorMode}
-          nodesConnectable={editorMode && activeTool === "connect"}
-          onConnect={handleConnect}
-          onInit={(instance) => {
-            if (flowInstanceRef) {
-              flowInstanceRef.current = instance;
-            }
-          }}
-          onError={handleCurrentActivityReactFlowError}
-          onEdgeClick={(_, edge) => {
-            if (editorMode) {
-              onEditorEdgeClick?.(
-                factoryGraphEdgeIdForRenderedEdge(nodes, edge),
-              );
-            }
-          }}
-          nodesDraggable={true}
-          onNodeClick={(_, node) => {
-            if (editorMode) {
-              onEditorNodeClick?.(
-                factoryGraphNodeIdForRenderedNode(nodes, node.id),
-              );
-            }
-          }}
-          onNodeDragStop={(_, node) => {
-            if (graphKey) {
-              setStoredNodePosition(graphKey, node.id, node.position);
-            }
-          }}
-          onNodesChange={handleNodesChange}
-          panOnDrag
-          proOptions={{ hideAttribution: true }}
-          zoomOnScroll
-        >
-          <DashboardGraphBackground />
-          <DashboardGraphControls
-            fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
-          />
-        </ReactFlow>
+        {graphViewport.ready ? (
+          <div
+            className="absolute left-0 top-0"
+            data-current-activity-flow-viewport
+            style={{
+              height: `${graphViewport.height}px`,
+              width: `${graphViewport.width}px`,
+            }}
+          >
+            <ReactFlow
+              connectionLineStyle={{
+                stroke: "var(--color-primary)",
+                strokeWidth: 2.4,
+              }}
+              edges={edges}
+              edgeTypes={edgeTypes}
+              fitView
+              fitViewOptions={initialFitViewOptions}
+              key={initialFitViewKey}
+              isValidConnection={isValidConnection}
+              maxZoom={2}
+              minZoom={0.25}
+              nodeTypes={nodeTypes}
+              nodes={nodes}
+              edgesFocusable={editorMode}
+              nodesConnectable={editorMode && activeTool === "connect"}
+              onConnect={handleConnect}
+              onInit={(instance) => {
+                if (flowInstanceRef) {
+                  flowInstanceRef.current = instance;
+                }
+              }}
+              onError={handleCurrentActivityReactFlowError}
+              onEdgeClick={(_, edge) => {
+                if (editorMode) {
+                  onEditorEdgeClick?.(
+                    factoryGraphEdgeIdForRenderedEdge(nodes, edge),
+                  );
+                }
+              }}
+              nodesDraggable={true}
+              onNodeClick={(_, node) => {
+                if (editorMode) {
+                  onEditorNodeClick?.(
+                    factoryGraphNodeIdForRenderedNode(nodes, node.id),
+                  );
+                }
+              }}
+              onNodeDragStop={(_, node) => {
+                if (graphKey) {
+                  setStoredNodePosition(graphKey, node.id, node.position);
+                }
+              }}
+              onNodesChange={handleNodesChange}
+              panOnDrag
+              proOptions={{ hideAttribution: true }}
+              zoomOnScroll
+            >
+              <DashboardGraphBackground />
+              <DashboardGraphControls
+                fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
+              />
+            </ReactFlow>
+          </div>
+        ) : null}
         <CurrentActivityGraphEditorChrome
           activeTool={activeTool}
           addMenuActions={addMenuActions}

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
 import type { ReactNode } from "react";
 
@@ -120,12 +120,57 @@ const importController: CurrentActivityImportController = {
   onDrop: vi.fn(),
 };
 
+const DEFAULT_GRAPH_RECT = {
+  bottom: 720,
+  height: 720,
+  left: 0,
+  right: 1280,
+  top: 0,
+  width: 1280,
+  x: 0,
+  y: 0,
+  toJSON: () => ({}),
+} as DOMRect;
+
 afterEach(() => {
   cleanup();
   reactFlowErrorToReport = null;
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: React Flow error coverage keeps the viewport bootstrap setup and endpoint assertions together.
 describe("CurrentActivityGraphViewport React Flow errors", () => {
+  const originalBoundingClientRect =
+    HTMLElement.prototype.getBoundingClientRect;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
+    globalThis.ResizeObserver = class {
+      public constructor(private readonly callback: ResizeObserverCallback) {}
+
+      public disconnect(): void {}
+
+      public observe(target: Element): void {
+        this.callback(
+          [
+            {
+              contentRect: DEFAULT_GRAPH_RECT,
+              target,
+            } as ResizeObserverEntry,
+          ],
+          this as unknown as ResizeObserver,
+        );
+      }
+
+      public unobserve(): void {}
+    } as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
   it("throws when React Flow reports an edge endpoint handle mismatch", () => {
     reactFlowErrorToReport = {
       errorId: "008",
@@ -138,8 +183,8 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
     );
   });
 
-  it("renders semantic endpoint edges when source and target handles exist", () => {
-    const { getByRole } = renderViewport({
+  it("renders semantic endpoint edges when source and target handles exist", async () => {
+    renderViewport({
       edges: [
         {
           id: "workstation-output:workstation:review->place:story:done",
@@ -156,7 +201,8 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
     });
 
     expect(
-      getByRole("list", { name: "Rendered graph edges" }).textContent,
+      (await screen.findByRole("list", { name: "Rendered graph edges" }))
+        .textContent,
     ).toContain("workstation-output:workstation:review->place:story:done");
   });
 
@@ -268,6 +314,8 @@ function renderViewport({
   edges?: Edge[];
   nodes?: Node[];
 } = {}) {
+  const flowContainerRef = { current: null as HTMLElement | null };
+
   return render(
     <CurrentActivityGraphViewport
       activeTool={null}
@@ -275,6 +323,7 @@ function renderViewport({
       canSaveDraft={false}
       editorMode={false}
       edges={edges}
+      flowContainerRef={flowContainerRef}
       graphKey="test-graph"
       handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}
