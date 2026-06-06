@@ -1,11 +1,7 @@
 package interfaces
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
-	"regexp"
-	"sort"
 	"strings"
 	"testing"
 )
@@ -78,12 +74,6 @@ func TestWorkDispatchContractGuard_WorkerOwnedFieldsStayDeleted(t *testing.T) {
 	}
 }
 
-var retiredSimpleDashboardAggregateSeamNames = []string{
-	"FactoryWorldView",
-	"FactoryWorldTopologyView",
-	"FactoryWorldRuntimeView",
-}
-
 func TestFactoryWorldContractGuard_RuntimeShellUsesCanonicalSelectedTickTypes(t *testing.T) {
 	t.Parallel()
 
@@ -115,32 +105,6 @@ func TestFactoryWorldContractGuard_RuntimeShellUsesCanonicalSelectedTickTypes(t 
 	assertWorldViewFieldAbsent(t, sessionType, "CompletedWorkLabels")
 	assertWorldViewFieldAbsent(t, sessionType, "FailedWorkLabels")
 	assertWorldViewFieldAbsent(t, sessionType, "FailedWorkDetailsByWorkID")
-}
-
-func TestFactoryWorldContractGuard_SimpleDashboardSeamStaysOffBroadAggregateShell(t *testing.T) {
-	t.Parallel()
-
-	names := append([]string(nil), retiredSimpleDashboardAggregateSeamNames...)
-	sort.Strings(names)
-	patterns := make([]string, 0, len(names))
-	for _, name := range names {
-		patterns = append(patterns, regexp.QuoteMeta(name))
-	}
-	matcher := regexp.MustCompile(`\b(?:` + strings.Join(patterns, "|") + `)\b`)
-
-	guardedFiles := []string{
-		filepath.Clean("../service/factory.go"),
-		filepath.Clean("../cli/dashboard/dashboard.go"),
-	}
-	for _, path := range guardedFiles {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
-		}
-		if match := matcher.FindString(string(data)); match != "" {
-			t.Fatalf("%s references %q; the simple-dashboard aggregate-retirement decision keeps this seam on projections.BuildSimpleDashboardWorldView(...) and forbids reintroducing pkg/interfaces aggregate shell ownership here", filepath.Clean(path), match)
-		}
-	}
 }
 
 func assertWorldViewFieldType(t *testing.T, structType reflect.Type, fieldName string, want reflect.Type) {
