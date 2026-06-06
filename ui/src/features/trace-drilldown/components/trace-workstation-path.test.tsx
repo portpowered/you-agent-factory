@@ -377,6 +377,58 @@ describe("TraceWorkstationPath fallback lineage", () => {
   });
 });
 
+describe("TraceWorkstationPath localization", () => {
+  it("renders zh-CN graph chrome without changing workstation names", async () => {
+    render(
+      <TraceWorkstationPath
+        dispatches={[
+          buildDispatch("dispatch-plan", {
+            current_chaining_trace_id: "trace-plan-chain",
+            output_items: [
+              buildWorkItem("work-reviewed", {
+                current_chaining_trace_id: "trace-plan-chain",
+                display_name: "已审阅故事",
+              }),
+            ],
+            workstation_name: "计划",
+          }),
+          buildDispatch("dispatch-implement", {
+            input_items: [
+              buildWorkItem("work-reviewed", {
+                display_name: "已审阅故事",
+              }),
+            ],
+            previous_chaining_trace_ids: ["trace-plan-chain"],
+            workstation_name: "实现",
+          }),
+        ]}
+        locale="zh-CN"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("region", { name: "分派关系图" })
+          .getAttribute("data-dashboard-graph-frame"),
+      ).toBe("true");
+    });
+
+    expect(screen.getByText("计划")).toBeTruthy();
+    expect(screen.getByText("实现")).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("trace-react-flow-controls")
+        .getAttribute("data-fit-view-options"),
+    ).toBe(JSON.stringify({ maxZoom: 1.15, padding: 0.16 }));
+    expect(
+      screen
+        .getByTestId("trace-react-flow-controls")
+        .getAttribute("data-controls-style"),
+    ).toContain('"backgroundColor":"var(--color-surface)"');
+  });
+});
+
 describe("TraceWorkstationPath captured selections", () => {
   it("renders the captured trace-654e selection with seven dispatch nodes", async () => {
     render(
@@ -493,7 +545,7 @@ describe("TraceWorkstationPath layout", () => {
 });
 
 describe("TraceWorkstationPath semantics", () => {
-  it("renders semantic workstation path tones and muted supporting copy", async () => {
+  it("renders factory-style workstation identity without dispatch metadata", async () => {
     render(
       <TraceWorkstationPath
         dispatches={[
@@ -516,22 +568,23 @@ describe("TraceWorkstationPath semantics", () => {
 
     expect(screen.queryByText("Dispatch")).toBeNull();
     expect(screen.getAllByText("Workstation").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Accepted")).toBeNull();
+    expect(screen.queryByText("Failed")).toBeNull();
+    expect(screen.queryByText(/^In:/)).toBeNull();
+    expect(screen.queryByText(/^Out:/)).toBeNull();
 
     const acceptedNode = screen.getByText("dispatch-plan").closest("article");
     if (!acceptedNode) {
       throw new Error("Expected accepted workstation node to render.");
     }
-    expect(acceptedNode.className).toContain("border-af-success-border");
-    expect(acceptedNode.className).toContain("bg-success-container");
+    expect(acceptedNode.className).toContain("border-primary");
+    expect(acceptedNode.className).toContain("bg-primary-container");
 
     const failedNode = screen.getByText("dispatch-repair").closest("article");
     if (!failedNode) {
       throw new Error("Expected failed workstation node to render.");
     }
-    expect(failedNode.className).toContain("border-af-danger-border");
-    expect(failedNode.className).toContain("bg-error-container");
-
-    const inputSummary = screen.getAllByText(/^In:/)[0];
-    expect(inputSummary.className).toContain("text-on-surface-variant");
+    expect(failedNode.className).toContain("border-primary");
+    expect(failedNode.className).toContain("bg-primary-container");
   });
 });
