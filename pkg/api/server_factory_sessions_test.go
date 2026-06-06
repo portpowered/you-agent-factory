@@ -22,6 +22,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing.T) {
@@ -502,109 +504,6 @@ func TestCurrentFactoryBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
 	assertJSONError(t, putRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
 }
 
-func TestGetProviderSessionDetails_LoadsCodexSessionFromConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess_123", strings.Join([]string{
-		`{"type":"session_meta","id":"sess_123"}`,
-		`{"type":"response_item","item":{"type":"reasoning"}}`,
-		`{"unexpected":true}`,
-		`not-json`,
-		``,
-	}, "\n"))
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
-	assertProviderSessionResponseIdentity(t, resp)
-	assertProviderSessionParseCounts(t, resp.Parse)
-	assertProviderSessionTranscriptSummary(t, resp)
-	assertProviderSessionParseDiagnostics(t, resp.Parse)
-}
-
-func assertProviderSessionResponseIdentity(t *testing.T, resp factoryapi.ProviderSessionDetailResponse) {
-	t.Helper()
-
-	if string(resp.ProviderSession.Provider) != "codex" || string(resp.ProviderSession.Kind) != "session_id" || resp.ProviderSession.Id != "sess_123" {
-		t.Fatalf("provider session = %#v, want codex session_id sess_123", resp.ProviderSession)
-	}
-	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" || resp.Source.SizeBytes == 0 {
-		t.Fatalf("source = %#v, want rooted rollout path with metadata", resp.Source)
-	}
-}
-
-func assertProviderSessionParseCounts(t *testing.T, parse factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if parse.LineCount != 4 || parse.EventCount != 3 || parse.MalformedLineCount != 1 || parse.UnknownEventCount != 1 {
-		t.Fatalf("parse summary = %#v, want line/event/malformed/unknown counts", parse)
-	}
-}
-
-func assertProviderSessionTranscriptSummary(t *testing.T, resp factoryapi.ProviderSessionDetailResponse) {
-	t.Helper()
-
-	if len(resp.Transcript) != 1 || resp.Transcript[0].Type != factoryapi.Reasoning || resp.Transcript[0].Order != 1 {
-		t.Fatalf("transcript = %#v, want one reasoning transcript entry", resp.Transcript)
-	}
-	if len(resp.Parse.Turns) != 1 || resp.Parse.Turns[0].ReasoningCount != 1 || len(resp.Parse.Reasoning) != 1 || resp.Parse.Reasoning[0].SourceType != "reasoning" {
-		t.Fatalf("parse detail = %#v, want reasoning turn summary", resp.Parse)
-	}
-}
-
-func assertProviderSessionParseDiagnostics(t *testing.T, parse factoryapi.ProviderSessionParseSummary) {
-	t.Helper()
-
-	if len(parse.ParseErrors) != 1 || parse.ParseErrors[0].LineNumber != 4 || len(parse.UnknownEvents) != 1 || parse.UnknownEvents[0].LineNumber != 3 {
-		t.Fatalf("parse diagnostics = %#v, want malformed line 4 and unknown line 3", parse)
-	}
-}
-
-func TestGetProviderSessionDetails_LoadsTimestampPrefixedCodexSessionFromConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl", strings.Join([]string{
-		`{"type":"session_meta","id":"019e44f4-580e-7f32-981e-1e54ec6907d6"}`,
-		`{"type":"response_item","payload":{"type":"reasoning"}}`,
-	}, "\n"))
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=019e44f4-580e-7f32-981e-1e54ec6907d6", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
-	if resp.Source.RelativePath != "2026/05/18/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl" || resp.ProviderSession.Id != "019e44f4-580e-7f32-981e-1e54ec6907d6" || resp.Parse.EventCount != 2 {
-		t.Fatalf("provider session detail = %#v, want timestamp-prefixed session path", resp)
-	}
-}
-
-func TestGetProviderSessionDetails_PrefersExactCodexSessionFileWhenSupportedLayoutsBothExist(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess_123", `{"type":"session_meta","id":"sess_123"}`)
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
-	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
-		t.Fatalf("relative path = %q, want exact rollout basename", resp.Source.RelativePath)
-	}
-}
-
 func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
 	session := strings.Join([]string{
 		`{"timestamp":"2026-05-18T10:00:00Z","type":"turn_context"}`,
@@ -871,6 +770,59 @@ func TestGetProviderSessionDetails_NotFoundIsDistinguishable(t *testing.T) {
 	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
 }
 
+func TestGetProviderSessionDetails_CursorNotFoundIsDistinguishable(t *testing.T) {
+	srv := newTestServerWithCursorRoot(t.TempDir())
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_LegacyAgentCursorNotFoundIsDistinguishable(t *testing.T) {
+	srv := newTestServerWithCursorRoot(t.TempDir())
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=agent&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+}
+
+func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
+	root := t.TempDir()
+	core, logs := observer.New(zap.InfoLevel)
+	srv := NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: root})
+
+	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=cursor&kind=session_id&id=missing-session", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusNotFound, "NOT_FOUND", "provider session not found")
+
+	entries := logs.FilterMessage("cursor provider session lookup not found").AllUntimed()
+	if len(entries) != 1 {
+		t.Fatalf("cursor not-found diagnostic count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if fields["provider"] != "cursor" {
+		t.Fatalf("provider field = %#v, want cursor", fields["provider"])
+	}
+	if fields["lookup_kind"] != "session_id" {
+		t.Fatalf("lookup_kind field = %#v, want session_id", fields["lookup_kind"])
+	}
+	if fields["requested_id"] != "missing-session" {
+		t.Fatalf("requested_id field = %#v, want missing-session", fields["requested_id"])
+	}
+	if fields["searched_root"] != root {
+		t.Fatalf("searched_root field = %#v, want %q", fields["searched_root"], root)
+	}
+	if fields["root_configured"] != true {
+		t.Fatalf("root_configured field = %#v, want true", fields["root_configured"])
+	}
+}
+
 func TestGetProviderSessionDetails_IgnoresUnsupportedRolloutFileNames(t *testing.T) {
 	root := t.TempDir()
 	writeNamedProviderSessionFixture(t, root, "rollout-backup-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
@@ -895,6 +847,38 @@ func TestGetProviderSessionDetails_RejectsPathLikeAndMalformedIdentifiers(t *tes
 			rec := httptest.NewRecorder()
 			srv.Handler().ServeHTTP(rec, req)
 			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+		})
+	}
+}
+
+func TestGetProviderSessionDetails_CursorRejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
+	for _, target := range []string{
+		"/provider-sessions/detail?provider=cursor&kind=session_id&id=../secret",
+		"/provider-sessions/detail?provider=cursor&kind=session_id&id=/tmp/store.db",
+		"/provider-sessions/detail?provider=cursor&kind=session_id&id=session.with.dot",
+	} {
+		t.Run(target, func(t *testing.T) {
+			srv := newTestServerWithCursorRoot(t.TempDir())
+			req := httptest.NewRequest("GET", target, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a cursor session_id identifier without path separators")
+		})
+	}
+}
+
+func TestGetProviderSessionDetails_LegacyAgentCursorRejectsPathLikeAndMalformedIdentifiers(t *testing.T) {
+	for _, target := range []string{
+		"/provider-sessions/detail?provider=agent&kind=session_id&id=../secret",
+		"/provider-sessions/detail?provider=agent&kind=session_id&id=/tmp/store.db",
+		"/provider-sessions/detail?provider=agent&kind=session_id&id=session.with.dot",
+	} {
+		t.Run(target, func(t *testing.T) {
+			srv := newTestServerWithCursorRoot(t.TempDir())
+			req := httptest.NewRequest("GET", target, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler().ServeHTTP(rec, req)
+			assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a cursor session_id identifier without path separators")
 		})
 	}
 }

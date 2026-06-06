@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -46,6 +47,22 @@ type ProviderSessionMetadata struct {
 	Provider string `json:"provider,omitempty"`
 	Kind     string `json:"kind,omitempty"`
 	ID       string `json:"id,omitempty"`
+}
+
+// CanonicalProviderSessionProvider maps provider-session identities onto the
+// stable backend-facing names used for loading, events, and persisted
+// diagnostics. Cursor keeps the CLI command name `agent` but stores `cursor`
+// as the provider-session contract.
+func CanonicalProviderSessionProvider(provider string) string {
+	trimmed := strings.TrimSpace(provider)
+	switch trimmed {
+	case "", "cursor":
+		return trimmed
+	case string(ModelProviderCursor), "cursor-agent":
+		return "cursor"
+	default:
+		return trimmed
+	}
 }
 
 // WorkOutcome distinguishes the result routing behavior for worker output.

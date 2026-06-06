@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"bytes"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,9 +20,11 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
+	_ "modernc.org/sqlite"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 )
@@ -62,6 +65,15 @@ func newTestServerWithCodexRoot(root string) *Server {
 	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
 }
 
+func newTestServerWithCursorRoot(root string) *Server {
+	logger, _ := zap.NewDevelopment()
+	return NewServerWithOptions(&testutil.MockFactory{
+		Marking: &petri.MarkingSnapshot{
+			Tokens: make(map[string]*interfaces.Token),
+		},
+	}, 8080, logger, ServerOptions{CursorSessionsRoot: root})
+}
+
 func writeProviderSessionFixture(t *testing.T, root, id, contents string) {
 	t.Helper()
 
@@ -86,6 +98,62 @@ func writeNamedProviderSessionFixture(t *testing.T, root, fileName, contents str
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatalf("write named provider session fixture: %v", err)
 	}
+}
+
+func writeCursorProviderSessionFixture(t *testing.T) (root string, sessionID string) {
+	t.Helper()
+
+	root = t.TempDir()
+	sessionID = "cursor-api-readable"
+	dbPath := filepath.Join(root, "workspace-hash", sessionID, "store.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatalf("mkdir cursor provider fixture: %v", err)
+	}
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open cursor provider fixture sqlite: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	schema := `
+CREATE TABLE blobs (key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);`
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatalf("create cursor provider fixture tables: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO blobs (key, value) VALUES (?, ?)`,
+		"bubble1",
+		`{"bubbleId":"bubble1","chatId":"chat1","text":"Hello from API fixture","timestamp":1000,"type":1}`,
+	); err != nil {
+		t.Fatalf("insert cursor provider bubble: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO meta (key, value) VALUES (?, ?)`,
+		"0",
+		`{"createdAt":1000,"agentId":"cursor-api-readable","name":"API fixture session"}`,
+	); err != nil {
+		t.Fatalf("insert cursor provider session meta: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO meta (key, value) VALUES (?, ?)`,
+		"1",
+		`{"usage":{"inputTokens":100,"outputTokens":25,"cacheReadTokens":40,"cacheWriteTokens":10}}`,
+	); err != nil {
+		t.Fatalf("insert cursor provider usage meta: %v", err)
+	}
+
+	normalizedRoot, err := cursorstorage.NormalizeAgentStorageRoot(root)
+	if err != nil {
+		t.Fatalf("normalize cursor provider fixture root: %v", err)
+	}
+	if resolved, err := cursorstorage.ResolveStoreDB(normalizedRoot, sessionID); err != nil {
+		t.Fatalf("resolve cursor provider fixture: %v", err)
+	} else if resolved.RelativePath != "workspace-hash/"+sessionID+"/store.db" {
+		t.Fatalf("resolved relative path = %q, want workspace-hash/%s/store.db", resolved.RelativePath, sessionID)
+	}
+
+	return root, sessionID
 }
 
 func readSSEFactoryEvent(t *testing.T, reader *bufio.Reader) factoryapi.FactoryEvent {

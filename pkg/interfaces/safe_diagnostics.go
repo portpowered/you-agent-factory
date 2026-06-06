@@ -133,7 +133,7 @@ func GeneratedProviderSessionMetadata(session *ProviderSessionMetadata) *factory
 		return nil
 	}
 	return &factoryapi.ProviderSessionMetadata{
-		Provider: safeDiagnosticsStringPtrIfNotEmpty(session.Provider),
+		Provider: safeDiagnosticsStringPtrIfNotEmpty(CanonicalProviderSessionProvider(session.Provider)),
 		Kind:     safeDiagnosticsStringPtrIfNotEmpty(session.Kind),
 		Id:       safeDiagnosticsStringPtrIfNotEmpty(session.ID),
 	}
@@ -146,7 +146,7 @@ func ProviderSessionMetadataFromGenerated(session *factoryapi.ProviderSessionMet
 		return nil
 	}
 	return &ProviderSessionMetadata{
-		Provider: safeDiagnosticsStringValue(session.Provider),
+		Provider: CanonicalProviderSessionProvider(safeDiagnosticsStringValue(session.Provider)),
 		Kind:     safeDiagnosticsStringValue(session.Kind),
 		ID:       safeDiagnosticsStringValue(session.Id),
 	}

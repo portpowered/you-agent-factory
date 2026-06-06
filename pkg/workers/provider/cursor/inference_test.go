@@ -36,7 +36,7 @@ func TestParseInferenceResult_Success(t *testing.T) {
 	if parsed.ProviderSession == nil {
 		t.Fatal("expected provider session metadata")
 	}
-	if parsed.ProviderSession.Provider != string(interfaces.ModelProviderCursor) {
+	if parsed.ProviderSession.Provider != "cursor" {
 		t.Fatalf("provider = %q, want cursor", parsed.ProviderSession.Provider)
 	}
 	if parsed.ProviderSession.Kind != ProviderSessionKindSessionID {
