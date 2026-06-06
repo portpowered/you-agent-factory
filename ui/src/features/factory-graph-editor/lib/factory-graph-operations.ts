@@ -311,18 +311,6 @@ export function disconnectFactoryGraphEdge(options: {
   };
 }
 
-export function validateFactoryGraphState(options: {
-  baseFactoryDefinition: CanonicalFactoryDefinition;
-  draft: FactoryGraphDraft;
-  locale?: string | null;
-}): FactoryGraphDraftValidationError[] {
-  return validateFactoryGraphDraft(
-    options.baseFactoryDefinition,
-    options.draft,
-    options.locale,
-  );
-}
-
 export function applyFactoryGraphPendingEdits(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
