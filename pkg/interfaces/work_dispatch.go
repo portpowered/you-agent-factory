@@ -212,7 +212,7 @@ func CloneResolvedModelOperationBindings(values []ResolvedModelOperationBinding)
 		cloned[i] = ResolvedModelOperationBinding{
 			Slot:    value.Slot,
 			Source:  value.Source,
-			Content: cloneWorkContentParts(value.Content),
+			Content: CloneWorkContentParts(value.Content),
 		}
 	}
 	return cloned

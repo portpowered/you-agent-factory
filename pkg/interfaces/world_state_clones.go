@@ -54,10 +54,6 @@ func CloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
 	return clone
 }
 
-func cloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
-	return CloneWorkContentParts(parts)
-}
-
 // CloneTokenHistory returns a detached copy of canonical runtime token history.
 func CloneTokenHistory(history TokenHistory) TokenHistory {
 	return TokenHistory{
