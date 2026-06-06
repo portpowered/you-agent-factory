@@ -214,4 +214,35 @@ describe("projectTraceDispatchesToFactoryGraph overlays", () => {
       outputSummary: "(story):work-output",
     });
   });
+
+  it("preserves workstation display label fallbacks from transition ids and localized unknown copy", () => {
+    const projection = projectTraceDispatchesToFactoryGraph(
+      [
+        buildDispatch("dispatch-transition-fallback", {
+          transition_id: "review",
+          workstation_name: "   ",
+        }),
+        buildDispatch("dispatch-unknown-fallback", {
+          transition_id: "   ",
+          workstation_name: undefined,
+        }),
+      ],
+      "en",
+    );
+
+    expect(
+      projection.overlaysByNodeId.get(
+        projection.nodeIdByDispatchId.get("dispatch-transition-fallback") ?? "",
+      ),
+    ).toMatchObject({
+      displayLabel: "review",
+    });
+    expect(
+      projection.overlaysByNodeId.get(
+        projection.nodeIdByDispatchId.get("dispatch-unknown-fallback") ?? "",
+      ),
+    ).toMatchObject({
+      displayLabel: "Unknown workstation",
+    });
+  });
 });

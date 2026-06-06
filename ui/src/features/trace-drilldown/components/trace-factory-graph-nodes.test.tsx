@@ -43,7 +43,7 @@ describe("Trace dispatch factory graph node", () => {
     cleanup();
   });
 
-  it("renders neutral dispatch chrome when outcome is missing", () => {
+  it("renders factory-style workstation identity without dispatch metadata", () => {
     render(
       <DispatchNode
         {...dispatchNodeProps({
@@ -61,40 +61,43 @@ describe("Trace dispatch factory graph node", () => {
       />,
     );
 
-    expect(screen.getByText("Observed")).toBeTruthy();
+    expect(screen.getByText("Workstation")).toBeTruthy();
+    expect(screen.queryByText("Observed")).toBeNull();
+    expect(screen.queryByText(/^In:/)).toBeNull();
+    expect(screen.queryByText(/^Out:/)).toBeNull();
     const node = screen.getByText("dispatch-pending").closest("article");
     if (!node) {
       throw new Error("Expected dispatch node shell to render.");
     }
-    expect(node.className).toContain("border-outline");
-    expect(node.className).toContain("bg-surface");
+    expect(node.className).toContain("border-primary");
+    expect(node.className).toContain("bg-primary-container");
   });
 
-  it("renders warning dispatch chrome for CONTINUE outcomes", () => {
+  it("keeps the factory workstation surface for failure outcomes", () => {
     render(
       <DispatchNode
         {...dispatchNodeProps({
           connectionAnchors: [],
-          dispatchId: "dispatch-continue",
-          displayLabel: "dispatch-continue",
-          factoryNodeId: "workstation:dispatch-continue",
+          dispatchId: "dispatch-failed",
+          displayLabel: "dispatch-failed",
+          factoryNodeId: "workstation:dispatch-failed",
           inputSummary: "None",
           kind: "workstation",
           kindLabel: "Workstation",
           locale: "en",
-          outcome: "CONTINUE",
+          outcome: "FAILED",
           outputSummary: "None",
-          workstationName: "dispatch-continue",
+          workstationName: "dispatch-failed",
         })}
       />,
     );
 
-    const node = screen.getByText("dispatch-continue").closest("article");
+    const node = screen.getByText("dispatch-failed").closest("article");
     if (!node) {
       throw new Error("Expected dispatch node shell to render.");
     }
-    expect(node.className).toContain("border-af-warning-border");
-    expect(node.className).toContain("bg-warning-container");
+    expect(node.className).toContain("border-primary");
+    expect(node.className).toContain("bg-primary-container");
   });
 });
 
