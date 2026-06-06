@@ -1,4 +1,4 @@
-package cursorstorage_test
+package cursorstorage
 
 import (
 	"database/sql"
@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	_ "modernc.org/sqlite"
 )
 
@@ -20,11 +19,11 @@ func TestValidateSessionID_RejectsPathLikeIdentifiers(t *testing.T) {
 		"has space",
 	}
 	for _, id := range cases {
-		if err := cursorstorage.ValidateSessionID(id); err == nil {
+		if err := ValidateSessionID(id); err == nil {
 			t.Fatalf("ValidateSessionID(%q) = nil, want error", id)
 		}
 	}
-	if err := cursorstorage.ValidateSessionID("cursor-session-abc"); err != nil {
+	if err := ValidateSessionID("cursor-session-abc"); err != nil {
 		t.Fatalf("ValidateSessionID(safe id) = %v, want nil", err)
 	}
 }
@@ -32,7 +31,7 @@ func TestValidateSessionID_RejectsPathLikeIdentifiers(t *testing.T) {
 func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
 	root, sessionID := writeReadableAgentStorageFixture(t)
 
-	resolved, err := cursorstorage.ResolveStoreDB(cursorstorage.AgentStorageRoot(root), sessionID)
+	resolved, err := ResolveStoreDB(AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("ResolveStoreDB() = %v", err)
 	}
@@ -40,7 +39,7 @@ func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
 		t.Fatal("expected non-empty relative path")
 	}
 
-	session, err := cursorstorage.LoadSessionData(resolved)
+	session, err := LoadSessionData(resolved)
 	if err != nil {
 		t.Fatalf("LoadSessionData() = %v", err)
 	}
@@ -59,11 +58,11 @@ func TestResolveAndLoadReadableSessionFixture(t *testing.T) {
 func TestLoadEncryptedOrUnavailableContentFixture(t *testing.T) {
 	root, sessionID := writeUnavailableAgentStorageFixture(t)
 
-	resolved, err := cursorstorage.ResolveStoreDB(cursorstorage.AgentStorageRoot(root), sessionID)
+	resolved, err := ResolveStoreDB(AgentStorageRoot(root), sessionID)
 	if err != nil {
 		t.Fatalf("ResolveStoreDB() = %v", err)
 	}
-	session, err := cursorstorage.LoadSessionData(resolved)
+	session, err := LoadSessionData(resolved)
 	if err != nil {
 		t.Fatalf("LoadSessionData() = %v", err)
 	}
@@ -72,6 +71,71 @@ func TestLoadEncryptedOrUnavailableContentFixture(t *testing.T) {
 	}
 	if len(session.Bubbles) != 0 {
 		t.Fatalf("bubbles = %#v, want no decrypted plaintext from binary blob", session.Bubbles)
+	}
+}
+
+func TestDefaultAgentStorageRoot_LinuxPrefersExistingConfigRoot(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	configRoot := filepath.Join(home, ".config", "cursor", "chats")
+	legacyRoot := filepath.Join(home, ".cursor", "chats")
+	mustMkdirAll(t, legacyRoot)
+	mustMkdirAll(t, configRoot)
+
+	root, err := defaultAgentStorageRoot("linux", home, os.Stat)
+	if err != nil {
+		t.Fatalf("defaultAgentStorageRoot() = %v", err)
+	}
+	if got, want := string(root), configRoot; got != want {
+		t.Fatalf("defaultAgentStorageRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultAgentStorageRoot_DarwinPrefersExistingCursorRoot(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	cursorRoot := filepath.Join(home, ".cursor", "chats")
+	configRoot := filepath.Join(home, ".config", "cursor", "chats")
+	mustMkdirAll(t, configRoot)
+	mustMkdirAll(t, cursorRoot)
+
+	root, err := defaultAgentStorageRoot("darwin", home, os.Stat)
+	if err != nil {
+		t.Fatalf("defaultAgentStorageRoot() = %v", err)
+	}
+	if got, want := string(root), cursorRoot; got != want {
+		t.Fatalf("defaultAgentStorageRoot() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultAgentStorageRoot_ReturnsEmptyWhenNoSupportedDirectoryExists(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+
+	for _, goos := range []string{"linux", "darwin"} {
+		root, err := defaultAgentStorageRoot(goos, home, os.Stat)
+		if err != nil {
+			t.Fatalf("defaultAgentStorageRoot(%q) = %v", goos, err)
+		}
+		if root != "" {
+			t.Fatalf("defaultAgentStorageRoot(%q) = %q, want empty root", goos, root)
+		}
+	}
+}
+
+func TestNormalizeAgentStorageRoot_ExplicitRootOverridesDiscovery(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	got, err := NormalizeAgentStorageRoot(root)
+	if err != nil {
+		t.Fatalf("NormalizeAgentStorageRoot() = %v", err)
+	}
+	if want := AgentStorageRoot(root); got != want {
+		t.Fatalf("NormalizeAgentStorageRoot() = %q, want %q", got, want)
 	}
 }
 
@@ -137,4 +201,11 @@ func writeUnavailableAgentStorageFixture(t *testing.T) (root string, sessionID s
 		t.Fatalf("insert encrypted blob: %v", err)
 	}
 	return root, sessionID
+}
+
+func mustMkdirAll(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) = %v", path, err)
+	}
 }

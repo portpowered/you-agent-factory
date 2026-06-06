@@ -25,22 +25,43 @@ func DefaultAgentStorageRoot() (AgentStorageRoot, error) {
 	if err != nil {
 		return "", fmt.Errorf("home directory: %w", err)
 	}
-	switch runtime.GOOS {
+	return defaultAgentStorageRoot(runtime.GOOS, home, os.Stat)
+}
+
+func defaultAgentStorageRoot(
+	goos string,
+	home string,
+	stat func(string) (os.FileInfo, error),
+) (AgentStorageRoot, error) {
+	candidates, err := defaultAgentStorageRootCandidates(goos, home)
+	if err != nil {
+		return "", err
+	}
+	for _, candidate := range candidates {
+		if info, statErr := stat(candidate); statErr == nil && info.IsDir() {
+			return AgentStorageRoot(candidate), nil
+		}
+	}
+	if len(candidates) == 0 {
+		return "", nil
+	}
+	return AgentStorageRoot(""), nil
+}
+
+func defaultAgentStorageRootCandidates(goos string, home string) ([]string, error) {
+	switch goos {
 	case "linux":
-		for _, candidate := range []string{
+		return []string{
 			filepath.Join(home, ".config", "cursor", "chats"),
 			filepath.Join(home, ".cursor", "chats"),
-		} {
-			if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-				return AgentStorageRoot(candidate), nil
-			}
-		}
-		return AgentStorageRoot(filepath.Join(home, ".cursor", "chats")), nil
+		}, nil
 	case "darwin":
-		// cursor-agent CLI storage is Linux-only in upstream; macOS uses empty default until configured.
-		return AgentStorageRoot(""), nil
+		return []string{
+			filepath.Join(home, ".cursor", "chats"),
+			filepath.Join(home, ".config", "cursor", "chats"),
+		}, nil
 	default:
-		return "", fmt.Errorf("unsupported OS for cursor-agent storage: %s", runtime.GOOS)
+		return nil, fmt.Errorf("unsupported OS for cursor-agent storage: %s", goos)
 	}
 }
 
