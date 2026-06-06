@@ -588,6 +588,7 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
     );
+    expect(readyCard.className).toContain("bg-surface-container-low");
     const readyRequestDetails = within(readyCard).getByRole("region", {
       name: "Request details",
     });
@@ -614,6 +615,23 @@ describe("App current selection", () => {
         "Review the active story and decide whether it is ready.",
       ),
     ).toBeNull();
+    const selectedInputWorkButton = within(readyRequestDetails).getByRole(
+      "button",
+      {
+        name: "Select work item Active Story",
+      },
+    );
+    expect(selectedInputWorkButton.getAttribute("aria-pressed")).toBe("true");
+    const selectedInputWorkArticle = selectedInputWorkButton.closest("article");
+    if (!(selectedInputWorkArticle instanceof HTMLElement)) {
+      throw new Error("expected selected input work item article");
+    }
+    expect(selectedInputWorkArticle.className).not.toContain(
+      "bg-surface-container-high",
+    );
+    expect(selectedInputWorkArticle.className).not.toContain(
+      "bg-surface-container-low",
+    );
     expect(
       within(readyRequestBody).getByText(
         "Retry the review with the latest context.",
@@ -655,6 +673,24 @@ describe("App current selection", () => {
     expect(
       within(readyRequestDetails).queryByText("Worktree", { selector: "dt" }),
     ).toBeNull();
+    const readyTraceDetails = within(readyCard).getByRole("region", {
+      name: "Trace details",
+    });
+    expect(
+      within(readyTraceDetails).getByText("Trace IDs", { selector: "dt" }),
+    ).toBeTruthy();
+    expect(
+      within(readyTraceDetails).getByRole("button", {
+        name: "trace-active-story (selected)",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(readyTraceDetails)
+        .getByRole("button", {
+          name: "trace-active-story (selected)",
+        })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
 
     const rejectedCard = getDispatchHistoryCard(
       dispatchHistory,
@@ -771,8 +807,13 @@ describe("App current selection", () => {
     });
     expect(within(workDetail).getByText(activeWorkID)).toBeTruthy();
     expect(
+      within(workDetail).getByRole("heading", {
+        name: "Work operations",
+      }),
+    ).toBeTruthy();
+    expect(
       within(workDetail).queryByRole("heading", {
-        name: "Request details",
+        name: "Request history",
       }),
     ).toBeNull();
 

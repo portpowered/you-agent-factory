@@ -4,8 +4,8 @@ import { ButtonLink } from "../../../../components/ui";
 import {
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,
-  CurrentSelectionDetailValue,
-  CurrentSelectionLabel,
+  CurrentSelectionDetailItem,
+  CurrentSelectionDetailSection,
 } from "../../base/public";
 
 export function DispatchDetailSection({
@@ -16,13 +16,9 @@ export function DispatchDetailSection({
   title: string;
 }) {
   return (
-    <section
-      aria-label={title}
-      className="mt-3 grid gap-2 border-t border-outline pt-3"
-    >
-      <CurrentSelectionLabel>{title}</CurrentSelectionLabel>
+    <CurrentSelectionDetailSection title={title}>
       {children}
-    </section>
+    </CurrentSelectionDetailSection>
   );
 }
 
@@ -76,10 +72,10 @@ function DispatchDetailListItem({
   }
 
   return (
-    <div>
-      <dt>{label}</dt>
-      <CurrentSelectionDetailValue>
-        {href ? (
+    <CurrentSelectionDetailItem
+      label={label}
+      value={
+        href ? (
           <ButtonLink
             className="w-fit"
             href={href}
@@ -93,8 +89,8 @@ function DispatchDetailListItem({
           <CurrentSelectionDetailCode>{value}</CurrentSelectionDetailCode>
         ) : (
           value
-        )}
-      </CurrentSelectionDetailValue>
-    </div>
+        )
+      }
+    />
   );
 }

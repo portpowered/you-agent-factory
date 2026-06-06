@@ -1,6 +1,7 @@
 import {
   formatDurationMillis,
   formatLocalDateTime,
+  formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
 import { DetailCopy } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
@@ -10,6 +11,8 @@ import {
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
 import { CurrentSelectionBadge } from "../../base/components/current-selection-pill";
+import { CurrentSelectionSelectableButton } from "../../base/components/current-selection-selectable-button";
+import { CurrentSelectionTraceButton } from "../../base/components/current-selection-trace-button";
 import { normalizeDetailText } from "../../base/components/detail-card-shared";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
 import { CurrentSelectionDescriptionList } from "../../base/public";
@@ -46,8 +49,6 @@ import {
 import {
   DispatchDetailList,
   DispatchDetailSection,
-  TraceActionGroup,
-  WorkItemActionGroup,
 } from "./selected-work-dispatch-history-card-shared";
 import { WorkstationOperationKindBadge } from "./selected-work-operation-history-cards";
 
@@ -315,6 +316,7 @@ function DispatchRequestSection({
         }}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
+        variant="plain"
         workItems={view.inputWorkItems}
       />
     </DispatchDetailSection>
@@ -338,14 +340,14 @@ function DispatchResponseSection({
 }) {
   return (
     <DispatchDetailSection title={messages.responseDetailsTitle}>
-      <WorkItemActionGroup
+      <DispatchWorkItemDetailRow
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
         selectWorkItemAccessibleLabel={messages.selectWorkItemAccessibleLabel}
       />
-      <TraceActionGroup
+      <DispatchTraceDetailRow
         activeTraceID={activeTraceID}
         label={messages.traceIdsLabel}
         onSelectTraceID={onSelectTraceID}
@@ -373,14 +375,14 @@ function DispatchTraceSection({
 }) {
   return (
     <DispatchDetailSection title={messages.traceDetailsTitle}>
-      <WorkItemActionGroup
+      <DispatchWorkItemDetailRow
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
         onSelectWorkID={onSelectWorkID}
         selectedWorkID={selectedWorkID}
         selectWorkItemAccessibleLabel={messages.selectWorkItemAccessibleLabel}
       />
-      <TraceActionGroup
+      <DispatchTraceDetailRow
         activeTraceID={activeTraceID}
         label={messages.traceIdsLabel}
         onSelectTraceID={onSelectTraceID}
@@ -412,5 +414,83 @@ function DispatchFailureSection({
         ]}
       />
     </DispatchDetailSection>
+  );
+}
+
+function DispatchWorkItemDetailRow({
+  items,
+  label,
+  onSelectWorkID,
+  selectedWorkID,
+  selectWorkItemAccessibleLabel,
+}: {
+  items: DispatchHistoryView["outputWorkItems"];
+  label: string;
+  onSelectWorkID?: (workID: string) => void;
+  selectedWorkID: string;
+  selectWorkItemAccessibleLabel: (workItemLabel: string) => string;
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <CurrentSelectionDescriptionList>
+      <div>
+        <dt>{label}</dt>
+        <dd className="flex flex-wrap gap-2">
+          {items.map((workItem) => {
+            const workItemLabel = formatWorkItemLabel(workItem);
+            return (
+              <CurrentSelectionSelectableButton
+                aria-label={selectWorkItemAccessibleLabel(workItemLabel)}
+                key={`${label}-${workItem.work_id}`}
+                onClick={() => onSelectWorkID?.(workItem.work_id)}
+                selected={selectedWorkID === workItem.work_id}
+              >
+                {workItemLabel}
+              </CurrentSelectionSelectableButton>
+            );
+          })}
+        </dd>
+      </div>
+    </CurrentSelectionDescriptionList>
+  );
+}
+
+function DispatchTraceDetailRow({
+  activeTraceID,
+  label,
+  onSelectTraceID,
+  selectedTraceSuffix,
+  traceIDs,
+}: {
+  activeTraceID?: string | null;
+  label: string;
+  onSelectTraceID?: (traceID: string) => void;
+  selectedTraceSuffix: string;
+  traceIDs: string[];
+}) {
+  if (traceIDs.length === 0) {
+    return null;
+  }
+
+  return (
+    <CurrentSelectionDescriptionList>
+      <div>
+        <dt>{label}</dt>
+        <dd className="grid gap-1.5">
+          {traceIDs.map((traceID) => (
+            <CurrentSelectionTraceButton
+              activeTraceID={activeTraceID}
+              key={traceID}
+              onSelectTraceID={onSelectTraceID}
+              selectedTraceSuffix={selectedTraceSuffix}
+              traceID={traceID}
+            />
+          ))}
+        </dd>
+      </div>
+    </CurrentSelectionDescriptionList>
   );
 }

@@ -538,12 +538,14 @@ describe("WorkItemDetailCard summary", () => {
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
-    const requestDetails = within(
-      screen.getByRole("region", { name: "Request details" }),
-    );
-    const traceDetails = within(
-      screen.getByRole("region", { name: "Trace details" }),
-    );
+    const requestDetailsRegion = screen.getByRole("region", {
+      name: "Request details",
+    });
+    const requestDetails = within(requestDetailsRegion);
+    const traceDetailsRegion = screen.getByRole("region", {
+      name: "Trace details",
+    });
+    const traceDetails = within(traceDetailsRegion);
     const inferenceAttempts = within(
       expandDispatchSection(document.body, "Inference attempts"),
     );
@@ -573,6 +575,22 @@ describe("WorkItemDetailCard summary", () => {
     ).toBeTruthy();
     expect(
       traceDetails.getByRole("button", { name: "trace-active-story" }),
+    ).toBeTruthy();
+    expect(
+      within(getDetailRow(traceDetailsRegion, "Output work")).getByRole(
+        "button",
+        {
+          name: "Select work item Active Story",
+        },
+      ),
+    ).toBeTruthy();
+    expect(
+      within(getDetailRow(traceDetailsRegion, "Trace IDs")).getByRole(
+        "button",
+        {
+          name: "trace-active-story",
+        },
+      ),
     ).toBeTruthy();
     expect(
       screen.queryByText("Never expose this raw system prompt."),
@@ -2445,6 +2463,14 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         within(dispatchCard).getByRole("region", { name: "Response details" }),
       ).queryByText(/script success stdout/),
     ).toBeNull();
+    const responseDetails = within(dispatchCard).getByRole("region", {
+      name: "Response details",
+    });
+    expect(
+      within(getDetailRow(responseDetails, "Trace IDs")).getByRole("button", {
+        name: "trace-active-story",
+      }),
+    ).toBeTruthy();
     expect(within(dispatchCard).queryByText("Provider session")).toBeNull();
   });
 
