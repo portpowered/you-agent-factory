@@ -264,6 +264,46 @@ func modelEventContext(request interfaces.RunnerExecutionRequest, eventTime time
 	}
 }
 
+func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+	if snapshot == nil {
+		return false
+	}
+	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 {
+		return true
+	}
+	for _, token := range snapshot.Marking.Tokens {
+		if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+			continue
+		}
+		if snapshot.Topology == nil {
+			return true
+		}
+		category := snapshot.Topology.StateCategoryForPlace(token.PlaceID)
+		if category != state.StateCategoryTerminal && category != state.StateCategoryFailed {
+			return true
+		}
+	}
+	return false
+}
+
+func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factoryapi.FactoryChangeEventPayload, bool) {
+	for _, event := range events {
+		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
+			continue
+		}
+		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+		if err != nil {
+			return factoryapi.FactoryChangeEventPayload{}, false
+		}
+		return factoryapi.FactoryChangeEventPayload{
+			Factory:         payload.Factory,
+			Metadata:        payload.Metadata,
+			SourceDirectory: payload.SourceDirectory,
+		}, true
+	}
+	return factoryapi.FactoryChangeEventPayload{}, false
+}
+
 func workersExecutionTick(metadata interfaces.ExecutionMetadata) int {
 	if metadata.CurrentTick != 0 {
 		return metadata.CurrentTick

@@ -75,6 +75,62 @@ func liveSessionBuildSpec(session *factorysessions.LiveSession) *runtimebuild.Se
 	return state.spec
 }
 
+type liveSessionRegistration struct {
+	factoryDir       string
+	folderPath       string
+	executionBaseDir string
+	targetRef        FactorySessionTargetRef
+	project          string
+	preparedSpec     *runtimebuild.SessionBuildSpec
+}
+
+func (fs *FactoryService) buildLiveSessionRegistration(
+	sessionID string,
+	handle *liveRuntimeHandle,
+	target FactorySessionTarget,
+) liveSessionRegistration {
+	registration := liveSessionRegistration{
+		factoryDir: strings.TrimSpace(target.FactoryDir),
+		folderPath: strings.TrimSpace(target.FolderPath),
+		targetRef:  target.Ref,
+		project:    strings.TrimSpace(target.Project),
+	}
+	if registration.factoryDir == "" && handle.runtime != nil {
+		registration.factoryDir = handle.runtime.dir
+	}
+	if registration.folderPath == "" {
+		registration.folderPath = fs.factoryRootDir
+	}
+	if registration.folderPath == "" {
+		registration.folderPath = registration.factoryDir
+	}
+	if registration.targetRef.Kind == "" {
+		registration.targetRef = FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault}
+	}
+	if registration.project == "" {
+		registration.project = filepath.Base(registration.folderPath)
+	}
+	registration.executionBaseDir = liveSessionExecutionBaseDir(handle, registration.folderPath, registration.factoryDir)
+	if existing := liveSessionRuntimeState(fs.sessionByID(sessionID)); existing != nil {
+		registration.preparedSpec = existing.spec
+	}
+	return registration
+}
+
+func liveSessionExecutionBaseDir(handle *liveRuntimeHandle, folderPath string, factoryDir string) string {
+	executionBaseDir := ""
+	if handle != nil && handle.runtime != nil && handle.runtime.runtimeCfg != nil {
+		executionBaseDir = strings.TrimSpace(handle.runtime.runtimeCfg.RuntimeBaseDir())
+	}
+	if executionBaseDir == "" {
+		executionBaseDir = folderPath
+	}
+	if executionBaseDir == "" {
+		executionBaseDir = factoryDir
+	}
+	return executionBaseDir
+}
+
 func (fs *FactoryService) registerLiveSession(
 	sessionID string,
 	handle *liveRuntimeHandle,
@@ -84,48 +140,16 @@ func (fs *FactoryService) registerLiveSession(
 	if fs == nil || fs.sessions == nil || sessionID == "" || handle == nil {
 		return
 	}
-	factoryDir := strings.TrimSpace(target.FactoryDir)
-	if factoryDir == "" && handle.runtime != nil {
-		factoryDir = handle.runtime.dir
-	}
-	folderPath := strings.TrimSpace(target.FolderPath)
-	if folderPath == "" {
-		folderPath = fs.factoryRootDir
-	}
-	if folderPath == "" {
-		folderPath = factoryDir
-	}
-	targetRef := target.Ref
-	if targetRef.Kind == "" {
-		targetRef = FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault}
-	}
-	project := strings.TrimSpace(target.Project)
-	if project == "" {
-		project = filepath.Base(folderPath)
-	}
-	executionBaseDir := ""
-	if handle.runtime != nil && handle.runtime.runtimeCfg != nil {
-		executionBaseDir = strings.TrimSpace(handle.runtime.runtimeCfg.RuntimeBaseDir())
-	}
-	if executionBaseDir == "" {
-		executionBaseDir = folderPath
-	}
-	if executionBaseDir == "" {
-		executionBaseDir = factoryDir
-	}
-	var preparedSpec *runtimebuild.SessionBuildSpec
-	if existing := liveSessionRuntimeState(fs.sessionByID(sessionID)); existing != nil {
-		preparedSpec = existing.spec
-	}
+	registration := fs.buildLiveSessionRegistration(sessionID, handle, target)
 	fs.sessions.Upsert(factorysessions.NewLiveSession(
 		sessionID,
-		factoryDir,
-		folderPath,
-		executionBaseDir,
-		targetRef,
-		&liveSessionState{bundle: handle.runtime, handle: handle, spec: preparedSpec},
+		registration.factoryDir,
+		registration.folderPath,
+		registration.executionBaseDir,
+		registration.targetRef,
+		&liveSessionState{bundle: handle.runtime, handle: handle, spec: registration.preparedSpec},
 		sessionID == defaultFactorySessionID,
-		project,
+		registration.project,
 	), selectSession)
 }
 
@@ -577,6 +601,33 @@ func (fs *FactoryService) requireIdleRuntimeForSession(
 	return nil
 }
 
+func sessionServiceContext(ctx context.Context, runState *serviceRunState) context.Context {
+	if runState != nil && runState.ctx != nil {
+		return runState.ctx
+	}
+	return ctx
+}
+
+func (fs *FactoryService) startReplacementSessionRuntime(
+	ctx context.Context,
+	serviceCtx context.Context,
+	replacement *factoryRuntimeBundle,
+) (*liveRuntimeHandle, error) {
+	replacementHandle := fs.startLiveRuntime(serviceCtx, replacement)
+	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
+		_ = fs.stopLiveRuntime(replacementHandle)
+		return nil, fmt.Errorf("start replacement runtime: %w", err)
+	}
+	if runtimeModeOrDefault(fs.coordinatorPolicy().runtimeMode) != interfaces.RuntimeModeService {
+		return replacementHandle, nil
+	}
+	if err := fs.startLiveRuntimeSidecars(serviceCtx, replacementHandle); err != nil {
+		_ = fs.stopLiveRuntime(replacementHandle)
+		return nil, fmt.Errorf("start replacement runtime sidecars: %w", err)
+	}
+	return replacementHandle, nil
+}
+
 //nolint:contextcheck // The request context bounds the save/startup wait, while the long-lived service runtime context owns the replacement session runtime and sidecars after the request returns.
 func (fs *FactoryService) replaceSessionRuntime(
 	ctx context.Context,
@@ -592,10 +643,7 @@ func (fs *FactoryService) replaceSessionRuntime(
 		return fmt.Errorf("%w: session handle is unavailable", apisurface.ErrFactorySessionNotFound)
 	}
 	runState := fs.currentRunState()
-	serviceCtx := ctx
-	if runState != nil && runState.ctx != nil {
-		serviceCtx = runState.ctx
-	}
+	serviceCtx := sessionServiceContext(ctx, runState)
 	isActiveSession := runState != nil && runState.sessionID == session.ID
 
 	restoreCurrentSidecars := false
@@ -610,16 +658,9 @@ func (fs *FactoryService) replaceSessionRuntime(
 		}()
 	}
 
-	replacementHandle := fs.startLiveRuntime(serviceCtx, replacement)
-	if err := fs.waitForLiveRuntimeStart(ctx, replacementHandle); err != nil {
-		_ = fs.stopLiveRuntime(replacementHandle)
-		return fmt.Errorf("start replacement runtime: %w", err)
-	}
-	if serviceMode {
-		if err := fs.startLiveRuntimeSidecars(serviceCtx, replacementHandle); err != nil {
-			_ = fs.stopLiveRuntime(replacementHandle)
-			return fmt.Errorf("start replacement runtime sidecars: %w", err)
-		}
+	replacementHandle, err := fs.startReplacementSessionRuntime(ctx, serviceCtx, replacement)
+	if err != nil {
+		return err
 	}
 
 	fs.publishFactoryChangeEvent(ctx, handle, replacement)
