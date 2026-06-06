@@ -9,10 +9,7 @@ import {
   formatWorkItemLabel,
 } from "../../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
-import {
-  DetailCopy,
-  WidgetSubtitle,
-} from "../../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
   useCurrentSelectionDetailMessages,
@@ -23,7 +20,8 @@ import {
   isTerminalOrFailedPlace,
 } from "../../base/components/detail-card-shared";
 import {
-  CurrentSelectionContentSection,
+  CurrentSelectionBodyLayout,
+  CurrentSelectionExpandableSection,
   CurrentSelectionSelectableButton,
 } from "../../base/public";
 import type {
@@ -58,46 +56,77 @@ export function StateNodeDetailCard({
     place.type_id,
     place.state_value,
   );
-  const showRuntimeSummary = editableConfigurationState?.status !== "ready";
+  const title = summaryLabel || placeLabel;
 
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
-      {showRuntimeSummary ? (
-        <div className="mt-0 grid gap-1" title={placeLabel}>
-          <WidgetSubtitle>{summaryLabel || placeLabel}</WidgetSubtitle>
-        </div>
-      ) : null}
-      {editableConfigurationState ? (
-        <WorkStateEditableConfigurationSection
-          messages={workStateMessages}
-          saveState={saveState}
-          state={editableConfigurationState}
-        />
-      ) : null}
-      <dl>
-        <div>
-          <dt>{messages.countLabel}</dt>
-          <dd>{tokenCount}</dd>
-        </div>
-      </dl>
-      <CurrentSelectionContentSection title={messages.currentWorkHeading}>
-        {visibleWorkItems.length > 0 ? (
-          <StatePositionWorkList
-            failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
-            messages={messages}
-            onSelectWorkItem={onSelectWorkItem}
-            workItems={visibleWorkItems}
+      <CurrentSelectionBodyLayout title={title}>
+        <CurrentSelectionExpandableSection
+          defaultExpanded
+          title={workStateMessages.summaryHeading}
+          toggleLabel={(expanded) =>
+            expanded
+              ? workStateMessages.collapseAction
+              : workStateMessages.expandAction
+          }
+        >
+          <DashboardDescriptionList>
+            {place.type_id ? (
+              <div>
+                <dt>{messages.workTypeLabel}</dt>
+                <dd>{place.type_id}</dd>
+              </div>
+            ) : null}
+            {place.state_value ? (
+              <div>
+                <dt>{messages.stateLabel}</dt>
+                <dd>{place.state_value}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>{messages.stateNodeIdLabel}</dt>
+              <dd>{place.place_id}</dd>
+            </div>
+            <div>
+              <dt>{messages.countLabel}</dt>
+              <dd>{tokenCount}</dd>
+            </div>
+          </DashboardDescriptionList>
+        </CurrentSelectionExpandableSection>
+        {editableConfigurationState ? (
+          <WorkStateEditableConfigurationSection
+            messages={workStateMessages}
+            saveState={saveState}
+            state={editableConfigurationState}
           />
-        ) : (
-          <DetailCopy>
-            {emptyStatePlaceMessage(
-              messages,
-              usesRetainedWorkItems,
-              tokenCount,
-            )}
-          </DetailCopy>
-        )}
-      </CurrentSelectionContentSection>
+        ) : null}
+        <CurrentSelectionExpandableSection
+          defaultExpanded
+          title={messages.currentWorkHeading}
+          toggleLabel={(expanded) =>
+            expanded
+              ? workStateMessages.collapseAction
+              : workStateMessages.expandAction
+          }
+        >
+          {visibleWorkItems.length > 0 ? (
+            <StatePositionWorkList
+              failedWorkDetailsByWorkID={failedWorkDetailsByWorkID}
+              messages={messages}
+              onSelectWorkItem={onSelectWorkItem}
+              workItems={visibleWorkItems}
+            />
+          ) : (
+            <DetailCopy>
+              {emptyStatePlaceMessage(
+                messages,
+                usesRetainedWorkItems,
+                tokenCount,
+              )}
+            </DetailCopy>
+          )}
+        </CurrentSelectionExpandableSection>
+      </CurrentSelectionBodyLayout>
     </SelectionDetailLayout>
   );
 }

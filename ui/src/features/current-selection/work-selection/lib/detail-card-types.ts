@@ -23,6 +23,7 @@ export interface InferenceAttemptsSectionProps {
   attempts: DashboardInferenceAttempt[];
   onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
   selectedProviderSessionKey?: string | null;
+  showHeading?: boolean;
 }
 
 export interface InferenceAttemptCardProps {

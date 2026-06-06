@@ -23,6 +23,16 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
   return value;
 }
 
+function sectionByHeading(name: string): HTMLElement {
+  const heading = screen.getByRole("heading", { name });
+  const section = heading.closest("section");
+  if (!section) {
+    throw new Error(`expected ${name} section`);
+  }
+
+  return section;
+}
+
 describe("StateNodeDetailCard", () => {
   const activeStoryStartedAt = "2026-04-08T12:00:01Z";
   const doneStoryStartedAt = "2026-04-08T12:00:06Z";
@@ -56,30 +66,43 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    const summaryDetails = screen.getByText("Count").closest("dl");
+    const summarySection = sectionByHeading("Summary");
+    const summaryDetails = within(summarySection).getByText("Count").closest(
+      "dl",
+    );
 
     expect(
       screen.getByRole("heading", { name: "Current selection" }),
     ).toBeTruthy();
-    expect(screen.getByText("story: implemented")).toBeTruthy();
+    expect(screen.getByText("story: implemented").className).toContain(
+      "type-display-large",
+    );
+    expect(
+      within(summarySection)
+        .getByRole("button", { name: "Collapse" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(summaryDetails).toBeTruthy();
     expect(
       within(
         requireValue(summaryDetails, "expected summary details"),
-      ).queryByText("Work type"),
-    ).toBeNull();
+      ).getByText("Work type"),
+    ).toBeTruthy();
+    expect(within(summarySection).getByText("story")).toBeTruthy();
     expect(
       within(
         requireValue(summaryDetails, "expected summary details"),
-      ).queryByText("State"),
-    ).toBeNull();
+      ).getByText("State"),
+    ).toBeTruthy();
+    expect(within(summarySection).getByText("implemented")).toBeTruthy();
     expect(
       within(
         requireValue(summaryDetails, "expected summary details"),
-      ).queryByText("State node ID"),
-    ).toBeNull();
-    expect(screen.getByText("Count")).toBeTruthy();
-    expect(screen.getByText("Current work")).toBeTruthy();
+      ).getByText("State node ID"),
+    ).toBeTruthy();
+    expect(within(summarySection).getByText("story:implemented")).toBeTruthy();
+    expect(within(summarySection).getByText("Count")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current work" })).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Active Story")).toBeTruthy();
@@ -96,7 +119,6 @@ describe("StateNodeDetailCard", () => {
     expect(startedAtTime.getAttribute("dateTime")).toBe(activeStoryStartedAt);
     expect(startedAtTime.getAttribute("title")).toBe(activeStoryStartedAt);
     expect(screen.queryByText("trace-active-story")).toBeNull();
-    expect(screen.queryByText("story")).toBeNull();
   });
 
   it("omits the supporting time row when current work has no started-at timestamp", () => {
@@ -125,18 +147,21 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    const summaryDetails = screen.getByText("Count").closest("dl");
+    const summarySection = sectionByHeading("Summary");
+    const summaryDetails = within(summarySection).getByText("Count").closest(
+      "dl",
+    );
 
     expect(summaryDetails).toBeTruthy();
     expect(
       within(
         requireValue(summaryDetails, "expected summary details"),
-      ).queryByText("Work type"),
-    ).toBeNull();
+      ).getByText("Work type"),
+    ).toBeTruthy();
     expect(screen.queryByText(/^Started at /)).toBeNull();
   });
 
-  it("renders the state-node selection header as one combined summary", () => {
+  it("renders the state-node selection title with canonical typography", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedState =
       snapshot.topology.workstation_nodes_by_id.review.input_places?.find(
@@ -156,11 +181,12 @@ describe("StateNodeDetailCard", () => {
       />,
     );
 
-    const header = screen.getByTitle("story:implemented");
-    const summary = within(header).getByText("story: implemented", {
-      selector: "p",
-    });
-    expect(summary.className).toContain("af-dashboard-widget-subtitle");
+    const title = screen.getByText("story: implemented");
+    expect(title.className).toContain("type-display-large");
+    expect(screen.getByRole("heading", { name: "Summary" })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Current work" }),
+    ).toBeTruthy();
   });
 
   it("renders selected state node empty-position guidance", () => {
@@ -187,8 +213,9 @@ describe("StateNodeDetailCard", () => {
       screen.getByRole("heading", { name: "Current selection" }),
     ).toBeTruthy();
     expect(screen.getByText("story: implemented")).toBeTruthy();
-    expect(screen.queryByText("State")).toBeNull();
-    expect(screen.getByText("Current work")).toBeTruthy();
+    expect(sectionByHeading("Summary")).toBeTruthy();
+    expect(screen.getByText("State")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current work" })).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(
@@ -229,8 +256,8 @@ describe("StateNodeDetailCard", () => {
       screen.getByRole("heading", { name: "Current selection" }),
     ).toBeTruthy();
     expect(screen.getByText("story: complete")).toBeTruthy();
-    expect(screen.queryByText("State node ID")).toBeNull();
-    expect(screen.getByText("Current work")).toBeTruthy();
+    expect(screen.getByText("State node ID")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current work" })).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Done Story")).toBeTruthy();
@@ -241,7 +268,6 @@ describe("StateNodeDetailCard", () => {
       ),
     ).toBeTruthy();
     expect(screen.queryByText("trace-done-story")).toBeNull();
-    expect(screen.queryByText(/^story$/)).toBeNull();
     expect(
       screen.queryByText("No current work is occupying this place."),
     ).toBeNull();
@@ -292,7 +318,7 @@ describe("StateNodeDetailCard", () => {
     );
 
     expect(screen.getByText("story: blocked")).toBeTruthy();
-    expect(screen.getByText("Current work")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current work" })).toBeTruthy();
     expect(screen.queryByText("Token count")).toBeNull();
     expect(screen.queryByText(/terminal history/i)).toBeNull();
     expect(screen.getByText("Failed Story")).toBeTruthy();
@@ -418,9 +444,9 @@ describe("StateNodeDetailCard", () => {
       </CurrentSelectionLocaleProvider>,
     );
 
-    expect(screen.queryByText("状态")).toBeNull();
-    expect(screen.queryByText("状态节点 ID")).toBeNull();
-    expect(screen.getByText("当前工作")).toBeTruthy();
+    expect(screen.getByText("状态")).toBeTruthy();
+    expect(screen.getByText("状态节点 ID")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "当前工作" })).toBeTruthy();
     expect(
       screen.getByText("在所选时间刻度，这个位置暂时没有记录到工作。"),
     ).toBeTruthy();
@@ -590,7 +616,9 @@ describe("StateNodeDetailCard editable work state configuration", () => {
     expect(
       screen.getByText(messages.localizeWorkStateType("PROCESSING")),
     ).toBeTruthy();
-    expect(screen.queryByText("story: implemented")).toBeNull();
+    expect(screen.getByText("story: implemented").className).toContain(
+      "type-display-large",
+    );
     expect(
       screen.getByText(messages.editableConfigurationHeading),
     ).toBeTruthy();
@@ -854,7 +882,7 @@ describe("StateNodeDetailCard editable work state configuration", () => {
       />,
     );
 
-    expect(screen.getByText("Current work")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current work" })).toBeTruthy();
     expect(screen.getByText("Active Story")).toBeTruthy();
   });
 });

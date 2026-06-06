@@ -106,26 +106,33 @@ export function ExecutionDetailsSection({
 
 export function InferenceAttemptsSection({
   attempts,
+  showHeading = true,
 }: InferenceAttemptsSectionProps) {
   const messages = useCurrentSelectionShellMessages();
+  const body =
+    attempts.length > 0 ? (
+      <div className="grid gap-3">
+        {attempts.map((attempt) => (
+          <InferenceAttemptCard
+            attempt={attempt}
+            key={attempt.inference_request_id}
+          />
+        ))}
+      </div>
+    ) : (
+      <DetailCopy>{messages.inferenceAttemptsEmptyState}</DetailCopy>
+    );
+
+  if (!showHeading) {
+    return body;
+  }
 
   return (
     <CurrentSelectionContentSection
       aria-label={messages.inferenceAttemptsRegionLabel}
       title={messages.inferenceAttemptsHeading}
     >
-      {attempts.length > 0 ? (
-        <div className="grid gap-3">
-          {attempts.map((attempt) => (
-            <InferenceAttemptCard
-              attempt={attempt}
-              key={attempt.inference_request_id}
-            />
-          ))}
-        </div>
-      ) : (
-        <DetailCopy>{messages.inferenceAttemptsEmptyState}</DetailCopy>
-      )}
+      {body}
     </CurrentSelectionContentSection>
   );
 }

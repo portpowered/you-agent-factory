@@ -53,6 +53,7 @@ const workStateDetailMessagesByLocale = {
     editableConfigurationValidationStatus:
       "Fix the highlighted work state fields before saving.",
     nameFieldLabel: "State name",
+    summaryHeading: "Summary",
     typeFieldLabel: "Lifecycle type",
   },
   ja: {
@@ -96,6 +97,7 @@ const workStateDetailMessagesByLocale = {
     editableConfigurationValidationStatus:
       "保存する前に強調表示されたワーク状態フィールドを修正してください。",
     nameFieldLabel: "状態名",
+    summaryHeading: "概要",
     typeFieldLabel: "ライフサイクル種別",
   },
   ko: {
@@ -139,6 +141,7 @@ const workStateDetailMessagesByLocale = {
     editableConfigurationValidationStatus:
       "저장하기 전에 강조 표시된 작업 상태 필드를 수정하세요.",
     nameFieldLabel: "상태 이름",
+    summaryHeading: "요약",
     typeFieldLabel: "수명 주기 유형",
   },
   "zh-CN": {
@@ -174,6 +177,7 @@ const workStateDetailMessagesByLocale = {
     editableConfigurationValidationStatus:
       "保存前请修复突出显示的工作状态字段。",
     nameFieldLabel: "状态名称",
+    summaryHeading: "摘要",
     typeFieldLabel: "生命周期类型",
   },
 } satisfies LocalizedMessages<WorkStateDetailCatalogMessages>;

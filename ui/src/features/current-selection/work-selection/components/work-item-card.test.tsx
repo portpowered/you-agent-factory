@@ -563,6 +563,28 @@ describe("WorkItemDetailCard summary", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
+    const primaryTitle = currentSelection.querySelector(".type-display-large");
+    expect(primaryTitle?.textContent).toBe("Active Story");
+    for (const sectionName of [
+      "Summary",
+      "Work contents",
+      "Work relationships",
+      "Workstation dispatches",
+    ]) {
+      const section = within(currentSelection)
+        .getByRole("heading", { name: sectionName })
+        .closest("section");
+
+      if (!(section instanceof HTMLElement)) {
+        throw new Error(`expected ${sectionName} section`);
+      }
+
+      expect(
+        within(section).getByRole("button", { name: "Collapse" }).getAttribute(
+          "aria-expanded",
+        ),
+      ).toBe("true");
+    }
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );

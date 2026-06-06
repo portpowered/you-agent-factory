@@ -2,6 +2,7 @@ export {
   type FactoryDocumentSaveInput,
   useFactoryDocumentSave,
 } from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
+export * from "../components/current-selection-body-layout";
 export * from "../components/current-selection-content-section";
 export * from "../components/current-selection-description-list";
 export * from "../components/current-selection-detail-feedback";

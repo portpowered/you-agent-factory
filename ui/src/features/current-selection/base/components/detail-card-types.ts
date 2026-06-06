@@ -67,6 +67,7 @@ export interface ProviderSessionAttemptsProps {
   selectedProviderSessionKey?: string | null;
   selectedRequestDispatchID?: string | null;
   selectedWorkID?: string | null;
+  showHeading?: boolean;
   workstationKind?: string;
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
   title?: string;

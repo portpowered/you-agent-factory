@@ -1,8 +1,20 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 import { surfacePanelVariants } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import { StandardExpandableSection } from "../../../standard-card-components/public";
+
+export interface CurrentSelectionExpandableSectionProps {
+  children: ReactNode;
+  className?: string;
+  contentId?: string;
+  defaultExpanded?: boolean;
+  headingId?: string;
+  resetKey?: string;
+  supportingText?: ReactNode;
+  title: string;
+  toggleLabel: (expanded: boolean) => string;
+}
 
 export function CurrentSelectionExpandableSection({
   children,
@@ -14,17 +26,10 @@ export function CurrentSelectionExpandableSection({
   supportingText,
   title,
   toggleLabel,
-}: {
-  children: ReactNode;
-  className?: string;
-  contentId?: string;
-  defaultExpanded?: boolean;
-  headingId?: string;
-  resetKey?: string;
-  supportingText?: ReactNode;
-  title: string;
-  toggleLabel: (expanded: boolean) => string;
-}) {
+}: CurrentSelectionExpandableSectionProps) {
+  const generatedHeadingId = useId();
+  const resolvedHeadingId = headingId ?? generatedHeadingId;
+
   return (
     <StandardExpandableSection
       className={cn("mt-4 gap-2.5 py-0 [&_h4]:m-0", className)}
@@ -35,7 +40,7 @@ export function CurrentSelectionExpandableSection({
       contentID={contentId}
       defaultExpanded={defaultExpanded}
       heading={title}
-      headingID={headingId}
+      headingID={resolvedHeadingId}
       headingLevel={4}
       resetKey={resetKey}
       supportingText={supportingText}

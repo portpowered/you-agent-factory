@@ -24,6 +24,7 @@ export interface SelectedWorkDispatchHistorySectionProps {
   requests: SelectedWorkRequestHistoryItem[];
   selectedProviderSessionKey?: string | null;
   selectedWorkID: string;
+  widgetId?: string;
   workstationKind?: string;
 }
 

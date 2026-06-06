@@ -194,6 +194,17 @@ function renderReadOnlyResourceDetailCard(
   );
 }
 
+function expectPrimaryResourceTitle(resourceName: string) {
+  const panel = screen.getByRole("article", { name: "Current selection" });
+  const matchingText = within(panel).getAllByText(resourceName);
+
+  expect(
+    matchingText.some((element) =>
+      element.classList.contains("type-display-large"),
+    ),
+  ).toBe(true);
+}
+
 describe("ResourceDetailCard", () => {
   beforeEach(() => {
     mockFactoryDocumentQuery();
@@ -202,6 +213,14 @@ describe("ResourceDetailCard", () => {
   it("shows loading state while the current factory document is pending", () => {
     renderResourceDetailCard("agent-slot");
 
+    expectPrimaryResourceTitle("agent-slot");
+    expect(
+      screen
+        .getByRole("button", {
+          name: "Collapse resource configuration editor",
+        })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
     expect(
       screen.getByText(
         "Loading the current factory definition for this resource.",
@@ -254,6 +273,7 @@ describe("ResourceDetailCard", () => {
 
     renderResourceDetailCard("agent-slot", { tokenCount: 1 });
 
+    expectPrimaryResourceTitle("agent-slot");
     expect(
       screen.getByRole("heading", { name: "Resource configuration" }),
     ).toBeTruthy();
@@ -261,7 +281,7 @@ describe("ResourceDetailCard", () => {
       "agent-slot",
     );
     expect(screen.getByLabelText("Capacity").getAttribute("value")).toBe("2");
-    expect(screen.getByText("Invocation slot")).toBeTruthy();
+    expect(screen.getAllByText("Invocation slot").length).toBeGreaterThan(0);
     expect(screen.getByText("Available tokens")).toBeTruthy();
     expect(screen.getByText("1")).toBeTruthy();
     expect(

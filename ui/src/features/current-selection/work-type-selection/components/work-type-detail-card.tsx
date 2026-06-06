@@ -1,6 +1,9 @@
-import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
-import { CurrentSelectionDetailFeedback } from "../../base/public";
+import {
+  CurrentSelectionBodyLayout,
+  CurrentSelectionDetailFeedback,
+  CurrentSelectionExpandableSection,
+} from "../../base/public";
 import type { WorkTypeDetailCardProps } from "../lib/detail-card-types";
 import { getWorkTypeDetailMessages } from "../messages/work-type-detail";
 import { WorkTypeEditableConfigurationSection } from "./work-type-ready-section";
@@ -18,37 +21,45 @@ export function WorkTypeDetailCard({
 
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
-      {editableConfigurationState?.status !== "ready" ? (
-        <WidgetSubtitle>{workTypeName}</WidgetSubtitle>
-      ) : null}
-      {editableConfigurationState?.status === "loading" ? (
-        <CurrentSelectionDetailFeedback>
-          {messages.configurationLoading}
-        </CurrentSelectionDetailFeedback>
-      ) : null}
-      {editableConfigurationState?.status === "error" ? (
-        <CurrentSelectionDetailFeedback
-          role="alert"
-          tone="danger"
-        >
-          {messages.configurationErrorPrefix}{" "}
-          {editableConfigurationState.errorMessage}
-        </CurrentSelectionDetailFeedback>
-      ) : null}
-      {editableConfigurationState?.status === "empty" ? (
-        <CurrentSelectionDetailFeedback>
-          {editableConfigurationState.message ?? messages.configurationEmpty}
-        </CurrentSelectionDetailFeedback>
-      ) : null}
-      {editableConfigurationState?.status === "ready" ? (
-        <WorkTypeEditableConfigurationSection
-          messages={messages}
-          onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
-          saveState={saveState}
-          state={editableConfigurationState}
-          workTypeName={workTypeName}
-        />
-      ) : null}
+      <CurrentSelectionBodyLayout title={workTypeName}>
+        {editableConfigurationState?.status === "ready" ? (
+          <WorkTypeEditableConfigurationSection
+            messages={messages}
+            onSelectWorkStateGraphNode={onSelectWorkStateGraphNode}
+            saveState={saveState}
+            state={editableConfigurationState}
+            workTypeName={workTypeName}
+          />
+        ) : (
+          <CurrentSelectionExpandableSection
+            defaultExpanded
+            title={messages.editableConfigurationHeading}
+            toggleLabel={(expanded) =>
+              expanded
+                ? messages.editableConfigurationCollapseActionLabel
+                : messages.editableConfigurationExpandActionLabel
+            }
+          >
+            {editableConfigurationState?.status === "loading" ? (
+              <CurrentSelectionDetailFeedback>
+                {messages.configurationLoading}
+              </CurrentSelectionDetailFeedback>
+            ) : null}
+            {editableConfigurationState?.status === "error" ? (
+              <CurrentSelectionDetailFeedback role="alert" tone="danger">
+                {messages.configurationErrorPrefix}{" "}
+                {editableConfigurationState.errorMessage}
+              </CurrentSelectionDetailFeedback>
+            ) : null}
+            {editableConfigurationState?.status === "empty" ? (
+              <CurrentSelectionDetailFeedback>
+                {editableConfigurationState.message ??
+                  messages.configurationEmpty}
+              </CurrentSelectionDetailFeedback>
+            ) : null}
+          </CurrentSelectionExpandableSection>
+        )}
+      </CurrentSelectionBodyLayout>
     </SelectionDetailLayout>
   );
 }

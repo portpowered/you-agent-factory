@@ -5,8 +5,8 @@ import {
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,
   CurrentSelectionDetailItem,
-  CurrentSelectionDetailSection,
   CurrentSelectionDetailValue,
+  CurrentSelectionExpandableSection,
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
 } from "../../base/public";
@@ -23,13 +23,19 @@ export function ResponseDetailsSection({
   const messages = useCurrentSelectionDetailMessages();
 
   return (
-    <CurrentSelectionDetailSection title={messages.responseDetailsTitle}>
+    <CurrentSelectionExpandableSection
+      defaultExpanded
+      title={messages.responseDetailsTitle}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
       {view.isScriptBackedRequest ? (
         <ScriptResponseDetails request={request} view={view} />
       ) : (
         <InferenceResponseDetails request={request} />
       )}
-    </CurrentSelectionDetailSection>
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -45,7 +51,13 @@ export function ErrorDetailsSection({
   }
 
   return (
-    <CurrentSelectionDetailSection title={messages.errorDetailsTitle}>
+    <CurrentSelectionExpandableSection
+      defaultExpanded
+      title={messages.errorDetailsTitle}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
       <CurrentSelectionDescriptionList>
         <CurrentSelectionDetailItem
           label={messages.failureReasonLabel}
@@ -60,7 +72,7 @@ export function ErrorDetailsSection({
           }
         />
       </CurrentSelectionDescriptionList>
-    </CurrentSelectionDetailSection>
+    </CurrentSelectionExpandableSection>
   );
 }
 

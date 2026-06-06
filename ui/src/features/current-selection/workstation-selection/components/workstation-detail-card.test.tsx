@@ -499,7 +499,7 @@ describe("WorkstationDetailCard", () => {
       "expected workstation provider sessions fixture",
     );
 
-    render(
+    const { container } = render(
       <WorkstationDetailCard
         activeExecutions={[resolvedActiveExecution]}
         now={DETAIL_CARD_NOW}
@@ -511,6 +511,8 @@ describe("WorkstationDetailCard", () => {
     expect(
       screen.getByRole("heading", { name: "Current selection" }),
     ).toBeTruthy();
+    const primaryTitle = container.querySelector(".type-display-large");
+    expect(primaryTitle?.textContent).toBe(selectedNode.workstation_name);
     expect(
       screen.getAllByText(selectedNode.workstation_name).length,
     ).toBeGreaterThan(0);

@@ -613,7 +613,8 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
-    expect(within(currentSelection).getByTitle("story:complete")).toBeTruthy();
+    const primaryTitle = within(currentSelection).getByText("story: complete");
+    expect(primaryTitle.classList.contains("type-display-large")).toBe(true);
     expect(within(currentSelection).getByText("Current work")).toBeTruthy();
     expect(within(currentSelection).getByText("Done Story")).toBeTruthy();
   });

@@ -19,6 +19,9 @@ describe("current-selection base public barrel", () => {
     expect(currentSelectionBasePublic.NoSelectionDetailCard).toBeTypeOf(
       "function",
     );
+    expect(currentSelectionBasePublic.CurrentSelectionBodyLayout).toBeTypeOf(
+      "function",
+    );
     expect(currentSelectionBasePublic.DetailCardFactorySaveFeedback).toBeTypeOf(
       "function",
     );

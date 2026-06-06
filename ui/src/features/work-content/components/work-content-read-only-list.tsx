@@ -13,6 +13,7 @@ export type WorkContent = components["schemas"]["WorkContent"];
 export interface WorkContentReadOnlyListProps {
   ariaLabel?: string;
   content?: WorkContent;
+  landmark?: boolean;
   messages?: Partial<WorkContentInspectMessages>;
   payloadStatus?: string;
   reason?: string | null;
@@ -22,6 +23,7 @@ export interface WorkContentReadOnlyListProps {
 export function WorkContentReadOnlyList({
   ariaLabel,
   content = [],
+  landmark = true,
   messages: messageOverrides,
   payloadStatus,
   reason,
@@ -39,12 +41,22 @@ export function WorkContentReadOnlyList({
     reason,
   });
 
-  return (
-    <section aria-label={resolvedAriaLabel} className="grid gap-2">
+  const contentBody = (
+    <>
       {showHeading ? (
         <DashboardLabel>{messages.heading}</DashboardLabel>
       ) : null}
       {body}
+    </>
+  );
+
+  if (!landmark) {
+    return <div className="grid gap-2">{contentBody}</div>;
+  }
+
+  return (
+    <section aria-label={resolvedAriaLabel} className="grid gap-2">
+      {contentBody}
     </section>
   );
 }

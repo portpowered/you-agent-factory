@@ -1,14 +1,15 @@
 import { formatDurationMillis } from "../../../../components/ui/formatters";
 import { LocalizedTimezoneNote } from "../../../../components/ui/localized-timezone-note";
-import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
 import {
+  CurrentSelectionBodyLayout,
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailCode,
-  CurrentSelectionDetailSection,
   CurrentSelectionDetailValue,
+  CurrentSelectionExpandableSection,
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
+  useCurrentSelectionShellMessages,
 } from "../../base/public";
 import { getRunnerDisplayName } from "../../editing/runner-metadata";
 import {
@@ -34,41 +35,55 @@ export function WorkstationRequestDetailCard({
   widgetId = "current-selection",
 }: WorkstationRequestDetailCardProps) {
   const messages = useCurrentSelectionDetailMessages();
+  const shellMessages = useCurrentSelectionShellMessages();
   const view = buildWorkstationRequestDetailView(request);
   const showInferenceAttempts = !view.isScriptBackedRequest;
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <WorkstationRequestSummary request={request} view={view} />
-      <RequestDetailsSection
-        onSelectWorkID={onSelectWorkID}
-        request={request}
-        selectedWorkID={selectedWorkID}
-        view={view}
-      />
-      {view.isScriptBackedRequest ? (
-        <RequestMetadataSection
-          emptyMessage={messages.metadataEmpty}
-          metadata={request.request_metadata}
-          title={messages.requestMetadataTitle}
+      <CurrentSelectionBodyLayout title={view.requestTitle}>
+        <WorkstationRequestSummary request={request} view={view} />
+        <RequestDetailsSection
+          onSelectWorkID={onSelectWorkID}
+          request={request}
+          selectedWorkID={selectedWorkID}
+          view={view}
         />
-      ) : null}
-      <ResponseDetailsSection request={request} view={view} />
-      {view.isScriptBackedRequest ? (
-        <RequestMetadataSection
-          emptyMessage={
-            request.errored_request_count > 0 || view.hasFailureDetails
-              ? messages.responseMetadataUnavailableErrored
-              : messages.responseMetadataUnavailableScript
-          }
-          metadata={request.response_metadata}
-          title={messages.responseMetadataTitle}
-        />
-      ) : null}
-      <ErrorDetailsSection view={view} />
-      {showInferenceAttempts ? (
-        <InferenceAttemptsSection attempts={request.inference_attempts} />
-      ) : null}
+        {view.isScriptBackedRequest ? (
+          <RequestMetadataSection
+            emptyMessage={messages.metadataEmpty}
+            metadata={request.request_metadata}
+            title={messages.requestMetadataTitle}
+          />
+        ) : null}
+        <ResponseDetailsSection request={request} view={view} />
+        {view.isScriptBackedRequest ? (
+          <RequestMetadataSection
+            emptyMessage={
+              request.errored_request_count > 0 || view.hasFailureDetails
+                ? messages.responseMetadataUnavailableErrored
+                : messages.responseMetadataUnavailableScript
+            }
+            metadata={request.response_metadata}
+            title={messages.responseMetadataTitle}
+          />
+        ) : null}
+        <ErrorDetailsSection view={view} />
+        {showInferenceAttempts ? (
+          <CurrentSelectionExpandableSection
+            defaultExpanded
+            title={shellMessages.inferenceAttemptsHeading}
+            toggleLabel={(expanded) =>
+              expanded ? messages.collapseAction : messages.expandAction
+            }
+          >
+            <InferenceAttemptsSection
+              attempts={request.inference_attempts}
+              showHeading={false}
+            />
+          </CurrentSelectionExpandableSection>
+        ) : null}
+      </CurrentSelectionBodyLayout>
     </SelectionDetailLayout>
   );
 }
@@ -84,8 +99,13 @@ function WorkstationRequestSummary({
   const locale = useCurrentSelectionLocale();
 
   return (
-    <>
-      <WidgetSubtitle>{view.requestTitle}</WidgetSubtitle>
+    <CurrentSelectionExpandableSection
+      defaultExpanded
+      title={messages.summaryTitle}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
       <LocalizedTimezoneNote
         locale={locale}
         timezoneLabel={messages.localizedTimezoneLabel}
@@ -158,7 +178,7 @@ function WorkstationRequestSummary({
           />
         ) : null}
       </CurrentSelectionDescriptionList>
-    </>
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -178,18 +198,30 @@ function RequestDetailsSection({
 
   if (!view.isScriptBackedRequest) {
     return (
-      <CurrentSelectionDetailSection title={messages.requestDetailsTitle}>
+      <CurrentSelectionExpandableSection
+        defaultExpanded
+        title={messages.requestDetailsTitle}
+        toggleLabel={(expanded) =>
+          expanded ? messages.collapseAction : messages.expandAction
+        }
+      >
         <ConsumedWorkItemsSection
           onSelectWorkID={onSelectWorkID}
           selectedWorkID={selectedWorkID}
           workItems={consumedWorkItems}
         />
-      </CurrentSelectionDetailSection>
+      </CurrentSelectionExpandableSection>
     );
   }
 
   return (
-    <CurrentSelectionDetailSection title={messages.requestDetailsTitle}>
+    <CurrentSelectionExpandableSection
+      defaultExpanded
+      title={messages.requestDetailsTitle}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
       <CurrentSelectionDescriptionList>
         <ScriptRequestFields request={request} />
       </CurrentSelectionDescriptionList>
@@ -198,7 +230,7 @@ function RequestDetailsSection({
         selectedWorkID={selectedWorkID}
         workItems={consumedWorkItems}
       />
-    </CurrentSelectionDetailSection>
+    </CurrentSelectionExpandableSection>
   );
 }
 

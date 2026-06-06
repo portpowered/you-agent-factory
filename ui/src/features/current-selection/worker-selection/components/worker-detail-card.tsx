@@ -1,6 +1,9 @@
-import { WidgetSubtitle } from "../../../../components/ui/widget-frame";
 import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
-import { CurrentSelectionDetailFeedback } from "../../base/public";
+import {
+  CurrentSelectionBodyLayout,
+  CurrentSelectionDetailFeedback,
+  CurrentSelectionExpandableSection,
+} from "../../base/public";
 import { useWorkerDetailState } from "../hooks/use-worker-detail-state";
 import type { WorkerDetailCardProps } from "../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
@@ -19,35 +22,42 @@ export function WorkerDetailCard({
 
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>
-      {editableConfigurationState?.status !== "ready" ? (
-        <WidgetSubtitle>{workerName}</WidgetSubtitle>
-      ) : null}
-      {detailState.status === "loading" ? (
-        <CurrentSelectionDetailFeedback>
-          {messages.configurationLoading}
-        </CurrentSelectionDetailFeedback>
-      ) : null}
-      {detailState.status === "error" ? (
-        <CurrentSelectionDetailFeedback
-          role="alert"
-          tone="danger"
-        >
-          {messages.configurationErrorPrefix} {detailState.errorMessage}
-        </CurrentSelectionDetailFeedback>
-      ) : null}
-      {detailState.status === "empty" ? (
-        <CurrentSelectionDetailFeedback>
-          {messages.configurationEmpty}
-        </CurrentSelectionDetailFeedback>
-      ) : null}
-      {detailState.status === "ready" ? (
-        <WorkerEditableConfigurationSection
-          messages={messages}
-          saveState={saveState}
-          state={editableConfigurationState}
-          workerName={workerName}
-        />
-      ) : null}
+      <CurrentSelectionBodyLayout title={workerName}>
+        {detailState.status === "ready" ? (
+          <WorkerEditableConfigurationSection
+            messages={messages}
+            saveState={saveState}
+            state={editableConfigurationState}
+            workerName={workerName}
+          />
+        ) : (
+          <CurrentSelectionExpandableSection
+            defaultExpanded
+            title={messages.editableConfigurationHeading}
+            toggleLabel={(expanded) =>
+              expanded
+                ? messages.editableConfigurationCollapseActionLabel
+                : messages.editableConfigurationExpandActionLabel
+            }
+          >
+            {detailState.status === "loading" ? (
+              <CurrentSelectionDetailFeedback>
+                {messages.configurationLoading}
+              </CurrentSelectionDetailFeedback>
+            ) : null}
+            {detailState.status === "error" ? (
+              <CurrentSelectionDetailFeedback role="alert" tone="danger">
+                {messages.configurationErrorPrefix} {detailState.errorMessage}
+              </CurrentSelectionDetailFeedback>
+            ) : null}
+            {detailState.status === "empty" ? (
+              <CurrentSelectionDetailFeedback>
+                {messages.configurationEmpty}
+              </CurrentSelectionDetailFeedback>
+            ) : null}
+          </CurrentSelectionExpandableSection>
+        )}
+      </CurrentSelectionBodyLayout>
     </SelectionDetailLayout>
   );
 }

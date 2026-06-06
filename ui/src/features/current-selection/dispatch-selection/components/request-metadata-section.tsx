@@ -3,7 +3,8 @@ import type { MetadataSectionProps } from "../../base/components/detail-card-typ
 import {
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailItem,
-  CurrentSelectionDetailSection,
+  CurrentSelectionExpandableSection,
+  useCurrentSelectionDetailMessages,
 } from "../../base/public";
 
 export function RequestMetadataSection({
@@ -11,12 +12,19 @@ export function RequestMetadataSection({
   metadata,
   title,
 }: MetadataSectionProps) {
+  const messages = useCurrentSelectionDetailMessages();
   const entries = Object.entries(metadata ?? {}).sort(([left], [right]) =>
     left.localeCompare(right),
   );
 
   return (
-    <CurrentSelectionDetailSection title={title}>
+    <CurrentSelectionExpandableSection
+      defaultExpanded
+      title={title}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
       {entries.length > 0 ? (
         <CurrentSelectionDescriptionList>
           {entries.map(([key, value]) => (
@@ -31,6 +39,6 @@ export function RequestMetadataSection({
       ) : (
         <DetailCopy>{emptyMessage}</DetailCopy>
       )}
-    </CurrentSelectionDetailSection>
+    </CurrentSelectionExpandableSection>
   );
 }

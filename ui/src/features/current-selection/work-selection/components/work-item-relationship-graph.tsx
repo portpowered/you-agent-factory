@@ -2,7 +2,7 @@ import { AlertPanel, AlertPanelText } from "../../../../components/ui";
 import { TraceRelationFlow } from "../../../trace-drilldown/public";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import {
-  CurrentSelectionContentSection,
+  CurrentSelectionExpandableSection,
   CurrentSelectionSupportingText,
 } from "../../base/public";
 import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "../lib/selected-work-relationship-relations";
@@ -16,6 +16,7 @@ export function WorkRelationshipsSection({
   onSelectTraceID,
   onSelectWorkID,
   relationshipGraph,
+  widgetId = "current-selection",
 }: {
   activeTraceID?: string | null;
   locale?: string;
@@ -23,6 +24,7 @@ export function WorkRelationshipsSection({
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   relationshipGraph?: SelectedWorkRelationshipGraph;
+  widgetId?: string;
 }) {
   const readyRelationshipGraph =
     relationshipGraph?.status === "ready" ? relationshipGraph : undefined;
@@ -33,9 +35,14 @@ export function WorkRelationshipsSection({
   const graphStatus = relationshipGraph?.status ?? "loading";
 
   return (
-    <CurrentSelectionContentSection
-      aria-label={messages.workRelationshipsHeading}
+    <CurrentSelectionExpandableSection
+      contentId={`${widgetId}-work-item-relationships-content`}
+      defaultExpanded
+      headingId={`${widgetId}-work-item-relationships-heading`}
       title={messages.workRelationshipsHeading}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
     >
       {graphStatus === "loading" ? (
         <CurrentSelectionSupportingText role="status">
@@ -70,6 +77,6 @@ export function WorkRelationshipsSection({
           {messages.workRelationshipsEmpty}
         </CurrentSelectionSupportingText>
       )}
-    </CurrentSelectionContentSection>
+    </CurrentSelectionExpandableSection>
   );
 }

@@ -139,6 +139,7 @@ export function ProviderSessionAttempts({
   selectedProviderSessionKey,
   selectedRequestDispatchID,
   selectedWorkID,
+  showHeading = true,
   title,
   workstationKind,
   workstationRequestsByDispatchID,
@@ -147,6 +148,28 @@ export function ProviderSessionAttempts({
   const headingId = `${resolvedTitle}-heading`
     .toLowerCase()
     .replace(/\s+/g, "-");
+
+  const attemptList = (
+    <ProviderSessionAttemptList
+      attempts={attempts}
+      currentDispatchID={currentDispatchID}
+      emptyMessage={emptyMessage}
+      messages={messages}
+      onSelectProviderSession={onSelectProviderSession}
+      onSelectWorkID={onSelectWorkID}
+      onSelectWorkstationRequest={onSelectWorkstationRequest}
+      renderHeading={renderHeading}
+      selectedProviderSessionKey={selectedProviderSessionKey}
+      selectedRequestDispatchID={selectedRequestDispatchID}
+      selectedWorkID={selectedWorkID}
+      workstationKind={workstationKind}
+      workstationRequestsByDispatchID={workstationRequestsByDispatchID}
+    />
+  );
+
+  if (!showHeading) {
+    return attemptList;
+  }
 
   return (
     <section
@@ -157,21 +180,7 @@ export function ProviderSessionAttempts({
         headingId={headingId}
         title={resolvedTitle}
       />
-      <ProviderSessionAttemptList
-        attempts={attempts}
-        currentDispatchID={currentDispatchID}
-        emptyMessage={emptyMessage}
-        messages={messages}
-        onSelectProviderSession={onSelectProviderSession}
-        onSelectWorkID={onSelectWorkID}
-        onSelectWorkstationRequest={onSelectWorkstationRequest}
-        renderHeading={renderHeading}
-        selectedProviderSessionKey={selectedProviderSessionKey}
-        selectedRequestDispatchID={selectedRequestDispatchID}
-        selectedWorkID={selectedWorkID}
-        workstationKind={workstationKind}
-        workstationRequestsByDispatchID={workstationRequestsByDispatchID}
-      />
+      {attemptList}
     </section>
   );
 }
