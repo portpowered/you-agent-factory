@@ -37,6 +37,32 @@ type (
 	liveFactorySession       = factorysessions.LiveSession
 )
 
+// FactoryCoordinator owns session tracking and runtime lifecycle orchestration.
+type FactoryCoordinator interface {
+	ActivateNamedFactory(context.Context, string) error
+	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
+	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
+	CloseFactorySession(context.Context, string) error
+	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
+	SubmitWorkRequestForSession(context.Context, string, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
+	MoveWorkForSession(context.Context, string, string, string, string) (interfaces.OperatorMoveResult, error)
+	SubscribeFactoryEventsForSession(context.Context, string) (*interfaces.FactoryEventStream, error)
+	GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
+	startDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error)
+	startBackgroundSessionWithMetadata(context.Context, string, *factoryRuntimeBundle, FactorySessionTarget) error
+	startLiveRuntimeSidecars(context.Context, *liveRuntimeHandle) error
+	stopLiveRuntimeSidecars(*liveRuntimeHandle)
+	restoreLiveRuntimeSidecars(*serviceRunState)
+	stopLiveRuntime(*liveRuntimeHandle) error
+	shutdownOtherLiveSessions(*liveRuntimeHandle) error
+	replaceSessionRuntime(context.Context, *factorysessions.LiveSession, string, *factoryRuntimeBundle) error
+}
+
+type runtimeFactoryCoordinator struct {
+	service *FactoryService
+}
+
 func liveSessionHandle(session *factorysessions.LiveSession) *liveRuntimeHandle {
 	if session == nil {
 		return nil
@@ -129,6 +155,20 @@ func liveSessionExecutionBaseDir(handle *liveRuntimeHandle, folderPath string, f
 		executionBaseDir = factoryDir
 	}
 	return executionBaseDir
+}
+
+func newFactoryCoordinator(fs *FactoryService) FactoryCoordinator {
+	return &runtimeFactoryCoordinator{service: fs}
+}
+
+func (fs *FactoryService) requireCoordinator() FactoryCoordinator {
+	if fs == nil {
+		return newFactoryCoordinator(nil)
+	}
+	if fs.coordinator == nil {
+		fs.coordinator = newFactoryCoordinator(fs)
+	}
+	return fs.coordinator
 }
 
 func (fs *FactoryService) registerLiveSession(
@@ -230,6 +270,11 @@ func (fs *FactoryService) sessionRuntimeConfig(sessionID string) (*factoryconfig
 }
 
 func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	return fs.requireCoordinator().SubmitWorkRequestForSession(ctx, sessionID, request)
+}
+
+func (c *runtimeFactoryCoordinator) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	fs := c.service
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {
 		return interfaces.WorkRequestSubmitResult{}, err
@@ -238,6 +283,11 @@ func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessi
 }
 
 func (fs *FactoryService) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+	return fs.requireCoordinator().MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
+}
+
+func (c *runtimeFactoryCoordinator) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+	fs := c.service
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {
 		return interfaces.OperatorMoveResult{}, err
@@ -258,6 +308,11 @@ func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string
 }
 
 func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+	fs := c.service
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {
 		return nil, err
@@ -270,6 +325,11 @@ func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, 
 }
 
 func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	return fs.requireCoordinator().GetEngineStateSnapshotForSession(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	fs := c.service
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {
 		return nil, err
@@ -281,7 +341,12 @@ func (fs *FactoryService) GetEngineStateSnapshotForSession(ctx context.Context, 
 	return snapshot, nil
 }
 
-func (fs *FactoryService) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+func (fs *FactoryService) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
+	return fs.requireCoordinator().GetCurrentFactoryForSession(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
+	fs := c.service
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
 		return factoryapi.Factory{}, err
@@ -311,7 +376,12 @@ func (fs *FactoryService) GetCurrentFactoryForSession(_ context.Context, session
 	return fs.withCurrentFactoryVersion(versionRootDir, serialized.Name, serialized)
 }
 
-func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	return fs.requireCoordinator().ListFactorySessions(ctx)
+}
+
+func (c *runtimeFactoryCoordinator) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	fs := c.service
 	if fs == nil || fs.sessions == nil {
 		return factoryapi.ListFactorySessionsResponse{}, nil
 	}
@@ -319,6 +389,11 @@ func (fs *FactoryService) ListFactorySessions(_ context.Context) (factoryapi.Lis
 }
 
 func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	return fs.requireCoordinator().OpenFactorySession(ctx, request)
+}
+
+func (c *runtimeFactoryCoordinator) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
+	fs := c.service
 	var target *FactorySessionTargetRef
 	if request.Target != nil {
 		targetName := ""
@@ -366,10 +441,15 @@ func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factor
 	return response, nil
 }
 
-func (fs *FactoryService) CloseFactorySession(_ context.Context, sessionID string) error {
+func (fs *FactoryService) CloseFactorySession(ctx context.Context, sessionID string) error {
+	return fs.requireCoordinator().CloseFactorySession(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) CloseFactorySession(_ context.Context, sessionID string) error {
 	if strings.TrimSpace(sessionID) == "" {
 		return fmt.Errorf("factory session id is required")
 	}
+	fs := c.service
 	return fs.stopFactorySession(sessionID)
 }
 
@@ -395,6 +475,17 @@ func (fs *FactoryService) OpenFactorySessionFromFolder(
 	validateOnly bool,
 	initNewFactory bool,
 ) (*FactorySessionOpenResult, error) {
+	return fs.requireCoordinator().OpenFactorySessionFromFolder(ctx, folderPath, target, validateOnly, initNewFactory)
+}
+
+func (c *runtimeFactoryCoordinator) OpenFactorySessionFromFolder(
+	ctx context.Context,
+	folderPath string,
+	target *FactorySessionTargetRef,
+	validateOnly bool,
+	initNewFactory bool,
+) (*FactorySessionOpenResult, error) {
+	fs := c.service
 	if fs == nil {
 		return nil, fmt.Errorf("factory service is required")
 	}
@@ -522,6 +613,16 @@ func (fs *FactoryService) startBackgroundSessionWithMetadata(
 	runtimeBundle *factoryRuntimeBundle,
 	target FactorySessionTarget,
 ) error {
+	return fs.requireCoordinator().startBackgroundSessionWithMetadata(ctx, sessionID, runtimeBundle, target)
+}
+
+func (c *runtimeFactoryCoordinator) startBackgroundSessionWithMetadata(
+	ctx context.Context,
+	sessionID string,
+	runtimeBundle *factoryRuntimeBundle,
+	target FactorySessionTarget,
+) error {
+	fs := c.service
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
@@ -635,6 +736,16 @@ func (fs *FactoryService) replaceSessionRuntime(
 	name string,
 	replacement *factoryRuntimeBundle,
 ) error {
+	return fs.requireCoordinator().replaceSessionRuntime(ctx, session, name, replacement)
+}
+
+func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+	name string,
+	replacement *factoryRuntimeBundle,
+) error {
+	fs := c.service
 	if session == nil {
 		return fmt.Errorf("%w: session handle is unavailable", apisurface.ErrFactorySessionNotFound)
 	}
