@@ -181,6 +181,130 @@ func TestFactoryService_OpenFactorySessionFromFolder_KeepsSessionWorkingDirector
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_DefaultsEmptyWorkingDirectoryToSessionRoot(t *testing.T) {
+	rootOne := t.TempDir()
+	rootTwo := t.TempDir()
+	writeFactoryJSON(t, rootOne, sessionScriptWorkingDirectoryFactoryConfig("alpha"))
+	writeFactoryJSON(t, rootTwo, sessionScriptWorkingDirectoryFactoryConfig("beta"))
+	writeScriptWorkerAgentsMD(t, rootOne, "script-worker")
+	writeScriptWorkerAgentsMD(t, rootTwo, "script-worker")
+	writeSessionRuntimeLookupWorkstationAgentsMDWithoutWorkingDirectory(t, rootOne, "run-script")
+	writeSessionRuntimeLookupWorkstationAgentsMDWithoutWorkingDirectory(t, rootTwo, "run-script")
+
+	runner := &sessionCapturingCommandRunner{}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:                   rootOne,
+		ExecutionBaseDir:      rootOne,
+		RuntimeMode:           interfaces.RuntimeModeService,
+		CommandRunnerOverride: runner,
+		Logger:                zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	harness := &runningSessionService{
+		rootDir:   rootOne,
+		svc:       svc,
+		runErrCh:  runErrCh,
+		cancelRun: cancelRun,
+	}
+	defer harness.stop(t)
+
+	openResult, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), rootTwo, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(root two): %v", err)
+	}
+	if openResult == nil || openResult.SessionID == "" {
+		t.Fatalf("open result = %#v, want session id", openResult)
+	}
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	secondSession := harness.requireSession(t, openResult.SessionID)
+	submitSessionWork(t, defaultSession, "alpha-empty-workdir", "trace-alpha-empty-workdir")
+	submitSessionWork(t, secondSession, "beta-empty-workdir", "trace-beta-empty-workdir")
+	waitForSessionEventsToContain(t, defaultSession, "alpha-empty-workdir", time.Second)
+	waitForSessionEventsToContain(t, secondSession, "beta-empty-workdir", time.Second)
+
+	requests := runner.waitForRequests(t, 2, time.Second)
+	workDirs := map[string]int{}
+	for _, request := range requests {
+		workDirs[request.WorkDir]++
+	}
+	if workDirs[rootOne] != 1 || workDirs[rootTwo] != 1 {
+		t.Fatalf("command workdirs = %#v, want one request for %q and one for %q", workDirs, rootOne, rootTwo)
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_DefaultsEmptyModelWorkingDirectoryToSessionRoot(t *testing.T) {
+	rootOne := t.TempDir()
+	rootTwo := t.TempDir()
+	writeFactoryJSON(t, rootOne, sessionModelWorkingDirectoryFactoryConfig("alpha"))
+	writeFactoryJSON(t, rootTwo, sessionModelWorkingDirectoryFactoryConfig("beta"))
+	writeWorkerAgentsMD(t, rootOne, "model-worker")
+	writeWorkerAgentsMD(t, rootTwo, "model-worker")
+	writeSessionRuntimeLookupModelWorkstationAgentsMDWithoutWorkingDirectory(t, rootOne, "run-model", interfaces.WorkstationTypeModel)
+	writeSessionRuntimeLookupModelWorkstationAgentsMDWithoutWorkingDirectory(t, rootTwo, "run-model", interfaces.WorkstationTypeModel)
+
+	provider := &sessionCapturingProvider{}
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:              rootOne,
+		ExecutionBaseDir: rootOne,
+		RuntimeMode:      interfaces.RuntimeModeService,
+		ProviderOverride: provider,
+		Logger:           zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	harness := &runningSessionService{
+		rootDir:   rootOne,
+		svc:       svc,
+		runErrCh:  runErrCh,
+		cancelRun: cancelRun,
+	}
+	defer harness.stop(t)
+
+	openResult, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), rootTwo, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(root two): %v", err)
+	}
+	if openResult == nil || openResult.SessionID == "" {
+		t.Fatalf("open result = %#v, want session id", openResult)
+	}
+
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	secondSession := harness.requireSession(t, openResult.SessionID)
+	submitSessionWork(t, defaultSession, "alpha-empty-model-workdir", "trace-alpha-empty-model-workdir")
+	submitSessionWork(t, secondSession, "beta-empty-model-workdir", "trace-beta-empty-model-workdir")
+	waitForSessionEventsToContain(t, defaultSession, "alpha-empty-model-workdir", time.Second)
+	waitForSessionEventsToContain(t, secondSession, "beta-empty-model-workdir", time.Second)
+
+	requests := provider.waitForRequests(t, 2, time.Second)
+	workDirs := map[string]int{}
+	for _, request := range requests {
+		workDirs[request.WorkingDirectory]++
+	}
+	if workDirs[rootOne] != 1 || workDirs[rootTwo] != 1 {
+		t.Fatalf("provider workdirs = %#v, want one request for %q and one for %q", workDirs, rootOne, rootTwo)
+	}
+}
+
 func TestFactoryService_OpenFactorySession_IsolatesSessionLogsAndReplayArtifacts(t *testing.T) {
 	recordPath := t.TempDir() + "/recording.json"
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
@@ -261,6 +385,39 @@ func (r *sessionCapturingCommandRunner) waitForRequests(t *testing.T, want int, 
 	return nil
 }
 
+type sessionCapturingProvider struct {
+	mu       sync.Mutex
+	requests []interfaces.ProviderInferenceRequest
+}
+
+func (p *sessionCapturingProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	p.mu.Lock()
+	p.requests = append(p.requests, interfaces.CloneProviderInferenceRequest(req))
+	p.mu.Unlock()
+	return interfaces.InferenceResponse{Content: "ok"}, nil
+}
+
+func (p *sessionCapturingProvider) waitForRequests(t *testing.T, want int, wait time.Duration) []interfaces.ProviderInferenceRequest {
+	t.Helper()
+
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		p.mu.Lock()
+		if len(p.requests) >= want {
+			requests := append([]interfaces.ProviderInferenceRequest(nil), p.requests...)
+			p.mu.Unlock()
+			return requests
+		}
+		p.mu.Unlock()
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	t.Fatalf("timed out waiting for %d provider requests; got %d", want, len(p.requests))
+	return nil
+}
+
 func sessionScriptWorkingDirectoryFactoryConfig(name string) map[string]any {
 	return map[string]any{
 		"name": name,
@@ -292,6 +449,37 @@ func sessionScriptWorkingDirectoryFactoryConfig(name string) map[string]any {
 	}
 }
 
+func sessionModelWorkingDirectoryFactoryConfig(name string) map[string]any {
+	return map[string]any{
+		"name": name,
+		"id":   name,
+		"workTypes": []map[string]any{
+			{
+				"name": "task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name": "model-worker",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "run-model",
+				"worker":    "model-worker",
+				"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			},
+		},
+	}
+}
+
 func writeSessionRuntimeLookupWorkstationAgentsMD(t *testing.T, factoryDir, workstationName, relativeWorkingDir string) {
 	t.Helper()
 
@@ -300,6 +488,32 @@ func writeSessionRuntimeLookupWorkstationAgentsMD(t *testing.T, factoryDir, work
 		t.Fatalf("create workstation dir: %v", err)
 	}
 	agentsMD := "---\ntype: MODEL_WORKSTATION\nworker: script-worker\nworkingDirectory: " + relativeWorkingDir + "\n---\nRun the script.\n"
+	if err := os.WriteFile(filepath.Join(wsDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
+	}
+}
+
+func writeSessionRuntimeLookupWorkstationAgentsMDWithoutWorkingDirectory(t *testing.T, factoryDir, workstationName string) {
+	t.Helper()
+
+	wsDir := filepath.Join(factoryDir, "workstations", workstationName)
+	if err := os.MkdirAll(wsDir, 0o755); err != nil {
+		t.Fatalf("create workstation dir: %v", err)
+	}
+	agentsMD := "---\ntype: MODEL_WORKSTATION\nworker: script-worker\n---\nRun the script.\n"
+	if err := os.WriteFile(filepath.Join(wsDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
+		t.Fatalf("write workstation AGENTS.md: %v", err)
+	}
+}
+
+func writeSessionRuntimeLookupModelWorkstationAgentsMDWithoutWorkingDirectory(t *testing.T, factoryDir, workstationName, workstationType string) {
+	t.Helper()
+
+	wsDir := filepath.Join(factoryDir, "workstations", workstationName)
+	if err := os.MkdirAll(wsDir, 0o755); err != nil {
+		t.Fatalf("create workstation dir: %v", err)
+	}
+	agentsMD := "---\ntype: " + string(workstationType) + "\nworker: model-worker\n---\nReview {{ (index .Inputs 0).WorkID }}.\n"
 	if err := os.WriteFile(filepath.Join(wsDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
 		t.Fatalf("write workstation AGENTS.md: %v", err)
 	}

@@ -1,7 +1,5 @@
 import {
   DashboardActionButton,
-  DashboardActionRow,
-  DashboardText,
 } from "../../../../components/ui";
 import {
   formatDurationFromISO,
@@ -12,6 +10,7 @@ import { CurrentSelectionExpandableSection } from "../../base/components/current
 import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../base/public";
 import type { WorkstationActiveWorkListProps } from "../lib/detail-card-types";
+import { WorkstationDispatchRow } from "./workstation-dispatch-row";
 
 export function WorkstationActiveWorkList({
   executions,
@@ -93,47 +92,39 @@ export function WorkstationActiveWorkList({
                 ) : undefined;
 
               return (
-                <DashboardText
-                  as="li"
-                  className="grid min-w-0 gap-2 rounded-lg px-3 py-2"
+                <WorkstationDispatchRow
+                  actions={headerActions}
                   key={`${execution.dispatch_id}-${workIdentifier}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <strong className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-                      {workLabel}
-                    </strong>
-                    <DashboardActionRow
-                      statuses={
-                        <CurrentSelectionExecutionPill>
-                          {messages.elapsedLabel}: {elapsed}
-                        </CurrentSelectionExecutionPill>
-                      }
-                      statusesClassName="justify-end"
-                      actions={headerActions}
-                      actionsClassName="justify-end"
-                      className="justify-end"
-                    />
-                  </div>
-                  {workItem ? null : (
-                    <CurrentSelectionSupportingText tone="status">
-                      {messages.workDetailsUnavailable(execution.dispatch_id)}
-                    </CurrentSelectionSupportingText>
-                  )}
-                  {requestSelected ? (
-                    <CurrentSelectionSupportingText tone="status">
-                      {messages.selectedRequestLabel(execution.dispatch_id)}
-                    </CurrentSelectionSupportingText>
-                  ) : null}
-                  {onSelectWorkstationRequest ? (
-                    request ? null : (
-                      <CurrentSelectionSupportingText tone="status">
-                        {messages.requestDetailsUnavailable(
-                          execution.dispatch_id,
-                        )}
-                      </CurrentSelectionSupportingText>
-                    )
-                  ) : null}
-                </DashboardText>
+                  status={
+                    <CurrentSelectionExecutionPill>
+                      {messages.elapsedLabel}: {elapsed}
+                    </CurrentSelectionExecutionPill>
+                  }
+                  supportingContent={
+                    <>
+                      {workItem ? null : (
+                        <CurrentSelectionSupportingText tone="status">
+                          {messages.workDetailsUnavailable(execution.dispatch_id)}
+                        </CurrentSelectionSupportingText>
+                      )}
+                      {requestSelected ? (
+                        <CurrentSelectionSupportingText tone="status">
+                          {messages.selectedRequestLabel(execution.dispatch_id)}
+                        </CurrentSelectionSupportingText>
+                      ) : null}
+                      {onSelectWorkstationRequest ? (
+                        request ? null : (
+                          <CurrentSelectionSupportingText tone="status">
+                            {messages.requestDetailsUnavailable(
+                              execution.dispatch_id,
+                            )}
+                          </CurrentSelectionSupportingText>
+                        )
+                      ) : null}
+                    </>
+                  }
+                  title={workLabel}
+                />
               );
             });
           })}

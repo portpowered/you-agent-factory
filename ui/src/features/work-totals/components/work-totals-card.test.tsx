@@ -52,6 +52,8 @@ describe("WorkTotalsCard", () => {
     expect(cardHeader?.className).toContain("px-3");
     expect(cardHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
     expect(cardHeader?.className).toContain("cursor-grab");
+    expect(cardShell.dataset.dashboardPanelShell).toBe("grid-card");
+    expect(cardShell.className).toContain("shadow-af-card");
     expect(
       within(cardShell).queryByRole("button", { name: "Move Work totals" }),
     ).toBeNull();

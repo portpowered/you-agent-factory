@@ -275,7 +275,7 @@ export function AgentBentoLayout({
       >
         {cards.map((card) => (
           <div
-            className="min-w-0"
+            className="min-w-0 overflow-visible"
             data-bento-card-id={card.widgetType}
             data-bento-instance-id={card.id}
             data-layout-signature={layoutSignature(

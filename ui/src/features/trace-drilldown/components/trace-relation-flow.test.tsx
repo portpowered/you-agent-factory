@@ -231,11 +231,15 @@ describe("TraceRelationFlow", () => {
     );
 
     await waitFor(() => {
-      expect(
-        screen
-          .getByRole("region", { name: "Batch relation graph" })
-          .getAttribute("data-dashboard-graph-frame"),
-      ).toBe("true");
+      const graphFrame = screen.getByRole("region", {
+        name: "Batch relation graph",
+      });
+      expect(graphFrame.getAttribute("data-dashboard-graph-frame")).toBe(
+        "true",
+      );
+      expect(graphFrame.className).toContain("shadow-none");
+      expect(graphFrame.className).not.toContain("shadow-af-card");
+      expect(graphFrame.className).not.toContain("shadow-af-panel");
     });
 
     expect(
@@ -307,6 +311,53 @@ describe("TraceRelationFlow", () => {
     expect(edges[0]?.style?.stroke).toBe("var(--color-success)");
     expect(edges[0]?.style?.strokeDasharray).toBe("7 5");
     expect(edges[1]?.style?.stroke).toBe("var(--color-on-error-container)");
+  });
+});
+
+describe("TraceRelationFlow selected work", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("highlights the selected work node without making it selectable", async () => {
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <TraceRelationFlow
+        onSelectWorkID={onSelectWorkID}
+        relations={RELATIONS}
+        selectedWorkID="work-plan"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("trace-relation-react-flow")).toBeTruthy();
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Plan story" }),
+    ).toBeNull();
+
+    const selectedShell = screen.getByText("Plan story").closest("article");
+    if (!(selectedShell instanceof HTMLElement)) {
+      throw new Error("Expected selected relation node shell to render.");
+    }
+    expect(selectedShell.className).toContain("border-primary");
+    expect(selectedShell.className).toContain("bg-primary-container");
+
+    fireEvent.click(selectedShell);
+    expect(onSelectWorkID).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Implement story" }));
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
   });
 });
 

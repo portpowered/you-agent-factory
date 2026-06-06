@@ -67,7 +67,15 @@ func provideHostedWorkersConfig(
 	return service.NewHostedWorkersConfig(cfg, logger, clock)
 }
 
-func provideFactoryServiceShell(
+func provideFactoryService(
+	core *service.FactoryCore,
+	cfg *service.FactoryServiceConfig,
+) *service.FactoryService {
+	serviceShell := service.FactoryServiceShell{Service: service.NewFactoryServiceFromCore(core)}
+	return service.AttachFactorySaveCollaborator(serviceShell, service.ProvideFactorySaveCollaborator(serviceShell, cfg))
+}
+
+func provideFactoryCore(
 	ctx context.Context,
 	cfg *service.FactoryServiceConfig,
 	root service.FactoryServiceRoot,
@@ -75,13 +83,6 @@ func provideFactoryServiceShell(
 	load service.FactoryConfigLoadResult,
 	clock factory.Clock,
 	hostedWorkers hostedworkers.Config,
-) (service.FactoryServiceShell, error) {
-	return service.ComposeFactoryService(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
-}
-
-func provideFactoryService(
-	shell service.FactoryServiceShell,
-	cfg *service.FactoryServiceConfig,
-) *service.FactoryService {
-	return service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, cfg))
+) (*service.FactoryCore, error) {
+	return service.ComposeFactoryCore(ctx, cfg, root, collaborators, load, clock, hostedWorkers)
 }

@@ -1,13 +1,14 @@
 import type { ComponentProps } from "react";
-import { expect, userEvent, within } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
 import type { WorkChartModel } from "../lib/trends";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
-} from "../lib/work-chart-legend-story-contract";
+} from "../lib/work-chart-legend-contract";
 import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
+import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { WorkChart, type WorkChartSeriesDefinition } from "./work-chart";
 
 const populatedModel = {
@@ -137,9 +138,36 @@ const WORK_CHART_SERIES: readonly WorkChartSeriesDefinition[] = [
   },
 ];
 
-function expectWorkChartOverlayContract(chart: HTMLElement): void {
-  expect(within(chart).getByText("Ticks")).toBeVisible();
-  expect(within(chart).getByText("Work count")).toBeVisible();
+async function expectWorkChartOverlayContract(
+  chart: HTMLElement,
+): Promise<void> {
+  const chartMessages = getWorkOutcomeMessages().chart;
+  const overlay = chart.querySelector<HTMLElement>(
+    "[data-work-chart-overlay='true']",
+  );
+
+  expect(overlay).not.toBeNull();
+
+  await waitFor(() => {
+    expect(within(chart).getByText(chartMessages.xAxisLabel)).toBeVisible();
+    expect(
+      within(overlay as HTMLElement).getByText(chartMessages.yAxisLabel),
+    ).toBeVisible();
+  });
+}
+
+async function expectWorkChartLegendAndAxisContract(
+  chart: HTMLElement,
+): Promise<void> {
+  const chartMessages = getWorkOutcomeMessages().chart;
+
+  await waitFor(() => {
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart, {
+      xAxisLabel: chartMessages.xAxisLabel,
+      yAxisLabel: chartMessages.yAxisLabel,
+    });
+  });
 }
 
 function expectWorkChartPaddingContract(chart: HTMLElement): void {
@@ -210,10 +238,9 @@ export const Populated = {
       name: "Work outcome chart",
     });
 
-    expectWorkChartOverlayContract(chart);
+    await expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
+    await expectWorkChartLegendAndAxisContract(chart);
   },
 };
 
@@ -291,10 +318,9 @@ export const ConstrainedWidth = {
       name: "Work outcome chart",
     });
 
-    expectWorkChartOverlayContract(chart);
+    await expectWorkChartOverlayContract(chart);
     expectWorkChartPaddingContract(chart);
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
+    await expectWorkChartLegendAndAxisContract(chart);
     await dragWorkChart(chart, 0.1, 0.5);
     expect(canvas.queryByText("Zoomed to ticks 10-20")).toBeNull();
     const reset = canvas.getByRole("button", {

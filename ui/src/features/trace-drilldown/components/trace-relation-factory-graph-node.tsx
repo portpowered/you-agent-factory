@@ -15,15 +15,19 @@ import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-
 
 const RELATION_NODE_ACTIVE_CLASS =
   "hover:border-primary hover:bg-primary-container";
+const RELATION_NODE_SELECTED_CLASS =
+  "border-primary bg-primary-container shadow-af-accent-selected";
 const RELATION_NODE_CLASS =
-  "min-w-0 w-full justify-start overflow-hidden text-left shadow-af-card";
+  "min-w-0 w-full justify-start overflow-hidden text-left shadow-none";
 
 function TraceRelationFactoryGraphNode({
   data,
 }: NodeProps<TraceRelationFlowNode>) {
   const shellClassName = cn(
     RELATION_NODE_CLASS,
-    relationNodeToneClassName(data.relationStates),
+    data.isSelectedWork
+      ? RELATION_NODE_SELECTED_CLASS
+      : relationNodeToneClassName(data.relationStates),
     data.selectable ? RELATION_NODE_ACTIVE_CLASS : undefined,
   );
   const content = (

@@ -51,7 +51,7 @@ type WorkstationExecutor struct {
 	Executor        WorkstationRequestExecutor
 	Renderer        workerprompting.PromptRenderer
 	Parser          OutputParser
-	Logger          logging.Logger // optional; nil → noop
+	Logger          logging.Logger        // optional; nil → noop
 	GitCommander    worktree.GitCommander // optional; nil → ExecGitCommander
 }
 
@@ -162,11 +162,12 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 	}
 
 	if workstationDef.WorkingDirectory != "" || workstationDef.Worktree != "" || len(workstationDef.Env) > 0 {
+		templateContext := workstationTemplateContext(we.WorkflowContext, requestContext.ProjectID, requestContext.SessionID, we.RuntimeConfig)
 		resolved, err := workerprompting.ResolveTemplateFields(
 			workstationDef.WorkingDirectory,
 			workstationDef.Env,
 			requestContext.InputTokens,
-			requestContext.factoryContext(),
+			templateContext,
 			workstationDef.Worktree,
 		)
 		if err != nil {
@@ -190,13 +191,7 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 			runtimeBaseDir = we.RuntimeConfig.RuntimeBaseDir()
 		}
 		resolved.WorkingDirectory = resolveRuntimePath(runtimeBaseDir, resolved.WorkingDirectory)
-
-		appliedContext := workerprompting.ApplyResolvedFields(requestContext.factoryContext(), resolved)
-		if appliedContext != nil {
-			requestContext.ProjectID = appliedContext.ProjectID
-			requestContext.WorkingDirectory = appliedContext.WorkDirectory
-			requestContext.EnvVars = cloneEnvVars(appliedContext.EnvVars)
-		}
+		requestContext.EnvVars = cloneEnvVars(resolved.Env)
 
 		if resolved.Worktree != "" {
 			logger.Debug("resolved worktree", "worktree", resolved.Worktree)
@@ -208,7 +203,45 @@ func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch inter
 			requestContext.WorkingDirectory = resolved.WorkingDirectory
 		}
 	}
+	if requestContext.WorkingDirectory == "" && requestContext.Worktree == "" {
+		requestContext.WorkingDirectory = defaultRuntimeWorkingDirectory(we.RuntimeConfig)
+	}
 	return requestContext, nil
+}
+
+func workstationTemplateContext(base *factory_context.FactoryContext, projectID, sessionID string, runtimeCfg interfaces.RuntimeConfigLookup) *factory_context.FactoryContext {
+	var templateContext factory_context.FactoryContext
+	if base != nil {
+		templateContext = *base
+		templateContext.EnvVars = cloneEnvVars(base.EnvVars)
+	}
+
+	if projectID != "" {
+		templateContext.ProjectID = projectID
+	}
+	templateContext.SessionID = factorySessionIDFromWorkflowContext(&templateContext)
+	if sessionID != "" {
+		templateContext.SessionID = sessionID
+	}
+	if templateContext.WorkDirectory == "" {
+		templateContext.WorkDirectory = defaultRuntimeWorkingDirectory(runtimeCfg)
+	}
+
+	return &templateContext
+}
+
+func defaultRuntimeWorkingDirectory(runtimeCfg interfaces.RuntimeConfigLookup) string {
+	if runtimeCfg == nil {
+		return ""
+	}
+	baseDir := strings.TrimSpace(runtimeCfg.RuntimeBaseDir())
+	if baseDir == "" {
+		baseDir = strings.TrimSpace(runtimeCfg.FactoryDir())
+	}
+	if baseDir == "" {
+		return ""
+	}
+	return filepath.Clean(baseDir)
 }
 
 func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
@@ -331,22 +364,23 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 
 	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
 	return interfaces.WorkstationExecutionRequest{
-		Dispatch:              interfaces.CloneWorkDispatch(dispatch),
-		WorkerType:            workerName,
-		WorkstationType:       dispatch.WorkstationName,
-		RunnerID:              selection.RunnerID,
-		RunnerSelectionSource: selection.Source,
-		ProjectID:             requestContext.ProjectID,
-		FactorySessionID:      requestContext.SessionID,
-		InputTokens:           InputTokens(requestContext.InputTokens...),
-		ModelOperation:        workstationDef.Operation,
-		ModelBindings:         modelBindings,
-		SystemPrompt:          workerDef.Body,
-		UserMessage:           rendered,
-		OutputSchema:          workstationDef.OutputSchema,
-		EnvVars:               cloneEnvVars(requestContext.EnvVars),
-		Worktree:              requestContext.Worktree,
-		WorkingDirectory:      requestContext.WorkingDirectory,
+		Dispatch:                 interfaces.CloneWorkDispatch(dispatch),
+		WorkerType:               workerName,
+		WorkstationType:          dispatch.WorkstationName,
+		RunnerID:                 selection.RunnerID,
+		RunnerSelectionSource:    selection.Source,
+		ProjectID:                requestContext.ProjectID,
+		FactorySessionID:         requestContext.SessionID,
+		InputTokens:              InputTokens(requestContext.InputTokens...),
+		ModelOperation:           workstationDef.Operation,
+		ModelBindings:            modelBindings,
+		SystemPrompt:             workerDef.Body,
+		UserMessage:              rendered,
+		OutputSchema:             workstationDef.OutputSchema,
+		EnvVars:                  cloneEnvVars(requestContext.EnvVars),
+		Worktree:                 requestContext.Worktree,
+		WorkingDirectory:         requestContext.WorkingDirectory,
+		WorkingDirectoryAuthored: workstationDef.WorkingDirectory != "",
 	}, nil
 }
 

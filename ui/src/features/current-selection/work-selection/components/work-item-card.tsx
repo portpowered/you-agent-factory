@@ -75,7 +75,6 @@ export function WorkItemDetailCard({
                   messages.workstationUnavailableValue}
               </dd>
             </div>
-
             <div>
               <dt>{messages.runtimeLabelsLabel}</dt>
               <dd>
@@ -111,17 +110,12 @@ export function WorkItemDetailCard({
         </CurrentSelectionExpandableSection>
         <WorkRelationshipsSection
           activeTraceID={activeTraceID}
+          locale={locale}
           messages={messages}
           onSelectTraceID={onSelectTraceID}
           onSelectWorkID={onSelectWorkID}
           relationshipGraph={relationshipGraph}
           widgetId={widgetId}
-          selectedWorkLabel={
-            relationshipGraph?.status !== "loading" &&
-            relationshipGraph?.selectedWork.label
-              ? relationshipGraph.selectedWork.label
-              : formatWorkItemLabel(selection.workItem)
-          }
         />
         <SelectedWorkDispatchHistorySection
           activeTraceID={activeTraceID}

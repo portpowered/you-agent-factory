@@ -13,19 +13,21 @@ vi.mock("@xyflow/react", async () => {
     Background: () => <div data-testid="graph-background" />,
     Controls: () => <div data-testid="graph-controls" />,
     ReactFlow: ({
+      className,
       children,
       edges,
       nodes,
       onEdgeClick,
       onNodeClick,
     }: {
+      className?: string;
       children: ReactNode;
       edges?: Edge[];
       nodes?: Node[];
       onEdgeClick?: (_event: unknown, edge: Edge) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
     }) => (
-      <div data-testid="mock-react-flow">
+      <div className={className} data-testid="mock-react-flow">
         {(nodes ?? []).map((node) => (
           <button
             key={node.id}
@@ -64,8 +66,52 @@ const importController: CurrentActivityImportController = {
   onDrop: vi.fn(),
 };
 
+const DEFAULT_GRAPH_RECT = {
+  bottom: 720,
+  height: 720,
+  left: 0,
+  right: 1280,
+  top: 0,
+  width: 1280,
+  x: 0,
+  y: 0,
+  toJSON: () => ({}),
+} as DOMRect;
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: viewport coverage keeps related mocked React Flow click paths together.
 describe("CurrentActivityGraphViewport", () => {
+  const originalBoundingClientRect =
+    HTMLElement.prototype.getBoundingClientRect;
+  const originalResizeObserver = globalThis.ResizeObserver;
+
+  beforeEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = () => DEFAULT_GRAPH_RECT;
+    globalThis.ResizeObserver = class {
+      public constructor(private readonly callback: ResizeObserverCallback) {}
+
+      public disconnect(): void {}
+
+      public observe(target: Element): void {
+        this.callback(
+          [
+            {
+              contentRect: DEFAULT_GRAPH_RECT,
+              target,
+            } as ResizeObserverEntry,
+          ],
+          this as unknown as ResizeObserver,
+        );
+      }
+
+      public unobserve(): void {}
+    } as unknown as typeof ResizeObserver;
+  });
+
+  afterEach(() => {
+    HTMLElement.prototype.getBoundingClientRect = originalBoundingClientRect;
+    globalThis.ResizeObserver = originalResizeObserver;
+  });
+
   it("renders hide/show controls in observer mode without editor tools", () => {
     renderViewport({ editorMode: false });
 
@@ -106,7 +152,7 @@ describe("CurrentActivityGraphViewport", () => {
       kind: "resource",
       renderedNodeId: "resource:gpu",
     },
-  ])("maps rendered $kind nodes to factory graph ids before editor node deletion", ({
+  ])("maps rendered $kind nodes to factory graph ids before editor node deletion", async ({
     expectedNodeId,
     kind,
     renderedNodeId,
@@ -129,7 +175,9 @@ describe("CurrentActivityGraphViewport", () => {
       onEditorNodeClick: handleEditorNodeClick,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: renderedNodeId }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: renderedNodeId }),
+    );
 
     expect(handleEditorNodeClick).toHaveBeenCalledWith(expectedNodeId);
   });
@@ -160,7 +208,7 @@ describe("CurrentActivityGraphViewport", () => {
       target: "workstation:review",
       targetFactoryGraphNodeId: "workstation:review",
     },
-  ])("maps rendered edge endpoints to factory graph ids before edge deletion", ({
+  ])("maps rendered edge endpoints to factory graph ids before edge deletion", async ({
     expectedEdgeId,
     renderedEdgeId,
     source,
@@ -201,12 +249,14 @@ describe("CurrentActivityGraphViewport", () => {
       onEditorEdgeClick: handleEditorEdgeClick,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: renderedEdgeId }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: renderedEdgeId }),
+    );
 
     expect(handleEditorEdgeClick).toHaveBeenCalledWith(expectedEdgeId);
   });
 
-  it("keeps canonical edge ids unchanged before editor edge deletion", () => {
+  it("keeps canonical edge ids unchanged before editor edge deletion", async () => {
     const handleEditorEdgeClick = vi.fn();
 
     renderViewport({
@@ -224,7 +274,7 @@ describe("CurrentActivityGraphViewport", () => {
     });
 
     fireEvent.click(
-      screen.getByRole("button", {
+      await screen.findByRole("button", {
         name: "workstation-output:workstation:review->work-state:story:done",
       }),
     );
@@ -234,7 +284,7 @@ describe("CurrentActivityGraphViewport", () => {
     );
   });
 
-  it("does not delete graph entities while outside editor mode", () => {
+  it("does not delete graph entities while outside editor mode", async () => {
     const handleEditorNodeClick = vi.fn();
     const handleEditorEdgeClick = vi.fn();
 
@@ -262,15 +312,33 @@ describe("CurrentActivityGraphViewport", () => {
       onEditorNodeClick: handleEditorNodeClick,
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "work-type:story" }));
     fireEvent.click(
-      screen.getByRole("button", {
+      await screen.findByRole("button", { name: "work-type:story" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", {
         name: "worker-resource:resource:gpu->place:worker:writer",
       }),
     );
 
     expect(handleEditorNodeClick).not.toHaveBeenCalled();
     expect(handleEditorEdgeClick).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current-activity graph shell and React Flow canvas flat", () => {
+    renderViewport();
+
+    const graphFrame = screen.getByRole("region", {
+      name: "Work graph viewport",
+    });
+    const reactFlow = screen.getByTestId("mock-react-flow");
+
+    expect(graphFrame.className).toContain("shadow-none");
+    expect(graphFrame.className).not.toContain("shadow-af-card");
+    expect(graphFrame.className).not.toContain("shadow-af-panel");
+    expect(reactFlow.className).toContain("shadow-none");
+    expect(reactFlow.className).not.toContain("shadow-af-card");
+    expect(reactFlow.className).not.toContain("shadow-af-panel");
   });
 });
 
@@ -289,6 +357,8 @@ function renderViewport({
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
 } = {}) {
+  const flowContainerRef = { current: null as HTMLElement | null };
+
   return render(
     <CurrentActivityGraphViewport
       activeTool={activeTool}
@@ -296,6 +366,7 @@ function renderViewport({
       canSaveDraft={false}
       editorMode={editorMode}
       edges={edges}
+      flowContainerRef={flowContainerRef}
       graphKey="test-graph"
       handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}

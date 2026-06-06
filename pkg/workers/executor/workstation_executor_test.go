@@ -969,3 +969,20 @@ func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingR
 		t.Fatal("expected missing required input slot to fail")
 	}
 }
+
+func TestInferenceRequestForExecutionRequest_AuthoredWorkingDirectoryRequiresRunnerCapability(t *testing.T) {
+	req := testAgentRequest(interfaces.WorkDispatch{
+		DispatchID: "d-authored-workdir", TransitionID: "t-authored-workdir", WorkerType: "worker-a", WorkstationName: "review",
+	}, withAgentPrompts("System prompt", "Review"), withAgentWorkingDirectory("/tmp/authored"), func(req *interfaces.WorkstationExecutionRequest) {
+		req.WorkingDirectoryAuthored = true
+	})
+	got := inferenceRequestForExecutionRequest(req, &interfaces.WorkerConfig{
+		Model: "gemini-1.5-pro", ModelProvider: interfaces.RunnerIDGemini,
+	}, nil)
+	for _, capability := range got.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityWorkingDirectory {
+			return
+		}
+	}
+	t.Fatalf("capabilities = %#v, want authored working directory capability", got.RequiredOptionalCapabilities)
+}

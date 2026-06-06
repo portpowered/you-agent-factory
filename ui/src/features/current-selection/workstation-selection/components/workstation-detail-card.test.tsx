@@ -130,7 +130,7 @@ function expectLocalizedSelectionControlNames() {
   );
   expect(
     within(resolvedRequestHistorySection).getByRole("button", {
-      name: "Select request Rejected Story (dispatch-review-rejected)",
+      name: "Select workstation request dispatch-review-rejected",
     }),
   ).toBeTruthy();
 
@@ -180,7 +180,7 @@ function expectLocalizedSelectionControlNames() {
   ).toBeTruthy();
   expect(
     within(resolvedRequestHistorySection).getByRole("button", {
-      name: "リクエスト Rejected Story (dispatch-review-rejected) を選択",
+      name: "ワークステーションリクエスト dispatch-review-rejected を選択",
     }),
   ).toBeTruthy();
 }
@@ -783,7 +783,7 @@ describe("WorkstationDetailCard", () => {
     );
     fireEvent.click(
       within(resolvedRequestHistorySection).getByRole("button", {
-        name: "Select request Rejected Story (dispatch-review-rejected)",
+        name: "Select workstation request dispatch-review-rejected",
       }),
     );
     expect(onSelectWorkstationRequest).toHaveBeenCalledWith(

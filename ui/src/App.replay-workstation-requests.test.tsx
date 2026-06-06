@@ -53,9 +53,7 @@ async function selectReviewRequest(dispatchID: string): Promise<void> {
   );
   fireEvent.click(
     within(requestHistorySection).getByRole("button", {
-      name: new RegExp(
-        `\\(${dispatchID.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\)$`,
-      ),
+      name: `Select workstation request ${dispatchID}`,
     }),
   );
 }

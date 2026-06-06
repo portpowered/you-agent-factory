@@ -1,6 +1,9 @@
 import {
   createElement,
+  type Dispatch,
+  type RefObject,
   type ReactNode,
+  type SetStateAction,
   useEffect,
   useMemo,
   useRef,
@@ -18,6 +21,16 @@ type MonacoEditorMockProps = {
   wrapperProps?: Record<string, string | undefined>;
 };
 
+type MonacoMarkers = Array<{
+  endColumn: number;
+  endLineNumber: number;
+  message: string;
+  startColumn: number;
+  startLineNumber: number;
+}>;
+
+type MonacoThemeApplications = Array<{ base: string | null; name: string }>;
+
 export function MonacoEditorMock({
   className,
   loading,
@@ -27,15 +40,10 @@ export function MonacoEditorMock({
   value,
   wrapperProps,
 }: MonacoEditorMockProps) {
-  const [markers, setMarkers] = useState<
-    Array<{
-      endColumn: number;
-      endLineNumber: number;
-      message: string;
-      startColumn: number;
-      startLineNumber: number;
-    }>
-  >([]);
+  const [markers, setMarkers] = useState<MonacoMarkers>([]);
+  const [themeApplications, setThemeApplications] =
+    useState<MonacoThemeApplications>([]);
+  const [appliedThemeNames, setAppliedThemeNames] = useState<string[]>([]);
   const editorValueRef = useRef(value ?? "");
   editorValueRef.current = value ?? "";
   const contentChangeListenersRef = useRef<
@@ -52,60 +60,19 @@ export function MonacoEditorMock({
 
   useEffect(() => {
     const disposeListeners: Array<() => void> = [];
-    const triggerSuggest = vi.fn();
     contentChangeListenersRef.current = [];
     onMount?.(
-      {
-        addCommand: () => undefined,
-        getModel: () => model,
-        getPosition: () => ({ column: 1, lineNumber: 1 }),
-        getScrollLeft: () => 0,
-        getScrollTop: () => 0,
-        getValue: () => editorValueRef.current,
-        onDidDispose: (listener: () => void) => {
-          disposeListeners.push(listener);
-          return { dispose() {} };
-        },
-        onDidChangeModelContent: (
-          listener: (event: { changes: Array<{ text: string }> }) => void,
-        ) => {
-          contentChangeListenersRef.current.push(listener);
-          return {
-            dispose() {
-              contentChangeListenersRef.current =
-                contentChangeListenersRef.current.filter(
-                  (registeredListener) => registeredListener !== listener,
-                );
-            },
-          };
-        },
-        onDidScrollChange: (
-          listener: (event: { scrollLeft: number; scrollTop: number }) => void,
-        ) => {
-          listener({ scrollLeft: 3, scrollTop: 4 });
-          return { dispose() {} };
-        },
-        trigger: triggerSuggest,
-      },
-      {
-        KeyCode: { Space: 10 },
-        editor: {
-          setModelMarkers: (
-            nextModel: typeof model,
-            _owner: string,
-            nextMarkers: typeof markers,
-          ) => {
-            nextModel.__setMarkers(nextMarkers);
-          },
-        },
-        languages: {
-          CompletionItemKind: { Field: 13, Variable: 4 },
-          CompletionTriggerKind: { Invoke: 0, TriggerCharacter: 1 },
-          registerCompletionItemProvider: () => ({
-            dispose() {},
-          }),
-        },
-      },
+      createMockEditorInstance({
+        contentChangeListenersRef,
+        disposeListeners,
+        editorValueRef,
+        model,
+      }),
+      createMockMonacoModule({
+        model,
+        setAppliedThemeNames,
+        setThemeApplications,
+      }),
     );
 
     return () => {
@@ -125,29 +92,176 @@ export function MonacoEditorMock({
 
   return createElement(
     "div",
-    {
-      ...wrapperProps,
+    buildWrapperProps({
+      appliedThemeNames,
       className,
-      "data-monaco-marker-count": String(markers.length),
-      "data-monaco-marker-messages": JSON.stringify(
-        markers.map((marker) => marker.message),
-      ),
-      "data-monaco-marker-ranges": JSON.stringify(markers),
-    },
+      markers,
+      themeApplications,
+      wrapperProps,
+    }),
     loading
       ? createElement("div", { "data-monaco-loading": "true" }, loading)
       : null,
-    createElement("textarea", {
-      "aria-label": options?.ariaLabel,
-      "data-monaco-editor":
-        wrapperProps?.["data-monaco-editor"] ?? "workstation-prompt",
-      onChange: (event: Event) => {
-        const nextValue = (event.target as HTMLTextAreaElement).value;
-        const insertedText = nextValue.slice(editorValueRef.current.length);
-        notifyContentChange(nextValue, insertedText);
-        onChange?.(nextValue);
-      },
-      value: value ?? "",
+    createEditorTextarea({
+      editorValueRef,
+      notifyContentChange,
+      onChange,
+      options,
+      value,
+      wrapperProps,
     }),
   );
+}
+
+function createMockEditorInstance({
+  contentChangeListenersRef,
+  disposeListeners,
+  editorValueRef,
+  model,
+}: {
+  contentChangeListenersRef: RefObject<
+    Array<(event: { changes: Array<{ text: string }> }) => void>
+  >;
+  disposeListeners: Array<() => void>;
+  editorValueRef: RefObject<string>;
+  model: {
+    __setMarkers: Dispatch<SetStateAction<MonacoMarkers>>;
+    getOffsetAt: () => number;
+    getValue: () => string;
+  };
+}) {
+  return {
+    addCommand: () => undefined,
+    getModel: () => model,
+    getPosition: () => ({ column: 1, lineNumber: 1 }),
+    getScrollLeft: () => 0,
+    getScrollTop: () => 0,
+    getValue: () => editorValueRef.current,
+    onDidDispose: (listener: () => void) => {
+      disposeListeners.push(listener);
+      return { dispose() {} };
+    },
+    onDidChangeModelContent: (
+      listener: (event: { changes: Array<{ text: string }> }) => void,
+    ) => {
+      contentChangeListenersRef.current.push(listener);
+      return {
+        dispose() {
+          contentChangeListenersRef.current =
+            contentChangeListenersRef.current.filter(
+              (registeredListener) => registeredListener !== listener,
+            );
+        },
+      };
+    },
+    onDidScrollChange: (
+      listener: (event: { scrollLeft: number; scrollTop: number }) => void,
+    ) => {
+      listener({ scrollLeft: 3, scrollTop: 4 });
+      return { dispose() {} };
+    },
+    trigger: vi.fn(),
+  };
+}
+
+function createMockMonacoModule({
+  model,
+  setAppliedThemeNames,
+  setThemeApplications,
+}: {
+  model: {
+    __setMarkers: Dispatch<SetStateAction<MonacoMarkers>>;
+    getOffsetAt: () => number;
+    getValue: () => string;
+  };
+  setAppliedThemeNames: Dispatch<SetStateAction<string[]>>;
+  setThemeApplications: Dispatch<SetStateAction<MonacoThemeApplications>>;
+}) {
+  return {
+    KeyCode: { Space: 10 },
+    editor: {
+      defineTheme: (name: string, themeData: { base?: string }) => {
+        setThemeApplications((current) => [
+          ...current,
+          { base: themeData.base ?? null, name },
+        ]);
+      },
+      setModelMarkers: (
+        nextModel: typeof model,
+        _owner: string,
+        nextMarkers: MonacoMarkers,
+      ) => {
+        nextModel.__setMarkers(nextMarkers);
+      },
+      setTheme: (name: string) => {
+        setAppliedThemeNames((current) => [...current, name]);
+      },
+    },
+    languages: {
+      CompletionItemKind: { Field: 13, Variable: 4 },
+      CompletionTriggerKind: { Invoke: 0, TriggerCharacter: 1 },
+      registerCompletionItemProvider: () => ({
+        dispose() {},
+      }),
+    },
+  };
+}
+
+function buildWrapperProps({
+  appliedThemeNames,
+  className,
+  markers,
+  themeApplications,
+  wrapperProps,
+}: {
+  appliedThemeNames: string[];
+  className?: string;
+  markers: MonacoMarkers;
+  themeApplications: MonacoThemeApplications;
+  wrapperProps?: Record<string, string | undefined>;
+}) {
+  return {
+    ...wrapperProps,
+    className,
+    "data-monaco-marker-count": String(markers.length),
+    "data-monaco-marker-messages": JSON.stringify(
+      markers.map((marker) => marker.message),
+    ),
+    "data-monaco-marker-ranges": JSON.stringify(markers),
+    "data-monaco-theme-application-count": String(themeApplications.length),
+    "data-monaco-theme-bases": JSON.stringify(
+      themeApplications.map((application) => application.base),
+    ),
+    "data-monaco-theme-set-count": String(appliedThemeNames.length),
+    "data-monaco-theme-set-names": JSON.stringify(appliedThemeNames),
+  };
+}
+
+function createEditorTextarea({
+  editorValueRef,
+  notifyContentChange,
+  onChange,
+  options,
+  value,
+  wrapperProps,
+}: {
+  editorValueRef: RefObject<string>;
+  notifyContentChange: (nextValue: string, insertedText: string) => void;
+  onChange?: (nextValue: string | undefined) => void;
+  options?: { ariaLabel?: string };
+  value?: string;
+  wrapperProps?: Record<string, string | undefined>;
+}) {
+  return createElement("textarea", {
+    "aria-label": options?.ariaLabel,
+    "data-monaco-editor":
+      wrapperProps?.["data-monaco-editor"] ?? "workstation-prompt",
+    onChange: (event: Event) => {
+      const nextValue = (event.target as HTMLTextAreaElement).value;
+      const insertedText = nextValue.slice(editorValueRef.current.length);
+      notifyContentChange(nextValue, insertedText);
+      onChange?.(nextValue);
+    },
+    value: value ?? "",
+  });
 }

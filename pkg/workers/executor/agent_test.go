@@ -971,3 +971,19 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
 }
+
+func TestInferenceRequestForExecutionRequest_DefaultWorkingDirectoryDoesNotRequireRunnerCapability(t *testing.T) {
+	got := inferenceRequestForExecutionRequest(testAgentRequest(interfaces.WorkDispatch{
+		DispatchID: "d-default-workdir", TransitionID: "t-default-workdir", WorkerType: "worker-a", WorkstationName: "review",
+	}, withAgentPrompts("System prompt", "Review"), withAgentWorkingDirectory("/tmp/runtime-session")), &interfaces.WorkerConfig{
+		Model: "gemini-1.5-pro", ModelProvider: interfaces.RunnerIDGemini,
+	}, nil)
+	if got.WorkingDirectory != "/tmp/runtime-session" {
+		t.Fatalf("working directory = %q, want forwarded runtime path", got.WorkingDirectory)
+	}
+	for _, capability := range got.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityWorkingDirectory {
+			t.Fatalf("capabilities = %#v, want default working directory omitted", got.RequiredOptionalCapabilities)
+		}
+	}
+}

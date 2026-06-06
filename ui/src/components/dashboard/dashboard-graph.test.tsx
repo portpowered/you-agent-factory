@@ -34,6 +34,9 @@ describe("DashboardGraphFrame", () => {
     const frame = screen.getByRole("region", { name: "Graph frame" });
     expect(frame.className).toContain("w-full");
     expect(frame.className).toContain("min-w-0");
+    expect(frame.className).toContain("shadow-none");
     expect(frame.className).not.toContain("h-full");
+    expect(frame.className).not.toContain("shadow-af-card");
+    expect(frame.className).not.toContain("shadow-af-panel");
   });
 });

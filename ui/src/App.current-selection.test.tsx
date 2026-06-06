@@ -894,7 +894,7 @@ describe("App current selection", () => {
     );
     fireEvent.click(
       within(requestHistorySection).getByRole("button", {
-        name: /\(dispatch-review-ready\)$/,
+        name: "Select workstation request dispatch-review-ready",
       }),
     );
 
@@ -993,7 +993,7 @@ describe("App current selection", () => {
         );
         fireEvent.click(
           within(requestHistorySection).getByRole("button", {
-            name: /\(dispatch-review-ready\)$/,
+            name: "Select workstation request dispatch-review-ready",
           }),
         );
       },

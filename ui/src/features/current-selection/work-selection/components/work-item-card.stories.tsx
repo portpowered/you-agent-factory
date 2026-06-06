@@ -1,7 +1,10 @@
 import { expect, within } from "storybook/test";
 
 import "../../../../styles.css";
-import type { DashboardWorkMoveOperation } from "../../../../api/dashboard/types";
+import type {
+  DashboardWorkItemRef,
+  DashboardWorkMoveOperation,
+} from "../../../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../../../components/dashboard/fixtures";
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
 import {
@@ -9,6 +12,7 @@ import {
   getSelectedWorkItemFixture,
   workstationRequest,
 } from "../../base/components/detail-card-test-helpers";
+import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
 
@@ -32,6 +36,62 @@ function buildMoveOperation(
     to_state: "review",
     work_id: "work-active-story",
     ...overrides,
+  };
+}
+
+function buildReadyRelationshipGraph(
+  workItem: DashboardWorkItemRef,
+): SelectedWorkRelationshipGraph {
+  return {
+    edges: [
+      {
+        relationship: "PARENT",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-parent-story",
+      },
+      {
+        relationship: "DEPENDS_ON",
+        requiredState: "ready",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-dependency-story",
+      },
+      {
+        relationship: "CHILD",
+        sourceWorkID: workItem.work_id,
+        targetWorkID: "work-child-story",
+      },
+    ],
+    relatedWork: [
+      {
+        label: "Child Story",
+        state: "running",
+        traceID: "trace-child-story",
+        workID: "work-child-story",
+        workTypeID: "task",
+      },
+      {
+        label: "Dependency Story",
+        state: "ready",
+        traceID: "trace-dependency-story",
+        workID: "work-dependency-story",
+        workTypeID: "dependency",
+      },
+      {
+        label: "Parent Story",
+        state: "done",
+        traceID: "trace-parent-story",
+        workID: "work-parent-story",
+        workTypeID: "epic",
+      },
+    ],
+    selectedWork: {
+      label: workItem.display_name ?? workItem.work_id,
+      state: workItem.state,
+      traceID: workItem.trace_id,
+      workID: workItem.work_id,
+      workTypeID: workItem.work_type_id,
+    },
+    status: "ready",
   };
 }
 
@@ -66,6 +126,7 @@ function SelectedWorkDispatchHistoryStory() {
             { kind: "workstation", request },
             { kind: "logical-move-dispatch", request: logicalMoveRequest },
           ]}
+          relationshipGraph={buildReadyRelationshipGraph(workItem)}
           selectedNode={selectedNode}
           selection={{
             dispatchId: dispatchID,
@@ -138,5 +199,14 @@ export const DispatchHistoryStandardActions = {
         name: "trace-active-story (selected)",
       }),
     ).toHaveAttribute("aria-pressed", "true");
+    const relationshipGraph = await within(card).findByRole("region", {
+      name: "Batch relation graph",
+    });
+    await expect(
+      within(relationshipGraph).getByText("Dependency Story"),
+    ).toBeVisible();
+    await expect(
+      within(relationshipGraph).queryByText("Relationship key"),
+    ).toBeNull();
   },
 };
