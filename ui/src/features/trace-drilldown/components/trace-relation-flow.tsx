@@ -29,20 +29,23 @@ export interface TraceRelationFlowProps {
   locale?: string;
   onSelectWorkID?: (workID: string) => void;
   relations: DashboardWorkRelation[];
+  selectedWorkID?: string | null;
 }
 
 export function TraceRelationFlow({
   locale,
   onSelectWorkID,
   relations,
+  selectedWorkID,
 }: TraceRelationFlowProps) {
   const graph = useMemo(
     () =>
       buildTraceRelationFactoryGraphFlow(relations, {
         locale,
         onSelectWorkID,
+        selectedWorkID,
       }),
-    [locale, onSelectWorkID, relations],
+    [locale, onSelectWorkID, relations, selectedWorkID],
   );
   const topologyKey = useMemo(
     () => traceRelationTopologyLayoutKey(graph.topology),
@@ -61,7 +64,9 @@ export function TraceRelationFlow({
           data: {
             ...node.data,
             onSelectWorkID,
-            selectable: Boolean(node.data.workID && onSelectWorkID),
+            selectable: Boolean(
+              node.data.workID && onSelectWorkID && !node.data.isSelectedWork,
+            ),
           },
         },
         positionsByTraceNodeId,
@@ -96,6 +101,8 @@ export function TraceRelationFlow({
     });
   }, [baseNodes, topologyKey]);
 
+  const renderedNodes =
+    topologyKeyRef.current === topologyKey ? nodes : baseNodes;
   const handleNodesChange = useCallback(
     (changes: NodeChange<TraceRelationFlowNode>[]) => {
       for (const change of changes) {
@@ -135,7 +142,7 @@ export function TraceRelationFlow({
         {graphViewportReady ? (
           <TraceRelationReactFlow
             edges={graph.edges}
-            nodes={nodes}
+            nodes={renderedNodes}
             onNodesChange={handleNodesChange}
           />
         ) : null}

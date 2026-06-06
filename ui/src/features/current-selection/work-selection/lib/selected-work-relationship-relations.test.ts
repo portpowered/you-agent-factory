@@ -1,0 +1,144 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  projectSelectedWorkRelationshipGraphToDashboardRelations,
+} from "./selected-work-relationship-relations";
+import type { SelectedWorkRelationshipGraph } from "./selected-work-relationship-graph";
+
+function readyGraph(): SelectedWorkRelationshipGraph {
+  return {
+    edges: [
+      {
+        relationship: "CHILD",
+        sourceWorkID: "work-active-story",
+        targetWorkID: "work-child-story",
+      },
+      {
+        relationship: "DEPENDS_ON",
+        requiredState: "ready",
+        sourceWorkID: "work-active-story",
+        targetWorkID: "work-dependency-story",
+      },
+      {
+        relationship: "PARENT",
+        sourceWorkID: "work-active-story",
+        targetWorkID: "work-parent-story",
+      },
+      {
+        relationship: "REQUIRED_BY",
+        requiredState: "approved",
+        sourceWorkID: "work-active-story",
+        targetWorkID: "work-blocked-story",
+      },
+      {
+        relationship: "DEPENDS_ON",
+        requiredState: "ready",
+        sourceWorkID: "work-active-story",
+        targetWorkID: "work-dependency-story",
+      },
+    ],
+    relatedWork: [
+      {
+        label: "Blocked Story",
+        state: "blocked",
+        traceID: "trace-blocked-story",
+        workID: "work-blocked-story",
+        workTypeID: "story",
+      },
+      {
+        label: "Child Story",
+        state: "queued",
+        traceID: "trace-child-story",
+        workID: "work-child-story",
+        workTypeID: "task",
+      },
+      {
+        label: "Dependency Story",
+        state: "ready",
+        traceID: "trace-dependency-story",
+        workID: "work-dependency-story",
+        workTypeID: "story",
+      },
+      {
+        label: "Parent Story",
+        state: "queued",
+        traceID: "trace-parent-story",
+        workID: "work-parent-story",
+        workTypeID: "epic",
+      },
+    ],
+    selectedWork: {
+      label: "Active Story",
+      state: "in_progress",
+      traceID: "trace-active-story",
+      workID: "work-active-story",
+      workTypeID: "story",
+    },
+    status: "ready",
+  };
+}
+
+describe("projectSelectedWorkRelationshipGraphToDashboardRelations", () => {
+  it("projects ready relationship graphs into deduplicated dashboard relations", () => {
+    expect(
+      projectSelectedWorkRelationshipGraphToDashboardRelations(readyGraph()),
+    ).toEqual([
+      {
+        source_work_id: "work-child-story",
+        source_work_name: "Child Story",
+        target_work_id: "work-active-story",
+        target_work_name: "Active Story",
+        type: "PARENT_CHILD",
+      },
+      {
+        required_state: "ready",
+        source_work_id: "work-active-story",
+        source_work_name: "Active Story",
+        target_work_id: "work-dependency-story",
+        target_work_name: "Dependency Story",
+        type: "DEPENDS_ON",
+      },
+      {
+        source_work_id: "work-active-story",
+        source_work_name: "Active Story",
+        target_work_id: "work-parent-story",
+        target_work_name: "Parent Story",
+        type: "PARENT_CHILD",
+      },
+      {
+        required_state: "approved",
+        source_work_id: "work-blocked-story",
+        source_work_name: "Blocked Story",
+        target_work_id: "work-active-story",
+        target_work_name: "Active Story",
+        type: "DEPENDS_ON",
+      },
+    ]);
+  });
+
+  it("returns no relations for loading, error, empty, or missing graphs", () => {
+    expect(
+      projectSelectedWorkRelationshipGraphToDashboardRelations(undefined),
+    ).toBeUndefined();
+    expect(
+      projectSelectedWorkRelationshipGraphToDashboardRelations({
+        status: "loading",
+      }),
+    ).toBeUndefined();
+    expect(
+      projectSelectedWorkRelationshipGraphToDashboardRelations({
+        message: "unavailable",
+        selectedWork: readyGraph().selectedWork,
+        status: "error",
+      }),
+    ).toBeUndefined();
+    expect(
+      projectSelectedWorkRelationshipGraphToDashboardRelations({
+        edges: [],
+        relatedWork: [],
+        selectedWork: readyGraph().selectedWork,
+        status: "empty",
+      }),
+    ).toBeUndefined();
+  });
+});

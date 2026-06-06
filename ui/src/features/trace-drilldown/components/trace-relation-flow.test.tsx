@@ -314,6 +314,53 @@ describe("TraceRelationFlow", () => {
   });
 });
 
+describe("TraceRelationFlow selected work", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("highlights the selected work node without making it selectable", async () => {
+    const onSelectWorkID = vi.fn();
+
+    render(
+      <TraceRelationFlow
+        onSelectWorkID={onSelectWorkID}
+        relations={RELATIONS}
+        selectedWorkID="work-plan"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("trace-relation-react-flow")).toBeTruthy();
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Plan story" }),
+    ).toBeNull();
+
+    const selectedShell = screen.getByText("Plan story").closest("article");
+    if (!(selectedShell instanceof HTMLElement)) {
+      throw new Error("Expected selected relation node shell to render.");
+    }
+    expect(selectedShell.className).toContain("border-primary");
+    expect(selectedShell.className).toContain("bg-primary-container");
+
+    fireEvent.click(selectedShell);
+    expect(onSelectWorkID).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Implement story" }));
+    expect(onSelectWorkID).toHaveBeenCalledWith("work-implement");
+  });
+});
+
 describe("TraceRelationFlow layout", () => {
   let restoreBrowserShims: (() => void) | undefined;
 

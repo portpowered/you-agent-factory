@@ -1,43 +1,35 @@
-import {
-  AlertPanel,
-  AlertPanelText,
-  SurfacePanel,
-} from "../../../../components/ui";
+import { AlertPanel, AlertPanelText } from "../../../../components/ui";
+import { TraceRelationFlow } from "../../../trace-drilldown/public";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../base/components/current-selection-locale";
 import {
   CurrentSelectionContentSection,
   CurrentSelectionSupportingText,
 } from "../../base/public";
+import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "../lib/selected-work-relationship-relations";
 import type { SelectedWorkRelationshipGraph } from "../lib/selected-work-relationship-graph";
-import {
-  buildRelationshipGroups,
-  buildWorkRelationships,
-  findRelationshipItems,
-} from "../lib/work-item-relationship-groups";
-import {
-  RelationshipLane,
-  RelationshipLegend,
-  RelationshipNodeCard,
-} from "./work-item-relationship-map";
 import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
 
 export function WorkRelationshipsSection({
   activeTraceID,
+  locale,
   messages,
   onSelectTraceID,
   onSelectWorkID,
   relationshipGraph,
-  selectedWorkLabel,
 }: {
   activeTraceID?: string | null;
+  locale?: string;
   messages: ReturnType<typeof useCurrentSelectionDispatchHistoryMessages>;
   onSelectTraceID?: (traceID: string) => void;
   onSelectWorkID?: (workID: string) => void;
   relationshipGraph?: SelectedWorkRelationshipGraph;
-  selectedWorkLabel: string;
 }) {
-  const relationships = buildWorkRelationships(relationshipGraph, messages);
-  const relationshipGroups = buildRelationshipGroups(relationships);
+  const readyRelationshipGraph =
+    relationshipGraph?.status === "ready" ? relationshipGraph : undefined;
+  const relationships =
+    projectSelectedWorkRelationshipGraphToDashboardRelations(
+      readyRelationshipGraph,
+    );
   const graphStatus = relationshipGraph?.status ?? "loading";
 
   return (
@@ -56,67 +48,23 @@ export function WorkRelationshipsSection({
             {relationshipGraph.message}
           </AlertPanelText>
         </AlertPanel>
-      ) : relationships.length > 0 ? (
-        <SurfacePanel className="grid gap-3">
-          <RelationshipLegend messages={messages} />
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(14rem,16rem)_minmax(0,1fr)] md:grid-rows-[auto_auto_auto] md:items-start">
-            <RelationshipLane
-              className="md:col-start-2 md:row-start-1"
-              items={findRelationshipItems(relationshipGroups, "parent")}
-              label={messages.relationshipParentLabel}
-              messages={messages}
-              onSelectWorkID={onSelectWorkID}
-            />
-            <RelationshipLane
-              className="md:col-start-1 md:row-start-2"
-              items={findRelationshipItems(relationshipGroups, "depends-on")}
-              label={messages.relationshipDependsOnLabel}
-              messages={messages}
-              onSelectWorkID={onSelectWorkID}
-            />
-            <RelationshipNodeCard
-              ariaCurrent="true"
-              className="md:col-start-2 md:row-start-2"
-              heading={messages.selectedWorkHeading}
-              isSelected
-              label={selectedWorkLabel}
-              messages={messages}
-              node={
-                relationshipGraph?.status === "loading"
-                  ? undefined
-                  : relationshipGraph?.selectedWork
-              }
-            />
-            <RelationshipLane
-              className="md:col-start-3 md:row-start-2"
-              items={findRelationshipItems(relationshipGroups, "required-by")}
-              label={messages.relationshipRequiredByLabel}
-              messages={messages}
-              onSelectWorkID={onSelectWorkID}
-            />
-            <RelationshipLane
-              className="md:col-start-2 md:row-start-3"
-              items={findRelationshipItems(relationshipGroups, "child")}
-              label={messages.relationshipChildLabel}
-              messages={messages}
-              onSelectWorkID={onSelectWorkID}
-            />
-          </div>
-          {relationshipGraph?.status === "ready" ? (
-            <FocusedRelationshipSummary
-              activeTraceID={activeTraceID}
-              messages={messages}
-              node={relationshipGraph.selectedWork}
-              onSelectTraceID={onSelectTraceID}
-            />
-          ) : null}
-          <RelationshipLane
-            items={findRelationshipItems(relationshipGroups, "related")}
-            label={messages.relationshipRelatedLabel}
-            messages={messages}
+      ) : readyRelationshipGraph &&
+        relationships &&
+        relationships.length > 0 ? (
+        <div className="grid gap-3">
+          <TraceRelationFlow
+            locale={locale}
             onSelectWorkID={onSelectWorkID}
+            relations={relationships}
+            selectedWorkID={readyRelationshipGraph.selectedWork.workID}
           />
-        </SurfacePanel>
+          <FocusedRelationshipSummary
+            activeTraceID={activeTraceID}
+            messages={messages}
+            node={readyRelationshipGraph.selectedWork}
+            onSelectTraceID={onSelectTraceID}
+          />
+        </div>
       ) : (
         <CurrentSelectionSupportingText>
           {messages.workRelationshipsEmpty}

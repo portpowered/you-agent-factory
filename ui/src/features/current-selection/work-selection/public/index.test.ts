@@ -17,6 +17,9 @@ describe("work-selection/public", () => {
     expect(workSelectionPublic.buildSelectedWorkRelationshipGraph).toBeTypeOf(
       "function",
     );
+    expect(
+      workSelectionPublic.projectSelectedWorkRelationshipGraphToDashboardRelations,
+    ).toBeTypeOf("function");
     expect(workSelectionPublic).not.toHaveProperty(
       "useSelectedProviderSessionState",
     );

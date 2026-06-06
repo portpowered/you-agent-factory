@@ -49,7 +49,9 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
       expect.arrayContaining([
         expect.objectContaining({
           source: "work-plan",
+          sourceHandle: "trace-relation-source",
           target: "work-implement",
+          targetHandle: "trace-relation-target",
           type: "factoryEditorEdge",
           ariaLabel:
             "Parent-child relation from Plan story to Implement story, requiring Done",
@@ -62,6 +64,16 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
             strokeDasharray: "7 5",
           }),
         }),
+      ]),
+    );
+    expect(
+      flow.nodes
+        .find((node) => node.id === "work-implement")
+        ?.data.connectionAnchors.map((anchor) => anchor.id),
+    ).toEqual(
+      expect.arrayContaining([
+        "trace-relation-target",
+        "trace-relation-source",
       ]),
     );
   });
@@ -79,7 +91,9 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
       true,
     );
   });
+});
 
+describe("buildTraceRelationFactoryGraphFlow relation styling", () => {
   it("styles relations without required state from relation type defaults", () => {
     const parentChildFlow = buildTraceRelationFactoryGraphFlow([
       {
@@ -161,5 +175,30 @@ describe("buildTraceRelationFactoryGraphFlow selection", () => {
       flow.nodes.find((node) => node.id === "work-implement")?.data
         .onSelectWorkID,
     ).toBe(onSelectWorkID);
+  });
+
+  it("marks the selected work node as active and non-selectable", () => {
+    const onSelectWorkID = vi.fn();
+    const flow = buildTraceRelationFactoryGraphFlow(RELATIONS, {
+      onSelectWorkID,
+      selectedWorkID: "work-plan",
+    });
+
+    expect(flow.nodes.find((node) => node.id === "work-plan")?.data).toEqual(
+      expect.objectContaining({
+        isSelectedWork: true,
+        selectable: false,
+        workID: "work-plan",
+      }),
+    );
+    expect(
+      flow.nodes.find((node) => node.id === "work-implement")?.data,
+    ).toEqual(
+      expect.objectContaining({
+        isSelectedWork: false,
+        selectable: true,
+        workID: "work-implement",
+      }),
+    );
   });
 });
