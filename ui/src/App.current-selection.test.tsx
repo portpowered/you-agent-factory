@@ -209,6 +209,62 @@ function getWorkOperationsSection(container: HTMLElement): HTMLElement {
   return section;
 }
 
+function getCurrentSelectionPrimaryTitle(
+  currentSelection: HTMLElement,
+): HTMLElement {
+  const primaryTitle = currentSelection.querySelector(".type-display-large");
+
+  if (!(primaryTitle instanceof HTMLElement)) {
+    throw new Error("expected current selection primary title");
+  }
+
+  return primaryTitle;
+}
+
+function expectCanonicalCurrentSelectionBody({
+  currentSelection,
+  sectionNames,
+  title,
+}: {
+  currentSelection: HTMLElement;
+  sectionNames: string[];
+  title: string;
+}): void {
+  const primaryTitle = getCurrentSelectionPrimaryTitle(currentSelection);
+  expect(primaryTitle.textContent).toBe(title);
+
+  const body = primaryTitle.parentElement;
+  if (!(body instanceof HTMLElement)) {
+    throw new Error("expected current selection body layout");
+  }
+
+  const topLevelSections = Array.from(body.children).filter(
+    (child): child is HTMLElement =>
+      child instanceof HTMLElement && child.tagName.toLowerCase() === "section",
+  );
+  expect(topLevelSections.length).toBeGreaterThan(0);
+
+  for (const sectionName of sectionNames) {
+    const section = within(body).getByRole("region", { name: sectionName });
+    expect(topLevelSections).toContain(section);
+
+    const toggle = within(section)
+      .getAllByRole("button")
+      .find((button) => button.getAttribute("aria-expanded") !== null);
+    if (!(toggle instanceof HTMLElement)) {
+      throw new Error(`expected disclosure button for ${sectionName}`);
+    }
+    expect(toggle.tagName.toLowerCase()).toBe("button");
+    expect(toggle.getAttribute("aria-expanded")).not.toBeNull();
+
+    const previousExpanded = toggle.getAttribute("aria-expanded");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).not.toBe(previousExpanded);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe(previousExpanded);
+  }
+}
+
 function getDispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
@@ -855,6 +911,153 @@ describe("App current selection", () => {
         name: "Workstation dispatches",
       }),
     ).toBeNull();
+  });
+
+  it("keeps every current-selection kind on the canonical title and expandable section layout", async () => {
+    renderApp({
+      snapshot: activeSnapshot,
+      traceFixtures: activeStoryTraceFixtures,
+      workstationRequestsByDispatchID:
+        readyDispatchWorkstationRequestsByDispatchID,
+    });
+
+    const assertSelection = async ({
+      action,
+      sectionNames,
+      title,
+    }: {
+      action: () => void | Promise<void>;
+      sectionNames: string[];
+      title: string;
+    }) => {
+      await action();
+
+      const currentSelection = await screen.findByRole("article", {
+        name: "Current selection",
+      });
+      expectCanonicalCurrentSelectionBody({
+        currentSelection,
+        sectionNames,
+        title,
+      });
+    };
+
+    await assertSelection({
+      action: async () => {
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: "Select Review workstation",
+          }),
+        );
+      },
+      sectionNames: [
+        "Workstation summary",
+        "Configuration",
+        "Active work",
+        "Request history",
+      ],
+      title: "Review",
+    });
+
+    await assertSelection({
+      action: () => {
+        fireEvent.click(getActiveStorySelectionButton());
+      },
+      sectionNames: [
+        "Summary",
+        "Work contents",
+        "Work relationships",
+        "Work operations",
+      ],
+      title: activeWorkLabel,
+    });
+
+    await assertSelection({
+      action: async () => {
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: "Select Review workstation",
+          }),
+        );
+        const requestHistorySection = screen
+          .getByRole("heading", { name: "Request history" })
+          .closest("section");
+        if (!(requestHistorySection instanceof HTMLElement)) {
+          throw new Error("expected workstation request history section");
+        }
+
+        fireEvent.click(
+          within(requestHistorySection).getByRole("button", {
+            name: "Expand",
+          }),
+        );
+        fireEvent.click(
+          within(requestHistorySection).getByRole("button", {
+            name: /\(dispatch-review-ready\)$/,
+          }),
+        );
+      },
+      sectionNames: [
+        "Summary",
+        "Request details",
+        "Response details",
+        "Inference attempts",
+      ],
+      title: activeWorkLabel,
+    });
+
+    await assertSelection({
+      action: async () => {
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: "Select story:implemented state",
+          }),
+        );
+      },
+      sectionNames: ["Summary", "Work state configuration", "Current work"],
+      title: "story: implemented",
+    });
+
+    await assertSelection({
+      action: async () => {
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: "Select reviewer worker",
+          }),
+        );
+      },
+      sectionNames: ["Worker configuration"],
+      title: "reviewer",
+    });
+
+    await assertSelection({
+      action: async () => {
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: "Select story work type",
+          }),
+        );
+      },
+      sectionNames: ["Work type configuration"],
+      title: "story",
+    });
+
+    await assertSelection({
+      action: async () => {
+        fireEvent.click(
+          await screen.findByRole("button", {
+            name: "Select agent-slot resource",
+          }),
+        );
+      },
+      sectionNames: [
+        "Summary",
+        "Referencing workers",
+        "Referencing workstations",
+        "Resource configuration",
+      ],
+      title: "agent-slot",
+    });
   });
 
   it("renders the selected-work empty dispatch-history state without reviving top-level execution details", async () => {
