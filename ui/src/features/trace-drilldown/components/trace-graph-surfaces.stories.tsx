@@ -92,3 +92,12 @@ export const VisualConsistency = {
     </div>
   ),
 };
+
+export const LocalizedZhCN = {
+  render: () => (
+    <div className="grid gap-4">
+      <TraceWorkstationPath dispatches={TRACE_DISPATCHES} locale="zh-CN" />
+      <TraceRelationFlow locale="zh-CN" relations={TRACE_RELATIONS} />
+    </div>
+  ),
+};

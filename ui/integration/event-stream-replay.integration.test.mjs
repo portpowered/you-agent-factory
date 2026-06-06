@@ -37,7 +37,7 @@ async function waitForTickLabel(page, label) {
       state: "visible",
       timeout: uiInteractionTimeoutMs,
     });
-  } catch (error) {
+  } catch (_error) {
     const sliderValue = await page
       .getByRole("slider", { name: "Timeline tick" })
       .inputValue();
@@ -158,7 +158,7 @@ async function exerciseSelectedWorkTrace(page, workstationName, options = {}) {
   await workstationButton.scrollIntoViewIfNeeded();
   try {
     await workstationButton.click({ force: true });
-  } catch (error) {
+  } catch (_error) {
     // React Flow workstation buttons can remain visible while clipping leaves the
     // actionable box outside the viewport in CI. Fall back to the DOM click so
     // the test still verifies replay behavior after the button renders.

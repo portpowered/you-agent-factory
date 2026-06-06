@@ -9,15 +9,12 @@ import { ActivityGraphNodeShell } from "../../flowchart/components/current-activ
 import { GraphSemanticIcon } from "../../flowchart/components/graph-semantic-icon";
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
 
-const WORKSTATION_NODE_CLASS =
-  "min-w-0 w-full justify-start overflow-hidden border-primary bg-primary-container text-left shadow-none";
-
 function TraceDispatchFactoryGraphNode({
   data,
 }: NodeProps<TraceDispatchFlowNode>) {
   return (
     <ActivityGraphNodeShell
-      className={WORKSTATION_NODE_CLASS}
+      className="min-w-0 w-full justify-start overflow-hidden border-primary bg-primary-container text-left shadow-none"
       handles={data.connectionAnchors.map((handle) => ({
         ...handle,
         hidden: true,

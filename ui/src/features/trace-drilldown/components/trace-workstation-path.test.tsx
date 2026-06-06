@@ -377,6 +377,58 @@ describe("TraceWorkstationPath fallback lineage", () => {
   });
 });
 
+describe("TraceWorkstationPath localization", () => {
+  it("renders zh-CN graph chrome without changing workstation names", async () => {
+    render(
+      <TraceWorkstationPath
+        dispatches={[
+          buildDispatch("dispatch-plan", {
+            current_chaining_trace_id: "trace-plan-chain",
+            output_items: [
+              buildWorkItem("work-reviewed", {
+                current_chaining_trace_id: "trace-plan-chain",
+                display_name: "已审阅故事",
+              }),
+            ],
+            workstation_name: "计划",
+          }),
+          buildDispatch("dispatch-implement", {
+            input_items: [
+              buildWorkItem("work-reviewed", {
+                display_name: "已审阅故事",
+              }),
+            ],
+            previous_chaining_trace_ids: ["trace-plan-chain"],
+            workstation_name: "实现",
+          }),
+        ]}
+        locale="zh-CN"
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen
+          .getByRole("region", { name: "分派关系图" })
+          .getAttribute("data-dashboard-graph-frame"),
+      ).toBe("true");
+    });
+
+    expect(screen.getByText("计划")).toBeTruthy();
+    expect(screen.getByText("实现")).toBeTruthy();
+    expect(
+      screen
+        .getByTestId("trace-react-flow-controls")
+        .getAttribute("data-fit-view-options"),
+    ).toBe(JSON.stringify({ maxZoom: 1.15, padding: 0.16 }));
+    expect(
+      screen
+        .getByTestId("trace-react-flow-controls")
+        .getAttribute("data-controls-style"),
+    ).toContain('"backgroundColor":"var(--color-surface)"');
+  });
+});
+
 describe("TraceWorkstationPath captured selections", () => {
   it("renders the captured trace-654e selection with seven dispatch nodes", async () => {
     render(
