@@ -12,7 +12,3 @@ export function configureMonacoReactLoader(monaco: MonacoModule) {
   loader.config({ monaco });
   monacoReactLoaderConfigured = true;
 }
-
-export function resetMonacoReactLoaderConfigurationForTests() {
-  monacoReactLoaderConfigured = false;
-}

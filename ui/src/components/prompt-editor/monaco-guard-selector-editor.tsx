@@ -243,10 +243,7 @@ function GuardSelectorEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <DashboardText
-        className="m-0 text-on-surface-variant"
-        variant="supporting"
-      >
+      <DashboardText className="m-0 text-on-surface-variant" variant="supporting">
         {message}
       </DashboardText>
       <Textarea
