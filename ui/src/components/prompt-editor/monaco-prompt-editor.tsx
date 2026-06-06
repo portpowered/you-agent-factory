@@ -1,4 +1,4 @@
-import Editor, { loader } from "@monaco-editor/react";
+import Editor from "@monaco-editor/react";
 import type { RefObject } from "react";
 import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
@@ -6,6 +6,7 @@ import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { DashboardCode, DashboardText } from "../ui";
 import { cn } from "../../lib/cn";
+import { configureMonacoReactLoader } from "./monaco-react-loader";
 import {
   applyWorkstationPromptTheme,
   buildWorkstationPromptMarkers,
@@ -62,7 +63,7 @@ let monacoSetupState: "error" | "ready" = "ready";
 if (import.meta.env.MODE !== "test") {
   try {
     registerWorkstationPromptMonaco(monaco);
-    loader.config({ monaco });
+    configureMonacoReactLoader(monaco);
   } catch {
     monacoSetupState = "error";
   }
