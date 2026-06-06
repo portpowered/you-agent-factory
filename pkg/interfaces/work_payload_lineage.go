@@ -338,7 +338,7 @@ func cloneLineageSnapshot(snapshot WorkPayloadSnapshot) WorkPayloadSnapshot {
 
 func cloneLineageWorkItem(item FactoryWorkItem) FactoryWorkItem {
 	item.PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
-	item.Content = cloneWorkContentParts(item.Content)
+	item.Content = CloneWorkContentParts(item.Content)
 	item.Tags = cloneStringMap(item.Tags)
 	return item
 }

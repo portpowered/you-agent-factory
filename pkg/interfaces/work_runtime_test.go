@@ -588,6 +588,26 @@ func TestCloneProviderInferenceRequest_DetachesProviderFields(t *testing.T) {
 	}
 }
 
+func TestWorkPayloadLineageProjection_RecordWorkRequestSnapshotDetachesContent(t *testing.T) {
+	t.Parallel()
+
+	projection := WorkPayloadLineageProjection{}
+	original := FactoryWorkItem{
+		ID:      "work-1",
+		Content: []WorkContentPart{{Type: WorkContentPartTypeText, Text: "hello"}},
+		Tags:    map[string]string{"origin": "request"},
+	}
+
+	projection.RecordWorkRequestSnapshot(7, "request-1", original)
+	snapshotID := projection.InitialSnapshotIDByWorkID[original.ID]
+	snapshot := projection.SnapshotsByID[snapshotID]
+	snapshot.WorkItem.Content[0].Text = "changed"
+
+	if original.Content[0].Text != "hello" {
+		t.Fatalf("work item content mutated original: %#v", original.Content)
+	}
+}
+
 func testWorkDispatch() WorkDispatch {
 	return WorkDispatch{
 		DispatchID:             "dispatch-1",
