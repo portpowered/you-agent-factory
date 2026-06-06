@@ -1,12 +1,13 @@
-import { expect, within } from "storybook/test";
+import { expect, waitFor, within } from "storybook/test";
 
 import "../../../styles.css";
 import {
   expectWorkChartAxisLabelsVisible,
   expectWorkChartCompactLegendContract,
   expectWorkChartLegendClearOfCardTitle,
-} from "../../work-outcome/lib/work-chart-legend-story-contract";
+} from "../../work-outcome/lib/work-chart-legend-contract";
 import { expectSingleWorkOutcomeCardHeader } from "../../work-outcome/lib/work-outcome-card-header-story-contract";
+import { getWorkOutcomeMessages } from "../../work-outcome/messages/work-outcome";
 import { WorkOutcomeWidget } from "../../work-outcome/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
@@ -22,6 +23,22 @@ export default {
   title: "you-agent-factory/Dashboard/Bento Cards",
   tags: ["test"],
 };
+
+async function expectWorkOutcomeChartLegendAndAxisContract(
+  card: HTMLElement,
+  chart: HTMLElement,
+): Promise<void> {
+  const chartMessages = getWorkOutcomeMessages().chart;
+
+  await waitFor(() => {
+    expectWorkChartCompactLegendContract(chart);
+    expectWorkChartAxisLabelsVisible(chart, {
+      xAxisLabel: chartMessages.xAxisLabel,
+      yAxisLabel: chartMessages.yAxisLabel,
+    });
+    expectWorkChartLegendClearOfCardTitle(card);
+  });
+}
 
 export const WorkOutcomeChart = {
   render: () =>
@@ -50,9 +67,7 @@ export const WorkOutcomeChart = {
     await expect(chart).toBeVisible();
     expectBentoHeaderDragSurface(card, "Work outcome chart");
     expectSingleWorkOutcomeCardHeader(card);
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
-    expectWorkChartLegendClearOfCardTitle(card);
+    await expectWorkOutcomeChartLegendAndAxisContract(card, chart);
   },
 };
 
@@ -82,9 +97,7 @@ export const WorkOutcomeChartNarrow = {
     });
 
     expectSingleWorkOutcomeCardHeader(card);
-    expectWorkChartCompactLegendContract(chart);
-    expectWorkChartAxisLabelsVisible(chart);
-    expectWorkChartLegendClearOfCardTitle(card);
+    await expectWorkOutcomeChartLegendAndAxisContract(card, chart);
 
     const frame = canvasElement.firstElementChild;
     if (!(frame instanceof HTMLElement)) {
