@@ -133,7 +133,7 @@ func GeneratedProviderSessionMetadata(session *ProviderSessionMetadata) *factory
 		return nil
 	}
 	return &factoryapi.ProviderSessionMetadata{
-		Provider: safeDiagnosticsStringPtrIfNotEmpty(session.Provider),
+		Provider: safeDiagnosticsStringPtrIfNotEmpty(CanonicalProviderSessionProvider(session.Provider)),
 		Kind:     safeDiagnosticsStringPtrIfNotEmpty(session.Kind),
 		Id:       safeDiagnosticsStringPtrIfNotEmpty(session.ID),
 	}

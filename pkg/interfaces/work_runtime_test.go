@@ -813,6 +813,28 @@ func TestCloneProviderMetadata_PreserveNilValuesAndDetachCopies(t *testing.T) {
 	}
 }
 
+func TestCanonicalProviderSessionProvider(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "empty", input: "", expected: ""},
+		{name: "cursor already canonical", input: "cursor", expected: "cursor"},
+		{name: "legacy cursor command", input: string(ModelProviderCursor), expected: "cursor"},
+		{name: "cursor alias", input: "cursor-agent", expected: "cursor"},
+		{name: "other provider unchanged", input: "codex", expected: "codex"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CanonicalProviderSessionProvider(tc.input); got != tc.expected {
+				t.Fatalf("CanonicalProviderSessionProvider(%q) = %q, want %q", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
 func assertNilMatches(t *testing.T, wantNil bool, gotNil bool, field string) {
 	t.Helper()
 	if wantNil != gotNil {

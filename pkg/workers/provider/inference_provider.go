@@ -13,8 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
 // Provider abstracts LLM inference calls. Implementations handle the
@@ -423,7 +423,7 @@ func providerSessionFromCommandResult(provider string, result CommandResult) *in
 			continue
 		}
 		return &interfaces.ProviderSessionMetadata{
-			Provider: provider,
+			Provider: interfaces.CanonicalProviderSessionProvider(provider),
 			Kind:     candidate.kind,
 			ID:       identifier,
 		}
@@ -439,7 +439,7 @@ func effectiveProviderSession(req interfaces.ProviderInferenceRequest, result Co
 	}
 	if (req.ModelProvider == string(interfaces.ModelProviderClaude) || req.ModelProvider == string(interfaces.ModelProviderCursor) || req.ModelProvider == string(interfaces.ModelProviderOpenCode)) && req.SessionID != "" {
 		return &interfaces.ProviderSessionMetadata{
-			Provider: req.ModelProvider,
+			Provider: interfaces.CanonicalProviderSessionProvider(req.ModelProvider),
 			Kind:     providerSessionKindSessionID,
 			ID:       req.SessionID,
 		}

@@ -516,7 +516,7 @@ func TestScriptWrapProvider_Infer_CursorParsesJSONResult(t *testing.T) {
 	if resp.ProviderSession == nil {
 		t.Fatal("expected provider session metadata")
 	}
-	if resp.ProviderSession.Provider != string(interfaces.ModelProviderCursor) {
+	if resp.ProviderSession.Provider != "cursor" {
 		t.Fatalf("provider = %q, want cursor", resp.ProviderSession.Provider)
 	}
 	if resp.ProviderSession.ID != "cursor-session-abc" {

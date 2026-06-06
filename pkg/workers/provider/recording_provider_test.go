@@ -261,6 +261,57 @@ func TestRecordingProvider_Infer_SuccessPreservesProviderSessionAndSafeDiagnosti
 	)
 }
 
+func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t *testing.T) {
+	respSession := &interfaces.ProviderSessionMetadata{
+		Provider: string(interfaces.ModelProviderCursor),
+		Kind:     "session_id",
+		ID:       "cursor-session-123",
+	}
+	fake := &recordingProviderFake{
+		responses: []interfaces.InferenceResponse{{
+			Content:         "provider response",
+			ProviderSession: respSession,
+			Diagnostics: &interfaces.WorkDiagnostics{
+				Provider: &interfaces.ProviderDiagnostic{
+					Provider: string(interfaces.ModelProviderCursor),
+					Model:    "gpt-5",
+				},
+			},
+		}},
+	}
+	events := &recordingEvents{}
+	provider := NewRecordingProvider(fake, events.record, WithRecordingProviderClock(sequenceClock(
+		time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC),
+		5*time.Millisecond,
+	)))
+
+	_, err := provider.Infer(context.Background(), recordingProviderDispatch())
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+
+	response := assertInferenceResponseEvent(t, events.items[1])
+	assertProviderSessionPayload(t, response.ProviderSession, "cursor", "session_id", "cursor-session-123")
+	assertInferenceProviderDiagnostics(
+		t,
+		response.Diagnostics,
+		string(interfaces.ModelProviderCursor),
+		"gpt-5",
+		map[string]string{
+			"worker_type":       "worker-a",
+			"worktree":          "feature-worktree",
+			"working_directory": "C:\\repo",
+		},
+		map[string]string{
+			"content_bytes":             "17",
+			"provider_session_id":       "cursor-session-123",
+			"provider_session_kind":     "session_id",
+			"provider_session_provider": "cursor",
+			"retry_count":               "0",
+		},
+	)
+}
+
 func TestRecordingProvider_Infer_FailureZeroExitCodeStillPreservesProviderSessionAndSafeDiagnostics(t *testing.T) {
 	providerErr := NewProviderErrorWithSession(
 		interfaces.WorkFailureTypeTimeout,

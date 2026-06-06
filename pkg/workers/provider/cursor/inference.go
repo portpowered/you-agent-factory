@@ -32,15 +32,15 @@ const (
 )
 
 type resultPayload struct {
-	Type          string         `json:"type"`
-	Subtype       string         `json:"subtype"`
-	IsError       bool           `json:"is_error"`
-	DurationMS    int64          `json:"duration_ms"`
-	DurationAPIMS int64          `json:"duration_api_ms"`
-	Result        string         `json:"result"`
-	SessionID     string         `json:"session_id"`
-	RequestID     string         `json:"request_id"`
-	Usage         *resultUsage   `json:"usage,omitempty"`
+	Type          string       `json:"type"`
+	Subtype       string       `json:"subtype"`
+	IsError       bool         `json:"is_error"`
+	DurationMS    int64        `json:"duration_ms"`
+	DurationAPIMS int64        `json:"duration_api_ms"`
+	Result        string       `json:"result"`
+	SessionID     string       `json:"session_id"`
+	RequestID     string       `json:"request_id"`
+	Usage         *resultUsage `json:"usage,omitempty"`
 }
 
 type resultUsage struct {
@@ -108,7 +108,7 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 	return &InferenceResult{
 		Content: payload.Result,
 		ProviderSession: &interfaces.ProviderSessionMetadata{
-			Provider: provider,
+			Provider: interfaces.CanonicalProviderSessionProvider(provider),
 			Kind:     ProviderSessionKindSessionID,
 			ID:       sessionID,
 		},
