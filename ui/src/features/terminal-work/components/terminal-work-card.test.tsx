@@ -3,13 +3,6 @@ import type { DashboardProviderSessionAttempt } from "../../../api/dashboard/typ
 import { getTerminalWorkMessages } from "../messages/terminal-work";
 import { CompletedFailedWorkstationCard } from "./terminal-work-card";
 
-const STANDARD_LIST_SELECTION_ROW_DANGER_CLASS =
-  "border-af-danger-border bg-error-container text-on-error";
-const STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS =
-  "border-outline-variant bg-surface-container-low text-on-surface";
-const STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS =
-  "border-af-success-border bg-success-container text-on-success-container";
-
 const failedAttempt: DashboardProviderSessionAttempt = {
   dispatch_id: "dispatch-repair-failed",
   outcome: "FAILED",
@@ -63,8 +56,8 @@ describe("CompletedFailedWorkstationCard", () => {
       "[data-terminal-work-title]",
     );
     const failedTitle = failedHeading.closest("[data-terminal-work-title]");
-    expect(completedTitle?.className).toContain("flex");
-    expect(failedTitle?.className).toContain("flex");
+    expect(completedTitle?.className).toContain("items-center");
+    expect(failedTitle?.className).toContain("items-center");
     const completedRow = completedHeading.closest("section");
     const failedRow = failedHeading.closest("section");
     expect(completedRow).toBeTruthy();
@@ -100,17 +93,25 @@ describe("CompletedFailedWorkstationCard", () => {
         })
         .getAttribute("class"),
     ).toContain("text-on-error");
-    const doneStoryButton = screen.getByRole("button", { name: /Done Story/ });
-    expect(doneStoryButton.getAttribute("aria-label")).toBe("Done Story");
-    expect(doneStoryButton.className).toContain("af-dashboard-body-text");
-    expect(doneStoryButton.className).toContain("text-on-success-container");
-    expect(doneStoryButton).toBeTruthy();
-    const failedStoryButton = screen.getByRole("button", {
-      name: /Failed Story/,
+    const doneStoryAction = screen.getByRole("button", {
+      name: messages.selectWorkItemLabel("Done Story"),
     });
-    expect(failedStoryButton.getAttribute("aria-label")).toBe("Failed Story");
-    expect(failedStoryButton.className).toContain("text-on-error");
-    expect(failedStoryButton).toBeTruthy();
+    expect(doneStoryAction.textContent).toBe(messages.openWorkItemAction);
+    const doneStoryCard = screen.getByText("Done Story").closest("li");
+    expect(doneStoryCard?.className).toContain("af-dashboard-body-text");
+    expect(
+      within(doneStoryCard as HTMLElement).getByText(messages.rowTitle("completed"))
+        .className,
+    ).toContain("text-on-success-container");
+    const failedStoryAction = screen.getByRole("button", {
+      name: messages.selectWorkItemLabel("Failed Story"),
+    });
+    expect(failedStoryAction.textContent).toBe(messages.openWorkItemAction);
+    expect(
+      within(screen.getByText("Failed Story").closest("li") as HTMLElement).getByText(
+        messages.rowTitle("failed"),
+      ).className,
+    ).toContain("text-on-error-container");
     const failedMeta = screen.getByText("Failed at setup-workspace");
     expect(failedMeta.className).toContain("af-dashboard-supporting-text");
     expect(failedMeta).toBeTruthy();
@@ -119,7 +120,7 @@ describe("CompletedFailedWorkstationCard", () => {
         .className,
     ).toContain("af-dashboard-supporting-text");
 
-    fireEvent.click(doneStoryButton);
+    fireEvent.click(doneStoryAction);
     expect(onSelectItem).toHaveBeenCalledWith(
       "completed",
       expect.objectContaining({
@@ -128,7 +129,7 @@ describe("CompletedFailedWorkstationCard", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Failed Story/ }));
+    fireEvent.click(failedStoryAction);
     expect(onSelectItem).toHaveBeenCalledWith(
       "failed",
       expect.objectContaining({
@@ -190,13 +191,17 @@ describe("CompletedFailedWorkstationCard", () => {
     );
 
     expect(
-      within(completedRow).queryByRole("button", { name: /Done Story/ }),
+      within(completedRow).queryByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
     ).toBeNull();
     expect(
       screen.getByRole("heading", { name: messages.rowTitle("failed") }),
     ).toBeTruthy();
     expect(
-      within(failedRow).getByRole("button", { name: /Failed Story/ }),
+      within(failedRow).getByRole("button", {
+        name: messages.selectWorkItemLabel("Failed Story"),
+      }),
     ).toBeTruthy();
 
     fireEvent.click(
@@ -212,7 +217,9 @@ describe("CompletedFailedWorkstationCard", () => {
       screen.getByRole("heading", { name: messages.rowTitle("failed") }),
     ).toBeTruthy();
     expect(
-      within(failedRow).queryByRole("button", { name: /Failed Story/ }),
+      within(failedRow).queryByRole("button", {
+        name: messages.selectWorkItemLabel("Failed Story"),
+      }),
     ).toBeNull();
 
     fireEvent.click(
@@ -221,7 +228,9 @@ describe("CompletedFailedWorkstationCard", () => {
       }),
     );
     expect(
-      within(completedRow).getByRole("button", { name: /Done Story/ }),
+      within(completedRow).getByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
     ).toBeTruthy();
   });
 
@@ -293,6 +302,8 @@ describe("CompletedFailedWorkstationCard", () => {
   });
 
   it("marks the selected outcome item through the shared button state", () => {
+    const messages = getTerminalWorkMessages("en");
+
     render(
       <CompletedFailedWorkstationCard
         completedItems={[
@@ -306,17 +317,23 @@ describe("CompletedFailedWorkstationCard", () => {
       />,
     );
 
-    expectStandardListTerminalRow(
-      screen.getByRole("button", { name: /Failed Story/ }),
-      { selected: true, tone: "danger" },
+    expectTerminalWorkActionButton(
+      screen.getByRole("button", {
+        name: messages.selectWorkItemLabel("Failed Story"),
+      }),
+      { selected: true, text: messages.selectedWorkItemAction },
     );
-    expectStandardListTerminalRow(
-      screen.getByRole("button", { name: /Done Story/ }),
-      { selected: false, tone: "success" },
+    expectTerminalWorkActionButton(
+      screen.getByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
+      { selected: false, text: messages.openWorkItemAction },
     );
+    expect(screen.getByText(messages.selectedWorkItemLabel("Failed Story"))).toBeTruthy();
   });
 
   it("keeps selection styling controlled by props across rerenders", () => {
+    const messages = getTerminalWorkMessages("en");
     const { rerender } = render(
       <CompletedFailedWorkstationCard
         completedItems={[
@@ -330,11 +347,12 @@ describe("CompletedFailedWorkstationCard", () => {
       />,
     );
 
-    expect(
-      screen
-        .getByRole("button", { name: /Done Story/ })
-        .getAttribute("data-selected"),
-    ).toBe("true");
+    expectTerminalWorkActionButton(
+      screen.getByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
+      { selected: true, text: messages.selectedWorkItemAction },
+    );
 
     rerender(
       <CompletedFailedWorkstationCard
@@ -349,13 +367,17 @@ describe("CompletedFailedWorkstationCard", () => {
       />,
     );
 
-    expectStandardListTerminalRow(
-      screen.getByRole("button", { name: /Done Story/ }),
-      { selected: false, tone: "success" },
+    expectTerminalWorkActionButton(
+      screen.getByRole("button", {
+        name: messages.selectWorkItemLabel("Done Story"),
+      }),
+      { selected: false, text: messages.openWorkItemAction },
     );
-    expectStandardListTerminalRow(
-      screen.getByRole("button", { name: /Failed Story/ }),
-      { selected: true, tone: "danger" },
+    expectTerminalWorkActionButton(
+      screen.getByRole("button", {
+        name: messages.selectWorkItemLabel("Failed Story"),
+      }),
+      { selected: true, text: messages.selectedWorkItemAction },
     );
   });
 
@@ -478,34 +500,16 @@ describe("CompletedFailedWorkstationCard", () => {
   });
 });
 
-const ACCENT_SELECTED_TOKENS = [
-  "bg-primary",
-  "bg-primary-container",
-  "border-primary",
-  "shadow-af-accent-selected",
-] as const;
-
-function expectStandardListTerminalRow(
-  row: HTMLElement,
+function expectTerminalWorkActionButton(
+  button: HTMLElement,
   {
     selected,
-    tone,
+    text,
   }: {
     selected: boolean;
-    tone: "success" | "danger";
+    text: string;
   },
 ) {
-  const unselectedToneClass =
-    tone === "danger"
-      ? STANDARD_LIST_SELECTION_ROW_DANGER_CLASS
-      : STANDARD_LIST_SELECTION_ROW_SUCCESS_CLASS;
-
-  expect(row.getAttribute("aria-pressed")).toBe(selected ? "true" : "false");
-  expect(row.getAttribute("data-selected")).toBe(selected ? "true" : "false");
-  expect(row.className).toContain(
-    selected ? STANDARD_LIST_SELECTION_ROW_SELECTED_CLASS : unselectedToneClass,
-  );
-  for (const token of ACCENT_SELECTED_TOKENS) {
-    expect(row.className).not.toContain(token);
-  }
+  expect(button.getAttribute("aria-pressed")).toBe(selected ? "true" : "false");
+  expect(button.textContent).toBe(text);
 }

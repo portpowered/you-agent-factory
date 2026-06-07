@@ -96,7 +96,7 @@ describe("DashboardWidgetFrame chrome", () => {
     expect(body?.className).toContain("custom-widget-body");
   });
 
-  it("uses page-flow bodies by default through the shared bento card", () => {
+  it("uses shared scroll bodies by default through the shared bento card", () => {
     render(
       <DashboardWidgetFrame title="Trace" widgetId="trace">
         <p>Trace content</p>
@@ -105,9 +105,9 @@ describe("DashboardWidgetFrame chrome", () => {
 
     const card = screen.getByRole("article", { name: "Trace" });
 
-    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeNull();
-    expect(card.className).not.toContain("h-full");
-    expect(card.className).not.toContain("overflow-hidden");
+    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeTruthy();
+    expect(card.className).toContain("h-full");
+    expect(card.className).toContain("overflow-hidden");
   });
 
   it("routes header actions through AgentBentoCard without a custom header slot", () => {

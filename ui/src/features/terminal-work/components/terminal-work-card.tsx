@@ -1,15 +1,18 @@
 import type { ReactNode } from "react";
 
-import { DashboardText } from "../../../components/ui";
 import {
-  StandardListSelection,
-  StandardListSelectionItem,
-} from "../../../components/ui/standard-list-selection";
+  DashboardActionButton,
+  DashboardActionRow,
+  surfacePanelVariants,
+} from "../../../components/ui";
 import {
   DashboardWidgetFrame,
   DetailCopy,
 } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
+import { CurrentSelectionExecutionPill } from "../../current-selection/base/components/current-selection-pill";
+import { CurrentSelectionSupportingText } from "../../current-selection/base/components/current-selection-supporting-text";
+import { WorkstationDispatchRow } from "../../current-selection/workstation-selection/components/workstation-dispatch-row";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
 import { GraphSemanticIcon } from "../../flowchart/public";
 import { StandardExpandableSection } from "../../standard-card-components/public";
@@ -38,6 +41,7 @@ interface TerminalWorkRowProps {
   iconLabel: string;
   itemCountLabel: string;
   items: TerminalWorkItem[];
+  messages: ReturnType<typeof getTerminalWorkMessages>;
   onSelectItem: (item: TerminalWorkItem) => void;
   selectedLabel?: string;
   status: TerminalWorkStatus;
@@ -49,6 +53,7 @@ interface TerminalWorkRowProps {
 
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_BUTTON_META_CLASS = "leading-snug text-current";
+const TERMINAL_SECTION_CLASS = "mt-4 gap-2.5 py-0 [&_h4]:m-0";
 
 function terminalStatusIconKind(
   status: TerminalWorkStatus,
@@ -89,6 +94,7 @@ export function CompletedFailedWorkstationCard({
           iconLabel={messages.iconLabel("completed")}
           itemCountLabel={messages.itemCountLabel(completedItems.length)}
           items={completedItems}
+          messages={messages}
           onSelectItem={(item) => onSelectItem("completed", item)}
           selectedLabel={
             selectedItem?.status === "completed"
@@ -107,6 +113,7 @@ export function CompletedFailedWorkstationCard({
           iconLabel={messages.iconLabel("failed")}
           itemCountLabel={messages.itemCountLabel(failedItems.length)}
           items={failedItems}
+          messages={messages}
           onSelectItem={(item) => onSelectItem("failed", item)}
           selectedLabel={
             selectedItem?.status === "failed" ? selectedItem.label : undefined
@@ -128,6 +135,7 @@ function TerminalWorkRow({
   iconLabel,
   itemCountLabel,
   items,
+  messages,
   onSelectItem,
   selectedLabel,
   status,
@@ -141,7 +149,11 @@ function TerminalWorkRow({
 
   return (
     <StandardExpandableSection
-      contentClassName="rounded-2xlbg-surface-container-high"
+      className={TERMINAL_SECTION_CLASS}
+      contentClassName={surfacePanelVariants({
+        className: "grid gap-3",
+        radius: "2xl",
+      })}
       contentID={rowId}
       defaultExpanded
       heading={title}
@@ -162,30 +174,82 @@ function TerminalWorkRow({
       toggleLabel={({ expanded }) => toggleLabel(expanded)}
     >
       {items.length > 0 ? (
-        <StandardListSelection>
+        <ul className="m-0 grid list-none gap-2.5 p-0">
           {items.map((item) => (
-            <StandardListSelectionItem
-              aria-label={item.label}
-              className="px-2.5 py-2 [overflow-wrap:anywhere]"
+            <TerminalWorkListItem
+              fallbackMessage={fallbackMessage}
+              item={item}
               key={`${status}-${item.label}`}
+              messages={messages}
               onClick={() => onSelectItem(item)}
               selected={selectedLabel === item.label}
-              tone={status === "failed" ? "danger" : "success"}
-            >
-              <span className="font-bold">{item.label}</span>
-              {renderTerminalWorkContext(
-                item,
-                fallbackMessage,
-                summary,
-                status,
-              )}
-            </StandardListSelectionItem>
+              selectionActionLabel={messages.selectWorkItemLabel(item.label)}
+              status={status}
+              summary={summary}
+            />
           ))}
-        </StandardListSelection>
+        </ul>
       ) : (
         <DetailCopy>{emptyMessage}</DetailCopy>
       )}
     </StandardExpandableSection>
+  );
+}
+
+interface TerminalWorkListItemProps {
+  fallbackMessage: string;
+  item: TerminalWorkItem;
+  messages: ReturnType<typeof getTerminalWorkMessages>;
+  onClick: () => void;
+  selected: boolean;
+  selectionActionLabel: string;
+  status: TerminalWorkStatus;
+  summary: (status: TerminalWorkStatus, workstation: string) => string;
+}
+
+function TerminalWorkListItem({
+  fallbackMessage,
+  item,
+  messages,
+  onClick,
+  selected,
+  selectionActionLabel,
+  status,
+  summary,
+}: TerminalWorkListItemProps) {
+  return (
+    <WorkstationDispatchRow
+      actions={
+        <DashboardActionButton
+          aria-label={selectionActionLabel}
+          aria-pressed={selected}
+          onClick={onClick}
+          type="button"
+        >
+          {selected
+            ? messages.selectedWorkItemAction
+            : messages.openWorkItemAction}
+        </DashboardActionButton>
+      }
+      status={
+        <CurrentSelectionExecutionPill
+          tone={status === "failed" ? "danger" : "success"}
+        >
+          {messages.rowTitle(status)}
+        </CurrentSelectionExecutionPill>
+      }
+      supportingContent={
+        <div className="grid gap-1">
+          {renderTerminalWorkContext(item, fallbackMessage, summary, status)}
+          {selected ? (
+            <CurrentSelectionSupportingText tone="status">
+              {messages.selectedWorkItemLabel(item.label)}
+            </CurrentSelectionSupportingText>
+          ) : null}
+        </div>
+      }
+      title={item.label}
+    />
   );
 }
 
@@ -202,23 +266,21 @@ function renderTerminalWorkContext(
     latestAttempt?.transition_id;
   if (!workstation) {
     return (
-      <DashboardText
-        as="span"
+      <CurrentSelectionSupportingText
         className={TERMINAL_BUTTON_META_CLASS}
-        variant="supporting"
+        tone="status"
       >
         {fallbackMessage}
-      </DashboardText>
+      </CurrentSelectionSupportingText>
     );
   }
 
   return (
-    <DashboardText
-      as="span"
+    <CurrentSelectionSupportingText
       className={TERMINAL_BUTTON_META_CLASS}
-      variant="supporting"
+      tone="status"
     >
       {summary(status, workstation)}
-    </DashboardText>
+    </CurrentSelectionSupportingText>
   );
 }

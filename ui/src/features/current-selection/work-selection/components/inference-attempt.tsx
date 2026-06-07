@@ -34,8 +34,9 @@ export function InferenceAttemptCard({
     <article
       aria-label={detailMessages.attemptAriaLabel(attempt.attempt)}
       className={surfacePanelVariants({
-        className: "grid min-w-0 gap-2.5 p-3.5",
+        className: "grid min-w-0 gap-2.5",
         radius: "lg",
+        padding: "none"
       })}
     >
       <InferenceAttemptSummaryHeader

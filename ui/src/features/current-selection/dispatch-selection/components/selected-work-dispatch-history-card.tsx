@@ -5,6 +5,7 @@ import {
 } from "../../../../components/ui/formatters";
 import { DetailCopy } from "../../../../components/ui/widget-frame";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import {
   useCurrentSelectionDispatchHistoryMessages,
   useCurrentSelectionLocale,
@@ -15,7 +16,10 @@ import { CurrentSelectionSelectableButton } from "../../base/components/current-
 import { CurrentSelectionTraceButton } from "../../base/components/current-selection-trace-button";
 import { normalizeDetailText } from "../../base/components/detail-card-shared";
 import type { CurrentSelectionDispatchHistoryMessages } from "../../base/messages/current-selection-dispatch-history";
-import { CurrentSelectionDescriptionList } from "../../base/public";
+import {
+  CurrentSelectionDescriptionList,
+  CurrentSelectionLabel,
+} from "../../base/public";
 import {
   CurrentSelectionHistoryCard,
   CurrentSelectionHistoryCardHeader,
@@ -48,9 +52,7 @@ import {
 } from "./selected-work-dispatch-attempt-sections";
 import {
   DispatchDetailList,
-  DispatchDetailSection,
 } from "./selected-work-dispatch-history-card-shared";
-import { WorkstationOperationKindBadge } from "./selected-work-operation-history-cards";
 
 interface DispatchHistoryCardProps {
   activeTraceID?: string | null;
@@ -85,24 +87,25 @@ export function DispatchHistoryCard({
         title,
         request.dispatch_id,
       )}
-      highlighted={isCurrentDispatch}
+      className={
+        isCurrentDispatch
+          ? "border-outline-variant bg-secondary-container text-on-surface"
+          : undefined
+      }
     >
       <DispatchHistoryHeader
-        dispatchID={request.dispatch_id}
         isCurrentDispatch={isCurrentDispatch}
         messages={messages}
-        outcome={view.outcome}
         title={title}
       />
-      <DispatchSummaryDetails
+      <DispatchSummarySection
+        activeTraceID={activeTraceID}
+        dispatchID={request.dispatch_id}
         locale={locale}
         messages={messages}
-        request={request}
-        view={view}
-      />
-      <DispatchRequestSection
-        messages={messages}
+        onSelectTraceID={onSelectTraceID}
         onSelectWorkID={onSelectWorkID}
+        request={request}
         selectedWorkID={selectedWorkID}
         view={view}
       />
@@ -126,14 +129,6 @@ export function DispatchHistoryCard({
         </>
       ) : (
         <>
-          <DispatchTraceSection
-            activeTraceID={activeTraceID}
-            messages={messages}
-            onSelectTraceID={onSelectTraceID}
-            onSelectWorkID={onSelectWorkID}
-            selectedWorkID={selectedWorkID}
-            view={view}
-          />
           <DispatchInferenceAttemptsSection
             attempts={view.sortedInferenceAttempts}
             emptyCopy={
@@ -208,54 +203,51 @@ function buildDispatchHistoryView(
 }
 
 function DispatchHistoryHeader({
-  dispatchID,
   isCurrentDispatch,
   messages,
-  outcome,
   title,
 }: {
-  dispatchID: string | undefined;
   isCurrentDispatch: boolean;
   messages: CurrentSelectionDispatchHistoryMessages;
-  outcome: string | undefined;
   title: string | undefined;
 }) {
-  const enumMessages = useCurrentSelectionOperationalEnumMessages();
-
   return (
     <CurrentSelectionHistoryCardHeader
-      badges={
-        <>
-          <WorkstationOperationKindBadge
-            label={messages.workstationOperationKindBadge}
-          />
-          {isCurrentDispatch ? (
-            <CurrentSelectionBadge>
-              {messages.currentDispatchBadge}
-            </CurrentSelectionBadge>
-          ) : null}
-        </>
+      title={title || messages.unknownDispatchTitle}
+      titleClassName="type-headline-large"
+      trailingContent={
+        isCurrentDispatch ? (
+          <CurrentSelectionBadge
+            className="border-outline-variant bg-secondary-container text-on-secondary-container"
+            tone="neutral"
+          >
+            {messages.currentDispatchBadge}
+          </CurrentSelectionBadge>
+        ) : null
       }
-      identifier={dispatchID || messages.unknownDispatchId}
-      subtitle={
-        outcome
-          ? enumMessages.localizeOutcome(outcome)
-          : enumMessages.localizeOutcome("PENDING")
-      }
-      title={title || dispatchID || messages.unknownDispatchTitle}
     />
   );
 }
 
-function DispatchSummaryDetails({
+function DispatchSummarySection({
+  activeTraceID,
+  dispatchID,
   locale,
   messages,
+  onSelectTraceID,
+  onSelectWorkID,
   request,
+  selectedWorkID,
   view,
 }: {
+  activeTraceID?: string | null;
+  dispatchID: string | undefined;
   locale?: string | null;
   messages: CurrentSelectionDispatchHistoryMessages;
+  onSelectTraceID?: (traceID: string) => void;
+  onSelectWorkID?: (workID: string) => void;
   request: SelectedWorkRequestHistoryItem;
+  selectedWorkID: string;
   view: DispatchHistoryView;
 }) {
   const startedAt = formatLocalDateTime(
@@ -263,30 +255,69 @@ function DispatchSummaryDetails({
     messages.workstationUnavailableValue,
     locale,
   );
+  const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
-    <CurrentSelectionDescriptionList className="mt-2.5">
-      <InferenceAttemptDetail
-        label={messages.workstationLabel}
-        value={request.workstation_name}
-      />
-      <InferenceAttemptDetail
-        label={messages.startedAtLabel}
-        value={startedAt}
-      />
-      <InferenceAttemptDetail
-        label={messages.durationLabel}
-        value={
-          view.durationMillis !== undefined
-            ? formatDurationMillis(view.durationMillis, locale)
-            : undefined
-        }
-      />
-    </CurrentSelectionDescriptionList>
+    <CurrentSelectionExpandableSection
+      title={messages.summaryHeading}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
+      <CurrentSelectionDescriptionList>
+        <InferenceAttemptDetail
+          code
+          label={messages.dispatchIdLabel}
+          value={dispatchID}
+        />
+        <InferenceAttemptDetail
+          label={messages.outcomeLabel}
+          value={
+            view.outcome
+              ? enumMessages.localizeOutcome(view.outcome)
+              : enumMessages.localizeOutcome("PENDING")
+          }
+        />
+        <InferenceAttemptDetail
+          label={messages.workstationLabel}
+          value={request.workstation_name}
+        />
+        <InferenceAttemptDetail
+          label={messages.startedAtLabel}
+          value={startedAt}
+        />
+        <InferenceAttemptDetail
+          label={messages.durationLabel}
+          value={
+            view.durationMillis !== undefined
+              ? formatDurationMillis(view.durationMillis, locale)
+              : undefined
+          }
+        />
+      </CurrentSelectionDescriptionList>
+      <div className="grid gap-3">
+        <DispatchRequestContent
+          messages={messages}
+          onSelectWorkID={onSelectWorkID}
+          selectedWorkID={selectedWorkID}
+          view={view}
+        />
+        {!view.isScriptBackedRequest ? (
+          <DispatchTraceContent
+            activeTraceID={activeTraceID}
+            messages={messages}
+            onSelectTraceID={onSelectTraceID}
+            onSelectWorkID={onSelectWorkID}
+            selectedWorkID={selectedWorkID}
+            view={view}
+          />
+        ) : null}
+      </div>
+    </CurrentSelectionExpandableSection>
   );
 }
 
-function DispatchRequestSection({
+function DispatchRequestContent({
   messages,
   onSelectWorkID,
   selectedWorkID,
@@ -298,7 +329,8 @@ function DispatchRequestSection({
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title={messages.requestDetailsTitle}>
+    <div className="grid gap-2">
+      <CurrentSelectionLabel>{messages.requestDetailsTitle}</CurrentSelectionLabel>
       {view.isScriptBackedRequest ? (
         <DetailCopy>{messages.promptDetailsNotApplicable}</DetailCopy>
       ) : null}
@@ -319,7 +351,7 @@ function DispatchRequestSection({
         variant="plain"
         workItems={view.inputWorkItems}
       />
-    </DispatchDetailSection>
+    </div>
   );
 }
 
@@ -339,7 +371,12 @@ function DispatchResponseSection({
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title={messages.responseDetailsTitle}>
+    <CurrentSelectionExpandableSection
+      title={messages.responseDetailsTitle}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
       <DispatchWorkItemDetailRow
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
@@ -354,11 +391,11 @@ function DispatchResponseSection({
         selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
       />
-    </DispatchDetailSection>
+    </CurrentSelectionExpandableSection>
   );
 }
 
-function DispatchTraceSection({
+function DispatchTraceContent({
   activeTraceID,
   messages,
   onSelectTraceID,
@@ -374,7 +411,8 @@ function DispatchTraceSection({
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title={messages.traceDetailsTitle}>
+    <div className="grid gap-2">
+      <CurrentSelectionLabel>{messages.traceDetailsTitle}</CurrentSelectionLabel>
       <DispatchWorkItemDetailRow
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}
@@ -389,7 +427,7 @@ function DispatchTraceSection({
         selectedTraceSuffix={messages.selectedTraceSuffix}
         traceIDs={view.traceIDs}
       />
-    </DispatchDetailSection>
+    </div>
   );
 }
 
@@ -401,7 +439,12 @@ function DispatchFailureSection({
   view: DispatchHistoryView;
 }) {
   return (
-    <DispatchDetailSection title={messages.failureDetailsTitle}>
+    <CurrentSelectionExpandableSection
+      title={messages.failureDetailsTitle}
+      toggleLabel={(expanded) =>
+        expanded ? messages.collapseAction : messages.expandAction
+      }
+    >
       <DispatchDetailList
         entries={[
           { label: messages.failureReasonLabel, value: view.failureReason },
@@ -413,7 +456,7 @@ function DispatchFailureSection({
           },
         ]}
       />
-    </DispatchDetailSection>
+    </CurrentSelectionExpandableSection>
   );
 }
 
@@ -435,26 +478,25 @@ function DispatchWorkItemDetailRow({
   }
 
   return (
-    <CurrentSelectionDescriptionList>
-      <div>
-        <dt>{label}</dt>
-        <dd className="flex flex-wrap gap-2">
-          {items.map((workItem) => {
-            const workItemLabel = formatWorkItemLabel(workItem);
-            return (
-              <CurrentSelectionSelectableButton
-                aria-label={selectWorkItemAccessibleLabel(workItemLabel)}
-                key={`${label}-${workItem.work_id}`}
-                onClick={() => onSelectWorkID?.(workItem.work_id)}
-                selected={selectedWorkID === workItem.work_id}
-              >
-                {workItemLabel}
-              </CurrentSelectionSelectableButton>
-            );
-          })}
-        </dd>
+    <div className="grid gap-2">
+      <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
+      <div className="flex flex-wrap gap-2">
+        {items.map((workItem) => {
+          const workItemLabel = formatWorkItemLabel(workItem);
+          return (
+            <CurrentSelectionSelectableButton
+              aria-label={selectWorkItemAccessibleLabel(workItemLabel)}
+              key={`${label}-${workItem.work_id}`}
+              onClick={() => onSelectWorkID?.(workItem.work_id)}
+              selected={selectedWorkID === workItem.work_id}
+              selectedStyle="outline"
+            >
+              {workItemLabel}
+            </CurrentSelectionSelectableButton>
+          );
+        })}
       </div>
-    </CurrentSelectionDescriptionList>
+    </div>
   );
 }
 
@@ -476,21 +518,19 @@ function DispatchTraceDetailRow({
   }
 
   return (
-    <CurrentSelectionDescriptionList>
-      <div>
-        <dt>{label}</dt>
-        <dd className="grid gap-1.5">
-          {traceIDs.map((traceID) => (
-            <CurrentSelectionTraceButton
-              activeTraceID={activeTraceID}
-              key={traceID}
-              onSelectTraceID={onSelectTraceID}
-              selectedTraceSuffix={selectedTraceSuffix}
-              traceID={traceID}
-            />
-          ))}
-        </dd>
+    <div className="grid gap-2">
+      <CurrentSelectionLabel>{label}</CurrentSelectionLabel>
+      <div className="grid gap-1.5">
+        {traceIDs.map((traceID) => (
+          <CurrentSelectionTraceButton
+            activeTraceID={activeTraceID}
+            key={traceID}
+            onSelectTraceID={onSelectTraceID}
+            selectedTraceSuffix={selectedTraceSuffix}
+            traceID={traceID}
+          />
+        ))}
       </div>
-    </CurrentSelectionDescriptionList>
+    </div>
   );
 }

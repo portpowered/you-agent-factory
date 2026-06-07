@@ -69,12 +69,12 @@ export function StandardExpandableSection({
       {...sectionAttributes}
       aria-labelledby={headingID}
       className={cn(
-        "grid gap-3 py-1.5",
+        "grid w-full self-start gap-3 py-1.5",
         sectionAttributes?.className,
         className,
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
         <div className="grid min-w-0 gap-1">
           <div
             {...headingGroupAttributes}
@@ -99,7 +99,7 @@ export function StandardExpandableSection({
         </div>
         <ExpandablePanelTrigger
           aria-label={disclosureLabel}
-          className="mt-0.5 h-10 min-h-0 w-10 rounded-lg"
+          className="h-10 min-h-0 w-10 self-start rounded-lg"
           controlsID={resolvedContentID}
           expanded={expanded}
           onClick={() => setExpanded((current) => !current)}
@@ -108,7 +108,7 @@ export function StandardExpandableSection({
       </div>
       {hasContent ? (
         <div
-          className={cn("grid gap-5", contentClassName)}
+          className={cn("grid", contentClassName)}
           id={resolvedContentID}
         >
           {expanded ? children : preview}

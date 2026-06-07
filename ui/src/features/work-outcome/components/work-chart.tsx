@@ -241,12 +241,6 @@ function ReadyWorkChart({
             .map((row) => row.tick)
             .join(","),
         }}
-        overlay={
-          <WorkChartAxisOverlay
-            className={overlayClassName}
-            yAxisLabel={yAxisLabel}
-          />
-        }
         style={{ minHeight: "14rem" }}
         title={ariaLabel}
       >
@@ -351,20 +345,6 @@ function WorkChartLegendRow({
         payload={buildWorkChartLegendPayload(series)}
         swatchClassName={WORK_CHART_LEGEND_SWATCH_CLASS}
       />
-    </div>
-  );
-}
-
-function WorkChartAxisOverlay({
-  className,
-  yAxisLabel,
-}: {
-  className: string;
-  yAxisLabel: string;
-}) {
-  return (
-    <div className={className} data-work-chart-overlay="true">
-      <span className={WORK_CHART_AXIS_LABEL_CLASS}>{yAxisLabel}</span>
     </div>
   );
 }
