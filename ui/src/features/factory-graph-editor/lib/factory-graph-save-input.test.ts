@@ -26,6 +26,20 @@ const richFactoryDefinition: CanonicalFactoryDefinition = {
       type: "DEFAULT",
     },
   ],
+  layout: {
+    schemaVersion: 1,
+    nodes: [
+      {
+        id: "workstation:draft",
+        position: { x: 120, y: 80 },
+      },
+    ],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1,
+    },
+  },
   metadata: {
     owner: "operations",
   },
@@ -204,6 +218,7 @@ describe("factory graph save input", () => {
     expect(saveInput.value).toMatchObject({
       guards: richFactoryDefinition.guards,
       inputTypes: richFactoryDefinition.inputTypes,
+      layout: richFactoryDefinition.layout,
       metadata: richFactoryDefinition.metadata,
       runner: richFactoryDefinition.runner,
       supportingFiles: richFactoryDefinition.supportingFiles,
@@ -284,12 +299,14 @@ describe("factory graph save input", () => {
     expect(saveInput.value.workers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          id: "writer",
           name: "writer",
           type: "MODEL_WORKER",
         }),
         {
           args: ["--watch", "--verbose"],
           command: "node",
+          id: "poller-runner",
           name: "poller-runner",
           type: "SCRIPT_WORKER",
         },
@@ -346,6 +363,7 @@ describe("factory graph save input", () => {
       expect.arrayContaining([
         {
           command: "node",
+          id: "poller-runner",
           name: "poller-runner",
           type: "SCRIPT_WORKER",
         },
@@ -355,6 +373,7 @@ describe("factory graph save input", () => {
       expect.arrayContaining([
         expect.objectContaining({
           behavior: "POLLER",
+          id: "linear-poller",
           name: "linear-poller",
           worker: "poller-runner",
         }),

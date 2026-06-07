@@ -1,0 +1,13 @@
+type: object
+description: Two-dimensional authored graph layout coordinate.
+additionalProperties: false
+required:
+  - x
+  - y
+properties:
+  x:
+    type: number
+    description: Horizontal graph layout coordinate in authored canvas space.
+  y:
+    type: number
+    description: Vertical graph layout coordinate in authored canvas space.

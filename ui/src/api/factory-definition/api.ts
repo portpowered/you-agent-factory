@@ -24,6 +24,14 @@ type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
 type FactoryRunnerID = FactorySchemas["RunnerID"];
 type FactoryVersion = FactorySchemas["HybridLogicalTimestamp"];
+type FactoryLayout = FactorySchemas["FactoryLayout"];
+type FactoryLayoutBounds = FactorySchemas["FactoryLayoutBounds"];
+type FactoryLayoutEdge = FactorySchemas["FactoryLayoutEdge"];
+type FactoryLayoutGroup = FactorySchemas["FactoryLayoutGroup"];
+type FactoryLayoutNode = FactorySchemas["FactoryLayoutNode"];
+type FactoryLayoutPoint = FactorySchemas["FactoryLayoutPoint"];
+type FactoryLayoutPreferences = FactorySchemas["FactoryLayoutPreferences"];
+type FactoryLayoutViewport = FactorySchemas["FactoryLayoutViewport"];
 type FactoryWorker = FactorySchemas["Worker"];
 type FactoryWorkState = FactorySchemas["WorkState"];
 type FactoryClassificationRoute = FactorySchemas["ClassificationRoute"];
@@ -41,6 +49,7 @@ const FACTORY_KEYS = new Set([
   "inputTypes",
   "metadata",
   "name",
+  "layout",
   "resources",
   "runner",
   "sourceDirectory",
@@ -57,11 +66,41 @@ const FACTORY_GUARD_KEYS = new Set([
   "type",
 ]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
-const WORK_TYPE_KEYS = new Set(["handlingBehavior", "name", "states"]);
+const WORK_TYPE_KEYS = new Set(["handlingBehavior", "id", "name", "states"]);
 const WORK_TYPE_HANDLING_BEHAVIOR_VALUES =
   new Set<FactoryWorkTypeHandlingBehavior>(["DEFAULT"]);
-const WORK_STATE_KEYS = new Set(["name", "type"]);
-const RESOURCE_KEYS = new Set(["capacity", "name"]);
+const WORK_STATE_KEYS = new Set(["id", "name", "type"]);
+const RESOURCE_KEYS = new Set(["capacity", "id", "name"]);
+const LAYOUT_KEYS = new Set([
+  "edges",
+  "groups",
+  "nodes",
+  "preferences",
+  "schemaVersion",
+  "viewport",
+]);
+const LAYOUT_NODE_KEYS = new Set(["id", "locked", "position", "size"]);
+const LAYOUT_EDGE_KEYS = new Set(["id", "labelPosition", "waypoints"]);
+const LAYOUT_GROUP_KEYS = new Set([
+  "bounds",
+  "color",
+  "id",
+  "label",
+  "locked",
+  "nodeIds",
+  "parentGroupId",
+]);
+const LAYOUT_POINT_KEYS = new Set(["x", "y"]);
+const LAYOUT_SIZE_KEYS = new Set(["height", "width"]);
+const LAYOUT_BOUNDS_KEYS = new Set(["height", "width", "x", "y"]);
+const LAYOUT_VIEWPORT_KEYS = new Set(["x", "y", "zoom"]);
+const LAYOUT_PREFERENCES_KEYS = new Set(["direction"]);
+const LAYOUT_PREFERENCE_DIRECTION_VALUES = new Set([
+  "UP",
+  "DOWN",
+  "LEFT",
+  "RIGHT",
+]);
 const WORKER_KEYS = new Set([
   "args",
   "auth",
@@ -73,6 +112,7 @@ const WORKER_KEYS = new Set([
   "modelLocality",
   "modelProvider",
   "name",
+  "id",
   "provider",
   "resources",
   "openCodeAgent",
@@ -243,6 +283,7 @@ function decodeFactoryDefinition(
   const guards = readOptionalArray(value, "guards", path, decodeFactoryGuard);
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
+  const layout = readOptionalObject(value, "layout", path, decodeFactoryLayout);
   const runner = readOptionalEnum(value, "runner", path, RUNNER_ID_VALUES);
   const supportingFiles = readOptionalObject(
     value,
@@ -290,6 +331,9 @@ function decodeFactoryDefinition(
   if (resources !== undefined) {
     factory.resources = resources;
   }
+  if (layout !== undefined) {
+    factory.layout = layout;
+  }
   if (runner !== undefined) {
     factory.runner = runner;
   }
@@ -321,12 +365,16 @@ function decodeWorkType(value: unknown, path: string): FactoryWorkType {
     name: readRequiredString(record, "name", path),
     states: readRequiredArray(record, "states", path, decodeWorkState),
   };
+  const id = readOptionalString(record, "id", path);
   const handlingBehavior = readOptionalEnumArray(
     record,
     "handlingBehavior",
     path,
     WORK_TYPE_HANDLING_BEHAVIOR_VALUES,
   );
+  if (id !== undefined) {
+    workType.id = id;
+  }
   if (handlingBehavior !== undefined) {
     workType.handlingBehavior = handlingBehavior;
   }
@@ -337,20 +385,30 @@ function decodeWorkState(value: unknown, path: string): FactoryWorkState {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, WORK_STATE_KEYS, path);
 
-  return {
+  const state: FactoryWorkState = {
     name: readRequiredString(record, "name", path),
     type: readRequiredEnum(record, "type", path, WORK_STATE_TYPE_VALUES),
   };
+  const id = readOptionalString(record, "id", path);
+  if (id !== undefined) {
+    state.id = id;
+  }
+  return state;
 }
 
 function decodeResource(value: unknown, path: string): FactoryResource {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, RESOURCE_KEYS, path);
 
-  return {
+  const resource: FactoryResource = {
     capacity: readRequiredInteger(record, "capacity", path),
     name: readRequiredString(record, "name", path),
   };
+  const id = readOptionalString(record, "id", path);
+  if (id !== undefined) {
+    resource.id = id;
+  }
+  return resource;
 }
 
 function decodeWorker(value: unknown, path: string): FactoryWorker {
@@ -360,6 +418,7 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   const worker: FactoryWorker = {
     name: readRequiredString(record, "name", path),
   };
+  const id = readOptionalString(record, "id", path);
   const type = readOptionalEnum(record, "type", path, WORKER_TYPE_VALUES);
   const model = readOptionalString(record, "model", path);
   const modelProvider = readOptionalEnum(
@@ -411,6 +470,9 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   );
   const body = readOptionalString(record, "body", path);
 
+  if (id !== undefined) {
+    worker.id = id;
+  }
   if (type !== undefined) {
     worker.type = type;
   }
@@ -461,6 +523,255 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   }
 
   return worker;
+}
+
+function decodeFactoryLayout(value: unknown, path: string): FactoryLayout {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_KEYS, path);
+
+  const layout: FactoryLayout = {
+    schemaVersion: readRequiredInteger(record, "schemaVersion", path),
+  };
+  const nodes = readOptionalArray(
+    record,
+    "nodes",
+    path,
+    decodeFactoryLayoutNode,
+  );
+  const edges = readOptionalArray(
+    record,
+    "edges",
+    path,
+    decodeFactoryLayoutEdge,
+  );
+  const groups = readOptionalArray(
+    record,
+    "groups",
+    path,
+    decodeFactoryLayoutGroup,
+  );
+  const viewport = readOptionalObject(
+    record,
+    "viewport",
+    path,
+    decodeFactoryLayoutViewport,
+  );
+  const preferences = readOptionalObject(
+    record,
+    "preferences",
+    path,
+    decodeFactoryLayoutPreferences,
+  );
+
+  if (nodes !== undefined) {
+    layout.nodes = nodes;
+  }
+  if (edges !== undefined) {
+    layout.edges = edges;
+  }
+  if (groups !== undefined) {
+    layout.groups = groups;
+  }
+  if (viewport !== undefined) {
+    layout.viewport = viewport;
+  }
+  if (preferences !== undefined) {
+    layout.preferences = preferences;
+  }
+
+  return layout;
+}
+
+function decodeFactoryLayoutNode(
+  value: unknown,
+  path: string,
+): FactoryLayoutNode {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_NODE_KEYS, path);
+
+  const node: FactoryLayoutNode = {
+    id: readRequiredString(record, "id", path),
+    position: decodeFactoryLayoutPointRequired(record, "position", path),
+  };
+  const size = readOptionalObject(
+    record,
+    "size",
+    path,
+    decodeFactoryLayoutSize,
+  );
+  const locked = readOptionalBoolean(record, "locked", path);
+  if (size !== undefined) {
+    node.size = size;
+  }
+  if (locked !== undefined) {
+    node.locked = locked;
+  }
+  return node;
+}
+
+function decodeFactoryLayoutEdge(
+  value: unknown,
+  path: string,
+): FactoryLayoutEdge {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_EDGE_KEYS, path);
+
+  const edge: FactoryLayoutEdge = {
+    id: readRequiredString(record, "id", path),
+  };
+  const waypoints = readOptionalArray(
+    record,
+    "waypoints",
+    path,
+    decodeFactoryLayoutPoint,
+  );
+  const labelPosition = readOptionalObject(
+    record,
+    "labelPosition",
+    path,
+    decodeFactoryLayoutPoint,
+  );
+  if (waypoints !== undefined) {
+    edge.waypoints = waypoints;
+  }
+  if (labelPosition !== undefined) {
+    edge.labelPosition = labelPosition;
+  }
+  return edge;
+}
+
+function decodeFactoryLayoutGroup(
+  value: unknown,
+  path: string,
+): FactoryLayoutGroup {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_GROUP_KEYS, path);
+
+  const group: FactoryLayoutGroup = {
+    bounds: decodeFactoryLayoutBoundsRequired(record, "bounds", path),
+    id: readRequiredString(record, "id", path),
+    nodeIds: readRequiredStringArray(record, "nodeIds", path),
+  };
+  const label = readOptionalString(record, "label", path);
+  const parentGroupId = readOptionalNullableString(
+    record,
+    "parentGroupId",
+    path,
+  );
+  const color = readOptionalString(record, "color", path);
+  const locked = readOptionalBoolean(record, "locked", path);
+  if (label !== undefined) {
+    group.label = label;
+  }
+  if (parentGroupId !== undefined) {
+    group.parentGroupId = parentGroupId;
+  }
+  if (color !== undefined) {
+    group.color = color;
+  }
+  if (locked !== undefined) {
+    group.locked = locked;
+  }
+  return group;
+}
+
+function decodeFactoryLayoutPreferences(
+  value: unknown,
+  path: string,
+): FactoryLayoutPreferences {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_PREFERENCES_KEYS, path);
+
+  const preferences: FactoryLayoutPreferences = {};
+  const direction = readOptionalEnum(
+    record,
+    "direction",
+    path,
+    LAYOUT_PREFERENCE_DIRECTION_VALUES,
+  );
+  if (direction !== undefined) {
+    preferences.direction = direction as FactoryLayoutPreferences["direction"];
+  }
+  return preferences;
+}
+
+function decodeFactoryLayoutViewport(
+  value: unknown,
+  path: string,
+): FactoryLayoutViewport {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_VIEWPORT_KEYS, path);
+
+  return {
+    x: readRequiredNumber(record, "x", path),
+    y: readRequiredNumber(record, "y", path),
+    zoom: readRequiredNumber(record, "zoom", path),
+  };
+}
+
+function decodeFactoryLayoutPoint(
+  value: unknown,
+  path: string,
+): FactoryLayoutPoint {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_POINT_KEYS, path);
+
+  return {
+    x: readRequiredNumber(record, "x", path),
+    y: readRequiredNumber(record, "y", path),
+  };
+}
+
+function decodeFactoryLayoutPointRequired(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): FactoryLayoutPoint {
+  const item = value[key];
+  if (item === undefined || item === null) {
+    throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
+  }
+  return decodeFactoryLayoutPoint(item, `${path}.${key}`);
+}
+
+function decodeFactoryLayoutSize(
+  value: unknown,
+  path: string,
+): FactoryLayoutNode["size"] {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_SIZE_KEYS, path);
+
+  return {
+    height: readRequiredNumber(record, "height", path),
+    width: readRequiredNumber(record, "width", path),
+  };
+}
+
+function decodeFactoryLayoutBoundsRequired(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): FactoryLayoutBounds {
+  const item = value[key];
+  if (item === undefined || item === null) {
+    throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
+  }
+  return decodeFactoryLayoutBounds(item, `${path}.${key}`);
+}
+
+function decodeFactoryLayoutBounds(
+  value: unknown,
+  path: string,
+): FactoryLayoutBounds {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, LAYOUT_BOUNDS_KEYS, path);
+
+  return {
+    height: readRequiredNumber(record, "height", path),
+    width: readRequiredNumber(record, "width", path),
+    x: readRequiredNumber(record, "x", path),
+    y: readRequiredNumber(record, "y", path),
+  };
 }
 
 function decodeHostedWorkerAuth(
@@ -966,6 +1277,26 @@ function readRequiredString(
   return item;
 }
 
+function readOptionalNullableString(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): string | null | undefined {
+  const item = value[key];
+  if (item === undefined) {
+    return undefined;
+  }
+  if (item === null) {
+    return null;
+  }
+  if (typeof item !== "string") {
+    throw new FactoryDefinitionAPIError(
+      `${path}.${key} must be a string or null.`,
+    );
+  }
+  return item;
+}
+
 function readOptionalBoolean(
   value: Record<string, unknown>,
   key: string,
@@ -1004,6 +1335,21 @@ function readRequiredInteger(
   const item = readOptionalInteger(value, key, path);
   if (item === undefined) {
     throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
+  }
+  return item;
+}
+
+function readRequiredNumber(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): number {
+  const item = value[key];
+  if (item === undefined || item === null) {
+    throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
+  }
+  if (typeof item !== "number" || !Number.isFinite(item)) {
+    throw new FactoryDefinitionAPIError(`${path}.${key} must be a number.`);
   }
   return item;
 }
@@ -1057,6 +1403,18 @@ function readOptionalStringArray(
     }
     return entry;
   });
+}
+
+function readRequiredStringArray(
+  value: Record<string, unknown>,
+  key: string,
+  path: string,
+): string[] {
+  const item = readOptionalStringArray(value, key, path);
+  if (item === undefined) {
+    throw new FactoryDefinitionAPIError(`${path}.${key} is required.`);
+  }
+  return item;
 }
 
 function readOptionalStringMap(

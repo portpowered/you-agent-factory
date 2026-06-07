@@ -11,7 +11,7 @@ required:
 properties:
   id:
     type: string
-    description: Optional stable identifier for this workstation in serialized runtime and replay payloads.
+    description: Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name.
   name:
     type: string
     description: Customer-authored workstation name used by guards, diagnostics, and authored references.

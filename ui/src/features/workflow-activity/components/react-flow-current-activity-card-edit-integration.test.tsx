@@ -20,6 +20,7 @@ import { DashboardSessionTestProvider } from "../../../testing/dashboard-session
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/factory-graph-public-ids";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
@@ -569,7 +570,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     await waitFor(() => {
       expect(saveAsync).toHaveBeenCalledWith({
         baseVersion: editableFactoryDocument.version,
-        factory: {
+        factory: materializeFactoryGraphEntityIdsForSave({
           ...editableFactoryDocument,
           resources: [],
           workstations: [
@@ -584,7 +585,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
               ],
             },
           ],
-        },
+        }),
       });
     });
   });
@@ -614,10 +615,12 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     enterEditorMode();
 
     expect(
-      await screen.findByRole("button", { name: "workstation:review" }),
+      await screen.findByRole("button", {
+        name: "workstation:canonical-review-id",
+      }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "workstation:canonical-review-id" }),
+      screen.queryByRole("button", { name: "workstation:review" }),
     ).toBeNull();
     fireEvent.click(
       await screen.findByRole("button", { name: "Connect" }),
@@ -628,7 +631,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "workstation-output:workstation:review->work-state:story:qa",
+        name: "workstation-output:workstation:canonical-review-id->work-state:story:qa",
       }),
     ).toBeTruthy();
 
@@ -650,7 +653,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     await waitFor(() => {
       expect(saveAsync).toHaveBeenCalledWith({
         baseVersion: factoryDocumentWithDistinctWorkstationId.version,
-        factory: {
+        factory: materializeFactoryGraphEntityIdsForSave({
           ...factoryDocumentWithDistinctWorkstationId,
           resources: [],
           workstations: [
@@ -666,7 +669,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
               ],
             },
           ],
-        },
+        }),
       });
     });
   });

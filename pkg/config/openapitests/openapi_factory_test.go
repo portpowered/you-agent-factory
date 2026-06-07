@@ -44,6 +44,211 @@ func TestFactoryConfigFromOpenAPIJSON_MapsCanonicalCamelCaseWorkstationSchema(t 
 	assertCanonicalWorkstationSchema(t, cfg)
 }
 
+func TestFactoryConfigFromOpenAPIJSON_MapsOptionalGraphableEntityIDs(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"stable-id-factory",
+		"workTypes": [
+			{"id":"work-type-story","name":"story","states":[
+				{"id":"state-ready","name":"ready","type":"INITIAL"},
+				{"id":"state-done","name":"done","type":"TERMINAL"}
+			]}
+		],
+		"resources": [{"id":"resource-agent-slot","name":"agent-slot","capacity":2}],
+		"workers": [{"id":"worker-executor","name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"workstation-execute-story",
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"ready"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	assertInternalGraphableEntityIDs(t, cfg)
+	assertPublicGraphableEntityIDs(t, cfg)
+	assertCanonicalGraphableEntityIDs(t, cfg)
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this contract test keeps internal, public, and canonical layout mapping assertions together on the same seam.
+func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"layout-factory",
+		"layout":{
+			"schemaVersion":1,
+			"nodes":[{"id":"workstation:review","position":{"x":420,"y":180},"size":{"width":156,"height":196},"locked":false}],
+			"edges":[{"id":"workstation-output:workstation:review->work-state:task:done","waypoints":[{"x":540,"y":220}],"labelPosition":{"x":590,"y":204}}],
+			"groups":[{"id":"review-lane","label":"Review","bounds":{"x":360,"y":120,"width":520,"height":360},"nodeIds":["workstation:review"],"parentGroupId":null,"color":"blue","locked":false}],
+			"viewport":{"x":0,"y":0,"zoom":1},
+			"preferences":{"direction":"RIGHT"}
+		},
+		"workTypes": [{"id":"task","name":"task","states":[{"id":"ready","name":"ready","type":"INITIAL"},{"id":"done","name":"done","type":"TERMINAL"}]}],
+		"workers": [{"id":"writer","name":"writer","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"review",
+			"name":"review",
+			"worker":"writer",
+			"inputs":[{"workType":"task","state":"ready"}],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.Layout == nil {
+		t.Fatal("expected layout to map into internal config")
+	}
+	if cfg.Layout.SchemaVersion != 1 || cfg.Layout.Nodes[0].ID != "workstation:review" {
+		t.Fatalf("unexpected internal layout: %#v", cfg.Layout)
+	}
+	if cfg.Layout.Nodes[0].Locked == nil || *cfg.Layout.Nodes[0].Locked {
+		t.Fatalf("expected node locked=false to roundtrip, got %#v", cfg.Layout.Nodes[0].Locked)
+	}
+	if cfg.Layout.Groups[0].ParentGroupID != nil {
+		t.Fatalf("expected parentGroupId null to remain nil, got %#v", cfg.Layout.Groups[0].ParentGroupID)
+	}
+	public := FactoryConfigToOpenAPI(cfg)
+	if public.Layout == nil || public.Layout.Preferences == nil || public.Layout.Preferences.Direction == nil || *public.Layout.Preferences.Direction != factoryapi.RIGHT {
+		t.Fatalf("expected public layout preferences direction RIGHT, got %#v", public.Layout)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		t.Fatalf("unmarshal canonical config: %v", err)
+	}
+	layout := decoded["layout"].(map[string]any)
+	if layout["schemaVersion"] != float64(1) {
+		t.Fatalf("canonical schemaVersion = %#v", layout["schemaVersion"])
+	}
+	viewport := layout["viewport"].(map[string]any)
+	if viewport["zoom"] != float64(1) {
+		t.Fatalf("canonical viewport.zoom = %#v", viewport["zoom"])
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_RejectsMalformedPortableLayoutContract(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"layout-factory",
+		"layout":{
+			"nodes":[{"id":"workstation:review","position":{"x":420,"y":180}}]
+		},
+		"workTypes": [{"name":"task","states":[{"name":"ready","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"review",
+			"worker":"writer",
+			"inputs":[{"workType":"task","state":"ready"}],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`)
+
+	_, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected malformed layout payload to be rejected")
+	}
+	if !strings.Contains(err.Error(), "layout.schemaVersion is required") {
+		t.Fatalf("expected missing schemaVersion error, got %v", err)
+	}
+}
+
+func assertInternalGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	if cfg.WorkTypes[0].ID != "work-type-story" {
+		t.Fatalf("work type id = %q", cfg.WorkTypes[0].ID)
+	}
+	if cfg.WorkTypes[0].States[0].ID != "state-ready" {
+		t.Fatalf("work state id = %q", cfg.WorkTypes[0].States[0].ID)
+	}
+	if cfg.Resources[0].ID != "resource-agent-slot" {
+		t.Fatalf("resource id = %q", cfg.Resources[0].ID)
+	}
+	if cfg.Workers[0].ID != "worker-executor" {
+		t.Fatalf("worker id = %q", cfg.Workers[0].ID)
+	}
+}
+
+func assertPublicGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	public := FactoryConfigToOpenAPI(cfg)
+	if public.WorkTypes == nil || (*public.WorkTypes)[0].Id == nil || *(*public.WorkTypes)[0].Id != "work-type-story" {
+		t.Fatalf("public work type id = %#v", public.WorkTypes)
+	}
+	if (*public.WorkTypes)[0].States[0].Id == nil || *(*public.WorkTypes)[0].States[0].Id != "state-ready" {
+		t.Fatalf("public work state id = %#v", (*public.WorkTypes)[0].States[0].Id)
+	}
+	if public.Resources == nil || (*public.Resources)[0].Id == nil || *(*public.Resources)[0].Id != "resource-agent-slot" {
+		t.Fatalf("public resource id = %#v", public.Resources)
+	}
+	if public.Workers == nil || (*public.Workers)[0].Id == nil || *(*public.Workers)[0].Id != "worker-executor" {
+		t.Fatalf("public worker id = %#v", public.Workers)
+	}
+}
+
+func assertCanonicalGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
+	canonical, err := MarshalCanonicalFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		t.Fatalf("unmarshal canonical config: %v", err)
+	}
+	workType := decoded["workTypes"].([]any)[0].(map[string]any)
+	if workType["id"] != "work-type-story" {
+		t.Fatalf("canonical work type id = %#v", workType["id"])
+	}
+	state := workType["states"].([]any)[0].(map[string]any)
+	if state["id"] != "state-ready" {
+		t.Fatalf("canonical work state id = %#v", state["id"])
+	}
+	resource := decoded["resources"].([]any)[0].(map[string]any)
+	if resource["id"] != "resource-agent-slot" {
+		t.Fatalf("canonical resource id = %#v", resource["id"])
+	}
+	worker := decoded["workers"].([]any)[0].(map[string]any)
+	if worker["id"] != "worker-executor" {
+		t.Fatalf("canonical worker id = %#v", worker["id"])
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_AllowsLegacyNameKeyedGraphableEntities(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"legacy-name-keyed-factory",
+		"workTypes": [{"name":"story","states":[{"name":"ready","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],
+		"resources": [{"name":"agent-slot","capacity":2}],
+		"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"workstation-execute-story",
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"ready"}],
+			"outputs":[{"workType":"story","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	if cfg.WorkTypes[0].ID != "" || cfg.WorkTypes[0].States[0].ID != "" || cfg.Resources[0].ID != "" || cfg.Workers[0].ID != "" {
+		t.Fatalf("legacy ids should remain empty, got workType=%q state=%q resource=%q worker=%q", cfg.WorkTypes[0].ID, cfg.WorkTypes[0].States[0].ID, cfg.Resources[0].ID, cfg.Workers[0].ID)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesCanonicalWorkstationCronFields(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"cron-factory",

@@ -1,0 +1,30 @@
+type: object
+description: Non-executable portable graph editor layout metadata keyed by canonical graph ids.
+additionalProperties: false
+required:
+  - schemaVersion
+properties:
+  schemaVersion:
+    type: integer
+    format: int32
+    minimum: 1
+    description: Portable layout contract schema version. Version 1 is the initial public layout contract.
+  nodes:
+    type: array
+    description: Optional authored graph node geometry keyed by canonical graph node id.
+    items:
+      $ref: './FactoryLayoutNode.yaml'
+  edges:
+    type: array
+    description: Optional authored graph edge geometry keyed by canonical graph edge id.
+    items:
+      $ref: './FactoryLayoutEdge.yaml'
+  groups:
+    type: array
+    description: Optional flat background groups keyed independently from topology.
+    items:
+      $ref: './FactoryLayoutGroup.yaml'
+  viewport:
+    $ref: './FactoryLayoutViewport.yaml'
+  preferences:
+    $ref: './FactoryLayoutPreferences.yaml'

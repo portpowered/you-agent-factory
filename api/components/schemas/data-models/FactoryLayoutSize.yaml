@@ -1,0 +1,13 @@
+type: object
+description: Authored node size in graph canvas units.
+additionalProperties: false
+required:
+  - width
+  - height
+properties:
+  width:
+    type: number
+    description: Authored node width.
+  height:
+    type: number
+    description: Authored node height.

@@ -33,7 +33,7 @@ func WorkTypeHandlingBehaviorTargets(cfg *interfaces.FactoryConfig, opts WorkTyp
 					Message:  fmt.Sprintf("unsupported handlingBehavior value %q", behavior),
 					Subject: Subject{
 						Type:     SubjectTypeWorkType,
-						ID:       workType.Name,
+						ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
 						Location: SubjectLocationDefinition,
 					},
 					Path: behaviorPath,
@@ -47,7 +47,7 @@ func WorkTypeHandlingBehaviorTargets(cfg *interfaces.FactoryConfig, opts WorkTyp
 					Message:  fmt.Sprintf("duplicate handlingBehavior value %q on the same work type", canonical),
 					Subject: Subject{
 						Type:     SubjectTypeWorkType,
-						ID:       workType.Name,
+						ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
 						Location: SubjectLocationDefinition,
 					},
 					Path: behaviorPath,

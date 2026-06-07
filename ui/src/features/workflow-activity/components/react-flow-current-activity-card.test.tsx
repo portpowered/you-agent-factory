@@ -63,6 +63,7 @@ import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "../lib/current-activity-factory-graph-layout";
+import { resetCurrentActivityGraphLayoutCacheForTests } from "../hooks/react-flow-current-activity-card-graph-layout";
 import { buildGraphEdges } from "../lib/react-flow-current-activity-card-edges";
 import {
   buildActiveGraphHighlights,
@@ -947,6 +948,7 @@ let restoreBrowserTestShims: (() => void) | null = null;
 function registerCurrentActivityCardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
+    resetCurrentActivityGraphLayoutCacheForTests();
     useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
     restoreBrowserTestShims = installDashboardBrowserTestShims();
     vi.mocked(useFactoryDocumentSave).mockReturnValue({
@@ -3282,7 +3284,7 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     );
     expect(renderedNodeIds).toEqual(
       expect.arrayContaining([
-        systemTimeGraphNodeId("workstation", "Nightly Cron"),
+        systemTimeGraphNodeId("workstation", "nightly-cron", "Nightly Cron"),
         systemTimeGraphNodeId("work-type", "story"),
       ]),
     );
@@ -3753,7 +3755,7 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
 
   it("selects work-state nodes and exposes resource nodes as resource selectors", async () => {
     const { onSelectResource, onSelectStateNode } = renderCurrentActivity({
-      snapshot: semanticWorkflowDashboardSnapshot,
+      snapshot: structuredClone(semanticWorkflowDashboardSnapshot),
       selection: { kind: "state-node", placeId: "story:implemented" },
     });
 

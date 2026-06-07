@@ -1838,6 +1838,8 @@ export interface components {
       resources?: components["schemas"]["Resource"][];
       /** @description Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources. */
       supportingFiles?: components["schemas"]["ResourceManifest"];
+      /** @description Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids. */
+      layout?: components["schemas"]["FactoryLayout"];
       /** @description Reusable worker definitions that workstations reference by name when dispatching work. */
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
@@ -1906,6 +1908,8 @@ export interface components {
     InputKind: InputKind;
     /** @description A named category of work that can move through the factory. Each work type declares the lifecycle states its work items can occupy. */
     WorkType: {
+      /** @description Optional durable public identifier for this work type. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Customer-authored work type name referenced by workstation inputs, outputs, and submitted work. */
       name: string;
       /** @description Lifecycle states available for work items of this type. */
@@ -1915,6 +1919,8 @@ export interface components {
     };
     /** @description A lifecycle state that a work item can occupy inside one work type. */
     WorkState: {
+      /** @description Optional durable public identifier for this state within its work type. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Customer-authored state name referenced by workstation inputs and outputs. */
       name: string;
       /** @description Lifecycle category for this state, such as initial, processing, terminal, or failed. */
@@ -1927,6 +1933,8 @@ export interface components {
     WorkStateType: WorkStateType;
     /** @description Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas. */
     Resource: {
+      /** @description Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Resource name referenced from worker requirements and workstation resourceUsage entries. */
       name: string;
       /** @description Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`. */
@@ -1949,6 +1957,8 @@ export interface components {
     ResourceType: ResourceType;
     /** @description A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script. */
     Worker: {
+      /** @description Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name. */
+      id?: string;
       /** @description Worker name referenced by Workstation.worker. */
       name: string;
       /** @description Worker implementation family to instantiate for this definition. */
@@ -2040,7 +2050,7 @@ export interface components {
     RunnerSelectionSource: RunnerSelectionSource;
     /** @description A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states. */
     Workstation: {
-      /** @description Optional stable identifier for this workstation in serialized runtime and replay payloads. */
+      /** @description Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name. */
       id?: string;
       /** @description Customer-authored workstation name used by guards, diagnostics, and authored references. */
       name: string;
@@ -2450,6 +2460,97 @@ export interface components {
      * @enum {string}
      */
     WorkTypeHandlingBehavior: WorkTypeHandlingBehavior;
+    /** @description Two-dimensional authored graph layout coordinate. */
+    FactoryLayoutPoint: {
+      /** @description Horizontal graph layout coordinate in authored canvas space. */
+      x: number;
+      /** @description Vertical graph layout coordinate in authored canvas space. */
+      y: number;
+    };
+    /** @description Authored node size in graph canvas units. */
+    FactoryLayoutSize: {
+      /** @description Authored node width. */
+      width: number;
+      /** @description Authored node height. */
+      height: number;
+    };
+    /** @description Portable graph node layout keyed by canonical graph node id. */
+    FactoryLayoutNode: {
+      /** @description Canonical graph node id such as workstation:<workstationId>. */
+      id: string;
+      position: components["schemas"]["FactoryLayoutPoint"];
+      size?: components["schemas"]["FactoryLayoutSize"];
+      /** @description Optional authored node lock flag for future editor affordances. */
+      locked?: boolean;
+    };
+    /** @description Portable graph edge layout keyed by canonical graph edge id. */
+    FactoryLayoutEdge: {
+      /** @description Canonical graph edge id such as workstation-output:workstation:review->work-state:task:done. */
+      id: string;
+      /** @description Optional authored intermediate edge points in graph canvas space. */
+      waypoints?: components["schemas"]["FactoryLayoutPoint"][];
+      labelPosition?: components["schemas"]["FactoryLayoutPoint"];
+    };
+    /** @description Authored rectangular bounds in graph canvas units. */
+    FactoryLayoutBounds: {
+      /** @description Left graph layout coordinate. */
+      x: number;
+      /** @description Top graph layout coordinate. */
+      y: number;
+      /** @description Authored group width. */
+      width: number;
+      /** @description Authored group height. */
+      height: number;
+    };
+    /** @description Portable background grouping metadata for graph canvas presentation. */
+    FactoryLayoutGroup: {
+      /** @description Stable authored group id for future layout editing. */
+      id: string;
+      /** @description Optional visible group label. */
+      label?: string;
+      bounds: components["schemas"]["FactoryLayoutBounds"];
+      /** @description Canonical graph node ids visually contained by this group. */
+      nodeIds: string[];
+      /** @description Reserved for future nested groups. Omit or set null for flat groups. */
+      parentGroupId?: string | null;
+      /** @description Optional authored group accent or fill color. */
+      color?: string;
+      /** @description Optional authored group lock flag for future editor affordances. */
+      locked?: boolean;
+    };
+    /** @description Shared authored graph camera position. */
+    FactoryLayoutViewport: {
+      /** @description Authored viewport horizontal offset. */
+      x: number;
+      /** @description Authored viewport vertical offset. */
+      y: number;
+      /** @description Authored viewport zoom factor. */
+      zoom: number;
+    };
+    /** @description Portable graph display defaults that do not alter factory topology. */
+    FactoryLayoutPreferences: {
+      /**
+       * @description Preferred authored graph direction for portable layout rendering.
+       * @enum {string}
+       */
+      direction?: FactoryLayoutPreferencesDirection;
+    };
+    /** @description Non-executable portable graph editor layout metadata keyed by canonical graph ids. */
+    FactoryLayout: {
+      /**
+       * Format: int32
+       * @description Portable layout contract schema version. Version 1 is the initial public layout contract.
+       */
+      schemaVersion: number;
+      /** @description Optional authored graph node geometry keyed by canonical graph node id. */
+      nodes?: components["schemas"]["FactoryLayoutNode"][];
+      /** @description Optional authored graph edge geometry keyed by canonical graph edge id. */
+      edges?: components["schemas"]["FactoryLayoutEdge"][];
+      /** @description Optional flat background groups keyed independently from topology. */
+      groups?: components["schemas"]["FactoryLayoutGroup"][];
+      viewport?: components["schemas"]["FactoryLayoutViewport"];
+      preferences?: components["schemas"]["FactoryLayoutPreferences"];
+    };
     /**
      * @description Built-in repository-owned hosted worker providers supported by the public factory-config contract.
      * @enum {string}
@@ -3803,6 +3904,14 @@ export const WorkTypeHandlingBehavior = {
 } as const;
 export type WorkTypeHandlingBehavior =
   (typeof WorkTypeHandlingBehavior)[keyof typeof WorkTypeHandlingBehavior];
+export const FactoryLayoutPreferencesDirection = {
+  UP: "UP",
+  DOWN: "DOWN",
+  LEFT: "LEFT",
+  RIGHT: "RIGHT",
+} as const;
+export type FactoryLayoutPreferencesDirection =
+  (typeof FactoryLayoutPreferencesDirection)[keyof typeof FactoryLayoutPreferencesDirection];
 export const HostedWorkerProvider = {
   // Built-in hosted poller integration for the Linear GraphQL API.
   HostedWorkerProviderLinear: "LINEAR",

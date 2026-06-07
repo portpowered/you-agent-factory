@@ -13,6 +13,11 @@ import {
 
 const GRAPH_LAYOUT_CACHE = createWorkflowTopologyAsyncCache<GraphLayout>();
 
+export function resetCurrentActivityGraphLayoutCacheForTests(): void {
+  GRAPH_LAYOUT_CACHE.inFlightByTopologyKey.clear();
+  GRAPH_LAYOUT_CACHE.resolvedByTopologyKey.clear();
+}
+
 export function useCurrentActivityGraphLayout(
   snapshot: DashboardSnapshot,
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
