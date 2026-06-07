@@ -13,6 +13,7 @@ import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-car
 const fixtureState = vi.hoisted(() => {
   const emptyDraft = () => ({
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -24,6 +25,7 @@ const fixtureState = vi.hoisted(() => {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],

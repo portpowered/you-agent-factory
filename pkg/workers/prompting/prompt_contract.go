@@ -7,9 +7,6 @@ import (
 	"strings"
 	"text/template"
 	"text/template/parse"
-
-	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type PromptTemplateVariableCategory string
@@ -821,65 +818,6 @@ func chainDisplay(base string, fields []string) string {
 
 func normalizeDiagnosticSourceText(sourceText string) string {
 	return strings.Trim(sourceText, "() ")
-}
-
-func unavailableBundledDocReason(targetPath string) string {
-	return fmt.Sprintf("The current factory does not bundle documentation at %q in this editing context.", targetPath)
-}
-
-func buildPromptValidationData(inputCount int, docPaths []string) PromptData {
-	inputs := make([]TokenData, 0, inputCount)
-	for index := 0; index < inputCount; index++ {
-		inputs = append(inputs, TokenData{
-			Name:       fmt.Sprintf("input-%d", index),
-			WorkID:     fmt.Sprintf("work-%d", index),
-			WorkTypeID: "processor",
-			DataType:   "work",
-			TraceID:    fmt.Sprintf("trace-%d", index),
-			ParentID:   "parent",
-			Project:    "project",
-			Tags: map[string]string{
-				"branch": "main",
-			},
-			Payload: "payload",
-			Relations: []interfaces.Relation{{
-				Type:          interfaces.RelationDependsOn,
-				TargetWorkID:  "target-work",
-				RequiredState: "SUCCEEDED",
-			}},
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
-				Text: "content",
-			}},
-			PreviousOutput:    "previous-output",
-			RejectionFeedback: "rejection-feedback",
-			History: PromptHistory{
-				LastError:    "last-error",
-				FailureCount: 1,
-				FailureLog: []interfaces.FailureRecord{{
-					TransitionID: "transition",
-					Error:        "failure",
-					Attempt:      1,
-				}},
-				TotalVisits:   1,
-				AttemptNumber: 2,
-			},
-		})
-	}
-
-	return PromptData{
-		Docs:   bundledDocPlaceholderContents(docPaths),
-		Inputs: inputs,
-		Context: PromptContext{
-			WorkDir:     "/tmp/workdir",
-			ArtifactDir: "/tmp/artifacts",
-			Project:     "project",
-			SessionID:   factory_context.DefaultSessionID,
-			Env: map[string]string{
-				"API_KEY": "value",
-			},
-		},
-	}
 }
 
 func promptTemplateSyntaxDiagnostic(err error, tmpl string) PromptTemplateDiagnostic {

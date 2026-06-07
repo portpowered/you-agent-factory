@@ -223,6 +223,7 @@ it("clears draft state when the factory document scope key changes", () => {
     result.current.replaceDraft({
       ...createEmptyFactoryGraphDraft(),
       additions: {
+        docs: [],
         resources: [],
         workers: [
           {
@@ -289,6 +290,7 @@ it("does not rehydrate from a stale document while the new scope document is pen
     result.current.replaceDraft({
       ...createEmptyFactoryGraphDraft(),
       additions: {
+        docs: [],
         resources: [],
         workers: [
           {
@@ -359,6 +361,7 @@ it("resets a dirty draft back to the latest server-backed document", () => {
     result.current.replaceDraft({
       ...createEmptyFactoryGraphDraft(),
       additions: {
+        docs: [],
         resources: [],
         workers: [
           {

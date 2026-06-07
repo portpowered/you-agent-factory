@@ -20,6 +20,7 @@ describe("current activity graph draft edges", () => {
       buildVisibleGraphEdgesWithDraft({
         draft: {
           additions: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -41,6 +42,7 @@ describe("current activity graph draft edges", () => {
             removals: [],
           },
           removals: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -86,6 +88,7 @@ describe("current activity graph draft edges", () => {
       buildVisibleGraphEdgesWithDraft({
         draft: {
           additions: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -125,6 +128,7 @@ describe("current activity graph draft edges", () => {
             removals: [],
           },
           removals: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -226,6 +230,7 @@ describe("current activity graph draft edges", () => {
       buildVisibleGraphEdgesWithDraft({
         draft: {
           additions: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -276,6 +281,7 @@ describe("current activity graph draft edges", () => {
             ],
           },
           removals: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -331,6 +337,7 @@ describe("current activity graph draft edges", () => {
       buildVisibleGraphEdgesWithDraft({
         draft: {
           additions: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -348,6 +355,7 @@ describe("current activity graph draft edges", () => {
             removals: [],
           },
           removals: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -412,6 +420,7 @@ describe("current activity graph draft edges", () => {
       buildVisibleGraphEdgesWithDraft({
         draft: {
           additions: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -433,6 +442,7 @@ describe("current activity graph draft edges", () => {
             removals: [],
           },
           removals: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -485,6 +495,7 @@ describe("current activity graph draft edges", () => {
       buildVisibleGraphEdgesWithDraft({
         draft: {
           additions: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],
@@ -506,6 +517,7 @@ describe("current activity graph draft edges", () => {
             removals: [],
           },
           removals: {
+            docs: [],
             resources: [],
             workers: [],
             workStates: [],

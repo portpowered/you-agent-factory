@@ -36,7 +36,7 @@ export function validateFactoryGraphDocAddEntityDraft(
   draft: FactoryGraphDocAddEntityDraft,
   factoryDefinition: CanonicalFactoryDefinition | null,
 ): FactoryGraphDocAddEntityFieldErrors {
-  const errors: FactoryGraphAddEntityFieldErrors = {};
+  const errors: FactoryGraphDocAddEntityFieldErrors = {};
   const fileName = draft.fileName.trim();
 
   if (fileName.length === 0) {

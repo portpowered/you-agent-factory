@@ -18,8 +18,9 @@ const fixtureState = vi.hoisted(() => ({
       | typeof divergentDocumentPlaneFactoryDocument
       | undefined,
     draft: {
-      additions: {
-        resources: [],
+    additions: {
+      docs: [],
+      resources: [],
         workers: [],
         workStates: [],
         workTypes: [],
@@ -30,6 +31,7 @@ const fixtureState = vi.hoisted(() => ({
         removals: [],
       },
       removals: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],

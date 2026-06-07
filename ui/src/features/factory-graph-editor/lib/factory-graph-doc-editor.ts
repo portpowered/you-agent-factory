@@ -11,7 +11,6 @@ import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
 import type {
   CanonicalFactoryDefinition,
-  FactoryGraphDocDraft,
   FactoryGraphDraft,
 } from "./factory-graph-draft-types";
 
@@ -69,15 +68,6 @@ export function docTargetPathExists(
   return listFactoryDocTargetPaths(
     factoryDefinition ?? { name: "Current Factory" },
   ).includes(targetPath);
-}
-
-export function applyFactoryGraphDocAddition(
-  currentDraft: FactoryGraphDraft,
-  docDraft: FactoryGraphDocDraft,
-): FactoryGraphDraft {
-  const nextDraft = structuredClone(currentDraft);
-  nextDraft.additions.docs.push(structuredClone(docDraft));
-  return nextDraft;
 }
 
 export function applyFactoryGraphDocRemoval(

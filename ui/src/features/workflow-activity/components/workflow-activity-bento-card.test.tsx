@@ -56,6 +56,7 @@ const defaultDraftState = {
   baseDocument: null,
   draft: {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -67,6 +68,7 @@ const defaultDraftState = {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
