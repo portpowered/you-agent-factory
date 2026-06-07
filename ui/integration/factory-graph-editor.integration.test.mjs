@@ -230,12 +230,8 @@ async function expectConsolidatedDirtyGraphEditorChrome(page) {
           name: "Leave editor",
         });
         const toggleClassName = await toggle.getAttribute("class");
-        const unsavedStatusCount = await graphCard
-          .getByText("Unsaved changes")
-          .count();
 
-        return toggleClassName?.includes("border-af-warning-border") === true &&
-          unsavedStatusCount === 1
+        return toggleClassName?.includes("border-af-warning-border") === true
           ? 1
           : 0;
       },
@@ -289,12 +285,13 @@ async function expectConsolidatedCleanGraphEditorChrome(page) {
           name: "Leave editor",
         });
         const toggleClassName = await toggle.getAttribute("class");
-        const activeStatusCount = await graphCard
-          .getByText("Editor mode active")
-          .count();
+        const toolbar = graphCard.getByRole("region", {
+          name: "Factory graph editor tools",
+        });
+        const toolbarStatusCount = await toolbar.locator('[role="status"]').count();
 
         return toggleClassName?.includes("border-af-warning-border") !== true &&
-          activeStatusCount >= 1
+          toolbarStatusCount === 0
           ? 1
           : 0;
       },

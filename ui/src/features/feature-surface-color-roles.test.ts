@@ -65,7 +65,7 @@ describe("feature surface color roles (US-009)", () => {
     const nodeShell = readFileSync(
       join(
         FEATURES_ROOT,
-        "flowchart/components/current-activity-node-shell.tsx",
+        "graphs/components/graph-node-shell.tsx",
       ),
       "utf8",
     );

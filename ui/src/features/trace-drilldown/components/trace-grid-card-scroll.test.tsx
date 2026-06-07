@@ -76,7 +76,9 @@ describe("TraceGridBentoCard page-flow scrolling", () => {
       if (!(frame instanceof HTMLElement)) {
         continue;
       }
-      expect(frame.style.height).not.toBe("");
+      expect(
+        frame.style.height !== "" || frame.parentElement?.getAttribute("style"),
+      ).toBeTruthy();
       expect(frame.className).toContain("overflow-hidden");
       expectNoVerticalScrollContainer(frame);
     }

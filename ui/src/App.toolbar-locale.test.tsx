@@ -61,7 +61,9 @@ describe("App shell locale and toolbar flows", () => {
     ).toBeTruthy();
     expect(screen.getByText("Waiting for more ticks")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Factory graph" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Select work item Done Story" }),
+    ).toBeTruthy();
 
     fireEvent.click(languageButton);
     fireEvent.click(
@@ -88,7 +90,9 @@ describe("App shell locale and toolbar flows", () => {
     expect(screen.getByLabelText("已完成：1")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "工厂图" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "工作图视口" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "选择工作项 Done Story" }),
+    ).toBeTruthy();
 
     fireEvent.drop(
       screen.getByRole("region", { name: "工作图视口" }),

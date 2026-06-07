@@ -1,5 +1,6 @@
-import { useId, useState } from "react";
+import { useId } from "react";
 import { surfacePanelVariants } from "../../../../components/ui";
+import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
@@ -19,9 +20,7 @@ export function InferenceAttemptCard({
   onSelectProviderSession,
   selectedProviderSessionKey,
 }: InferenceAttemptCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const attemptPanelId = useId();
-  const summaryHeadingId = `${attemptPanelId}-heading`;
   const detailMessages = useCurrentSelectionDetailMessages();
   const locale = useCurrentSelectionLocale();
   const timingSummary = getInferenceAttemptTimingSummary(
@@ -34,31 +33,36 @@ export function InferenceAttemptCard({
     <article
       aria-label={detailMessages.attemptAriaLabel(attempt.attempt)}
       className={surfacePanelVariants({
-        className: "grid min-w-0 gap-2.5 p-3.5",
+        className: "grid min-w-0 gap-2.5 p-0",
         radius: "lg",
+        padding: "none",
       })}
     >
-      <InferenceAttemptSummaryHeader
-        attempt={attempt}
-        expanded={expanded}
-        headingId={summaryHeadingId}
-        panelId={attemptPanelId}
-        timingSummary={timingSummary}
-        onToggle={() => setExpanded((current) => !current)}
-      />
-      {expanded ? (
-        <section
-          aria-labelledby={summaryHeadingId}
-          className="grid gap-3"
-          id={attemptPanelId}
-        >
-          <AttemptExpandedContent
+      <CurrentSelectionExpandableSection
+        className="mt-0"
+        contentId={attemptPanelId}
+        headingId={`${attemptPanelId}-heading`}
+        preview={
+          <InferenceAttemptSummaryHeader
             attempt={attempt}
             onSelectProviderSession={onSelectProviderSession}
             selectedProviderSessionKey={selectedProviderSessionKey}
+            timingSummary={timingSummary}
           />
-        </section>
-      ) : null}
+        }
+        title={detailMessages.attemptTitle(attempt.attempt)}
+        toggleLabel={(expanded) =>
+          expanded
+            ? detailMessages.collapseAttemptAction(attempt.attempt)
+            : detailMessages.expandAttemptAction(attempt.attempt)
+        }
+      >
+        <AttemptExpandedContent
+          attempt={attempt}
+          onSelectProviderSession={onSelectProviderSession}
+          selectedProviderSessionKey={selectedProviderSessionKey}
+        />
+      </CurrentSelectionExpandableSection>
     </article>
   );
 }

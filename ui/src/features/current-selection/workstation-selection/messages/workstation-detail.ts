@@ -879,7 +879,8 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationInputGuardSpawnedByInvalid: (workstation) =>
       `spawned-by 工作站 ${workstation} 在当前工厂中不可用。`,
     matchesFieldsGuardInputKeyFieldLabel: "字段选择器",
-    editableConfigurationGuardSelectorEditorLoading: "正在启动字段选择器编辑器。",
+    editableConfigurationGuardSelectorEditorLoading:
+      "正在启动字段选择器编辑器。",
     editableConfigurationGuardSelectorEditorError:
       "无法启动字段选择器编辑器。请重新加载此工作站后重试。",
     modelFieldLabel: "模型",

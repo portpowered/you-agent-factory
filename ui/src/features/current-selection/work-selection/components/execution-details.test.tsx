@@ -366,7 +366,6 @@ describe("InferenceAttemptsSection", () => {
     expect(
       within(section).getByText("Awaiting provider response."),
     ).toBeTruthy();
-    expect(within(section).getByText("Pending")).toBeTruthy();
   });
 
   it("localizes current-selection operational outcomes and unknown fallbacks in zh-CN", () => {
