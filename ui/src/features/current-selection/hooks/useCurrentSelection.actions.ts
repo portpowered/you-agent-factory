@@ -88,6 +88,13 @@ export function useCurrentSelectionActions({
     });
   };
 
+  const selectDoc = (targetPath: string) => {
+    commitSelectionState({
+      selection: { kind: "doc", targetPath },
+      terminalWorkDetail: null,
+    });
+  };
+
   const clearSelectedWorkerIfMatching = (workerName: string) => {
     if (selection?.kind !== "worker" || selection.workerName !== workerName) {
       return;
@@ -251,6 +258,7 @@ export function useCurrentSelectionActions({
     selectWorkItem,
     selectWorkstation,
     selectWorkstationRequest,
+    selectDoc,
     selectResource,
     selectWorker,
     selectWorkType,

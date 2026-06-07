@@ -11,6 +11,7 @@ import type {
   FactoryWorker,
   FactoryWorkType,
 } from "../../../../api/events/types";
+import { factoryBundledDocExists } from "../../../workflow-activity/lib/factory-bundled-docs";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 import { resolveFactoryGraphNodeSelection } from "./factoryGraphNodeSelection";
 
@@ -54,6 +55,11 @@ export interface DashboardWorkTypeSelection {
   workTypeName: string;
 }
 
+export interface DashboardDocSelection {
+  kind: "doc";
+  targetPath: string;
+}
+
 export type DashboardSelection =
   | DashboardNodeSelection
   | DashboardStateNodeSelection
@@ -61,7 +67,8 @@ export type DashboardSelection =
   | DashboardWorkstationRequestSelection
   | DashboardWorkerSelection
   | DashboardResourceSelection
-  | DashboardWorkTypeSelection;
+  | DashboardWorkTypeSelection
+  | DashboardDocSelection;
 
 export function selectDefaultSelection(
   snapshot: DashboardSnapshot,
@@ -130,6 +137,12 @@ export function resolveDashboardSelection({
 
   if (selection.kind === "work-type") {
     return workTypeExistsInSnapshotFactory(snapshot, selection.workTypeName)
+      ? selection
+      : selectDefaultSelection(snapshot);
+  }
+
+  if (selection.kind === "doc") {
+    return factoryBundledDocExists(factory, selection.targetPath)
       ? selection
       : selectDefaultSelection(snapshot);
   }

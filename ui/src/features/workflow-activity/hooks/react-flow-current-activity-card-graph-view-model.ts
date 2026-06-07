@@ -19,6 +19,7 @@ import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { resolveStoredNodePositionsForGraphKey } from "../lib/bridge-graph-layout-positions";
+import { mergeDocNodesIntoGraphLayout } from "../lib/current-activity-doc-graph-layout";
 import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import {
   buildGraphEdges,
@@ -47,6 +48,7 @@ export type CurrentActivityGraphViewModelInput = {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   locale?: string;
   now: number;
+  onSelectDoc: (targetPath: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (
     workID: string,
@@ -69,6 +71,7 @@ function useCurrentActivityBaseNodes({
   graphLayout,
   locale,
   now,
+  onSelectDoc,
   onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
@@ -81,6 +84,7 @@ function useCurrentActivityBaseNodes({
 }: Pick<
   CurrentActivityGraphViewModelInput,
   | "now"
+  | "onSelectDoc"
   | "onSelectResource"
   | "onSelectStateNode"
   | "onSelectWorkID"
@@ -120,6 +124,7 @@ function useCurrentActivityBaseNodes({
         graphLayout,
         locale,
         now,
+        onSelectDoc,
         onSelectResource,
         onSelectStateNode,
         onSelectWorkID,
@@ -139,6 +144,7 @@ function useCurrentActivityBaseNodes({
       graphLayout,
       locale,
       now,
+      onSelectDoc,
       onSelectResource,
       onSelectStateNode,
       onSelectWorkID,
@@ -323,10 +329,12 @@ function useInitialFitViewOptions(graphLayout: GraphLayout) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph view-model keeps observe/editor layout, doc projection, and node presentation wiring together.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
   now,
+  onSelectDoc,
   onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
@@ -341,8 +349,16 @@ export function useCurrentActivityGraphViewModel({
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
     [activeExecutions],
   );
-  const { displayFactoryDefinition, graphLayout } =
+  const { displayFactoryDefinition, graphLayout: topologyGraphLayout } =
     useStableCurrentActivityGraphLayout(snapshot, editor);
+  const graphLayout = useMemo(
+    () =>
+      mergeDocNodesIntoGraphLayout(
+        topologyGraphLayout,
+        displayFactoryDefinition,
+      ),
+    [displayFactoryDefinition, topologyGraphLayout],
+  );
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -409,6 +425,7 @@ export function useCurrentActivityGraphViewModel({
     graphLayout,
     locale,
     now,
+    onSelectDoc,
     onSelectResource,
     onSelectStateNode,
     onSelectWorkID,

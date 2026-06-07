@@ -23,6 +23,7 @@ import { useEditableWorkerConfigurationState } from "../worker-selection/hooks/u
 import { useEditableWorkstationConfigurationState } from "../workstation-selection/hooks/use-editable-workstation-configuration-state";
 import { WorkstationDetailCard } from "../workstation-selection/public";
 import {
+  DocDetailCard,
   NoSelectionDetailCard,
   ResourceDetailCard,
   StateNodeDetailCard,
@@ -147,6 +148,7 @@ function renderCurrentSelectionDetailCard({
     selectedWorkID,
     selectedWorkOperationHistory,
     selectedWorkRequestHistory,
+    selectedDocTargetPath,
     selectedResourceName,
     selectedResourceTokenCount,
     selectedWorkerName,
@@ -212,6 +214,16 @@ function renderCurrentSelectionDetailCard({
         saveState={workStateSaveState}
         terminalHistoryWorkItems={selectedStateTerminalHistoryWorkItems}
         tokenCount={selectedStateTokenCount}
+        widgetId={widgetId}
+      />
+    );
+  }
+
+  if (selection?.kind === "doc" && selectedDocTargetPath) {
+    return (
+      <DocDetailCard
+        locale={locale}
+        targetPath={selectedDocTargetPath}
         widgetId={widgetId}
       />
     );

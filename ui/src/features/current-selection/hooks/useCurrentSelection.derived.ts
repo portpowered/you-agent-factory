@@ -367,6 +367,8 @@ export function useCurrentSelectionDerivedState({
       : selection?.kind === "workstation-request"
         ? (selection.request.work_items[0]?.work_id ?? null)
         : (terminalWorkDetail?.traceWorkID ?? null);
+  const selectedDocTargetPath =
+    selection?.kind === "doc" ? selection.targetPath : null;
   const { selectedResourceName, selectedResourceTokenCount } =
     useSelectedResourceRuntime(selection, snapshot);
   const {
@@ -424,6 +426,7 @@ export function useCurrentSelectionDerivedState({
     selectedWorkProviderSessions: work.selectedWorkProviderSessions,
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,
+    selectedDocTargetPath,
     selectedResourceName,
     selectedResourceTokenCount,
     selectedWorker,

@@ -271,6 +271,7 @@ function buildOverviewWidgetCard({
 
               currentSelection.clearSelectedFactoryGraphNodeIfMatching(nodeId);
             }}
+            onSelectDoc={currentSelection.selectDoc}
             onSelectResource={currentSelection.selectResource}
             onSelectStateNode={currentSelection.selectStateNode}
             onSelectWorkID={currentSelection.selectWorkByID}

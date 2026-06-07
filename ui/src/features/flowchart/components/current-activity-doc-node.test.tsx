@@ -1,0 +1,37 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+
+import { DocNodeView } from "./current-activity-doc-node";
+
+describe("DocNodeView", () => {
+  it("renders an accessible doc node label and selection handler", async () => {
+    const onSelectDoc = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <DocNodeView
+        data={{
+          displayLabel: "guide.md",
+          factoryGraphNodeId: "doc:factory/docs/guide.md",
+          handles: [],
+          kind: "doc",
+          onSelectDoc,
+          selectedDoc: false,
+          targetPath: "factory/docs/guide.md",
+        }}
+        id="doc:factory/docs/guide.md"
+        type="doc"
+      />,
+    );
+
+    expect(screen.getByText("guide.md")).toBeTruthy();
+    expect(screen.getByText("factory/docs/guide.md")).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", { name: "Select guide.md doc" }),
+    );
+
+    expect(onSelectDoc).toHaveBeenCalledWith("factory/docs/guide.md");
+  });
+});

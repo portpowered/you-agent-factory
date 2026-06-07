@@ -80,8 +80,10 @@ export interface CurrentSelectionState {
   ) => void;
   selectWorkstation: (nodeId: string) => void;
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
+  selectDoc: (targetPath: string) => void;
   selectResource: (resourceName: string) => void;
   selectWorker: (workerName: string) => void;
+  selectedDocTargetPath: string | null;
   clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
   clearSelectedStateNodeIfMatching: (placeId: string) => void;
   clearSelectedWorkerIfMatching: (workerName: string) => void;
@@ -198,6 +200,7 @@ export function useCurrentSelection({
     selectedWorkProviderSessions: derived.selectedWorkProviderSessions,
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
+    selectedDocTargetPath: derived.selectedDocTargetPath,
     selectedResourceName: derived.selectedResourceName,
     selectedResourceTokenCount: derived.selectedResourceTokenCount,
     selectedWorker: derived.selectedWorker,
@@ -217,6 +220,7 @@ export function useCurrentSelection({
       actions.clearSelectedFactoryGraphNodeIfMatching,
     clearSelectedStateNodeIfMatching: actions.clearSelectedStateNodeIfMatching,
     clearSelectedWorkerIfMatching: actions.clearSelectedWorkerIfMatching,
+    selectDoc: actions.selectDoc,
     selectResource: actions.selectResource,
     selectWorker: actions.selectWorker,
     selectWorkType: actions.selectWorkType,

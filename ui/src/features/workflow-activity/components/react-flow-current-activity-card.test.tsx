@@ -400,6 +400,7 @@ async function expectRenderableCurrentActivityGraphEdges(
     now: Date.parse("2026-04-08T12:00:04Z"),
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
+    onSelectDoc: vi.fn(),
     onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkType: vi.fn(),
@@ -455,6 +456,7 @@ function renderCurrentActivity({
       (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
     >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
+  const onSelectDoc = vi.fn<(targetPath: string) => void>();
   const onSelectResource = vi.fn<(resourceName: string) => void>();
   const onSelectWorker = vi.fn<(workerName: string) => void>();
   const onSelectWorkType = vi.fn<(workTypeName: string) => void>();
@@ -469,6 +471,7 @@ function renderCurrentActivity({
       onFactoryActivated={onFactoryActivated}
       onFactoryImportReady={onFactoryImportReady}
       onSelectWorkID={onSelectWorkID}
+      onSelectDoc={onSelectDoc}
       onSelectResource={onSelectResource}
       onSelectStateNode={onSelectStateNode}
       onSelectWorker={onSelectWorker}
@@ -482,6 +485,7 @@ function renderCurrentActivity({
   );
 
   return {
+    onSelectDoc,
     onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
@@ -3691,7 +3695,8 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     const callbacks = {
       onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
-      onSelectResource: vi.fn(),
+      onSelectDoc: vi.fn(),
+    onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
