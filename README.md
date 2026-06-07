@@ -21,21 +21,44 @@ For example:
 - tell the agents a series of plans, and run them in dependency order
 - have a cron setup to autonomously look at git tasks or whatever and submit tasks that go through a write/review cycle loop
 
-## Install
+## Installation
 
+### Prerequisites
 
-1. install [codex](https://developers.openai.com/codex/cli) `npm i -g @openai/codex`
-2. install on macOS/Linux: `curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh`
-3. install on Windows PowerShell: `irm https://github.com/portpowered/infinite-you/releases/latest/download/install.ps1 | iex`
-4. go `cd your-project-directory`
-5. run `you`
-6. submit a work task on the website interface, like "go write a report on my codebase at TEST.md", 
-7. wait till complete
-8. finished
+- **[Codex CLI](https://developers.openai.com/codex/cli)** (default agent backend for the starter factory): `npm i -g @openai/codex`
+- A project directory where you want the local `factory/` scaffold to live
 
+### Install the `you` CLI
 
-### claude variant
+**macOS / Linux:**
+
+```sh
+curl -fsSL https://github.com/portpowered/infinite-you/releases/latest/download/install.sh | sh
 ```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://github.com/portpowered/infinite-you/releases/latest/download/install.ps1 | iex
+```
+
+For custom install locations or pinned versions, see the [install script](./scripts/install.sh).
+
+## Quick start
+
+The default path uses the Codex-backed starter scaffold:
+
+1. `cd your-project-directory`
+2. Run `you` — bootstraps `./factory`, starts the runtime, and prints the dashboard URL (usually `http://localhost:7437/dashboard/ui`)
+3. Submit a task from the dashboard (for example, “write a report on my codebase to TEST.md”) and wait for completion
+
+For factory authoring, CLI topics, and advanced setup, see [Authoring factories](./docs/reference/authoring-factories.md) and [`you docs`](./docs/reference/README.md).
+
+### Alternate executor: Claude
+
+To scaffold a factory with Claude as the starter worker instead of Codex:
+
+```sh
 you init --executor claude --dir my-factory
 you docs workstation
 ```
