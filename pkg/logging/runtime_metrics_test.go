@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -309,6 +310,127 @@ func TestBuildRuntimeMetricsSinkAvoidsConcurrentPathCollisions(t *testing.T) {
 	}
 	if len(seen) != workers {
 		t.Fatalf("created %d unique runtime metrics paths, want %d", len(seen), workers)
+	}
+}
+
+func TestBuildRuntimeMetricsSinkManyConcurrentStartsKeepCorrelationIsolated(t *testing.T) {
+	metricsDir := t.TempDir()
+	const workers = 12
+	type sinkResult struct {
+		path              string
+		sessionID         string
+		runtimeInstanceID string
+		folderPath        string
+		factoryDir        string
+	}
+	results := make(chan sinkResult, workers)
+	errs := make(chan error, workers)
+	var wg sync.WaitGroup
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			sessionID := "session-many-" + strconv.Itoa(index)
+			runtimeInstanceID := "runtime-many-" + strconv.Itoa(index)
+			folderPath := filepath.Join("/factory", "sessions", sessionID)
+			factoryDir := filepath.Join("/factory", "roots", runtimeInstanceID)
+			sink, err := BuildRuntimeMetricsSink(sessionID, runtimeInstanceID, folderPath, factoryDir, metricsDir, RuntimeMetricsConfig{})
+			if err != nil {
+				errs <- err
+				return
+			}
+			if err := sink.Counter(context.Background(), "runtime.started", 1, metrics.Fields{}); err != nil {
+				_ = sink.Close()
+				errs <- err
+				return
+			}
+			path := sink.Path()
+			if err := sink.Close(); err != nil {
+				errs <- err
+				return
+			}
+			results <- sinkResult{
+				path:              path,
+				sessionID:         sessionID,
+				runtimeInstanceID: runtimeInstanceID,
+				folderPath:        folderPath,
+				factoryDir:        factoryDir,
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(results)
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent runtime metrics startup: %v", err)
+		}
+	}
+
+	seen := make(map[string]struct{}, workers)
+	for result := range results {
+		if _, ok := seen[result.path]; ok {
+			t.Fatalf("duplicate concurrent runtime metrics path %q", result.path)
+		}
+		seen[result.path] = struct{}{}
+		record := readSingleRuntimeMetricsRecord(t, result.path)
+		assertRuntimeMetricStringField(t, record, "session_id", result.sessionID)
+		assertRuntimeMetricStringField(t, record, "runtime_instance_id", result.runtimeInstanceID)
+		assertRuntimeMetricStringField(t, record, "folder_path", result.folderPath)
+		assertRuntimeMetricStringField(t, record, "factory_dir", result.factoryDir)
+	}
+	if len(seen) != workers {
+		t.Fatalf("created %d unique runtime metrics paths, want %d", len(seen), workers)
+	}
+}
+
+func TestRuntimeMetricsSinkRotatesUnderLoad(t *testing.T) {
+	metricsDir := t.TempDir()
+	sink, err := BuildRuntimeMetricsSink(
+		"session-rotate",
+		"runtime-rotate",
+		"/folder",
+		"/factory",
+		metricsDir,
+		RuntimeMetricsConfig{MaxSize: 1, MaxBackups: 3, MaxAge: 1},
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+	defer sink.Close()
+
+	largeReason := strings.Repeat("rotation-payload-", 8192)
+	for i := 0; i < 16; i++ {
+		if err := sink.Sample(context.Background(), "dispatch.duration", float64(i+1), "ms", metrics.Fields{
+			DispatchID: "dispatch-rotate",
+			Reason:     largeReason,
+		}); err != nil {
+			t.Fatalf("Sample #%d: %v", i, err)
+		}
+	}
+	if err := sink.Close(); err != nil {
+		t.Fatalf("Close(runtime metrics sink): %v", err)
+	}
+
+	ext := filepath.Ext(sink.Path())
+	base := strings.TrimSuffix(filepath.Base(sink.Path()), ext)
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(sink.Path()), base+"*"+ext))
+	if err != nil {
+		t.Fatalf("Glob(runtime metrics rotation): %v", err)
+	}
+	if len(matches) < 2 {
+		t.Fatalf("rotation files = %v, want active file plus at least one rotated segment", matches)
+	}
+	for _, path := range matches {
+		if strings.HasSuffix(path, ".gz") {
+			continue
+		}
+		records := readRuntimeMetricsRecords(t, path)
+		if len(records) == 0 {
+			t.Fatalf("runtime metrics rotation segment %q contained no records", path)
+		}
 	}
 }
 

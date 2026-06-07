@@ -294,10 +294,16 @@ func buildRuntimeBundle(
 	if err != nil {
 		return nil, err
 	}
+	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
 	metricsSink, err := buildRuntimeMetricsSink(input.cfg, sessionID, runtimeInstanceID, input.folderPath, input.dir)
 	if err != nil {
-		_ = logSink.Close()
-		return nil, err
+		logger.Warn(
+			"runtime metrics sink unavailable; continuing without metrics",
+			zap.Error(err),
+			zap.String("runtime_instance_id", runtimeInstanceID),
+			zap.String("runtime_metrics_root_dir", strings.TrimSpace(input.cfg.RuntimeMetricsDir)),
+		)
+		metricsSink = nil
 	}
 	bundleBuilt := false
 	defer func() {
@@ -308,7 +314,6 @@ func buildRuntimeBundle(
 	if input.cfg != nil && runtimeInstanceID != "" {
 		input.cfg.RuntimeInstanceID = runtimeInstanceID
 	}
-	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
 
 	mapper := factoryconfig.ConfigMapper{}
 	net, err := mapper.Map(ctx, input.loadedFactoryCfg.FactoryConfig())
