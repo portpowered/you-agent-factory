@@ -72,9 +72,9 @@ managed runtime contract instead of re-deriving source-specific cache or
 repository conditions.
 
 When a required runtime is `MISSING`, `LOADING`, `FAILED`, or `UNSUPPORTED`,
-invocation returns actionable outcomes derived from the managed contract. When a
-runtime is `READY`, packaged and authored factories invoke through the same
-managed runtime layer.
+invocation returns actionable outcomes derived from the managed contract through
+`apisurface.InvocationErrorFromManagedRuntime`. When a runtime is `READY`,
+packaged and authored factories invoke through the same managed runtime layer.
 
 ## Pull or Install Lifecycle
 

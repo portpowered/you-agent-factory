@@ -164,7 +164,13 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
+	managed, readinessErr := localmodels.EnsureManagedRuntimeReadyForInvocation(runtimeCfg, workerDef.Model, s.catalogOptions())
+	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
+	if readinessErr != nil {
+		return apisurface.ModelInvocationResult{}, readinessErr
+	}
 	if err := s.modelAssetPuller().EnsureModelAvailable(ctx, runtimeCfg, workerDef); err != nil {
+		s.recordManagedRuntimeInvocationFailure(modelName, managed, err)
 		return apisurface.ModelInvocationResult{}, err
 	}
 
@@ -781,6 +787,45 @@ func (s *runtimeModelService) recordManagedRuntimePull(modelName string, result 
 			zap.Duration("duration", elapsed),
 		)
 	}
+}
+
+func (s *runtimeModelService) recordManagedRuntimeInvocationReadiness(
+	modelName string,
+	managed factoryapi.ManagedRuntime,
+	err error,
+) {
+	if s == nil || s.deps.logger == nil {
+		return
+	}
+	fields := []zap.Field{
+		zap.String("model_name", modelName),
+		zap.String("managed_runtime_identity", managed.Identity),
+		zap.String("readiness_state", string(managed.ReadinessState)),
+		zap.String("lifecycle_state", string(managed.LifecycleState)),
+	}
+	if err != nil {
+		s.deps.logger.Warn("managed runtime invocation blocked", append(fields, zap.Error(err))...)
+		return
+	}
+	s.deps.logger.Info("managed runtime invocation readiness satisfied", fields...)
+}
+
+func (s *runtimeModelService) recordManagedRuntimeInvocationFailure(
+	modelName string,
+	managed factoryapi.ManagedRuntime,
+	err error,
+) {
+	if s == nil || s.deps.logger == nil || err == nil {
+		return
+	}
+	s.deps.logger.Warn(
+		"managed runtime invocation asset check failed",
+		zap.String("model_name", modelName),
+		zap.String("managed_runtime_identity", managed.Identity),
+		zap.String("readiness_state", string(managed.ReadinessState)),
+		zap.String("lifecycle_state", string(managed.LifecycleState)),
+		zap.Error(err),
+	)
 }
 
 func (s *runtimeModelService) recordModelPullMetric(name string, labels map[string]string) {

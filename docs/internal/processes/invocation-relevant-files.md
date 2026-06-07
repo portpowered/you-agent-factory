@@ -44,3 +44,4 @@ primary-result behavior.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
+- Managed-runtime invocation readiness gating lives in `pkg/localmodels/invocation_readiness.go` and `pkg/apisurface/managed_runtime_invocation.go`; direct model invocation wires through `pkg/service/model_catalog.go` and factory worker execution through `pkg/localmodels/runtime.go`.

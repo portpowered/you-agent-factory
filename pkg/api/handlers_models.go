@@ -59,8 +59,14 @@ func (s *Server) InvokeModel(w http.ResponseWriter, r *http.Request, modelName s
 		switch {
 		case errors.Is(err, apisurface.ErrModelNotFound):
 			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
-		case errors.Is(err, apisurface.ErrModelNotAvailable):
+		case apisurface.IsManagedRuntimeMissing(err), errors.Is(err, apisurface.ErrModelNotAvailable):
 			s.writeError(w, http.StatusNotFound, err.Error(), "MODEL_NOT_AVAILABLE")
+		case errors.Is(err, apisurface.ErrManagedRuntimeLoading):
+			s.writeError(w, http.StatusConflict, err.Error(), "MODEL_RUNTIME_LOADING")
+		case errors.Is(err, apisurface.ErrManagedRuntimeFailed):
+			s.writeError(w, http.StatusServiceUnavailable, err.Error(), "MODEL_RUNTIME_FAILED")
+		case errors.Is(err, apisurface.ErrManagedRuntimeUnsupported):
+			s.writeError(w, http.StatusBadRequest, err.Error(), "MODEL_RUNTIME_UNSUPPORTED")
 		case errors.Is(err, apisurface.ErrModelInvocationUnsupportedOperation), errors.Is(err, apisurface.ErrModelInvocationUnsupportedMode):
 			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		default:

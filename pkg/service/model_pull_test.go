@@ -146,6 +146,7 @@ func (r *capturingModelPullMetricsRecorder) assertContainsMetric(t *testing.T, n
 type managedPullMetricsAssetPuller struct {
 	result     apisurface.ModelPullResult
 	inspection localmodels.RuntimeCacheInspection
+	cache      localmodels.CacheLayout
 	err        error
 }
 
@@ -158,7 +159,7 @@ func (p *managedPullMetricsAssetPuller) EnsureModelAvailable(context.Context, *f
 }
 
 func (p *managedPullMetricsAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
-	return localmodels.CacheLayout{}, nil
+	return p.cache, nil
 }
 
 func (p *managedPullMetricsAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
