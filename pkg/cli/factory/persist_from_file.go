@@ -104,8 +104,8 @@ func validatePersistFromFilePayload(payload []byte) error {
 		}
 		return fmt.Errorf("%w: %v", configload.ErrInvalidNamedFactory, err)
 	}
-	if result.HasTargets() {
-		return persistFromFileValidationTargetsError(result.Targets)
+	if result.HasBlockingTargets() {
+		return persistFromFileValidationTargetsError(result.BlockingTargets())
 	}
 	return nil
 }

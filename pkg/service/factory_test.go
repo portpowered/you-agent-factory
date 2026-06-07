@@ -1393,6 +1393,92 @@ func TestFactoryService_ActivateNamedFactory_SwapsPersistedFactoryAndUpdatesCurr
 	}
 }
 
+func TestFactoryService_ActivateNamedFactory_PreservesPortableLayoutWhenSwitchingFactories(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithPortableLayout(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if _, err := config.PersistNamedFactory(rootDir, "beta", serviceNamedFactoryPayloadWithPortableLayout(t, "beta")); err != nil {
+		t.Fatalf("PersistNamedFactory(beta): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	if err := svc.ActivateNamedFactory(context.Background(), "beta"); err != nil {
+		t.Fatalf("ActivateNamedFactory(beta): %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory after activation: %v", err)
+	}
+	assertServicePortableLayoutResponse(t, current.Layout, "workstation:process", "task")
+}
+
+func serviceNamedFactoryPayloadWithPortableLayout(t *testing.T, project string) []byte {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(serviceNamedFactoryPayload(t, project), &payload); err != nil {
+		t.Fatalf("unmarshal service factory payload: %v", err)
+	}
+	payload["layout"] = map[string]any{
+		"schemaVersion": 1,
+		"nodes": []map[string]any{{
+			"id":       "workstation:process",
+			"position": map[string]any{"x": 128, "y": 256},
+			"size":     map[string]any{"width": 320, "height": 180},
+			"locked":   true,
+		}},
+		"edges": []map[string]any{{
+			"id":        "workstation-output:workstation:process->work-state:task:complete",
+			"waypoints": []map[string]any{{"x": 180, "y": 220}},
+		}},
+		"groups": []map[string]any{{
+			"id":      "group-1",
+			"label":   "Main lane",
+			"nodeIds": []string{"workstation:process"},
+			"bounds":  map[string]any{"x": 100, "y": 200, "width": 400, "height": 240},
+		}},
+		"viewport":    map[string]any{"x": 40, "y": 60, "zoom": 0.9},
+		"preferences": map[string]any{"direction": "RIGHT"},
+	}
+	updated, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal service factory payload with layout: %v", err)
+	}
+	return updated
+}
+
+func assertServicePortableLayoutResponse(t *testing.T, layout *factoryapi.FactoryLayout, wantNodeID, wantWorkType string) {
+	t.Helper()
+
+	if layout == nil {
+		t.Fatal("expected current factory layout after activation")
+	}
+	if layout.SchemaVersion != 1 {
+		t.Fatalf("layout schemaVersion = %d, want 1", layout.SchemaVersion)
+	}
+	if layout.Nodes == nil || len(*layout.Nodes) != 1 || (*layout.Nodes)[0].Id != wantNodeID {
+		t.Fatalf("layout nodes = %#v, want %s", layout.Nodes, wantNodeID)
+	}
+	wantEdgeID := "workstation-output:workstation:process->work-state:" + wantWorkType + ":complete"
+	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != wantEdgeID {
+		t.Fatalf("layout edges = %#v, want %s", layout.Edges, wantEdgeID)
+	}
+}
+
 func TestFactoryService_ActivateNamedFactory_CanActivateSecondPersistedFactory(t *testing.T) {
 	rootDir := t.TempDir()
 

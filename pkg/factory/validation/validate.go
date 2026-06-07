@@ -38,6 +38,9 @@ func Validate(cfg *interfaces.FactoryConfig) Result {
 	result.Targets = append(result.Targets, InvocationReturnTargets(cfg)...)
 	result.Targets = append(result.Targets, missingWorkTypeOutcomeStateTargets(cfg)...)
 	result.Targets = append(result.Targets, missingTerminalCompletionPathTargets(cfg)...)
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result.Targets = append(result.Targets, ValidateLayout(cfg, topology).Targets...)
 	return result
 }
 

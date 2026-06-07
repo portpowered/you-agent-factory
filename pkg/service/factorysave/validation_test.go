@@ -33,7 +33,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
 	}
 
-	apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.Targets)
+	apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.BlockingTargets())
 	saveSignatures := factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
 	if !factoryvalidation.EquivalentCanonicalTargetSignatures(apiSignatures, saveSignatures) {
 		t.Fatalf("ValidateFactoryAPI signatures = %#v, save signatures = %#v",

@@ -27,4 +27,9 @@ const (
 	CodeManagedRuntimeWorkerMissingModel        = "factory.managedRuntime.workerMissingModel"
 	CodeManagedRuntimeWorkerMissingDep          = "factory.managedRuntime.workerMissingDependency"
 	CodeManagedRuntimeWorkerModelMismatch       = "factory.managedRuntime.workerModelMismatch"
+	CodeLayoutUnknownNodeReference              = "factory.layout.unknownNodeReference"
+	CodeLayoutUnknownEdgeReference              = "factory.layout.unknownEdgeReference"
+	CodeLayoutUnknownGroupMemberReference       = "factory.layout.unknownGroupMemberReference"
+	CodeLayoutUnsupportedSchemaVersion          = "factory.layout.unsupportedSchemaVersion"
+	CodeLayoutInvalidGeometry                   = "factory.layout.invalidGeometry"
 )

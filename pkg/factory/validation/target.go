@@ -65,6 +65,30 @@ func (r Result) HasTargets() bool {
 	return len(r.Targets) > 0
 }
 
+// BlockingTargets returns topology and other error-severity targets that should
+// block save and runtime load. Recoverable layout warnings are excluded.
+func (r Result) BlockingTargets() []Target {
+	if len(r.Targets) == 0 {
+		return nil
+	}
+	blocking := make([]Target, 0, len(r.Targets))
+	for _, target := range r.Targets {
+		if target.Severity != SeverityError {
+			continue
+		}
+		if IsLayoutTargetCode(target.Code) {
+			continue
+		}
+		blocking = append(blocking, target)
+	}
+	return blocking
+}
+
+// HasBlockingTargets reports whether the result contains save-blocking targets.
+func (r Result) HasBlockingTargets() bool {
+	return len(r.BlockingTargets()) > 0
+}
+
 // FactoryValidationResult maps canonical targets onto the validate-only API
 // response shape used by POST /factory-validations.
 func (r Result) FactoryValidationResult() factoryapi.FactoryValidationResult {
