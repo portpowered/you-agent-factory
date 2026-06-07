@@ -1,6 +1,9 @@
 import type { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type {
+  FactoryGraphEditorTool,
+  FactoryGraphEditorVisibilityPreset,
+} from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/factory-graph-layout-draft-hook";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
@@ -84,7 +87,9 @@ export function buildCurrentActivityGraphEditorValue(args: {
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen: boolean;
   setHideShowMenuOpen: (open: boolean) => void;
+  setVisibilityPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
   toggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
+  visibilityPreset: FactoryGraphEditorVisibilityPreset;
 }) {
   return {
     activeTool: args.activeTool,
@@ -149,6 +154,8 @@ export function buildCurrentActivityGraphEditorValue(args: {
     hiddenNodeClasses: args.hiddenNodeClasses,
     hideShowMenuOpen: args.hideShowMenuOpen,
     setHideShowMenuOpen: args.setHideShowMenuOpen,
+    setVisibilityPreset: args.setVisibilityPreset,
     toggleHiddenNodeClass: args.toggleHiddenNodeClass,
+    visibilityPreset: args.visibilityPreset,
   };
 }

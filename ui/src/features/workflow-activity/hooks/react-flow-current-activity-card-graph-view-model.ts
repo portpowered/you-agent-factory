@@ -282,6 +282,7 @@ function useStableCurrentActivityGraphLayout(
     snapshot,
     layoutFactoryDefinition,
     editor.hiddenNodeClasses,
+    editor.visibilityPreset,
   );
 
   return { displayFactoryDefinition, graphLayout };

@@ -112,6 +112,11 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canSaveDraft: true,
     connectionNotice: "Only workstation-to-work-state routes are supported.",
     currentFactoryDefinition: null,
+    dirtyStateSummary: {
+      layoutDirty: false,
+      preferencesDirty: false,
+      topologyDirty: true,
+    },
     draftState: { hasChanges: true, pendingFactoryDefinition: null },
     layoutDraftState: { hasChanges: false },
     moveLayoutNode: vi.fn(),
@@ -133,6 +138,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     handleEditorNodeDelete: vi.fn(),
     hiddenNodeClasses: new Set(),
     hideShowMenuOpen: false,
+    visibilityPreset: "all",
     hasActiveWork: true,
     isStaleDraft: true,
     saveBlockedReason: "Stop active work before saving this draft.",
@@ -145,6 +151,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     setAddMenuOpen: vi.fn(),
     setHideShowMenuOpen: vi.fn(),
     setIsConfirmingSave: vi.fn(),
+    setVisibilityPreset: vi.fn(),
+    resetPreferences: vi.fn(),
     toggleHiddenNodeClass: vi.fn(),
     ...overrides,
   };

@@ -836,6 +836,10 @@ function renderViewport({
       headingID="test-heading"
       hiddenNodeClasses={new Set()}
       hideShowMenuOpen={false}
+      onClearPreferences={vi.fn()}
+      onSelectVisibilityPreset={vi.fn()}
+      preferencesDirty={false}
+      visibilityPreset="all"
       imports={mockImportController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}

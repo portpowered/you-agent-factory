@@ -14,16 +14,20 @@ import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-to
 export function FactoryGraphEditorHideShowMenu({
   hiddenNodeClasses,
   locale,
+  onClearPreferences,
   onOpenChange,
   onToggleHiddenNodeClass,
   open,
+  preferencesDirty = false,
   pressed,
 }: {
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   locale?: string;
+  onClearPreferences?: () => void;
   onOpenChange?: (open: boolean) => void;
   onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
   open: boolean;
+  preferencesDirty?: boolean;
   pressed: boolean;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
@@ -81,6 +85,20 @@ export function FactoryGraphEditorHideShowMenu({
             );
           })}
         </div>
+        {onClearPreferences ? (
+          <FactoryGraphEditorMenuItemButton
+            aria-label={messages.toolbarClearPreferencesLabel}
+            disabled={!preferencesDirty}
+            onClick={onClearPreferences}
+            role="menuitem"
+            type="button"
+          >
+            <FactoryGraphEditorMenuItemCopy
+              description={messages.toolbarClearPreferencesDescription}
+              label={messages.toolbarClearPreferencesLabel}
+            />
+          </FactoryGraphEditorMenuItemButton>
+        ) : null}
       </PopoverContent>
     </Popover>
   );

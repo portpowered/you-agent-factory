@@ -200,8 +200,12 @@ export function CurrentActivityGraphSurface({
         onAddMenuOpenChange={editor.setAddMenuOpen}
         hiddenNodeClasses={editor.hiddenNodeClasses}
         hideShowMenuOpen={editor.hideShowMenuOpen}
+        onClearPreferences={editor.resetPreferences}
         onHideShowMenuOpenChange={editor.setHideShowMenuOpen}
+        onSelectVisibilityPreset={editor.setVisibilityPreset}
         onToggleHiddenNodeClass={editor.toggleHiddenNodeClass}
+        preferencesDirty={editor.dirtyStateSummary.preferencesDirty}
+        visibilityPreset={editor.visibilityPreset}
         onConnect={editor.handleEditorConnect}
         onEditorEdgeClick={editor.handleEditorEdgeDelete}
         onEditorNodeClick={editor.handleEditorNodeDelete}

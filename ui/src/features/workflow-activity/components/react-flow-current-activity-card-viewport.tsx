@@ -21,6 +21,8 @@ import type { WorkstationProgressOutcomeRouteContext } from "../../current-facto
 import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
+  FactoryGraphEditorVisibilityPanel,
+  type FactoryGraphEditorVisibilityPreset,
 } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
@@ -57,10 +59,12 @@ function CurrentActivityGraphEditorChrome(props: {
   locale?: string;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onClearPreferences: () => void;
   onHideShowMenuOpenChange: (open: boolean) => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
   openAddMenu?: boolean;
+  preferencesDirty: boolean;
   saveDisabledReason?: string;
 }) {
   const messages = getFactoryGraphEditorMessages(props.locale);
@@ -93,16 +97,45 @@ function CurrentActivityGraphEditorChrome(props: {
       locale={props.locale}
       onAddAction={props.onAddAction}
       onAddMenuOpenChange={props.onAddMenuOpenChange}
+      onClearPreferences={props.onClearPreferences}
       onDiscard={props.handleDiscardPendingChanges}
       onHideShowMenuOpenChange={props.onHideShowMenuOpenChange}
       onSave={props.handleSaveDraft}
       onSelectTool={props.onSelectTool}
       onToggleHiddenNodeClass={props.onToggleHiddenNodeClass}
       openAddMenu={props.openAddMenu}
+      preferencesDirty={props.preferencesDirty}
       saveDisabledReason={props.saveDisabledReason}
       visible={props.editorMode}
     />
   );
+}
+
+function buildVisibilityPresetOptions(
+  locale: string | undefined,
+  visibilityPreset: FactoryGraphEditorVisibilityPreset,
+) {
+  const messages = getFactoryGraphEditorMessages(locale);
+
+  return (
+    [
+      "all",
+      "workflow",
+      "execution",
+      "infrastructure",
+    ] as const
+  ).map((key) => ({
+    key,
+    label:
+      key === "all"
+        ? messages.visibilityPresetAllLabel
+        : key === "workflow"
+          ? messages.visibilityPresetWorkflowLabel
+          : key === "execution"
+            ? messages.visibilityPresetExecutionLabel
+            : messages.visibilityPresetInfrastructureLabel,
+    selected: visibilityPreset === key,
+  }));
 }
 
 function buildCurrentActivityIsValidConnection({
@@ -188,6 +221,10 @@ export function CurrentActivityGraphViewport({
   hiddenNodeClasses,
   hideShowMenuOpen,
   editorMode,
+  onClearPreferences,
+  onSelectVisibilityPreset,
+  preferencesDirty,
+  visibilityPreset,
   edges,
   graphKey,
   handleNodesChange,
@@ -228,6 +265,10 @@ export function CurrentActivityGraphViewport({
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen: boolean;
   editorMode: boolean;
+  onClearPreferences: () => void;
+  onSelectVisibilityPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
+  preferencesDirty: boolean;
+  visibilityPreset: FactoryGraphEditorVisibilityPreset;
   edges: Edge[];
   graphKey: string;
   handleNodesChange: (changes: NodeChange[]) => void;
@@ -399,6 +440,12 @@ export function CurrentActivityGraphViewport({
             </ReactFlow>
           </div>
         ) : null}
+        <FactoryGraphEditorVisibilityPanel
+          locale={locale}
+          onSelectPreset={onSelectVisibilityPreset}
+          options={buildVisibilityPresetOptions(locale, visibilityPreset)}
+          visible={true}
+        />
         <CurrentActivityGraphEditorChrome
           activeTool={activeTool}
           addMenuActions={addMenuActions}
@@ -418,10 +465,12 @@ export function CurrentActivityGraphViewport({
           locale={locale}
           onAddAction={onAddAction}
           onAddMenuOpenChange={onAddMenuOpenChange}
+          onClearPreferences={onClearPreferences}
           onHideShowMenuOpenChange={onHideShowMenuOpenChange}
           onSelectTool={onSelectTool}
           onToggleHiddenNodeClass={onToggleHiddenNodeClass}
           openAddMenu={openAddMenu}
+          preferencesDirty={preferencesDirty}
           saveDisabledReason={saveDisabledReason}
         />
         <GraphDropOverlay dropState={imports.dropState} locale={locale} />

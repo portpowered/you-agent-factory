@@ -136,6 +136,8 @@ export interface FactoryGraphEditorMessages {
   toolbarHideShowMenuAriaLabel: string;
   toolbarHideShowMenuDescription: string;
   toolbarHideShowMenuTitle: string;
+  toolbarClearPreferencesDescription: string;
+  toolbarClearPreferencesLabel: string;
   toolbarOpenAddMenuLabel: string;
   toolbarOpenHideShowMenuLabel: string;
   nodeClassVisibilityDescription: (kind: FactoryGraphNodeKind) => string;
@@ -621,6 +623,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarHideShowMenuDescription:
         "Toggle which node classes appear on the graph. Hidden classes stay out of the view until you show them again.",
       toolbarHideShowMenuTitle: "Hide or show node classes",
+      toolbarClearPreferencesDescription:
+        "Restore the shared authored graph view for this factory. Private visibility and filter choices are cleared.",
+      toolbarClearPreferencesLabel: "Clear private view preferences",
       toolbarOpenAddMenuLabel: "Add",
       toolbarOpenHideShowMenuLabel: "Show or hide",
       nodeClassVisibilityDescription: describeEnglishNodeClassVisibility,
@@ -1057,6 +1062,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarHideShowMenuDescription:
         "切换哪些节点类别显示在图上。隐藏的类别会保持不可见，直到你再次显示它们。",
       toolbarHideShowMenuTitle: "隐藏或显示节点类别",
+      toolbarClearPreferencesDescription:
+        "恢复此工厂的共享创作图视图。私有的可见性和筛选选择将被清除。",
+      toolbarClearPreferencesLabel: "清除私有视图偏好",
       toolbarOpenAddMenuLabel: "添加",
       toolbarOpenHideShowMenuLabel: "显示或隐藏",
       nodeClassVisibilityDescription: (kind) => {

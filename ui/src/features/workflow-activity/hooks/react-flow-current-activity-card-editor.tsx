@@ -27,8 +27,10 @@ export function useCurrentActivityGraphEditor(
     preferencesDirty,
     resetPreferences,
     setHideShowMenuOpen,
+    setVisibilityPreset,
     toggleHiddenNodeClass,
-  } = useHiddenFactoryGraphNodeClasses();
+    visibilityPreset,
+  } = useHiddenFactoryGraphNodeClasses(factoryDocumentScopeKey);
   const leaveEditorBridge = useGraphEditorLeaveEditorBridge();
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
@@ -180,6 +182,8 @@ export function useCurrentActivityGraphEditor(
     hiddenNodeClasses,
     hideShowMenuOpen,
     setHideShowMenuOpen,
+    setVisibilityPreset,
     toggleHiddenNodeClass,
+    visibilityPreset,
   });
 }

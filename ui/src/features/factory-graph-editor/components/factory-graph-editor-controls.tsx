@@ -70,9 +70,11 @@ export function FactoryGraphEditorToolbar({
   onDiscard,
   onAddAction,
   onAddMenuOpenChange,
+  onClearPreferences,
   onHideShowMenuOpenChange,
   onSave,
   onToggleHiddenNodeClass,
+  preferencesDirty = false,
   saveDisabledReason,
   visible,
   onSelectTool,
@@ -99,9 +101,11 @@ export function FactoryGraphEditorToolbar({
   onDiscard?: () => void;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
+  onClearPreferences?: () => void;
   onHideShowMenuOpenChange?: (open: boolean) => void;
   onSave?: () => void;
   onToggleHiddenNodeClass?: (kind: FactoryGraphNodeKind) => void;
+  preferencesDirty?: boolean;
   saveDisabledReason?: string;
   visible: boolean;
   onSelectTool: (tool: FactoryGraphEditorTool) => void;
@@ -133,9 +137,11 @@ export function FactoryGraphEditorToolbar({
         <FactoryGraphEditorHideShowMenu
           hiddenNodeClasses={hiddenNodeClasses}
           locale={locale}
+          onClearPreferences={onClearPreferences}
           onOpenChange={onHideShowMenuOpenChange}
           onToggleHiddenNodeClass={onToggleHiddenNodeClass}
           open={hideShowMenuOpen}
+          preferencesDirty={preferencesDirty}
           pressed={hideShowActive}
         />
       ) : null}
