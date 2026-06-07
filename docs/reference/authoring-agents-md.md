@@ -292,4 +292,4 @@ For complete current examples that include workers and workstations, see:
 - `you docs workstations` - workstation runtime fields, routing, and logical moves
 - `you docs authoring-factories` - factory sequencing and mock-worker checks
 - `you docs templates` - complete variable listing, supported surfaces, and quoting examples
-- [Architecture](../internal/development/architecture.md) - engine design and subsystem details
+- [Architecture](../architecture/architecture.md) - engine design and subsystem details

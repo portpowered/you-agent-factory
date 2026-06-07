@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -234,6 +236,167 @@ func TestRunCommand_FactoryPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
 	}
 }
 
+func TestRunCommand_FactoryStdinPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetIn(strings.NewReader("Fix the stdin path\n"))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "-"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --factory with stdin prompt: %v", err)
+	}
+	if got.WorkFile == "" {
+		t.Fatal("expected generated work file for stdin factory prompt run")
+	}
+	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
+
+	workRequest, err := runcli.LoadWorkFile(got.WorkFile)
+	if err != nil {
+		t.Fatalf("LoadWorkFile: %v", err)
+	}
+	if len(workRequest.Works) != 1 || workRequest.Works[0].WorkTypeID != "story" {
+		t.Fatalf("works = %#v, want one story work item", workRequest.Works)
+	}
+	if payload, ok := workRequest.Works[0].Payload.(string); !ok || payload != "Fix the stdin path" {
+		t.Fatalf("payload = %#v, want stdin prompt text", workRequest.Works[0].Payload)
+	}
+}
+
+func TestRunCommand_FactoryPromptSelectsCleanInvocationMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		if cfg.StartupOutput != nil {
+			io.WriteString(cfg.StartupOutput, "Factory initiated: unexpected\n")
+			io.WriteString(cfg.StartupOutput, "Dashboard URL: unexpected\n")
+			io.WriteString(cfg.StartupOutput, "Recording saved: unexpected\n")
+		}
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute clean factory prompt run: %v", err)
+	}
+	if got.WorkFile == "" {
+		t.Fatal("expected generated work file for factory prompt run")
+	}
+	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
+	if !got.CleanInvocation {
+		t.Fatal("expected factory prompt batch run to select clean invocation mode")
+	}
+	if !got.SuppressDashboardRendering {
+		t.Fatal("expected clean invocation mode to suppress dashboard rendering")
+	}
+	if got.StartupOutput != nil {
+		t.Fatalf("startup output = %#v, want nil for clean invocation mode", got.StartupOutput)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to clean run config")
+	}
+	if got.Output == nil {
+		t.Fatal("expected clean run config to receive stdout writer")
+	}
+	assertRunStdoutFreeOfOperatorChatter(t, stdout.String())
+}
+
+func TestRunCommand_FactoryWorkFileSelectsCleanInvocationMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+	workPath := filepath.Join(dir, "work.json")
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "--work", workPath})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute clean factory work-file run: %v", err)
+	}
+	if !got.CleanInvocation {
+		t.Fatal("expected factory work-file batch run to select clean invocation mode")
+	}
+	if !got.SuppressDashboardRendering {
+		t.Fatal("expected clean invocation mode to suppress dashboard rendering")
+	}
+	if got.StartupOutput != nil {
+		t.Fatalf("startup output = %#v, want nil for clean invocation mode", got.StartupOutput)
+	}
+}
+
+func TestRunCommand_FactoryContinuousPromptKeepsOperatorOutputMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "--continuously", "Fix the lint issues"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute continuous factory prompt run: %v", err)
+	}
+	if got.CleanInvocation {
+		t.Fatal("continuous factory run should keep operator output mode")
+	}
+	if got.SuppressDashboardRendering {
+		t.Fatal("continuous factory run should not implicitly suppress dashboard rendering")
+	}
+	if got.StartupOutput == nil {
+		t.Fatal("continuous factory run should keep startup output configured")
+	}
+}
+
 func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -263,6 +426,62 @@ func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 	}
 	if runCalled {
 		t.Fatal("run should not start for empty factory prompt")
+	}
+}
+
+func assertRunStdoutFreeOfOperatorChatter(t *testing.T, stdout string) {
+	t.Helper()
+
+	for _, forbidden := range []string{
+		"Factory initiated",
+		"Dashboard URL",
+		"Runtime log",
+		"Opening dashboard",
+		"Factory:",
+		"Recording saved",
+	} {
+		if strings.Contains(stdout, forbidden) {
+			t.Fatalf("stdout = %q, want no %q chatter", stdout, forbidden)
+		}
+	}
+}
+
+func TestRunCommand_FactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetIn(strings.NewReader("Fix from stdin\n"))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix from args", "-"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected ambiguous positional and stdin prompt rejection")
+	}
+	for _, want := range []string{
+		runcli.InvocationErrorCodeAmbiguousInput,
+		string(runcli.InvocationInputSourcePositional),
+		string(runcli.InvocationInputSourceStdin),
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+	if runCalled {
+		t.Fatal("run should not start for ambiguous factory prompt input")
 	}
 }
 
@@ -324,5 +543,81 @@ func TestRunCommand_PositionalPromptRequiresFactoryFlag(t *testing.T) {
 	}
 	if runCalled {
 		t.Fatal("run should not start for positional prompt without --factory")
+	}
+}
+
+func TestRunCommand_CleanInvocationFailureWritesPlaintextToStderr(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var stdout, stderr bytes.Buffer
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		return &runcli.InvocationError{
+			Code:    runcli.InvocationErrorCodeFailed,
+			Message: "clean invocation failed: mock worker rejected",
+		}
+	}
+
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix the lint issues"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected clean invocation failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got := stderr.String(); got != "RUN_INVOCATION_FAILED: clean invocation failed: mock worker rejected\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestRunCommand_CleanInvocationJSONFailureWritesSingleErrorObjectToStderr(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var stdout, stderr bytes.Buffer
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		return &runcli.InvocationError{
+			Code:    runcli.InvocationErrorCodeTimeout,
+			Message: "clean invocation timed out",
+		}
+	}
+
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected clean invocation timeout")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+
+	var payload map[string]string
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("stderr is not one JSON object: %v\n%s", decodeErr, stderr.String())
+	}
+	if payload["code"] != runcli.InvocationErrorCodeTimeout {
+		t.Fatalf("code = %q, want %q", payload["code"], runcli.InvocationErrorCodeTimeout)
+	}
+	if payload["message"] != "clean invocation timed out" {
+		t.Fatalf("message = %q", payload["message"])
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -24,6 +25,7 @@ import (
 
 type stubFactoryService struct {
 	run                   func(context.Context) error
+	snapshot              func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	runtimeLogDiagnostics service.RuntimeLogDiagnostics
 }
 
@@ -33,6 +35,13 @@ func (s stubFactoryService) Run(ctx context.Context) error {
 
 func (s stubFactoryService) RuntimeLogDiagnostics() service.RuntimeLogDiagnostics {
 	return s.runtimeLogDiagnostics
+}
+
+func (s stubFactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	if s.snapshot == nil {
+		return nil, errors.New("snapshot unavailable")
+	}
+	return s.snapshot(ctx)
 }
 
 type capturedOOTBSmokeRun struct {

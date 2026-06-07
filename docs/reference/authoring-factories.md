@@ -680,7 +680,7 @@ review-loop workflow.
 - `you docs workstations`
 - `you docs workers`
 - `you docs batch-inputs`
-- [Parent-Aware Fan-In](../internal/development/parent-aware-fan-in.md)
-- [Workstation Guards And Guarded Loop Breakers](../internal/development/workstation-guards-and-guarded-loop-breakers.md)
+- `you docs relationships`
+- `you docs guards`
 - `you docs templates`
 - `docs/reference/README.md`
