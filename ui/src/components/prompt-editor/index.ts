@@ -24,6 +24,10 @@ export {
   WORKSTATION_PROMPT_LANGUAGE_ID,
   WORKSTATION_PROMPT_THEME_ID,
 } from "./monaco-prompt-setup";
+export {
+  CURRENT_SELECTION_FACTORY_DOC_MODEL_PATH,
+  MonacoTextEditor,
+} from "./monaco-text-editor";
 export type {
   PromptEditorDiagnosticsPanelLabels,
   PromptEditorDiagnosticsPanelProps,

@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: widget wires all current-selection detail cards and save hooks in one mount surface.
 import type { ReactNode } from "react";
 
 import type {
@@ -9,6 +10,7 @@ import {
   CurrentSelectionHeaderActionProvider,
   CurrentSelectionLocaleProvider,
 } from "../base/public";
+import { useEditableDocConfigurationState } from "../doc-selection/hooks/use-editable-doc-configuration-state";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSelectedProviderSessionState } from "../work-selection/hooks/useSelectedProviderSessionState";
@@ -57,7 +59,10 @@ export interface CurrentSelectionWidgetProps {
 function renderCurrentSelectionDetailCard({
   activeTraceID,
   currentSelection,
+  docHeaderAction,
+  docSaveState,
   editableConfigurationState,
+  editableDocConfigurationState,
   editableResourceConfigurationState,
   editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
@@ -87,8 +92,15 @@ function renderCurrentSelectionDetailCard({
 }: {
   activeTraceID?: string | null;
   currentSelection: CurrentSelectionState;
+  docHeaderAction: ReactNode;
+  docSaveState: ReturnType<
+    typeof useCurrentSelectionDetailSave
+  >["docSaveState"];
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
+  >;
+  editableDocConfigurationState: ReturnType<
+    typeof useEditableDocConfigurationState
   >;
   editableResourceConfigurationState: ReturnType<
     typeof useEditableResourceConfigurationState
@@ -222,7 +234,10 @@ function renderCurrentSelectionDetailCard({
   if (selection?.kind === "doc" && selectedDocTargetPath) {
     return (
       <DocDetailCard
+        editableConfigurationState={editableDocConfigurationState}
+        headerAction={docHeaderAction}
         locale={locale}
+        saveState={docSaveState}
         targetPath={selectedDocTargetPath}
         widgetId={widgetId}
       />
@@ -318,6 +333,7 @@ export function CurrentSelectionWidget({
     selectedNodeProviderSessions,
     selectedWorkDispatchAttempts,
     selectedWorkRequestHistory,
+    selectedDocTargetPath,
     selectedResourceName,
     selectedWorkerName,
     selectedWorkTypeName,
@@ -337,6 +353,11 @@ export function CurrentSelectionWidget({
     selectedWorkerName,
     locale,
   );
+  const editableDocConfigurationState = useEditableDocConfigurationState(
+    selection,
+    selectedDocTargetPath,
+    locale,
+  );
   const editableResourceConfigurationState =
     useEditableResourceConfigurationState(
       selection,
@@ -350,6 +371,9 @@ export function CurrentSelectionWidget({
       locale,
     );
   const {
+    docHeaderAction,
+    docSave,
+    docSaveState,
     resourceHeaderAction,
     resourceSave,
     resourceSaveState,
@@ -370,11 +394,13 @@ export function CurrentSelectionWidget({
   } = useCurrentSelectionDetailSave({
     currentSelection,
     editableConfigurationState,
+    editableDocConfigurationState,
     editableResourceConfigurationState,
     editableWorkStateConfigurationState,
     editableWorkerConfigurationState,
     editableWorkTypeConfigurationState,
     locale,
+    selectedDocTargetPath,
     selectedNode,
     selectedResourceName,
     selectedWorkerName,
@@ -397,7 +423,10 @@ export function CurrentSelectionWidget({
   const detailCard = renderCurrentSelectionDetailCard({
     activeTraceID,
     currentSelection,
+    docHeaderAction,
+    docSaveState,
     editableConfigurationState,
+    editableDocConfigurationState,
     editableResourceConfigurationState,
     editableWorkStateConfigurationState,
     editableWorkerConfigurationState,
@@ -435,6 +464,7 @@ export function CurrentSelectionWidget({
       </CurrentSelectionHeaderActionProvider>
       <CurrentSelectionWidgetSaveNotifications
         editableConfigurationState={editableConfigurationState}
+        editableDocConfigurationState={editableDocConfigurationState}
         editableResourceConfigurationState={editableResourceConfigurationState}
         editableWorkStateConfigurationState={
           editableWorkStateConfigurationState
@@ -442,8 +472,11 @@ export function CurrentSelectionWidget({
         editableWorkerConfigurationState={editableWorkerConfigurationState}
         editableWorkTypeConfigurationState={editableWorkTypeConfigurationState}
         locale={resolvedLocale}
+        docSave={docSave}
+        docSaveState={docSaveState}
         resourceSave={resourceSave}
         resourceSaveState={resourceSaveState}
+        selectedDocTargetPath={selectedDocTargetPath}
         selectedNode={selectedNode}
         selectedResourceName={selectedResourceName}
         selectedWorkerName={selectedWorkerName}

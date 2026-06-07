@@ -1,4 +1,7 @@
 import type { DashboardSelection } from "../base/state/selection-types";
+import { EditableDocConfigurationHeaderActions } from "../doc-selection/components/doc-save-controls";
+import type { useEditableDocConfigurationState } from "../doc-selection/hooks/use-editable-doc-configuration-state";
+import { useSaveEditableDocConfiguration } from "../doc-selection/hooks/use-save-editable-doc-configuration";
 import type { CurrentSelectionState } from "../hooks/useCurrentSelection";
 import { EditableResourceConfigurationHeaderActions } from "../resource-selection/components/resource-save-controls";
 import type { useEditableResourceConfigurationState } from "../resource-selection/hooks/use-editable-resource-configuration-state";
@@ -27,11 +30,13 @@ import { buildWorkstationSaveScopeKey } from "../workstation-selection/lib/works
 export function useCurrentSelectionDetailSave({
   currentSelection,
   editableConfigurationState,
+  editableDocConfigurationState,
   editableResourceConfigurationState,
   editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
   editableWorkTypeConfigurationState,
   locale,
+  selectedDocTargetPath,
   selectedNode,
   selectedResourceName,
   selectedWorkerName,
@@ -42,6 +47,9 @@ export function useCurrentSelectionDetailSave({
   currentSelection: CurrentSelectionState;
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
+  >;
+  editableDocConfigurationState: ReturnType<
+    typeof useEditableDocConfigurationState
   >;
   editableResourceConfigurationState: ReturnType<
     typeof useEditableResourceConfigurationState
@@ -56,6 +64,7 @@ export function useCurrentSelectionDetailSave({
     typeof useEditableWorkTypeConfigurationState
   >;
   locale?: string | null;
+  selectedDocTargetPath: string | null;
   selectedNode: CurrentSelectionState["selectedNode"];
   selectedResourceName: string | null;
   selectedWorkerName: string | null;
@@ -112,6 +121,16 @@ export function useCurrentSelectionDetailSave({
     locale,
     onWorkTypeRenamed: currentSelection.selectWorkType,
     scopeKey: workTypeSaveScopeKey,
+  });
+  const docSaveScopeKey =
+    selection?.kind === "doc" && selectedDocTargetPath
+      ? selectedDocTargetPath
+      : null;
+  const docSave = useSaveEditableDocConfiguration({
+    editableConfigurationState: editableDocConfigurationState,
+    locale,
+    onDocRenamed: currentSelection.selectDoc,
+    scopeKey: docSaveScopeKey,
   });
 
   const workstationHeaderAction = (
@@ -199,8 +218,28 @@ export function useCurrentSelectionDetailSave({
       saveState={workTypeSave.saveState}
     />
   );
+  const docHeaderAction = (
+    <EditableDocConfigurationHeaderActions
+      canDiscard={
+        editableDocConfigurationState?.status === "ready" &&
+        editableDocConfigurationState.isDirty
+      }
+      canSave={docSave.canSave}
+      locale={locale ?? undefined}
+      onDiscard={() => {
+        if (editableDocConfigurationState?.status === "ready") {
+          editableDocConfigurationState.onResetToLatest();
+        }
+      }}
+      onSave={() => void docSave.save()}
+      saveState={docSave.saveState}
+    />
+  );
 
   return {
+    docHeaderAction,
+    docSave,
+    docSaveState: docSave.saveState,
     resourceHeaderAction,
     resourceSave,
     resourceSaveState: resourceSave.saveState,

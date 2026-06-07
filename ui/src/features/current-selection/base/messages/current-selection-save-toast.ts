@@ -5,6 +5,8 @@ import {
 import type { CurrentSelectionSaveEntityKind } from "../../../notifications/lib/save-notification-delivery-policy";
 
 export interface CurrentSelectionSaveToastCatalogMessages {
+  docSaveFailedTitle: string;
+  docSaveSuccessTitle: string;
   resourceSaveFailedTitle: string;
   resourceSaveSuccessTitle: string;
   saveFailedAffectedSummary: (labels: string) => string;
@@ -20,6 +22,8 @@ export interface CurrentSelectionSaveToastCatalogMessages {
 
 const currentSelectionSaveToastMessagesByLocale = {
   en: {
+    docSaveFailedTitle: "Doc save failed",
+    docSaveSuccessTitle: "Doc saved",
     resourceSaveFailedTitle: "Resource save failed",
     resourceSaveSuccessTitle: "Resource saved",
     saveFailedAffectedSummary: (labels: string) => `Affected: ${labels}`,
@@ -33,6 +37,8 @@ const currentSelectionSaveToastMessagesByLocale = {
     workstationSaveSuccessTitle: "Workstation saved",
   },
   "zh-CN": {
+    docSaveFailedTitle: "文档保存失败",
+    docSaveSuccessTitle: "文档已保存",
     resourceSaveFailedTitle: "资源保存失败",
     resourceSaveSuccessTitle: "资源已保存",
     saveFailedAffectedSummary: (labels: string) => `受影响项：${labels}`,
@@ -46,6 +52,8 @@ const currentSelectionSaveToastMessagesByLocale = {
     workstationSaveSuccessTitle: "工位已保存",
   },
   ko: {
+    docSaveFailedTitle: "문서 저장 실패",
+    docSaveSuccessTitle: "문서 저장됨",
     resourceSaveFailedTitle: "리소스 저장 실패",
     resourceSaveSuccessTitle: "리소스 저장됨",
     saveFailedAffectedSummary: (labels: string) => `영향 대상: ${labels}`,
@@ -59,6 +67,8 @@ const currentSelectionSaveToastMessagesByLocale = {
     workstationSaveSuccessTitle: "워크스테이션 저장됨",
   },
   ja: {
+    docSaveFailedTitle: "ドキュメントの保存に失敗しました",
+    docSaveSuccessTitle: "ドキュメントを保存しました",
     resourceSaveFailedTitle: "リソースの保存に失敗しました",
     resourceSaveSuccessTitle: "リソースを保存しました",
     saveFailedAffectedSummary: (labels: string) => `影響対象: ${labels}`,
@@ -90,6 +100,11 @@ export function resolveCurrentSelectionSaveToastTitles(
   saveSuccessTitle: string;
 } {
   switch (entityKind) {
+    case "doc":
+      return {
+        saveFailedTitle: catalog.docSaveFailedTitle,
+        saveSuccessTitle: catalog.docSaveSuccessTitle,
+      };
     case "workstation":
       return {
         saveFailedTitle: catalog.workstationSaveFailedTitle,

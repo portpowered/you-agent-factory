@@ -1,4 +1,5 @@
 import type { CurrentSelectionSaveEntityKind } from "../../../notifications/lib/save-notification-delivery-policy";
+import { getDocDetailMessages } from "../../doc-selection/messages/doc-detail";
 import { getResourceDetailMessages } from "../../resource-selection/messages/resource-detail";
 import { getWorkStateDetailMessages } from "../../work-state-selection/messages/work-state-detail";
 import { getWorkTypeDetailMessages } from "../../work-type-selection/messages/work-type-detail";
@@ -24,6 +25,18 @@ export function buildCurrentSelectionSaveToastMessages({
     resolveCurrentSelectionSaveToastTitles(toastCatalog, entityKind);
 
   switch (entityKind) {
+    case "doc": {
+      const detailMessages = getDocDetailMessages(locale);
+      return {
+        saveFailedAffectedSummary: toastCatalog.saveFailedAffectedSummary,
+        saveFailedTitle,
+        saveSuccessDescription:
+          detailMessages.editableConfigurationSaveSuccess(entityDisplayName),
+        saveSuccessTitle,
+        staleVersionDetail:
+          detailMessages.editableConfigurationSaveStaleVersionDetail,
+      };
+    }
     case "workstation": {
       const detailMessages = getWorkstationDetailMessages(locale);
       return {

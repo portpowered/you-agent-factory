@@ -1,0 +1,35 @@
+export interface DocDetailMessages {
+  configurationEmpty: string;
+  configurationErrorPrefix: string;
+  configurationLoading: string;
+  configurationUnknownError: string;
+  docKindLabel: string;
+  editableConfigurationCollapseActionLabel: string;
+  editableConfigurationContractInvalidPrefix: string;
+  editableConfigurationEditorError: string;
+  editableConfigurationEditorLoading: string;
+  editableConfigurationEmpty: string;
+  editableConfigurationErrorPrefix: string;
+  editableConfigurationExpandActionLabel: string;
+  editableConfigurationFileNameDuplicate: (fileName: string) => string;
+  editableConfigurationFileNameFieldLabel: string;
+  editableConfigurationFileNameInvalid: string;
+  editableConfigurationFileNameRequired: string;
+  editableConfigurationHeading: string;
+  editableConfigurationInlineContentFieldLabel: string;
+  editableConfigurationInlineContentRequired: string;
+  editableConfigurationLoading: string;
+  editableConfigurationOverwriteWarning: (fields: string) => string;
+  editableConfigurationOverwriteWarningDetail: string;
+  editableConfigurationSaveAction: string;
+  editableConfigurationSaveBusyAction: string;
+  editableConfigurationSaveDisabledValidationDetail: string;
+  editableConfigurationSaveErrorPrefix: string;
+  editableConfigurationSaveFallbackError: string;
+  editableConfigurationSaveStaleVersionDetail: string;
+  editableConfigurationSaveSuccess: (displayLabel: string) => string;
+  editableConfigurationServerFieldChangedHint: string;
+  editableConfigurationTargetPathPrefix: string;
+  editableConfigurationValidationStatus: string;
+  resetToLatestAction: string;
+}
