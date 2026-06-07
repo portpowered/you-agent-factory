@@ -24,7 +24,7 @@ import {
 } from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
-  buildEditorHandles,
+  buildSemanticGraphHandles,
   supportedEditorHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
 import {
@@ -1493,7 +1493,7 @@ describe("current activity graph editor handles", () => {
   it("wires shared handle click actions back through the editor anchor callback", () => {
     const onConnectionAnchorClick = vi.fn();
 
-    const handles = buildEditorHandles({
+    const handles = buildSemanticGraphHandles({
       editor: {
         activeTool: "connect",
         canInteractWithEditor: true,
@@ -1792,7 +1792,7 @@ describe("current activity graph active item labels", () => {
         },
       },
     ]);
-    const handles = buildEditorHandles({
+    const handles = buildSemanticGraphHandles({
       connectionAnchorContext,
       editor: {
         activeTool: "connect",
@@ -1845,7 +1845,7 @@ describe("current activity graph active item labels", () => {
         },
       },
     ]);
-    const handles = buildEditorHandles({
+    const handles = buildSemanticGraphHandles({
       connectionAnchorContext,
       editor: {
         activeTool: "connect",
