@@ -4,7 +4,7 @@ import { toast } from "sonner";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { workerFieldValidationTarget } from "../../../../testing/factory-validation-target-fixtures";
-import { buildGraphSaveErrorToastDescription } from "../../../factory-graph-editor/lib/graph-document-save-notifications";
+import { buildGraphSaveErrorToastDescription } from "../../../factory-graph-editor/lib/document-save/graph-document-save-notifications";
 import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,

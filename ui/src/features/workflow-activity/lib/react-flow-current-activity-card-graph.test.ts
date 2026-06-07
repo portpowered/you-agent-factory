@@ -12,11 +12,11 @@ import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
-} from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
-import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
-import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+} from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
+import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
+import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,

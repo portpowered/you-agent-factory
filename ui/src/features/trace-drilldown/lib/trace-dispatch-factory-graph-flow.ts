@@ -1,12 +1,12 @@
 import { type Node, Position } from "@xyflow/react";
 
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
-import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
-} from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
+} from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,

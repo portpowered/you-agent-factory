@@ -1,7 +1,7 @@
 import type { Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
-import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 import {
   factoryGraphNodeIdForAddEntityDraft,

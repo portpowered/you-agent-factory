@@ -10,7 +10,7 @@ import {
   filterValidationHandleErrorsForWorkstation,
   projectFactoryValidationTargets,
   validationTargetIsRenderedForWorkstation,
-} from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+} from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 
 const WORK_TYPE_GRAPH_NODE_PREFIX = "work-type:";

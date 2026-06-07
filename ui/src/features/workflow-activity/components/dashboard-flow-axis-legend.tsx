@@ -11,8 +11,8 @@ import { cn } from "../../../lib/cn";
 import {
   WORK_STATE_PHASE_LEGEND_ORDER,
   workStatePhaseSwatchClassName,
-} from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
-import type { FactoryGraphWorkStateType } from "../../factory-graph-editor/lib/factory-graph-work-state-type";
+} from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling";
+import type { FactoryGraphWorkStateType } from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-type";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,

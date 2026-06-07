@@ -156,8 +156,8 @@ vi.mock("../../import/public", () => ({
 
 vi.mock("../../current-selection/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     CurrentSelectionWidget: ({
@@ -178,8 +178,8 @@ vi.mock("../../current-selection/public", async () => {
 
 vi.mock("../../provider-session-detail/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     ProviderSessionWidget: ({
@@ -200,8 +200,8 @@ vi.mock("../../provider-session-detail/public", async () => {
 
 vi.mock("../../submit-work/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     SubmitWorkWidget: ({
@@ -222,8 +222,8 @@ vi.mock("../../submit-work/public", async () => {
 
 vi.mock("../../terminal-work/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     TerminalWorkWidget: ({
@@ -244,8 +244,8 @@ vi.mock("../../terminal-work/public", async () => {
 
 vi.mock("../../trace-drilldown/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     TraceDrilldownWidget: ({
@@ -266,8 +266,8 @@ vi.mock("../../trace-drilldown/public", async () => {
 
 vi.mock("../../work-outcome/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     WorkOutcomeWidget: ({
@@ -288,8 +288,8 @@ vi.mock("../../work-outcome/public", async () => {
 
 vi.mock("../../work-totals/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     WorkTotalsWidget: ({
@@ -310,8 +310,8 @@ vi.mock("../../work-totals/public", async () => {
 
 vi.mock("../../workflow-activity/public", async () => {
   const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../../components/ui/widget-frame")
-  >("../../../components/ui/widget-frame");
+    typeof import("../../bento/public")
+  >("../../bento/public");
 
   return {
     WorkflowActivityWidget: ({

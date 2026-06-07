@@ -7,7 +7,7 @@ import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
-import { useFactoryEventStream } from "./useFactoryEventStream";
+import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;

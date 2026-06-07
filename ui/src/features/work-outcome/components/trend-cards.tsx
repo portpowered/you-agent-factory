@@ -12,10 +12,10 @@ import {
   DashboardEmptyState,
   DashboardEmptyStateText,
   DashboardEmptyStateTitle,
-  DashboardWidgetFrame,
   DetailCopy,
   WidgetSubtitle,
 } from "../../../components/ui/widget-frame";
+import { DashboardWidgetFrame } from "../../bento/public";
 import { cn } from "../../../lib/cn";
 import {
   dashboardChartAxisClassName,

@@ -5,10 +5,8 @@ import {
   StandardListSelection,
   StandardListSelectionItem,
 } from "../../../components/ui/standard-list-selection";
-import {
-  DashboardWidgetFrame,
-  DetailCopy,
-} from "../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../components/ui/widget-frame";
+import { DashboardWidgetFrame } from "../../bento/public";
 import { cn } from "../../../lib/cn";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
 import { GraphSemanticIcon } from "../../flowchart/public";

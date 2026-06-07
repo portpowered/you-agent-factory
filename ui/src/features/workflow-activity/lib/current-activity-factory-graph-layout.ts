@@ -7,16 +7,16 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
-import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
   type FactoryGraphEdge,
   type FactoryGraphNode,
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/factory-graph-node-class-visibility";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";

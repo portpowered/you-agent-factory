@@ -110,14 +110,14 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
 }));
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-additions",
+  "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
   () => ({
     buildFactoryGraphAddEntityMenuActions: () => [],
   }),
 );
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-save-summary",
+  "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
   () => ({
     buildFactoryGraphSaveSummary: () => ({
       additions: [],
@@ -156,7 +156,7 @@ vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
   }),
 }));
 
-vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
+vi.mock("../../factory-graph-editor/hooks/validation/use-factory-validation", () => ({
   useFactoryValidation: () => ({
     data: { targets: [] },
     isError: false,

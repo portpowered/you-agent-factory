@@ -18,7 +18,7 @@ import { useCurrentFactoryDocument } from "../../current-factory-definition/hook
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import {
@@ -238,7 +238,7 @@ vi.mock(
   },
 );
 
-vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
+vi.mock("../../factory-graph-editor/hooks/validation/use-factory-validation", () => ({
   useFactoryValidation: () => ({
     data: { targets: [] },
     isError: false,

@@ -2,7 +2,7 @@ import type { NodeProps } from "@xyflow/react";
 import { DashboardText } from "../../../components/ui";
 import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   activityGraphNodeSurfaceClassName,
   activityGraphNodeTitleClassName,

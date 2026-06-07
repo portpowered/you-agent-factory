@@ -8,7 +8,7 @@ import {
   DashboardGraphControls,
   DashboardGraphFrame,
 } from "../../../components/dashboard/dashboard-graph";
-import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "../../factory-graph-editor/components/factory-graph-editor-edge";
+import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "../../factory-graph-editor/components/surface/factory-graph-editor-edge";
 import {
   traceDispatchTopologyLayoutKey,
   useTraceDispatchFactoryGraphLayoutPositions,
