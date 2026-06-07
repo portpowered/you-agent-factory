@@ -24,5 +24,9 @@ primary-result behavior.
   item, polls selected-tick world state, and maps timeout/cancel/unresolved
   outcomes into `InvocationResponse`.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
+- `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
+  shared `pkg/invocations` contract, then runs the local service in
+  invocation-only service mode so stdout stays reserved for primary-result
+  output instead of startup or dashboard noise.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.

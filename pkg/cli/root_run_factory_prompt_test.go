@@ -194,7 +194,7 @@ func writePortableFactoryWithDefaultHandling(t *testing.T, dir string) string {
 	return factoryPath
 }
 
-func TestRunCommand_FactoryPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
+func TestRunCommand_FactoryPromptCarriesInvocationText(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -217,20 +217,11 @@ func TestRunCommand_FactoryPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute run --factory with prompt: %v", err)
 	}
-	if got.WorkFile == "" {
-		t.Fatal("expected generated work file for factory prompt run")
+	if got.InvocationPositionalText == nil {
+		t.Fatal("expected invocation positional text for factory prompt run")
 	}
-	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
-
-	workRequest, err := runcli.LoadWorkFile(got.WorkFile)
-	if err != nil {
-		t.Fatalf("LoadWorkFile: %v", err)
-	}
-	if len(workRequest.Works) != 1 || workRequest.Works[0].WorkTypeID != "story" {
-		t.Fatalf("works = %#v, want one story work item", workRequest.Works)
-	}
-	if payload, ok := workRequest.Works[0].Payload.(string); !ok || payload != "Fix the lint issues" {
-		t.Fatalf("payload = %#v, want joined prompt text", workRequest.Works[0].Payload)
+	if gotText := *got.InvocationPositionalText; gotText != "Fix the lint issues" {
+		t.Fatalf("invocation positional text = %q, want joined prompt text", gotText)
 	}
 }
 

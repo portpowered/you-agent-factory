@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
-	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
@@ -24,6 +23,7 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
+	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
@@ -255,7 +255,7 @@ func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			"  " + cliBinaryName + " --json factory save --session session-beta",
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
-		PreRunE: rejectDeprecatedPortFlag,
+		PreRunE:      rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				liveCfg.Server = globals.server
@@ -324,7 +324,7 @@ func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 			"  # Query a factory API on a non-default host or port.\n" +
 			"  " + cliBinaryName + " --server http://localhost:9090 --json factory query",
 		SilenceUsage: true,
-		PreRunE: rejectDeprecatedPortFlag,
+		PreRunE:      rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
 			cfg.JSON = globals.json
@@ -475,8 +475,8 @@ func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 func newModelsListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.ListConfig{Server: globals.server}
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List discovered models",
+		Use:     "list",
+		Short:   "List discovered models",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
@@ -495,9 +495,9 @@ func newModelsListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.InspectConfig{Server: globals.server}
 	cmd := &cobra.Command{
-		Use:   "inspect <model-name>",
-		Short: "Inspect one discovered model",
-		Args:  cobra.ExactArgs(1),
+		Use:     "inspect <model-name>",
+		Short:   "Inspect one discovered model",
+		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
@@ -517,9 +517,9 @@ func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
 	cmd := &cobra.Command{
-		Use:   "invoke <model-name>",
-		Short: "Invoke one discovered model",
-		Args:  cobra.ExactArgs(1),
+		Use:     "invoke <model-name>",
+		Short:   "Invoke one discovered model",
+		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
@@ -542,9 +542,9 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := modelscli.PullConfig{Server: globals.server}
 	cmd := &cobra.Command{
-		Use:   "pull <model-name>",
-		Short: "Pull one discovered local model into the managed cache",
-		Args:  cobra.ExactArgs(1),
+		Use:     "pull <model-name>",
+		Short:   "Pull one discovered local model into the managed cache",
+		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
@@ -798,6 +798,10 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cfg.Verbose = verbose || debug
 	cfg.StartupOutput = cmd.OutOrStdout()
 	cfg.Diagnostics = cmd.ErrOrStderr()
+	cfg.JSONOutput = globals.json
+	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		cfg.Output = cmd.OutOrStdout()
+	}
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
@@ -870,12 +874,7 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if prompt == "" {
 		return nil
 	}
-
-	workFile, err := runcli.PrepareFactoryPromptWorkFile(cfg.FactoryConfigPath, prompt)
-	if err != nil {
-		return err
-	}
-	cfg.WorkFile = workFile
+	cfg.InvocationPositionalText = &prompt
 	return nil
 }
 
