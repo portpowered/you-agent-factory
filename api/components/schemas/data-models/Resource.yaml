@@ -22,13 +22,19 @@ properties:
     description: Total units of this resource available to the factory at one time.
   model:
     type: string
-    description: Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+    description: >-
+      Stable managed runtime identity for `MODEL` resources, such as `OMNIVOICE_Q4_K_M`.
+      Packaged and authored factories declare the same managed-runtime dependency through
+      this field plus matching `MODEL_WORKER.model` values.
   backend:
     type: string
-    description: Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+    description: >-
+      Managed runtime backend identifier for `MODEL` resources, such as `LLAMACPP`.
+      Backend selection stays provider-agnostic in customer-facing factory config.
   loadPolicy:
     type: string
-    description: Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+    description: >-
+      Managed runtime load policy for `MODEL` resources, such as `ON_DEMAND` or `EAGER`.
   provider:
     type: string
     description: Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.

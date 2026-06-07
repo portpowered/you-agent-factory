@@ -50,6 +50,21 @@ layer. Public field names and primary wording stay stable regardless of whether
 the active source is an upstream repository, a regional mirror, or another
 provider integration.
 
+## Factory Dependency Contract
+
+Packaged factories and authored factories declare managed runtime dependencies
+through the same `MODEL` resource shape in `factory.json`:
+
+- `resources[].type: MODEL` carries the stable managed runtime identity in
+  `model`, plus `backend` and `loadPolicy`.
+- LOCAL `MODEL_WORKER` entries reference that resource through
+  `workers[].resources[]` and keep `model` aligned with the managed runtime
+  identity.
+- Validation rejects unsupported identities, invalid backend or load-policy
+  combinations, and LOCAL workers without a matching `MODEL` resource.
+- Readiness for a factory dependency uses the same `managedRuntime` projection
+  as `/models` discovery and inspect.
+
 ## Invocation Consumption
 
 Invocation surfaces consume **readinessState** and **lifecycleState** from the

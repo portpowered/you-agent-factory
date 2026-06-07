@@ -2242,7 +2242,7 @@ type ResolvedModelOperationBindingSource string
 
 // Resource Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
 type Resource struct {
-	// Backend Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+	// Backend Managed runtime backend identifier for `MODEL` resources, such as `LLAMACPP`. Backend selection stays provider-agnostic in customer-facing factory config.
 	Backend *string `json:"backend,omitempty"`
 
 	// Capacity Total units of this resource available to the factory at one time.
@@ -2251,10 +2251,10 @@ type Resource struct {
 	// Id Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name.
 	Id *string `json:"id,omitempty"`
 
-	// LoadPolicy Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+	// LoadPolicy Managed runtime load policy for `MODEL` resources, such as `ON_DEMAND` or `EAGER`.
 	LoadPolicy *string `json:"loadPolicy,omitempty"`
 
-	// Model Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+	// Model Stable managed runtime identity for `MODEL` resources, such as `OMNIVOICE_Q4_K_M`. Packaged and authored factories declare the same managed-runtime dependency through this field plus matching `MODEL_WORKER.model` values.
 	Model *string `json:"model,omitempty"`
 
 	// Name Resource name referenced from worker requirements and workstation resourceUsage entries.
