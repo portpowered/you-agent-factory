@@ -9,7 +9,6 @@ import {
   createMockGraphEditorDraftState,
   draftWorkstationFactoryDocument,
   type MockEditableFactoryGraphHooks,
-  mockEditableFactoryGraph,
   wireMockEditableFactoryGraph,
 } from "./graph-editor-harness";
 
@@ -100,10 +99,6 @@ describe("graph-editor-harness", () => {
 
     await expect(graph.actions.save()).resolves.toBe(false);
     expect(graph.saveState.canSave).toBe(false);
-  });
-
-  it("mockEditableFactoryGraph alias matches createMockEditableFactoryGraph", () => {
-    expect(mockEditableFactoryGraph).toBe(createMockEditableFactoryGraph);
   });
 
   it("createHookTestGraphEditorDraftState seeds draft workstation topology", () => {

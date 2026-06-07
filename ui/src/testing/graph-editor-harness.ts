@@ -490,9 +490,6 @@ export function createMockEditableFactoryGraph(
   };
 }
 
-/** PRD-facing alias for editable-graph view-model doubles in hook/card tests. */
-export const mockEditableFactoryGraph = createMockEditableFactoryGraph;
-
 const divergentPlaneStoryWorkType = {
   name: "story",
   states: [
