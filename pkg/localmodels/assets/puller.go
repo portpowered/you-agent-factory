@@ -39,6 +39,17 @@ type CacheLayout struct {
 	Files     []string
 }
 
+// RuntimeCacheInspection reports local managed-cache state without contacting
+// upstream asset sources.
+type RuntimeCacheInspection struct {
+	Supported          bool
+	Installed          bool
+	Revision           string
+	CachePath          string
+	InstalledFileCount int
+	MissingAssets      []string
+}
+
 type Puller struct {
 	cacheDir   string
 	baseURL    string
@@ -166,6 +177,55 @@ func (p *Puller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryco
 
 func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
 	return p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
+}
+
+// InspectRuntimeCache inspects the local managed cache without contacting upstream sources.
+func (p *Puller) InspectRuntimeCache(_ context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (RuntimeCacheInspection, error) {
+	spec, err := p.resolveSpec(runtimeCfg, modelName)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrModelPullUnsupported) {
+			return RuntimeCacheInspection{}, nil
+		}
+		return RuntimeCacheInspection{}, err
+	}
+	result := RuntimeCacheInspection{
+		Supported:     true,
+		MissingAssets: append([]string(nil), spec.RequiredFilenames...),
+	}
+	manifest, found, err := p.readLocalMetadata(spec)
+	if err != nil {
+		return RuntimeCacheInspection{}, err
+	}
+	if !found {
+		manifest, found, err = p.discoverLocalManifest(spec)
+		if err != nil {
+			return RuntimeCacheInspection{}, err
+		}
+	}
+	if !found {
+		return result, nil
+	}
+	cachePath, err := p.cachePath(spec, manifest.Revision)
+	if err != nil {
+		return RuntimeCacheInspection{}, err
+	}
+	result.CachePath = cachePath
+	result.Revision = manifest.Revision
+	installed := make([]string, 0, len(spec.RequiredFilenames))
+	missing := make([]string, 0)
+	for _, required := range spec.RequiredFilenames {
+		target := filepath.Join(cachePath, filepath.FromSlash(required))
+		info, statErr := os.Stat(target)
+		if statErr == nil && !info.IsDir() {
+			installed = append(installed, required)
+			continue
+		}
+		missing = append(missing, required)
+	}
+	result.InstalledFileCount = len(installed)
+	result.MissingAssets = missing
+	result.Installed = len(missing) == 0
+	return result, nil
 }
 
 func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {

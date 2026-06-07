@@ -56,3 +56,30 @@ func TestListModels_PopulatesManagedRuntimeContract(t *testing.T) {
 		t.Fatalf("managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
 	}
 }
+
+func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) {
+	summary := factoryapi.ModelSummary{
+		Name:             "OMNIVOICE_Q4_K_M",
+		ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+		Status:           factoryapi.ModelStatusREADY,
+		LoadState:        factoryapi.UNLOADED,
+	}
+	inspection := RuntimeCacheInspection{
+		Supported:          true,
+		Installed:          true,
+		Revision:           "rev1",
+		InstalledFileCount: 2,
+	}
+	managed := buildManagedRuntimeProjection(managedRuntimeProjection{
+		summary:         summary,
+		baseDiagnostics: factoryapi.StringMap{"statusReason": "ready"},
+		cacheInspection: &inspection,
+		includeInspect:  true,
+	})
+	if managed.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+		t.Fatalf("lifecycle = %s, want INSTALLED", managed.LifecycleState)
+	}
+	if managed.Diagnostics == nil || (*managed.Diagnostics)["revision"] != "rev1" {
+		t.Fatalf("diagnostics = %#v, want revision detail", managed.Diagnostics)
+	}
+}

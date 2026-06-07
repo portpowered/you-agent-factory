@@ -1458,6 +1458,10 @@ func (p *recordingServiceModelAssetPuller) ResolveModelCache(context.Context, *c
 	return localModelCacheLayout{}, nil
 }
 
+func (p *recordingServiceModelAssetPuller) InspectRuntimeCache(context.Context, *config.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
+	return localmodels.RuntimeCacheInspection{}, nil
+}
+
 type stubModelService struct {
 	listResult   factoryapi.ListModelsResponse
 	listErr      error

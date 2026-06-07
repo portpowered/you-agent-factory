@@ -24,18 +24,53 @@ func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
 			ProviderLocality: factoryapi.WorkerModelLocalityLocal,
 			Status:           factoryapi.ModelStatusREADY,
 			LoadState:        factoryapi.UNLOADED,
-			Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
-			Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
-			Resources:        []factoryapi.ModelResourceSummary{{Name: "voice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
+			ManagedRuntime: factoryapi.ManagedRuntime{
+				Identity:       "OMNIVOICE_Q4_K_M",
+				ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+				Locality:       factoryapi.WorkerModelLocalityLocal,
+			},
+			Operations: []factoryapi.ModelOperation{{Name: "TTS"}},
+			Modalities: []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
+			Resources:  []factoryapi.ModelResourceSummary{{Name: "voice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
 		}},
 	}, &out)
 	if err != nil {
 		t.Fatalf("RenderList: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"NAME", "OMNIVOICE_Q4_K_M", "LOCAL", "READY", "UNLOADED", "TTS", "AUDIO,TEXT"} {
+	for _, want := range []string{"NAME", "READINESS", "LIFECYCLE", "OMNIVOICE_Q4_K_M", "LOCAL", "READY", "INSTALLED", "TTS", "AUDIO,TEXT"} {
 		if !bytes.Contains([]byte(got), []byte(want)) {
 			t.Fatalf("rendered table missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderModel_WritesManagedRuntimeInspectFields(t *testing.T) {
+	diagnostics := factoryapi.StringMap{
+		"readinessState": "MISSING",
+		"missingAssets":  "weights.bin",
+	}
+	var out bytes.Buffer
+	err := RenderModel(factoryapi.ModelDetail{
+		Name: "SECOND_RUNTIME",
+		ManagedRuntime: factoryapi.ManagedRuntime{
+			Identity:       "SECOND_RUNTIME",
+			ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			Locality:       factoryapi.WorkerModelLocalityLocal,
+			Diagnostics:    &diagnostics,
+		},
+		ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+		Operations:       []factoryapi.ModelOperation{{Name: "EMBED"}},
+	}, &out)
+	if err != nil {
+		t.Fatalf("RenderModel: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{"Readiness:\tMISSING", "Lifecycle:\tNOT_INSTALLED", "missingAssets=weights.bin"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rendered inspect output missing %q:\n%s", want, got)
 		}
 	}
 }
@@ -275,7 +310,7 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		switch r.URL.Path {
 		case "/models/OMNIVOICE_Q4_K_M":
 			inspectRequests.Add(1)
-			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
+			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","managedRuntime":{"identity":"OMNIVOICE_Q4_K_M","readinessState":"READY","lifecycleState":"NOT_INSTALLED","locality":"LOCAL","supportedOperations":[{"name":"TTS"}],"diagnostics":{}},"providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
 		case "/models/OMNIVOICE_Q4_K_M/invocations":
 			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/sensitive-generated-output.wav"}],"bindings":[]}`)
 		case "/models/OMNIVOICE_Q4_K_M/pull":
@@ -302,7 +337,7 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 	assertDiagnosticsContains(t, diag, []string{
 		"models inspect request",
 		"modelName=\"OMNIVOICE_Q4_K_M\"",
-		"status=READY",
+		"readiness=READY",
 		"models invoke request",
 		"operation=\"TTS\"",
 		"worker=tts-worker",

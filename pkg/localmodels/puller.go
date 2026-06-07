@@ -15,6 +15,7 @@ type AssetPuller interface {
 	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (apisurface.ModelPullResult, error)
 	EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error
 	ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error)
+	InspectRuntimeCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (RuntimeCacheInspection, error)
 }
 
 type assetPuller struct {
@@ -44,5 +45,20 @@ func (p assetPuller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryc
 		CachePath: layout.CachePath,
 		Revision:  layout.Revision,
 		Files:     layout.Files,
+	}, nil
+}
+
+func (p assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (RuntimeCacheInspection, error) {
+	inspection, err := p.inner.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return RuntimeCacheInspection{}, err
+	}
+	return RuntimeCacheInspection{
+		Supported:          inspection.Supported,
+		Installed:          inspection.Installed,
+		Revision:           inspection.Revision,
+		CachePath:          inspection.CachePath,
+		InstalledFileCount: inspection.InstalledFileCount,
+		MissingAssets:      inspection.MissingAssets,
 	}, nil
 }

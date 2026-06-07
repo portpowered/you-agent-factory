@@ -19,6 +19,12 @@ type CatalogEntry struct {
 	Detail  factoryapi.ModelDetail
 }
 
+// CatalogOptions configures runtime-aware managed-runtime projection for discovery.
+type CatalogOptions struct {
+	RuntimeCacheInspector RuntimeCacheInspector
+	SourceResolver        ManagedRuntimeSourceResolver
+}
+
 type catalogAggregate struct {
 	name           string
 	locality       string
@@ -37,6 +43,12 @@ type catalogAggregate struct {
 
 // BuildCatalog projects configured model workers into API catalog entries.
 func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]CatalogEntry {
+	return BuildCatalogWithOptions(runtimeCfg, CatalogOptions{})
+}
+
+// BuildCatalogWithOptions projects configured model workers into API catalog entries
+// with optional runtime cache and source resolver inputs.
+func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts CatalogOptions) map[string]CatalogEntry {
 	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
 		return map[string]CatalogEntry{}
 	}
@@ -98,13 +110,15 @@ func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]Cata
 		})
 		summary := buildModelSummary(*aggregate)
 		detailDiagnostics := modelDiagnostics(*aggregate, summary)
-		managedRuntime := buildManagedRuntime(summary, detailDiagnostics)
-		summary.ManagedRuntime = managedRuntime
+		listManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, opts, false)
+		summary.ManagedRuntime = listManagedRuntime
+		inspectManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, opts, true)
+		inspectDiagnostics := mergeInspectDiagnostics(detailDiagnostics, inspectManagedRuntime)
 		catalog[key] = CatalogEntry{
 			Summary: summary,
 			Detail: factoryapi.ModelDetail{
 				Name:             summary.Name,
-				ManagedRuntime:   managedRuntime,
+				ManagedRuntime:   inspectManagedRuntime,
 				ProviderLocality: summary.ProviderLocality,
 				Status:           summary.Status,
 				LoadState:        summary.LoadState,
@@ -112,7 +126,7 @@ func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]Cata
 				Modalities:       summary.Modalities,
 				Resources:        summary.Resources,
 				Capabilities:     aggregate.capabilities,
-				Diagnostics:      detailDiagnostics,
+				Diagnostics:      inspectDiagnostics,
 			},
 		}
 	}
@@ -430,12 +444,60 @@ func canonicalModelName(model string) string {
 }
 
 
+func buildCatalogManagedRuntime(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	factoryCfg *interfaces.FactoryConfig,
+	aggregate catalogAggregate,
+	summary factoryapi.ModelSummary,
+	diagnostics factoryapi.StringMap,
+	opts CatalogOptions,
+	forInspect bool,
+) factoryapi.ManagedRuntime {
+	projection := managedRuntimeProjection{
+		summary:         summary,
+		baseDiagnostics: diagnostics,
+		includeInspect:  forInspect,
+	}
+	if resource := primaryModelScopedResource(aggregate, factoryCfg); resource != nil {
+		if opts.SourceResolver != nil {
+			resolution := opts.SourceResolver.Resolve(aggregate.name, resource)
+			projection.sourceResolution = &resolution
+		}
+		if opts.RuntimeCacheInspector != nil && aggregate.localCount > 0 {
+			inspection, err := opts.RuntimeCacheInspector.InspectRuntimeCache(context.Background(), runtimeCfg, aggregate.name)
+			if err == nil {
+				projection.cacheInspection = &inspection
+			}
+		}
+	}
+	return buildManagedRuntimeProjection(projection)
+}
+
+func mergeInspectDiagnostics(base factoryapi.StringMap, managed factoryapi.ManagedRuntime) factoryapi.StringMap {
+	merged := factoryapi.StringMap{}
+	for key, value := range base {
+		merged[key] = value
+	}
+	if managed.Diagnostics == nil {
+		return merged
+	}
+	for key, value := range *managed.Diagnostics {
+		merged[key] = value
+	}
+	return merged
+}
+
 // ListModels builds the list-models API response from runtime config.
 func ListModels(runtimeCfg *factoryconfig.LoadedFactoryConfig) (factoryapi.ListModelsResponse, error) {
+	return ListModelsWithOptions(runtimeCfg, CatalogOptions{})
+}
+
+// ListModelsWithOptions builds the list-models API response with runtime-aware projection.
+func ListModelsWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts CatalogOptions) (factoryapi.ListModelsResponse, error) {
 	if runtimeCfg == nil {
 		return factoryapi.ListModelsResponse{}, fmt.Errorf("factory service runtime is not available")
 	}
-	catalog := BuildCatalog(runtimeCfg)
+	catalog := BuildCatalogWithOptions(runtimeCfg, opts)
 	results := make([]factoryapi.ModelSummary, 0, len(catalog))
 	for _, entry := range catalog {
 		results = append(results, entry.Summary)
@@ -448,10 +510,15 @@ func ListModels(runtimeCfg *factoryconfig.LoadedFactoryConfig) (factoryapi.ListM
 
 // GetModel returns model detail for a catalog model name.
 func GetModel(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (factoryapi.ModelDetail, error) {
+	return GetModelWithOptions(runtimeCfg, modelName, CatalogOptions{})
+}
+
+// GetModelWithOptions returns model detail with runtime-aware managed-runtime projection.
+func GetModelWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string, opts CatalogOptions) (factoryapi.ModelDetail, error) {
 	if runtimeCfg == nil {
 		return factoryapi.ModelDetail{}, fmt.Errorf("factory service runtime is not available")
 	}
-	catalog := BuildCatalog(runtimeCfg)
+	catalog := BuildCatalogWithOptions(runtimeCfg, opts)
 	key := CanonicalModelName(modelName)
 	if key == "" {
 		return factoryapi.ModelDetail{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)

@@ -77,10 +77,20 @@ func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 }
 
 func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
+	managedRuntime := factoryapi.ManagedRuntime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+		Locality:       factoryapi.WorkerModelLocalityLocal,
+		SupportedOperations: []factoryapi.ModelOperation{{
+			Name: "TTS",
+		}},
+	}
 	mf := &testutil.MockFactory{
 		Models: factoryapi.ListModelsResponse{
 			Results: []factoryapi.ModelSummary{{
 				Name:             "OMNIVOICE_Q4_K_M",
+				ManagedRuntime:   managedRuntime,
 				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
 				Status:           factoryapi.ModelStatusREADY,
 				LoadState:        factoryapi.UNLOADED,
@@ -103,13 +113,25 @@ func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
 	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("list models response = %#v, want OMNIVOICE model", response)
 	}
+	if response.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("managed readiness = %s, want READY", response.Results[0].ManagedRuntime.ReadinessState)
+	}
 }
 
 func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
 	mf := &testutil.MockFactory{
 		ModelDetails: map[string]factoryapi.ModelDetail{
 			"OMNIVOICE_Q4_K_M": {
-				Name:             "OMNIVOICE_Q4_K_M",
+				Name: "OMNIVOICE_Q4_K_M",
+				ManagedRuntime: factoryapi.ManagedRuntime{
+					Identity:       "OMNIVOICE_Q4_K_M",
+					ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+					LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+					Locality:       factoryapi.WorkerModelLocalityLocal,
+					SupportedOperations: []factoryapi.ModelOperation{{
+						Name: "TTS",
+					}},
+				},
 				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
 				Status:           factoryapi.ModelStatusREADY,
 				LoadState:        factoryapi.UNLOADED,

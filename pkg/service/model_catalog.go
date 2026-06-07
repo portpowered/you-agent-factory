@@ -119,12 +119,19 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 
 func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
 	_ = ctx
-	return localmodels.ListModels(s.currentRuntimeConfig())
+	return localmodels.ListModelsWithOptions(s.currentRuntimeConfig(), s.catalogOptions())
 }
 
 func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 	_ = ctx
-	return localmodels.GetModel(s.currentRuntimeConfig(), modelName)
+	return localmodels.GetModelWithOptions(s.currentRuntimeConfig(), modelName, s.catalogOptions())
+}
+
+func (s *runtimeModelService) catalogOptions() localmodels.CatalogOptions {
+	return localmodels.CatalogOptions{
+		RuntimeCacheInspector: s.modelAssetPuller(),
+		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+	}
 }
 
 func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {

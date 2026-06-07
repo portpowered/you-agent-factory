@@ -1,19 +1,63 @@
 package localmodels
 
 import (
+	"strings"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+type managedRuntimeProjection struct {
+	summary           factoryapi.ModelSummary
+	baseDiagnostics   factoryapi.StringMap
+	cacheInspection   *RuntimeCacheInspection
+	sourceResolution  *ManagedRuntimeSourceResolution
+	includeInspect    bool
+}
+
 func buildManagedRuntime(summary factoryapi.ModelSummary, diagnostics factoryapi.StringMap) factoryapi.ManagedRuntime {
-	managedDiagnostics := managedRuntimeDiagnostics(summary, diagnostics)
+	return buildManagedRuntimeProjection(managedRuntimeProjection{
+		summary:         summary,
+		baseDiagnostics: diagnostics,
+	})
+}
+
+func buildManagedRuntimeProjection(input managedRuntimeProjection) factoryapi.ManagedRuntime {
+	readiness, lifecycle := managedRuntimeStates(input)
+	managedDiagnostics := managedRuntimeDiagnostics(input.summary, input.baseDiagnostics, readiness, lifecycle)
+	for key, value := range managedRuntimeSourceDiagnostics(managedRuntimeSourceResolutionValue(input)) {
+		managedDiagnostics[key] = value
+	}
+	if input.cacheInspection != nil {
+		for key, value := range runtimeCacheInspectDiagnostics(*input.cacheInspection, input.includeInspect) {
+			managedDiagnostics[key] = value
+		}
+	}
 	return factoryapi.ManagedRuntime{
-		Identity:            summary.Name,
-		ReadinessState:      managedRuntimeReadinessFromStatus(summary.Status),
-		LifecycleState:      managedRuntimeLifecycleFromLoadState(summary.LoadState),
-		Locality:            summary.ProviderLocality,
-		SupportedOperations: summary.Operations,
+		Identity:            input.summary.Name,
+		ReadinessState:      readiness,
+		LifecycleState:      lifecycle,
+		Locality:            input.summary.ProviderLocality,
+		SupportedOperations: input.summary.Operations,
 		Diagnostics:         &managedDiagnostics,
 	}
+}
+
+func managedRuntimeStates(input managedRuntimeProjection) (factoryapi.ManagedRuntimeReadinessState, factoryapi.ManagedRuntimeLifecycleState) {
+	if input.cacheInspection != nil && input.cacheInspection.Supported {
+		if input.cacheInspection.Installed {
+			return factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED
+		}
+		return factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+	}
+	return managedRuntimeReadinessFromStatus(input.summary.Status), managedRuntimeLifecycleFromLoadState(input.summary.LoadState)
+}
+
+func managedRuntimeSourceResolutionValue(input managedRuntimeProjection) ManagedRuntimeSourceResolution {
+	if input.sourceResolution != nil {
+		return *input.sourceResolution
+	}
+	return ManagedRuntimeSourceResolution{}
 }
 
 func managedRuntimeReadinessFromStatus(status factoryapi.ModelStatus) factoryapi.ManagedRuntimeReadinessState {
@@ -38,14 +82,36 @@ func managedRuntimeLifecycleFromLoadState(loadState factoryapi.ModelLoadState) f
 	}
 }
 
-func managedRuntimeDiagnostics(summary factoryapi.ModelSummary, diagnostics factoryapi.StringMap) factoryapi.StringMap {
+func managedRuntimeDiagnostics(
+	summary factoryapi.ModelSummary,
+	diagnostics factoryapi.StringMap,
+	readiness factoryapi.ManagedRuntimeReadinessState,
+	lifecycle factoryapi.ManagedRuntimeLifecycleState,
+) factoryapi.StringMap {
 	result := factoryapi.StringMap{
-		"readinessState": string(managedRuntimeReadinessFromStatus(summary.Status)),
-		"lifecycleState": string(managedRuntimeLifecycleFromLoadState(summary.LoadState)),
+		"readinessState": string(readiness),
+		"lifecycleState": string(lifecycle),
 		"locality":       string(summary.ProviderLocality),
 	}
 	for key, value := range diagnostics {
 		result[key] = value
 	}
 	return result
+}
+
+func primaryModelScopedResource(aggregate catalogAggregate, factoryCfg *interfaces.FactoryConfig) *interfaces.ResourceConfig {
+	if factoryCfg == nil || !aggregate.hasModelScoped {
+		return nil
+	}
+	for _, resource := range factoryCfg.Resources {
+		if canonicalModelName(resource.Model) != canonicalModelName(aggregate.name) {
+			continue
+		}
+		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+			continue
+		}
+		copied := resource
+		return &copied
+	}
+	return nil
 }
