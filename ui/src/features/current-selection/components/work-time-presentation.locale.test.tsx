@@ -140,9 +140,13 @@ function renderDispatchStartedAt(
   }
 
   const expandLabel = locale === "zh-CN" ? "展开" : "Expand";
-  fireEvent.click(
-    within(dispatchCard).getAllByRole("button", { name: expandLabel })[0]!,
-  );
+  const expandButton = within(dispatchCard).getAllByRole("button", {
+    name: expandLabel,
+  })[0];
+  if (!(expandButton instanceof HTMLElement)) {
+    throw new Error("expected dispatch history expand button");
+  }
+  fireEvent.click(expandButton);
   expect(
     within(getDetailRow(dispatchCard, startedAtLabel)).getByText(expected),
   ).toBeTruthy();
