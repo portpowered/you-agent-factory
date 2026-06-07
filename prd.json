@@ -1,0 +1,108 @@
+{
+  "project": "Website Structure Separation Lints",
+  "branchName": "ralph/website-structure-separation-lints",
+  "description": "Enforce the website UI refactor direction with repo-owned guards that keep ui/src/components/ui as a shared styling and presentation lane, keep feature-owned behavior inside approved ui/src/features shapes, and ratchet feature folders toward a maximum of 10 files per folder without regressing current website behavior.",
+  "context": {
+    "customerAsk": "Use docs/temp/refactoring-ui.md to enforce lints for the website structure so shared UI styling stays under ui/src/components/ui, feature directories are constrained to at most 10 files per folder, and feature shapes conform to the intended separation between shared UI primitives and feature-owned behavior.",
+    "problem": "The intended website structure exists in standards and in parts of the codebase, but contributors can still add code that blurs the shared-UI and feature boundary. Shared primitives can drift toward feature-specific behavior, feature directories can accumulate too many files in one folder, and feature shapes can diverge from the refactor direction without a repository-owned enforcement path. Several feature directories already exceed the requested 10 files per folder limit, so the work needs staged enforcement that blocks new drift immediately and ratchets existing debt down safely.",
+    "solution": "Extend the repository's existing website guard pattern in ui/scripts and wire the new checks into the normal lint and check flows. Enforce shared UI ownership in ui/src/components/ui, enforce approved feature shapes and public boundaries in ui/src/features, and add a staged file-count guard that blocks new oversized folders, reports named legacy debt, and drives the largest hotspots down toward the 10-files-per-folder target in bounded cleanup stories."
+  },
+  "acceptanceCriteria": [
+    "The website has one repo-owned structural enforcement path that maps the refactor intent in docs/temp/refactoring-ui.md onto the actual ui/src/components/ui and ui/src/features layout.",
+    "ui/src/components/ui rejects feature-owned imports, feature-specific state or network logic, and other violations that would make the shared UI layer more than a styling or shared presentation lane.",
+    "Feature structure enforcement rejects disallowed root-level files, disallowed directory shapes, and feature-boundary violations that bypass intentional public ownership where the rule applies.",
+    "The 10 files per folder policy is enforced through a staged guard that blocks new debt immediately, reports existing oversized folders clearly, and supports ratcheting the current debt down in bounded follow-up stories.",
+    "The largest in-scope feature hotspots moved under the new size and shape rules preserve current browser-visible loading, empty, error, success, keyboard, and responsive behavior.",
+    "Guard failures report the violating path and the reason clearly enough for contributors to correct the structure without reading implementation internals.",
+    "Quality gate: frontend typecheck, lint, and relevant automated tests pass with the final enabled enforcement state."
+  ],
+  "userStories": [
+    {
+      "id": "website-structure-separation-lints-001",
+      "title": "Enforce shared UI as a styling and shared presentation lane",
+      "description": "As a website contributor, I want ui/src/components/ui to reject feature-owned behavior so that shared primitives stay reusable, style-consistent, and independent from feature workflows.",
+      "acceptanceCriteria": [
+        "The repository adds or extends a guard that fails when production files under ui/src/components/ui import from ui/src/features, feature-owned state containers, or feature-owned network modules.",
+        "The guard fails when shared UI files own feature-specific workflow logic, feature-specific copy, or customer-flow orchestration that belongs in a feature layer instead of a shared primitive or shared wrapper.",
+        "Approved shared primitive owners such as tokens, style variants, presentational wrappers, semantic-button style wrappers, tests, and stories remain allowed.",
+        "Guard output identifies the violating file and explains that ui/src/components/ui is reserved for shared styling primitives and shared presentation owners.",
+        "The guard runs through the normal website lint and check workflow rather than a one-off command only.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "website-structure-separation-lints-002",
+      "title": "Enforce feature shape and intentional boundaries",
+      "description": "As a maintainer, I want feature-owned code to follow one approved shape so that contributors can add UI behavior without bypassing shared primitives or leaking feature internals across the website.",
+      "acceptanceCriteria": [
+        "The repository enforces that each ui/src/features/<feature>/ root contains approved subdirectories only and does not accumulate new root-level implementation files.",
+        "The repository enforces approved feature-owned lanes such as components/, hooks/, lib/, messages/, state/, public/, or a narrower domain folder when the feature has a justified internal subdivision.",
+        "Cross-feature imports that are covered by the rule fail when they reach into another feature's internals instead of using that feature's intentional public boundary.",
+        "Guard output identifies the violating path and states which approved feature boundary or subdirectory shape was expected.",
+        "The enforcement integrates with the existing feature-root and website structure guard workflow instead of creating a disconnected second system.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "website-structure-separation-lints-003",
+      "title": "Add a staged file-count guard for feature folders",
+      "description": "As a reviewer, I want oversized feature folders reported and blocked from growing so that the website can ratchet toward smaller, easier-to-review feature slices without unsafe repo-wide churn.",
+      "acceptanceCriteria": [
+        "The repository adds a guard that measures file counts for feature-owned folders under ui/src/features and fails when a non-allowlisted folder exceeds 10 files.",
+        "Existing oversized folders are reported as named legacy debt when they are temporarily allowlisted, and the report includes the observed file count for each folder.",
+        "The guard fails if an allowlisted folder grows, if a new oversized folder appears, or if an allowlist entry becomes stale after the folder is reduced or reshaped.",
+        "Guard output makes the ratchet explicit by telling contributors to split the folder into smaller approved subdirectories and remove allowlist debt in the same change when possible.",
+        "The file-count guard runs from the normal website lint and check commands.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "website-structure-separation-lints-004",
+      "title": "Make the graph and dashboard structure pass the new guards",
+      "description": "As a customer using the dashboard and graph editing surfaces, I want the initial high-debt website hotspots cleaned up to fit the enforced structure without changing how the product behaves.",
+      "acceptanceCriteria": [
+        "The initial oversized graph and dashboard hotspots selected for this lane no longer rely on file-count debt growth or shared-UI boundary violations to pass the enabled guards.",
+        "The affected dashboard and graph-editor surfaces continue to render explicit loading, empty, error, and success states where those states already exist.",
+        "The affected surfaces preserve keyboard reachability, visible focus, and responsive usability on supported mobile, tablet, and desktop widths.",
+        "Existing customer-visible actions, dialogs, toggles, and disclosures in the affected surfaces preserve their current observable behavior after the structural split.",
+        "The implementation stays within the selected graph and dashboard hotspots and does not widen into unrelated website cleanup.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "website-structure-separation-lints-005",
+      "title": "Make current-selection structure pass the new guards",
+      "description": "As a customer using current-selection detail flows, I want the largest current-selection hotspots reshaped into smaller feature slices so that future changes are safer without regressing the existing interaction model.",
+      "acceptanceCriteria": [
+        "The selected oversized current-selection folders no longer exceed the staged file-count policy without an explicit shrinking debt path.",
+        "The affected current-selection flows preserve their current loading, empty, error, and success behavior for detail panels and editable sections.",
+        "Save, retry, expand, and detail-view interactions in the affected current-selection flows preserve current keyboard behavior, focus movement, and disabled or pending treatment.",
+        "Any feature-boundary cleanup required for the selected current-selection hotspots continues to route shared primitives through ui/src/components/ui and feature-owned behavior through approved ui/src/features subdirectories.",
+        "The implementation stays bounded to the selected current-selection hotspots rather than broad cleanup across unrelated features.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
