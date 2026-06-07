@@ -288,11 +288,16 @@ func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) 
 		Use:   "list",
 		Short: "List persisted named factories",
 		Long: "List persisted named factories stored under a factory root.\n\n" +
-			"By default the command writes a human-readable table with each factory name, " +
-			"on-disk directory, and whether it is selected by .current-factory. " +
-			"Use --dir to scope discovery to a different factory root. Use global --json for scripting output.",
+			"By default the command lists project-local named factories from ./factory and writes a " +
+			"human-readable table with each factory name, on-disk directory, and whether it is selected " +
+			"by .current-factory. Global built-ins and customer-edited shared factories live under " +
+			"~/.you-agent-factory/factories and are listed only when you point --dir there explicitly. " +
+			"The command lists exactly one root at a time and never merges project-local and global entries. " +
+			"Use global --json for scripting output.",
 		Example: "  # List named factories under the default factory root.\n" +
 			"  " + cliBinaryName + " factory list\n\n" +
+			"  # List global built-ins and shared factories.\n" +
+			"  " + cliBinaryName + " factory list --dir ~/.you-agent-factory/factories\n\n" +
 			"  # List factories from a custom root as JSON.\n" +
 			"  " + cliBinaryName + " --json factory list --dir my-factory",
 		SilenceUsage: true,
@@ -729,6 +734,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
 			"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
+			"Built-ins such as @you/tts materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
 		Example: "  # Start the out-of-the-box continuous factory.\n" +
@@ -766,7 +772,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
-	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories")
+	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable")
 	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs")
 	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
 		interfaces.RunnerIDCodex,

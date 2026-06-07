@@ -39,8 +39,21 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "--named") {
 		t.Fatal("expected run command long help text to document --named")
 	}
+	if !strings.Contains(runCmd.Long, "resolve project-local factories before global built-ins") {
+		t.Fatal("expected run command long help text to document local-over-global named resolution")
+	}
+	if !strings.Contains(runCmd.Long, "materialize lazily into that global root on first use and stay editable on disk") {
+		t.Fatal("expected run command long help text to document built-in materialization and editability")
+	}
 	if !strings.Contains(runCmd.Example, "run --named @you/tts") {
 		t.Fatal("expected run command examples to document simplified --named run")
+	}
+	namedFlag := runCmd.Flags().Lookup("named")
+	if namedFlag == nil {
+		t.Fatal("expected --named flag on run command")
+	}
+	if !strings.Contains(namedFlag.Usage, "built-ins materialize there on first use and remain editable") {
+		t.Fatalf("--named usage = %q, want built-in editability guidance", namedFlag.Usage)
 	}
 	if !strings.Contains(runCmd.Example, "run --factory ./factory.json \"Fix the lint issues\"") {
 		t.Fatal("expected run command examples to document simplified --factory run")
