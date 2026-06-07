@@ -178,7 +178,8 @@ For packaged terminal docs, run `you docs` to list topics or `you docs <topic>`
 for embedded reference output. Maintainers edit only
 [`docs/reference/`](./docs/reference/) (see
 [`docs/reference/README.md`](./docs/reference/README.md)); run
-`make docs-reference-smoke` before shipping doc changes. Customer guides such as
+`make docs-reference-smoke` before shipping doc changes and
+`make readme-check` before changing README structure or linked assets. Customer guides such as
 [`docs/reference/config.md`](./docs/reference/config.md),
 [`docs/reference/work.md`](./docs/reference/work.md),
 [`docs/reference/workstations.md`](./docs/reference/workstations.md),
