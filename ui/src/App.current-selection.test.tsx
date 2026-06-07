@@ -12,10 +12,10 @@ import type {
   DashboardWorkItemRef,
 } from "./api/dashboard";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS } from "./features/bento/hooks/dashboardLayoutSchema";
 import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import {
-  activeSnapshot,
   baselineSnapshot,
   MockEventSource,
   mockCurrentFactoryDocument,
@@ -36,7 +36,9 @@ const completedWorkID = "work-complete";
 const failedWorkID = "work-failed-story";
 const activeWorkLabel = "Active Story";
 
-const activeSnapshotWithoutTraceID = removeTraceIDsFromSnapshot(activeSnapshot);
+const activeSnapshotWithoutTraceID = removeTraceIDsFromSnapshot(
+  semanticWorkflowDashboardSnapshot,
+);
 const historicalTimelineSnapshot = {
   ...baselineSnapshot,
   tick_count: 1,
@@ -534,7 +536,7 @@ describe("App current selection", () => {
 
   it("renders a trace drill-down for a selected work item", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -587,7 +589,7 @@ describe("App current selection", () => {
 
   it("renders one selected-work dispatch history list with mixed inference and script-backed rows", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID:
         dispatchHistoryWorkstationRequestsByDispatchID,
@@ -850,7 +852,7 @@ describe("App current selection", () => {
 
   it("follows the explicit selection contract: clicking work selects work, clicking a request selects a request", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID:
         readyDispatchWorkstationRequestsByDispatchID,
@@ -915,7 +917,7 @@ describe("App current selection", () => {
 
   it("keeps every current-selection kind on the canonical title and expandable section layout", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID:
         readyDispatchWorkstationRequestsByDispatchID,
@@ -1062,11 +1064,11 @@ describe("App current selection", () => {
 
   it("renders the selected-work empty dispatch-history state without reviving top-level execution details", async () => {
     const snapshotWithoutSelectedWorkDispatchHistory = {
-      ...activeSnapshot,
+      ...semanticWorkflowDashboardSnapshot,
       runtime: {
-        ...activeSnapshot.runtime,
+        ...semanticWorkflowDashboardSnapshot.runtime,
         session: {
-          ...activeSnapshot.runtime.session,
+          ...semanticWorkflowDashboardSnapshot.runtime.session,
           provider_sessions: [],
         },
         workstation_requests_by_dispatch_id: {},
@@ -1133,7 +1135,7 @@ describe("App current selection", () => {
   it("switches current-selection and trace enum labels to zh-CN without changing raw IDs", async () => {
     renderApp({
       initialLocale: "en",
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -1184,7 +1186,7 @@ describe("App current selection", () => {
 
   it("keeps workstation and work-item selection usable after React Flow zoom", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -1213,7 +1215,7 @@ describe("App current selection", () => {
 
   it("separates workstation selection from active work selection", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -1288,7 +1290,7 @@ describe("App current selection", () => {
 
   it("shows active executions from the selected workstation instead of provider history", async () => {
     const reviewExecution =
-      activeSnapshot.runtime.active_executions_by_dispatch_id?.[
+      semanticWorkflowDashboardSnapshot.runtime.active_executions_by_dispatch_id?.[
         "dispatch-review-active"
       ];
     const resolvedReviewExecution = requireValue(
@@ -1297,9 +1299,9 @@ describe("App current selection", () => {
     );
 
     const snapshot = {
-      ...activeSnapshot,
+      ...semanticWorkflowDashboardSnapshot,
       runtime: {
-        ...activeSnapshot.runtime,
+        ...semanticWorkflowDashboardSnapshot.runtime,
         active_dispatch_ids: ["dispatch-review-active", "dispatch-plan-active"],
         active_executions_by_dispatch_id: {
           "dispatch-plan-active": {
@@ -1328,7 +1330,7 @@ describe("App current selection", () => {
         },
         active_workstation_node_ids: ["review", "plan"],
         session: {
-          ...activeSnapshot.runtime.session,
+          ...semanticWorkflowDashboardSnapshot.runtime.session,
           provider_sessions: [],
         },
       },
@@ -1421,7 +1423,7 @@ describe("App current selection", () => {
       status: "success",
     } as never);
 
-    renderApp({ snapshot: activeSnapshot });
+    renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
 
     const expectSingleConfigurationForWorkstation = async ({
       actionLabel,
@@ -1506,13 +1508,13 @@ describe("App current selection", () => {
 
   it("renders localized workstation editing options with canonical values and keeps unknown fallbacks readable", async () => {
     const snapshot = {
-      ...activeSnapshot,
+      ...semanticWorkflowDashboardSnapshot,
       topology: {
-        ...activeSnapshot.topology,
+        ...semanticWorkflowDashboardSnapshot.topology,
         workstation_nodes_by_id: {
-          ...activeSnapshot.topology.workstation_nodes_by_id,
+          ...semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id,
           review: {
-            ...activeSnapshot.topology.workstation_nodes_by_id.review,
+            ...semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review,
             workstation_kind: "future-kind",
           },
         },
@@ -1601,7 +1603,7 @@ describe("App current selection", () => {
   });
 
   it("shows selected state node details from the graph", async () => {
-    renderApp({ snapshot: activeSnapshot });
+    renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
 
     const stateButton = await screen.findByRole("button", {
       name: "Select story:implemented state",
@@ -1677,7 +1679,7 @@ describe("App current selection", () => {
   describe("layout", () => {
     it("keeps selection detail out of the workflow graph inspector layer", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
         traceFixtures: activeStoryTraceFixtures,
       });
 
@@ -1704,7 +1706,7 @@ describe("App current selection", () => {
 
     it("renders selected work and traces on the shared dashboard grid", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
         traceFixtures: activeStoryTraceFixtures,
       });
 
@@ -1736,7 +1738,7 @@ describe("App current selection", () => {
 
     it("supports rearranging shared-grid widgets without replacing graph selection", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
         traceFixtures: activeStoryTraceFixtures,
       });
 
@@ -1793,8 +1795,8 @@ describe("App current selection", () => {
 
       act(() => {
         stream.emit("snapshot", {
-          ...activeSnapshot,
-          tick_count: activeSnapshot.tick_count + 1,
+          ...semanticWorkflowDashboardSnapshot,
+          tick_count: semanticWorkflowDashboardSnapshot.tick_count + 1,
         } satisfies DashboardSnapshot);
       });
 
@@ -2413,7 +2415,7 @@ describe("App current selection", () => {
 
     it("shows an explicit unavailable state when no retained trace history exists", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
       });
 
       fireEvent.click(getActiveStorySelectionButton());
