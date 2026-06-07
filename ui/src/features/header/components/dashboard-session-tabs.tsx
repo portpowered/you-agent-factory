@@ -1,4 +1,10 @@
-import { useEffect, useId, useRef } from "react";
+import {
+  type DragEvent as ReactDragEvent,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
@@ -62,6 +68,7 @@ function DashboardSessionTabsView({
     handleCreateNewFactory,
     handleInspectFolder,
     handleOpenTarget,
+    moveSessionTab,
     openSessionMutation,
     resetDialogState,
     selectedTargetValue,
@@ -86,7 +93,7 @@ function DashboardSessionTabsView({
 
   return (
     <>
-      <div className="grid min-w-0 max-w-full flex-1 gap-2 overflow-x-auto">
+      <div className="grid min-w-0 max-w-full flex-1 gap-2 overflow-hidden">
         <div className="flex min-w-0 max-w-full items-stretch gap-1 overflow-visible">
           <SessionTabsContent
             activeSession={activeSession}
@@ -105,6 +112,7 @@ function DashboardSessionTabsView({
             onOpenSession={() => {
               setDialogOpen(true);
             }}
+            onReorderSession={moveSessionTab}
             onSelectSession={setActiveSessionID}
             sessions={sessions}
             streamStatus={streamStatus}
@@ -155,6 +163,7 @@ function SessionTabsContent({
   messages,
   onCloseSession,
   onOpenSession,
+  onReorderSession,
   onRetry,
   onSelectSession,
   sessions,
@@ -167,6 +176,7 @@ function SessionTabsContent({
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onCloseSession: (sessionID: string) => void;
   onOpenSession: () => void;
+  onReorderSession: (sessionID: string, targetIndex: number) => void;
   onRetry: () => void;
   onSelectSession: (sessionID: string) => void;
   sessions: FactorySessionSummary[];
@@ -174,6 +184,8 @@ function SessionTabsContent({
 }) {
   const sessionButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const sessionTabsID = useId();
+  const [draggedSessionID, setDraggedSessionID] = useState<string | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
 
   if (isPending) {
     return (
@@ -225,15 +237,23 @@ function SessionTabsContent({
     focusSessionButton(nextIndex);
   }
 
+  function dropInsertionIndex(
+    event: ReactDragEvent<HTMLDivElement>,
+    index: number,
+  ): number {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    return event.clientX >= bounds.left + bounds.width / 2 ? index + 1 : index;
+  }
+
   return (
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="min-w-0 overflow-visible"
+        className="min-w-0 flex-1 overflow-hidden"
       >
         <div
           aria-orientation="horizontal"
-          className="flex h-full min-w-full w-max items-left gap-1 overflow-visible"
+          className="flex h-full min-w-0 items-stretch gap-1 overflow-hidden"
           role="tablist"
         >
           {sessions.map((session, index) => (
@@ -243,7 +263,44 @@ function SessionTabsContent({
                 sessionButtonRefs.current[index] = element;
               }}
               controlsID={sessionPanelID(sessionTabsID, session.id)}
+              dragPreview={draggedSessionID === session.id}
+              draggable={sessions.length > 1}
+              dropIndicator={
+                dropTargetIndex === index
+                  ? "before"
+                  : dropTargetIndex === index + 1
+                    ? "after"
+                    : null
+              }
               key={session.id}
+              onDragEnd={() => {
+                setDraggedSessionID(null);
+                setDropTargetIndex(null);
+              }}
+              onDragOver={(event) => {
+                if (!draggedSessionID || draggedSessionID === session.id) {
+                  return;
+                }
+                event.preventDefault();
+                setDropTargetIndex(dropInsertionIndex(event, index));
+              }}
+              onDragStart={(event) => {
+                setDraggedSessionID(session.id);
+                setDropTargetIndex(index);
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", session.id);
+              }}
+              onDrop={(event) => {
+                if (!draggedSessionID) {
+                  return;
+                }
+                event.preventDefault();
+                const nextIndex =
+                  dropTargetIndex ?? dropInsertionIndex(event, index);
+                onReorderSession(draggedSessionID, nextIndex);
+                setDraggedSessionID(null);
+                setDropTargetIndex(null);
+              }}
               onKeyDown={(event) => {
                 switch (event.key) {
                   case "ArrowLeft":
