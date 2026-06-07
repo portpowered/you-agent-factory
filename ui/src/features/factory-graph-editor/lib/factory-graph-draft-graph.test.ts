@@ -144,3 +144,124 @@ it("uses explicit entity ids for canonical graph node and edge ids", () => {
     ]),
   );
 });
+
+it("keeps legacy fallback graph ids for name-keyed factories", () => {
+  const topology = buildFactoryGraphTopologyFromDefinition({
+    name: "legacy-name-keyed-factory",
+    resources: [{ capacity: 1, name: "slot" }],
+    workers: [
+      {
+        name: "reviewer",
+        resources: [{ name: "slot" }],
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        name: "story",
+        states: [{ name: "queued", type: "INITIAL" }],
+      },
+    ],
+    workstations: [
+      {
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "review",
+        outputs: [{ state: "queued", workType: "story" }],
+        resources: [{ name: "slot" }],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+    ],
+  });
+
+  expect(topology.nodes.map((node) => node.id)).toEqual(
+    expect.arrayContaining([
+      "resource:slot",
+      "worker:reviewer",
+      "work-type:story",
+      "work-state:story:queued",
+      "workstation:review",
+    ]),
+  );
+  expect(topology.edges.map((edge) => edge.id)).toEqual(
+    expect.arrayContaining([
+      "worker-resource:resource:slot->worker:reviewer",
+      "worker-assignment:worker:reviewer->workstation:review",
+      "workstation-input:work-state:story:queued->workstation:review",
+      "workstation-output:workstation:review->work-state:story:queued",
+    ]),
+  );
+});
+
+it("keeps canonical graph ids stable across renames for id-backed factories", () => {
+  const beforeRename = buildFactoryGraphTopologyFromDefinition({
+    name: "stable-before-rename",
+    resources: [{ capacity: 1, id: "resource-slot", name: "slot" }],
+    workers: [
+      {
+        id: "worker-reviewer",
+        name: "reviewer",
+        resources: [{ name: "slot" }],
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        id: "work-type-story",
+        name: "story",
+        states: [{ id: "state-queued", name: "queued", type: "INITIAL" }],
+      },
+    ],
+    workstations: [
+      {
+        id: "workstation-review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "review",
+        outputs: [{ state: "queued", workType: "story" }],
+        resources: [{ name: "slot" }],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+    ],
+  });
+
+  const afterRename = buildFactoryGraphTopologyFromDefinition({
+    name: "stable-after-rename",
+    resources: [{ capacity: 1, id: "resource-slot", name: "renamed-slot" }],
+    workers: [
+      {
+        id: "worker-reviewer",
+        name: "renamed-reviewer",
+        resources: [{ name: "renamed-slot" }],
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        id: "work-type-story",
+        name: "renamed-story",
+        states: [
+          { id: "state-queued", name: "renamed-queued", type: "INITIAL" },
+        ],
+      },
+    ],
+    workstations: [
+      {
+        id: "workstation-review",
+        inputs: [{ state: "renamed-queued", workType: "renamed-story" }],
+        name: "renamed-review",
+        outputs: [{ state: "renamed-queued", workType: "renamed-story" }],
+        resources: [{ name: "renamed-slot" }],
+        type: "MODEL_WORKSTATION",
+        worker: "renamed-reviewer",
+      },
+    ],
+  });
+
+  expect(afterRename.nodes.map((node) => node.id)).toEqual(
+    beforeRename.nodes.map((node) => node.id),
+  );
+  expect(afterRename.edges.map((edge) => edge.id)).toEqual(
+    beforeRename.edges.map((edge) => edge.id),
+  );
+});
