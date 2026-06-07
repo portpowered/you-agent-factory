@@ -1,0 +1,27 @@
+{
+  "mockWorkers": [
+    {
+      "id": "executor-script-side-effect",
+      "workerName": "executor",
+      "workstationName": "execute-story",
+      "workInputs": [
+        {
+          "workType": "story",
+          "state": "init",
+          "inputName": "work"
+        }
+      ],
+      "runType": "script",
+      "scriptConfig": {
+        "command": "printf",
+        "args": ["mock script stdout\n"],
+        "env": {
+          "MOCK_WORKER": "1"
+        },
+        "workingDirectory": ".",
+        "stdin": "optional script stdin payload",
+        "timeout": "30s"
+      }
+    }
+  ]
+}

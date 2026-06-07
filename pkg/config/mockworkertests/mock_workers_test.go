@@ -230,6 +230,64 @@ func TestDocsExampleMockWorkersConfig_ParsesAsSupportedConfig(t *testing.T) {
 	}
 }
 
+func TestDocsExampleMockWorkersScriptConfig_ParsesAsSupportedConfig(t *testing.T) {
+	path := testpath.MustRepoPathFromCaller(t, 0, "docs", "examples", "mock-workers-script.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read docs example script mock workers config: %v", err)
+	}
+	if !json.Valid(data) {
+		t.Fatalf("%s is not valid JSON", path)
+	}
+
+	cfg, err := ParseMockWorkersConfig(data)
+	if err != nil {
+		t.Fatalf("ParseMockWorkersConfig(%s): %v", path, err)
+	}
+	if len(cfg.MockWorkers) != 1 {
+		t.Fatalf("mock worker count = %d, want 1", len(cfg.MockWorkers))
+	}
+
+	worker := cfg.MockWorkers[0]
+	if worker.WorkerName != "executor" ||
+		worker.WorkstationName != "execute-story" ||
+		worker.RunType != MockWorkerRunTypeScript ||
+		worker.ScriptConfig == nil ||
+		worker.ScriptConfig.Command != "printf" ||
+		worker.ScriptConfig.Timeout != "30s" {
+		t.Fatalf("docs example script worker = %#v, want targeted script entry", worker)
+	}
+}
+
+func TestDocsExampleMockWorkersMixedConfig_ParsesAsSupportedConfig(t *testing.T) {
+	path := testpath.MustRepoPathFromCaller(t, 0, "docs", "examples", "mock-workers-mixed.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read docs example mixed mock workers config: %v", err)
+	}
+	if !json.Valid(data) {
+		t.Fatalf("%s is not valid JSON", path)
+	}
+
+	cfg, err := ParseMockWorkersConfig(data)
+	if err != nil {
+		t.Fatalf("ParseMockWorkersConfig(%s): %v", path, err)
+	}
+	if cfg.UnmatchedDispatchPolicy != MockWorkerUnmatchedDispatchPolicyPassthrough {
+		t.Fatalf("unmatchedDispatchPolicy = %q, want %q", cfg.UnmatchedDispatchPolicy, MockWorkerUnmatchedDispatchPolicyPassthrough)
+	}
+	if len(cfg.MockWorkers) != 1 {
+		t.Fatalf("mock worker count = %d, want 1", len(cfg.MockWorkers))
+	}
+
+	worker := cfg.MockWorkers[0]
+	if worker.WorkerName != "reviewer" ||
+		worker.WorkstationName != "review-story" ||
+		worker.RunType != MockWorkerRunTypeReject {
+		t.Fatalf("docs example mixed worker = %#v, want targeted reject entry", worker)
+	}
+}
+
 func assertMockWorkerAcceptEntry(t *testing.T, worker MockWorkerConfig) {
 	t.Helper()
 

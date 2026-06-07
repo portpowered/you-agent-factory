@@ -41,6 +41,8 @@ when it matches.
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| `unmatchedDispatchPolicy` | No | Controls unmatched dispatches: `accept` (default when omitted) or `passthrough` for real-worker fallback. |
+| `mockWorkers` | Yes | Array of mock-worker entries. |
 | `id` | No | Stable label for diagnostics and test fixtures. |
 | `workerName` | No | Matches `workers[].name` from `factory.json`. |
 | `workstationName` | No | Matches the workstation currently executing. |
@@ -91,11 +93,23 @@ boundary. Requires `scriptConfig` with at least `command`. Optional fields:
 | `stdin` | Stdin payload |
 | `timeout` | Duration string such as `30s` |
 
-### Default When Nothing Matches
+### Unmatched Dispatch Policy
 
-If no `mockWorkers` entry matches a dispatch, mock-worker mode returns the
-default accepted result. An empty `mockWorkers` array therefore accepts every
-dispatch.
+When no `mockWorkers` entry matches a dispatch, mock-worker mode uses
+`unmatchedDispatchPolicy`:
+
+| Value | Behavior |
+|-------|----------|
+| omitted or `"accept"` | Return the default accepted mock result. This preserves the historical mock-worker default. |
+| `"passthrough"` | Execute the dispatch through the normal worker runner and provider path instead of returning the synthetic accepted result. |
+
+Use `"accept"` when you want every dispatch to stay deterministic. Use
+`"passthrough"` for mixed mock/live runs where targeted `mockWorkers[]` entries
+handle specific steps and everything else falls through to the real worker.
+
+An empty `mockWorkers` array with the default policy therefore accepts every
+dispatch. The same empty array with `"passthrough"` runs every dispatch through
+the real worker path.
 
 ## Example Commands
 
@@ -110,6 +124,104 @@ Targeted rejection using the checked-in example config:
 ```bash
 you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
 ```
+
+Script mock using the checked-in script example:
+
+```bash
+you run --dir ./examples/write-code-review \
+  --with-mock-workers ./docs/examples/mock-workers-script.json \
+  --work ./docs/examples/startup-work.json
+```
+
+Mixed mock/live run with reviewer rejection plus real-worker fallback for
+unmatched dispatches:
+
+```bash
+you run --dir ./examples/write-code-review \
+  --with-mock-workers ./docs/examples/mock-workers-mixed.json \
+  --work ./docs/examples/startup-work.json
+```
+
+## Script Mock Example
+
+The checked-in
+[`docs/examples/mock-workers-script.json`](../examples/mock-workers-script.json)
+targets the `executor` worker at the `execute-story` workstation and runs a local
+command instead of returning a synthetic accept/reject result:
+
+```json
+{
+  "mockWorkers": [
+    {
+      "id": "executor-script-side-effect",
+      "workerName": "executor",
+      "workstationName": "execute-story",
+      "workInputs": [
+        {
+          "workType": "story",
+          "state": "init",
+          "inputName": "work"
+        }
+      ],
+      "runType": "script",
+      "scriptConfig": {
+        "command": "printf",
+        "args": ["mock script stdout\n"],
+        "env": {
+          "MOCK_WORKER": "1"
+        },
+        "workingDirectory": ".",
+        "stdin": "optional script stdin payload",
+        "timeout": "30s"
+      }
+    }
+  ]
+}
+```
+
+Set `runType` to `"script"`, provide `scriptConfig.command`, and use the
+optional `args`, `env`, `workingDirectory`, `stdin`, and `timeout` fields to
+mirror the command you want the mock boundary to execute.
+
+## Mixed Mock and Real-Worker Fallback
+
+The checked-in
+[`docs/examples/mock-workers-mixed.json`](../examples/mock-workers-mixed.json)
+keeps the review rejection mock from
+[`docs/examples/mock-workers.json`](../examples/mock-workers.json) and opts
+unmatched dispatches into real-worker passthrough:
+
+```json
+{
+  "unmatchedDispatchPolicy": "passthrough",
+  "mockWorkers": [
+    {
+      "id": "reviewer-rejects-first-pass",
+      "workerName": "reviewer",
+      "workstationName": "review-story",
+      "workInputs": [
+        {
+          "workType": "story",
+          "state": "in-review",
+          "inputName": "work"
+        }
+      ],
+      "runType": "reject",
+      "rejectConfig": {
+        "stdout": "needs changes",
+        "stderr": "missing acceptance criteria",
+        "exitCode": 42
+      }
+    }
+  ]
+}
+```
+
+Matched `accept`, `reject`, and `script` entries keep their configured outcomes.
+Only dispatches that do not match any `mockWorkers[]` entry use the unmatched
+policy.
+
+## Rejection Example
 
 The reusable example in
 [`docs/examples/mock-workers.json`](../examples/mock-workers.json) matches a
