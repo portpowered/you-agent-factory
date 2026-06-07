@@ -10,10 +10,8 @@ import {
   saveFactoryForSessionDocument,
 } from "../../../api/current-factory-definition";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
-import {
-  currentFactoryDefinitionQueryKey,
-  currentFactoryDocumentQueryKey,
-} from "./useCurrentFactoryDefinition";
+import { syncCurrentFactoryDocumentCache } from "../lib/sync-current-factory-document-cache";
+import { currentFactoryDocumentQueryKey } from "./useCurrentFactoryDefinition";
 
 export type FactoryDocumentSaveInput = {
   baseVersion?: CurrentFactoryVersion;
@@ -51,12 +49,9 @@ export function useFactoryDocumentSave() {
     },
     onSuccess: (document, input) => {
       const resolvedSessionID = input.sessionID ?? dashboardSessionID;
-      queryClient.setQueryData(
-        currentFactoryDocumentQueryKey(resolvedSessionID),
-        document,
-      );
-      queryClient.setQueryData(
-        currentFactoryDefinitionQueryKey(resolvedSessionID),
+      syncCurrentFactoryDocumentCache(
+        queryClient,
+        resolvedSessionID,
         document,
       );
     },
