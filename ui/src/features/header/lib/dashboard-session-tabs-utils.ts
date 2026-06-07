@@ -7,6 +7,7 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 export const SESSION_TAB_PATH_MAX_LENGTH = 48;
+export const CANONICAL_NESTED_FACTORY_DIR = "factory";
 
 export type FolderValidationState =
   | { status: "idle" }
@@ -25,17 +26,41 @@ export type FolderValidationErrorReason =
   | "unknown";
 
 export function sessionTabLabel(session: FactorySessionSummary): string {
-  const targetName = normalizeSessionLabelPart(session.target.name);
-  if (targetName.length > 0) {
-    return targetName;
+  const folderBasename = normalizeSessionLabelPart(
+    basename(session.folderPath),
+  );
+  if (isCanonicalNestedFactorySession(session) && folderBasename) {
+    return folderBasename;
   }
 
-  const folderName = basename(session.folderPath);
-  if (folderName.length > 0) {
-    return folderName;
-  }
+  const namedTarget =
+    session.target.kind === "named" ? session.target.name : "";
+  return (
+    normalizeSessionLabelPart(namedTarget) ||
+    normalizeSessionLabelPart(basename(session.factoryDir)) ||
+    folderBasename ||
+    normalizeSessionLabelPart(session.project) ||
+    CANONICAL_NESTED_FACTORY_DIR
+  );
+}
 
-  return "unnamed";
+export function initNewFactoryNestedPath(folderPath: string): string {
+  const normalizedFolderPath = normalizePathForCompare(folderPath);
+  if (!normalizedFolderPath) {
+    return CANONICAL_NESTED_FACTORY_DIR;
+  }
+  return `${normalizedFolderPath}/${CANONICAL_NESTED_FACTORY_DIR}`;
+}
+
+export function isCanonicalNestedFactorySession(
+  session: Pick<FactorySessionSummary, "folderPath" | "factoryDir">,
+): boolean {
+  const folderPath = normalizePathForCompare(session.folderPath);
+  const factoryDir = normalizePathForCompare(session.factoryDir);
+  if (!folderPath || !factoryDir || folderPath === factoryDir) {
+    return false;
+  }
+  return factoryDir === `${folderPath}/${CANONICAL_NESTED_FACTORY_DIR}`;
 }
 
 export function sessionTabSecondaryPath(
@@ -293,6 +318,10 @@ function folderValidationErrorMessage(
 function basename(path: string): string {
   const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
   return segments[segments.length - 1] ?? "";
+}
+
+function normalizePathForCompare(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 function normalizeSessionLabelPart(value: string | undefined): string {
