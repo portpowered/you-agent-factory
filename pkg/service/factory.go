@@ -78,21 +78,22 @@ type managedLocalModelManager = localmodels.Manager
 // factoryRuntimeBundle is the single runtime wiring struct produced by
 // buildRuntimeBundle and referenced from liveRuntimeHandle.
 type factoryRuntimeBundle struct {
-	dir            string
-	folderPath     string
-	eventHistory   *factoryevents.FactoryEventHistory
-	factory        factory.Factory
-	listener       *ingest.FileWatcher
-	net            *state.Net
-	runtimeCfg     *factoryconfig.LoadedFactoryConfig
-	modelResources *localModelResourceLimiter
-	modelAssets    modelAssetPuller
-	localModels    *managedLocalModelManager
-	logger         *zap.Logger
-	logSink        *logging.RuntimeLogSink
-	metricsSink    *logging.RuntimeMetricsSink
-	recording      *replay.Recorder
-	recordPath     string
+	dir                  string
+	folderPath           string
+	eventHistory         *factoryevents.FactoryEventHistory
+	factory              factory.Factory
+	listener             *ingest.FileWatcher
+	net                  *state.Net
+	runtimeCfg           *factoryconfig.LoadedFactoryConfig
+	modelResources       *localModelResourceLimiter
+	modelAssets          modelAssetPuller
+	localModels          *managedLocalModelManager
+	logger               *zap.Logger
+	logSink              *logging.RuntimeLogSink
+	metricsSink          *logging.RuntimeMetricsSink
+	recording            *replay.Recorder
+	recordPath           string
+	dispatchMetricFields sync.Map
 }
 
 type liveRuntimeHandle struct {

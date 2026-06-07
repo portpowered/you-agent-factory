@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -213,6 +214,114 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureLifecycleAndStateTr
 	}, "canceled stop")
 	if len(records) == 0 {
 		t.Fatal("runtime metrics records should not be empty")
+	}
+}
+
+// portos:func-length-exception owner=agent-factory reason=dispatch-metrics-observable-fixture review=2026-07-18 removal=split-runtime-metrics-submission-cases-before-next-dispatch-metrics-change
+// pkgmaintcheck:ignore-function-lines this dispatch-metrics runtime test keeps accepted, rejected, and failed observable assertions together on one service seam.
+func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t *testing.T) {
+	dir := t.TempDir()
+	metricsDir := t.TempDir()
+	cfg := minimalFactoryConfig()
+	cfg["workTypes"] = []map[string]any{{
+		"name": "task",
+		"states": []map[string]string{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "rejected", "type": "REJECTED"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	}}
+	cfg["workstations"] = []map[string]any{{
+		"name":        "process",
+		"worker":      "worker-a",
+		"inputs":      []map[string]string{{"workType": "task", "state": "init"}},
+		"outputs":     []map[string]string{{"workType": "task", "state": "complete"}},
+		"onRejection": []map[string]string{{"workType": "task", "state": "rejected"}},
+		"onFailure":   []map[string]string{{"workType": "task", "state": "failed"}},
+	}}
+	writeFactoryJSON(t, dir, cfg)
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		RuntimeMetricsDir: metricsDir,
+		Logger:            zap.NewNop(),
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithWorkerExecutor("worker-a", dispatchMetricsWorkerExecutor{}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- svc.Run(runCtx) }()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
+	session := svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("default session runtime metrics sink is unavailable")
+	}
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	submissions := []struct {
+		workID   string
+		traceID  string
+		placeID  string
+		outcome  string
+		duration float64
+		retries  float64
+		cost     float64
+	}{
+		{workID: "work-dispatch-accepted", traceID: "trace-dispatch-accepted", placeID: "task:complete", outcome: string(interfaces.OutcomeAccepted), duration: 250, retries: 2, cost: 1.25},
+		{workID: "work-dispatch-rejected", traceID: "trace-dispatch-rejected", placeID: "task:rejected", outcome: string(interfaces.OutcomeRejected), duration: 125, retries: 1},
+		{workID: "work-dispatch-failed", traceID: "trace-dispatch-failed", placeID: "task:failed", outcome: string(interfaces.OutcomeFailed), duration: 500, retries: 3},
+	}
+
+	for _, submission := range submissions {
+		err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+			WorkID:     submission.workID,
+			Name:       submission.workID,
+			WorkTypeID: "task",
+			TraceID:    submission.traceID,
+			Payload:    []byte(`{"title":"` + submission.workID + `"}`),
+		}})
+		if err != nil {
+			t.Fatalf("SubmitWorkRequest(%s): %v", submission.workID, err)
+		}
+		waitForTokenInPlaceByWorkID(t, svc, submission.placeID, submission.workID, time.Second)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesWork(record, runtimeMetricDispatchStarted, submission.workID, submission.traceID, "")
+		}, "dispatch start "+submission.workID)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesWork(record, runtimeMetricDispatchComplete, submission.workID, submission.traceID, submission.outcome)
+		}, "dispatch completion "+submission.workID)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesValue(record, runtimeMetricDispatchDuration, submission.workID, submission.outcome, submission.duration, "ms")
+		}, "dispatch duration "+submission.workID)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesValue(record, runtimeMetricDispatchRetries, submission.workID, submission.outcome, submission.retries, "")
+		}, "dispatch retries "+submission.workID)
+		if submission.cost > 0 {
+			waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+				return runtimeMetricMatchesValue(record, runtimeMetricDispatchCost, submission.workID, submission.outcome, submission.cost, "usd")
+			}, "dispatch cost "+submission.workID)
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service runtime shutdown")
 	}
 }
 
@@ -1708,4 +1817,52 @@ func snapshotHasCompletedTaskToken(snap *interfaces.EngineStateSnapshot[petri.Ma
 		return token.PlaceID == "task:complete"
 	}
 	return false
+}
+
+type dispatchMetricsWorkerExecutor struct{}
+
+func (dispatchMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	result := interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		Output:       "done",
+		Metrics:      interfaces.WorkMetrics{Duration: 250 * time.Millisecond, RetryCount: 2, Cost: 1.25},
+	}
+	if len(dispatch.Execution.WorkIDs) == 0 {
+		return result, nil
+	}
+	switch dispatch.Execution.WorkIDs[0] {
+	case "work-dispatch-rejected":
+		result.Outcome = interfaces.OutcomeRejected
+		result.Feedback = "needs changes"
+		result.Metrics = interfaces.WorkMetrics{Duration: 125 * time.Millisecond, RetryCount: 1}
+	case "work-dispatch-failed":
+		result.Outcome = interfaces.OutcomeFailed
+		result.Error = "worker crashed"
+		result.Metrics = interfaces.WorkMetrics{Duration: 500 * time.Millisecond, RetryCount: 3}
+	}
+	return result, nil
+}
+
+func runtimeMetricMatchesWork(record map[string]any, metricName, workID, traceID, outcome string) bool {
+	if strings.TrimSpace(metricRecordString(record, "metric_name")) != metricName ||
+		metricRecordString(record, "work_id") != workID {
+		return false
+	}
+	if traceID != "" && metricRecordString(record, "trace_id") != traceID {
+		return false
+	}
+	if outcome == "" {
+		return true
+	}
+	return metricRecordString(record, "outcome") == outcome
+}
+
+func runtimeMetricMatchesValue(record map[string]any, metricName, workID, outcome string, value float64, unit string) bool {
+	if !runtimeMetricMatchesWork(record, metricName, workID, "", outcome) {
+		return false
+	}
+	got, ok := record["value"].(float64)
+	return ok && got == value && metricRecordString(record, "unit") == unit
 }

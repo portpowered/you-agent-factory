@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file service runtime build wiring keeps log, metrics, worker, and recorder assembly co-located until dedicated bundle seams split.
+// pkgmaintcheck:ignore-file-lines service runtime build wiring keeps log, metrics, worker, and recorder assembly co-located until dedicated bundle seams split.
 package service
 
 import (
@@ -23,6 +25,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -85,6 +88,11 @@ const (
 	runtimeMetricStatePaused      = "runtime.state.paused"
 	runtimeMetricStateFailed      = "runtime.state.failed"
 	runtimeMetricQueueInFlight    = "runtime.queue.in_flight"
+	runtimeMetricDispatchStarted  = "dispatch.started"
+	runtimeMetricDispatchComplete = "dispatch.completed"
+	runtimeMetricDispatchDuration = "dispatch.duration"
+	runtimeMetricDispatchRetries  = "dispatch.retry_count"
+	runtimeMetricDispatchCost     = "dispatch.cost"
 )
 
 const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
@@ -366,6 +374,21 @@ func assembleRuntimeBundle(
 		return nil, err
 	}
 
+	bundle := &factoryRuntimeBundle{
+		dir:            input.dir,
+		folderPath:     input.folderPath,
+		eventHistory:   eventHistory,
+		net:            net,
+		runtimeCfg:     input.loadedFactoryCfg,
+		modelResources: localModels.resources,
+		modelAssets:    localModels.assets,
+		localModels:    localModels.manager,
+		logger:         logger,
+		logSink:        logSink,
+		metricsSink:    metricsSink,
+		recording:      recording,
+		recordPath:     input.recordPath,
+	}
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
 		factory.WithRuntimeMode(input.cfg.RuntimeMode),
@@ -374,6 +397,8 @@ func assembleRuntimeBundle(
 		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID)),
 		factory.WithClock(input.clock),
 		factory.WithFactoryEventHistory(eventHistory),
+		factory.WithDispatchRecorder(bundle.recordDispatchMetric),
+		factory.WithCompletionRecorder(bundle.recordCompletionMetrics),
 	}
 	if input.recordPath != "" {
 		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
@@ -395,23 +420,9 @@ func assembleRuntimeBundle(
 		return nil, err
 	}
 
-	return &factoryRuntimeBundle{
-		dir:            input.dir,
-		folderPath:     input.folderPath,
-		eventHistory:   eventHistory,
-		factory:        activeFactory,
-		listener:       listener,
-		net:            net,
-		runtimeCfg:     input.loadedFactoryCfg,
-		modelResources: localModels.resources,
-		modelAssets:    localModels.assets,
-		localModels:    localModels.manager,
-		logger:         logger,
-		logSink:        logSink,
-		metricsSink:    metricsSink,
-		recording:      recording,
-		recordPath:     input.recordPath,
-	}, nil
+	bundle.factory = activeFactory
+	bundle.listener = listener
+	return bundle, nil
 }
 
 func buildRuntimeLogSink(
@@ -472,6 +483,40 @@ func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *loggi
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (r *factoryRuntimeBundle) recordDispatchMetric(record interfaces.FactoryDispatchRecord) {
+	fields := runtimeDispatchMetricFields(record.Dispatch)
+	r.dispatchMetricFields.Store(record.DispatchID, fields)
+	r.emitMetricCounter(runtimeMetricDispatchStarted, 1, fields)
+}
+
+func (r *factoryRuntimeBundle) recordCompletionMetrics(record interfaces.FactoryCompletionRecord) {
+	fields, _ := r.dispatchMetricFields.LoadAndDelete(record.DispatchID)
+	metricFields, _ := fields.(metrics.Fields)
+	if metricFields.DispatchID == "" {
+		metricFields.DispatchID = record.DispatchID
+	}
+	metricFields.Outcome = string(record.Result.Outcome)
+	r.emitMetricCounter(runtimeMetricDispatchComplete, 1, metricFields)
+	r.emitMetricSample(runtimeMetricDispatchDuration, float64(record.Result.Metrics.Duration.Milliseconds()), "ms", metricFields)
+	r.emitMetricSample(runtimeMetricDispatchRetries, float64(record.Result.Metrics.RetryCount), "", metricFields)
+	if record.Result.Metrics.Cost > 0 {
+		r.emitMetricSample(runtimeMetricDispatchCost, record.Result.Metrics.Cost, "usd", metricFields)
+	}
+}
+
+func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Fields {
+	fields := metrics.Fields{
+		DispatchID:  dispatch.DispatchID,
+		TraceID:     strings.TrimSpace(dispatch.Execution.TraceID),
+		Workstation: strings.TrimSpace(dispatch.WorkstationName),
+		WorkerType:  strings.TrimSpace(dispatch.WorkerType),
+	}
+	if len(dispatch.Execution.WorkIDs) > 0 {
+		fields.WorkID = strings.TrimSpace(dispatch.Execution.WorkIDs[0])
+	}
+	return fields
 }
 
 // localModelDomain wires pkg/localmodels runtime dependencies constructed at

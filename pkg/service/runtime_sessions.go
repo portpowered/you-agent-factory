@@ -848,6 +848,15 @@ func (r *factoryRuntimeBundle) emitMetricGauge(name string, value float64, field
 	}
 }
 
+func (r *factoryRuntimeBundle) emitMetricSample(name string, value float64, unit string, fields metrics.Fields) {
+	if r == nil {
+		return
+	}
+	if err := r.metricsEmitter().Sample(context.Background(), name, value, unit, fields); err != nil {
+		r.runtimeLogger().Warn("runtime metrics sample emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
+}
+
 func (r *factoryRuntimeBundle) emitRuntimeLifecycleStart() {
 	if r == nil {
 		return
