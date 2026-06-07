@@ -265,6 +265,32 @@ files fit together. The checked-in
 [`examples/write-code-review/factory.json`](../../examples/write-code-review/factory.json)
 factory is a concrete starting point for adapting these commands.
 
+## Reviewer Verification
+
+When reviewing mock-worker docs or runtime changes, use this recipe:
+
+1. Read the packaged topic: `you docs mock-workers`
+2. Run one pure-mock scenario with the checked-in rejection example:
+
+```bash
+you run --dir ./examples/write-code-review \
+  --with-mock-workers ./docs/examples/mock-workers.json \
+  --work ./docs/examples/startup-work.json
+```
+
+3. Run one script-mock scenario with the checked-in script example:
+
+```bash
+you run --dir ./examples/write-code-review \
+  --with-mock-workers ./docs/examples/mock-workers-script.json \
+  --work ./docs/examples/startup-work.json
+```
+
+**Signoff note:** Do not rely on a live real-agent passthrough run for signoff
+in this change. The `unmatchedDispatchPolicy: "passthrough"` mixed mock/live
+path is covered by automated service and runner tests instead of manual
+live-provider QA.
+
 ## Related
 
 - `you docs config` — brief run-flag summary with pointers to this topic
