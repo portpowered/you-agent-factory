@@ -15,7 +15,7 @@ import {
 import { dragWorkChart } from "../lib/work-chart-zoom-story-contract";
 import { expectSingleWorkOutcomeCardHeader } from "../lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
-import { D3CompletionInformationCard } from "./d3-information-card";
+import { WorkChartCard } from "./d3-information-card";
 import type { WorkChartState } from "./work-chart";
 import { WorkOutcomeWidget } from "./work-outcome-widget";
 
@@ -258,7 +258,7 @@ function renderResizableWorkOutcomeStoryShell({
             id: "work-outcome-chart",
             widgetType: "work-outcome-chart",
             children: chartState ? (
-              <D3CompletionInformationCard
+              <WorkChartCard
                 chartState={chartState}
                 model={model}
                 widgetId="work-outcome-chart-story"
@@ -346,14 +346,14 @@ async function expectStatusPanelResizeChrome(
 
 export default {
   title: "Agent Factory/Dashboard/Work Outcome Chart Card",
-  component: D3CompletionInformationCard,
+  component: WorkChartCard,
 };
 
 export const Populated = {
   render: () =>
     renderWorkOutcomeStoryShell({
       children: (
-        <D3CompletionInformationCard
+        <WorkChartCard
           model={populatedTrend}
           widgetId="work-outcome-chart-story"
         />
@@ -374,7 +374,7 @@ export const EmptyData = {
   render: () =>
     renderWorkOutcomeStoryShell({
       children: (
-        <D3CompletionInformationCard
+        <WorkChartCard
           model={emptyTrend}
           widgetId="work-outcome-chart-empty-story"
         />
@@ -401,7 +401,7 @@ export const LoadingData = {
   render: () =>
     renderWorkOutcomeStoryShell({
       children: (
-        <D3CompletionInformationCard
+        <WorkChartCard
           chartState={{ status: "loading" }}
           model={emptyTrend}
           widgetId="work-outcome-chart-loading-story"
@@ -431,7 +431,7 @@ export const ErrorState = {
   render: () =>
     renderWorkOutcomeStoryShell({
       children: (
-        <D3CompletionInformationCard
+        <WorkChartCard
           chartState={{ status: "error" }}
           model={emptyTrend}
           widgetId="work-outcome-chart-error-story"
@@ -461,7 +461,7 @@ export const ConstrainedWidth = {
   render: () =>
     renderWorkOutcomeStoryShell({
       children: (
-        <D3CompletionInformationCard
+        <WorkChartCard
           model={populatedTrend}
           widgetId="work-outcome-chart-narrow-story"
         />
@@ -484,7 +484,7 @@ export const LocalizedZhCN = {
   render: () =>
     renderWorkOutcomeStoryShell({
       children: (
-        <D3CompletionInformationCard
+        <WorkChartCard
           locale="zh-CN"
           model={populatedTrend}
           widgetId="work-outcome-chart-zh-cn-story"
@@ -525,7 +525,7 @@ export const ZoomInteraction = {
   render: () =>
     renderWorkOutcomeStoryShell({
       children: (
-        <D3CompletionInformationCard
+        <WorkChartCard
           model={populatedTrend}
           widgetId="work-outcome-chart-zoom-story"
         />

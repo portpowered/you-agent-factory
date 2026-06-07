@@ -1,6 +1,5 @@
-import "@testing-library/jest-dom/vitest";
+import { expect } from "storybook/test";
 import { within } from "@testing-library/react";
-import { expect } from "vitest";
 
 const DEFAULT_WORK_CHART_SERIES_LABELS = [
   "Queued",

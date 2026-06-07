@@ -1,6 +1,5 @@
-import "@testing-library/jest-dom/vitest";
+import { expect } from "storybook/test";
 import { within } from "@testing-library/react";
-import { expect } from "vitest";
 
 export function expectSingleWorkOutcomeCardHeader(
   card: HTMLElement,

@@ -10,7 +10,7 @@ import { getTerminalWorkMessages } from "../../terminal-work/messages/terminal-w
 import { TerminalWorkWidget } from "../../terminal-work/public";
 import { TraceDrilldownWidget } from "../../trace-drilldown/components/trace-drilldown-widget";
 import { getTraceDrilldownMessages } from "../../trace-drilldown/messages/trace-drilldown";
-import { D3CompletionInformationCard } from "../../work-outcome/components/d3-information-card";
+import { WorkChartCard } from "../../work-outcome/components/d3-information-card";
 import type { WorkChartModel } from "../../work-outcome/lib/trends";
 
 const minimalWorkChartModel: WorkChartModel = {
@@ -120,7 +120,7 @@ describe("dashboard widget header seam", () => {
 
   it("routes work outcome chart through the shared bento card header", () => {
     renderBentoWidget(
-      <D3CompletionInformationCard
+      <WorkChartCard
         headerAction={<button type="button">Remove chart</button>}
         model={minimalWorkChartModel}
       />,
