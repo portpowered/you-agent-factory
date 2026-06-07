@@ -132,6 +132,90 @@ func TestBuildFactoryService_ServiceModeAcceptsLateSubmissionAfterIdleStartup(t 
 	t.Fatal("late-submitted service work did not reach task:complete before timeout")
 }
 
+func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureLifecycleAndStateTransitions(t *testing.T) {
+	dir := t.TempDir()
+	metricsDir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	releaseProvider := make(chan struct{})
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		RuntimeMetricsDir: metricsDir,
+		ProviderOverride:  &blockingInferenceProvider{releaseCh: releaseProvider, content: "ok"},
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
+	session := svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("default session runtime metrics sink is unavailable")
+	}
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStarted, 1)
+	}, "runtime start")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricStateIdle, 1)
+	}, "idle state")
+
+	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		WorkTypeID: "task",
+		TraceID:    "trace-runtime-metrics-active",
+		Payload:    json.RawMessage(`{"title":"runtime metrics active"}`),
+	}})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusActive, time.Second, "service runtime active work")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricStateActive, 1)
+	}, "active state")
+
+	close(releaseProvider)
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle after work")
+	if err := svc.Pause(context.Background()); err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	waitForSessionFactoryState(t, svc, defaultFactorySessionID, interfaces.FactoryStatePaused, time.Second, "service runtime paused")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricStatePaused, 1)
+	}, "paused state")
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service runtime shutdown")
+	}
+
+	records := waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStopped, 1) &&
+			metricRecordString(record, "outcome") == "canceled"
+	}, "canceled stop")
+	if len(records) == 0 {
+		t.Fatal("runtime metrics records should not be empty")
+	}
+}
+
 func TestBuildFactoryService_BatchModeRejectsLateSubmissionAfterTermination(t *testing.T) {
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, minimalFactoryConfig())

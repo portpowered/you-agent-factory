@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -314,6 +315,41 @@ func (f *aggregateSnapshotFactory) WaitToComplete() <-chan struct{} {
 	return make(chan struct{})
 }
 
+type runtimeMetricsObserverFactory struct {
+	mu          sync.RWMutex
+	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+}
+
+func (f *runtimeMetricsObserverFactory) Run(context.Context) error { return nil }
+func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	return interfaces.WorkRequestSubmitResult{}, nil
+}
+func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context) (*interfaces.FactoryEventStream, error) {
+	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+}
+func (f *runtimeMetricsObserverFactory) Pause(context.Context) error { return nil }
+func (f *runtimeMetricsObserverFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
+	return interfaces.OperatorMoveResult{}, nil
+}
+func (f *runtimeMetricsObserverFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.engineState, nil
+}
+func (f *runtimeMetricsObserverFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+	return nil, nil
+}
+func (f *runtimeMetricsObserverFactory) WaitToComplete() <-chan struct{} {
+	ch := make(chan struct{})
+	close(ch)
+	return ch
+}
+func (f *runtimeMetricsObserverFactory) setEngineState(state *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.engineState = state
+}
+
 func TestFactoryService_WaitToComplete_ReturnsClosedChannelWithoutRuntime(t *testing.T) {
 	svc := &FactoryService{}
 
@@ -337,6 +373,86 @@ func TestFactoryService_WaitToComplete_DelegatesToActiveRuntime(t *testing.T) {
 		t.Fatalf("WaitToComplete channel = %p, want %p", got, waitCh)
 	}
 	close(waitCh)
+}
+
+func TestFactoryService_ObserveRuntimeMetrics_EmitsFailedLifecycleMetric(t *testing.T) {
+	metricsSink, err := logging.BuildRuntimeMetricsSink(
+		"session-failed",
+		"runtime-failed",
+		"/factory",
+		"/factory/current",
+		t.TempDir(),
+		logging.RuntimeMetricsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+	defer metricsSink.Close()
+
+	factoryStub := &runtimeMetricsObserverFactory{}
+	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		RuntimeStatus: interfaces.RuntimeStatusActive,
+		FactoryState:  string(interfaces.FactoryStateRunning),
+	})
+
+	handle := &liveRuntimeHandle{
+		runtime: &factoryRuntimeBundle{
+			factory:     factoryStub,
+			metricsSink: metricsSink,
+			logger:      zap.NewNop(),
+		},
+		runDone: make(chan struct{}),
+	}
+
+	observerCtx, cancelObserver := context.WithCancel(context.Background())
+	defer cancelObserver()
+
+	done := make(chan struct{})
+	svc := &FactoryService{}
+	go func() {
+		svc.observeRuntimeMetrics(observerCtx, handle)
+		close(done)
+	}()
+
+	waitForRuntimeMetricsRecord(t, metricsSink.Path(), time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricStateActive, 1)
+	}, "active runtime state")
+
+	factoryStub.setEngineState(&interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		RuntimeStatus: interfaces.RuntimeStatusFinished,
+		FactoryState:  string(interfaces.FactoryStateFailed),
+	})
+	handle.setRunResult(fmt.Errorf("run failed"))
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for runtime metrics observer to stop")
+	}
+
+	records := waitForRuntimeMetricsRecord(t, metricsSink.Path(), time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStopped, 1) &&
+			metricRecordString(record, "outcome") == "failed"
+	}, "failed stop")
+
+	foundFailedState := false
+	foundFailedStop := false
+	for _, record := range records {
+		if runtimeMetricNameAndValue(record, runtimeMetricStateFailed, 1) {
+			foundFailedState = true
+		}
+		if runtimeMetricNameAndValue(record, runtimeMetricLifecycleStopped, 1) &&
+			metricRecordString(record, "outcome") == "failed" &&
+			strings.Contains(metricRecordString(record, "reason"), "run failed") {
+			foundFailedStop = true
+		}
+	}
+	if !foundFailedState {
+		t.Fatalf("runtime metrics records missing failed state gauge: %#v", records)
+	}
+	if !foundFailedStop {
+		t.Fatalf("runtime metrics records missing failed lifecycle stop: %#v", records)
+	}
 }
 
 func TestFactoryService_Pause_RequiresActiveRuntimeAndWrapsPauseErrors(t *testing.T) {
@@ -794,6 +910,107 @@ func waitForSessionRuntimeStatus(
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for %s to reach runtime status %s", label, want)
+}
+
+func waitForSessionFactoryState(
+	t *testing.T,
+	svc *FactoryService,
+	sessionID string,
+	want interfaces.FactoryState,
+	wait time.Duration,
+	label string,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		session := svc.sessionByID(sessionID)
+		if session != nil && liveSessionHandle(session) != nil && liveSessionHandle(session).runtime != nil {
+			snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+			if err == nil && snap.FactoryState == string(want) {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s to reach factory state %s", label, want)
+}
+
+func readServiceRuntimeMetricsRecords(t *testing.T, path string) []map[string]any {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read runtime metrics %q: %v", path, err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 || (len(lines) == 1 && lines[0] == "") {
+		t.Fatalf("runtime metrics %q contained no records", path)
+	}
+
+	records := make([]map[string]any, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode runtime metrics line %q: %v", line, err)
+		}
+		records = append(records, record)
+	}
+	if len(records) == 0 {
+		t.Fatalf("runtime metrics %q contained no decodable records", path)
+	}
+	return records
+}
+
+func waitForRuntimeMetricsRecord(
+	t *testing.T,
+	path string,
+	wait time.Duration,
+	predicate func(map[string]any) bool,
+	label string,
+) []map[string]any {
+	t.Helper()
+
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			t.Fatalf("stat runtime metrics %q: %v", path, err)
+		}
+		records := readServiceRuntimeMetricsRecords(t, path)
+		for _, record := range records {
+			if predicate(record) {
+				return records
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	records := readServiceRuntimeMetricsRecords(t, path)
+	t.Fatalf("timed out waiting for runtime metrics record %s in %q: %#v", label, path, records)
+	return nil
+}
+
+func runtimeMetricNameAndValue(record map[string]any, name string, value float64) bool {
+	if strings.TrimSpace(metricRecordString(record, "metric_name")) != name {
+		return false
+	}
+	got, ok := record["value"].(float64)
+	return ok && got == value
+}
+
+func metricRecordString(record map[string]any, key string) string {
+	if record == nil {
+		return ""
+	}
+	value, _ := record[key].(string)
+	return value
 }
 
 func submitSessionWork(t *testing.T, session *liveFactorySession, workID, traceID string) {

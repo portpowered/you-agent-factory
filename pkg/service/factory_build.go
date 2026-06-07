@@ -77,6 +77,25 @@ type serviceCoordinatorPolicy struct {
 	commandRunnerOverride         workers.CommandRunner
 }
 
+const (
+	runtimeMetricLifecycleStarted = "runtime.lifecycle.started"
+	runtimeMetricLifecycleStopped = "runtime.lifecycle.stopped"
+	runtimeMetricStateActive      = "runtime.state.active"
+	runtimeMetricStateIdle        = "runtime.state.idle"
+	runtimeMetricStatePaused      = "runtime.state.paused"
+	runtimeMetricStateFailed      = "runtime.state.failed"
+	runtimeMetricQueueInFlight    = "runtime.queue.in_flight"
+)
+
+const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
+
+type runtimeMetricsObservation struct {
+	runtimeStatus interfaces.RuntimeStatus
+	factoryState  interfaces.FactoryState
+	inFlightCount int
+	initialized   bool
+}
+
 func (fs *FactoryService) coordinatorPolicy() serviceCoordinatorPolicy {
 	if fs == nil {
 		return serviceCoordinatorPolicy{}

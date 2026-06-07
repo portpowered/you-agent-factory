@@ -783,6 +783,7 @@ func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *f
 			return handle
 		}
 	}
+	runtimeBundle.emitRuntimeLifecycleStart()
 	go func() {
 		handle.setRunResult(runtimeBundle.factory.Run(runCtx))
 	}()
@@ -807,6 +808,11 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 
 	sidecarCtx, sidecarCancel := context.WithCancel(ctx)
 	handle.sidecarCancel = sidecarCancel
+	handle.sidecars.Add(1)
+	go func() {
+		defer handle.sidecars.Done()
+		fs.observeRuntimeMetrics(sidecarCtx, handle)
+	}()
 	if handle.runtime.listener != nil {
 		handle.sidecars.Add(1)
 		go func() {
