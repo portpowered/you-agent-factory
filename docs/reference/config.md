@@ -314,7 +314,7 @@ The current invocation slice is text-first:
 | Surface | Supported source now | Notes |
 |---------|----------------------|-------|
 | CLI | Trailing positional text or non-TTY stdin | Supplying both is rejected with `INVOCATION_INPUT_SOURCE_CONFLICT`. Empty selected stdin is rejected with `INVOCATION_INPUT_EMPTY`. |
-| API | `InvocationRequest.content` with `source.kind: text` | `fileRef` and `audioStream` are reserved future source categories and are not accepted yet. |
+| API | Top-level `sourceKind: "text"` plus canonical `content` (`WorkContent`) | `fileRef` and `audioStream` are reserved future source categories and are not accepted yet. |
 
 Use `you docs sessions` for the session-scoped invocation API examples. Reserve
 future source categories in authored configs and client code, but do not imply
@@ -545,7 +545,8 @@ Clean invocation accepts exactly one primary input source per invocation:
 Do not combine multiple payload sources in the same invocation. If stdin and a
 non-empty positional prompt are both present, the command exits non-zero before
 runtime startup and writes a stable stderr error with code
-`RUN_INVOCATION_AMBIGUOUS_INPUT` naming the conflicting sources.
+`INVOCATION_INPUT_SOURCE_CONFLICT` naming the conflicting sources
+(`positional_text`, `stdin_text`).
 
 Example ambiguity failure:
 
@@ -556,13 +557,13 @@ printf 'from stdin' | you run --factory ./factory.json "from arg"
 Text stderr:
 
 ```text
-RUN_INVOCATION_AMBIGUOUS_INPUT: conflicting input sources: positional prompt, stdin
+INVOCATION_INPUT_SOURCE_CONFLICT: invocation input sources conflict: positional_text, stdin_text
 ```
 
 JSON stderr with global `--json`:
 
 ```json
-{"code":"RUN_INVOCATION_AMBIGUOUS_INPUT","message":"conflicting input sources: positional prompt, stdin"}
+{"code":"INVOCATION_INPUT_SOURCE_CONFLICT","message":"invocation input sources conflict: positional_text, stdin_text"}
 ```
 
 #### Success stdout contract
@@ -581,15 +582,20 @@ Text success example:
 you run --factory ./factory.json "Summarize the changelog" > result.txt
 ```
 
-JSON success example:
+JSON success example for text positional or stdin invocation:
 
 ```bash
 you --json run --factory ./factory.json "Summarize the changelog"
 ```
 
 ```json
-{"output":"Summary text","workId":"work-123","workTypeName":"task","traceId":"trace-123","sessionId":"~default"}
+{"requestId":"req-123","traceId":"trace-123","status":"COMPLETED","primaryResult":[{"type":"text","text":"Summary text"}]}
 ```
+
+`--work` clean invocations still emit the work-target JSON envelope
+`{"output":"...","workId":"...","workTypeName":"...","traceId":"...","sessionId":"..."}`
+because they resolve a submitted work file instead of the shared session
+invocation API.
 
 Stdin-only example:
 
@@ -607,7 +613,7 @@ Stable error codes include:
 - `RUN_INVOCATION_FAILED` for runtime or work failures
 - `RUN_INVOCATION_CANCELLED` for SIGINT or SIGTERM cancellation
 - `RUN_INVOCATION_TIMEOUT` when the invocation deadline is exceeded
-- `RUN_INVOCATION_AMBIGUOUS_INPUT` when payload sources conflict before startup
+- `INVOCATION_INPUT_SOURCE_CONFLICT` when positional text and stdin conflict before startup
 
 Without `--json`, stderr is a single concise text line beginning with the stable
 error code. With global `--json`, stderr is a single parseable JSON object with

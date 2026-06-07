@@ -164,10 +164,10 @@ the factory's invocation policy to resolve, and return one canonical
 POST /factory-sessions/{session_id}/invocations
 ```
 
-The current API contract is text-first. Send `InvocationRequest.content` with
-`source.kind: "text"`. Reserved source kinds such as `fileRef` and
-`audioStream` are named in the contract for future compatibility, but current
-runtimes do not accept them yet.
+The current API contract is text-first. Send top-level `sourceKind: "text"` and
+canonical `content` as ordered `WorkContent` parts. Reserved source kinds such
+as `fileRef` and `audioStream` are named in the contract for future
+compatibility, but current runtimes do not accept them yet.
 
 ### Example request
 
@@ -177,10 +177,10 @@ curl -s \
   -H "Content-Type: application/json" \
   "http://localhost:7437/factory-sessions/~default/invocations" \
   -d '{
-    "content": {
-      "source": { "kind": "text" },
-      "parts": [{ "kind": "text", "text": "Summarize the failing test output." }]
-    }
+    "sourceKind": "text",
+    "content": [
+      { "type": "text", "text": "Summarize the failing test output." }
+    ]
   }'
 ```
 
@@ -191,11 +191,9 @@ curl -s \
   "requestId": "req-123",
   "traceId": "trace-123",
   "status": "COMPLETED",
-  "primaryResult": {
-    "parts": [
-      { "kind": "text", "text": "The root failure is a missing fixture path." }
-    ]
-  }
+  "primaryResult": [
+    { "type": "text", "text": "The root failure is a missing fixture path." }
+  ]
 }
 ```
 
