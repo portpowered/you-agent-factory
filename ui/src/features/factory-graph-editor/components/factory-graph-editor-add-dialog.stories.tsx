@@ -110,10 +110,10 @@ export const AddWorkState = {
     ).toBeVisible();
     await expect(
       within(dialog).getByRole("combobox", { name: "Work type" }),
-    ).toHaveValue("story");
+    ).toHaveTextContent("story");
     await expect(
       within(dialog).getByRole("combobox", { name: "State type" }),
-    ).toHaveValue("PROCESSING");
+    ).toHaveTextContent("PROCESSING");
   },
 };
 

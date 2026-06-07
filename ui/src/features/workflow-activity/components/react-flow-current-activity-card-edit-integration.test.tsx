@@ -11,18 +11,24 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/factory-graph-public-ids";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
+
+vi.mock("../../../components/ui/dialog", () =>
+  import("../../../testing/mock-dashboard-dialog"),
+);
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
@@ -331,7 +337,12 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       expectedNodeNames: ["worker:analyst"],
       fields: [
         { label: "Identifier", value: "analyst" },
-        { label: "Model provider", role: "combobox" as const, value: "CURSOR" },
+        {
+          label: "Model provider",
+          optionLabel: "Cursor",
+          role: "combobox" as const,
+          value: "CURSOR",
+        },
       ],
       menuAction: "Worker",
     },
@@ -373,9 +384,20 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: menuAction }));
+    const user = userEvent.setup();
     for (const field of fields) {
-      const role = "role" in field && field.role ? field.role : "textbox";
-      fireEvent.change(screen.getByRole(role, { name: field.label }), {
+      if ("role" in field && field.role === "combobox") {
+        await selectLabeledComboboxOption(
+          user,
+          field.label,
+          "optionLabel" in field && field.optionLabel
+            ? field.optionLabel
+            : field.value,
+        );
+        continue;
+      }
+
+      fireEvent.change(screen.getByRole("textbox", { name: field.label }), {
         target: { value: field.value },
       });
     }
