@@ -1,6 +1,5 @@
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { EditableWorkstationBehavior } from "../../current-factory-definition/lib/workstation-behavior";
-import type { GraphSemanticIconKind } from "../components/graph-semantic-icon";
 import {
   CRON_WORKSTATION_KIND,
   POLLER_WORKSTATION_KIND,
@@ -72,10 +71,4 @@ export function workstationGraphPresentationFromBehavior(
     },
     locale,
   );
-}
-
-export function workstationGraphSemanticIconKind(
-  presentation: WorkstationGraphPresentation,
-): GraphSemanticIconKind {
-  return presentation.iconKind;
 }
