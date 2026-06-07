@@ -72,6 +72,7 @@ describe("useEditableFactoryGraph worker-assignment disconnect and reconnect", (
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        operations: [],
         workerType: "MODEL_WORKER",
       });
     });

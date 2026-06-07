@@ -7,8 +7,12 @@ import type {
   FactoryGraphNodeKind,
   FactoryWorkState,
 } from "../lib/factory-graph-draft-types";
+import type { components } from "../../../api/generated/openapi";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
+
+type ModelOperationContentType =
+  components["schemas"]["ModelOperationContentType"];
 
 export interface FactoryGraphEditorMessages {
   addDialogAddEntityAction: string;
@@ -24,6 +28,26 @@ export interface FactoryGraphEditorMessages {
   addDialogKindLabel: string;
   addDialogModelHelp: string;
   addDialogModelLabel: string;
+  addDialogModelOperationAddAction: string;
+  addDialogModelOperationHeading: (operationIndex: number) => string;
+  addDialogModelOperationInputsLabel: string;
+  addDialogModelOperationNameHelp: string;
+  addDialogModelOperationNameLabel: string;
+  addDialogModelOperationOutputsLabel: string;
+  addDialogModelOperationRemoveAction: string;
+  addDialogModelOperationSlotAddAction: (
+    direction: "input" | "output",
+  ) => string;
+  addDialogModelOperationSlotContentTypesLabel: string;
+  addDialogModelOperationSlotHeading: (
+    direction: "input" | "output",
+    slotIndex: number,
+  ) => string;
+  addDialogModelOperationSlotNameLabel: string;
+  addDialogModelOperationSlotRemoveAction: string;
+  addDialogModelOperationSlotRequiredLabel: string;
+  addDialogModelOperationsHelp: string;
+  addDialogModelOperationsLabel: string;
   addDialogPromptBodyEditorError: string;
   addDialogPromptBodyEditorLoading: string;
   addDialogPromptBodyHelp: string;
@@ -176,6 +200,9 @@ export interface FactoryGraphEditorMessages {
   removalWorkerAssignedReason: (
     workstationCount: number,
     workerLabel: string,
+  ) => string;
+  localizeModelOperationContentType: (
+    contentType: ModelOperationContentType,
   ) => string;
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
   workStatePhaseLegendAriaLabel: string;
@@ -415,6 +442,23 @@ function describeEnglishStateType(stateType: FactoryWorkState["type"]) {
   return stateType;
 }
 
+function describeEnglishModelOperationContentType(
+  contentType: ModelOperationContentType,
+) {
+  switch (contentType) {
+    case "TEXT":
+      return "Text";
+    case "IMAGE":
+      return "Image";
+    case "AUDIO":
+      return "Audio";
+    case "JSON":
+      return "JSON";
+    case "BINARY":
+      return "Binary";
+  }
+}
+
 function describeEnglishWorkStatePhaseLegendLabel(
   stateType: FactoryWorkState["type"],
 ) {
@@ -449,6 +493,26 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelHelp:
         "The model identifier saved on the new `MODEL_WORKER`.",
       addDialogModelLabel: "Model",
+      addDialogModelOperationAddAction: "Add operation",
+      addDialogModelOperationHeading: (operationIndex) =>
+        `Operation ${operationIndex + 1}`,
+      addDialogModelOperationInputsLabel: "Input slots",
+      addDialogModelOperationNameHelp:
+        "Use uppercase names such as TTS or ASR.",
+      addDialogModelOperationNameLabel: "Operation name",
+      addDialogModelOperationOutputsLabel: "Output slots",
+      addDialogModelOperationRemoveAction: "Remove operation",
+      addDialogModelOperationSlotAddAction: (direction) =>
+        direction === "input" ? "Add input slot" : "Add output slot",
+      addDialogModelOperationSlotContentTypesLabel: "Content types",
+      addDialogModelOperationSlotHeading: (direction, slotIndex) =>
+        `${direction === "input" ? "Input" : "Output"} slot ${slotIndex + 1}`,
+      addDialogModelOperationSlotNameLabel: "Slot name",
+      addDialogModelOperationSlotRemoveAction: "Remove slot",
+      addDialogModelOperationSlotRequiredLabel: "Required input slot",
+      addDialogModelOperationsHelp:
+        "Declare provider-agnostic operations with typed input and output slots for MODEL_INVOKE workstations.",
+      addDialogModelOperationsLabel: "Model operations",
       addDialogPromptBodyEditorError:
         "The prompt editor could not start. Edit the prompt text below while we recover.",
       addDialogPromptBodyEditorLoading: "Starting the prompt editor.",
@@ -657,6 +721,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
           workstationCount,
           "workstation",
         )}. Reassign or remove those workstations before deleting ${workerLabel}.`,
+      localizeModelOperationContentType:
+        describeEnglishModelOperationContentType,
       workerStatusLabel: describeEnglishWorkerStatus,
       workStatePhaseLegendAriaLabel: "Work state lifecycle colors",
       workStatePhaseLegendLabel: describeEnglishWorkStatePhaseLegendLabel,
@@ -691,6 +757,25 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogKindLabel: "类型",
       addDialogModelHelp: "将保存到新 `MODEL_WORKER` 上的模型标识符。",
       addDialogModelLabel: "模型",
+      addDialogModelOperationAddAction: "添加操作",
+      addDialogModelOperationHeading: (operationIndex) =>
+        `操作 ${operationIndex + 1}`,
+      addDialogModelOperationInputsLabel: "输入槽位",
+      addDialogModelOperationNameHelp: "请使用大写名称，例如 TTS 或 ASR。",
+      addDialogModelOperationNameLabel: "操作名称",
+      addDialogModelOperationOutputsLabel: "输出槽位",
+      addDialogModelOperationRemoveAction: "移除操作",
+      addDialogModelOperationSlotAddAction: (direction) =>
+        direction === "input" ? "添加输入槽位" : "添加输出槽位",
+      addDialogModelOperationSlotContentTypesLabel: "内容类型",
+      addDialogModelOperationSlotHeading: (direction, slotIndex) =>
+        `${direction === "input" ? "输入" : "输出"}槽位 ${slotIndex + 1}`,
+      addDialogModelOperationSlotNameLabel: "槽位名称",
+      addDialogModelOperationSlotRemoveAction: "移除槽位",
+      addDialogModelOperationSlotRequiredLabel: "必填输入槽位",
+      addDialogModelOperationsHelp:
+        "为 MODEL_INVOKE 工作站声明带有类型化输入和输出槽位的提供方无关操作。",
+      addDialogModelOperationsLabel: "模型操作",
       addDialogPromptBodyEditorError:
         "提示词编辑器无法启动。请先在下方编辑提示正文，我们稍后会恢复编辑器。",
       addDialogPromptBodyEditorLoading: "正在启动提示词编辑器。",
@@ -1044,6 +1129,20 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       removalFallbackTitle: "移除图实体？",
       removalWorkerAssignedReason: (workstationCount, workerLabel) =>
         `此工作者仍分配给 ${workstationCount} 个工作站。删除 ${workerLabel} 前，请重新分配或移除这些工作站。`,
+      localizeModelOperationContentType: (contentType) => {
+        switch (contentType) {
+          case "TEXT":
+            return "文本";
+          case "IMAGE":
+            return "图像";
+          case "AUDIO":
+            return "音频";
+          case "JSON":
+            return "JSON";
+          case "BINARY":
+            return "二进制";
+        }
+      },
       workerStatusLabel: (status) => {
         switch (status) {
           case "active":

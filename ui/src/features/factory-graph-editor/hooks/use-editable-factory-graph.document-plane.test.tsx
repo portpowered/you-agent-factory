@@ -94,6 +94,7 @@ describe("useEditableFactoryGraph document plane projection", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: document-plane scope scenarios share one fixture setup.
 describe("useEditableFactoryGraph document plane scope isolation", () => {
   beforeEach(() => {
     setupEditableFactoryGraphSaveTestEnvironment();
@@ -135,10 +136,14 @@ describe("useEditableFactoryGraph document plane scope isolation", () => {
 
     act(() => {
       result.current.actions.addNode({
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        operations: [],
+        workerType: "MODEL_WORKER",
       });
     });
 
@@ -204,6 +209,7 @@ describe("useEditableFactoryGraph document plane scope isolation", () => {
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        operations: [],
         workerType: "MODEL_WORKER",
       });
     });
@@ -273,6 +279,7 @@ describe("useEditableFactoryGraph document plane persist", () => {
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        operations: [],
         workerType: "MODEL_WORKER",
       });
     });

@@ -1,5 +1,7 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { ModelOperationContentType } from "../../../api/generated/openapi";
 import { createEmptyEditableWorkstationCronDraft } from "../../current-factory-definition/lib/workstation-editable-values";
+import { createEmptyFactoryGraphAddModelOperationDraft } from "../lib/factory-graph-add-model-operation-draft";
 import type { CanonicalFactoryDefinition } from "../lib/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
 import { editableWorkstationBehaviorOptions } from "../lib/factory-graph-editor-additions";
@@ -103,6 +105,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         model: "",
         modelProvider: "",
         name: "writer",
+        operations: [],
         workerType: "MODEL_WORKER",
       },
       errors: {
@@ -133,6 +136,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       model: "",
       modelProvider: "CURSOR",
       name: "writer",
+      operations: [],
       workerType: "MODEL_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(2, {
@@ -142,6 +146,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       model: "gpt-5.5",
       modelProvider: "",
       name: "writer",
+      operations: [],
       workerType: "MODEL_WORKER",
     });
     expect(
@@ -162,6 +167,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         model: "gpt-5.5",
         modelProvider: "CURSOR",
         name: "runner",
+        operations: [],
         workerType: "MODEL_WORKER",
       },
       errors: {
@@ -181,6 +187,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       model: "",
       modelProvider: "",
       name: "runner",
+      operations: [],
       workerType: "SCRIPT_WORKER",
     });
 
@@ -194,6 +201,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           model: "",
           modelProvider: "",
           name: "runner",
+          operations: [],
           workerType: "SCRIPT_WORKER",
         }}
         errors={{}}
@@ -225,6 +233,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       model: "",
       modelProvider: "",
       name: "runner",
+      operations: [],
       workerType: "SCRIPT_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(3, {
@@ -234,6 +243,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       model: "",
       modelProvider: "",
       name: "runner",
+      operations: [],
       workerType: "SCRIPT_WORKER",
     });
 
@@ -248,6 +258,126 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       model: "",
       modelProvider: "",
       name: "runner",
+      operations: [],
+      workerType: "MODEL_WORKER",
+    });
+  });
+
+  it("renders model operation fields for model workers and emits operation drafts", () => {
+    const workerChange = vi.fn();
+    const operation = createEmptyFactoryGraphAddModelOperationDraft();
+    renderDialog({
+      draft: {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "CURSOR",
+        name: "tts-worker",
+        operations: [operation],
+        workerType: "MODEL_WORKER",
+      },
+      errors: {
+        modelOperations: {
+          byIndex: {
+            0: {
+              name: "Operation names must be uppercase letters, digits, or underscores.",
+            },
+          },
+        },
+      },
+      onChange: workerChange,
+    });
+
+    expect(
+      screen.getByRole("heading", { name: "Operation 1", level: 3 }),
+    ).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Operation name" })).toBeTruthy();
+    expect(screen.getByText("Input slots")).toBeTruthy();
+    expect(screen.getByText("Output slots")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Operation names must be uppercase letters, digits, or underscores.",
+      ),
+    ).toBeTruthy();
+
+    const operationSection = screen
+      .getByRole("heading", { name: "Operation 1", level: 3 })
+      .closest("section");
+    expect(operationSection).toBeTruthy();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Operation name" }), {
+      target: { value: "TTS" },
+    });
+    fireEvent.change(
+      within(operationSection as HTMLElement).getAllByRole("textbox", {
+        name: "Slot name",
+      })[0],
+      {
+        target: { value: "text" },
+      },
+    );
+    const inputTextCheckbox = operationSection?.querySelector(
+      "#factory-graph-add-model-operation-input-slot-0-content-type-TEXT",
+    );
+    expect(inputTextCheckbox).toBeTruthy();
+    fireEvent.click(inputTextCheckbox as HTMLInputElement);
+
+    expect(workerChange).toHaveBeenNthCalledWith(1, {
+      argsText: "",
+      command: "",
+      kind: "worker",
+      model: "",
+      modelProvider: "CURSOR",
+      name: "tts-worker",
+      operations: [
+        {
+          ...operation,
+          name: "TTS",
+        },
+      ],
+      workerType: "MODEL_WORKER",
+    });
+    expect(workerChange).toHaveBeenNthCalledWith(2, {
+      argsText: "",
+      command: "",
+      kind: "worker",
+      model: "",
+      modelProvider: "CURSOR",
+      name: "tts-worker",
+      operations: [
+        {
+          ...operation,
+          inputs: [
+            {
+              ...operation.inputs[0],
+              name: "text",
+            },
+          ],
+        },
+      ],
+      workerType: "MODEL_WORKER",
+    });
+    expect(workerChange).toHaveBeenNthCalledWith(3, {
+      argsText: "",
+      command: "",
+      kind: "worker",
+      model: "",
+      modelProvider: "CURSOR",
+      name: "tts-worker",
+      operations: [
+        {
+          ...operation,
+          inputs: [
+            {
+              ...operation.inputs[0],
+              contentTypes: [
+                ModelOperationContentType.ModelOperationContentTypeText,
+              ],
+            },
+          ],
+        },
+      ],
       workerType: "MODEL_WORKER",
     });
   });

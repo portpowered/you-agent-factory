@@ -58,6 +58,7 @@ describe("useEditableFactoryGraph", () => {
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        operations: [],
         workerType: "MODEL_WORKER",
       });
     });
@@ -76,6 +77,7 @@ describe("useEditableFactoryGraph", () => {
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "writer",
+        operations: [],
         workerType: "MODEL_WORKER",
       });
     });
