@@ -113,10 +113,6 @@ describe("resolveSessionFactoryAPIErrorMessage", () => {
 });
 
 describe("session factory HTTP error mapping", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it.each([
     [
       "STALE_FACTORY_VERSION",

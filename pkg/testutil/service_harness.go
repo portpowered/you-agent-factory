@@ -31,12 +31,13 @@ import (
 // The harness does not expose the underlying factory or service — all
 // operations are available through harness methods.
 type ServiceTestHarness struct {
-	t               *testing.T
-	svc             *service.FactoryService
-	mocks           map[string]*MockExecutor
-	customExecutors map[string]workers.WorkerExecutor
-	markingMu       sync.RWMutex
-	latestMarking   *petri.MarkingSnapshot
+	t                    *testing.T
+	svc                  *service.FactoryService
+	mocks                map[string]*MockExecutor
+	customExecutors      map[string]workers.WorkerExecutor
+	markingMu            sync.RWMutex
+	latestMarking        *petri.MarkingSnapshot
+	latestEngineSnapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 }
 
 // harnessConfig holds internal configuration for NewServiceTestHarness,
@@ -231,7 +232,7 @@ func (h *ServiceTestHarness) getMarking(ctx context.Context) (*petri.MarkingSnap
 	if err != nil {
 		return nil, err
 	}
-	h.storeLatestMarking(&snap.Marking)
+	h.storeEngineStateSnapshot(snap)
 	return cloneMarkingSnapshot(&snap.Marking), nil
 }
 
@@ -246,7 +247,7 @@ func (h *ServiceTestHarness) waitForRuntimeAvailability(ctx context.Context, run
 
 	for {
 		if snap, err := h.svc.GetEngineStateSnapshot(context.Background()); err == nil {
-			h.storeLatestMarking(&snap.Marking)
+			h.storeEngineStateSnapshot(snap)
 			return nil
 		}
 
@@ -393,7 +394,7 @@ func (h *ServiceTestHarness) RunUntilCompleteError(timeout time.Duration) error 
 	for {
 		select {
 		case <-h.waitToComplete():
-			_, _ = h.getMarking(context.Background())
+			h.captureEngineStateSnapshot(context.Background())
 			cancel()
 			goto waitForRunExit
 		case <-pollTicker.C:
@@ -504,20 +505,55 @@ func (h *ServiceTestHarness) GetEngineStateSnapshot() (*interfaces.EngineStateSn
 		return nil, fmt.Errorf("factory service runtime is not available")
 	}
 	snap, err := h.svc.GetEngineStateSnapshot(context.Background())
-	if err != nil {
-		return nil, err
+	if err == nil {
+		h.storeEngineStateSnapshot(snap)
+		return snap, nil
 	}
-	h.storeLatestMarking(&snap.Marking)
-	return snap, nil
+	if cached := h.latestEngineStateSnapshot(); cached != nil {
+		return cached, nil
+	}
+	return nil, err
 }
 
-func (h *ServiceTestHarness) storeLatestMarking(snapshot *petri.MarkingSnapshot) {
+func (h *ServiceTestHarness) captureEngineStateSnapshot(ctx context.Context) {
+	if h == nil || h.svc == nil {
+		return
+	}
+	snap, err := h.svc.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return
+	}
+	h.storeEngineStateSnapshot(snap)
+}
+
+func (h *ServiceTestHarness) storeEngineStateSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
 	if h == nil || snapshot == nil {
 		return
 	}
+	cloned := cloneEngineStateSnapshot(snapshot)
 	h.markingMu.Lock()
 	defer h.markingMu.Unlock()
-	h.latestMarking = cloneMarkingSnapshot(snapshot)
+	h.latestEngineSnapshot = cloned
+	h.latestMarking = cloneMarkingSnapshot(&cloned.Marking)
+}
+
+func (h *ServiceTestHarness) latestEngineStateSnapshot() *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	if h == nil {
+		return nil
+	}
+	h.markingMu.RLock()
+	defer h.markingMu.RUnlock()
+	return cloneEngineStateSnapshot(h.latestEngineSnapshot)
+}
+
+func cloneEngineStateSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	if snapshot == nil {
+		return nil
+	}
+	cloned := *snapshot
+	cloned.Marking = *cloneMarkingSnapshot(&snapshot.Marking)
+	cloned.DispatchHistory = slices.Clone(snapshot.DispatchHistory)
+	return &cloned
 }
 
 func (h *ServiceTestHarness) latestMarkingSnapshot() *petri.MarkingSnapshot {

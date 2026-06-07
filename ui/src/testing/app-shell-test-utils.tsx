@@ -118,23 +118,20 @@ type CurrentFactoryDocumentResult = ReturnType<
   typeof useCurrentFactoryDocument
 >;
 
-const terminalBaseSnapshot = semanticWorkflowDashboardSnapshot;
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
 
-export const activeSnapshot = semanticWorkflowDashboardSnapshot;
-
 export const terminalSnapshot = {
-  ...terminalBaseSnapshot,
+  ...semanticWorkflowDashboardSnapshot,
   tick_count: 4,
   runtime: {
-    ...terminalBaseSnapshot.runtime,
+    ...semanticWorkflowDashboardSnapshot.runtime,
     place_occupancy_work_items_by_place_id: {
-      ...(terminalBaseSnapshot.runtime.place_occupancy_work_items_by_place_id ??
-        {}),
+      ...(semanticWorkflowDashboardSnapshot.runtime
+        .place_occupancy_work_items_by_place_id ?? {}),
       "story:blocked": [
         {
           display_name: "Failed Story",
@@ -153,16 +150,17 @@ export const terminalSnapshot = {
       ],
     },
     place_token_counts: {
-      ...(terminalBaseSnapshot.runtime.place_token_counts ?? {}),
+      ...(semanticWorkflowDashboardSnapshot.runtime.place_token_counts ?? {}),
       "story:blocked": 1,
       "story:complete": 1,
     },
     session: {
-      ...terminalBaseSnapshot.runtime.session,
+      ...semanticWorkflowDashboardSnapshot.runtime.session,
       completed_count: 1,
       completed_work_labels: ["Done Story"],
       provider_sessions: [
-        ...(terminalBaseSnapshot.runtime.session.provider_sessions ?? []),
+        ...(semanticWorkflowDashboardSnapshot.runtime.session
+          .provider_sessions ?? []),
         {
           dispatch_id: "dispatch-complete",
           outcome: "ACCEPTED",

@@ -16,10 +16,11 @@ const (
 // ExplicitRunConfig returns the baseline configuration for the explicit run command.
 func ExplicitRunConfig() runcli.RunConfig {
 	return runcli.RunConfig{
-		Dir:              FactoryDir,
-		Port:             FactoryPort,
-		AutoPort:         true,
-		RuntimeLogConfig: logging.DefaultRuntimeLogConfig(),
+		Dir:                  FactoryDir,
+		Port:                 FactoryPort,
+		AutoPort:             true,
+		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
+		RuntimeMetricsConfig: logging.DefaultRuntimeMetricsConfig(),
 	}
 }
 

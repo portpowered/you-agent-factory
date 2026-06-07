@@ -17,8 +17,8 @@ import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStr
 import { sessionStreamToggleLabel } from "./features/header/lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import {
-  activeSnapshot,
   MockEventSource,
   registerAppDashboardTestLifecycle,
   renderApp,
@@ -59,7 +59,7 @@ describe("App dashboard session stream loading", () => {
     resetTimelineForInitialStreamLoad();
     renderApp({
       seedTimelineFromSnapshot: false,
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
     });
 
     await waitFor(() => {
@@ -97,7 +97,7 @@ describe("App dashboard session stream tab switch", () => {
 
     renderApp({
       factorySessions: [rootFactorySession, betaFactorySession],
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
     });
 
     await waitFor(() => {
@@ -114,7 +114,7 @@ describe("App dashboard session stream tab switch", () => {
       name: "Timeline tick",
     });
     await waitFor(() => {
-      expect(defaultSlider.value).toBe(String(activeSnapshot.tick_count));
+      expect(defaultSlider.value).toBe(String(semanticWorkflowDashboardSnapshot.tick_count));
     });
 
     act(() => {
@@ -156,7 +156,7 @@ describe("App dashboard session stream pause", () => {
 
     await renderAppWithDashboardShell({
       factorySessions: [rootFactorySession, betaFactorySession],
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
     });
 
     await screen.findByRole("tab", { name: "beta" });
@@ -218,7 +218,7 @@ describe("App dashboard session stream refresh", () => {
     resetTimelineForInitialStreamLoad();
     renderApp({
       seedTimelineFromSnapshot: false,
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
     });
 
     await waitFor(() => {

@@ -47,6 +47,12 @@ type WorkAPI interface {
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
 
+// InvocationAPI is the session-scoped factory invocation seam used by the API
+// transport to submit one logical input and return the selected primary result.
+type InvocationAPI interface {
+	InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (FactoryInvocationResult, error)
+}
+
 // APISurface is the runtime seam consumed by the Agent Factory API server.
 // It resolves requests against the service-owned current runtime so activation
 // can swap the active runtime without leaving API reads pinned to startup
@@ -64,6 +70,31 @@ type SessionAPISurface interface {
 	SessionAPI
 	FactorySaveAPI
 	WorkAPI
+	InvocationAPI
+}
+
+// FactoryInvocationResult carries the runtime-owned outcome of one session
+// invocation request after input resolution and primary-result selection.
+type FactoryInvocationResult struct {
+	RequestID     string
+	TraceID       string
+	Status        factoryapi.InvocationTerminalStatus
+	PrimaryResult []interfaces.WorkContentPart
+	ErrorCode     string
+	Message       string
+}
+
+// RequestValidationError reports a stable client-side validation failure that
+// should map to HTTP 400 at the transport boundary.
+type RequestValidationError struct {
+	Message string
+}
+
+func (e *RequestValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
 }
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
@@ -101,6 +132,10 @@ var ErrModelNotAvailable = errors.New("model not available")
 // ErrModelPullUnsupported reports that the requested model does not support
 // managed local asset pulls in the current runtime or platform.
 var ErrModelPullUnsupported = errors.New("model pull is not supported")
+
+// ErrManagedRuntimeSourceFetchFailed reports that required managed runtime
+// assets could not be fetched from the configured backend source.
+var ErrManagedRuntimeSourceFetchFailed = errors.New("managed runtime source fetch failed")
 
 // ErrModelInvocationUnsupportedMode reports that the requested direct
 // invocation response mode is not valid for the selected operation output.
@@ -140,6 +175,12 @@ type ModelPullResult struct {
 	CachePath        string
 	Revision         string
 	DownloadedFiles  []ModelPullDownloadedFile
+	ManagedPullOutcome string
+	ReadinessState     string
+	LifecycleState     string
+	SourceKind         string
+	SourceID           string
+	ResolverNotes      string
 }
 
 // TopologyValidationError carries validation targets that the graph editor can
