@@ -285,6 +285,9 @@ First-party built-ins such as `@you/tts` also use the named-factory path:
 you run --named @you/tts
 ```
 
+See `you docs packaged-tts` for the full packaged TTS workflow, default
+metadata result, materialization path, and edit-after-materialize behavior.
+
 On the first invocation the CLI materializes the built-in into
 `~/.you-agent-factory/factories`, then loads later runs from that on-disk copy.
 That keeps the built-in editable: if you modify the materialized

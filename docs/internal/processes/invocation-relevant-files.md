@@ -33,12 +33,39 @@ primary-result behavior.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
-  transport-specific empty-stdin errors.
+  transport-specific empty-stdin errors. When `Stdin` is overridden away from
+  `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
+  input even if the process-level `os.Stdin` is still a TTY.
 - `pkg/invocations/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.
 - `pkg/cli/root.go` owns the customer-facing `you run --factory` help text for
   invocation input-source rules and the canonical pointers into packaged docs.
+  `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
+  as an invocation factory selector for positional/stdin text.
+- `pkg/config/layout.go` owns the built-in `@you/tts` factory JSON (`BuiltInTTSFactoryJSON`)
+  registered from `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
+- `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
+  helpers used when MODEL_INVOKE work completes on the `execute-tts` workstation.
+  `metadata.go` derives the `backend` metadata field from the loaded on-disk
+  worker model so customer edits to materialized `factory.json` affect the next
+  invocation result.
+- `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
+  customer guide for `@you/tts` invocation, materialization, metadata result,
+  edit-after-materialize behavior, and raw-artifact streaming scope.
+- `pkg/packagedfactories/tts/observability.go` classifies packaged TTS loading,
+  model-not-ready, and generation-failure outcomes and defines stable invocation
+  error codes plus packaged-factory metric names.
+- `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
+  the CLI boundary without recording packaged-factory metrics or logging submitted
+  text or generated artifact bodies.
+- `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
+  loading/completion/failure logs, and packaged-factory metrics while polling for
+  primary results.
+- `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
+  invocation metadata to terminal token `Content` for the `execute-tts` TTS
+  MODEL_INVOKE workstation so primary-result selection returns JSON metadata
+  instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged

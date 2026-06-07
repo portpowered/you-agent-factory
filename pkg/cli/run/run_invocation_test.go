@@ -3,12 +3,14 @@ package run
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -29,6 +31,26 @@ func (s stubInvocationService) GetCurrentFactoryForSession(context.Context, stri
 
 func (s stubInvocationService) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 	return s.invoke(ctx, sessionID, request)
+}
+
+func TestResolveFactoryInvocationRequest_NamedFactoryDirPositionalText(t *testing.T) {
+	text := "hi there"
+
+	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Dir:                      "/tmp/builtin-tts",
+		NamedFactoryName:         "@you/tts",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("resolveFactoryInvocationRequest: %v", err)
+	}
+	if !invocationMode {
+		t.Fatal("expected invocation mode for named factory positional text")
+	}
+	if got := extractInvocationText(t, request); got != text {
+		t.Fatalf("invocation text = %q, want %q", got, text)
+	}
 }
 
 func TestResolveFactoryInvocationRequest_PositionalText(t *testing.T) {
@@ -64,6 +86,47 @@ func TestResolveFactoryInvocationRequest_StdinText(t *testing.T) {
 	}
 	if got := extractInvocationText(t, request); got != "from stdin" {
 		t.Fatalf("invocation text = %q, want stdin text", got)
+	}
+}
+
+func TestResolveFactoryInvocationRequest_NamedFactoryStdinText(t *testing.T) {
+	stdinText := "hi from stdin"
+
+	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Dir:                 "/tmp/builtin-tts",
+		NamedFactoryName:    "@you/tts",
+		InvocationStdinText: &stdinText,
+		StdinIsTTY:          func() bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("resolveFactoryInvocationRequest: %v", err)
+	}
+	if !invocationMode {
+		t.Fatal("expected invocation mode for named factory stdin text")
+	}
+	if got := extractInvocationText(t, request); got != stdinText {
+		t.Fatalf("invocation text = %q, want %q", got, stdinText)
+	}
+}
+
+func TestResolveFactoryInvocationRequest_NamedFactoryRejectsConflictingSources(t *testing.T) {
+	text := "from args"
+
+	_, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Dir:                      "/tmp/builtin-tts",
+		NamedFactoryName:         "@you/tts",
+		InvocationPositionalText: &text,
+		Stdin:                    strings.NewReader("from stdin"),
+		StdinIsTTY:               func() bool { return false },
+	})
+	if !invocationMode {
+		t.Fatal("expected invocation mode when both sources are present for named factory")
+	}
+	if err == nil {
+		t.Fatal("expected conflicting invocation sources to fail for named factory")
+	}
+	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
+		t.Fatalf("error = %q, want stable conflict code", err.Error())
 	}
 }
 
@@ -139,6 +202,159 @@ func TestResolveFactoryInvocationRequest_ConflictLogsAndCountsSourceConflict(t *
 	}
 
 	recorder.assertContainsMetricNames(t, "invocation.failure", "invocation.source_conflict")
+}
+
+func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "hi there"
+	var output bytes.Buffer
+	core, observedLogs := observer.New(zap.InfoLevel)
+
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-tts-not-ready",
+					TraceID:   "trace-tts-not-ready",
+					Status:    factoryapi.InvocationTerminalStatusFailed,
+					ErrorCode: tts.InvocationErrorCodeModelNotReady,
+					Message:   "model not available: required assets missing",
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-tts",
+		NamedFactoryName:         "@you/tts",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+		Logger: zap.New(core),
+	})
+	if err == nil {
+		t.Fatal("expected model-not-ready invocation failure")
+	}
+	if !strings.Contains(err.Error(), tts.InvocationErrorCodeModelNotReady) {
+		t.Fatalf("error = %q, want %s", err.Error(), tts.InvocationErrorCodeModelNotReady)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty without success metadata", output.String())
+	}
+
+	startLogs := observedLogs.FilterMessage("packaged tts invocation started").All()
+	if len(startLogs) != 1 {
+		t.Fatalf("packaged start logs = %d, want 1", len(startLogs))
+	}
+	if got := startLogs[0].ContextMap()["tts_backend"]; got == "" {
+		t.Fatal("expected tts_backend field in packaged start log")
+	}
+}
+
+func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "hi there"
+	var output bytes.Buffer
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-tts-failed",
+					TraceID:   "trace-tts-failed",
+					Status:    factoryapi.InvocationTerminalStatusFailed,
+					ErrorCode: tts.InvocationErrorCodeGenerationFailed,
+					Message:   "omnivoice invoke failed: exit status 1",
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-tts",
+		NamedFactoryName:         "@you/tts",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err == nil {
+		t.Fatal("expected generation failure")
+	}
+	if !strings.Contains(err.Error(), tts.InvocationErrorCodeGenerationFailed) {
+		t.Fatalf("error = %q, want %s", err.Error(), tts.InvocationErrorCodeGenerationFailed)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty without success metadata", output.String())
+	}
+}
+
+func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T) {
+	preserveRunGlobals(t)
+
+	stdinText := "hi there"
+	metadataJSON := `{"artifactPath":"/tmp/speech.wav","mediaType":"audio/wav","backend":"OMNIVOICE_Q4_K_M/LLAMACPP"}`
+	var output bytes.Buffer
+
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				if sessionID != defaultFactorySessionID {
+					t.Fatalf("sessionID = %q, want %q", sessionID, defaultFactorySessionID)
+				}
+				if got := extractInvocationText(t, &request); got != stdinText {
+					t.Fatalf("invocation text = %q, want %q", got, stdinText)
+				}
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-tts-stdin",
+					TraceID:   "trace-tts-stdin",
+					Status:    factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: metadataJSON,
+					}},
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                 "/tmp/builtin-tts",
+		NamedFactoryName:    "@you/tts",
+		InvocationStdinText: &stdinText,
+		StdinIsTTY:          func() bool { return true },
+		Output:              &output,
+		Port:                7437,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := output.String(); got != metadataJSON {
+		t.Fatalf("stdout = %q, want packaged TTS metadata JSON", got)
+	}
+
+	var metadata tts.InvocationMetadata
+	if err := json.Unmarshal([]byte(output.String()), &metadata); err != nil {
+		t.Fatalf("metadata JSON: %v", err)
+	}
+	if metadata.ArtifactPath != "/tmp/speech.wav" || metadata.MediaType != "audio/wav" || metadata.Backend == "" {
+		t.Fatalf("metadata = %#v, want artifact path, media type, and backend", metadata)
+	}
 }
 
 func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {

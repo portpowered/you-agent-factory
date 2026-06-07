@@ -737,6 +737,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Built-ins such as @you/tts materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
 			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
+			"Packaged @you/tts invocation details live in " + cliBinaryName + " docs packaged-tts. " +
 			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
 			"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
@@ -856,11 +857,12 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 }
 
 func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {
-	cleanInvocation = cmd.Flags().Changed("factory") &&
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
+	cleanInvocation = invocationFactorySelected &&
 		cmd.Flags().Changed("work") &&
 		strings.TrimSpace(cfg.WorkFile) != "" &&
 		!cfg.Continuously
-	textInvocation = cmd.Flags().Changed("factory") &&
+	textInvocation = invocationFactorySelected &&
 		!cmd.Flags().Changed("work") &&
 		!cfg.Continuously &&
 		(cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil)
@@ -934,6 +936,7 @@ func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
 
 func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string) error {
 	factoryChanged := cmd.Flags().Changed("factory")
+	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
 	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
 		PromptArgs: promptArgs,
@@ -943,9 +946,9 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		return err
 	}
 
-	if !factoryChanged {
+	if !factoryChanged && !namedChanged {
 		if input.Payload != "" {
-			return fmt.Errorf("positional prompt arguments require --factory")
+			return fmt.Errorf("positional prompt arguments require --factory or --named")
 		}
 		return nil
 	}

@@ -116,6 +116,9 @@ func invocationStdinIsTTY(cfg FactoryInvocationInputConfig) bool {
 	if cfg.StdinIsTTY != nil {
 		return cfg.StdinIsTTY()
 	}
+	if cfg.Stdin != nil && cfg.Stdin != os.Stdin {
+		return false
+	}
 	fi, err := os.Stdin.Stat()
 	if err != nil {
 		return true
@@ -189,7 +192,10 @@ type sessionInvocationRunner interface {
 }
 
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
-	if strings.TrimSpace(cfg.FactoryConfigPath) == "" || strings.TrimSpace(cfg.WorkFile) != "" {
+	if strings.TrimSpace(cfg.WorkFile) != "" {
+		return nil, false, nil
+	}
+	if factoryInvocationRoot(cfg) == "" {
 		return nil, false, nil
 	}
 
@@ -236,11 +242,21 @@ func stdinIsTTY(cfg RunConfig) bool {
 	if cfg.StdinIsTTY != nil {
 		return cfg.StdinIsTTY()
 	}
+	if cfg.Stdin != nil && cfg.Stdin != os.Stdin {
+		return false
+	}
 	fi, err := os.Stdin.Stat()
 	if err != nil {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func factoryInvocationRoot(cfg RunConfig) string {
+	if root := strings.TrimSpace(cfg.FactoryConfigPath); root != "" {
+		return root
+	}
+	return strings.TrimSpace(cfg.Dir)
 }
 
 func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *factoryapi.InvocationRequest {
@@ -290,6 +306,8 @@ func runFactoryInvocation(
 	go func() {
 		runErrCh <- invoker.Run(runCtx)
 	}()
+
+	logPackagedTTSInvocationStart(cfg)
 
 	if err := waitForInvocationSessionReady(runCtx, invoker, runErrCh); err != nil {
 		return err
