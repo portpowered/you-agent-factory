@@ -903,6 +903,7 @@ func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
 		return err
 	}
 	cfg.Dir = resolution.FactoryDir
+	cfg.NamedFactoryResolution = resolution
 	return nil
 }
 

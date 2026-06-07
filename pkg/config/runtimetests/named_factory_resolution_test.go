@@ -22,6 +22,9 @@ func TestResolveNamedFactoryAcrossRoots_ReturnsLocalFactory(t *testing.T) {
 	}
 
 	assertNamedFactoryResolution(t, resolution, "alpha", projectFactoryDir, NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
+	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionNone {
+		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionNone)
+	}
 }
 
 func TestResolveNamedFactoryAcrossRoots_PrefersLocalFactoryOverGlobal(t *testing.T) {
@@ -36,6 +39,9 @@ func TestResolveNamedFactoryAcrossRoots_PrefersLocalFactoryOverGlobal(t *testing
 	}
 
 	assertNamedFactoryResolution(t, resolution, "alpha", projectFactoryDir, NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot)
+	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionProjectOverGlobal {
+		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionProjectOverGlobal)
+	}
 	loaded, err := LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfigFromFactoryDir(resolved local): %v", err)
@@ -124,6 +130,9 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInIntoGlobalRoot(t *tes
 
 	wantDir := filepath.Join(globalRoot, "@you%2Ftts")
 	assertNamedFactoryResolution(t, resolution, "@you/tts", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
+	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionNone {
+		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionNone)
+	}
 	assertBuiltInMaterializedLayout(t, wantDir)
 
 	loaded, err := LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)

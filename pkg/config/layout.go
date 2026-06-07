@@ -795,16 +795,6 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 	_ = os.RemoveAll(trashDir)
 }
 
-// NamedFactoryResolutionSource identifies the root that supplied a resolved
-// named factory.
-type NamedFactoryResolutionSource string
-
-const (
-	NamedFactoryResolutionSourceProjectLocal NamedFactoryResolutionSource = "project-local"
-	NamedFactoryResolutionSourceGlobal       NamedFactoryResolutionSource = "global"
-	NamedFactoryResolutionSourceBuiltin      NamedFactoryResolutionSource = "builtin-materialized"
-)
-
 var builtInNamedFactoryCatalog = map[string][]byte{
 	"@you/tts": []byte(`{
   "name": "@you/tts",
@@ -855,16 +845,6 @@ var builtInNamedFactoryCatalog = map[string][]byte{
 `),
 }
 
-// NamedFactoryResolution reports the selected runnable directory and the roots
-// considered during cross-root named-factory resolution.
-type NamedFactoryResolution struct {
-	Name        string
-	FactoryDir  string
-	Source      NamedFactoryResolutionSource
-	ProjectRoot string
-	GlobalRoot  string
-}
-
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
 // name, checking the project-local root before the global root.
 func ResolveNamedFactoryDirAcrossRoots(projectRoot, globalRoot, name string) (string, error) {
@@ -896,19 +876,40 @@ func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*Name
 	if factoryDir, found, err := resolveNamedFactoryCandidate(projectRoot, canonicalName); err != nil {
 		return nil, err
 	} else if found {
-		return namedFactoryResolution(canonicalName, factoryDir, NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot), nil
+		return namedFactoryResolution(
+			canonicalName,
+			factoryDir,
+			NamedFactoryResolutionSourceProjectLocal,
+			projectRoot,
+			globalRoot,
+			projectLocalPrecedenceDecision(globalRoot, canonicalName),
+		), nil
 	}
 
 	if factoryDir, found, err := resolveNamedFactoryCandidate(globalRoot, canonicalName); err != nil {
 		return nil, err
 	} else if found {
-		return namedFactoryResolution(canonicalName, factoryDir, NamedFactoryResolutionSourceGlobal, projectRoot, globalRoot), nil
+		return namedFactoryResolution(
+			canonicalName,
+			factoryDir,
+			NamedFactoryResolutionSourceGlobal,
+			projectRoot,
+			globalRoot,
+			NamedFactoryPrecedenceDecisionNone,
+		), nil
 	}
 
 	if factoryDir, materialized, err := resolveBuiltInNamedFactory(globalRoot, canonicalName); err != nil {
 		return nil, err
 	} else if materialized {
-		return namedFactoryResolution(canonicalName, factoryDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot), nil
+		return namedFactoryResolution(
+			canonicalName,
+			factoryDir,
+			NamedFactoryResolutionSourceBuiltin,
+			projectRoot,
+			globalRoot,
+			NamedFactoryPrecedenceDecisionNone,
+		), nil
 	}
 
 	return nil, fmt.Errorf(
@@ -937,22 +938,6 @@ func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 		return "", false, nil
 	}
 	return "", false, err
-}
-
-func namedFactoryResolution(
-	name string,
-	factoryDir string,
-	source NamedFactoryResolutionSource,
-	projectRoot string,
-	globalRoot string,
-) *NamedFactoryResolution {
-	return &NamedFactoryResolution{
-		Name:        name,
-		FactoryDir:  factoryDir,
-		Source:      source,
-		ProjectRoot: projectRoot,
-		GlobalRoot:  globalRoot,
-	}
 }
 
 func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {

@@ -30,6 +30,36 @@ var ErrInvalidNamedFactoryName = errors.New("invalid named factory name")
 // in the searched root or roots.
 var ErrNamedFactoryNotFound = errors.New("named factory not found")
 
+// NamedFactoryResolutionSource identifies the root that supplied a resolved
+// named factory.
+type NamedFactoryResolutionSource string
+
+const (
+	NamedFactoryResolutionSourceProjectLocal NamedFactoryResolutionSource = "project-local"
+	NamedFactoryResolutionSourceGlobal       NamedFactoryResolutionSource = "global"
+	NamedFactoryResolutionSourceBuiltin      NamedFactoryResolutionSource = "builtin-materialized"
+)
+
+// NamedFactoryPrecedenceDecision reports whether cross-root resolution observed
+// a local-over-global conflict before selecting a runnable directory.
+type NamedFactoryPrecedenceDecision string
+
+const (
+	NamedFactoryPrecedenceDecisionNone              NamedFactoryPrecedenceDecision = "none"
+	NamedFactoryPrecedenceDecisionProjectOverGlobal NamedFactoryPrecedenceDecision = "project-local-over-global"
+)
+
+// NamedFactoryResolution reports the selected runnable directory and the roots
+// considered during cross-root named-factory resolution.
+type NamedFactoryResolution struct {
+	Name               string
+	FactoryDir         string
+	Source             NamedFactoryResolutionSource
+	ProjectRoot        string
+	GlobalRoot         string
+	PrecedenceDecision NamedFactoryPrecedenceDecision
+}
+
 type invalidNamedFactoryNameError struct {
 	name string
 	err  error
@@ -58,6 +88,39 @@ func wrapInvalidNamedFactoryName(name string, err error) error {
 		return err
 	}
 	return &invalidNamedFactoryNameError{name: strings.TrimSpace(name), err: err}
+}
+
+func namedFactoryResolution(
+	name string,
+	factoryDir string,
+	source NamedFactoryResolutionSource,
+	projectRoot string,
+	globalRoot string,
+	precedence NamedFactoryPrecedenceDecision,
+) *NamedFactoryResolution {
+	return &NamedFactoryResolution{
+		Name:               name,
+		FactoryDir:         factoryDir,
+		Source:             source,
+		ProjectRoot:        projectRoot,
+		GlobalRoot:         globalRoot,
+		PrecedenceDecision: precedence,
+	}
+}
+
+func projectLocalPrecedenceDecision(globalRoot, canonicalName string) NamedFactoryPrecedenceDecision {
+	if globalRoot == "" {
+		return NamedFactoryPrecedenceDecisionNone
+	}
+	if hasNamedFactoryCandidate(globalRoot, canonicalName) {
+		return NamedFactoryPrecedenceDecisionProjectOverGlobal
+	}
+	return NamedFactoryPrecedenceDecisionNone
+}
+
+func hasNamedFactoryCandidate(rootDir, canonicalName string) bool {
+	_, found, err := resolveNamedFactoryCandidate(rootDir, canonicalName)
+	return err == nil && found
 }
 
 func newNamedFactoryNotFoundError(name string) error {
