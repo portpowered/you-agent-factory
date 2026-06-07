@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -244,22 +245,27 @@ func buildRuntimeBundle(
 	ctx context.Context,
 	input runtimeBundleBuildInput,
 ) (*factoryRuntimeBundle, error) {
+	sessionID := strings.TrimSpace(input.sessionID)
+	if sessionID == "" {
+		sessionID = defaultFactorySessionID
+	}
 	logSink, runtimeInstanceID, err := buildRuntimeLogSink(input.cfg, input.baseLogger, input.runtimeInstanceID)
 	if err != nil {
 		return nil, err
 	}
+	metricsSink, err := buildRuntimeMetricsSink(input.cfg, sessionID, runtimeInstanceID, input.folderPath, input.dir)
+	if err != nil {
+		_ = logSink.Close()
+		return nil, err
+	}
 	bundleBuilt := false
 	defer func() {
-		if !bundleBuilt && logSink != nil {
-			_ = logSink.Close()
+		if !bundleBuilt {
+			_ = closeRuntimeBundleSinks(logSink, metricsSink)
 		}
 	}()
 	if input.cfg != nil && runtimeInstanceID != "" {
 		input.cfg.RuntimeInstanceID = runtimeInstanceID
-	}
-	sessionID := strings.TrimSpace(input.sessionID)
-	if sessionID == "" {
-		sessionID = defaultFactorySessionID
 	}
 	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
 
@@ -283,7 +289,7 @@ func buildRuntimeBundle(
 	}
 
 	bundleBuilt = true
-	return assembleRuntimeBundle(input, logger, logSink, net, eventHistory, localModels, workerOpts)
+	return assembleRuntimeBundle(input, logger, logSink, metricsSink, net, eventHistory, localModels, workerOpts)
 }
 
 func loadRuntimeBundleWorkerOptions(
@@ -322,6 +328,7 @@ func assembleRuntimeBundle(
 	input runtimeBundleBuildInput,
 	logger *zap.Logger,
 	logSink *logging.RuntimeLogSink,
+	metricsSink *logging.RuntimeMetricsSink,
 	net *state.Net,
 	eventHistory *factoryevents.FactoryEventHistory,
 	localModels localModelDomain,
@@ -382,6 +389,7 @@ func assembleRuntimeBundle(
 		localModels:    localModels.manager,
 		logger:         logger,
 		logSink:        logSink,
+		metricsSink:    metricsSink,
 		recording:      recording,
 		recordPath:     input.recordPath,
 	}, nil
@@ -406,6 +414,45 @@ func buildRuntimeLogSink(
 		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
 	}
 	return logSink, runtimeInstanceID, nil
+}
+
+func buildRuntimeMetricsSink(
+	cfg *FactoryServiceConfig,
+	sessionID string,
+	runtimeInstanceID string,
+	folderPath string,
+	factoryDir string,
+) (*logging.RuntimeMetricsSink, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("factory service config is required to build runtime metrics sink")
+	}
+	metricsSink, err := logging.BuildRuntimeMetricsSink(
+		sessionID,
+		runtimeInstanceID,
+		folderPath,
+		factoryDir,
+		cfg.RuntimeMetricsDir,
+		cfg.RuntimeMetricsConfig,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build runtime metrics sink: %w", err)
+	}
+	return metricsSink, nil
+}
+
+func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+	var errs []error
+	if logSink != nil {
+		if err := logSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if metricsSink != nil {
+		if err := metricsSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // localModelDomain wires pkg/localmodels runtime dependencies constructed at
@@ -836,6 +883,8 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 		RuntimeInstanceID:                       cfg.RuntimeInstanceID,
 		RuntimeLogDir:                           cfg.RuntimeLogDir,
 		RuntimeLogConfig:                        cfg.RuntimeLogConfig,
+		RuntimeMetricsDir:                       cfg.RuntimeMetricsDir,
+		RuntimeMetricsConfig:                    cfg.RuntimeMetricsConfig,
 		RecordPath:                              cfg.RecordPath,
 		WorkflowID:                              cfg.WorkflowID,
 		MockWorkersConfig:                       cfg.MockWorkersConfig,

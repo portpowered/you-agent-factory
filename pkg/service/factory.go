@@ -90,6 +90,7 @@ type factoryRuntimeBundle struct {
 	localModels    *managedLocalModelManager
 	logger         *zap.Logger
 	logSink        *logging.RuntimeLogSink
+	metricsSink    *logging.RuntimeMetricsSink
 	recording      *replay.Recorder
 	recordPath     string
 }
@@ -208,6 +209,13 @@ type FactoryServiceConfig struct {
 	// RuntimeLogConfig controls bounded runtime file logging behavior.
 	// Zero values use defaults that match the package rolling policy.
 	RuntimeLogConfig logging.RuntimeLogConfig
+	// RuntimeMetricsDir optionally overrides the default
+	// ~/.you-agent-factory/metrics directory. Tests use this to keep
+	// file-backed metrics isolated.
+	RuntimeMetricsDir string
+	// RuntimeMetricsConfig controls bounded runtime metrics file behavior.
+	// Zero values use defaults that match the runtime log rolling policy.
+	RuntimeMetricsConfig logging.RuntimeMetricsConfig
 	// WorkFile is an optional path to a FACTORY_REQUEST_BATCH JSON file
 	// containing initial work to submit when the factory starts.
 	WorkFile string
@@ -446,9 +454,9 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		if currentRuntime != nil {
 			return
 		}
-		if bundle := fs.startupRuntimeBundle(); bundle != nil && bundle.logSink != nil {
-			if err := bundle.logSink.Close(); err != nil {
-				fs.logger.Warn("runtime log close failed", zap.Error(err))
+		if bundle := fs.startupRuntimeBundle(); bundle != nil {
+			if err := closeRuntimeBundleSinks(bundle.logSink, bundle.metricsSink); err != nil {
+				fs.logger.Warn("runtime artifact close failed", zap.Error(err))
 			}
 		}
 	}()

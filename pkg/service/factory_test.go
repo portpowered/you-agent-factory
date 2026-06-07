@@ -425,6 +425,7 @@ type runningSessionServiceOptions struct {
 type runningSessionService struct {
 	rootDir       string
 	runtimeLogDir string
+	metricsDir    string
 	svc           *FactoryService
 	runErrCh      chan error
 	cancelRun     context.CancelFunc
@@ -447,6 +448,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	if runtimeLogDir == "" {
 		runtimeLogDir = filepath.Join(rootDir, "runtime-logs")
 	}
+	runtimeMetricsDir := filepath.Join(rootDir, "runtime-metrics")
 	if options.rootConfig != nil {
 		writeFactoryJSON(t, rootDir, options.rootConfig)
 	}
@@ -468,6 +470,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 		RuntimeLogDir:     runtimeLogDir,
+		RuntimeMetricsDir: runtimeMetricsDir,
 		RecordPath:        options.recordPath,
 	})
 	if err != nil {
@@ -485,6 +488,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 	harness := &runningSessionService{
 		rootDir:       rootDir,
 		runtimeLogDir: runtimeLogDir,
+		metricsDir:    runtimeMetricsDir,
 		svc:           svc,
 		runErrCh:      runErrCh,
 		cancelRun:     cancelRun,
@@ -549,16 +553,26 @@ func removeRunningSessionServiceRoot(t *testing.T, rootDir string) {
 func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
 	t.Helper()
 	closed := make(map[*logging.RuntimeLogSink]struct{})
+	closedMetrics := make(map[*logging.RuntimeMetricsSink]struct{})
 	closeBundle := func(bundle *factoryRuntimeBundle) {
-		if bundle == nil || bundle.logSink == nil {
+		if bundle == nil {
 			return
 		}
-		if _, seen := closed[bundle.logSink]; seen {
-			return
+		if bundle.logSink != nil {
+			if _, seen := closed[bundle.logSink]; !seen {
+				closed[bundle.logSink] = struct{}{}
+				if err := bundle.logSink.Close(); err != nil {
+					t.Fatalf("logSink.Close: %v", err)
+				}
+			}
 		}
-		closed[bundle.logSink] = struct{}{}
-		if err := bundle.logSink.Close(); err != nil {
-			t.Fatalf("logSink.Close: %v", err)
+		if bundle.metricsSink != nil {
+			if _, seen := closedMetrics[bundle.metricsSink]; !seen {
+				closedMetrics[bundle.metricsSink] = struct{}{}
+				if err := bundle.metricsSink.Close(); err != nil {
+					t.Fatalf("metricsSink.Close: %v", err)
+				}
+			}
 		}
 	}
 	closeBundle(svc.currentRuntimeBundle())
@@ -700,6 +714,35 @@ func assertSessionRuntimeLogPathsAreDistinct(t *testing.T, runtimeLogRoot string
 		}
 		if otherSessionID, ok := seenPaths[path]; ok {
 			t.Fatalf("sessions %s and %s shared runtime log path %q", otherSessionID, session.ID, path)
+		}
+		seenPaths[path] = session.ID
+	}
+}
+
+func assertSessionRuntimeMetricsPathsAreDistinct(t *testing.T, metricsRoot string, sessions ...*liveFactorySession) {
+	t.Helper()
+
+	seenPaths := make(map[string]string, len(sessions))
+	for _, session := range sessions {
+		if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+			t.Fatal("expected live session runtime metrics sink")
+		}
+		path := liveSessionHandle(session).runtime.metricsSink.Path()
+		if path == "" {
+			t.Fatalf("session %s runtime metrics path is empty", session.ID)
+		}
+		if liveSessionHandle(session).runtime.metricsSink.RootDir() != metricsRoot {
+			t.Fatalf("session %s runtime metrics root = %q, want %q", session.ID, liveSessionHandle(session).runtime.metricsSink.RootDir(), metricsRoot)
+		}
+		if otherSessionID, ok := seenPaths[path]; ok {
+			t.Fatalf("sessions %s and %s shared runtime metrics path %q", otherSessionID, session.ID, path)
+		}
+		sessionComponent := strings.Trim(strings.TrimSpace(session.ID), "_.-~")
+		if sessionComponent == "" {
+			sessionComponent = "unknown"
+		}
+		if !strings.Contains(filepath.Base(path), "-"+sessionComponent+"-") {
+			t.Fatalf("session %s runtime metrics path %q does not include session ID", session.ID, path)
 		}
 		seenPaths[path] = session.ID
 	}
@@ -1307,10 +1350,10 @@ func TestFactoryService_BuildFactoryService_LogsPortableBundledFileReplacements(
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
-	if bundle := svc.currentRuntimeBundle(); bundle != nil && bundle.logSink != nil {
+	if bundle := svc.currentRuntimeBundle(); bundle != nil {
 		defer func() {
-			if err := bundle.logSink.Close(); err != nil {
-				t.Fatalf("Close(runtime log sink): %v", err)
+			if err := closeRuntimeBundleSinks(bundle.logSink, bundle.metricsSink); err != nil {
+				t.Fatalf("Close(runtime artifact sinks): %v", err)
 			}
 		}()
 	}
