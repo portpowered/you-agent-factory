@@ -1860,7 +1860,7 @@ export interface components {
     ResourceManifest: {
       /** @description Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed. */
       requiredTools?: components["schemas"]["RequiredTool"][];
-      /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies. */
+      /** @description Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. Export, share, flatten, and materialize flows auto-discover SCRIPT and DOC files under the documented factory subtrees, but ROOT_HELPER entries such as Makefile are opt-in manifest entries that travel only when explicitly declared here. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies. */
       bundledFiles?: components["schemas"]["BundledFile"][];
     };
     /** @description One declarative external tool dependency for a portable factory. */
@@ -1874,10 +1874,10 @@ export interface components {
       /** @description Optional argument vector used by future validation flows to probe the tool version without changing the executable lookup token. */
       versionArgs?: string[];
     };
-    /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work. */
+    /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work. */
     BundledFile: {
       /**
-       * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
+       * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
        * @enum {string}
        */
       type: BundledFileType;
@@ -1892,7 +1892,7 @@ export interface components {
        * @enum {string}
        */
       encoding: BundledFileContentEncoding;
-      /** @description Inline bundled file content carried in the manifest. Files under factory/scripts/, factory/docs/, and supported root helper paths are only bundled when they appear in bundledFiles. */
+      /** @description Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles. */
       inline: string;
     };
     /** @description Declared types of inputs. Used to force the inputs of a certain work type to be of a certain shape, like a specific JSON structure. */
