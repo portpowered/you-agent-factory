@@ -94,6 +94,9 @@ func mapUpsertNamedFactoryPersistError(err error) error {
 
 func isNamedFactoryResolveNotFound(err error) bool {
 	for err != nil {
+		if factoryconfig.IsNamedFactoryNotFound(err) {
+			return true
+		}
 		if errors.Is(err, os.ErrNotExist) {
 			return true
 		}

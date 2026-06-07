@@ -12,7 +12,9 @@ import (
 // Re-export stable persist error values for callers that import pkg/config/persist only.
 var (
 	ErrInvalidNamedFactory       = config.ErrInvalidNamedFactory
+	ErrInvalidNamedFactoryName   = config.ErrInvalidNamedFactoryName
 	ErrNamedFactoryAlreadyExists = config.ErrNamedFactoryAlreadyExists
+	ErrNamedFactoryNotFound      = config.ErrNamedFactoryNotFound
 )
 
 // NamedFactoryPersistResult reports the staged named-factory directory together
@@ -114,12 +116,52 @@ func ValidateNamedFactoryName(name string) error {
 	return config.ValidateNamedFactoryName(name)
 }
 
+// NamedFactoryNameToLayoutSegment maps a canonical named-factory display name
+// into the single on-disk directory segment used under a factory root.
+func NamedFactoryNameToLayoutSegment(name string) (string, error) {
+	return config.NamedFactoryNameToLayoutSegment(name)
+}
+
+// NamedFactoryLayoutSegmentToName maps an on-disk named-factory directory
+// segment back to the canonical display name shown by list and API callers.
+func NamedFactoryLayoutSegmentToName(segment string) (string, error) {
+	return config.NamedFactoryLayoutSegmentToName(segment)
+}
+
+// GlobalNamedFactoryRootForHome builds the customer-owned global named-factory
+// root for a resolved home directory.
+func GlobalNamedFactoryRootForHome(homeDir string) (string, error) {
+	return config.GlobalNamedFactoryRootForHome(homeDir)
+}
+
+// DefaultGlobalNamedFactoryRoot returns the default global named-factory root
+// under the current user's home directory.
+func DefaultGlobalNamedFactoryRoot() (string, error) {
+	return config.DefaultGlobalNamedFactoryRoot()
+}
+
+// DefaultProjectNamedFactoryRoot returns the default project-local named
+// factory root for a caller working directory.
+func DefaultProjectNamedFactoryRoot(cwd string) (string, error) {
+	return config.DefaultProjectNamedFactoryRoot(cwd)
+}
+
 // IsInvalidNamedFactory reports whether err wraps ErrInvalidNamedFactory.
 func IsInvalidNamedFactory(err error) bool {
 	return errors.Is(err, ErrInvalidNamedFactory)
 }
 
+// IsInvalidNamedFactoryName reports whether err wraps ErrInvalidNamedFactoryName.
+func IsInvalidNamedFactoryName(err error) bool {
+	return errors.Is(err, ErrInvalidNamedFactoryName)
+}
+
 // IsNamedFactoryAlreadyExists reports whether err wraps ErrNamedFactoryAlreadyExists.
 func IsNamedFactoryAlreadyExists(err error) bool {
 	return errors.Is(err, ErrNamedFactoryAlreadyExists)
+}
+
+// IsNamedFactoryNotFound reports whether err wraps ErrNamedFactoryNotFound.
+func IsNamedFactoryNotFound(err error) bool {
+	return errors.Is(err, ErrNamedFactoryNotFound)
 }

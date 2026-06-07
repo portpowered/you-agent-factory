@@ -147,6 +147,26 @@ func TestIsInvalidNamedFactory_DetectsPersistValidationFailure(t *testing.T) {
 	}
 }
 
+func TestIsInvalidNamedFactoryName_DetectsNameValidationFailure(t *testing.T) {
+	_, err := config.ResolveNamedFactoryAcrossRoots(t.TempDir(), t.TempDir(), "@you")
+	if err == nil {
+		t.Fatal("expected invalid named factory name to fail")
+	}
+	if !load.IsInvalidNamedFactoryName(err) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactoryName", err)
+	}
+}
+
+func TestIsNamedFactoryNotFound_DetectsCrossRootMiss(t *testing.T) {
+	_, err := config.ResolveNamedFactoryAcrossRoots(t.TempDir(), t.TempDir(), "missing")
+	if err == nil {
+		t.Fatal("expected missing named factory to fail")
+	}
+	if !load.IsNamedFactoryNotFound(err) {
+		t.Fatalf("error = %v, want ErrNamedFactoryNotFound", err)
+	}
+}
+
 func TestLoadFromCanonicalJSON_MatchesLoadFromFactoryDirForInlineFactory(t *testing.T) {
 	factoryDir := t.TempDir()
 	inlineCfg := map[string]any{

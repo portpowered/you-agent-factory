@@ -56,3 +56,27 @@ func TestFactoryCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		t.Fatalf("factory help must not advertise --port:\n%s", help)
 	}
 }
+
+func TestFactoryListCommand_HelpDocumentsProjectAndGlobalRoots(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"factory", "list", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute factory list --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"project-local named factories from ./factory",
+		"~/.you-agent-factory/factories",
+		"never merges project-local and global entries",
+		"you factory list --dir ~/.you-agent-factory/factories",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("factory list help missing %q:\n%s", want, help)
+		}
+	}
+}
