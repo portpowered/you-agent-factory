@@ -1369,18 +1369,20 @@ func (fs *FactoryService) finalizeRuntimeLifecycleMetrics(handle *liveRuntimeHan
 	if handle == nil || handle.runtime == nil || handle.runtime.factory == nil {
 		return
 	}
-	snapshot, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
-	if err == nil {
-		current := metricsObservationFromSnapshot(snapshot)
-		if current.changedFrom(last) {
-			handle.runtime.emitRuntimeStateMetrics(snapshot)
+	handle.lifecycleMetricsOnce.Do(func() {
+		snapshot, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+		if err == nil {
+			current := metricsObservationFromSnapshot(snapshot)
+			if current.changedFrom(last) {
+				handle.runtime.emitRuntimeStateMetrics(snapshot)
+			}
+			outcome, reason := runtimeStopOutcome(snapshot, handle.result(), false)
+			handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
+			return
 		}
-		outcome, reason := runtimeStopOutcome(snapshot, handle.result(), false)
+		outcome, reason := runtimeStopOutcome(nil, handle.result(), false)
 		handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
-		return
-	}
-	outcome, reason := runtimeStopOutcome(nil, handle.result(), false)
-	handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
+	})
 }
 
 func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liveRuntimeHandle) {
@@ -1401,6 +1403,7 @@ func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liv
 		}
 		select {
 		case <-handle.runDone:
+			fs.finalizeRuntimeLifecycleMetrics(handle, last)
 			return
 		case <-ctx.Done():
 			// Temporary sidecar shutdown (for example during session runtime replacement)

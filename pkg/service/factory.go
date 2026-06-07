@@ -97,14 +97,15 @@ type factoryRuntimeBundle struct {
 }
 
 type liveRuntimeHandle struct {
-	runtime       *factoryRuntimeBundle
-	runCancel     context.CancelFunc
-	runDone       chan struct{}
-	sidecarCancel context.CancelFunc
-	sidecars      sync.WaitGroup
-	runErrMu      sync.RWMutex
-	runErr        error
-	sidecarMu     sync.Mutex
+	runtime              *factoryRuntimeBundle
+	runCancel            context.CancelFunc
+	runDone              chan struct{}
+	sidecarCancel        context.CancelFunc
+	sidecars             sync.WaitGroup
+	runErrMu             sync.RWMutex
+	runErr               error
+	sidecarMu            sync.Mutex
+	lifecycleMetricsOnce sync.Once
 }
 
 type serviceRunState struct {
