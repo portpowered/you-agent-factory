@@ -196,8 +196,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * List discovered models
-     * @description Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+     * List managed runtimes
+     * @description Lists named managed runtimes exposed by the currently loaded runtime configuration together with readiness, lifecycle state, locality, supported operations, and resource summary data using the managed-runtime contract.
      */
     get: operations["listModels"];
     put?: never;
@@ -216,8 +216,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get one discovered model
-     * @description Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+     * Inspect one managed runtime
+     * @description Returns one managed runtime's readiness, lifecycle state, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
      */
     get: operations["getModel"];
     put?: never;
@@ -258,8 +258,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Pull local model assets into the managed cache
-     * @description Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+     * Pull or install one managed runtime
+     * @description Pulls or installs required managed runtime assets into the managed cache using one source-agnostic customer action. Cloud-backed runtimes and unsupported local targets return actionable errors instead of silently succeeding.
      */
     post: operations["pullModel"];
     delete?: never;
@@ -665,16 +665,66 @@ export interface components {
       resources?: components["schemas"]["ResourceUsage"][];
     };
     ListModelsResponse: {
-      /** @description Discovered models exposed by the currently loaded runtime configuration. */
+      /** @description Managed runtimes exposed by the currently loaded runtime configuration. */
       results: components["schemas"]["ModelSummary"][];
     };
+    ManagedRuntime: {
+      /** @description Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces. */
+      identity: string;
+      readinessState: components["schemas"]["ManagedRuntimeReadinessState"];
+      lifecycleState: components["schemas"]["ManagedRuntimeLifecycleState"];
+      locality: components["schemas"]["WorkerModelLocality"];
+      /** @description Provider-agnostic operations supported by this managed runtime. */
+      supportedOperations: components["schemas"]["ModelOperation"][];
+      /** @description Concise managed-runtime diagnostics in customer-relevant terms. */
+      diagnostics?: components["schemas"]["StringMap"];
+    };
+    /**
+     * @description Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
+     * @enum {string}
+     */
+    ManagedRuntimeLifecycleState: ManagedRuntimeLifecycleState;
+    /**
+     * @description Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+     * @enum {string}
+     */
+    ManagedRuntimePullOutcome: ManagedRuntimePullOutcome;
+    ManagedRuntimePullResult: {
+      /** @description Stable managed runtime identity targeted by the pull or install request. */
+      identity: string;
+      pullOutcome: components["schemas"]["ManagedRuntimePullOutcome"];
+      readinessState: components["schemas"]["ManagedRuntimeReadinessState"];
+      /** @description Managed cache directory that now contains the installed runtime assets. */
+      cachePath?: string;
+      /** @description Managed revision identifier for the installed runtime assets. */
+      revision?: string;
+      /** @description Files downloaded or verified as already present for the managed cache entry. */
+      downloadedFiles?: components["schemas"]["ModelPullDownloadedFile"][];
+      sourceDiagnostics?: components["schemas"]["ManagedRuntimeSourceDiagnostics"];
+    };
+    /**
+     * @description Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+     * @enum {string}
+     */
+    ManagedRuntimeReadinessState: ManagedRuntimeReadinessState;
+    /** @description Optional advanced diagnostics for how one managed runtime resolved assets from a configured backend source. Source details are implementation diagnostics and are not required for the primary customer lifecycle contract. */
+    ManagedRuntimeSourceDiagnostics: {
+      /** @description Resolver-classified backend source kind, such as `UPSTREAM_REPOSITORY` or `MANAGED_MIRROR`, without exposing provider-native repository vocabulary in the primary customer contract. */
+      sourceKind?: string;
+      /** @description Opaque resolver identifier for the selected backend source instance. */
+      sourceId?: string;
+      /** @description Concise resolver note suitable for operator diagnostics. */
+      resolverNotes?: string;
+    };
     ModelSummary: {
-      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields. */
       name: string;
+      managedRuntime: components["schemas"]["ManagedRuntime"];
+      /** @description Managed runtime locality summary. Mirrors `managedRuntime.locality` for compatibility with earlier discovery fields. */
       providerLocality: components["schemas"]["WorkerModelLocality"];
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
-      /** @description Provider-agnostic operations supported by the discovered model. */
+      /** @description Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields. */
       operations: components["schemas"]["ModelOperation"][];
       /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
       modalities: components["schemas"]["ModelOperationContentType"][];
@@ -682,12 +732,14 @@ export interface components {
       resources: components["schemas"]["ModelResourceSummary"][];
     };
     ModelDetail: {
-      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields. */
       name: string;
+      managedRuntime: components["schemas"]["ManagedRuntime"];
+      /** @description Managed runtime locality summary. Mirrors `managedRuntime.locality` for compatibility with earlier inspect fields. */
       providerLocality: components["schemas"]["WorkerModelLocality"];
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
-      /** @description Union of provider-agnostic operations supported by workers for this model. */
+      /** @description Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields. */
       operations: components["schemas"]["ModelOperation"][];
       /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
       modalities: components["schemas"]["ModelOperationContentType"][];
@@ -740,18 +792,19 @@ export interface components {
       sha256?: string;
     };
     /**
-     * @description Outcome of a managed local-model asset pull request.
+     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
      * @enum {string}
      */
     ModelPullOutcome: ModelPullOutcome;
     ModelPullResponse: {
-      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields. */
       modelName: string;
+      managedRuntimePull: components["schemas"]["ManagedRuntimePullResult"];
       providerLocality: components["schemas"]["WorkerModelLocality"];
       outcome: components["schemas"]["ModelPullOutcome"];
-      /** @description Final managed cache directory that now contains the pulled model assets. */
+      /** @description Final managed cache directory that now contains the installed runtime assets. Mirrors `managedRuntimePull.cachePath`. */
       cachePath: string;
-      /** @description Pulled source revision identifier, such as an upstream repository commit SHA. */
+      /** @description Managed revision identifier for the installed runtime assets. Mirrors `managedRuntimePull.revision`. */
       revision: string;
       /** @description Files that were downloaded or verified as already present for the managed cache entry. */
       downloadedFiles: components["schemas"]["ModelPullDownloadedFile"][];
@@ -794,12 +847,12 @@ export interface components {
       provider?: string;
     };
     /**
-     * @description Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+     * @description Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
      * @enum {string}
      */
     ModelStatus: ModelStatus;
     /**
-     * @description Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+     * @description Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
      * @enum {string}
      */
     ModelLoadState: ModelLoadState;
@@ -3079,7 +3132,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Discovered models for the current runtime. */
+      /** @description Managed runtimes for the current runtime. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3096,14 +3149,14 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+        /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. */
         model_name: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Discovered model detail. */
+      /** @description Managed runtime detail. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3152,14 +3205,14 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+        /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. */
         model_name: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Successful local-model asset pull or confirmation that the managed cache already contained the required revision. */
+      /** @description Successful managed runtime pull or install, or confirmation that the managed cache already contained the required revision. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3503,6 +3556,54 @@ export const SubmitWorkDocumentItemType = {
 } as const;
 export type SubmitWorkDocumentItemType =
   (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const ManagedRuntimeLifecycleState = {
+  // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
+  NOT_APPLICABLE: "NOT_APPLICABLE",
+  // Required managed runtime assets are not installed in the managed cache.
+  NOT_INSTALLED: "NOT_INSTALLED",
+  // Managed runtime assets are being pulled or installed into the managed cache.
+  INSTALLING: "INSTALLING",
+  // Required managed runtime assets are installed in the managed cache but not loaded for invocation.
+  INSTALLED: "INSTALLED",
+  // Managed runtime assets are being loaded into an invocation-ready runtime handle.
+  LOADING: "LOADING",
+  // Managed runtime assets are loaded and available for invocation subject to readiness checks.
+  LOADED: "LOADED",
+} as const;
+export type ManagedRuntimeLifecycleState =
+  (typeof ManagedRuntimeLifecycleState)[keyof typeof ManagedRuntimeLifecycleState];
+export const ManagedRuntimePullOutcome = {
+  // The managed runtime was already ready and no additional install work was required.
+  ALREADY_READY: "ALREADY_READY",
+  // Required managed runtime assets were installed successfully into the managed cache.
+  INSTALLED_SUCCESSFULLY: "INSTALLED_SUCCESSFULLY",
+  // Required managed runtime assets were already present in the managed cache at the requested revision.
+  ALREADY_PRESENT: "ALREADY_PRESENT",
+  // Managed runtime install or preparation is still in progress.
+  STILL_LOADING: "STILL_LOADING",
+  // Managed runtime install or preparation timed out before reaching a terminal readiness state.
+  TIMED_OUT: "TIMED_OUT",
+  // Required managed runtime assets could not be fetched from the configured backend source.
+  SOURCE_FETCH_FAILED: "SOURCE_FETCH_FAILED",
+  // The requested managed runtime does not support pull or install in the current configuration.
+  UNSUPPORTED_RUNTIME: "UNSUPPORTED_RUNTIME",
+} as const;
+export type ManagedRuntimePullOutcome =
+  (typeof ManagedRuntimePullOutcome)[keyof typeof ManagedRuntimePullOutcome];
+export const ManagedRuntimeReadinessState = {
+  // Required managed runtime assets are present and the runtime is ready for invocation.
+  READY: "READY",
+  // Required managed runtime assets are not present and pull or install is required.
+  MISSING: "MISSING",
+  // Managed runtime assets are being prepared or loaded.
+  LOADING: "LOADING",
+  // Managed runtime setup failed and requires operator attention.
+  FAILED: "FAILED",
+  // The managed runtime is not supported by the current factory or platform configuration.
+  UNSUPPORTED: "UNSUPPORTED",
+} as const;
+export type ManagedRuntimeReadinessState =
+  (typeof ManagedRuntimeReadinessState)[keyof typeof ManagedRuntimeReadinessState];
 export const ModelInvocationResponseMode = {
   METADATA: "METADATA",
   AUDIO_STREAM: "AUDIO_STREAM",

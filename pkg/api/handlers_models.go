@@ -116,14 +116,16 @@ func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName str
 		}
 		files = append(files, current)
 	}
-	s.writeJSON(w, http.StatusOK, factoryapi.ModelPullResponse{
+	response := factoryapi.ModelPullResponse{
 		ModelName:        result.ModelName,
 		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
 		Outcome:          factoryapi.ModelPullOutcome(result.Outcome),
 		CachePath:        result.CachePath,
 		Revision:         result.Revision,
 		DownloadedFiles:  files,
-	})
+	}
+	response.ManagedRuntimePull = apisurface.ManagedRuntimePullResultFromService(result, files)
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func decodeModelInvocationRequestBody(body io.Reader) (factoryapi.ModelInvocationRequest, error) {

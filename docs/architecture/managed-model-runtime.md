@@ -1,0 +1,62 @@
+# Managed Model Runtime
+
+This note documents the source abstraction boundary for managed model runtimes in
+infinite-you. It is intentionally sparse and complements the public OpenAPI and
+reference docs rather than replacing them.
+
+## Customer Contract
+
+Customers interact with **managed runtimes** through one provider-agnostic
+lifecycle vocabulary:
+
+- **identity** — stable runtime name shared by list, inspect, pull or install,
+  factory dependency validation, and invocation surfaces
+- **readinessState** — whether invocation can proceed now (`READY`, `MISSING`,
+  `LOADING`, `FAILED`, `UNSUPPORTED`)
+- **lifecycleState** — install, cache, and load progression (`NOT_APPLICABLE`,
+  `NOT_INSTALLED`, `INSTALLING`, `INSTALLED`, `LOADING`, `LOADED`)
+- **locality** — `LOCAL` or `CLOUD`
+- **supportedOperations** — provider-agnostic operation contract
+- **managedRuntimePull.pullOutcome** — source-agnostic pull or install outcomes
+
+Legacy discovery fields such as `status`, `loadState`, and `outcome` remain as
+compatibility projections of the managed-runtime contract.
+
+## Source Abstraction Boundary
+
+Managed runtimes sit above backend asset sources. The public contract does not
+require customers to know whether assets resolve from one upstream repository,
+a managed mirror, or another configured backend.
+
+Responsibilities split as follows:
+
+| Layer | Responsibility |
+| --- | --- |
+| OpenAPI and CLI surfaces | Publish managed-runtime vocabulary only |
+| Catalog and readiness projection | Classify configured workers and resources into managed lifecycle states |
+| Source resolver | Select a backend source for a managed runtime identity |
+| Asset puller or installer | Materialize required assets into the managed cache |
+| Local runtime manager | Load installed assets into invocation-ready handles |
+
+Optional `sourceDiagnostics` may expose resolver-classified details for
+operators. Those details are advanced diagnostics, not primary customer setup
+language.
+
+## Multiple Backend Sources
+
+One managed runtime identity may be satisfied by more than one configured
+backend source. Source selection is an implementation concern of the resolver
+layer. Public field names and primary wording stay stable regardless of whether
+the active source is an upstream repository, a regional mirror, or another
+provider integration.
+
+## Invocation Consumption
+
+Invocation surfaces consume **readinessState** and **lifecycleState** from the
+managed runtime contract instead of re-deriving source-specific cache or
+repository conditions.
+
+When a required runtime is `MISSING`, `LOADING`, `FAILED`, or `UNSUPPORTED`,
+invocation returns actionable outcomes derived from the managed contract. When a
+runtime is `READY`, packaged and authored factories invoke through the same
+managed runtime layer.

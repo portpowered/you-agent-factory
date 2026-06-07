@@ -97,10 +97,14 @@ func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]Cata
 			return aggregate.capabilities[i].Worker < aggregate.capabilities[j].Worker
 		})
 		summary := buildModelSummary(*aggregate)
+		detailDiagnostics := modelDiagnostics(*aggregate, summary)
+		managedRuntime := buildManagedRuntime(summary, detailDiagnostics)
+		summary.ManagedRuntime = managedRuntime
 		catalog[key] = CatalogEntry{
 			Summary: summary,
 			Detail: factoryapi.ModelDetail{
 				Name:             summary.Name,
+				ManagedRuntime:   managedRuntime,
 				ProviderLocality: summary.ProviderLocality,
 				Status:           summary.Status,
 				LoadState:        summary.LoadState,
@@ -108,7 +112,7 @@ func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]Cata
 				Modalities:       summary.Modalities,
 				Resources:        summary.Resources,
 				Capabilities:     aggregate.capabilities,
-				Diagnostics:      modelDiagnostics(*aggregate, summary),
+				Diagnostics:      detailDiagnostics,
 			},
 		}
 	}
@@ -340,9 +344,9 @@ func modelDiagnostics(aggregate catalogAggregate, summary factoryapi.ModelSummar
 		"mixedLocality":    strconv.FormatBool(len(aggregate.localities) > 1),
 	}
 	if summary.Status == factoryapi.ModelStatusUNAVAILABLE {
-		diagnostics["statusReason"] = "local model workers require a matching MODEL resource declaration for readiness"
+		diagnostics["statusReason"] = "managed runtime assets are missing or not yet installed"
 	} else {
-		diagnostics["statusReason"] = "declared worker capabilities and resources are discoverable"
+		diagnostics["statusReason"] = "managed runtime is discoverable with declared operations and resources"
 	}
 	return diagnostics
 }

@@ -266,6 +266,11 @@ func TestPullModel_ReturnsManagedCachePullMetadata(t *testing.T) {
 	if response.Outcome != factoryapi.ModelPullOutcome("PULLED") || response.CachePath == "" || len(response.DownloadedFiles) != 1 {
 		t.Fatalf("pull response = %#v, want pull metadata", response)
 	}
+	if response.ManagedRuntimePull.Identity != "OMNIVOICE_Q4_K_M" ||
+		response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ||
+		response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("managed runtime pull = %#v, want installed successfully", response.ManagedRuntimePull)
+	}
 }
 
 func TestGetCurrentFactory_ReturnsDefinitionAndVersion(t *testing.T) {

@@ -241,6 +241,36 @@ const (
 	Cursor LoadableProviderSessionProvider = "cursor"
 )
 
+// Defines values for ManagedRuntimeLifecycleState.
+const (
+	ManagedRuntimeLifecycleStateINSTALLED     ManagedRuntimeLifecycleState = "INSTALLED"
+	ManagedRuntimeLifecycleStateINSTALLING    ManagedRuntimeLifecycleState = "INSTALLING"
+	ManagedRuntimeLifecycleStateLOADED        ManagedRuntimeLifecycleState = "LOADED"
+	ManagedRuntimeLifecycleStateLOADING       ManagedRuntimeLifecycleState = "LOADING"
+	ManagedRuntimeLifecycleStateNOTAPPLICABLE ManagedRuntimeLifecycleState = "NOT_APPLICABLE"
+	ManagedRuntimeLifecycleStateNOTINSTALLED  ManagedRuntimeLifecycleState = "NOT_INSTALLED"
+)
+
+// Defines values for ManagedRuntimePullOutcome.
+const (
+	ManagedRuntimePullOutcomeALREADYPRESENT        ManagedRuntimePullOutcome = "ALREADY_PRESENT"
+	ManagedRuntimePullOutcomeALREADYREADY          ManagedRuntimePullOutcome = "ALREADY_READY"
+	ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ManagedRuntimePullOutcome = "INSTALLED_SUCCESSFULLY"
+	ManagedRuntimePullOutcomeSOURCEFETCHFAILED     ManagedRuntimePullOutcome = "SOURCE_FETCH_FAILED"
+	ManagedRuntimePullOutcomeSTILLLOADING          ManagedRuntimePullOutcome = "STILL_LOADING"
+	ManagedRuntimePullOutcomeTIMEDOUT              ManagedRuntimePullOutcome = "TIMED_OUT"
+	ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME    ManagedRuntimePullOutcome = "UNSUPPORTED_RUNTIME"
+)
+
+// Defines values for ManagedRuntimeReadinessState.
+const (
+	ManagedRuntimeReadinessStateFAILED      ManagedRuntimeReadinessState = "FAILED"
+	ManagedRuntimeReadinessStateLOADING     ManagedRuntimeReadinessState = "LOADING"
+	ManagedRuntimeReadinessStateMISSING     ManagedRuntimeReadinessState = "MISSING"
+	ManagedRuntimeReadinessStateREADY       ManagedRuntimeReadinessState = "READY"
+	ManagedRuntimeReadinessStateUNSUPPORTED ManagedRuntimeReadinessState = "UNSUPPORTED"
+)
+
 // Defines values for ModelInvocationResponseMode.
 const (
 	AUDIOSTREAM ModelInvocationResponseMode = "AUDIO_STREAM"
@@ -264,8 +294,8 @@ const (
 
 // Defines values for ModelPullOutcome.
 const (
-	ALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
-	PULLED         ModelPullOutcome = "PULLED"
+	ModelPullOutcomeALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
+	ModelPullOutcomePULLED         ModelPullOutcome = "PULLED"
 )
 
 // Defines values for ModelStatus.
@@ -1398,7 +1428,7 @@ type ListFactorySessionsResponse struct {
 
 // ListModelsResponse defines model for ListModelsResponse.
 type ListModelsResponse struct {
-	// Results Discovered models exposed by the currently loaded runtime configuration.
+	// Results Managed runtimes exposed by the currently loaded runtime configuration.
 	Results []ModelSummary `json:"results"`
 }
 
@@ -1426,6 +1456,71 @@ type LoadableProviderSessionRef struct {
 	Provider LoadableProviderSessionProvider `json:"provider"`
 }
 
+// ManagedRuntime defines model for ManagedRuntime.
+type ManagedRuntime struct {
+	Diagnostics *StringMap `json:"diagnostics,omitempty"`
+
+	// Identity Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
+	Identity string `json:"identity"`
+
+	// LifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
+	LifecycleState ManagedRuntimeLifecycleState `json:"lifecycleState"`
+
+	// Locality Provider locality for a model worker capability declaration.
+	Locality WorkerModelLocality `json:"locality"`
+
+	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
+
+	// SupportedOperations Provider-agnostic operations supported by this managed runtime.
+	SupportedOperations []ModelOperation `json:"supportedOperations"`
+}
+
+// ManagedRuntimeLifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
+type ManagedRuntimeLifecycleState string
+
+// ManagedRuntimePullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+type ManagedRuntimePullOutcome string
+
+// ManagedRuntimePullResult defines model for ManagedRuntimePullResult.
+type ManagedRuntimePullResult struct {
+	// CachePath Managed cache directory that now contains the installed runtime assets.
+	CachePath *string `json:"cachePath,omitempty"`
+
+	// DownloadedFiles Files downloaded or verified as already present for the managed cache entry.
+	DownloadedFiles *[]ModelPullDownloadedFile `json:"downloadedFiles,omitempty"`
+
+	// Identity Stable managed runtime identity targeted by the pull or install request.
+	Identity string `json:"identity"`
+
+	// PullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+	PullOutcome ManagedRuntimePullOutcome `json:"pullOutcome"`
+
+	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
+
+	// Revision Managed revision identifier for the installed runtime assets.
+	Revision *string `json:"revision,omitempty"`
+
+	// SourceDiagnostics Optional advanced diagnostics for how one managed runtime resolved assets from a configured backend source. Source details are implementation diagnostics and are not required for the primary customer lifecycle contract.
+	SourceDiagnostics *ManagedRuntimeSourceDiagnostics `json:"sourceDiagnostics,omitempty"`
+}
+
+// ManagedRuntimeReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+type ManagedRuntimeReadinessState string
+
+// ManagedRuntimeSourceDiagnostics Optional advanced diagnostics for how one managed runtime resolved assets from a configured backend source. Source details are implementation diagnostics and are not required for the primary customer lifecycle contract.
+type ManagedRuntimeSourceDiagnostics struct {
+	// ResolverNotes Concise resolver note suitable for operator diagnostics.
+	ResolverNotes *string `json:"resolverNotes,omitempty"`
+
+	// SourceId Opaque resolver identifier for the selected backend source instance.
+	SourceId *string `json:"sourceId,omitempty"`
+
+	// SourceKind Resolver-classified backend source kind, such as `UPSTREAM_REPOSITORY` or `MANAGED_MIRROR`, without exposing provider-native repository vocabulary in the primary customer contract.
+	SourceKind *string `json:"sourceKind,omitempty"`
+}
+
 // ModelCapability defines model for ModelCapability.
 type ModelCapability struct {
 	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
@@ -1450,16 +1545,17 @@ type ModelDetail struct {
 	Capabilities []ModelCapability `json:"capabilities"`
 	Diagnostics  StringMap         `json:"diagnostics"`
 
-	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
-	LoadState ModelLoadState `json:"loadState"`
+	// LoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
+	LoadState      ModelLoadState `json:"loadState"`
+	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across all declared operation inputs and outputs.
 	Modalities []ModelOperationContentType `json:"modalities"`
 
-	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields.
 	Name string `json:"name"`
 
-	// Operations Union of provider-agnostic operations supported by workers for this model.
+	// Operations Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
 	Operations []ModelOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
@@ -1468,7 +1564,7 @@ type ModelDetail struct {
 	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
 	Resources []ModelResourceSummary `json:"resources"`
 
-	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	// Status Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
 	Status ModelStatus `json:"status"`
 }
 
@@ -1517,7 +1613,7 @@ type ModelInvocationResponse struct {
 // ModelInvocationResponseMode Requested direct-invocation response mode.
 type ModelInvocationResponseMode string
 
-// ModelLoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+// ModelLoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
 type ModelLoadState string
 
 // ModelOperation One provider-agnostic operation exposed by a model worker, such as `TTS`.
@@ -1562,27 +1658,28 @@ type ModelPullDownloadedFile struct {
 	Sha256 *string `json:"sha256,omitempty"`
 }
 
-// ModelPullOutcome Outcome of a managed local-model asset pull request.
+// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
 type ModelPullOutcome string
 
 // ModelPullResponse defines model for ModelPullResponse.
 type ModelPullResponse struct {
-	// CachePath Final managed cache directory that now contains the pulled model assets.
+	// CachePath Final managed cache directory that now contains the installed runtime assets. Mirrors `managedRuntimePull.cachePath`.
 	CachePath string `json:"cachePath"`
 
 	// DownloadedFiles Files that were downloaded or verified as already present for the managed cache entry.
-	DownloadedFiles []ModelPullDownloadedFile `json:"downloadedFiles"`
+	DownloadedFiles    []ModelPullDownloadedFile `json:"downloadedFiles"`
+	ManagedRuntimePull ManagedRuntimePullResult  `json:"managedRuntimePull"`
 
-	// ModelName Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	// ModelName Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields.
 	ModelName string `json:"modelName"`
 
-	// Outcome Outcome of a managed local-model asset pull request.
+	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
 	Outcome ModelPullOutcome `json:"outcome"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`
 
-	// Revision Pulled source revision identifier, such as an upstream repository commit SHA.
+	// Revision Managed revision identifier for the installed runtime assets. Mirrors `managedRuntimePull.revision`.
 	Revision string `json:"revision"`
 }
 
@@ -1703,21 +1800,22 @@ type ModelResponseEventPayload struct {
 	Worker string `json:"worker"`
 }
 
-// ModelStatus Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+// ModelStatus Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
 type ModelStatus string
 
 // ModelSummary defines model for ModelSummary.
 type ModelSummary struct {
-	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
-	LoadState ModelLoadState `json:"loadState"`
+	// LoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
+	LoadState      ModelLoadState `json:"loadState"`
+	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across the model's declared operation inputs and outputs.
 	Modalities []ModelOperationContentType `json:"modalities"`
 
-	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields.
 	Name string `json:"name"`
 
-	// Operations Provider-agnostic operations supported by the discovered model.
+	// Operations Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
 	Operations []ModelOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
@@ -1726,7 +1824,7 @@ type ModelSummary struct {
 	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
 	Resources []ModelResourceSummary `json:"resources"`
 
-	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	// Status Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
 	Status ModelStatus `json:"status"`
 }
 
@@ -4012,16 +4110,16 @@ type ServerInterface interface {
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
-	// List discovered models
+	// List managed runtimes
 	// (GET /models)
 	ListModels(w http.ResponseWriter, r *http.Request)
-	// Get one discovered model
+	// Inspect one managed runtime
 	// (GET /models/{model_name})
 	GetModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Invoke one discovered model directly
 	// (POST /models/{model_name}/invocations)
 	InvokeModel(w http.ResponseWriter, r *http.Request, modelName string)
-	// Pull local model assets into the managed cache
+	// Pull or install one managed runtime
 	// (POST /models/{model_name}/pull)
 	PullModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Get provider session details
