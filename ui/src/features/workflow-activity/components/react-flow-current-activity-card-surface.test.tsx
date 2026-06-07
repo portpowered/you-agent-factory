@@ -113,6 +113,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     connectionNotice: "Only workstation-to-work-state routes are supported.",
     currentFactoryDefinition: null,
     draftState: { hasChanges: true, pendingFactoryDefinition: null },
+    layoutDraftState: { hasChanges: false },
+    moveLayoutNode: vi.fn(),
     editorMode: true,
     structuralValidation: {
       projection: {

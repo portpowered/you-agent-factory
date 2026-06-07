@@ -1,0 +1,173 @@
+import type { components } from "../../../api/generated/openapi";
+import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
+
+export type FactoryLayout = NonNullable<
+  components["schemas"]["Factory"]["layout"]
+>;
+export type FactoryLayoutPoint = FactoryLayout["nodes"] extends
+  | (infer TNode)[]
+  | undefined
+  ? TNode extends { position: infer Position }
+    ? Position
+    : { x: number; y: number }
+  : { x: number; y: number };
+
+export const FACTORY_LAYOUT_SCHEMA_VERSION = 1;
+
+export function createDefaultFactoryLayout(): FactoryLayout {
+  return {
+    schemaVersion: FACTORY_LAYOUT_SCHEMA_VERSION,
+  };
+}
+
+export function factoryLayoutFromDefinition(
+  factoryDefinition: CanonicalFactoryDefinition | null | undefined,
+): FactoryLayout {
+  if (!factoryDefinition?.layout) {
+    return createDefaultFactoryLayout();
+  }
+
+  return structuredClone(factoryDefinition.layout);
+}
+
+export function factoryLayoutNodePosition(
+  layout: FactoryLayout,
+  nodeId: string,
+): FactoryLayoutPoint | undefined {
+  const node = layout.nodes?.find((entry) => entry.id === nodeId);
+  if (!node) {
+    return undefined;
+  }
+
+  const { x, y } = node.position;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return undefined;
+  }
+
+  return { x, y };
+}
+
+export function moveFactoryLayoutNode(
+  layout: FactoryLayout,
+  nodeId: string,
+  position: FactoryLayoutPoint,
+): FactoryLayout {
+  const nodes = [...(layout.nodes ?? [])];
+  const existingIndex = nodes.findIndex((entry) => entry.id === nodeId);
+  const nextNode = {
+    ...(existingIndex >= 0 ? nodes[existingIndex] : { id: nodeId }),
+    id: nodeId,
+    position: {
+      x: position.x,
+      y: position.y,
+    },
+  };
+
+  if (existingIndex >= 0) {
+    nodes[existingIndex] = nextNode;
+  } else {
+    nodes.push(nextNode);
+  }
+
+  return {
+    ...layout,
+    nodes,
+    schemaVersion: layout.schemaVersion ?? FACTORY_LAYOUT_SCHEMA_VERSION,
+  };
+}
+
+export function moveFactoryLayoutNodesByDelta(
+  layout: FactoryLayout,
+  nodeIds: readonly string[],
+  delta: FactoryLayoutPoint,
+  resolvedPositionsByNodeId: ReadonlyMap<string, FactoryLayoutPoint>,
+): FactoryLayout {
+  let nextLayout = layout;
+  for (const nodeId of nodeIds) {
+    const currentPosition =
+      factoryLayoutNodePosition(nextLayout, nodeId) ??
+      resolvedPositionsByNodeId.get(nodeId);
+    if (!currentPosition) {
+      continue;
+    }
+
+    nextLayout = moveFactoryLayoutNode(nextLayout, nodeId, {
+      x: currentPosition.x + delta.x,
+      y: currentPosition.y + delta.y,
+    });
+  }
+
+  return nextLayout;
+}
+
+export function factoryLayoutPositionsByNodeId(
+  layout: FactoryLayout,
+): Map<string, FactoryLayoutPoint> {
+  const positions = new Map<string, FactoryLayoutPoint>();
+  for (const node of layout.nodes ?? []) {
+    const position = factoryLayoutNodePosition(layout, node.id);
+    if (position) {
+      positions.set(node.id, position);
+    }
+  }
+  return positions;
+}
+
+export function resolveProjectedLayoutPositions(input: {
+  autoLayoutPositionsByNodeId: ReadonlyMap<string, FactoryLayoutPoint>;
+  canonicalLayout: FactoryLayout;
+  nodeIds: readonly string[];
+}): Map<string, FactoryLayoutPoint> {
+  const canonicalPositions = factoryLayoutPositionsByNodeId(
+    input.canonicalLayout,
+  );
+  const projected = new Map<string, FactoryLayoutPoint>();
+
+  for (const nodeId of input.nodeIds) {
+    const canonicalPosition = canonicalPositions.get(nodeId);
+    if (canonicalPosition) {
+      projected.set(nodeId, canonicalPosition);
+      continue;
+    }
+
+    const autoLayoutPosition = input.autoLayoutPositionsByNodeId.get(nodeId);
+    if (autoLayoutPosition) {
+      projected.set(nodeId, autoLayoutPosition);
+    }
+  }
+
+  return projected;
+}
+
+export function hasFactoryLayoutChanges(
+  baseLayout: FactoryLayout,
+  pendingLayout: FactoryLayout,
+): boolean {
+  return (
+    JSON.stringify(normalizeFactoryLayoutForComparison(baseLayout)) !==
+    JSON.stringify(normalizeFactoryLayoutForComparison(pendingLayout))
+  );
+}
+
+export function applyPendingFactoryLayout(
+  factoryDefinition: CanonicalFactoryDefinition,
+  pendingLayout: FactoryLayout,
+): CanonicalFactoryDefinition {
+  return {
+    ...factoryDefinition,
+    layout: structuredClone(pendingLayout),
+  };
+}
+
+function normalizeFactoryLayoutForComparison(layout: FactoryLayout) {
+  return {
+    edges: layout.edges ?? [],
+    groups: layout.groups ?? [],
+    nodes: [...(layout.nodes ?? [])].sort((left, right) =>
+      left.id.localeCompare(right.id),
+    ),
+    preferences: layout.preferences ?? null,
+    schemaVersion: layout.schemaVersion ?? FACTORY_LAYOUT_SCHEMA_VERSION,
+    viewport: layout.viewport ?? null,
+  };
+}

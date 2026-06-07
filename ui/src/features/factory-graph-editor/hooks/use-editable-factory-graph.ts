@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
+import { resolveProjectedLayoutPositions } from "../lib/factory-graph-layout-operations";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -18,6 +19,7 @@ import {
   removeFactoryGraphNode,
 } from "../lib/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
+import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
 import { useEditableFactoryGraphSaveController } from "./use-editable-factory-graph-save-controller";
 import type {
   EditableFactoryGraphViewModel,
@@ -30,6 +32,7 @@ export function useEditableFactoryGraph(
   const [blockedOperation, setBlockedOperation] =
     useState<FactoryGraphOperationResult<never> | null>(null);
   const draftState = useFactoryGraphDraftState(options);
+  const layoutDraftState = useFactoryGraphLayoutDraftState(options);
   const baseFactoryDefinition =
     draftState.latestDocument ?? draftState.baseDocument ?? null;
   const graphState = useEditableFactoryGraphState({
@@ -40,10 +43,16 @@ export function useEditableFactoryGraph(
   const projection = useMemo(() => {
     const factoryDefinition =
       draftState.pendingFactoryDefinition ?? draftState.baseDocument ?? null;
+    const layoutPositionsByNodeId = resolveProjectedLayoutPositions({
+      autoLayoutPositionsByNodeId: new Map(),
+      canonicalLayout: layoutDraftState.layout,
+      nodeIds: draftState.graph.nodes.map((node) => node.id),
+    });
 
     return projectFactoryGraphToReactFlow({
       factoryDefinition,
       filterEdgesToRenderedHandles: true,
+      layoutPositionsByNodeId,
       locale: options.locale ?? undefined,
       topology: draftState.graph,
       workstationResolver: factoryDefinition
@@ -57,12 +66,14 @@ export function useEditableFactoryGraph(
     draftState.baseDocument,
     draftState.graph,
     draftState.pendingFactoryDefinition,
+    layoutDraftState.layout,
     options.locale,
   ]);
   const saveController = useEditableFactoryGraphSaveController({
     activeWorkCount: options.activeWorkCount ?? 0,
     draftState,
     factoryDocumentScopeKey: options.factoryDocumentScopeKey ?? null,
+    layoutDraftState,
     locale: options.locale,
     setBlockedOperation,
   });
@@ -74,9 +85,10 @@ export function useEditableFactoryGraph(
   });
   const discard = useCallback(() => {
     draftState.resetDraft();
+    layoutDraftState.resetLayout();
     setBlockedOperation(null);
     saveController.resetSaveState();
-  }, [draftState, saveController]);
+  }, [draftState, layoutDraftState, saveController]);
 
   return {
     actions: {
@@ -84,6 +96,7 @@ export function useEditableFactoryGraph(
       connectNodes: mutationActions.connectNodes,
       discard,
       disconnectEdge: mutationActions.disconnectEdge,
+      moveLayoutNode: layoutDraftState.moveNode,
       removeNode: mutationActions.removeNode,
       save: saveController.save,
       updateNodeField: mutationActions.updateNodeField,
@@ -91,8 +104,11 @@ export function useEditableFactoryGraph(
     blockedOperation,
     draftState,
     graphState,
+    layoutDraftState,
     pendingState: {
-      hasChanges: draftState.hasChanges,
+      hasChanges: draftState.hasChanges || layoutDraftState.hasChanges,
+      hasLayoutChanges: layoutDraftState.hasChanges,
+      hasTopologyChanges: draftState.hasChanges,
       pendingFactoryDefinition: draftState.pendingFactoryDefinition,
     },
     projection,

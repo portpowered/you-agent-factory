@@ -158,6 +158,9 @@ export function CurrentActivityGraphSurface({
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
         graphKey={graph.graphKey}
+        moveLayoutNode={
+          editor.editorMode ? editor.moveLayoutNode : undefined
+        }
         nodes={graph.nodes}
         setStoredNodePosition={graph.setStoredNodePosition}
         storedNodePositions={storedNodePositions}
@@ -181,7 +184,10 @@ export function CurrentActivityGraphSurface({
         handleSaveDraft={() => {
           editor.setIsConfirmingSave(true);
         }}
-        hasPendingChanges={editor.draftState.hasChanges}
+        hasPendingChanges={
+          editor.draftState.hasChanges ||
+          (editor.layoutDraftState?.hasChanges ?? false)
+        }
         headingID={headingID}
         imports={imports}
         initialFitViewKey={graph.initialFitViewKey}
@@ -202,6 +208,7 @@ export function CurrentActivityGraphSurface({
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}
         saveDisabledReason={editor.saveBlockedReason}
+        moveLayoutNode={editor.moveLayoutNode}
         setStoredNodePosition={graph.setStoredNodePosition}
       />
     </div>

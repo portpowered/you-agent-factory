@@ -24,6 +24,10 @@ import {
   type FactoryGraphDraftDerivedState,
 } from "../features/factory-graph-editor/lib/factory-graph-draft-types";
 import {
+  createDefaultFactoryLayout,
+  moveFactoryLayoutNode,
+} from "../features/factory-graph-editor/lib/factory-graph-layout-operations";
+import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
   connectFactoryGraphNodes,
@@ -305,9 +309,36 @@ export function createHookTestGraphEditorDraftState(
   return state;
 }
 
+function createMockLayoutDraftState() {
+  const baseLayout = createDefaultFactoryLayout();
+  const state = {
+    adoptSavedLayout: vi.fn((layout: typeof baseLayout) => {
+      state.baseLayout = structuredClone(layout);
+      state.layout = structuredClone(layout);
+      state.hasChanges = false;
+    }),
+    baseLayout,
+    hasChanges: false,
+    layout: structuredClone(baseLayout),
+    moveNode: vi.fn((nodeId: string, position: { x: number; y: number }) => {
+      state.layout = moveFactoryLayoutNode(state.layout, nodeId, position);
+      state.hasChanges = true;
+    }),
+    moveNodesByDelta: vi.fn(),
+    replaceLayout: vi.fn(),
+    resetLayout: vi.fn(() => {
+      state.layout = structuredClone(state.baseLayout);
+      state.hasChanges = false;
+    }),
+  };
+
+  return state;
+}
+
 function createMockEditableFactoryGraphActions(
   options: UseEditableFactoryGraphOptions,
   draftState: MockGraphEditorDraftState,
+  layoutDraftState: ReturnType<typeof createMockLayoutDraftState>,
   baseDefinition: CurrentFactoryDocument | null,
   activeWorkCount: number,
 ): EditableFactoryGraphViewModel["actions"] {
@@ -346,7 +377,10 @@ function createMockEditableFactoryGraphActions(
       }
       return result;
     },
-    discard: draftState.resetDraft,
+    discard: () => {
+      draftState.resetDraft();
+      layoutDraftState.resetLayout();
+    },
     disconnectEdge: (edgeId) => {
       const result = baseDefinition
         ? disconnectFactoryGraphEdge({
@@ -382,10 +416,13 @@ function createMockEditableFactoryGraphActions(
       }
       return result;
     },
+    moveLayoutNode: layoutDraftState.moveNode,
     save: async () => {
+      const hasPendingEdits =
+        draftState.hasChanges || layoutDraftState.hasChanges;
       if (
         options.factoryDocumentScopeKey == null ||
-        !draftState.hasChanges ||
+        !hasPendingEdits ||
         !draftState.pendingFactoryDefinition ||
         !draftState.latestDocument ||
         activeWorkCount > 0
@@ -396,6 +433,7 @@ function createMockEditableFactoryGraphActions(
       const saveInput = applyFactoryGraphPendingEdits({
         baseFactoryDefinition: draftState.latestDocument,
         draft: draftState.draft,
+        pendingLayout: layoutDraftState.layout,
       });
       if (!saveInput.ok) {
         return false;
@@ -407,6 +445,9 @@ function createMockEditableFactoryGraphActions(
         factory: saveInput.value,
       });
       draftState.replaceDraft(createEmptyFactoryGraphDraft());
+      layoutDraftState.adoptSavedLayout(
+        saveInput.value.layout ?? createDefaultFactoryLayout(),
+      );
       return true;
     },
     updateNodeField: () => ({
@@ -423,6 +464,7 @@ export function createMockEditableFactoryGraph(
 ): EditableFactoryGraphViewModel {
   const baseDefinition =
     draftState.latestDocument ?? draftState.baseDocument ?? null;
+  const layoutDraftState = createMockLayoutDraftState();
   const activeWorkCount = options.activeWorkCount ?? 0;
   const isStale =
     draftState.hasChanges &&
@@ -437,14 +479,18 @@ export function createMockEditableFactoryGraph(
     actions: createMockEditableFactoryGraphActions(
       options,
       draftState,
+      layoutDraftState,
       baseDefinition,
       activeWorkCount,
     ),
     blockedOperation: null,
     draftState,
     graphState: null,
+    layoutDraftState,
     pendingState: {
-      hasChanges: draftState.hasChanges,
+      hasChanges: draftState.hasChanges || layoutDraftState.hasChanges,
+      hasLayoutChanges: layoutDraftState.hasChanges,
+      hasTopologyChanges: draftState.hasChanges,
       pendingFactoryDefinition: draftState.pendingFactoryDefinition,
     },
     projection: {
@@ -471,7 +517,7 @@ export function createMockEditableFactoryGraph(
       get canSave() {
         return (
           options.factoryDocumentScopeKey != null &&
-          draftState.hasChanges &&
+          (draftState.hasChanges || layoutDraftState.hasChanges) &&
           draftState.pendingFactoryDefinition !== null &&
           draftState.latestDocument !== null &&
           activeWorkCount === 0 &&

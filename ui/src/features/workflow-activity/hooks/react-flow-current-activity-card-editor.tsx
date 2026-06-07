@@ -131,6 +131,8 @@ export function useCurrentActivityGraphEditor(
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,
+    layoutDraftState: editableGraph.layoutDraftState,
+    moveLayoutNode: editableGraph.actions.moveLayoutNode,
     editableDefinitionQuery: currentFactoryQuery,
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,

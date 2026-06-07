@@ -2,6 +2,7 @@ import type { useCurrentFactoryDocument } from "../../current-factory-definition
 import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/factory-graph-layout-draft-hook";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
 import type {
@@ -26,6 +27,8 @@ export function buildCurrentActivityGraphEditorValue(args: {
   connectionNotice: string | null;
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
+  moveLayoutNode: (nodeId: string, position: { x: number; y: number }) => void;
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
@@ -88,6 +91,8 @@ export function buildCurrentActivityGraphEditorValue(args: {
     connectionNotice: args.connectionNotice,
     currentFactoryDefinition: args.currentFactoryDefinition,
     draftState: args.draftState,
+    layoutDraftState: args.layoutDraftState,
+    moveLayoutNode: args.moveLayoutNode,
     editableDefinitionQuery: args.editableDefinitionQuery,
     editorUnavailableClassifierWorkstationName:
       args.editorUnavailableClassifierWorkstationName,

@@ -31,6 +31,14 @@ import {
   buildHandleAssignments,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
+import {
+  createDefaultFactoryLayout,
+  factoryLayoutFromDefinition,
+} from "../../factory-graph-editor/lib/factory-graph-layout-operations";
+import {
+  graphNodePositionsFromCanonicalLayout,
+  mergeLegacyStoredGraphNodePositions,
+} from "../lib/factory-graph-canonical-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -357,7 +365,7 @@ export function useCurrentActivityGraphViewModel({
   const bridgePositionsToGraphKey = useCurrentActivityGraphStore(
     (state) => state.bridgePositionsToGraphKey,
   );
-  const storedNodePositions = useMemo(
+  const legacyStoredNodePositions = useMemo(
     () =>
       graphKey
         ? resolveStoredNodePositionsForGraphKey(
@@ -368,6 +376,30 @@ export function useCurrentActivityGraphViewModel({
         : EMPTY_NODE_POSITIONS,
     [graphKey, layoutNodeIds, positionsByGraphKey],
   );
+  const storedNodePositions = useMemo(() => {
+    const canonicalLayout = editor.editorMode
+      ? (editor.layoutDraftState?.layout ?? createDefaultFactoryLayout())
+      : factoryLayoutFromDefinition(displayFactoryDefinition);
+    const canonicalPositions = graphNodePositionsFromCanonicalLayout(
+      graphLayout,
+      canonicalLayout,
+    );
+
+    if (editor.editorMode) {
+      return canonicalPositions;
+    }
+
+    return mergeLegacyStoredGraphNodePositions(
+      canonicalPositions,
+      legacyStoredNodePositions,
+    );
+  }, [
+    displayFactoryDefinition,
+    editor.editorMode,
+    editor.layoutDraftState?.layout,
+    graphLayout,
+    legacyStoredNodePositions,
+  ]);
   const setStoredNodePosition = useCurrentActivityGraphStore(
     (state) => state.setNodePosition,
   );

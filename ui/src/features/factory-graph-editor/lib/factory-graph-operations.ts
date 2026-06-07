@@ -33,6 +33,12 @@ import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "./factory-graph-editor-removals";
+import {
+  applyPendingFactoryLayout,
+  type FactoryLayout,
+  hasFactoryLayoutChanges,
+  factoryLayoutFromDefinition,
+} from "./factory-graph-layout-operations";
 import { materializeFactoryGraphEntityIdsForSave } from "./factory-graph-public-ids";
 
 export {
@@ -315,6 +321,7 @@ export function disconnectFactoryGraphEdge(options: {
 export function applyFactoryGraphPendingEdits(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  pendingLayout?: FactoryLayout | null;
   locale?: string | null;
 }): FactoryGraphOperationResult<CanonicalFactoryDefinition> {
   const validationErrors = validateFactoryGraphDraft(
@@ -333,13 +340,19 @@ export function applyFactoryGraphPendingEdits(options: {
     };
   }
 
+  const baseLayout = factoryLayoutFromDefinition(options.baseFactoryDefinition);
+  const nextFactoryDefinition = buildDraftAppliedFactoryDefinition(
+    options.baseFactoryDefinition,
+    options.draft,
+  );
+  const nextDefinition =
+    options.pendingLayout &&
+    hasFactoryLayoutChanges(baseLayout, options.pendingLayout)
+      ? applyPendingFactoryLayout(nextFactoryDefinition, options.pendingLayout)
+      : nextFactoryDefinition;
+
   return {
     ok: true,
-    value: materializeFactoryGraphEntityIdsForSave(
-      buildDraftAppliedFactoryDefinition(
-        options.baseFactoryDefinition,
-        options.draft,
-      ),
-    ),
+    value: materializeFactoryGraphEntityIdsForSave(nextDefinition),
   };
 }

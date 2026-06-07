@@ -26,6 +26,7 @@ import type {
   FactoryGraphState,
 } from "../lib/factory-graph-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
 
 export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;
@@ -53,6 +54,10 @@ export interface EditableFactoryGraphViewModel {
     removeNode: (
       nodeId: string,
     ) => FactoryGraphOperationResult<FactoryGraphDraft>;
+    moveLayoutNode: (
+      nodeId: string,
+      position: { x: number; y: number },
+    ) => void;
     save: () => Promise<boolean>;
     updateNodeField: (
       update: FactoryGraphNodeFieldUpdate,
@@ -61,8 +66,11 @@ export interface EditableFactoryGraphViewModel {
   blockedOperation: FactoryGraphOperationResult<never> | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   graphState: FactoryGraphState | null;
+  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   pendingState: {
     hasChanges: boolean;
+    hasLayoutChanges: boolean;
+    hasTopologyChanges: boolean;
     pendingFactoryDefinition: CanonicalFactoryDefinition | null;
   };
   projection: FactoryGraphReactFlowProjection;

@@ -211,6 +211,7 @@ export function CurrentActivityGraphViewport({
   onSelectTool,
   openAddMenu,
   saveDisabledReason,
+  moveLayoutNode,
   setStoredNodePosition,
   flowContainerRef,
   flowInstanceRef,
@@ -249,6 +250,7 @@ export function CurrentActivityGraphViewport({
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   openAddMenu?: boolean;
   saveDisabledReason?: string;
+  moveLayoutNode?: (nodeId: string, position: XYPosition) => void;
   setStoredNodePosition: (
     graphKey: string,
     nodeId: string,
@@ -366,6 +368,14 @@ export function CurrentActivityGraphViewport({
                 }
               }}
               onNodeDragStop={(_, node) => {
+                const factoryGraphNodeId = (
+                  node.data as { factoryGraphNodeId?: string } | undefined
+                )?.factoryGraphNodeId;
+                if (editorMode && moveLayoutNode && factoryGraphNodeId) {
+                  moveLayoutNode(factoryGraphNodeId, node.position);
+                  return;
+                }
+
                 if (graphKey) {
                   setStoredNodePosition(graphKey, node.id, node.position);
                 }
