@@ -142,6 +142,9 @@ Use top-level `layout` when a shared factory should carry authored graph-canvas
 geometry across sessions or exports. Layout metadata is presentation-only: the
 runtime ignores it when building the executable factory topology.
 
+Omit `layout` entirely when no authored canvas state is needed. Missing layout is
+a valid factory state and does not affect runtime execution.
+
 ```json
 {
   "layout": {
@@ -178,14 +181,133 @@ runtime ignores it when building the executable factory topology.
 }
 ```
 
-- `layout.schemaVersion` is required whenever `layout` is present.
-- `layout.nodes[].id` and `layout.edges[].id` must use canonical graph ids such
-  as `workstation:<workstationId>` or
-  `workstation-output:<sourceGraphNodeId>-><targetGraphNodeId>`.
-- `layout.groups[]` is flat in v1. `parentGroupId` is reserved for future
-  nesting and may be omitted or set to `null`.
-- `layout.preferences` is intentionally narrow. Keep only portable display
-  defaults that do not hide nodes, rewrite topology, or change execution.
+### Field contract
+
+| Field | Required when `layout` is present | Description |
+|-------|-----------------------------------|-------------|
+| `schemaVersion` | Yes | Portable layout contract version. The shipped contract is `1`. |
+| `nodes` | No | Authored node geometry keyed by canonical graph node ids. |
+| `edges` | No | Authored edge waypoints and label positions keyed by canonical graph edge ids. |
+| `groups` | No | Flat background groups with bounds and member node ids. |
+| `viewport` | Yes | Authored camera position (`x`, `y`, `zoom`). |
+| `preferences` | No | Portable display defaults. |
+
+#### `layout.nodes[]`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Canonical graph node id such as `workstation:<workstationId>`. |
+| `position` | Yes | Authored node origin in graph canvas space (`x`, `y`). |
+| `size` | No | Authored node dimensions (`width`, `height`). |
+| `locked` | No | Optional authored lock flag for future editor affordances. |
+
+#### `layout.edges[]`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Canonical graph edge id such as `workstation-output:<sourceGraphNodeId>-><targetGraphNodeId>`. |
+| `waypoints` | No | Optional intermediate edge points in graph canvas space. |
+| `labelPosition` | No | Optional authored label anchor in graph canvas space. |
+
+#### `layout.groups[]`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Stable authored group id. |
+| `bounds` | Yes | Group rectangle (`x`, `y`, `width`, `height`) in graph canvas space. |
+| `nodeIds` | Yes | Canonical graph node ids visually contained by the group. May be empty after pruning. |
+| `label` | No | Optional visible group label. |
+| `parentGroupId` | No | Reserved for future nesting. Omit or set to `null` for flat groups in v1. |
+| `color` | No | Optional authored accent or fill color. |
+| `locked` | No | Optional authored lock flag for future editor affordances. |
+
+#### `layout.viewport`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `x` | Yes | Authored viewport horizontal offset. |
+| `y` | Yes | Authored viewport vertical offset. |
+| `zoom` | Yes | Authored viewport zoom factor. |
+
+#### `layout.preferences`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `direction` | No | Preferred authored graph direction: `UP`, `DOWN`, `LEFT`, or `RIGHT`. |
+
+`layout.nodes[].id` and `layout.edges[].id` must use canonical graph ids such as
+`workstation:<workstationId>` or
+`workstation-output:<sourceGraphNodeId>-><targetGraphNodeId>`. Legacy simplified
+edge ids are treated as stale layout references during validation and save.
+
+`layout.preferences` is intentionally narrow. Keep only portable display defaults
+that do not hide nodes, rewrite topology, or change execution.
+
+### Round-trip and portability
+
+Layout round-trips through current-factory GET/PUT, backend load/save,
+named-factory create/replace, activation, import/export, and
+`you config flatten` / `you config expand` when topology is unchanged.
+
+### Validation: blocking topology vs recoverable layout
+
+Factory validation builds pending graph topology indexes from the factory graph,
+then evaluates layout only after those indexes exist (`validation.Validate` in
+`pkg/factory/validation`).
+
+**Blocking topology validation** covers structural factory defects such as
+dangling references, missing outcome routes, and invalid work-type completion
+paths. These targets block editable saves, CLI persist pre-checks, and runtime
+load when the factory graph itself is invalid.
+
+**Recoverable layout validation** covers presentation metadata that does not
+change execution semantics. Layout defects use `factory.layout.*` target codes
+with warning severity. They do not make `HasBlockingTargets()` true, so an
+otherwise valid factory can still save and load for runtime use.
+
+Recoverable layout cases include:
+
+- **Missing layout** — valid; runtime ignores absent layout metadata.
+- **Unsupported `schemaVersion`** — `factory.layout.unsupportedSchemaVersion`;
+  layout still loads when structurally valid.
+- **Stale node, edge, or group member references** —
+  `factory.layout.unknownNodeReference`, `factory.layout.unknownEdgeReference`,
+  and `factory.layout.unknownGroupMemberReference`; references that do not match
+  pending graph ids are warnings, not topology failures.
+- **Non-finite geometry** — `factory.layout.invalidGeometry`; NaN or infinite
+  coordinates are warnings during validation.
+- **Malformed layout JSON** — boundary validation rejects structurally invalid
+  layout on editable OpenAPI payloads. Runtime load
+  (`expandFactoryConfigForRuntimeLoad`) can strip malformed top-level `layout`
+  and continue when the remaining factory topology is valid.
+
+### Save-time pruning and `layoutOutcomes`
+
+Save paths (`PrepareFactoryLayoutPayload`, editable `PUT`, named-factory upsert,
+`you factory save`) prune stale layout references against the pending topology
+before persist:
+
+- Remove `layout.nodes[]` entries whose ids are absent from the pending node
+  index.
+- Remove `layout.edges[]` entries whose ids are absent from the pending edge
+  index.
+- Remove unknown node ids from each `layout.groups[].nodeIds`.
+- Keep groups with empty `nodeIds` unless the author deletes the group
+  explicitly.
+- Reject entries with non-finite geometry rather than persisting them.
+
+Pruning and rejection outcomes are returned on save responses as ephemeral
+`layoutOutcomes` (structured validation targets). `layoutOutcomes` is omitted
+from persisted `factory.json`, ignored on save requests, and not returned on
+subsequent GETs.
+
+| Code | Recoverable | Meaning |
+|------|-------------|---------|
+| `factory.layout.unsupportedSchemaVersion` | Yes | `schemaVersion` is not the supported contract (`1`). |
+| `factory.layout.unknownNodeReference` | Yes | `layout.nodes[].id` does not match a pending graph node. |
+| `factory.layout.unknownEdgeReference` | Yes | `layout.edges[].id` does not match a pending graph edge. |
+| `factory.layout.unknownGroupMemberReference` | Yes | `layout.groups[].nodeIds[]` references an unknown graph node. |
+| `factory.layout.invalidGeometry` | Yes | Layout coordinates contain NaN or infinity. |
 
 ## Portability Resource Manifest
 
@@ -658,6 +780,14 @@ Validate-only and save pre-check can disagree on the same JSON when save uses
 profile. Regression tests in `pkg/service/factorysave` and
 `pkg/factory/validationentry` lock pre-persist parity between save and
 `ValidateFactoryAPI`; use `ProfilePrePersist` when comparing to save.
+
+`Validate()` appends recoverable `factory.layout.*` warnings only after pending
+graph topology indexes are built. Blocking topology targets and recoverable
+layout targets stay separate: layout warnings do not make
+`HasBlockingTargets()` true. Save paths additionally prune stale layout
+references and return ephemeral `layoutOutcomes` on the save response. See
+[Portable Graph Layout](#portable-graph-layout) for the field contract and
+recovery semantics.
 
 ### Post-persist `LoadRuntimeConfig`
 
