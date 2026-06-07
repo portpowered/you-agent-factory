@@ -795,3 +795,105 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 	_ = os.RemoveAll(trashDir)
 }
 
+// NamedFactoryResolutionSource identifies the root that supplied a resolved
+// named factory.
+type NamedFactoryResolutionSource string
+
+const (
+	NamedFactoryResolutionSourceProjectLocal NamedFactoryResolutionSource = "project-local"
+	NamedFactoryResolutionSourceGlobal       NamedFactoryResolutionSource = "global"
+)
+
+// NamedFactoryResolution reports the selected runnable directory and the roots
+// considered during cross-root named-factory resolution.
+type NamedFactoryResolution struct {
+	Name        string
+	FactoryDir  string
+	Source      NamedFactoryResolutionSource
+	ProjectRoot string
+	GlobalRoot  string
+}
+
+// ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
+// name, checking the project-local root before the global root.
+func ResolveNamedFactoryDirAcrossRoots(projectRoot, globalRoot, name string) (string, error) {
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name)
+	if err != nil {
+		return "", err
+	}
+	return resolution.FactoryDir, nil
+}
+
+// ResolveNamedFactoryAcrossRoots resolves name from projectRoot first and
+// globalRoot second. It selects exactly one persisted factory directory and
+// never merges definitions across roots.
+func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*NamedFactoryResolution, error) {
+	projectRoot = strings.TrimSpace(projectRoot)
+	globalRoot = strings.TrimSpace(globalRoot)
+	if projectRoot == "" {
+		return nil, fmt.Errorf("project factory root is required")
+	}
+	if globalRoot == "" {
+		return nil, fmt.Errorf("global factory root is required")
+	}
+
+	canonicalName, err := canonicalNamedFactoryName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	if factoryDir, found, err := resolveNamedFactoryCandidate(projectRoot, canonicalName); err != nil {
+		return nil, err
+	} else if found {
+		return namedFactoryResolution(canonicalName, factoryDir, NamedFactoryResolutionSourceProjectLocal, projectRoot, globalRoot), nil
+	}
+
+	if factoryDir, found, err := resolveNamedFactoryCandidate(globalRoot, canonicalName); err != nil {
+		return nil, err
+	} else if found {
+		return namedFactoryResolution(canonicalName, factoryDir, NamedFactoryResolutionSourceGlobal, projectRoot, globalRoot), nil
+	}
+
+	return nil, fmt.Errorf(
+		"resolve named factory %q in project root %s or global root %s: %w",
+		canonicalName,
+		projectRoot,
+		globalRoot,
+		ErrFactoryLayoutNotFound,
+	)
+}
+
+func canonicalNamedFactoryName(name string) (string, error) {
+	segment, err := NamedFactoryNameToLayoutSegment(name)
+	if err != nil {
+		return "", err
+	}
+	return NamedFactoryLayoutSegmentToName(segment)
+}
+
+func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
+	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
+	if err == nil {
+		return factoryDir, true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	return "", false, err
+}
+
+func namedFactoryResolution(
+	name string,
+	factoryDir string,
+	source NamedFactoryResolutionSource,
+	projectRoot string,
+	globalRoot string,
+) *NamedFactoryResolution {
+	return &NamedFactoryResolution{
+		Name:        name,
+		FactoryDir:  factoryDir,
+		Source:      source,
+		ProjectRoot: projectRoot,
+		GlobalRoot:  globalRoot,
+	}
+}
