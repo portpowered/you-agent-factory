@@ -4,9 +4,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestResolveFactoryInvocationInput_NoInputReturnsEmptyWithoutError(t *testing.T) {
+	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		StdinIsTTY: func() bool {
+			return true
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveFactoryInvocationInput: %v", err)
+	}
+	if got.Payload != "" || got.Source != "" {
+		t.Fatalf("input = %#v, want empty invocation input", got)
+	}
+}
 
 func TestResolveFactoryInvocationInput_PositionalOnly(t *testing.T) {
 	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
@@ -40,8 +55,8 @@ func TestResolveFactoryInvocationInput_StdinOnlyFromDash(t *testing.T) {
 	if got.Source != InvocationInputSourceStdin {
 		t.Fatalf("source = %q, want stdin", got.Source)
 	}
-	if got.Payload != "Fix the tests" {
-		t.Fatalf("payload = %q, want stdin payload", got.Payload)
+	if got.Payload != "Fix the tests\n" {
+		t.Fatalf("payload = %q, want raw stdin payload", got.Payload)
 	}
 }
 
@@ -58,8 +73,77 @@ func TestResolveFactoryInvocationInput_StdinOnlyFromPipe(t *testing.T) {
 	if got.Source != InvocationInputSourceStdin {
 		t.Fatalf("source = %q, want stdin", got.Source)
 	}
-	if got.Payload != "Fix from pipe" {
-		t.Fatalf("payload = %q, want stdin payload", got.Payload)
+	if got.Payload != "Fix from pipe\n" {
+		t.Fatalf("payload = %q, want raw stdin payload", got.Payload)
+	}
+}
+
+func TestResolveFactoryInvocationInput_PreservesSurroundingWhitespace(t *testing.T) {
+	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		PromptArgs: []string{"  keep", "surrounding", "whitespace  "},
+		StdinIsTTY: func() bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("ResolveFactoryInvocationInput: %v", err)
+	}
+	want := "  keep surrounding whitespace  "
+	if got.Payload != want {
+		t.Fatalf("payload = %q, want %q", got.Payload, want)
+	}
+}
+
+func TestResolveFactoryInvocationInput_StdinPreservesSurroundingWhitespace(t *testing.T) {
+	want := "  keep surrounding whitespace  "
+	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		PromptArgs: []string{"-"},
+		Stdin:      strings.NewReader(want),
+		StdinIsTTY: func() bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("ResolveFactoryInvocationInput: %v", err)
+	}
+	if got.Payload != want {
+		t.Fatalf("payload = %q, want %q", got.Payload, want)
+	}
+}
+
+func TestResolveFactoryInvocationInput_ExplicitEmptyPositionalUsesStableEmptyCode(t *testing.T) {
+	_, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		PromptArgs: []string{""},
+		StdinIsTTY: func() bool { return true },
+	})
+	if err == nil {
+		t.Fatal("expected explicit empty positional rejection")
+	}
+	if !strings.Contains(err.Error(), string(invocations.InputErrorCodeEmpty)) {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
+	}
+}
+
+func TestResolveFactoryInvocationInput_RejectsWhitespaceOnlyPositional(t *testing.T) {
+	_, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		PromptArgs: []string{"   "},
+		StdinIsTTY: func() bool { return true },
+	})
+	if err == nil {
+		t.Fatal("expected whitespace-only positional rejection")
+	}
+	if !strings.Contains(err.Error(), string(invocations.InputErrorCodeEmpty)) {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
+	}
+}
+
+func TestResolveFactoryInvocationInput_ExplicitEmptyStdinUsesStableEmptyCode(t *testing.T) {
+	_, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		PromptArgs: []string{"-"},
+		Stdin:      strings.NewReader(""),
+		StdinIsTTY: func() bool { return true },
+	})
+	if err == nil {
+		t.Fatal("expected empty stdin error")
+	}
+	if !strings.Contains(err.Error(), string(invocations.InputErrorCodeEmpty)) {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
 	}
 }
 
@@ -75,9 +159,9 @@ func TestResolveFactoryInvocationInput_RejectsPositionalAndStdinConflict(t *test
 		t.Fatal("expected ambiguous input error")
 	}
 	for _, want := range []string{
-		InvocationErrorCodeAmbiguousInput,
-		string(InvocationInputSourcePositional),
-		string(InvocationInputSourceStdin),
+		string(invocations.InputErrorCodeSourceConflict),
+		"positional_text",
+		"stdin_text",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want %q", err.Error(), want)

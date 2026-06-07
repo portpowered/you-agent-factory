@@ -201,6 +201,35 @@ const (
 	InputKindDefault InputKind = "DEFAULT"
 )
 
+// Defines values for InvocationInputSourceKind.
+const (
+	InvocationInputSourceKindAudioStream InvocationInputSourceKind = "audioStream"
+	InvocationInputSourceKindFileRef     InvocationInputSourceKind = "fileRef"
+	InvocationInputSourceKindText        InvocationInputSourceKind = "text"
+)
+
+// Defines values for InvocationResponseErrorCode.
+const (
+	INVOCATIONCANCELED                InvocationResponseErrorCode = "INVOCATION_CANCELED"
+	INVOCATIONPRIMARYRESULTUNRESOLVED InvocationResponseErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
+	INVOCATIONRUNTIMEFAILURE          InvocationResponseErrorCode = "INVOCATION_RUNTIME_FAILURE"
+	INVOCATIONTIMEDOUT                InvocationResponseErrorCode = "INVOCATION_TIMED_OUT"
+)
+
+// Defines values for InvocationReturnPolicy.
+const (
+	InvocationReturnPolicyExplicit              InvocationReturnPolicy = "EXPLICIT"
+	InvocationReturnPolicySubmittedWorkTerminal InvocationReturnPolicy = "SUBMITTED_WORK_TERMINAL"
+)
+
+// Defines values for InvocationTerminalStatus.
+const (
+	InvocationTerminalStatusCanceled  InvocationTerminalStatus = "CANCELED"
+	InvocationTerminalStatusCompleted InvocationTerminalStatus = "COMPLETED"
+	InvocationTerminalStatusFailed    InvocationTerminalStatus = "FAILED"
+	InvocationTerminalStatusTimedOut  InvocationTerminalStatus = "TIMED_OUT"
+)
+
 // Defines values for LoadableProviderSessionKind.
 const (
 	LoadableProviderSessionKindSessionID LoadableProviderSessionKind = "session_id"
@@ -613,6 +642,9 @@ type Factory struct {
 
 	// InputTypes Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
+
+	// InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+	InvocationReturn *InvocationReturn `json:"invocationReturn,omitempty"`
 
 	// Layout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
 	Layout   *FactoryLayout `json:"layout,omitempty"`
@@ -1295,6 +1327,69 @@ type InputType struct {
 
 // IntegerMap defines model for IntegerMap.
 type IntegerMap map[string]int
+
+// InvocationInputSourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+type InvocationInputSourceKind string
+
+// InvocationRequest defines model for InvocationRequest.
+type InvocationRequest struct {
+	// Content Ordered canonical content parts for one work item.
+	Content WorkContent `json:"content"`
+
+	// RequestId Optional caller-supplied idempotency key for the invocation request.
+	RequestId *string `json:"requestId,omitempty"`
+
+	// SourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+	SourceKind InvocationInputSourceKind `json:"sourceKind"`
+
+	// TimeoutMillis Optional caller timeout budget in milliseconds for waiting on the primary result.
+	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
+}
+
+// InvocationResponse defines model for InvocationResponse.
+type InvocationResponse struct {
+	// ErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
+	ErrorCode *InvocationResponseErrorCode `json:"errorCode,omitempty"`
+
+	// Message Human-readable failure summary when status is not `COMPLETED`.
+	Message *string `json:"message,omitempty"`
+
+	// PrimaryResult Ordered canonical content parts for one work item.
+	PrimaryResult *WorkContent `json:"primaryResult,omitempty"`
+
+	// RequestId Stable invocation request identifier assigned or accepted by the server.
+	RequestId string `json:"requestId"`
+
+	// Status Terminal status for a factory-session invocation.
+	Status InvocationTerminalStatus `json:"status"`
+
+	// TraceId Trace identifier for the work submitted by this invocation.
+	TraceId string `json:"traceId"`
+}
+
+// InvocationResponseErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
+type InvocationResponseErrorCode string
+
+// InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+type InvocationReturn struct {
+	// Policy Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+	Policy InvocationReturnPolicy `json:"policy"`
+
+	// TerminalState Authored terminal state name used by EXPLICIT policy selection.
+	TerminalState *string `json:"terminalState,omitempty"`
+
+	// WorkName Optional authored work name filter used by EXPLICIT policy selection.
+	WorkName *string `json:"workName,omitempty"`
+
+	// WorkTypeName Work type name used by EXPLICIT policy selection.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
+}
+
+// InvocationReturnPolicy Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+type InvocationReturnPolicy string
+
+// InvocationTerminalStatus Terminal status for a factory-session invocation.
+type InvocationTerminalStatus string
 
 // ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
 type ListFactorySessionsResponse struct {
@@ -3134,6 +3229,9 @@ type SaveCurrentFactoryBySessionIdJSONRequestBody = SaveFactoryForSessionRequest
 // ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplateBySessionId for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody = PromptTemplateValidationRequest
 
+// InvokeFactorySessionBySessionIdJSONRequestBody defines body for InvokeFactorySessionBySessionId for application/json ContentType.
+type InvokeFactorySessionBySessionIdJSONRequestBody = InvocationRequest
+
 // SubmitWorkBySessionIdJSONRequestBody defines body for SubmitWorkBySessionId for application/json ContentType.
 type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
 
@@ -3887,6 +3985,9 @@ type ServerInterface interface {
 	// Validate workstation prompt template
 	// (POST /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation)
 	ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workstationName string)
+	// Invoke one factory session and return its primary result
+	// (POST /factory-sessions/{session_id}/invocations)
+	InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -4141,6 +4242,31 @@ func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTempla
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w, r, sessionId, workstationName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// InvokeFactorySessionBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InvokeFactorySessionBySessionId(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4730,6 +4856,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContractBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/invocations", wrapper.InvokeFactorySessionBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
 

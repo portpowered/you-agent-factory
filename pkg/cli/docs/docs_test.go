@@ -369,6 +369,44 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_ConfigDocumentsInvocationContract(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("config")
+	if err != nil {
+		t.Fatalf("Markdown(config) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"## Invocation Contract",
+		"`you run --factory <factory.json> <text>`",
+		"`POST /factory-sessions/{session_id}/invocations`",
+		"`INVOCATION_INPUT_SOURCE_CONFLICT`",
+		"`INVOCATION_INPUT_EMPTY`",
+		"`invocationReturn`",
+		"`SUBMITTED_WORK_TERMINAL`",
+		"`EXPLICIT`",
+		"`INVOCATION_PRIMARY_RESULT_UNRESOLVED`",
+		"`you docs sessions`",
+		"`fileRef` and `audioStream` are reserved future source categories",
+		"Top-level `sourceKind: \"text\"` plus canonical `content` (`WorkContent`)",
+		`"status":"COMPLETED","primaryResult":[{"type":"text"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"RUN_INVOCATION_AMBIGUOUS_INPUT",
+		`"output":"Summary text","workId":"work-123"`,
+		"source.kind: text",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("Markdown(config) still contains stale invocation contract %q:\n%s", forbidden, got)
+		}
+	}
+}
+
 func TestMarkdown_WorkReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -700,6 +738,15 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"runtimeStatus",
 		"categories",
 		"totalTokens",
+		"## Session invocation API",
+		"POST /factory-sessions/{session_id}/invocations",
+		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"INVOCATION_INPUT_EMPTY",
+		"INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+		"status: TIMED_OUT",
+		"`primaryResult`",
+		`"sourceKind": "text"`,
+		`"primaryResult": [`,
 		"http://localhost:7437/dashboard/ui",
 		"## `--server` and `--session` routing",
 		"you submit --session session-beta",
@@ -707,9 +754,20 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"`you docs agents`",
 		"`you docs work`",
 		"`you docs config`",
+		"`fileRef`",
+		"`audioStream`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(sessions) missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"source.kind",
+		`"parts": [`,
+		`primaryResult": {`,
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("Markdown(sessions) still contains stale invocation contract %q:\n%s", forbidden, got)
 		}
 	}
 	for _, wrapper := range []string{

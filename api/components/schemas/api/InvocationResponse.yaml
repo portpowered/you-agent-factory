@@ -1,0 +1,32 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - traceId
+  - status
+properties:
+  requestId:
+    type: string
+    description: Stable invocation request identifier assigned or accepted by the server.
+  traceId:
+    type: string
+    description: Trace identifier for the work submitted by this invocation.
+  status:
+    $ref: './InvocationTerminalStatus.yaml'
+    description: Terminal invocation status after resolving or failing primary-result selection.
+  primaryResult:
+    $ref: '../data-models/WorkContent.yaml'
+    description: >-
+      Primary invocation result. Present only when the invocation resolves
+      successfully with status `COMPLETED`.
+  errorCode:
+    type: string
+    description: Stable machine-readable invocation failure code when status is not `COMPLETED`.
+    enum:
+      - INVOCATION_PRIMARY_RESULT_UNRESOLVED
+      - INVOCATION_TIMED_OUT
+      - INVOCATION_CANCELED
+      - INVOCATION_RUNTIME_FAILURE
+  message:
+    type: string
+    description: Human-readable failure summary when status is not `COMPLETED`.
