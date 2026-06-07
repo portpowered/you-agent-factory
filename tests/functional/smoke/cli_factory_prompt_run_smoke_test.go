@@ -233,6 +233,88 @@ func TestFactoryPromptRun_RealCLIRejectsFactoryWithoutDefaultHandling(t *testing
 	}
 }
 
+func TestFactoryPromptRun_RealCLICleanInvocationStdoutRemainsPipeableAcrossRuns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI factory prompt run smoke")
+	}
+
+	dir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfig())
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	binaryPath := buildYouCLIBinary(t)
+
+	for _, prompt := range []string{
+		"functional-clean-stdout-first",
+		"functional-clean-stdout-second",
+	} {
+		stdout, stderr, err := runFactoryPromptCLI(t, dir, binaryPath, mockWorkersPath, nil, factoryPath, prompt)
+		if err != nil {
+			t.Fatalf("run clean invocation for prompt %q: %v\nstdout:\n%s\nstderr:\n%s", prompt, err, stdout, stderr)
+		}
+		assertFactoryPromptCleanInvocationStdout(t, stdout, prompt)
+	}
+}
+
+func TestFactoryPromptRun_RealCLIStdinOnlyCleanInvocationStdoutRemainsPipeable(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI factory prompt run smoke")
+	}
+
+	dir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfig())
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	binaryPath := buildYouCLIBinary(t)
+
+	stdout, stderr, err := runFactoryPromptCLI(
+		t,
+		dir,
+		binaryPath,
+		mockWorkersPath,
+		strings.NewReader("functional-clean-stdin-only\n"),
+		factoryPath,
+	)
+	if err != nil {
+		t.Fatalf("run stdin-only clean invocation: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+	}
+	assertFactoryPromptCleanInvocationStdout(t, stdout, "functional-clean-stdin-only")
+}
+
+func TestFactoryPromptRun_RealCLIAmbiguousPromptAndStdinFailsBeforeRuntimeStartup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI factory prompt run smoke")
+	}
+
+	dir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfig())
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	binaryPath := buildYouCLIBinary(t)
+
+	stdout, stderr, err := runFactoryPromptCLI(
+		t,
+		dir,
+		binaryPath,
+		mockWorkersPath,
+		strings.NewReader("functional-clean-stdin-conflict\n"),
+		factoryPath,
+		"functional-clean-positional-conflict",
+	)
+	if err == nil {
+		t.Fatalf("expected ambiguous stdin and prompt invocation to fail\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+	if stdout != "" {
+		t.Fatalf("stdout = %q, want empty on ambiguous input failure", stdout)
+	}
+	for _, want := range []string{
+		"RUN_INVOCATION_AMBIGUOUS_INPUT",
+		"positional prompt",
+		"stdin",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("stderr = %q, want %q", stderr, want)
+		}
+	}
+}
+
 const defaultPromptRunWorkTypeName = "prompt-task"
 
 func factoryPromptRunSmokeConfig() map[string]any {
@@ -316,6 +398,63 @@ func writeDefaultMockWorkersConfig(t *testing.T) string {
 		t.Fatalf("write mock-workers config: %v", err)
 	}
 	return path
+}
+
+func runFactoryPromptCLI(
+	t *testing.T,
+	dir string,
+	binaryPath string,
+	mockWorkersPath string,
+	stdin *strings.Reader,
+	factoryPath string,
+	promptArgs ...string,
+) (stdout string, stderr string, runErr error) {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	t.Cleanup(cancel)
+
+	args := []string{
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers",
+		"--no-record",
+		"--quiet",
+		mockWorkersPath,
+	}
+	args = append(args, promptArgs...)
+
+	cmd := exec.CommandContext(ctx, binaryPath, args...)
+	cmd.Dir = dir
+	if stdin != nil {
+		cmd.Stdin = stdin
+	}
+
+	var outBuf, errBuf strings.Builder
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	runErr = cmd.Run()
+	return outBuf.String(), errBuf.String(), runErr
+}
+
+func assertFactoryPromptCleanInvocationStdout(t *testing.T, got string, want string) {
+	t.Helper()
+
+	if got != want {
+		t.Fatalf("stdout = %q, want exact primary clean invocation output", got)
+	}
+	for _, forbidden := range []string{
+		"Factory initiated",
+		"Dashboard URL",
+		"Runtime log",
+		"Opening dashboard",
+		"Recording saved to",
+		"Factory:",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("stdout = %q, should not contain operator chatter %q", got, forbidden)
+		}
+	}
 }
 
 func buildYouCLIBinary(t *testing.T) string {

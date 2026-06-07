@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/handwrittensourceguard"
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
@@ -36,7 +36,14 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 			return walkErr
 		}
 		if entry.IsDir() {
-			if handwrittensourceguard.ShouldSkipDir("pkg/api/legacy_model_guard_test.go", moduleRoot, path) {
+			if contractguard.ShouldSkipDir(
+				moduleRoot,
+				path,
+				"pkg/api/generated",
+				"ui/dist",
+				"ui/node_modules",
+				"ui/storybook-static",
+			) {
 				return filepath.SkipDir
 			}
 			return nil

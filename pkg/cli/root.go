@@ -713,8 +713,9 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cfg := defaultcmd.ExplicitRunConfig()
 
 	cmd := &cobra.Command{
-		Use:   "run",
-		Short: "Load workflow and run the factory engine",
+		Use:           "run",
+		Short:         "Load workflow and run the factory engine",
+		SilenceErrors: true,
 		Long: "Load workflow and run the factory engine.\n\n" +
 			"For the quickest local setup, run " + cliBinaryName + " with no arguments. " +
 			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
@@ -750,7 +751,11 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 					cfg.MockWorkersConfigPath = ""
 				}
 			}
-			return runFactory(cmd, cfg, promptArgs, globals, diagnostics.verboseEnabled(), diagnostics.debug)
+			err := runFactory(cmd, cfg, promptArgs, globals, diagnostics.verboseEnabled(), diagnostics.debug)
+			if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+			}
+			return err
 		},
 	}
 
@@ -782,6 +787,13 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 }
 
 func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, verbose, debug bool) error {
+	logger, err := logging.BuildLogger(verbose, debug)
+	if err != nil {
+		return err
+	}
+	cfg.Logger = logger
+	cfg.Verbose = verbose || debug
+
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
 	}
@@ -789,21 +801,24 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 		return err
 	}
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs); err != nil {
+		runcli.ObserveInvocationRejection(logger, err)
 		return err
 	}
-
-	logger, err := logging.BuildLogger(verbose, debug)
-	if err != nil {
-		return err
+	cleanInvocation := shouldUseCleanRunInvocation(cmd, cfg)
+	textInvocation := shouldUseSharedFactoryTextInvocation(cmd, cfg)
+	cfg.CleanInvocation = cleanInvocation
+	cfg.JSON = globals.json
+	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation || textInvocation
+	if cleanInvocation || textInvocation {
+		cfg.Output = cmd.OutOrStdout()
+	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		cfg.Output = cmd.OutOrStdout()
+		cfg.StartupOutput = cmd.OutOrStdout()
+	} else {
+		cfg.StartupOutput = cmd.OutOrStdout()
 	}
-	cfg.Logger = logger
-	cfg.Verbose = verbose || debug
-	cfg.StartupOutput = cmd.OutOrStdout()
 	cfg.Diagnostics = cmd.ErrOrStderr()
 	cfg.JSONOutput = globals.json
-	if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
-		cfg.Output = cmd.OutOrStdout()
-	}
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
@@ -821,6 +836,20 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	}()
 
 	return runCLI(ctx, cfg)
+}
+
+func shouldUseCleanRunInvocation(cmd *cobra.Command, cfg runcli.RunConfig) bool {
+	return cmd.Flags().Changed("factory") &&
+		cmd.Flags().Changed("work") &&
+		strings.TrimSpace(cfg.WorkFile) != "" &&
+		!cfg.Continuously
+}
+
+func shouldUseSharedFactoryTextInvocation(cmd *cobra.Command, cfg runcli.RunConfig) bool {
+	return cmd.Flags().Changed("factory") &&
+		!cmd.Flags().Changed("work") &&
+		!cfg.Continuously &&
+		(cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil)
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
@@ -859,24 +888,41 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string) error {
 	factoryChanged := cmd.Flags().Changed("factory")
 	workChanged := cmd.Flags().Changed("work")
-	prompt := strings.TrimSpace(strings.Join(promptArgs, " "))
+	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
+		PromptArgs: promptArgs,
+		Stdin:      cmd.InOrStdin(),
+	})
+	if err != nil {
+		return err
+	}
 
 	if !factoryChanged {
-		if prompt != "" {
+		if input.Payload != "" {
 			return fmt.Errorf("positional prompt arguments require --factory")
 		}
 		return nil
 	}
-	if workChanged && prompt != "" {
-		return fmt.Errorf("positional prompt arguments cannot be used with --work")
+	if workChanged && input.Payload != "" {
+		return fmt.Errorf("%s cannot be used with --work", input.Source)
 	}
-	if len(promptArgs) > 0 && prompt == "" {
+	if workChanged {
+		cfg.CleanInvocationInputSource = runcli.InvocationInputSourceWorkFile
+	}
+	if len(promptArgs) > 0 && input.Payload == "" {
 		return fmt.Errorf("prompt is required for you run --factory")
 	}
-	if prompt == "" {
+	if input.Payload == "" {
 		return nil
 	}
-	cfg.InvocationPositionalText = &prompt
+
+	payload := input.Payload
+	switch input.Source {
+	case runcli.InvocationInputSourcePositional:
+		cfg.InvocationPositionalText = &payload
+	case runcli.InvocationInputSourceStdin:
+		cfg.InvocationStdinText = &payload
+	}
+	cfg.CleanInvocationInputSource = input.Source
 	return nil
 }
 

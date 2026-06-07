@@ -1,0 +1,382 @@
+package run
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"go.uber.org/zap"
+)
+
+const (
+	InvocationErrorCodeAmbiguousInput = "RUN_INVOCATION_AMBIGUOUS_INPUT"
+)
+
+type InvocationInputSource string
+
+const (
+	InvocationInputSourcePositional InvocationInputSource = "positional prompt"
+	InvocationInputSourceStdin      InvocationInputSource = "stdin"
+	InvocationInputSourceWorkFile   InvocationInputSource = "work file"
+)
+
+type FactoryInvocationInputConfig struct {
+	PromptArgs []string
+	Stdin      io.Reader
+	StdinIsTTY func() bool
+}
+
+type FactoryInvocationInput struct {
+	Source  InvocationInputSource
+	Payload string
+}
+
+// ResolveFactoryInvocationInput resolves the one-shot invocation payload from
+// positional prompt args, explicit "-" stdin, or piped non-TTY stdin.
+func ResolveFactoryInvocationInput(cfg FactoryInvocationInputConfig) (FactoryInvocationInput, error) {
+	positionalPrompt, explicitStdin := splitInvocationPromptArgs(cfg.PromptArgs)
+	stdinPayload, hasStdin, err := resolveInvocationStdin(cfg, explicitStdin)
+	if err != nil {
+		return FactoryInvocationInput{}, err
+	}
+
+	var sources []InvocationInputSource
+	if positionalPrompt != "" {
+		sources = append(sources, InvocationInputSourcePositional)
+	}
+	if hasStdin {
+		sources = append(sources, InvocationInputSourceStdin)
+	}
+	if len(sources) > 1 {
+		return FactoryInvocationInput{}, ambiguousInvocationInputError(sources)
+	}
+	if positionalPrompt != "" {
+		return FactoryInvocationInput{Source: InvocationInputSourcePositional, Payload: positionalPrompt}, nil
+	}
+	if hasStdin {
+		return FactoryInvocationInput{Source: InvocationInputSourceStdin, Payload: stdinPayload}, nil
+	}
+	return FactoryInvocationInput{}, nil
+}
+
+func splitInvocationPromptArgs(args []string) (prompt string, explicitStdin bool) {
+	positional := make([]string, 0, len(args))
+	for _, arg := range args {
+		if strings.TrimSpace(arg) == "-" {
+			explicitStdin = true
+			continue
+		}
+		positional = append(positional, arg)
+	}
+	return strings.TrimSpace(strings.Join(positional, " ")), explicitStdin
+}
+
+func resolveInvocationStdin(cfg FactoryInvocationInputConfig, explicitStdin bool) (string, bool, error) {
+	if !explicitStdin && invocationStdinIsTTY(cfg) {
+		return "", false, nil
+	}
+
+	stdin := cfg.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return "", false, fmt.Errorf("read invocation stdin: %w", err)
+	}
+	payload := strings.TrimSpace(string(data))
+	if payload == "" {
+		if explicitStdin {
+			return "", false, fmt.Errorf("stdin input is empty")
+		}
+		return "", false, nil
+	}
+	return payload, true, nil
+}
+
+func invocationStdinIsTTY(cfg FactoryInvocationInputConfig) bool {
+	if cfg.StdinIsTTY != nil {
+		return cfg.StdinIsTTY()
+	}
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return true
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func ambiguousInvocationInputError(sources []InvocationInputSource) error {
+	labels := invocationInputSourceLabels(sources)
+	return &AmbiguousInvocationInputError{
+		invocationErr: &InvocationError{
+			Code:    InvocationErrorCodeAmbiguousInput,
+			Message: fmt.Sprintf("ambiguous invocation input sources: %s", strings.Join(labels, " and ")),
+		},
+		Sources: append([]InvocationInputSource(nil), sources...),
+	}
+}
+
+type AmbiguousInvocationInputError struct {
+	invocationErr *InvocationError
+	Sources       []InvocationInputSource
+}
+
+func (e *AmbiguousInvocationInputError) Error() string {
+	if e == nil || e.invocationErr == nil {
+		return ""
+	}
+	return e.invocationErr.Error()
+}
+
+func (e *AmbiguousInvocationInputError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.invocationErr
+}
+
+func invocationInputSourceLabels(sources []InvocationInputSource) []string {
+	labels := make([]string, 0, len(sources))
+	for _, source := range sources {
+		labels = append(labels, string(source))
+	}
+	return labels
+}
+
+type sessionInvocationRunner interface {
+	factoryServiceRunner
+	apisurface.InvocationAPI
+	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
+}
+
+func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
+	if strings.TrimSpace(cfg.FactoryConfigPath) == "" || strings.TrimSpace(cfg.WorkFile) != "" {
+		return nil, false, nil
+	}
+
+	stdinTTY := stdinIsTTY(cfg)
+	if cfg.InvocationPositionalText == nil && cfg.InvocationStdinText == nil && stdinTTY {
+		return nil, false, nil
+	}
+
+	sources := invocations.TextInputSources{
+		PositionalText: cfg.InvocationPositionalText,
+	}
+	if cfg.InvocationStdinText != nil {
+		sources.StdinText = cfg.InvocationStdinText
+	} else if !stdinTTY {
+		stdinText, err := readInvocationStdin(cfg)
+		if err != nil {
+			return nil, true, err
+		}
+		sources.StdinText = &stdinText
+	}
+
+	resolved, err := invocations.ResolveTextInput(sources)
+	if err != nil {
+		recordCLIInvocationFailure(cfg, err)
+		return nil, true, wrapInvocationInputError(err)
+	}
+	recordCLIInvocationResolved(cfg, resolved.Source)
+	return invocationRequestFromResolvedInput(resolved), true, nil
+}
+
+func readInvocationStdin(cfg RunConfig) (string, error) {
+	stdin := cfg.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+	data, err := io.ReadAll(stdin)
+	if err != nil {
+		return "", fmt.Errorf("read invocation stdin: %w", err)
+	}
+	return string(data), nil
+}
+
+func stdinIsTTY(cfg RunConfig) bool {
+	if cfg.StdinIsTTY != nil {
+		return cfg.StdinIsTTY()
+	}
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *factoryapi.InvocationRequest {
+	return &factoryapi.InvocationRequest{
+		SourceKind: factoryapi.InvocationInputSourceKindText,
+		Content:    *workcontent.GeneratedPtrFromParts(resolved.Content),
+	}
+}
+
+func wrapInvocationInputError(err error) error {
+	inputErr, ok := err.(*invocations.InputError)
+	if !ok {
+		return err
+	}
+	return invocationCLIError{
+		Code:    string(inputErr.Code),
+		Message: inputErr.Message,
+	}
+}
+
+func runFactoryInvocation(
+	ctx context.Context,
+	cfg RunConfig,
+	request factoryapi.InvocationRequest,
+	logger *zap.Logger,
+	mockWorkersConfig *factoryconfig.MockWorkersConfig,
+	reservedAPIServer *reservedAPIServerListener,
+) error {
+	svcCfg := buildRunServiceConfig(cfg, logger, mockWorkersConfig, reservedAPIServer, make(chan struct{}), &sync.Once{})
+	svcCfg.RuntimeMode = interfaces.RuntimeModeService
+	svcCfg.WorkFile = ""
+	svcCfg.SimpleDashboardRenderer = nil
+
+	factorySvc, err := buildFactoryService(ctx, svcCfg)
+	if err != nil {
+		return err
+	}
+	invoker, ok := factorySvc.(sessionInvocationRunner)
+	if !ok {
+		return fmt.Errorf("factory invocation runner does not support session invocation")
+	}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- invoker.Run(runCtx)
+	}()
+
+	if err := waitForInvocationSessionReady(runCtx, invoker, runErrCh); err != nil {
+		return err
+	}
+
+	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
+	cancel()
+	runErr := <-runErrCh
+	if err != nil {
+		return err
+	}
+	if runErr != nil && !errors.Is(runErr, context.Canceled) {
+		return runErr
+	}
+	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+		return invocationResultFailure(result)
+	}
+	return writeInvocationSuccess(cfg, result)
+}
+
+func waitForInvocationSessionReady(
+	ctx context.Context,
+	invoker sessionInvocationRunner,
+	runErrCh <-chan error,
+) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if _, err := invoker.GetCurrentFactoryForSession(ctx, factorysessions.DefaultSessionID); err == nil {
+			return nil
+		} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			return err
+		}
+
+		select {
+		case err := <-runErrCh:
+			if err == nil || errors.Is(err, context.Canceled) {
+				return fmt.Errorf("factory invocation session stopped before it became ready")
+			}
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+type invocationCLIError struct {
+	Code    string
+	Message string
+}
+
+func (e invocationCLIError) Error() string {
+	switch {
+	case strings.TrimSpace(e.Code) == "":
+		return strings.TrimSpace(e.Message)
+	case strings.TrimSpace(e.Message) == "":
+		return strings.TrimSpace(e.Code)
+	default:
+		return strings.TrimSpace(e.Code) + ": " + strings.TrimSpace(e.Message)
+	}
+}
+
+func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
+	return invocationCLIError{
+		Code:    strings.TrimSpace(result.ErrorCode),
+		Message: strings.TrimSpace(result.Message),
+	}
+}
+
+func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
+	output := cfg.Output
+	if output == nil {
+		output = os.Stdout
+	}
+
+	if cfg.JSONOutput {
+		response := factoryapi.InvocationResponse{
+			RequestId: result.RequestID,
+			TraceId:   result.TraceID,
+			Status:    result.Status,
+		}
+		if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
+			response.PrimaryResult = content
+		}
+		encoded, err := json.Marshal(response)
+		if err != nil {
+			return fmt.Errorf("marshal invocation response: %w", err)
+		}
+		_, err = fmt.Fprintln(output, string(encoded))
+		return err
+	}
+
+	text, err := invocationPrimaryResultText(result.PrimaryResult)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprint(output, text)
+	return err
+}
+
+func invocationPrimaryResultText(parts []interfaces.WorkContentPart) (string, error) {
+	if len(parts) == 0 {
+		return "", fmt.Errorf("invocation primary result is empty")
+	}
+
+	textParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
+			return "", fmt.Errorf("invocation primary result is not plain text; use --json")
+		}
+		textParts = append(textParts, part.Text)
+	}
+	return strings.Join(textParts, "\n"), nil
+}

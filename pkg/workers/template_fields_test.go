@@ -9,6 +9,7 @@ import (
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
 func canonicalWorkerTestPath(value string) string {
@@ -48,7 +49,7 @@ func TestResolveTemplateFields_WorkingDirectory(t *testing.T) {
 		},
 	}
 
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		`/worktrees/{{ index (index .Inputs 0).Tags "branch" }}`,
 		nil,
 		tokens,
@@ -75,7 +76,7 @@ func TestResolveTemplateFields_Env(t *testing.T) {
 		},
 	}
 
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		"",
 		map[string]string{
 			"PROJECT_NAME": `{{ index (index .Inputs 0).Tags "project" }}`,
@@ -119,7 +120,7 @@ func TestResolveTemplateFields_ProjectVariableUsesTag(t *testing.T) {
 		},
 	}
 
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		`/workspaces/{{ (index .Inputs 0).Project }}/{{ index (index .Inputs 0).Tags "branch" }}`,
 		map[string]string{
 			"PROJECT": "{{ (index .Inputs 0).Project }}",
@@ -150,7 +151,7 @@ func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefau
 		}},
 	}
 
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		"",
 		map[string]string{
 			"PROJECT":         "{{ .Context.Project }}",
@@ -171,7 +172,7 @@ func TestResolveTemplateFields_ProjectVariableFallsBackToContextThenNeutralDefau
 	}
 
 	tokens[0].Color.Tags = nil
-	resolved, err = ResolveTemplateFields(
+	resolved, err = workerprompting.ResolveTemplateFields(
 		"",
 		map[string]string{
 			"PROJECT":         "{{ .Context.Project }}",
@@ -197,7 +198,7 @@ func TestResolveTemplateFields_InvalidTemplate(t *testing.T) {
 		{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}},
 	}
 
-	_, err := ResolveTemplateFields(
+	_, err := workerprompting.ResolveTemplateFields(
 		`{{ .InvalidSyntax`,
 		nil,
 		tokens,
@@ -224,7 +225,7 @@ func TestResolveTemplateFields_MissingTagKey(t *testing.T) {
 	}
 
 	// index returns empty string for missing keys, not an error — this is Go map behavior.
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		`/worktrees/{{ index (index .Inputs 0).Tags "missing_key" }}`,
 		nil,
 		tokens,
@@ -253,7 +254,7 @@ func TestResolveTemplateFields_WorkIDAndPayload(t *testing.T) {
 		},
 	}
 
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		`/work/{{ (index .Inputs 0).WorkID }}/{{ (index .Inputs 0).WorkTypeID }}`,
 		map[string]string{
 			"WORK_ID": "{{ (index .Inputs 0).WorkID }}",
@@ -279,7 +280,7 @@ func TestResolveTemplateFields_EnvInvalidTemplate(t *testing.T) {
 		{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}},
 	}
 
-	_, err := ResolveTemplateFields(
+	_, err := workerprompting.ResolveTemplateFields(
 		"",
 		map[string]string{
 			"GOOD": "static",
@@ -308,7 +309,7 @@ func TestResolveTemplateFields_Worktree(t *testing.T) {
 		},
 	}
 
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		"",
 		nil,
 		tokens,
@@ -338,7 +339,7 @@ func TestResolveTemplateFields_ResolvesExplicitRuntimeFieldsTogether(t *testing.
 		},
 	}
 
-	resolved, err := ResolveTemplateFields(
+	resolved, err := workerprompting.ResolveTemplateFields(
 		`/workspace/{{ index (index .Inputs 0).Tags "branch" }}`,
 		map[string]string{
 			"PROJECT": `{{ index (index .Inputs 0).Tags "project" }}`,
@@ -372,11 +373,11 @@ func TestApplyResolvedFields_PreservesSessionID(t *testing.T) {
 		WorkDirectory: "/original/path",
 	}
 
-	resolved := &ResolvedFields{
+	resolved := &workerprompting.ResolvedFields{
 		WorkingDirectory: "/resolved/path",
 	}
 
-	result := applyResolvedFields(base, resolved)
+	result := workerprompting.ApplyResolvedFields(base, resolved)
 	if result.SessionID != "session-beta" {
 		t.Fatalf("SessionID = %q, want %q", result.SessionID, "session-beta")
 	}
@@ -391,12 +392,12 @@ func TestApplyResolvedFields_OverridesWorkingDirectory(t *testing.T) {
 		EnvVars:       map[string]string{"EXISTING": "keep"},
 	}
 
-	resolved := &ResolvedFields{
+	resolved := &workerprompting.ResolvedFields{
 		WorkingDirectory: "/resolved/path",
 		Env:              map[string]string{"NEW_VAR": "new-value"},
 	}
 
-	result := applyResolvedFields(base, resolved)
+	result := workerprompting.ApplyResolvedFields(base, resolved)
 
 	if result.WorkDirectory != "/resolved/path" {
 		t.Errorf("expected /resolved/path, got %s", result.WorkDirectory)
@@ -422,12 +423,12 @@ func TestApplyResolvedFields_OverridesWorkingDirectory(t *testing.T) {
 }
 
 func TestApplyResolvedFields_NilBase(t *testing.T) {
-	resolved := &ResolvedFields{
+	resolved := &workerprompting.ResolvedFields{
 		WorkingDirectory: "/new/path",
 		Env:              map[string]string{"KEY": "val"},
 	}
 
-	result := applyResolvedFields(nil, resolved)
+	result := workerprompting.ApplyResolvedFields(nil, resolved)
 
 	if result.WorkDirectory != "/new/path" {
 		t.Errorf("expected /new/path, got %s", result.WorkDirectory)
@@ -439,7 +440,7 @@ func TestApplyResolvedFields_NilBase(t *testing.T) {
 
 func TestApplyResolvedFields_NilResolved(t *testing.T) {
 	base := &factory_context.FactoryContext{WorkDirectory: "/base"}
-	result := applyResolvedFields(base, nil)
+	result := workerprompting.ApplyResolvedFields(base, nil)
 	if result != base {
 		t.Error("expected original base returned when resolved is nil")
 	}
@@ -468,7 +469,7 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 			},
 		},
 		Executor: mock,
-		Renderer: &DefaultPromptRenderer{},
+		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
 	dispatch := interfaces.WorkDispatch{
@@ -524,7 +525,7 @@ func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
 			},
 		},
 		Executor: mock,
-		Renderer: &DefaultPromptRenderer{},
+		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
 	dispatch := interfaces.WorkDispatch{
@@ -571,7 +572,7 @@ func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
 			},
 		},
 		Executor: mock,
-		Renderer: &DefaultPromptRenderer{},
+		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
 	dispatch := interfaces.WorkDispatch{

@@ -3,7 +3,6 @@ package run
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,13 +26,11 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
 
@@ -48,9 +45,12 @@ type RunConfig struct {
 	FactoryConfigPath string
 	// InvocationPositionalText is the optional text supplied positionally to
 	// `you run --factory`. When set, factory invocation mode resolves this
-	// alongside non-TTY stdin through the shared invocation input contract.
+	// alongside stdin text through the shared invocation input contract.
 	InvocationPositionalText *string
-	RunnerID                 string
+	// InvocationStdinText carries stdin text resolved before Run when root
+	// already consumed the stdin stream for one-shot factory invocation.
+	InvocationStdinText *string
+	RunnerID            string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths. Empty defaults to the caller's current working
 	// directory for CLI-style runs.
@@ -82,6 +82,17 @@ type RunConfig struct {
 	// SuppressDashboardRendering disables the simple stdout dashboard while
 	// preserving the normal service-layer run path.
 	SuppressDashboardRendering bool
+	// CleanInvocation suppresses operator-facing stdout chatter for one-shot
+	// result-oriented invocations. It does not disable replay recording.
+	CleanInvocation bool
+	// JSON emits the clean invocation success result as a single JSON object.
+	JSON bool
+	// CleanInvocationInputSource describes how a one-shot clean invocation
+	// received its primary input payload.
+	CleanInvocationInputSource InvocationInputSource
+	// Output receives clean invocation and shared factory-invocation success
+	// payloads. Nil defaults to stdout.
+	Output io.Writer
 	// OpenDashboard attempts to open the embedded dashboard URL in a browser.
 	OpenDashboard bool
 	// StartupOutput receives human-facing startup messages. Nil suppresses
@@ -90,9 +101,6 @@ type RunConfig struct {
 	// Diagnostics receives metadata-only verbose command diagnostics. Nil
 	// suppresses diagnostics for programmatic callers and tests.
 	Diagnostics io.Writer
-	// Output receives successful invocation payloads when `you run --factory`
-	// executes through the shared invocation contract.
-	Output io.Writer
 	// Stdin provides the CLI stdin stream for shared invocation input
 	// resolution. Nil defaults to os.Stdin.
 	Stdin io.Reader
@@ -114,6 +122,23 @@ type factoryServiceRunner interface {
 
 type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
+}
+
+type engineStateSnapshotProvider interface {
+	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+}
+
+type cleanInvocationSuccess struct {
+	Output       string `json:"output"`
+	WorkID       string `json:"workId"`
+	WorkTypeName string `json:"workTypeName"`
+	TraceID      string `json:"traceId,omitempty"`
+	SessionID    string `json:"sessionId,omitempty"`
+}
+
+type cleanInvocationWorkTarget struct {
+	WorkID       string
+	WorkTypeName string
 }
 
 // FactoryServiceBuilder constructs the factory service used by Run.
@@ -303,6 +328,7 @@ func (r *reservedAPIServerListener) CloseIfUnused() error {
 // FactoryService. The CLI is a thin wrapper — all orchestration logic
 // (file watcher, dashboard, API server, engine) lives in the service layer.
 func Run(ctx context.Context, cfg RunConfig) error {
+	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
 		logger = zap.NewNop()
@@ -352,9 +378,17 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	}
 	defer waitForDashboardOpen()
 
-	err = factorySvc.Run(ctx)
-	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
-	return err
+	return runFactoryServiceAndEmitResult(ctx, cfg, factorySvc, recordPath)
+}
+
+func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
+	if !cfg.CleanInvocation {
+		return cfg
+	}
+	cfg.SuppressDashboardRendering = true
+	cfg.StartupOutput = nil
+	cfg.OpenDashboard = false
+	return cfg
 }
 
 func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, bool, resolvedRunRecordPath, error) {
@@ -388,229 +422,6 @@ func loadMockWorkersConfig(cfg RunConfig) (*factoryconfig.MockWorkersConfig, err
 		return nil, nil
 	}
 	return factoryconfig.LoadMockWorkersConfig(cfg.MockWorkersConfigPath)
-}
-
-type sessionInvocationRunner interface {
-	factoryServiceRunner
-	apisurface.InvocationAPI
-	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
-}
-
-func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
-	if strings.TrimSpace(cfg.FactoryConfigPath) == "" || strings.TrimSpace(cfg.WorkFile) != "" {
-		return nil, false, nil
-	}
-
-	stdinTTY := stdinIsTTY(cfg)
-	if cfg.InvocationPositionalText == nil && stdinTTY {
-		return nil, false, nil
-	}
-
-	sources := invocations.TextInputSources{
-		PositionalText: cfg.InvocationPositionalText,
-	}
-	if !stdinTTY {
-		stdinText, err := readInvocationStdin(cfg)
-		if err != nil {
-			return nil, true, err
-		}
-		sources.StdinText = &stdinText
-	}
-
-	resolved, err := invocations.ResolveTextInput(sources)
-	if err != nil {
-		recordCLIInvocationFailure(cfg, err)
-		return nil, true, wrapInvocationInputError(err)
-	}
-	recordCLIInvocationResolved(cfg, resolved.Source)
-	return invocationRequestFromResolvedInput(resolved), true, nil
-}
-
-func readInvocationStdin(cfg RunConfig) (string, error) {
-	stdin := cfg.Stdin
-	if stdin == nil {
-		stdin = os.Stdin
-	}
-	data, err := io.ReadAll(stdin)
-	if err != nil {
-		return "", fmt.Errorf("read invocation stdin: %w", err)
-	}
-	return string(data), nil
-}
-
-func stdinIsTTY(cfg RunConfig) bool {
-	if cfg.StdinIsTTY != nil {
-		return cfg.StdinIsTTY()
-	}
-	fi, err := os.Stdin.Stat()
-	if err != nil {
-		return false
-	}
-	return fi.Mode()&os.ModeCharDevice != 0
-}
-
-func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *factoryapi.InvocationRequest {
-	return &factoryapi.InvocationRequest{
-		SourceKind: factoryapi.InvocationInputSourceKindText,
-		Content:    *workcontent.GeneratedPtrFromParts(resolved.Content),
-	}
-}
-
-func wrapInvocationInputError(err error) error {
-	inputErr, ok := err.(*invocations.InputError)
-	if !ok {
-		return err
-	}
-	return invocationCLIError{
-		Code:    string(inputErr.Code),
-		Message: inputErr.Message,
-	}
-}
-
-func runFactoryInvocation(
-	ctx context.Context,
-	cfg RunConfig,
-	request factoryapi.InvocationRequest,
-	logger *zap.Logger,
-	mockWorkersConfig *factoryconfig.MockWorkersConfig,
-	reservedAPIServer *reservedAPIServerListener,
-) error {
-	svcCfg := buildRunServiceConfig(cfg, logger, mockWorkersConfig, reservedAPIServer, make(chan struct{}), &sync.Once{})
-	svcCfg.RuntimeMode = interfaces.RuntimeModeService
-	svcCfg.WorkFile = ""
-	svcCfg.SimpleDashboardRenderer = nil
-
-	factorySvc, err := buildFactoryService(ctx, svcCfg)
-	if err != nil {
-		return err
-	}
-	invoker, ok := factorySvc.(sessionInvocationRunner)
-	if !ok {
-		return fmt.Errorf("factory invocation runner does not support session invocation")
-	}
-
-	runCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	runErrCh := make(chan error, 1)
-	go func() {
-		runErrCh <- invoker.Run(runCtx)
-	}()
-
-	if err := waitForInvocationSessionReady(runCtx, invoker, runErrCh); err != nil {
-		return err
-	}
-
-	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
-	cancel()
-	runErr := <-runErrCh
-	if err != nil {
-		return err
-	}
-	if runErr != nil && !errors.Is(runErr, context.Canceled) {
-		return runErr
-	}
-	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
-		return invocationResultFailure(result)
-	}
-	return writeInvocationSuccess(cfg, result)
-}
-
-func waitForInvocationSessionReady(
-	ctx context.Context,
-	invoker sessionInvocationRunner,
-	runErrCh <-chan error,
-) error {
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		if _, err := invoker.GetCurrentFactoryForSession(ctx, factorysessions.DefaultSessionID); err == nil {
-			return nil
-		} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			return err
-		}
-
-		select {
-		case err := <-runErrCh:
-			if err == nil || errors.Is(err, context.Canceled) {
-				return fmt.Errorf("factory invocation session stopped before it became ready")
-			}
-			return err
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
-
-type invocationCLIError struct {
-	Code    string
-	Message string
-}
-
-func (e invocationCLIError) Error() string {
-	switch {
-	case strings.TrimSpace(e.Code) == "":
-		return strings.TrimSpace(e.Message)
-	case strings.TrimSpace(e.Message) == "":
-		return strings.TrimSpace(e.Code)
-	default:
-		return strings.TrimSpace(e.Code) + ": " + strings.TrimSpace(e.Message)
-	}
-}
-
-func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
-	return invocationCLIError{
-		Code:    strings.TrimSpace(result.ErrorCode),
-		Message: strings.TrimSpace(result.Message),
-	}
-}
-
-func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	output := cfg.Output
-	if output == nil {
-		output = os.Stdout
-	}
-
-	if cfg.JSONOutput {
-		response := factoryapi.InvocationResponse{
-			RequestId: result.RequestID,
-			TraceId:   result.TraceID,
-			Status:    result.Status,
-		}
-		if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
-			response.PrimaryResult = content
-		}
-		encoded, err := json.Marshal(response)
-		if err != nil {
-			return fmt.Errorf("marshal invocation response: %w", err)
-		}
-		_, err = fmt.Fprintln(output, string(encoded))
-		return err
-	}
-
-	text, err := invocationPrimaryResultText(result.PrimaryResult)
-	if err != nil {
-		return err
-	}
-	_, err = fmt.Fprint(output, text)
-	return err
-}
-
-func invocationPrimaryResultText(parts []interfaces.WorkContentPart) (string, error) {
-	if len(parts) == 0 {
-		return "", fmt.Errorf("invocation primary result is empty")
-	}
-
-	textParts := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
-			return "", fmt.Errorf("invocation primary result is not plain text; use --json")
-		}
-		textParts = append(textParts, part.Text)
-	}
-	return strings.Join(textParts, "\n"), nil
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
@@ -704,6 +515,27 @@ func buildRunServiceConfig(
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard
 	}
 	return svcCfg
+}
+
+func runFactoryServiceAndEmitResult(
+	ctx context.Context,
+	cfg RunConfig,
+	factorySvc factoryServiceRunner,
+	recordPath resolvedRunRecordPath,
+) error {
+	startedAt := time.Now().UTC()
+	if cfg.CleanInvocation {
+		recordCleanInvocationAttempt()
+	}
+	err := factorySvc.Run(ctx)
+	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
+	if cfg.CleanInvocation {
+		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, err, startedAt)
+	}
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {
