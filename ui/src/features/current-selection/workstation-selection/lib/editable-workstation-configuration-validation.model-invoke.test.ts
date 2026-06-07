@@ -7,7 +7,7 @@ import {
   baseEditableWorkstationDraft,
   editableWorkstationValidationMessages,
   modelWorkstationValues,
-} from "./editable-workstation-configuration-validation.shared.test";
+} from "../../../../testing/editable-workstation-configuration-validation-fixtures";
 
 describe("validateEditableWorkstationDraft model invoke", () => {
   const modelInvokeValues = {

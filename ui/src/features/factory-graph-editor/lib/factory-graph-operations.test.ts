@@ -39,7 +39,13 @@ describe("factory graph operations", () => {
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
-        operations: [],
+        operations: [
+          {
+            name: "REVIEW",
+            inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+            outputs: [{ name: "result", contentTypes: ["TEXT"] }],
+          },
+        ],
         workerType: "MODEL_WORKER",
       },
     });

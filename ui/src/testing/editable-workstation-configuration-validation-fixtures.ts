@@ -1,4 +1,4 @@
-import type { EditableWorkstationDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type { EditableWorkstationDraft } from "../features/current-factory-definition/lib/workstation-editable-values";
 
 export const nameValidationContext = {
   originalWorkstationName: "Review",

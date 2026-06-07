@@ -5,7 +5,7 @@ import {
   baseEditableWorkstationDraft,
   editableWorkstationValidationMessages,
   modelWorkstationValues,
-} from "./editable-workstation-configuration-validation.shared.test";
+} from "../../../../testing/editable-workstation-configuration-validation-fixtures";
 
 describe("resolveWorkerOptionsState logical move", () => {
   it("returns ready options without worker membership checks for LOGICAL_MOVE", () => {

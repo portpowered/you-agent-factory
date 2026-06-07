@@ -6,6 +6,12 @@ import {
   validateFactoryGraphAddEntityDraft,
 } from "./factory-graph-editor-additions";
 
+const minimalModelWorkerOperation = {
+  name: "REVIEW",
+  inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+  outputs: [{ name: "result", contentTypes: ["TEXT"] }],
+};
+
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
   workers: [
@@ -80,7 +86,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "CURSOR",
           name: "reviewer",
-          operations: [],
+          operations: [minimalModelWorkerOperation],
           workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
@@ -102,6 +108,9 @@ describe("factory graph editor additions", () => {
         baseFactoryDefinition,
       ),
     ).toEqual({
+      modelOperations: {
+        summary: "Add at least one model-invocation operation.",
+      },
       modelProvider: "Select a model provider for the new worker.",
     });
   });
@@ -186,7 +195,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "CURSOR",
           name: "writer",
-          operations: [],
+          operations: [minimalModelWorkerOperation],
           workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,

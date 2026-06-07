@@ -8,7 +8,7 @@ import {
   editableWorkstationValidationMessages,
   modelWorkstationValues,
   nameValidationContext,
-} from "./editable-workstation-configuration-validation.shared.test";
+} from "../../../../testing/editable-workstation-configuration-validation-fixtures";
 
 describe("validateEditableWorkstationDraft workstation name", () => {
   it("blocks empty, duplicate, and unchanged-after-trim names", () => {
