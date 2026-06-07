@@ -56,11 +56,12 @@ primary-result behavior.
 - `pkg/packagedfactories/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
   error codes plus packaged-factory metric names.
-- `pkg/cli/run/packaged_tts_invocation.go` logs and counts `@you/tts` invocation
-  readiness/failure fields at the CLI boundary without logging submitted text or
-  generated artifact bodies.
-- `pkg/service/model_catalog.go` emits packaged TTS loading/completion/failure logs
-  and metrics while waiting for session invocation primary results.
+- `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
+  the CLI boundary without recording packaged-factory metrics or logging submitted
+  text or generated artifact bodies.
+- `pkg/service/model_catalog.go` and `pkg/service/model_catalog_packaged_tts.go`
+  own packaged TTS loading/completion/failure logs and metrics while waiting for
+  session invocation primary results.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata

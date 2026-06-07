@@ -310,7 +310,6 @@ func runFactoryInvocation(
 	logPackagedTTSInvocationStart(cfg)
 
 	if err := waitForInvocationSessionReady(runCtx, invoker, runErrCh); err != nil {
-		observePackagedTTSInvocationResult(cfg, apisurface.FactoryInvocationResult{}, err)
 		return err
 	}
 
@@ -318,19 +317,14 @@ func runFactoryInvocation(
 	cancel()
 	runErr := <-runErrCh
 	if err != nil {
-		observePackagedTTSInvocationResult(cfg, apisurface.FactoryInvocationResult{}, err)
 		return err
 	}
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
-		observePackagedTTSInvocationResult(cfg, apisurface.FactoryInvocationResult{}, runErr)
 		return runErr
 	}
 	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
-		invocationErr := invocationResultFailure(result)
-		observePackagedTTSInvocationResult(cfg, result, invocationErr)
-		return invocationErr
+		return invocationResultFailure(result)
 	}
-	observePackagedTTSInvocationResult(cfg, result, nil)
 	return writeInvocationSuccess(cfg, result)
 }
 

@@ -209,7 +209,6 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 
 	text := "hi there"
 	var output bytes.Buffer
-	recorder := &capturingInvocationMetricsRecorder{}
 	core, observedLogs := observer.New(zap.InfoLevel)
 
 	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
@@ -237,8 +236,7 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 		StdinIsTTY:               func() bool { return true },
 		Output:                   &output,
 		Port:                     7437,
-		Logger:                   zap.New(core),
-		InvocationMetricsRecorder: recorder,
+		Logger: zap.New(core),
 	})
 	if err == nil {
 		t.Fatal("expected model-not-ready invocation failure")
@@ -250,24 +248,13 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 		t.Fatalf("stdout = %q, want empty without success metadata", output.String())
 	}
 
-	failedLogs := observedLogs.FilterMessage("packaged tts invocation failed").All()
-	if len(failedLogs) != 1 {
-		t.Fatalf("packaged failure logs = %d, want 1", len(failedLogs))
+	startLogs := observedLogs.FilterMessage("packaged tts invocation started").All()
+	if len(startLogs) != 1 {
+		t.Fatalf("packaged start logs = %d, want 1", len(startLogs))
 	}
-	fields := failedLogs[0].ContextMap()
-	if got := fields["failure_class"]; got != tts.FailureClassModelNotReady {
-		t.Fatalf("failure_class = %#v, want %s", got, tts.FailureClassModelNotReady)
+	if got := startLogs[0].ContextMap()["tts_backend"]; got == "" {
+		t.Fatal("expected tts_backend field in packaged start log")
 	}
-	if got := fields["tts_backend"]; got == "" {
-		t.Fatal("expected tts_backend field in packaged failure log")
-	}
-
-	recorder.assertContainsMetricNames(
-		t,
-		tts.MetricPackagedFactoryAttempts,
-		tts.MetricPackagedFactoryFailure,
-		tts.MetricPackagedFactoryNotReady,
-	)
 }
 
 func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
