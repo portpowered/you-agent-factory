@@ -48,12 +48,16 @@ func ShouldFormatInvocationMetadata(workstation *interfaces.FactoryWorkstationCo
 // packaged factory defaults.
 func BackendLabelFromWorker(worker *interfaces.WorkerConfig) string {
 	model := DefaultModelName
+	backend := DefaultBackendName
 	if worker != nil {
 		if trimmed := strings.TrimSpace(worker.Model); trimmed != "" {
 			model = trimmed
 		}
+		if trimmed := strings.TrimSpace(worker.Command); trimmed != "" && trimmed != "omnivoice-llamacpp" {
+			backend = trimmed
+		}
 	}
-	return model + "/" + DefaultBackendName
+	return model + "/" + backend
 }
 
 // MetadataContentFromWorkerOutput parses a MODEL_INVOKE TTS worker output payload

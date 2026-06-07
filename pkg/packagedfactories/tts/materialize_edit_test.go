@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -43,11 +42,36 @@ func TestEditedMaterializedPackagedTTSFactoryChangesInvocationBackendMetadata(t 
 	if err != nil {
 		t.Fatalf("ReadFile(factory.json): %v", err)
 	}
-	editedJSON := strings.ReplaceAll(string(factoryJSON), `"model": "OMNIVOICE_Q4_K_M"`, `"model": "CUSTOMER_EDITED_TTS_MODEL"`)
-	if editedJSON == string(factoryJSON) {
-		t.Fatal("expected factory.json worker model field to be editable")
+	var factoryDoc map[string]any
+	if err := json.Unmarshal(factoryJSON, &factoryDoc); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
 	}
-	if err := os.WriteFile(factoryJSONPath, []byte(editedJSON), 0o644); err != nil {
+	workers, ok := factoryDoc["workers"].([]any)
+	if !ok || len(workers) == 0 {
+		t.Fatal("expected factory.json workers array")
+	}
+	const editedCommand = "customer-tts-command"
+	editedWorkerCommand := false
+	for _, worker := range workers {
+		workerDoc, ok := worker.(map[string]any)
+		if !ok || workerDoc["name"] != "tts-executor" {
+			continue
+		}
+		workerDoc["command"] = editedCommand
+		editedWorkerCommand = true
+		break
+	}
+	if !editedWorkerCommand {
+		t.Fatal("expected factory.json tts-executor worker command field to be editable")
+	}
+	editedJSON, err := json.MarshalIndent(factoryDoc, "", "  ")
+	if err != nil {
+		t.Fatalf("Marshal(edited factory.json): %v", err)
+	}
+	if string(editedJSON) == string(factoryJSON) {
+		t.Fatal("expected edited factory.json to differ from initial materialized content")
+	}
+	if err := os.WriteFile(factoryJSONPath, editedJSON, 0o644); err != nil {
 		t.Fatalf("WriteFile(edited factory.json): %v", err)
 	}
 
@@ -59,8 +83,8 @@ func TestEditedMaterializedPackagedTTSFactoryChangesInvocationBackendMetadata(t 
 	if !ok {
 		t.Fatal("expected edited tts-executor worker")
 	}
-	if editedWorker.Model != "CUSTOMER_EDITED_TTS_MODEL" {
-		t.Fatalf("edited worker model = %q, want CUSTOMER_EDITED_TTS_MODEL", editedWorker.Model)
+	if editedWorker.Command != editedCommand {
+		t.Fatalf("edited worker command = %q, want %q", editedWorker.Command, editedCommand)
 	}
 
 	editedContent, err := MetadataContentFromWorkerOutput(output, "trace-edit", "session-edit", BackendLabelFromWorker(editedWorker))
@@ -71,8 +95,8 @@ func TestEditedMaterializedPackagedTTSFactoryChangesInvocationBackendMetadata(t 
 	if editedBackend == initialBackend {
 		t.Fatalf("edited backend = %q, want change from %q after on-disk factory edit", editedBackend, initialBackend)
 	}
-	if editedBackend != "CUSTOMER_EDITED_TTS_MODEL/LLAMACPP" {
-		t.Fatalf("edited backend = %q, want CUSTOMER_EDITED_TTS_MODEL/LLAMACPP", editedBackend)
+	if editedBackend != "OMNIVOICE_Q4_K_M/"+editedCommand {
+		t.Fatalf("edited backend = %q, want OMNIVOICE_Q4_K_M/%s", editedBackend, editedCommand)
 	}
 }
 
