@@ -69,6 +69,14 @@ func TestFactoryConfigFromOpenAPIJSON_MapsOptionalGraphableEntityIDs(t *testing.
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
 
+	assertInternalGraphableEntityIDs(t, cfg)
+	assertPublicGraphableEntityIDs(t, cfg)
+	assertCanonicalGraphableEntityIDs(t, cfg)
+}
+
+func assertInternalGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
 	if cfg.WorkTypes[0].ID != "work-type-story" {
 		t.Fatalf("work type id = %q", cfg.WorkTypes[0].ID)
 	}
@@ -81,6 +89,10 @@ func TestFactoryConfigFromOpenAPIJSON_MapsOptionalGraphableEntityIDs(t *testing.
 	if cfg.Workers[0].ID != "worker-executor" {
 		t.Fatalf("worker id = %q", cfg.Workers[0].ID)
 	}
+}
+
+func assertPublicGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 
 	public := FactoryConfigToOpenAPI(cfg)
 	if public.WorkTypes == nil || (*public.WorkTypes)[0].Id == nil || *(*public.WorkTypes)[0].Id != "work-type-story" {
@@ -95,6 +107,10 @@ func TestFactoryConfigFromOpenAPIJSON_MapsOptionalGraphableEntityIDs(t *testing.
 	if public.Workers == nil || (*public.Workers)[0].Id == nil || *(*public.Workers)[0].Id != "worker-executor" {
 		t.Fatalf("public worker id = %#v", public.Workers)
 	}
+}
+
+func assertCanonicalGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 
 	canonical, err := MarshalCanonicalFactoryConfig(cfg)
 	if err != nil {

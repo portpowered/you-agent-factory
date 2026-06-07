@@ -13,6 +13,38 @@ func duplicateIdentifierTargets(cfg *interfaces.FactoryConfig) []Target {
 	targets = append(targets, duplicateNameTargets(cfg, "workers", workerNames(cfg), SubjectTypeWorker)...)
 	targets = append(targets, duplicateNameTargets(cfg, "resources", resourceNames(cfg), SubjectTypeResource)...)
 	targets = append(targets, duplicateNameTargets(cfg, "workstations", workstationNames(cfg), SubjectTypeWorkstation)...)
+	targets = append(targets, duplicateExplicitIDTargets("workTypes", workTypeIDs(cfg), SubjectTypeWorkType, "work type")...)
+	targets = append(targets, duplicateExplicitIDTargets("workers", workerIDs(cfg), SubjectTypeWorker, "worker")...)
+	targets = append(targets, duplicateExplicitIDTargets("resources", resourceIDs(cfg), SubjectTypeResource, "resource")...)
+	targets = append(targets, duplicateExplicitIDTargets("workstations", workstationIDs(cfg), SubjectTypeWorkstation, "workstation")...)
+	return targets
+}
+
+type explicitIDValue struct {
+	value string
+	index int
+}
+
+func duplicateExplicitIDTargets(collection string, ids []explicitIDValue, subjectType SubjectType, namespace string) []Target {
+	seen := make(map[string]int, len(ids))
+	var targets []Target
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id.value)
+		if trimmed == "" {
+			continue
+		}
+		path := fmt.Sprintf("%s.%s[%d].id", validationRoot, collection, id.index)
+		if firstIndex, ok := seen[trimmed]; ok {
+			firstPath := fmt.Sprintf("%s.%s[%d].id", validationRoot, collection, firstIndex)
+			message := fmt.Sprintf("duplicate %s id %q.", namespace, trimmed)
+			targets = append(targets,
+				duplicateIdentifierTarget(subjectType, trimmed, firstPath, message),
+				duplicateIdentifierTarget(subjectType, trimmed, path, message),
+			)
+			continue
+		}
+		seen[trimmed] = id.index
+	}
 	return targets
 }
 
@@ -82,8 +114,23 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 	var targets []Target
 	for workTypeIndex, workType := range cfg.WorkTypes {
 		seen := make(map[string]int, len(workType.States))
+		seenIDs := make(map[string]int, len(workType.States))
 		for stateIndex, state := range workType.States {
 			path := fmt.Sprintf("%s.workTypes[%d].states[%d].name", validationRoot, workTypeIndex, stateIndex)
+			stateID := strings.TrimSpace(state.ID)
+			if stateID != "" {
+				idPath := fmt.Sprintf("%s.workTypes[%d].states[%d].id", validationRoot, workTypeIndex, stateIndex)
+				if firstIndex, ok := seenIDs[stateID]; ok {
+					subjectID := workType.Name + ":" + stateID
+					message := fmt.Sprintf("duplicate work state id %q on work type %q.", stateID, workType.Name)
+					targets = append(targets,
+						duplicateWorkStateTarget(workType.Name, subjectID, fmt.Sprintf("%s.workTypes[%d].states[%d].id", validationRoot, workTypeIndex, firstIndex), message),
+						duplicateWorkStateTarget(workType.Name, subjectID, idPath, message),
+					)
+				} else {
+					seenIDs[stateID] = stateIndex
+				}
+			}
 			if strings.TrimSpace(state.Name) == "" {
 				targets = append(targets, Target{
 					Code:     CodeDuplicateIdentifier,
@@ -617,12 +664,28 @@ func workTypeNames(cfg *interfaces.FactoryConfig) []string {
 	return names
 }
 
+func workTypeIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.WorkTypes))
+	for index, workType := range cfg.WorkTypes {
+		ids = append(ids, explicitIDValue{value: workType.ID, index: index})
+	}
+	return ids
+}
+
 func workerNames(cfg *interfaces.FactoryConfig) []string {
 	names := make([]string, 0, len(cfg.Workers))
 	for _, worker := range cfg.Workers {
 		names = append(names, worker.Name)
 	}
 	return names
+}
+
+func workerIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.Workers))
+	for index, worker := range cfg.Workers {
+		ids = append(ids, explicitIDValue{value: worker.ID, index: index})
+	}
+	return ids
 }
 
 func resourceNames(cfg *interfaces.FactoryConfig) []string {
@@ -633,12 +696,28 @@ func resourceNames(cfg *interfaces.FactoryConfig) []string {
 	return names
 }
 
+func resourceIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.Resources))
+	for index, resource := range cfg.Resources {
+		ids = append(ids, explicitIDValue{value: resource.ID, index: index})
+	}
+	return ids
+}
+
 func workstationNames(cfg *interfaces.FactoryConfig) []string {
 	names := make([]string, 0, len(cfg.Workstations))
 	for _, workstation := range cfg.Workstations {
 		names = append(names, workstation.Name)
 	}
 	return names
+}
+
+func workstationIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.Workstations))
+	for index, workstation := range cfg.Workstations {
+		ids = append(ids, explicitIDValue{value: workstation.ID, index: index})
+	}
+	return ids
 }
 
 func stringSet(values []string) map[string]bool {
