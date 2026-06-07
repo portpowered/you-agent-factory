@@ -134,6 +134,24 @@ describe("EditableConfigurationModelInvokeFields", () => {
     await user.selectOptions(screen.getByLabelText("Operation"), "TTS");
     expect(onOperationChange).toHaveBeenCalledWith("TTS");
 
+    fireEvent.change(screen.getByLabelText("Selector label"), {
+      target: { value: "utterance" },
+    });
+    expect(onOperationBindingsChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        slot: "text",
+        selector: expect.objectContaining({ label: "utterance" }),
+      }),
+    ]);
+
+    fireEvent.change(screen.getByLabelText("Selector slot"), {
+      target: { value: "input.text" },
+    });
+    fireEvent.change(screen.getByLabelText("Selector role"), {
+      target: { value: "runtime" },
+    });
+    await user.selectOptions(screen.getByLabelText("Selector type"), "TEXT");
+
     fireEvent.change(screen.getByLabelText("Config content"), {
       target: { value: "speak clearly" },
     });
