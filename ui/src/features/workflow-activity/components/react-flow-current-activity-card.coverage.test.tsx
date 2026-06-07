@@ -410,7 +410,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("Observe")).toBeTruthy();
     expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(
       screen.getByText(

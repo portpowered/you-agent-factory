@@ -1290,9 +1290,8 @@ describe("App current selection", () => {
 
   it("shows active executions from the selected workstation instead of provider history", async () => {
     const reviewExecution =
-      semanticWorkflowDashboardSnapshot.runtime.active_executions_by_dispatch_id?.[
-        "dispatch-review-active"
-      ];
+      semanticWorkflowDashboardSnapshot.runtime
+        .active_executions_by_dispatch_id?.["dispatch-review-active"];
     const resolvedReviewExecution = requireValue(
       reviewExecution,
       "expected active review execution fixture",
@@ -1514,7 +1513,8 @@ describe("App current selection", () => {
         workstation_nodes_by_id: {
           ...semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id,
           review: {
-            ...semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review,
+            ...semanticWorkflowDashboardSnapshot.topology
+              .workstation_nodes_by_id.review,
             workstation_kind: "future-kind",
           },
         },

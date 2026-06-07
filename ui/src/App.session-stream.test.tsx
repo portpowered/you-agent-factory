@@ -11,13 +11,13 @@ import {
 } from "./App.session-stream.test-helpers";
 import type { FactorySessionSummary } from "./api/factory-sessions/api";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
 import { useDashboardSessionStore } from "./features/dashboard/state/dashboardSessionStore";
 import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStreamStore";
 import { sessionStreamToggleLabel } from "./features/header/lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
-import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import {
   MockEventSource,
   registerAppDashboardTestLifecycle,
@@ -115,7 +115,9 @@ describe("App dashboard session stream tab switch", () => {
       name: "Timeline tick",
     });
     await waitFor(() => {
-      expect(defaultSlider.value).toBe(String(semanticWorkflowDashboardSnapshot.tick_count));
+      expect(defaultSlider.value).toBe(
+        String(semanticWorkflowDashboardSnapshot.tick_count),
+      );
     });
 
     act(() => {
