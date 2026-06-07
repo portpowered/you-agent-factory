@@ -18,7 +18,7 @@ status API fields, and `--server` / `--session` on HTTP client commands), see
 
 - `factory.json` is the canonical root file. It owns factory-level workflow
   topology such as `id`, `workTypes`, `workers`, `workstations`, routes,
-  optional runtime `resources`, and the optional portability
+  optional runtime `resources`, non-executable portable `layout`, and the optional portability
   `supportingFiles`; the normative field contract lives on this page.
 - Keep worker runtime instructions in `workers/<name>/AGENTS.md`.
 - Keep workstation runtime instructions in `workstations/<name>/AGENTS.md`.
@@ -125,6 +125,7 @@ Each `workType` and `state` pair becomes a place named
 | `inputTypes` | No | Named input kinds. The implicit `default` input type already exists; omit this unless adding a supported non-default input kind. |
 | `workTypes` | Yes | Work categories and lifecycle states. Workstation input and output places must reference these names. |
 | `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
+| `layout` | No | Non-executable portable graph-editor layout metadata keyed by canonical graph node and edge ids. It must not change runtime topology or execution behavior. |
 | `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
 | `runner` | No | Factory-level default runner ID. Supported built-ins are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
 | `workers` | Yes | Worker identities that workstations reference by `name`; see `you docs workers` for worker runtime fields. |
@@ -134,6 +135,57 @@ Do not rely on stale top-level `global_limits` or `exhaustionRules` examples.
 The current public `factory.json` authoring contract uses guarded
 `LOGICAL_MOVE` workstations and workstation limits for user-configured safety
 behavior.
+
+## Portable Graph Layout
+
+Use top-level `layout` when a shared factory should carry authored graph-canvas
+geometry across sessions or exports. Layout metadata is presentation-only: the
+runtime ignores it when building the executable factory topology.
+
+```json
+{
+  "layout": {
+    "schemaVersion": 1,
+    "nodes": [
+      {
+        "id": "workstation:review",
+        "position": { "x": 420, "y": 180 },
+        "size": { "width": 156, "height": 196 },
+        "locked": false
+      }
+    ],
+    "edges": [
+      {
+        "id": "workstation-output:workstation:review->work-state:task:done",
+        "waypoints": [{ "x": 540, "y": 220 }],
+        "labelPosition": { "x": 590, "y": 204 }
+      }
+    ],
+    "groups": [
+      {
+        "id": "review-lane",
+        "label": "Review",
+        "bounds": { "x": 360, "y": 120, "width": 520, "height": 360 },
+        "nodeIds": ["workstation:review"],
+        "parentGroupId": null,
+        "color": "blue",
+        "locked": false
+      }
+    ],
+    "viewport": { "x": 0, "y": 0, "zoom": 1 },
+    "preferences": { "direction": "RIGHT" }
+  }
+}
+```
+
+- `layout.schemaVersion` is required whenever `layout` is present.
+- `layout.nodes[].id` and `layout.edges[].id` must use canonical graph ids such
+  as `workstation:<workstationId>` or
+  `workstation-output:<sourceGraphNodeId>-><targetGraphNodeId>`.
+- `layout.groups[]` is flat in v1. `parentGroupId` is reserved for future
+  nesting and may be omitted or set to `null`.
+- `layout.preferences` is intentionally narrow. Keep only portable display
+  defaults that do not hide nodes, rewrite topology, or change execution.
 
 ## Portability Resource Manifest
 

@@ -6,10 +6,12 @@ required:
   - name
   - type
 properties:
+  id:
+    type: string
+    description: Optional durable public identifier for this state within its work type. When present, graph and layout references should use this id instead of the mutable name.
   name:
     type: string
     description: Customer-authored state name referenced by workstation inputs and outputs.
   type:
     $ref: './WorkStateType.yaml'
     description: Lifecycle category for this state, such as initial, processing, terminal, or failed.
-

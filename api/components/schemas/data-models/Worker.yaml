@@ -6,6 +6,9 @@ additionalProperties: false
 required:
   - name
 properties:
+  id:
+    type: string
+    description: Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
   name:
     type: string
     description: Worker name referenced by Workstation.worker.

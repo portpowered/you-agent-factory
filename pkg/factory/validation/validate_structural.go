@@ -9,42 +9,79 @@ import (
 
 func duplicateIdentifierTargets(cfg *interfaces.FactoryConfig) []Target {
 	var targets []Target
-	targets = append(targets, duplicateNameTargets(cfg, "workTypes", workTypeNames(cfg), SubjectTypeWorkType)...)
-	targets = append(targets, duplicateNameTargets(cfg, "workers", workerNames(cfg), SubjectTypeWorker)...)
-	targets = append(targets, duplicateNameTargets(cfg, "resources", resourceNames(cfg), SubjectTypeResource)...)
-	targets = append(targets, duplicateNameTargets(cfg, "workstations", workstationNames(cfg), SubjectTypeWorkstation)...)
+	targets = append(targets, duplicateNameTargets("workTypes", workTypeSubjectRecords(cfg), SubjectTypeWorkType)...)
+	targets = append(targets, duplicateNameTargets("workers", workerSubjectRecords(cfg), SubjectTypeWorker)...)
+	targets = append(targets, duplicateNameTargets("resources", resourceSubjectRecords(cfg), SubjectTypeResource)...)
+	targets = append(targets, duplicateNameTargets("workstations", workstationSubjectRecords(cfg), SubjectTypeWorkstation)...)
+	targets = append(targets, duplicateExplicitIDTargets("workTypes", workTypeIDs(cfg), SubjectTypeWorkType, "work type")...)
+	targets = append(targets, duplicateExplicitIDTargets("workers", workerIDs(cfg), SubjectTypeWorker, "worker")...)
+	targets = append(targets, duplicateExplicitIDTargets("resources", resourceIDs(cfg), SubjectTypeResource, "resource")...)
+	targets = append(targets, duplicateExplicitIDTargets("workstations", workstationIDs(cfg), SubjectTypeWorkstation, "workstation")...)
 	return targets
 }
 
-func duplicateNameTargets(cfg *interfaces.FactoryConfig, collection string, names []string, subjectType SubjectType) []Target {
-	seen := make(map[string]int, len(names))
+type explicitIDValue struct {
+	value string
+	index int
+}
+
+type namedSubjectRecord struct {
+	name      string
+	subjectID string
+}
+
+func duplicateExplicitIDTargets(collection string, ids []explicitIDValue, subjectType SubjectType, namespace string) []Target {
+	seen := make(map[string]int, len(ids))
 	var targets []Target
-	for index, name := range names {
+	for _, id := range ids {
+		trimmed := strings.TrimSpace(id.value)
+		if trimmed == "" {
+			continue
+		}
+		path := fmt.Sprintf("%s.%s[%d].id", validationRoot, collection, id.index)
+		if firstIndex, ok := seen[trimmed]; ok {
+			firstPath := fmt.Sprintf("%s.%s[%d].id", validationRoot, collection, firstIndex)
+			message := fmt.Sprintf("duplicate %s id %q.", namespace, trimmed)
+			targets = append(targets,
+				duplicateIdentifierTarget(subjectType, trimmed, firstPath, message),
+				duplicateIdentifierTarget(subjectType, trimmed, path, message),
+			)
+			continue
+		}
+		seen[trimmed] = id.index
+	}
+	return targets
+}
+
+func duplicateNameTargets(collection string, subjects []namedSubjectRecord, subjectType SubjectType) []Target {
+	seen := make(map[string]int, len(subjects))
+	var targets []Target
+	for index, subject := range subjects {
 		path := fmt.Sprintf("%s.%s[%d].name", validationRoot, collection, index)
-		if strings.TrimSpace(name) == "" {
+		if strings.TrimSpace(subject.name) == "" {
 			targets = append(targets, Target{
 				Code:     CodeDuplicateIdentifier,
 				Severity: SeverityError,
 				Message:  fmt.Sprintf("%s name must be non-empty.", collection),
 				Subject: Subject{
 					Type:     subjectType,
-					ID:       "",
+					ID:       subject.subjectID,
 					Location: SubjectLocationDefinition,
 				},
 				Path: path,
 			})
 			continue
 		}
-		if firstIndex, ok := seen[name]; ok {
+		if firstIndex, ok := seen[subject.name]; ok {
 			firstPath := fmt.Sprintf("%s.%s[%d].name", validationRoot, collection, firstIndex)
-			message := fmt.Sprintf("duplicate %s name %q.", singularCollectionLabel(collection), name)
+			message := fmt.Sprintf("duplicate %s name %q.", singularCollectionLabel(collection), subject.name)
 			targets = append(targets,
-				duplicateIdentifierTarget(subjectType, name, firstPath, message),
-				duplicateIdentifierTarget(subjectType, name, path, message),
+				duplicateIdentifierTarget(subjectType, subjects[firstIndex].subjectID, firstPath, message),
+				duplicateIdentifierTarget(subjectType, subject.subjectID, path, message),
 			)
 			continue
 		}
-		seen[name] = index
+		seen[subject.name] = index
 	}
 	return targets
 }
@@ -82,8 +119,23 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 	var targets []Target
 	for workTypeIndex, workType := range cfg.WorkTypes {
 		seen := make(map[string]int, len(workType.States))
+		seenIDs := make(map[string]int, len(workType.States))
 		for stateIndex, state := range workType.States {
 			path := fmt.Sprintf("%s.workTypes[%d].states[%d].name", validationRoot, workTypeIndex, stateIndex)
+			stateID := strings.TrimSpace(state.ID)
+			if stateID != "" {
+				idPath := fmt.Sprintf("%s.workTypes[%d].states[%d].id", validationRoot, workTypeIndex, stateIndex)
+				if firstIndex, ok := seenIDs[stateID]; ok {
+					subjectID := interfaces.CanonicalFactoryGraphEntityID(workType.ID, workType.Name) + ":" + stateID
+					message := fmt.Sprintf("duplicate work state id %q on work type %q.", stateID, workType.Name)
+					targets = append(targets,
+						duplicateWorkStateTarget(subjectID, fmt.Sprintf("%s.workTypes[%d].states[%d].id", validationRoot, workTypeIndex, firstIndex), message),
+						duplicateWorkStateTarget(subjectID, idPath, message),
+					)
+				} else {
+					seenIDs[stateID] = stateIndex
+				}
+			}
 			if strings.TrimSpace(state.Name) == "" {
 				targets = append(targets, Target{
 					Code:     CodeDuplicateIdentifier,
@@ -91,7 +143,7 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 					Message:  fmt.Sprintf("work type %q state name must be non-empty.", workType.Name),
 					Subject: Subject{
 						Type:     SubjectTypeWorkType,
-						ID:       workType.Name,
+						ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
 						Location: SubjectLocationStates,
 					},
 					Path: path,
@@ -99,11 +151,11 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 				continue
 			}
 			if firstIndex, ok := seen[state.Name]; ok {
-				stateID := workType.Name + ":" + state.Name
+				stateID := interfaces.CanonicalFactoryGraphWorkStateID(workType, state)
 				message := fmt.Sprintf("duplicate work state name %q on work type %q.", state.Name, workType.Name)
 				targets = append(targets,
-					duplicateWorkStateTarget(workType.Name, stateID, fmt.Sprintf("%s.workTypes[%d].states[%d].name", validationRoot, workTypeIndex, firstIndex), message),
-					duplicateWorkStateTarget(workType.Name, stateID, path, message),
+					duplicateWorkStateTarget(stateID, fmt.Sprintf("%s.workTypes[%d].states[%d].name", validationRoot, workTypeIndex, firstIndex), message),
+					duplicateWorkStateTarget(stateID, path, message),
 				)
 				continue
 			}
@@ -113,7 +165,7 @@ func duplicateWorkStateTargets(cfg *interfaces.FactoryConfig) []Target {
 	return targets
 }
 
-func duplicateWorkStateTarget(workTypeName, stateID, path, message string) Target {
+func duplicateWorkStateTarget(stateID, path, message string) Target {
 	return Target{
 		Code:     CodeDuplicateIdentifier,
 		Severity: SeverityError,
@@ -139,7 +191,7 @@ func danglingReferenceTargets(cfg *interfaces.FactoryConfig) []Target {
 				Message:  fmt.Sprintf("workstation %q references non-existent worker %q.", workstation.Name, workstation.WorkerTypeName),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,
-					ID:       workstation.Name,
+					ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
 					Location: SubjectLocationReference,
 				},
 				Path: fmt.Sprintf("%s.workstations[%d].worker", validationRoot, workstationIndex),
@@ -226,15 +278,15 @@ func conflictingWorkstationOutputTargets(cfg *interfaces.FactoryConfig) []Target
 		if len(inputCounts) == 0 {
 			continue
 		}
-		targets = append(targets, conflictingRouteTargets(workstation.Name, inputCounts, workstation.Outputs, fmt.Sprintf("%s.workstations[%d].outputs", validationRoot, workstationIndex))...)
-		targets = append(targets, conflictingRouteTargets(workstation.Name, inputCounts, workstation.OnContinue, fmt.Sprintf("%s.workstations[%d].onContinue", validationRoot, workstationIndex))...)
-		targets = append(targets, conflictingRouteTargets(workstation.Name, inputCounts, workstation.OnRejection, fmt.Sprintf("%s.workstations[%d].onRejection", validationRoot, workstationIndex))...)
-		targets = append(targets, conflictingRouteTargets(workstation.Name, inputCounts, workstation.OnFailure, fmt.Sprintf("%s.workstations[%d].onFailure", validationRoot, workstationIndex))...)
+		targets = append(targets, conflictingRouteTargets(workstation, inputCounts, workstation.Outputs, fmt.Sprintf("%s.workstations[%d].outputs", validationRoot, workstationIndex))...)
+		targets = append(targets, conflictingRouteTargets(workstation, inputCounts, workstation.OnContinue, fmt.Sprintf("%s.workstations[%d].onContinue", validationRoot, workstationIndex))...)
+		targets = append(targets, conflictingRouteTargets(workstation, inputCounts, workstation.OnRejection, fmt.Sprintf("%s.workstations[%d].onRejection", validationRoot, workstationIndex))...)
+		targets = append(targets, conflictingRouteTargets(workstation, inputCounts, workstation.OnFailure, fmt.Sprintf("%s.workstations[%d].onFailure", validationRoot, workstationIndex))...)
 	}
 	return targets
 }
 
-func conflictingRouteTargets(workstation string, inputCounts map[string]int, routes []interfaces.IOConfig, fieldPrefix string) []Target {
+func conflictingRouteTargets(workstation interfaces.FactoryWorkstationConfig, inputCounts map[string]int, routes []interfaces.IOConfig, fieldPrefix string) []Target {
 	routeCounts := ioWorkTypeCounts(routes)
 	var targets []Target
 	for workType, inputCount := range inputCounts {
@@ -249,10 +301,10 @@ func conflictingRouteTargets(workstation string, inputCounts map[string]int, rou
 			targets = append(targets, Target{
 				Code:     CodeWorkstationConflictingOutputs,
 				Severity: SeverityError,
-				Message:  fmt.Sprintf("workstation %q routes work type %q to conflicting output states.", workstation, workType),
+				Message:  fmt.Sprintf("workstation %q routes work type %q to conflicting output states.", workstation.Name, workType),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,
-					ID:       workstation,
+					ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
 					Location: SubjectLocationOutputs,
 				},
 				Path: fmt.Sprintf("%s[%d]", fieldPrefix, routeIndex),
@@ -289,7 +341,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 				Message:  fmt.Sprintf("workstation %q must define output routes.", workstation.Name),
 				Subject: Subject{
 					Type:     SubjectTypeWorkstation,
-					ID:       workstation.Name,
+					ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
 					Location: SubjectLocationOutputs,
 				},
 				Path: fmt.Sprintf("%s.workstations[%d].outputs", validationRoot, workstationIndex),
@@ -304,7 +356,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 					Message:  fmt.Sprintf("workstation %q must define a failure route.", workstation.Name),
 					Subject: Subject{
 						Type:     SubjectTypeWorkstation,
-						ID:       workstation.Name,
+						ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
 						Location: SubjectLocationOnFailure,
 					},
 					Path: fmt.Sprintf("%s.workstations[%d].onFailure", validationRoot, workstationIndex),
@@ -323,7 +375,7 @@ func missingOutcomeRouteTargets(cfg *interfaces.FactoryConfig) []Target {
 			Message:  fmt.Sprintf("workstation %q must define a reject route.", workstation.Name),
 			Subject: Subject{
 				Type:     SubjectTypeWorkstation,
-				ID:       workstation.Name,
+				ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
 				Location: SubjectLocationOnRejection,
 			},
 			Path: fmt.Sprintf("%s.workstations[%d].onRejection", validationRoot, workstationIndex),
@@ -356,7 +408,7 @@ func missingWorkTypeOutcomeStateTargets(cfg *interfaces.FactoryConfig) []Target 
 				Message:  fmt.Sprintf("work type %q must declare a completion state.", workType.Name),
 				Subject: Subject{
 					Type:     SubjectTypeWorkType,
-					ID:       workType.Name,
+					ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
 					Location: SubjectLocationStates,
 				},
 			})
@@ -368,7 +420,7 @@ func missingWorkTypeOutcomeStateTargets(cfg *interfaces.FactoryConfig) []Target 
 				Message:  fmt.Sprintf("work type %q must declare a failure state.", workType.Name),
 				Subject: Subject{
 					Type:     SubjectTypeWorkType,
-					ID:       workType.Name,
+					ID:       interfaces.CanonicalFactoryGraphWorkTypeID(workType),
 					Location: SubjectLocationStates,
 				},
 			})
@@ -399,12 +451,74 @@ func missingTerminalCompletionPathTargets(cfg *interfaces.FactoryConfig) []Targe
 			Message:  fmt.Sprintf("work state %q has no terminal completion path.", stateID),
 			Subject: Subject{
 				Type:     SubjectTypeWorkState,
-				ID:       stateID,
+				ID:       canonicalWorkStateSubjectID(cfg, stateID),
 				Location: SubjectLocationTerminal,
 			},
 		})
 	}
 	return targets
+}
+
+func resourceSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+	subjects := make([]namedSubjectRecord, 0, len(cfg.Resources))
+	for _, resource := range cfg.Resources {
+		subjects = append(subjects, namedSubjectRecord{
+			name:      resource.Name,
+			subjectID: interfaces.CanonicalFactoryGraphResourceID(resource),
+		})
+	}
+	return subjects
+}
+
+func workerSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+	subjects := make([]namedSubjectRecord, 0, len(cfg.Workers))
+	for _, worker := range cfg.Workers {
+		subjects = append(subjects, namedSubjectRecord{
+			name:      worker.Name,
+			subjectID: interfaces.CanonicalFactoryGraphWorkerID(worker),
+		})
+	}
+	return subjects
+}
+
+func workTypeSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+	subjects := make([]namedSubjectRecord, 0, len(cfg.WorkTypes))
+	for _, workType := range cfg.WorkTypes {
+		subjects = append(subjects, namedSubjectRecord{
+			name:      workType.Name,
+			subjectID: interfaces.CanonicalFactoryGraphWorkTypeID(workType),
+		})
+	}
+	return subjects
+}
+
+func workstationSubjectRecords(cfg *interfaces.FactoryConfig) []namedSubjectRecord {
+	subjects := make([]namedSubjectRecord, 0, len(cfg.Workstations))
+	for _, workstation := range cfg.Workstations {
+		subjects = append(subjects, namedSubjectRecord{
+			name:      workstation.Name,
+			subjectID: interfaces.CanonicalFactoryGraphWorkstationID(workstation),
+		})
+	}
+	return subjects
+}
+
+func canonicalWorkStateSubjectID(cfg *interfaces.FactoryConfig, legacyStateID string) string {
+	workTypeName, stateName, ok := strings.Cut(legacyStateID, ":")
+	if !ok {
+		return legacyStateID
+	}
+	for _, workType := range cfg.WorkTypes {
+		if workType.Name != workTypeName {
+			continue
+		}
+		for _, state := range workType.States {
+			if state.Name == stateName {
+				return interfaces.CanonicalFactoryGraphWorkStateID(workType, state)
+			}
+		}
+	}
+	return legacyStateID
 }
 
 func referencedWorkTypeSet(cfg *interfaces.FactoryConfig) map[string]bool {
@@ -609,12 +723,12 @@ func ioWorkTypeCounts(ios []interfaces.IOConfig) map[string]int {
 	return counts
 }
 
-func workTypeNames(cfg *interfaces.FactoryConfig) []string {
-	names := make([]string, 0, len(cfg.WorkTypes))
-	for _, workType := range cfg.WorkTypes {
-		names = append(names, workType.Name)
+func workTypeIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.WorkTypes))
+	for index, workType := range cfg.WorkTypes {
+		ids = append(ids, explicitIDValue{value: workType.ID, index: index})
 	}
-	return names
+	return ids
 }
 
 func workerNames(cfg *interfaces.FactoryConfig) []string {
@@ -625,6 +739,14 @@ func workerNames(cfg *interfaces.FactoryConfig) []string {
 	return names
 }
 
+func workerIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.Workers))
+	for index, worker := range cfg.Workers {
+		ids = append(ids, explicitIDValue{value: worker.ID, index: index})
+	}
+	return ids
+}
+
 func resourceNames(cfg *interfaces.FactoryConfig) []string {
 	names := make([]string, 0, len(cfg.Resources))
 	for _, resource := range cfg.Resources {
@@ -633,12 +755,20 @@ func resourceNames(cfg *interfaces.FactoryConfig) []string {
 	return names
 }
 
-func workstationNames(cfg *interfaces.FactoryConfig) []string {
-	names := make([]string, 0, len(cfg.Workstations))
-	for _, workstation := range cfg.Workstations {
-		names = append(names, workstation.Name)
+func resourceIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.Resources))
+	for index, resource := range cfg.Resources {
+		ids = append(ids, explicitIDValue{value: resource.ID, index: index})
 	}
-	return names
+	return ids
+}
+
+func workstationIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
+	ids := make([]explicitIDValue, 0, len(cfg.Workstations))
+	for index, workstation := range cfg.Workstations {
+		ids = append(ids, explicitIDValue{value: workstation.ID, index: index})
+	}
+	return ids
 }
 
 func stringSet(values []string) map[string]bool {

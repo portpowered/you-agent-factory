@@ -1,0 +1,17 @@
+type: object
+description: Shared authored graph camera position.
+additionalProperties: false
+required:
+  - x
+  - y
+  - zoom
+properties:
+  x:
+    type: number
+    description: Authored viewport horizontal offset.
+  y:
+    type: number
+    description: Authored viewport vertical offset.
+  zoom:
+    type: number
+    description: Authored viewport zoom factor.

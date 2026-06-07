@@ -136,6 +136,7 @@ type FactoryConfig struct {
 	WorkTypes        []WorkTypeConfig                `json:"work_types"`
 	Resources        []ResourceConfig                `json:"resources"`
 	ResourceManifest *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
+	Layout           *FactoryLayoutConfig            `json:"layout,omitempty"`
 	Workers          []WorkerConfig                  `json:"workers"`
 	Workstations     []FactoryWorkstationConfig      `json:"workstations"`
 }
@@ -145,6 +146,67 @@ type FactoryConfig struct {
 type FactoryVersion struct {
 	Logical  int64     `json:"logical"`
 	Physical time.Time `json:"physical"`
+}
+
+// FactoryLayoutConfig carries non-executable portable graph editor layout
+// metadata keyed by canonical graph ids.
+type FactoryLayoutConfig struct {
+	SchemaVersion int                             `json:"schemaVersion"`
+	Nodes         []FactoryLayoutNodeConfig       `json:"nodes,omitempty"`
+	Edges         []FactoryLayoutEdgeConfig       `json:"edges,omitempty"`
+	Groups        []FactoryLayoutGroupConfig      `json:"groups,omitempty"`
+	Viewport      *FactoryLayoutViewportConfig    `json:"viewport,omitempty"`
+	Preferences   *FactoryLayoutPreferencesConfig `json:"preferences,omitempty"`
+}
+
+type FactoryLayoutNodeConfig struct {
+	ID       string                   `json:"id"`
+	Position FactoryLayoutPointConfig `json:"position"`
+	Size     *FactoryLayoutSizeConfig `json:"size,omitempty"`
+	Locked   *bool                    `json:"locked,omitempty"`
+}
+
+type FactoryLayoutEdgeConfig struct {
+	ID            string                     `json:"id"`
+	Waypoints     []FactoryLayoutPointConfig `json:"waypoints,omitempty"`
+	LabelPosition *FactoryLayoutPointConfig  `json:"labelPosition,omitempty"`
+}
+
+type FactoryLayoutGroupConfig struct {
+	ID            string                    `json:"id"`
+	Label         string                    `json:"label,omitempty"`
+	Bounds        FactoryLayoutBoundsConfig `json:"bounds"`
+	NodeIDs       []string                  `json:"nodeIds"`
+	ParentGroupID *string                   `json:"parentGroupId,omitempty"`
+	Color         string                    `json:"color,omitempty"`
+	Locked        *bool                     `json:"locked,omitempty"`
+}
+
+type FactoryLayoutViewportConfig struct {
+	X    float64 `json:"x"`
+	Y    float64 `json:"y"`
+	Zoom float64 `json:"zoom"`
+}
+
+type FactoryLayoutPreferencesConfig struct {
+	Direction string `json:"direction,omitempty"`
+}
+
+type FactoryLayoutPointConfig struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type FactoryLayoutSizeConfig struct {
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+type FactoryLayoutBoundsConfig struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
 }
 
 // InputTypeConfig declares a named input type that the factory accepts.
@@ -173,6 +235,7 @@ type InvocationReturnConfig struct {
 }
 
 type WorkTypeConfig struct {
+	ID               string        `json:"id,omitempty" yaml:"id,omitempty"`
 	Name             string        `json:"name"`
 	States           []StateConfig `json:"states"`
 	HandlingBehavior []string      `json:"handlingBehavior,omitempty"`
@@ -180,6 +243,7 @@ type WorkTypeConfig struct {
 
 // StateConfig declares a state within a work type.
 type StateConfig struct {
+	ID   string    `json:"id,omitempty" yaml:"id,omitempty"`
 	Name string    `json:"name"`
 	Type StateType `json:"type"`
 }
@@ -194,6 +258,7 @@ const (
 )
 
 type ResourceConfig struct {
+	ID         string `json:"id,omitempty" yaml:"id,omitempty"`
 	Name       string `json:"name"`
 	Type       string `json:"type,omitempty"`
 	Capacity   int    `json:"capacity"`
@@ -267,7 +332,8 @@ type WorkflowConfig struct {
 	Paths []TransitionConfig `json:"transitions"`
 }
 
-// FactoryWorkstationConfig is the factory.json workstation topology entry.
+// FactoryWorkstationConfig is the factory.json workstation topology entry. ID is
+// the durable public workstation identifier for graph and layout references.
 // It also carries flattened runtime workstation fields when factory.json embeds
 // AGENTS.md-equivalent workstation configuration directly.
 type FactoryWorkstationConfig struct {
@@ -461,6 +527,7 @@ type ResolvedModelOperationBinding struct {
 // WorkerConfig is the canonical worker configuration used by factory.json,
 // worker AGENTS.md frontmatter, and loaded runtime config.
 type WorkerConfig struct {
+	ID               string                    `json:"id,omitempty" yaml:"id,omitempty"`
 	Name             string                    `json:"name" yaml:"name,omitempty"`
 	Type             string                    `json:"type" yaml:"type"`
 	Provider         string                    `json:"provider,omitempty" yaml:"provider,omitempty"`

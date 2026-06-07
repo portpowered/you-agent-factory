@@ -33,6 +33,7 @@ import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "./factory-graph-editor-removals";
+import { materializeFactoryGraphEntityIdsForSave } from "./factory-graph-public-ids";
 
 export {
   type FactoryGraphReactFlowEdge,
@@ -334,9 +335,11 @@ export function applyFactoryGraphPendingEdits(options: {
 
   return {
     ok: true,
-    value: buildDraftAppliedFactoryDefinition(
-      options.baseFactoryDefinition,
-      options.draft,
+    value: materializeFactoryGraphEntityIdsForSave(
+      buildDraftAppliedFactoryDefinition(
+        options.baseFactoryDefinition,
+        options.draft,
+      ),
     ),
   };
 }

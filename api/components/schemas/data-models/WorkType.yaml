@@ -7,6 +7,9 @@ required:
   - name
   - states
 properties:
+  id:
+    type: string
+    description: Optional durable public identifier for this work type. When present, graph and layout references should use this id instead of the mutable name.
   name:
     type: string
     description: Customer-authored work type name referenced by workstation inputs, outputs, and submitted work.
@@ -22,4 +25,3 @@ properties:
       must declare handlingBehavior DEFAULT on exactly one work type.
     items:
       $ref: './WorkTypeHandlingBehavior.yaml'
-

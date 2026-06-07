@@ -128,18 +128,18 @@ describe("current activity factory graph legacy replay layout", () => {
         "work-state:story:new",
         "work-state:story:done",
         "work-state:story:failed",
-        "workstation:Review",
+        "workstation:review",
       ]),
     );
     expect(edges).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: "workstation-input:work-state:story:new->workstation:Review",
+          id: "workstation-input:work-state:story:new->workstation:review",
           sourceHandle: "workstation-input-source",
           targetHandle: "workstation-input-target",
         }),
         expect.objectContaining({
-          id: "workstation-on-failure:workstation:Review->work-state:story:failed",
+          id: "workstation-on-failure:workstation:review->work-state:story:failed",
           sourceHandle: "workstation-on-failure-source",
           targetHandle: "work-state-input-target",
         }),

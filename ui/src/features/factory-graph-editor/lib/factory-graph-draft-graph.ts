@@ -17,16 +17,24 @@ type WorkstationRouteInput =
   | null
   | undefined;
 
+interface FactoryGraphEntityIndex {
+  resourceIdsByName: ReadonlyMap<string, string>;
+  workerIdsByName: ReadonlyMap<string, string>;
+  workStateIdsByWorkTypeName: ReadonlyMap<string, ReadonlyMap<string, string>>;
+  workTypeIdsByName: ReadonlyMap<string, string>;
+}
+
 export function buildFactoryGraphTopologyFromDefinition(
   factoryDefinition: CanonicalFactoryDefinition,
 ): FactoryGraphTopology {
   const nodes = new Map<string, FactoryGraphNode>();
   const edges = new Map<string, FactoryGraphEdge>();
+  const entityIndex = indexFactoryGraphEntities(factoryDefinition);
 
-  appendResourceNodes(factoryDefinition, nodes);
-  appendWorkerNodes(factoryDefinition, nodes, edges);
-  appendWorkTypeNodes(factoryDefinition, nodes, edges);
-  appendWorkstationNodes(factoryDefinition, nodes, edges);
+  appendResourceNodes(factoryDefinition, entityIndex, nodes);
+  appendWorkerNodes(factoryDefinition, entityIndex, nodes, edges);
+  appendWorkTypeNodes(factoryDefinition, entityIndex, nodes, edges);
+  appendWorkstationNodes(factoryDefinition, entityIndex, nodes, edges);
 
   return {
     edges: Array.from(edges.values()).sort((left, right) =>
@@ -40,10 +48,12 @@ export function buildFactoryGraphTopologyFromDefinition(
 
 function appendResourceNodes(
   factoryDefinition: CanonicalFactoryDefinition,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
 ) {
   for (const resource of factoryDefinition.resources ?? []) {
     const key: FactoryGraphNodeReference = {
+      id: entityIndex.resourceIdsByName.get(resource.name),
       kind: "resource",
       name: resource.name,
     };
@@ -53,11 +63,13 @@ function appendResourceNodes(
 
 function appendWorkerNodes(
   factoryDefinition: CanonicalFactoryDefinition,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
   for (const worker of factoryDefinition.workers ?? []) {
     const workerKey: FactoryGraphNodeReference = {
+      id: entityIndex.workerIdsByName.get(worker.name),
       kind: "worker",
       name: worker.name,
     };
@@ -65,6 +77,7 @@ function appendWorkerNodes(
 
     for (const resource of worker.resources ?? []) {
       const resourceKey: FactoryGraphNodeReference = {
+        id: entityIndex.resourceIdsByName.get(resource.name),
         kind: "resource",
         name: resource.name,
       };
@@ -77,11 +90,13 @@ function appendWorkerNodes(
 
 function appendWorkTypeNodes(
   factoryDefinition: CanonicalFactoryDefinition,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
   for (const workType of factoryDefinition.workTypes ?? []) {
     const workTypeKey: FactoryGraphNodeReference = {
+      id: entityIndex.workTypeIdsByName.get(workType.name),
       kind: "work-type",
       name: workType.name,
     };
@@ -90,7 +105,11 @@ function appendWorkTypeNodes(
     for (const state of workType.states) {
       const workStateKey: FactoryGraphWorkStateReference = {
         kind: "work-state",
+        stateId: entityIndex.workStateIdsByWorkTypeName
+          .get(workType.name)
+          ?.get(state.name),
         stateName: state.name,
+        workTypeId: entityIndex.workTypeIdsByName.get(workType.name),
         workTypeName: workType.name,
       };
       nodes.set(nodeKeyId(workStateKey), buildNode(workStateKey));
@@ -102,22 +121,37 @@ function appendWorkTypeNodes(
 
 function appendWorkstationNodes(
   factoryDefinition: CanonicalFactoryDefinition,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
   for (const workstation of factoryDefinition.workstations ?? []) {
     const workstationKey: FactoryGraphNodeReference = {
+      id: workstation.id,
       kind: "workstation",
       name: workstation.name,
     };
     nodes.set(nodeKeyId(workstationKey), buildNode(workstationKey));
 
-    appendWorkstationWorkerEdge(workstation, workstationKey, nodes, edges);
-    appendWorkstationResourceEdges(workstation, workstationKey, nodes, edges);
+    appendWorkstationWorkerEdge(
+      workstation,
+      workstationKey,
+      entityIndex,
+      nodes,
+      edges,
+    );
+    appendWorkstationResourceEdges(
+      workstation,
+      workstationKey,
+      entityIndex,
+      nodes,
+      edges,
+    );
     appendWorkstationStateEdges(
       workstation.inputs,
       "workstation-input",
       workstationKey,
+      entityIndex,
       nodes,
       edges,
     );
@@ -125,6 +159,7 @@ function appendWorkstationNodes(
       workstation.outputs,
       "workstation-output",
       workstationKey,
+      entityIndex,
       nodes,
       edges,
     );
@@ -132,6 +167,7 @@ function appendWorkstationNodes(
       workstation.onContinue,
       "workstation-on-continue",
       workstationKey,
+      entityIndex,
       nodes,
       edges,
     );
@@ -139,6 +175,7 @@ function appendWorkstationNodes(
       workstation.onFailure,
       "workstation-on-failure",
       workstationKey,
+      entityIndex,
       nodes,
       edges,
     );
@@ -146,6 +183,7 @@ function appendWorkstationNodes(
       workstation.onRejection,
       "workstation-on-rejection",
       workstationKey,
+      entityIndex,
       nodes,
       edges,
     );
@@ -155,6 +193,7 @@ function appendWorkstationNodes(
 function appendWorkstationWorkerEdge(
   workstation: NonNullable<CanonicalFactoryDefinition["workstations"]>[number],
   workstationKey: FactoryGraphNodeReference,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
@@ -164,6 +203,7 @@ function appendWorkstationWorkerEdge(
   }
 
   const workerKey: FactoryGraphNodeReference = {
+    id: entityIndex.workerIdsByName.get(workerName),
     kind: "worker",
     name: workerName,
   };
@@ -175,11 +215,13 @@ function appendWorkstationWorkerEdge(
 function appendWorkstationResourceEdges(
   workstation: NonNullable<CanonicalFactoryDefinition["workstations"]>[number],
   workstationKey: FactoryGraphNodeReference,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
   for (const resource of workstation.resources ?? []) {
     const resourceKey: FactoryGraphNodeReference = {
+      id: entityIndex.resourceIdsByName.get(resource.name),
       kind: "resource",
       name: resource.name,
     };
@@ -198,11 +240,18 @@ function appendWorkstationStateEdges(
     | "workstation-on-rejection"
     | "workstation-output",
   workstationKey: FactoryGraphNodeReference,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
   edges: EdgeMap,
 ) {
   for (const item of workstationRouteIOs(items)) {
-    const edge = buildWorkstationIOEdge(kind, item, workstationKey, nodes);
+    const edge = buildWorkstationIOEdge(
+      kind,
+      item,
+      workstationKey,
+      entityIndex,
+      nodes,
+    );
     edges.set(edge.id, edge);
   }
 }
@@ -225,15 +274,60 @@ function buildWorkstationIOEdge(
     | "workstation-output",
   io: FactoryWorkstationIO,
   workstationKey: FactoryGraphNodeReference,
+  entityIndex: FactoryGraphEntityIndex,
   nodes: NodeMap,
 ): FactoryGraphEdge {
   const workStateKey: FactoryGraphWorkStateReference = {
     kind: "work-state",
+    stateId: entityIndex.workStateIdsByWorkTypeName
+      .get(io.workType)
+      ?.get(io.state),
     stateName: io.state,
+    workTypeId: entityIndex.workTypeIdsByName.get(io.workType),
     workTypeName: io.workType,
   };
   nodes.set(nodeKeyId(workStateKey), buildNode(workStateKey));
   return kind === "workstation-input"
     ? buildEdge(kind, workStateKey, workstationKey)
     : buildEdge(kind, workstationKey, workStateKey);
+}
+
+function indexFactoryGraphEntities(
+  factoryDefinition: CanonicalFactoryDefinition,
+): FactoryGraphEntityIndex {
+  const resourceIdsByName = new Map<string, string>();
+  for (const resource of factoryDefinition.resources ?? []) {
+    if (resource.id?.trim()) {
+      resourceIdsByName.set(resource.name, resource.id);
+    }
+  }
+
+  const workerIdsByName = new Map<string, string>();
+  for (const worker of factoryDefinition.workers ?? []) {
+    if (worker.id?.trim()) {
+      workerIdsByName.set(worker.name, worker.id);
+    }
+  }
+
+  const workTypeIdsByName = new Map<string, string>();
+  const workStateIdsByWorkTypeName = new Map<string, ReadonlyMap<string, string>>();
+  for (const workType of factoryDefinition.workTypes ?? []) {
+    if (workType.id?.trim()) {
+      workTypeIdsByName.set(workType.name, workType.id);
+    }
+    const stateIdsByName = new Map<string, string>();
+    for (const state of workType.states) {
+      if (state.id?.trim()) {
+        stateIdsByName.set(state.name, state.id);
+      }
+    }
+    workStateIdsByWorkTypeName.set(workType.name, stateIdsByName);
+  }
+
+  return {
+    resourceIdsByName,
+    workerIdsByName,
+    workStateIdsByWorkTypeName,
+    workTypeIdsByName,
+  };
 }

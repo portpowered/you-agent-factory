@@ -1,0 +1,16 @@
+type: object
+description: Portable graph edge layout keyed by canonical graph edge id.
+additionalProperties: false
+required:
+  - id
+properties:
+  id:
+    type: string
+    description: Canonical graph edge id such as workstation-output:workstation:review->work-state:task:done.
+  waypoints:
+    type: array
+    description: Optional authored intermediate edge points in graph canvas space.
+    items:
+      $ref: './FactoryLayoutPoint.yaml'
+  labelPosition:
+    $ref: './FactoryLayoutPoint.yaml'

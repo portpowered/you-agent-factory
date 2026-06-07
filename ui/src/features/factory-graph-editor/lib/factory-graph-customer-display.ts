@@ -62,14 +62,37 @@ export function systemTimeGraphNodeId(
 ): string {
   switch (kind) {
     case "work-type":
+      if (parts.length > 1) {
+        return nodeKeyId({
+          kind: "work-type",
+          id: parts[0],
+          name: parts[1] ?? "",
+        });
+      }
       return nodeKeyId({ kind: "work-type", name: parts[0] ?? "" });
     case "work-state":
+      if (parts.length > 2) {
+        return nodeKeyId({
+          kind: "work-state",
+          stateId: parts[2],
+          stateName: parts[3] ?? parts[2] ?? "",
+          workTypeId: parts[0],
+          workTypeName: parts[1] ?? parts[0] ?? "",
+        });
+      }
       return nodeKeyId({
         kind: "work-state",
         stateName: parts[1] ?? "",
         workTypeName: parts[0] ?? "",
       });
     case "workstation":
+      if (parts.length > 1) {
+        return nodeKeyId({
+          kind: "workstation",
+          id: parts[0],
+          name: parts[1] ?? "",
+        });
+      }
       return nodeKeyId({ kind: "workstation", name: parts[0] ?? "" });
   }
 }

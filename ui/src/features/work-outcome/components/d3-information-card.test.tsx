@@ -18,7 +18,7 @@ import {
   expectWorkOutcomeCardFillsChartBody,
 } from "../lib/work-outcome-card-header-contract";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
-import { D3CompletionInformationCard } from "./d3-information-card";
+import { WorkChartCard } from "./d3-information-card";
 
 const populatedTrend: WorkChartModel = {
   delta: {
@@ -210,7 +210,7 @@ const emptyTrend: WorkChartModel = {
   series: [],
 };
 
-describe("D3CompletionInformationCard", () => {
+describe("WorkChartCard", () => {
   const restoreBrowserShims = installDashboardBrowserTestShims();
 
   afterAll(() => {
@@ -224,7 +224,7 @@ describe("D3CompletionInformationCard", () => {
   it("keeps the bento header while leaving the chart region titleless", () => {
     const messages = getWorkOutcomeMessages();
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         headerAction={<button type="button">Remove chart</button>}
         model={populatedTrend}
         widgetId="work-outcome-chart"
@@ -245,7 +245,7 @@ describe("D3CompletionInformationCard", () => {
   it("flattens ready-state chart chrome without duplicating the bento card title", () => {
     const messages = getWorkOutcomeMessages();
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         model={populatedTrend}
         widgetId="work-outcome-chart"
       />,
@@ -281,7 +281,7 @@ describe("D3CompletionInformationCard", () => {
 
   it("renders a shared-chart accessible work outcome visualization from dashboard samples", () => {
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         model={populatedTrend}
         widgetId="work-outcome-chart"
       />,
@@ -340,7 +340,7 @@ describe("D3CompletionInformationCard", () => {
 
   it("toggles chart lines when the legend controls are clicked", () => {
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         model={populatedTrend}
         widgetId="work-outcome-chart"
       />,
@@ -382,7 +382,7 @@ describe("D3CompletionInformationCard", () => {
   });
 
   it("renders an explicit empty state without a chart when samples are unavailable", () => {
-    render(<D3CompletionInformationCard model={emptyTrend} />);
+    render(<WorkChartCard model={emptyTrend} />);
 
     expect(
       screen.queryByRole("img", { name: "Work outcome chart for 15m" }),
@@ -408,7 +408,7 @@ describe("D3CompletionInformationCard", () => {
 
   it("renders an explicit loading state without dropping chart summary controls", () => {
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         chartState={{ status: "loading" }}
         model={emptyTrend}
       />,
@@ -439,7 +439,7 @@ describe("D3CompletionInformationCard", () => {
   it("preserves compact legend, axis labels, and legend placement in embedded bento layout", () => {
     const messages = getWorkOutcomeMessages();
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         model={zoomableTrend}
         widgetId="work-outcome-chart"
       />,
@@ -521,7 +521,7 @@ describe("D3CompletionInformationCard", () => {
     const user = userEvent.setup();
     const messages = getWorkOutcomeMessages();
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         model={zoomableTrend}
         widgetId="work-outcome-chart"
       />,
@@ -574,7 +574,7 @@ describe("D3CompletionInformationCard", () => {
 
   it("renders an explicit error state with the card landmark preserved", () => {
     render(
-      <D3CompletionInformationCard
+      <WorkChartCard
         chartState={{ status: "error" }}
         model={emptyTrend}
       />,

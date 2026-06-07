@@ -2,6 +2,12 @@ import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { factoryGraphConnectionAnchorContext } from "./factory-graph-editor-connections";
 import { workstationRendersProgressOutcomeHandleValidation } from "./factory-graph-progress-outcome-handle-visibility";
+import {
+  parseFactoryGraphWorkStateNodeId,
+  parseFactoryGraphWorkTypeNodeId,
+} from "./factory-graph-draft-types";
+
+export { parseFactoryGraphWorkStateNodeId, parseFactoryGraphWorkTypeNodeId };
 
 export type FactoryValidationSubjectLocation =
   FactoryValidationTarget["subject"]["location"];
@@ -36,52 +42,19 @@ export interface FactoryValidationGraphProjection {
   >;
 }
 
-const WORKSTATION_GRAPH_NODE_PREFIX = "workstation:";
-const WORK_TYPE_GRAPH_NODE_PREFIX = "work-type:";
-const WORK_STATE_GRAPH_NODE_PREFIX = "work-state:";
-
 export function factoryGraphNodeIdForWorkstation(subjectId: string): string {
-  return `${WORKSTATION_GRAPH_NODE_PREFIX}${subjectId}`;
+  // hardcoded-ui-copy-exception: non-product-diagnostic
+  return `workstation:${subjectId}`;
 }
 
 export function factoryGraphNodeIdForWorkType(subjectId: string): string {
-  return `${WORK_TYPE_GRAPH_NODE_PREFIX}${subjectId}`;
-}
-
-export function parseFactoryGraphWorkTypeNodeId(nodeId: string): string | null {
-  if (!nodeId.startsWith(WORK_TYPE_GRAPH_NODE_PREFIX)) {
-    return null;
-  }
-
-  const workTypeName = nodeId.slice(WORK_TYPE_GRAPH_NODE_PREFIX.length);
-  return workTypeName.length > 0 ? workTypeName : null;
-}
-
-export function parseFactoryGraphWorkStateNodeId(
-  nodeId: string,
-): string | null {
-  if (!nodeId.startsWith(WORK_STATE_GRAPH_NODE_PREFIX)) {
-    return null;
-  }
-
-  const placeId = nodeId.slice(WORK_STATE_GRAPH_NODE_PREFIX.length);
-  const separatorIndex = placeId.indexOf(":");
-  if (separatorIndex <= 0 || separatorIndex >= placeId.length - 1) {
-    return null;
-  }
-
-  return placeId;
+  // hardcoded-ui-copy-exception: non-product-diagnostic
+  return `work-type:${subjectId}`;
 }
 
 export function factoryGraphNodeIdForWorkState(subjectId: string): string {
-  const separatorIndex = subjectId.indexOf(":");
-  if (separatorIndex <= 0 || separatorIndex >= subjectId.length - 1) {
-    return `${WORK_STATE_GRAPH_NODE_PREFIX}${subjectId}`;
-  }
-
-  const workTypeName = subjectId.slice(0, separatorIndex);
-  const stateName = subjectId.slice(separatorIndex + 1);
-  return `${WORK_STATE_GRAPH_NODE_PREFIX}${workTypeName}:${stateName}`;
+  // hardcoded-ui-copy-exception: non-product-diagnostic
+  return `work-state:${subjectId}`;
 }
 
 export function workstationHandleIdForValidationLocation(

@@ -1,0 +1,12 @@
+type: object
+description: Portable graph display defaults that do not alter factory topology.
+additionalProperties: false
+properties:
+  direction:
+    type: string
+    enum:
+      - UP
+      - DOWN
+      - LEFT
+      - RIGHT
+    description: Preferred authored graph direction for portable layout rendering.

@@ -142,6 +142,65 @@ describe("factory-validation-graph-projection", () => {
     });
   });
 
+  it("maps explicit subject ids onto canonical graph ids", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.workType.missingCompletionState",
+        message: 'work type "story" must declare a completion state.',
+        severity: "error",
+        subject: {
+          id: "work-type-story",
+          location: "STATES",
+          type: "WORK_TYPE",
+        },
+      },
+      {
+        code: "factory.workState.missingTerminalCompletionPath",
+        message: 'work state "story:queued" has no terminal completion path.',
+        severity: "error",
+        subject: {
+          id: "work-type-story:state-queued",
+          location: "TERMINAL",
+          type: "WORK_STATE",
+        },
+      },
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "review" must define a failure route.',
+        severity: "error",
+        subject: {
+          id: "workstation-review",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+
+    const projection = projectFactoryValidationTargets(targets);
+
+    expect(
+      validationNodeErrorForNode(projection, "work-type:work-type-story"),
+    )?.toMatchObject({
+      code: "factory.workType.missingCompletionState",
+    });
+    expect(
+      validationNodeErrorForNode(
+        projection,
+        "work-state:work-type-story:state-queued",
+      ),
+    )?.toMatchObject({
+      code: "factory.workState.missingTerminalCompletionPath",
+    });
+    expect(
+      validationHandleErrorsForNode(
+        projection,
+        "workstation:workstation-review",
+      )?.get("workstation-on-failure-source"),
+    )?.toMatchObject({
+      code: "factory.workstation.missingFailureRoute",
+    });
+  });
+
   it("filters progress-outcome handle errors using rendered workstation anchors", () => {
     const targets: FactoryValidationTarget[] = [
       {

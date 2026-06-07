@@ -222,7 +222,7 @@ func loadFactoryConfig(factoryDir string) (*interfaces.FactoryConfig, error) {
 		return nil, err
 	}
 
-	cfg, err := NewFactoryConfigMapper().Expand(data)
+	cfg, err := expandFactoryConfigForRuntimeLoad(data)
 	if err != nil {
 		return nil, err
 	}
