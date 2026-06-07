@@ -400,6 +400,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["scripts/*-allowlist.mjs"],
+      "linter": {
+        "rules": {
+          "nursery": {
+            "noExcessiveLinesPerFile": "off"
+          }
+        }
+      }
     }
   ]
 }
