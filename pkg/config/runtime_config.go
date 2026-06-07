@@ -3,11 +3,12 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // LoadedFactoryConfig is the effective runtime configuration assembled from
@@ -652,7 +653,7 @@ var ErrInvalidNamedFactory = errors.New("invalid named factory")
 // ValidateNamedFactoryName applies the canonical safe directory-segment rules
 // used by the named-factory on-disk layout.
 func ValidateNamedFactoryName(name string) error {
-	_, err := safeFactoryLayoutSegment("factory", name)
+	_, err := NamedFactoryNameToLayoutSegment(name)
 	return err
 }
 
@@ -749,7 +750,7 @@ func persistNamedFactory(
 		return nil, fmt.Errorf("factory root is required")
 	}
 
-	segment, err := safeFactoryLayoutSegment("factory", name)
+	segment, err := NamedFactoryNameToLayoutSegment(name)
 	if err != nil {
 		return nil, err
 	}
@@ -897,7 +898,11 @@ func ReadCurrentFactoryPointer(rootDir string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
 	}
-	return segment, nil
+	name, err := NamedFactoryLayoutSegmentToName(segment)
+	if err != nil {
+		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
+	}
+	return name, nil
 }
 
 // WriteCurrentFactoryPointer persists the selected named factory for later
@@ -907,7 +912,7 @@ func WriteCurrentFactoryPointer(rootDir, name string) error {
 		return fmt.Errorf("factory root is required")
 	}
 
-	segment, err := safeFactoryLayoutSegment("factory", name)
+	segment, err := NamedFactoryNameToLayoutSegment(name)
 	if err != nil {
 		return err
 	}
@@ -932,7 +937,7 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 		return "", fmt.Errorf("factory root is required")
 	}
 
-	segment, err := safeFactoryLayoutSegment("factory", name)
+	segment, err := NamedFactoryNameToLayoutSegment(name)
 	if err != nil {
 		return "", err
 	}

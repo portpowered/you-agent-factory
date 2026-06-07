@@ -34,6 +34,157 @@ func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
 	}
 }
 
+func TestPersistNamedFactory_WritesScopedNamedLayout(t *testing.T) {
+	rootDir := t.TempDir()
+
+	factoryDir, err := PersistNamedFactory(rootDir, "@you/tts", namedFactoryPayload(t, "tts"))
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(scoped): %v", err)
+	}
+
+	wantDir := filepath.Join(rootDir, "@you%2Ftts")
+	assertScopedNamedFactoryPaths(t, factoryDir, wantDir)
+
+	resolved, err := ResolveNamedFactoryDir(rootDir, "@you/tts")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryDir(scoped): %v", err)
+	}
+	if resolved != wantDir {
+		t.Fatalf("resolved scoped factory = %q, want %q", resolved, wantDir)
+	}
+	assertScopedCurrentFactoryPointer(t, rootDir)
+	assertScopedNamedFactoryList(t, rootDir)
+}
+
+func assertScopedNamedFactoryPaths(t *testing.T, factoryDir, wantDir string) {
+	t.Helper()
+
+	if factoryDir != wantDir {
+		t.Fatalf("factory dir = %q, want %q", factoryDir, wantDir)
+	}
+	for _, path := range []string{
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "executor", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-tts", interfaces.FactoryAgentsFileName),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected scoped named-factory path %s: %v", path, err)
+		}
+	}
+}
+
+func assertScopedCurrentFactoryPointer(t *testing.T, rootDir string) {
+	t.Helper()
+
+	if err := WriteCurrentFactoryPointer(rootDir, "@you/tts"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(scoped): %v", err)
+	}
+	pointerBytes, err := os.ReadFile(filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile))
+	if err != nil {
+		t.Fatalf("ReadFile(current pointer): %v", err)
+	}
+	if got := string(pointerBytes); got != "@you%2Ftts\n" {
+		t.Fatalf("current pointer content = %q, want encoded scoped segment", got)
+	}
+	current, err := ReadCurrentFactoryPointer(rootDir)
+	if err != nil {
+		t.Fatalf("ReadCurrentFactoryPointer(scoped): %v", err)
+	}
+	if current != "@you/tts" {
+		t.Fatalf("current scoped factory = %q, want @you/tts", current)
+	}
+}
+
+func assertScopedNamedFactoryList(t *testing.T, rootDir string) {
+	t.Helper()
+
+	entries, err := ListNamedFactories(rootDir)
+	if err != nil {
+		t.Fatalf("ListNamedFactories(scoped): %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name != "@you/tts" || !entries[0].Current {
+		t.Fatalf("scoped list entries = %#v, want current @you/tts", entries)
+	}
+}
+
+func TestNamedFactoryNameLayoutSegment_RoundTrip(t *testing.T) {
+	tests := []struct {
+		name        string
+		wantSegment string
+	}{
+		{name: "alpha", wantSegment: "alpha"},
+		{name: "@you/tts", wantSegment: "@you%2Ftts"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			segment, err := NamedFactoryNameToLayoutSegment(tt.name)
+			if err != nil {
+				t.Fatalf("NamedFactoryNameToLayoutSegment: %v", err)
+			}
+			if segment != tt.wantSegment {
+				t.Fatalf("segment = %q, want %q", segment, tt.wantSegment)
+			}
+			if strings.ContainsAny(segment, `/\`) {
+				t.Fatalf("segment %q must not contain path separators", segment)
+			}
+			roundTrip, err := NamedFactoryLayoutSegmentToName(segment)
+			if err != nil {
+				t.Fatalf("NamedFactoryLayoutSegmentToName: %v", err)
+			}
+			if roundTrip != tt.name {
+				t.Fatalf("round trip = %q, want %q", roundTrip, tt.name)
+			}
+		})
+	}
+}
+
+func TestNamedFactoryNameLayoutSegment_RejectsInvalidNames(t *testing.T) {
+	tests := []string{
+		"../alpha",
+		"@you",
+		"@you/",
+		"@you/tts/extra",
+	}
+
+	for _, name := range tests {
+		t.Run(name, func(t *testing.T) {
+			if _, err := NamedFactoryNameToLayoutSegment(name); err == nil {
+				t.Fatal("expected invalid canonical factory name to fail")
+			}
+		})
+	}
+}
+
+func TestDefaultNamedFactoryRoots(t *testing.T) {
+	homeDir := filepath.Join("home", "customer")
+	globalRoot, err := GlobalNamedFactoryRootForHome(homeDir)
+	if err != nil {
+		t.Fatalf("GlobalNamedFactoryRootForHome: %v", err)
+	}
+	if want := filepath.Join(homeDir, ".you-agent-factory", "factories"); globalRoot != want {
+		t.Fatalf("global root = %q, want %q", globalRoot, want)
+	}
+
+	testHomeDir := t.TempDir()
+	t.Setenv("HOME", testHomeDir)
+	defaultGlobalRoot, err := DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	if want := filepath.Join(testHomeDir, ".you-agent-factory", "factories"); defaultGlobalRoot != want {
+		t.Fatalf("default global root = %q, want %q", defaultGlobalRoot, want)
+	}
+
+	projectRoot, err := DefaultProjectNamedFactoryRoot(filepath.Join("repo", "app"))
+	if err != nil {
+		t.Fatalf("DefaultProjectNamedFactoryRoot: %v", err)
+	}
+	if want := filepath.Join("repo", "app", "factory"); projectRoot != want {
+		t.Fatalf("project root = %q, want %q", projectRoot, want)
+	}
+}
+
 func TestPersistNamedFactory_PreservesVersionMetadataAcrossLoadRoundTrip(t *testing.T) {
 	rootDir := t.TempDir()
 	versionTime := time.Date(2026, 5, 23, 11, 45, 0, 0, time.UTC)

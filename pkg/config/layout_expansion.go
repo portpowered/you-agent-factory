@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -715,6 +716,104 @@ type NamedFactoryListEntry struct {
 	Current    bool   `json:"current"`
 }
 
+const (
+	defaultNamedFactoryHomeDir     = ".you-agent-factory"
+	defaultGlobalNamedFactoryDir   = "factories"
+	defaultProjectNamedFactoryRoot = "factory"
+	scopedNamedFactoryPrefix       = "@"
+)
+
+// NamedFactoryNameToLayoutSegment maps a canonical named-factory display name
+// into the single on-disk directory segment used under a factory root.
+func NamedFactoryNameToLayoutSegment(name string) (string, error) {
+	trimmed := strings.TrimSpace(name)
+	if strings.HasPrefix(trimmed, scopedNamedFactoryPrefix) {
+		if err := validateScopedNamedFactoryName(trimmed); err != nil {
+			return "", err
+		}
+		segment := encodeScopedNamedFactoryLayoutSegment(trimmed)
+		if _, err := safeFactoryLayoutSegment("factory", segment); err != nil {
+			return "", err
+		}
+		return segment, nil
+	}
+	return safeFactoryLayoutSegment("factory", trimmed)
+}
+
+func encodeScopedNamedFactoryLayoutSegment(name string) string {
+	return strings.NewReplacer("%", "%25", "/", "%2F").Replace(name)
+}
+
+// NamedFactoryLayoutSegmentToName maps an on-disk named-factory directory
+// segment back to the canonical display name shown by list and API callers.
+func NamedFactoryLayoutSegmentToName(segment string) (string, error) {
+	safeSegment, err := safeFactoryLayoutSegment("factory", segment)
+	if err != nil {
+		return "", err
+	}
+	if !strings.HasPrefix(safeSegment, scopedNamedFactoryPrefix) {
+		return safeSegment, nil
+	}
+
+	name, err := url.PathUnescape(safeSegment)
+	if err != nil {
+		return "", fmt.Errorf("decode factory layout segment %q: %w", segment, err)
+	}
+	encoded, err := NamedFactoryNameToLayoutSegment(name)
+	if err != nil {
+		return "", err
+	}
+	if encoded != safeSegment {
+		return "", fmt.Errorf("factory layout segment %q is not canonical for %q", segment, name)
+	}
+	return name, nil
+}
+
+func validateScopedNamedFactoryName(name string) error {
+	parts := strings.Split(name, "/")
+	if len(parts) != 2 || parts[0] == scopedNamedFactoryPrefix || parts[1] == "" {
+		return fmt.Errorf("factory name %q must be scoped as @scope/name", name)
+	}
+	scope := strings.TrimPrefix(parts[0], scopedNamedFactoryPrefix)
+	if _, err := safeFactoryLayoutSegment("factory scope", scope); err != nil {
+		return err
+	}
+	if _, err := safeFactoryLayoutSegment("factory", parts[1]); err != nil {
+		return err
+	}
+	return nil
+}
+
+// GlobalNamedFactoryRootForHome builds the customer-owned global named-factory
+// root for a resolved home directory.
+func GlobalNamedFactoryRootForHome(homeDir string) (string, error) {
+	trimmed := strings.TrimSpace(homeDir)
+	if trimmed == "" {
+		return "", fmt.Errorf("user home directory is required")
+	}
+	return filepath.Join(trimmed, defaultNamedFactoryHomeDir, defaultGlobalNamedFactoryDir), nil
+}
+
+// DefaultGlobalNamedFactoryRoot returns the default global named-factory root
+// under the current user's home directory.
+func DefaultGlobalNamedFactoryRoot() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user home for named factories: %w", err)
+	}
+	return GlobalNamedFactoryRootForHome(homeDir)
+}
+
+// DefaultProjectNamedFactoryRoot returns the default project-local named
+// factory root for a caller working directory.
+func DefaultProjectNamedFactoryRoot(cwd string) (string, error) {
+	trimmed := strings.TrimSpace(cwd)
+	if trimmed == "" {
+		return "", fmt.Errorf("working directory is required")
+	}
+	return filepath.Join(trimmed, defaultProjectNamedFactoryRoot), nil
+}
+
 // ListNamedFactories discovers persisted named factories by scanning rootDir for
 // subdirectories that contain a valid factory.json layout.
 func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
@@ -756,10 +855,14 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 		if err := requireFactoryConfig(factoryDir); err != nil {
 			continue
 		}
+		displayName, err := NamedFactoryLayoutSegmentToName(name)
+		if err != nil {
+			continue
+		}
 		entries = append(entries, NamedFactoryListEntry{
-			Name:       name,
+			Name:       displayName,
 			FactoryDir: factoryDir,
-			Current:    currentName != "" && name == currentName,
+			Current:    currentName != "" && displayName == currentName,
 		})
 	}
 
@@ -791,12 +894,16 @@ func DeleteNamedFactory(rootDir, name string) error {
 		return fmt.Errorf("factory root is required")
 	}
 
-	segment, err := safeFactoryLayoutSegment("factory", name)
+	segment, err := NamedFactoryNameToLayoutSegment(name)
+	if err != nil {
+		return err
+	}
+	canonicalName, err := NamedFactoryLayoutSegmentToName(segment)
 	if err != nil {
 		return err
 	}
 
-	factoryDir, err := ResolveNamedFactoryDir(rootDir, segment)
+	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
 	if err != nil {
 		return err
 	}
@@ -805,7 +912,7 @@ func DeleteNamedFactory(rootDir, name string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("read current factory pointer: %w", err)
 	}
-	if current == segment {
+	if current == canonicalName {
 		return fmt.Errorf(
 			"delete factory %q: %w: switch .current-factory to another factory first",
 			segment,

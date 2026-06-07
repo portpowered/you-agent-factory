@@ -133,6 +133,82 @@ func TestReadWriteCurrentFactoryPointer_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestNamedFactoryHelpers_MatchConfigPackage(t *testing.T) {
+	assertNamedFactorySegmentHelpersMatchConfig(t)
+	assertNamedFactoryRootHelpersMatchConfig(t)
+}
+
+func assertNamedFactorySegmentHelpersMatchConfig(t *testing.T) {
+	t.Helper()
+
+	facadeSegment, err := persist.NamedFactoryNameToLayoutSegment("@you/tts")
+	if err != nil {
+		t.Fatalf("persist.NamedFactoryNameToLayoutSegment: %v", err)
+	}
+	configSegment, err := config.NamedFactoryNameToLayoutSegment("@you/tts")
+	if err != nil {
+		t.Fatalf("config.NamedFactoryNameToLayoutSegment: %v", err)
+	}
+	if facadeSegment != configSegment {
+		t.Fatalf("layout segment = %q vs %q", facadeSegment, configSegment)
+	}
+
+	facadeName, err := persist.NamedFactoryLayoutSegmentToName(facadeSegment)
+	if err != nil {
+		t.Fatalf("persist.NamedFactoryLayoutSegmentToName: %v", err)
+	}
+	configName, err := config.NamedFactoryLayoutSegmentToName(configSegment)
+	if err != nil {
+		t.Fatalf("config.NamedFactoryLayoutSegmentToName: %v", err)
+	}
+	if facadeName != configName {
+		t.Fatalf("canonical name = %q vs %q", facadeName, configName)
+	}
+}
+
+func assertNamedFactoryRootHelpersMatchConfig(t *testing.T) {
+	t.Helper()
+
+	homeDir := t.TempDir()
+	facadeGlobalRoot, err := persist.GlobalNamedFactoryRootForHome(homeDir)
+	if err != nil {
+		t.Fatalf("persist.GlobalNamedFactoryRootForHome: %v", err)
+	}
+	configGlobalRoot, err := config.GlobalNamedFactoryRootForHome(homeDir)
+	if err != nil {
+		t.Fatalf("config.GlobalNamedFactoryRootForHome: %v", err)
+	}
+	if facadeGlobalRoot != configGlobalRoot {
+		t.Fatalf("global root = %q vs %q", facadeGlobalRoot, configGlobalRoot)
+	}
+
+	t.Setenv("HOME", homeDir)
+	facadeDefaultGlobalRoot, err := persist.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("persist.DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	configDefaultGlobalRoot, err := config.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("config.DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	if facadeDefaultGlobalRoot != configDefaultGlobalRoot {
+		t.Fatalf("default global root = %q vs %q", facadeDefaultGlobalRoot, configDefaultGlobalRoot)
+	}
+
+	cwd := filepath.Join("repo", "app")
+	facadeProjectRoot, err := persist.DefaultProjectNamedFactoryRoot(cwd)
+	if err != nil {
+		t.Fatalf("persist.DefaultProjectNamedFactoryRoot: %v", err)
+	}
+	configProjectRoot, err := config.DefaultProjectNamedFactoryRoot(cwd)
+	if err != nil {
+		t.Fatalf("config.DefaultProjectNamedFactoryRoot: %v", err)
+	}
+	if facadeProjectRoot != configProjectRoot {
+		t.Fatalf("project root = %q vs %q", facadeProjectRoot, configProjectRoot)
+	}
+}
+
 func TestReplaceFactoryLayoutAtDir_MatchesConfigPackage(t *testing.T) {
 	targetDir := t.TempDir()
 	payload := namedFactoryPayload(t, "alpha")
