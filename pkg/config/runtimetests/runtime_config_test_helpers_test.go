@@ -2,12 +2,13 @@ package runtimetests
 
 import (
 	"encoding/json"
-	. "github.com/portpowered/infinite-you/pkg/config"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -533,4 +534,178 @@ func writeRuntimeWorkstationAgentsMD(t *testing.T, factoryDir, workstationName, 
 	if err := os.WriteFile(filepath.Join(workstationDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
 		t.Fatalf("WriteFile(workstation AGENTS.md): %v", err)
 	}
+}
+
+func runtimeFactoryWithoutLayout() map[string]any {
+	return map[string]any{
+		"name": "factory",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "executor",
+		}},
+		"workstations": []map[string]any{{
+			"id":      "execute-story",
+			"name":    "execute-story",
+			"worker":  "executor",
+			"inputs":  []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs": []map[string]string{{"workType": "story", "state": "complete"}},
+			"type":    "MODEL_WORKSTATION",
+		}},
+	}
+}
+
+func portableLayoutFixture(nodeID, edgeID string) map[string]any {
+	return map[string]any{
+		"schemaVersion": 1,
+		"nodes": []map[string]any{{
+			"id": nodeID,
+			"position": map[string]any{
+				"x": 128,
+				"y": 256,
+			},
+			"size": map[string]any{
+				"width":  320,
+				"height": 180,
+			},
+			"locked": true,
+		}},
+		"edges": []map[string]any{{
+			"id": edgeID,
+			"waypoints": []map[string]any{{
+				"x": 180,
+				"y": 220,
+			}},
+			"labelPosition": map[string]any{
+				"x": 200,
+				"y": 210,
+			},
+		}},
+		"groups": []map[string]any{{
+			"id":      "group-1",
+			"label":   "Main lane",
+			"nodeIds": []string{nodeID},
+			"bounds": map[string]any{
+				"x":      100,
+				"y":      200,
+				"width":  400,
+				"height": 240,
+			},
+		}},
+		"viewport": map[string]any{
+			"x":    40,
+			"y":    60,
+			"zoom": 0.9,
+		},
+		"preferences": map[string]any{
+			"direction": "RIGHT",
+		},
+	}
+}
+
+func namedFactoryPayloadWithPortableLayout(t *testing.T, project string) []byte {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(namedFactoryPayload(t, project), &payload); err != nil {
+		t.Fatalf("Unmarshal(namedFactoryPayload): %v", err)
+	}
+	payload["layout"] = portableLayoutFixture(
+		"workstation:execute-"+project,
+		"output:workstation:execute-"+project+"->work-type:task",
+	)
+	updated, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal(namedFactoryPayload with layout): %v", err)
+	}
+	return updated
+}
+
+func assertLoadedPortableLayoutConfig(t *testing.T, cfg *interfaces.FactoryConfig, wantNodeID string) {
+	t.Helper()
+
+	if cfg == nil || cfg.Layout == nil {
+		t.Fatalf("expected portable layout on loaded factory config, got %#v", cfg)
+	}
+	if cfg.Layout.SchemaVersion != 1 {
+		t.Fatalf("layout schemaVersion = %d, want 1", cfg.Layout.SchemaVersion)
+	}
+	if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != wantNodeID {
+		t.Fatalf("layout nodes = %#v, want %s", cfg.Layout.Nodes, wantNodeID)
+	}
+	if cfg.Layout.Nodes[0].Position.X != 128 || cfg.Layout.Nodes[0].Position.Y != 256 {
+		t.Fatalf("layout node position = %#v, want x=128 y=256", cfg.Layout.Nodes[0].Position)
+	}
+	if len(cfg.Layout.Edges) != 1 || cfg.Layout.Edges[0].ID == "" {
+		t.Fatalf("layout edges = %#v, want one edge", cfg.Layout.Edges)
+	}
+	if len(cfg.Layout.Edges[0].Waypoints) != 1 || cfg.Layout.Edges[0].Waypoints[0].X != 180 {
+		t.Fatalf("layout edge waypoints = %#v, want one waypoint at x=180", cfg.Layout.Edges[0].Waypoints)
+	}
+	if cfg.Layout.Edges[0].LabelPosition == nil || cfg.Layout.Edges[0].LabelPosition.X != 200 {
+		t.Fatalf("layout edge labelPosition = %#v, want x=200", cfg.Layout.Edges[0].LabelPosition)
+	}
+	if len(cfg.Layout.Groups) != 1 || cfg.Layout.Groups[0].ID != "group-1" {
+		t.Fatalf("layout groups = %#v, want group-1", cfg.Layout.Groups)
+	}
+	if len(cfg.Layout.Groups[0].NodeIDs) != 1 || cfg.Layout.Groups[0].NodeIDs[0] != wantNodeID {
+		t.Fatalf("layout group nodeIds = %#v, want %s", cfg.Layout.Groups[0].NodeIDs, wantNodeID)
+	}
+	if cfg.Layout.Viewport == nil || math.Abs(cfg.Layout.Viewport.Zoom-0.9) > 1e-6 {
+		t.Fatalf("layout viewport = %#v, want zoom 0.9", cfg.Layout.Viewport)
+	}
+	if cfg.Layout.Preferences == nil || cfg.Layout.Preferences.Direction != "RIGHT" {
+		t.Fatalf("layout preferences = %#v, want RIGHT direction", cfg.Layout.Preferences)
+	}
+}
+
+func assertPortableLayoutJSONPayload(t *testing.T, value any, wantNodeID string) {
+	t.Helper()
+
+	layout, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("persisted layout = %#v, want object", value)
+	}
+	if got := layout["schemaVersion"]; got != float64(1) {
+		t.Fatalf("persisted layout schemaVersion = %#v, want 1", got)
+	}
+	nodes, ok := layout["nodes"].([]any)
+	if !ok || len(nodes) != 1 {
+		t.Fatalf("persisted layout nodes = %#v, want one node", layout["nodes"])
+	}
+	node, ok := nodes[0].(map[string]any)
+	if !ok || node["id"] != wantNodeID {
+		t.Fatalf("persisted layout node = %#v, want %s", nodes[0], wantNodeID)
+	}
+	edges, ok := layout["edges"].([]any)
+	if !ok || len(edges) != 1 {
+		t.Fatalf("persisted layout edges = %#v, want one edge", layout["edges"])
+	}
+	groups, ok := layout["groups"].([]any)
+	if !ok || len(groups) != 1 {
+		t.Fatalf("persisted layout groups = %#v, want one group", layout["groups"])
+	}
+	viewport, ok := layout["viewport"].(map[string]any)
+	if !ok || viewport["zoom"] != 0.9 {
+		t.Fatalf("persisted layout viewport = %#v, want zoom 0.9", layout["viewport"])
+	}
+	preferences, ok := layout["preferences"].(map[string]any)
+	if !ok || preferences["direction"] != "RIGHT" {
+		t.Fatalf("persisted layout preferences = %#v, want RIGHT", layout["preferences"])
+	}
+}
+
+func assertPortableLayoutJSONBytes(t *testing.T, payload []byte, wantNodeID string) {
+	t.Helper()
+
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("Unmarshal(flattened payload): %v", err)
+	}
+	assertPortableLayoutJSONPayload(t, decoded["layout"], wantNodeID)
 }

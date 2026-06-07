@@ -135,6 +135,19 @@ func assertPortableLayoutResponse(t *testing.T, layout *factoryapi.FactoryLayout
 	if (*layout.Nodes)[0].Position.X != 144 || (*layout.Nodes)[0].Position.Y != 288 {
 		t.Fatalf("layout node position = %#v, want x=144 y=288", (*layout.Nodes)[0].Position)
 	}
+	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != "output:workstation:plan-task->work-type:story" {
+		t.Fatalf("layout edges = %#v, want plan-task output edge", layout.Edges)
+	}
+	waypoints := (*layout.Edges)[0].Waypoints
+	if waypoints == nil || len(*waypoints) != 1 || (*waypoints)[0].X != 200 {
+		t.Fatalf("layout edge waypoints = %#v, want one waypoint at x=200", waypoints)
+	}
+	if layout.Groups == nil || len(*layout.Groups) != 1 || (*layout.Groups)[0].Id != "group-1" {
+		t.Fatalf("layout groups = %#v, want group-1", layout.Groups)
+	}
+	if len((*layout.Groups)[0].NodeIds) != 1 || (*layout.Groups)[0].NodeIds[0] != "workstation:plan-task" {
+		t.Fatalf("layout group nodeIds = %#v, want workstation:plan-task", (*layout.Groups)[0].NodeIds)
+	}
 	if layout.Viewport == nil || math.Abs(float64(layout.Viewport.Zoom)-0.85) > 1e-6 {
 		t.Fatalf("layout viewport = %#v, want zoom 0.85", layout.Viewport)
 	}
@@ -161,8 +174,20 @@ func assertPortableLayoutPayload(t *testing.T, value any) {
 	if !ok || node["id"] != "workstation:plan-task" {
 		t.Fatalf("persisted layout node = %#v, want workstation:plan-task", nodes[0])
 	}
+	edges, ok := layout["edges"].([]any)
+	if !ok || len(edges) != 1 {
+		t.Fatalf("persisted layout edges = %#v, want one edge", layout["edges"])
+	}
+	groups, ok := layout["groups"].([]any)
+	if !ok || len(groups) != 1 {
+		t.Fatalf("persisted layout groups = %#v, want one group", layout["groups"])
+	}
 	viewport, ok := layout["viewport"].(map[string]any)
 	if !ok || viewport["zoom"] != 0.85 {
 		t.Fatalf("persisted layout viewport = %#v, want zoom 0.85", layout["viewport"])
+	}
+	preferences, ok := layout["preferences"].(map[string]any)
+	if !ok || preferences["direction"] != "RIGHT" {
+		t.Fatalf("persisted layout preferences = %#v, want RIGHT", layout["preferences"])
 	}
 }
