@@ -245,10 +245,7 @@ describe("WorkChartCard", () => {
   it("flattens ready-state chart chrome without duplicating the bento card title", () => {
     const messages = getWorkOutcomeMessages();
     render(
-      <WorkChartCard
-        model={populatedTrend}
-        widgetId="work-outcome-chart"
-      />,
+      <WorkChartCard model={populatedTrend} widgetId="work-outcome-chart" />,
     );
 
     const card = screen.getByRole("article", {
@@ -281,10 +278,7 @@ describe("WorkChartCard", () => {
 
   it("renders a shared-chart accessible work outcome visualization from dashboard samples", () => {
     render(
-      <WorkChartCard
-        model={populatedTrend}
-        widgetId="work-outcome-chart"
-      />,
+      <WorkChartCard model={populatedTrend} widgetId="work-outcome-chart" />,
     );
 
     const card = screen.getByRole("article", { name: "Work outcome chart" });
@@ -340,10 +334,7 @@ describe("WorkChartCard", () => {
 
   it("toggles chart lines when the legend controls are clicked", () => {
     render(
-      <WorkChartCard
-        model={populatedTrend}
-        widgetId="work-outcome-chart"
-      />,
+      <WorkChartCard model={populatedTrend} widgetId="work-outcome-chart" />,
     );
 
     const chart = screen.getByRole("img", {
@@ -408,10 +399,7 @@ describe("WorkChartCard", () => {
 
   it("renders an explicit loading state without dropping chart summary controls", () => {
     render(
-      <WorkChartCard
-        chartState={{ status: "loading" }}
-        model={emptyTrend}
-      />,
+      <WorkChartCard chartState={{ status: "loading" }} model={emptyTrend} />,
     );
 
     const card = screen.getByRole("article", { name: "Work outcome chart" });
@@ -439,10 +427,7 @@ describe("WorkChartCard", () => {
   it("preserves compact legend, axis labels, and legend placement in embedded bento layout", () => {
     const messages = getWorkOutcomeMessages();
     render(
-      <WorkChartCard
-        model={zoomableTrend}
-        widgetId="work-outcome-chart"
-      />,
+      <WorkChartCard model={zoomableTrend} widgetId="work-outcome-chart" />,
     );
 
     const card = screen.getByRole("article", {
@@ -521,10 +506,7 @@ describe("WorkChartCard", () => {
     const user = userEvent.setup();
     const messages = getWorkOutcomeMessages();
     render(
-      <WorkChartCard
-        model={zoomableTrend}
-        widgetId="work-outcome-chart"
-      />,
+      <WorkChartCard model={zoomableTrend} widgetId="work-outcome-chart" />,
     );
 
     const card = screen.getByRole("article", {
@@ -574,10 +556,7 @@ describe("WorkChartCard", () => {
 
   it("renders an explicit error state with the card landmark preserved", () => {
     render(
-      <WorkChartCard
-        chartState={{ status: "error" }}
-        model={emptyTrend}
-      />,
+      <WorkChartCard chartState={{ status: "error" }} model={emptyTrend} />,
     );
 
     const card = screen.getByRole("article", { name: "Work outcome chart" });

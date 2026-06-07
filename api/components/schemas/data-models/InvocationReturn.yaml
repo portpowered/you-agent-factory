@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - policy
+description: >-
+  Factory-authored policy for selecting the primary result returned by CLI and
+  API invocations. When omitted from a Factory, runtimes use the documented
+  SUBMITTED_WORK_TERMINAL fallback.
+properties:
+  policy:
+    $ref: './InvocationReturnPolicy.yaml'
+    description: Return selection policy for this factory.
+  workTypeName:
+    type: string
+    description: Work type name used by EXPLICIT policy selection.
+  terminalState:
+    type: string
+    description: Authored terminal state name used by EXPLICIT policy selection.
+  workName:
+    type: string
+    description: Optional authored work name filter used by EXPLICIT policy selection.

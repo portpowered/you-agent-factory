@@ -7,7 +7,9 @@ import {
 
 describe("ActivityGraphNodeBadge", () => {
   it("renders semantic badge tones through shared graph chrome", () => {
-    render(<ActivityGraphNodeBadge tone="warning">Pending</ActivityGraphNodeBadge>);
+    render(
+      <ActivityGraphNodeBadge tone="warning">Pending</ActivityGraphNodeBadge>,
+    );
 
     expect(screen.getByText("Pending").className).toContain(
       "bg-warning-container",

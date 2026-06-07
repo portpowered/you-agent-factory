@@ -2,6 +2,7 @@ import {
   WorkstationKind,
   WorkstationType,
 } from "../../../api/generated/openapi";
+import { Checkbox } from "../../../components/ui";
 import {
   type EditableWorkstationBehavior,
   workstationBehaviorRequiresPrompt,
@@ -26,7 +27,6 @@ import {
   FactoryGraphEditorSelectField,
   FactoryGraphEditorTextField,
 } from "./factory-graph-editor-add-dialog-fields";
-import { Checkbox } from "../../../components/ui";
 
 const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
   WorkstationType.WorkstationTypeModelWorkstation,

@@ -16,6 +16,7 @@ const (
 	validationReasonNotRunnable      = "not_runnable"
 	validationReasonTargetNotFound   = "target_not_found"
 	validationReasonUnreadable       = "unreadable"
+	validationReasonConflict         = "conflict"
 )
 
 // ValidationTargetKind is the API error-target kind for factory-session validation failures.
@@ -38,6 +39,9 @@ const ValidationReasonTargetNotFound = validationReasonTargetNotFound
 
 // ValidationReasonUnreadable reports that the session folder could not be read.
 const ValidationReasonUnreadable = validationReasonUnreadable
+
+// ValidationReasonConflict reports that init-new-factory cannot safely materialize a scaffold.
+const ValidationReasonConflict = validationReasonConflict
 
 type validationError struct {
 	reason string

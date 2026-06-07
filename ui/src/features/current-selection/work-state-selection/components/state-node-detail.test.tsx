@@ -67,9 +67,9 @@ describe("StateNodeDetailCard", () => {
     );
 
     const summarySection = sectionByHeading("Summary");
-    const summaryDetails = within(summarySection).getByText("Count").closest(
-      "dl",
-    );
+    const summaryDetails = within(summarySection)
+      .getByText("Count")
+      .closest("dl");
 
     expect(
       screen.getByRole("heading", { name: "Current selection" }),
@@ -148,9 +148,9 @@ describe("StateNodeDetailCard", () => {
     );
 
     const summarySection = sectionByHeading("Summary");
-    const summaryDetails = within(summarySection).getByText("Count").closest(
-      "dl",
-    );
+    const summaryDetails = within(summarySection)
+      .getByText("Count")
+      .closest("dl");
 
     expect(summaryDetails).toBeTruthy();
     expect(
@@ -184,9 +184,7 @@ describe("StateNodeDetailCard", () => {
     const title = screen.getByText("story: implemented");
     expect(title.className).toContain("type-display-large");
     expect(screen.getByRole("heading", { name: "Summary" })).toBeTruthy();
-    expect(
-      screen.getByRole("heading", { name: "Current work" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Current work" })).toBeTruthy();
   });
 
   it("renders selected state node empty-position guidance", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { twentyNodeDashboardTopology } from "../../../components/dashboard/test-fixtures";
+import { twentyNodeDashboardTopology } from "../../../components/dashboard/fixtures/topologies";
 import { buildGraphLayout } from "./layout";
 
 describe("buildGraphLayout", () => {

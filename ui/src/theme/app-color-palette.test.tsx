@@ -135,14 +135,10 @@ describe("AppColorPaletteProvider", () => {
 
     render(<OverrideProbe />);
 
-    expect(screen.getByTestId("palette").textContent).toBe(
-      "material-baseline",
-    );
+    expect(screen.getByTestId("palette").textContent).toBe("material-baseline");
     screen.getByRole("button", { name: "noop set" }).click();
     screen.getByRole("button", { name: "noop clear" }).click();
-    expect(screen.getByTestId("palette").textContent).toBe(
-      "material-baseline",
-    );
+    expect(screen.getByTestId("palette").textContent).toBe("material-baseline");
   });
 
   it("falls back to stored or default palette when used outside the provider", () => {

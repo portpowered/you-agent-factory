@@ -45,7 +45,9 @@ export function WorkItemDetailCard({
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
-      <CurrentSelectionBodyLayout title={formatWorkItemLabel(selection.workItem)}>
+      <CurrentSelectionBodyLayout
+        title={formatWorkItemLabel(selection.workItem)}
+      >
         <CurrentSelectionExpandableSection
           contentId={`${widgetId}-work-item-summary-content`}
           defaultExpanded

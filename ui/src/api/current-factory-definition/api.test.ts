@@ -1,10 +1,9 @@
 import {
   CurrentFactoryDefinitionError,
-  getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
 } from "./api";
 
-describe("getCurrentFactoryDefinition", () => {
+describe("current-factory-definition api", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -59,11 +58,11 @@ describe("getCurrentFactoryDefinition", () => {
       ),
     );
 
-    const factoryDefinition = await getCurrentFactoryDefinition({
+    const document = await getCurrentFactoryDocument({
       fetch: fetchMock,
     });
 
-    expect(factoryDefinition).toEqual({
+    expect(document).toEqual({
       id: "factory-current",
       name: "Current Factory",
       version: {
@@ -180,7 +179,7 @@ describe("getCurrentFactoryDefinition", () => {
 
   it("surfaces current-factory transport failures with the original API error code", async () => {
     await expect(
-      getCurrentFactoryDefinition({
+      getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({
@@ -322,7 +321,7 @@ describe("getCurrentFactoryDefinition", () => {
     let thrown: unknown;
 
     try {
-      await getCurrentFactoryDefinition({
+      await getCurrentFactoryDocument({
         fetch: vi.fn().mockResolvedValue(
           new Response(
             JSON.stringify({

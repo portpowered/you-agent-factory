@@ -736,7 +736,12 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
 			"Built-ins such as @you/tts materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
-			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
+			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
+			"Packaged @you/tts invocation details live in " + cliBinaryName + " docs packaged-tts. " +
+			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
+			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
+			"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
+			"Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
 		Example: "  # Start the out-of-the-box continuous factory.\n" +
 			"  " + cliBinaryName + "\n\n" +
 			"  # Submit a Markdown task to the default scaffold.\n" +
@@ -773,7 +778,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
 	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable")
-	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs")
+	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs; use positional text or piped stdin for the invocation input")
 	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
 		interfaces.RunnerIDCodex,
 		interfaces.RunnerIDGemini,
@@ -789,6 +794,11 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxBackups, "runtime-log-max-backups", cfg.RuntimeLogConfig.MaxBackups, "maximum rotated runtime log files to retain")
 	cmd.Flags().IntVar(&cfg.RuntimeLogConfig.MaxAge, "runtime-log-max-age-days", cfg.RuntimeLogConfig.MaxAge, "maximum days to retain rotated runtime log files")
 	cmd.Flags().BoolVar(&cfg.RuntimeLogConfig.Compress, "runtime-log-compress", false, "compress rotated runtime log files")
+	cmd.Flags().StringVar(&cfg.RuntimeMetricsDir, "runtime-metrics-dir", "", "root directory for structured runtime metrics JSONL files grouped by UTC start date (default: ~/.you-agent-factory/metrics)")
+	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxSize, "runtime-metrics-max-size-mb", cfg.RuntimeMetricsConfig.MaxSize, "rotate each runtime metrics file after this many megabytes")
+	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxBackups, "runtime-metrics-max-backups", cfg.RuntimeMetricsConfig.MaxBackups, "maximum rotated runtime metrics files to retain")
+	cmd.Flags().IntVar(&cfg.RuntimeMetricsConfig.MaxAge, "runtime-metrics-max-age-days", cfg.RuntimeMetricsConfig.MaxAge, "maximum days to retain rotated runtime metrics files")
+	cmd.Flags().BoolVar(&cfg.RuntimeMetricsConfig.Compress, "runtime-metrics-compress", false, "compress rotated runtime metrics files")
 	cmd.Flags().StringVar(&cfg.MockWorkersConfigPath, "with-mock-workers", "", "enable mock-worker execution with an optional mock-workers JSON config path")
 	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
 	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
@@ -813,16 +823,20 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
 	}
-	cleanInvocation := shouldUseCleanRunInvocation(cmd, cfg)
+	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
-	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation
-	if cleanInvocation {
+	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation || textInvocation
+	if cleanInvocation || textInvocation {
 		cfg.Output = cmd.OutOrStdout()
+	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
+		cfg.Output = cmd.OutOrStdout()
+		cfg.StartupOutput = cmd.OutOrStdout()
 	} else {
 		cfg.StartupOutput = cmd.OutOrStdout()
 	}
 	cfg.Diagnostics = cmd.ErrOrStderr()
+	cfg.JSONOutput = globals.json
 
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
@@ -842,10 +856,17 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	return runCLI(ctx, cfg)
 }
 
-func shouldUseCleanRunInvocation(cmd *cobra.Command, cfg runcli.RunConfig) bool {
-	return cmd.Flags().Changed("factory") &&
+func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
+	cleanInvocation = invocationFactorySelected &&
+		cmd.Flags().Changed("work") &&
 		strings.TrimSpace(cfg.WorkFile) != "" &&
 		!cfg.Continuously
+	textInvocation = invocationFactorySelected &&
+		!cmd.Flags().Changed("work") &&
+		!cfg.Continuously &&
+		(cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil)
+	return cleanInvocation, textInvocation
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
@@ -915,6 +936,7 @@ func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
 
 func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string) error {
 	factoryChanged := cmd.Flags().Changed("factory")
+	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
 	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
 		PromptArgs: promptArgs,
@@ -924,9 +946,9 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		return err
 	}
 
-	if !factoryChanged {
+	if !factoryChanged && !namedChanged {
 		if input.Payload != "" {
-			return fmt.Errorf("positional prompt arguments require --factory")
+			return fmt.Errorf("positional prompt arguments require --factory or --named")
 		}
 		return nil
 	}
@@ -936,52 +958,17 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if workChanged {
 		cfg.CleanInvocationInputSource = runcli.InvocationInputSourceWorkFile
 	}
-	if len(promptArgs) > 0 && input.Payload == "" {
-		return fmt.Errorf("prompt is required for you run --factory")
-	}
 	if input.Payload == "" {
 		return nil
 	}
 
-	workFile, err := runcli.PrepareFactoryPromptWorkFile(cfg.FactoryConfigPath, input.Payload)
-	if err != nil {
-		return err
+	payload := input.Payload
+	switch input.Source {
+	case runcli.InvocationInputSourcePositional:
+		cfg.InvocationPositionalText = &payload
+	case runcli.InvocationInputSourceStdin:
+		cfg.InvocationStdinText = &payload
 	}
-	cfg.WorkFile = workFile
 	cfg.CleanInvocationInputSource = input.Source
 	return nil
-}
-
-func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := submitcli.SubmitConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "submit",
-		Short: "Submit work to a running factory",
-		Long: "Submit work to a running you-agent-factory service.\n\n" +
-			"Unary submit (this command) posts one work item with --name, --work-type-name, and --payload. " +
-			"For multi-work FACTORY_REQUEST_BATCH ingress to an already-running session, use " +
-			cliBinaryName + " submit batch. See " + cliBinaryName + " submit batch --help and " +
-			cliBinaryName + " docs batch-inputs.\n\n" +
-			"By default unary submit targets the default compatibility session. " +
-			"Use --session to submit to one specific live factory session instead.",
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return submitWork(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.Name, "name", "", "authored request name for the submitted work (required)")
-	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
-	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
-	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	cmd.AddCommand(newSubmitBatchCommand(globals, diagnostics))
-	return cmd
 }

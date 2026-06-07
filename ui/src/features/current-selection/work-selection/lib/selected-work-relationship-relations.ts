@@ -18,16 +18,24 @@ export function projectSelectedWorkRelationshipGraphToDashboardRelations(
     return undefined;
   }
 
-  const workNodeEntries: Array<readonly [string, SelectedWorkRelationshipNode]> =
-    [
-      [relationshipGraph.selectedWork.workID, relationshipGraph.selectedWork],
-      ...relationshipGraph.relatedWork.map(
-        (node): readonly [string, SelectedWorkRelationshipNode] => [
-          node.workID,
-          node,
-        ],
-      ),
-    ];
+  if (
+    "relations" in relationshipGraph &&
+    relationshipGraph.relations.length > 0
+  ) {
+    return relationshipGraph.relations;
+  }
+
+  const workNodeEntries: Array<
+    readonly [string, SelectedWorkRelationshipNode]
+  > = [
+    [relationshipGraph.selectedWork.workID, relationshipGraph.selectedWork],
+    ...relationshipGraph.relatedWork.map(
+      (node): readonly [string, SelectedWorkRelationshipNode] => [
+        node.workID,
+        node,
+      ],
+    ),
+  ];
   const workNodesByID = new Map<string, SelectedWorkRelationshipNode>(
     workNodeEntries,
   );

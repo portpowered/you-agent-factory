@@ -29,6 +29,7 @@ describe("CurrentSelectionHistoryCardHeader", () => {
         badges={<span>Current</span>}
         identifier="dispatch-1"
         subtitle="Pending"
+        trailingContent={<span>Active</span>}
         title="Review work"
       />,
     );
@@ -38,6 +39,7 @@ describe("CurrentSelectionHistoryCardHeader", () => {
       "text-on-surface-variant",
     );
     expect(screen.getByText("Current")).toBeTruthy();
+    expect(screen.getByText("Active")).toBeTruthy();
     expect(screen.getByText("dispatch-1").className).toContain("rounded-full");
   });
 

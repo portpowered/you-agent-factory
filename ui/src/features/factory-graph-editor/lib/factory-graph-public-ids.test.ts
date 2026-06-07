@@ -89,9 +89,7 @@ const idBackedFactory: CanonicalFactoryDefinition = {
   resources: [
     { capacity: 4, id: "resource-id-model-slot", name: "renamed-model-slot" },
   ],
-  workers: [
-    { id: "worker-id-writer", model: "gpt-5", name: "renamed-writer" },
-  ],
+  workers: [{ id: "worker-id-writer", model: "gpt-5", name: "renamed-writer" }],
   workTypes: [
     {
       id: "work-type-id-story",

@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import {
   type CanonicalFactoryDefinition,
   type CurrentFactoryDocument,
-  getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
@@ -21,7 +20,6 @@ vi.mock("../../../api/current-factory-definition", async () => {
 
   return {
     ...actual,
-    getCurrentFactoryDefinition: vi.fn(),
     getCurrentFactoryDocument: vi.fn(),
   };
 });
@@ -60,7 +58,6 @@ const editableFactoryDefinition: CanonicalFactoryDefinition = {
 };
 
 beforeEach(() => {
-  vi.mocked(getCurrentFactoryDefinition).mockReset();
   vi.mocked(getCurrentFactoryDocument).mockReset();
   useDashboardSessionStore.setState({ selectedSessionID: "~default" });
 });
@@ -71,7 +68,7 @@ describe("useCurrentFactoryDefinition", () => {
       wrapper: createQueryClientWrapper(),
     });
 
-    expect(getCurrentFactoryDefinition).not.toHaveBeenCalled();
+    expect(getCurrentFactoryDocument).not.toHaveBeenCalled();
     expect(result.current).toMatchObject({
       data: undefined,
       error: null,
@@ -82,7 +79,7 @@ describe("useCurrentFactoryDefinition", () => {
   });
 
   it("returns the validated editable current factory definition on success", async () => {
-    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
+    vi.mocked(getCurrentFactoryDocument).mockResolvedValue(
       editableFactoryDefinition,
     );
 
@@ -102,7 +99,7 @@ describe("useCurrentFactoryDefinition", () => {
 
   it("loads the selected non-default session definition instead of the default alias", async () => {
     useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
-    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
+    vi.mocked(getCurrentFactoryDocument).mockResolvedValue(
       editableFactoryDefinition,
     );
 
@@ -111,14 +108,14 @@ describe("useCurrentFactoryDefinition", () => {
     });
 
     await waitFor(() => {
-      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDocument).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });
   });
 
   it("refetches when the selected session tab changes", async () => {
-    vi.mocked(getCurrentFactoryDefinition).mockResolvedValue(
+    vi.mocked(getCurrentFactoryDocument).mockResolvedValue(
       editableFactoryDefinition,
     );
 
@@ -127,12 +124,12 @@ describe("useCurrentFactoryDefinition", () => {
     });
 
     await waitFor(() => {
-      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDocument).toHaveBeenCalledWith({
         sessionID: "~default",
       });
     });
 
-    vi.mocked(getCurrentFactoryDefinition).mockClear();
+    vi.mocked(getCurrentFactoryDocument).mockClear();
 
     act(() => {
       useDashboardSessionStore.getState().setSelectedSessionID("session-2");
@@ -141,14 +138,14 @@ describe("useCurrentFactoryDefinition", () => {
     rerender();
 
     await waitFor(() => {
-      expect(getCurrentFactoryDefinition).toHaveBeenCalledWith({
+      expect(getCurrentFactoryDocument).toHaveBeenCalledWith({
         sessionID: "session-2",
       });
     });
   });
 
   it("exposes actionable typed errors when the current definition is not editable", async () => {
-    vi.mocked(getCurrentFactoryDefinition).mockRejectedValue({
+    vi.mocked(getCurrentFactoryDocument).mockRejectedValue({
       code: "INVALID_FACTORY_DEFINITION",
       message: "The current factory definition is malformed.",
       name: "CurrentFactoryDefinitionError",

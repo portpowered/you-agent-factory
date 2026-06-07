@@ -42,18 +42,18 @@ func TestFactoryService_ListModels_SummarizesConfiguredModelCapabilities(t *test
 	}
 }
 
-func TestFactoryService_GetModel_ReturnsUnavailableWithoutMatchingLocalModelResource(t *testing.T) {
-	svc := buildModelCatalogService(t, modelCatalogConfig(false))
+func TestFactoryService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.T) {
+	svc := buildModelCatalogService(t, modelCatalogConfig(true))
 
 	model, err := svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
 	if err != nil {
 		t.Fatalf("GetModel: %v", err)
 	}
-	if model.Status != factoryapi.ModelStatusUNAVAILABLE {
-		t.Fatalf("status = %s, want UNAVAILABLE", model.Status)
+	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
+		t.Fatalf("managed readiness = %s, want MISSING", model.ManagedRuntime.ReadinessState)
 	}
-	if model.Diagnostics["statusReason"] == "" {
-		t.Fatalf("diagnostics = %#v, want statusReason", model.Diagnostics)
+	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+		t.Fatalf("managed lifecycle = %s, want NOT_INSTALLED", model.ManagedRuntime.LifecycleState)
 	}
 }
 
@@ -113,7 +113,7 @@ func modelCatalogConfig(includeResource bool) map[string]any {
 			"type":       interfaces.ResourceTypeModel,
 			"capacity":   1,
 			"model":      "OMNIVOICE_Q4_K_M",
-			"backend":    "GGUF",
+			"backend":    "LLAMACPP",
 			"loadPolicy": "ON_DEMAND",
 		}}
 	}

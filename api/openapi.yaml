@@ -81,6 +81,34 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/invocations:
+    post:
+      tags:
+        - Work
+      operationId: invokeFactorySessionBySessionId
+      summary: Invoke one factory session and return its primary result
+      description: Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvocationRequest'
+      responses:
+        '200':
+          description: Invocation reached a terminal status for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvocationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/staged-files:
     post:
       tags:
@@ -256,11 +284,11 @@ paths:
       tags:
         - Models
       operationId: listModels
-      summary: List discovered models
-      description: Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+      summary: List managed runtimes
+      description: Lists named managed runtimes exposed by the currently loaded runtime configuration together with readiness, lifecycle state, locality, supported operations, and resource summary data using the managed-runtime contract.
       responses:
         '200':
-          description: Discovered models for the current runtime.
+          description: Managed runtimes for the current runtime.
           content:
             application/json:
               schema:
@@ -272,18 +300,18 @@ paths:
       tags:
         - Models
       operationId: getModel
-      summary: Get one discovered model
-      description: Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+      summary: Inspect one managed runtime
+      description: Returns one managed runtime's readiness, lifecycle state, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
       parameters:
         - name: model_name
           in: path
           required: true
-          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
           schema:
             type: string
       responses:
         '200':
-          description: Discovered model detail.
+          description: Managed runtime detail.
           content:
             application/json:
               schema:
@@ -335,18 +363,18 @@ paths:
       tags:
         - Models
       operationId: pullModel
-      summary: Pull local model assets into the managed cache
-      description: Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+      summary: Pull or install one managed runtime
+      description: Pulls or installs required managed runtime assets into the managed cache using one source-agnostic customer action. Cloud-backed runtimes and unsupported local targets return actionable errors instead of silently succeeding.
       parameters:
         - name: model_name
           in: path
           required: true
-          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
           schema:
             type: string
       responses:
         '200':
-          description: Successful local-model asset pull or confirmation that the managed cache already contained the required revision.
+          description: Successful managed runtime pull or install, or confirmation that the managed cache already contained the required revision.
           content:
             application/json:
               schema:
@@ -1008,6 +1036,93 @@ components:
         sessionId:
           type: string
           description: Factory session that accepted the submit (~default for POST /work).
+    InvocationInputSourceKind:
+      type: string
+      description: Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+      enum:
+        - text
+        - fileRef
+        - audioStream
+      x-enum-varnames:
+        - InvocationInputSourceKindText
+        - InvocationInputSourceKindFileRef
+        - InvocationInputSourceKindAudioStream
+      x-enum-descriptions:
+        - Text supplied in canonical WorkContent.
+        - Reserved future file-reference input source.
+        - Reserved future audio-stream input source.
+    InvocationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceKind
+        - content
+      properties:
+        sourceKind:
+          $ref: '#/components/schemas/InvocationInputSourceKind'
+          description: Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice.
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions.
+        requestId:
+          type: string
+          description: Optional caller-supplied idempotency key for the invocation request.
+        timeoutMillis:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Optional caller timeout budget in milliseconds for waiting on the primary result.
+    InvocationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - traceId
+        - status
+      properties:
+        requestId:
+          type: string
+          description: Stable invocation request identifier assigned or accepted by the server.
+        traceId:
+          type: string
+          description: Trace identifier for the work submitted by this invocation.
+        status:
+          $ref: '#/components/schemas/InvocationTerminalStatus'
+          description: Terminal invocation status after resolving or failing primary-result selection.
+        primaryResult:
+          $ref: '#/components/schemas/WorkContent'
+          description: Primary invocation result. Present only when the invocation resolves successfully with status `COMPLETED`.
+        errorCode:
+          type: string
+          description: Stable machine-readable invocation failure code when status is not `COMPLETED`.
+          enum:
+            - INVOCATION_PRIMARY_RESULT_UNRESOLVED
+            - INVOCATION_TIMED_OUT
+            - INVOCATION_CANCELED
+            - INVOCATION_RUNTIME_FAILURE
+            - INVOCATION_TTS_MODEL_NOT_READY
+            - INVOCATION_TTS_GENERATION_FAILED
+        message:
+          type: string
+          description: Human-readable failure summary when status is not `COMPLETED`.
+    InvocationTerminalStatus:
+      type: string
+      description: Terminal status for a factory-session invocation.
+      enum:
+        - COMPLETED
+        - FAILED
+        - CANCELED
+        - TIMED_OUT
+      x-enum-varnames:
+        - InvocationTerminalStatusCompleted
+        - InvocationTerminalStatusFailed
+        - InvocationTerminalStatusCanceled
+        - InvocationTerminalStatusTimedOut
+      x-enum-descriptions:
+        - Invocation completed and any primaryResult is authoritative.
+        - Invocation reached a runtime or primary-result resolution failure.
+        - Invocation was canceled before successful completion.
+        - Invocation exceeded its caller or server timeout budget.
     SubmitWorkItemList:
       type: array
       description: Ordered dashboard-authored submit-work items preserved for one submission.
@@ -1381,13 +1496,137 @@ components:
       properties:
         results:
           type: array
-          description: Discovered models exposed by the currently loaded runtime configuration.
+          description: Managed runtimes exposed by the currently loaded runtime configuration.
           items:
             $ref: '#/components/schemas/ModelSummary'
+    ManagedRuntime:
+      type: object
+      required:
+        - identity
+        - readinessState
+        - lifecycleState
+        - locality
+        - supportedOperations
+      properties:
+        identity:
+          type: string
+          description: |
+            Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
+        readinessState:
+          $ref: '#/components/schemas/ManagedRuntimeReadinessState'
+        lifecycleState:
+          $ref: '#/components/schemas/ManagedRuntimeLifecycleState'
+        locality:
+          $ref: '#/components/schemas/WorkerModelLocality'
+        supportedOperations:
+          type: array
+          description: Provider-agnostic operations supported by this managed runtime.
+          items:
+            $ref: '#/components/schemas/ModelOperation'
+        diagnostics:
+          $ref: '#/components/schemas/StringMap'
+          description: Concise managed-runtime diagnostics in customer-relevant terms.
+    ManagedRuntimeLifecycleState:
+      type: string
+      description: |
+        Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
+      enum:
+        - NOT_APPLICABLE
+        - NOT_INSTALLED
+        - INSTALLING
+        - INSTALLED
+        - LOADING
+        - LOADED
+      x-enum-descriptions:
+        - Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
+        - Required managed runtime assets are not installed in the managed cache.
+        - Managed runtime assets are being pulled or installed into the managed cache.
+        - Required managed runtime assets are installed in the managed cache but not loaded for invocation.
+        - Managed runtime assets are being loaded into an invocation-ready runtime handle.
+        - Managed runtime assets are loaded and available for invocation subject to readiness checks.
+    ManagedRuntimePullOutcome:
+      type: string
+      description: |
+        Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+      enum:
+        - ALREADY_READY
+        - INSTALLED_SUCCESSFULLY
+        - ALREADY_PRESENT
+        - STILL_LOADING
+        - TIMED_OUT
+        - SOURCE_FETCH_FAILED
+        - UNSUPPORTED_RUNTIME
+      x-enum-descriptions:
+        - The managed runtime was already ready and no additional install work was required.
+        - Required managed runtime assets were installed successfully into the managed cache.
+        - Required managed runtime assets were already present in the managed cache at the requested revision.
+        - Managed runtime install or preparation is still in progress.
+        - Managed runtime install or preparation timed out before reaching a terminal readiness state.
+        - Required managed runtime assets could not be fetched from the configured backend source.
+        - The requested managed runtime does not support pull or install in the current configuration.
+    ManagedRuntimePullResult:
+      type: object
+      required:
+        - identity
+        - pullOutcome
+        - readinessState
+      properties:
+        identity:
+          type: string
+          description: Stable managed runtime identity targeted by the pull or install request.
+        pullOutcome:
+          $ref: '#/components/schemas/ManagedRuntimePullOutcome'
+        readinessState:
+          $ref: '#/components/schemas/ManagedRuntimeReadinessState'
+        cachePath:
+          type: string
+          description: Managed cache directory that now contains the installed runtime assets.
+        revision:
+          type: string
+          description: Managed revision identifier for the installed runtime assets.
+        downloadedFiles:
+          type: array
+          description: Files downloaded or verified as already present for the managed cache entry.
+          items:
+            $ref: '#/components/schemas/ModelPullDownloadedFile'
+        sourceDiagnostics:
+          $ref: '#/components/schemas/ManagedRuntimeSourceDiagnostics'
+    ManagedRuntimeReadinessState:
+      type: string
+      description: |
+        Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+      enum:
+        - READY
+        - MISSING
+        - LOADING
+        - FAILED
+        - UNSUPPORTED
+      x-enum-descriptions:
+        - Required managed runtime assets are present and the runtime is ready for invocation.
+        - Required managed runtime assets are not present and pull or install is required.
+        - Managed runtime assets are being prepared or loaded.
+        - Managed runtime setup failed and requires operator attention.
+        - The managed runtime is not supported by the current factory or platform configuration.
+    ManagedRuntimeSourceDiagnostics:
+      type: object
+      description: |
+        Optional advanced diagnostics for how one managed runtime resolved assets from a configured backend source. Source details are implementation diagnostics and are not required for the primary customer lifecycle contract.
+      properties:
+        sourceKind:
+          type: string
+          description: |
+            Resolver-classified backend source kind, such as `UPSTREAM_REPOSITORY` or `MANAGED_MIRROR`, without exposing provider-native repository vocabulary in the primary customer contract.
+        sourceId:
+          type: string
+          description: Opaque resolver identifier for the selected backend source instance.
+        resolverNotes:
+          type: string
+          description: Concise resolver note suitable for operator diagnostics.
     ModelSummary:
       type: object
       required:
         - name
+        - managedRuntime
         - providerLocality
         - status
         - loadState
@@ -1397,16 +1636,22 @@ components:
       properties:
         name:
           type: string
-          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          description: |
+            Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields.
+        managedRuntime:
+          $ref: '#/components/schemas/ManagedRuntime'
         providerLocality:
           $ref: '#/components/schemas/WorkerModelLocality'
+          description: |
+            Managed runtime locality summary. Mirrors `managedRuntime.locality` for compatibility with earlier discovery fields.
         status:
           $ref: '#/components/schemas/ModelStatus'
         loadState:
           $ref: '#/components/schemas/ModelLoadState'
         operations:
           type: array
-          description: Provider-agnostic operations supported by the discovered model.
+          description: |
+            Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
           items:
             $ref: '#/components/schemas/ModelOperation'
         modalities:
@@ -1423,6 +1668,7 @@ components:
       type: object
       required:
         - name
+        - managedRuntime
         - providerLocality
         - status
         - loadState
@@ -1434,16 +1680,22 @@ components:
       properties:
         name:
           type: string
-          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          description: |
+            Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields.
+        managedRuntime:
+          $ref: '#/components/schemas/ManagedRuntime'
         providerLocality:
           $ref: '#/components/schemas/WorkerModelLocality'
+          description: |
+            Managed runtime locality summary. Mirrors `managedRuntime.locality` for compatibility with earlier inspect fields.
         status:
           $ref: '#/components/schemas/ModelStatus'
         loadState:
           $ref: '#/components/schemas/ModelLoadState'
         operations:
           type: array
-          description: Union of provider-agnostic operations supported by workers for this model.
+          description: |
+            Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
           items:
             $ref: '#/components/schemas/ModelOperation'
         modalities:
@@ -1544,7 +1796,8 @@ components:
           description: Lowercase SHA-256 checksum for the cached file when known.
     ModelPullOutcome:
       type: string
-      description: Outcome of a managed local-model asset pull request.
+      description: |
+        Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
       enum:
         - PULLED
         - ALREADY_PRESENT
@@ -1552,6 +1805,7 @@ components:
       type: object
       required:
         - modelName
+        - managedRuntimePull
         - providerLocality
         - outcome
         - cachePath
@@ -1560,17 +1814,22 @@ components:
       properties:
         modelName:
           type: string
-          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          description: |
+            Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields.
+        managedRuntimePull:
+          $ref: '#/components/schemas/ManagedRuntimePullResult'
         providerLocality:
           $ref: '#/components/schemas/WorkerModelLocality'
         outcome:
           $ref: '#/components/schemas/ModelPullOutcome'
         cachePath:
           type: string
-          description: Final managed cache directory that now contains the pulled model assets.
+          description: |
+            Final managed cache directory that now contains the installed runtime assets. Mirrors `managedRuntimePull.cachePath`.
         revision:
           type: string
-          description: Pulled source revision identifier, such as an upstream repository commit SHA.
+          description: |
+            Managed revision identifier for the installed runtime assets. Mirrors `managedRuntimePull.revision`.
         downloadedFiles:
           type: array
           description: Files that were downloaded or verified as already present for the managed cache entry.
@@ -1655,13 +1914,15 @@ components:
           description: Cloud provider identity when the resource models quota or routing.
     ModelStatus:
       type: string
-      description: Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+      description: |
+        Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
       enum:
         - READY
         - UNAVAILABLE
     ModelLoadState:
       type: string
-      description: Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+      description: |
+        Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
       enum:
         - UNLOADED
         - NOT_APPLICABLE
@@ -3599,6 +3860,8 @@ components:
                 type: FAILED
               - name: complete
                 type: TERMINAL
+        invocationReturn:
+          policy: SUBMITTED_WORK_TERMINAL
         supportingFiles:
           requiredTools:
             - name: python
@@ -3697,6 +3960,9 @@ components:
           description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
           items:
             $ref: '#/components/schemas/InputType'
+        invocationReturn:
+          $ref: '#/components/schemas/InvocationReturn'
+          description: Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -3718,6 +3984,11 @@ components:
         layout:
           $ref: '#/components/schemas/FactoryLayout'
           description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
+        layoutOutcomes:
+          type: array
+          description: Ephemeral save-response metadata listing layout pruning or validation outcomes. Omitted from persisted factory documents, ignored on save requests, and cleared before split-layout writes.
+          items:
+            $ref: '#/components/schemas/FactoryValidationTarget'
         workers:
           type: array
           description: Reusable worker definitions that workstations reference by name when dispatching work.
@@ -3728,6 +3999,37 @@ components:
           description: Processing steps that consume work, invoke workers, and emit the next work states.
           items:
             $ref: '#/components/schemas/Workstation'
+    InvocationReturn:
+      type: object
+      additionalProperties: false
+      required:
+        - policy
+      description: Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+      properties:
+        policy:
+          $ref: '#/components/schemas/InvocationReturnPolicy'
+          description: Return selection policy for this factory.
+        workTypeName:
+          type: string
+          description: Work type name used by EXPLICIT policy selection.
+        terminalState:
+          type: string
+          description: Authored terminal state name used by EXPLICIT policy selection.
+        workName:
+          type: string
+          description: Optional authored work name filter used by EXPLICIT policy selection.
+    InvocationReturnPolicy:
+      type: string
+      description: Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+      enum:
+        - SUBMITTED_WORK_TERMINAL
+        - EXPLICIT
+      x-enum-varnames:
+        - InvocationReturnPolicySubmittedWorkTerminal
+        - InvocationReturnPolicyExplicit
+      x-enum-descriptions:
+        - Use the invocation-submitted work item terminal content as the primary result.
+        - Use the configured work type, terminal state, and optional work name as the primary result.
     FactoryGuard:
       type: object
       description: Factory-level guard attached at the root factory definition.
@@ -3930,13 +4232,13 @@ components:
           description: Total units of this resource available to the factory at one time.
         model:
           type: string
-          description: Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+          description: Stable managed runtime identity for `MODEL` resources, such as `OMNIVOICE_Q4_K_M`. Packaged and authored factories declare the same managed-runtime dependency through this field plus matching `MODEL_WORKER.model` values.
         backend:
           type: string
-          description: Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+          description: Managed runtime backend identifier for `MODEL` resources, such as `LLAMACPP`. Backend selection stays provider-agnostic in customer-facing factory config.
         loadPolicy:
           type: string
-          description: Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+          description: Managed runtime load policy for `MODEL` resources, such as `ON_DEMAND` or `EAGER`.
         provider:
           type: string
           description: Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.

@@ -20,6 +20,7 @@ import {
   type FolderValidationState,
   factorySessionTargetOptionValue,
   folderValidationStatusMessage,
+  initNewFactoryNestedPath,
   selectedFactorySessionTarget,
 } from "../lib/dashboard-session-tabs-utils";
 import type { getHeaderControlsMessages } from "../messages/header-controls";
@@ -170,8 +171,9 @@ function InitNewFactoryConfirmation({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const nestedFactoryPath = initNewFactoryNestedPath(folderPath);
   const description =
-    messages.openSessionInitNewFactoryDescriptionTemplate.replace(
+    messages.openSessionInitNewFactoryDescriptionTemplate.replaceAll(
       "{{folderPath}}",
       folderPath,
     );
@@ -191,7 +193,7 @@ function InitNewFactoryConfirmation({
           {description}
         </DashboardText>
         <DashboardText className="break-all font-mono text-xs text-on-surface-subtle">
-          {folderPath}
+          {nestedFactoryPath}
         </DashboardText>
         <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row">
           <Button

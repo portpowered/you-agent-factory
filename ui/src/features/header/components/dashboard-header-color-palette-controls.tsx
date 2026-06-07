@@ -1,6 +1,6 @@
-import { DashboardPaletteMenu } from "./dashboard-palette-menu";
-import { DashboardLocaleMenu } from "./dashboard-header-locale-menu";
 import { getHeaderControlsMessages } from "../messages/header-controls";
+import { DashboardLocaleMenu } from "./dashboard-header-locale-menu";
+import { DashboardPaletteMenu } from "./dashboard-palette-menu";
 
 interface DashboardHeaderColorPaletteControlsProps {
   locale: string;
@@ -16,7 +16,7 @@ export function DashboardHeaderColorPaletteControls({
   return (
     <fieldset
       aria-label={headerMessages.globalHeaderActionsLabel}
-      className="flex shrink-0 items-center gap-1.5 self-end pb-2 pr-2"
+      className="flex shrink-0 items-center gap-1.5 self-end pr-2"
     >
       <DashboardPaletteMenu locale={locale} />
       <DashboardLocaleMenu locale={locale} onChangeLocale={onChangeLocale} />

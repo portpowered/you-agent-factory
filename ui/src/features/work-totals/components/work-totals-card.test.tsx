@@ -78,7 +78,8 @@ describe("WorkTotalsCard", () => {
     expect(failedCard?.className).toContain("border-af-danger-border");
     expect(failedCard?.className).toContain("bg-error-container");
     expect(dispatchedCard?.className).toContain("border-outline");
-    expect(dispatchedCard?.className).not.toContain("border-af-info-border");
+    expect(dispatchedCard?.className).toContain("border-af-info-border");
+    expect(dispatchedCard?.className).toContain("bg-info-container");
     expect(dispatchedCard?.className).not.toContain("border-af-success-border");
     expect(dispatchedCard?.className).not.toContain("border-af-danger-border");
   });

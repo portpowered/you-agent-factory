@@ -1,13 +1,4 @@
 export {
-  type ConsoleAllowlistEntry,
-  type ConsoleLevel,
-  type StrictConsoleGuardOptions,
-  assertStrictConsoleClean,
-  installStrictConsoleGuard,
-  useStrictConsoleGuard,
-  withStrictConsole,
-} from "./strict-console-guard";
-export {
   DashboardSessionTestProvider,
   type DashboardSessionTestProviderProps,
 } from "./dashboard-session-test-provider";
@@ -30,3 +21,12 @@ export {
   wireMockEditableFactoryGraph,
   workerDenseFactoryDefinitionDocument,
 } from "./graph-editor-harness";
+export {
+  assertStrictConsoleClean,
+  type ConsoleAllowlistEntry,
+  type ConsoleLevel,
+  installStrictConsoleGuard,
+  type StrictConsoleGuardOptions,
+  useStrictConsoleGuard,
+  withStrictConsole,
+} from "./strict-console-guard";

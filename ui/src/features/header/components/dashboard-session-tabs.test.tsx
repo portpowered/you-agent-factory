@@ -241,6 +241,160 @@ describe("DashboardSessionTabs", () => {
     );
   });
 
+  it("lets the tab strip compress each tab instead of clipping overflowed sessions", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/alpha",
+        folderPath: "/workspace/root/alpha",
+        id: "session-alpha",
+        isDefault: false,
+        project: "alpha",
+        target: {
+          kind: "named",
+          name: "alpha",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root/beta",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("navigation", { name: messages.sessionTabsLabel }),
+      ).toBeTruthy();
+    });
+
+    const navigation = screen.getByRole("navigation", {
+      name: messages.sessionTabsLabel,
+    });
+    const tablist = screen.getByRole("tablist");
+    const shells = screen
+      .getAllByRole("tab")
+      .map((tab) => sessionTabShell(tab as HTMLElement));
+
+    expect(navigation.className).toContain("overflow-hidden");
+    expect(tablist.className).toContain("overflow-hidden");
+    for (const shell of shells) {
+      expect(shell.className).toContain("flex-1");
+      expect(shell.className).toContain("basis-0");
+      expect(shell.className).toContain("max-w-72");
+    }
+  });
+
+  it("reorders session tabs with drag-and-drop and preserves the moved tab as active", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root/beta",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/gamma",
+        folderPath: "/workspace/root/gamma",
+        id: "session-gamma",
+        isDefault: false,
+        project: "gamma",
+        target: {
+          kind: "named",
+          name: "gamma",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("navigation", { name: messages.sessionTabsLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "beta" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected"),
+      ).toBe("true");
+    });
+
+    const rootShell = sessionTabShell(
+      screen.getByRole("tab", { name: "root" }),
+    );
+    const gammaShell = sessionTabShell(
+      screen.getByRole("tab", { name: "gamma" }),
+    );
+    const dataTransfer = {
+      effectAllowed: "all",
+      setData: vi.fn(),
+    };
+
+    Object.defineProperty(gammaShell, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 40,
+        height: 40,
+        left: 200,
+        right: 320,
+        top: 0,
+        width: 120,
+        x: 200,
+        y: 0,
+        toJSON: () => "",
+      }),
+    });
+
+    fireEvent.dragStart(rootShell, { dataTransfer });
+    fireEvent.dragOver(gammaShell, { clientX: 319, dataTransfer });
+    fireEvent.drop(gammaShell, { clientX: 319, dataTransfer });
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("tab").map((tab) => tab.getAttribute("aria-label")),
+      ).toEqual(["beta", "root", "gamma"]);
+    });
+    expect(
+      screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
   it("shows the offline state and allows session refetch", async () => {
     listFactorySessions
       .mockRejectedValueOnce(
@@ -732,7 +886,8 @@ describe("DashboardSessionTabs", () => {
   });
 
   it("confirms init-new-factory after validateOnly returns initsNewFactory", async () => {
-    const emptyFolderPath = "/workspace/new-factory-root";
+    const selectedFolderPath = "/workspace/new-factory-root";
+    const nestedFactoryPath = `${selectedFolderPath}/factory`;
     listFactorySessions
       .mockResolvedValueOnce([
         {
@@ -758,30 +913,32 @@ describe("DashboardSessionTabs", () => {
           },
         },
         {
-          factoryDir: emptyFolderPath,
-          folderPath: emptyFolderPath,
+          factoryDir: nestedFactoryPath,
+          folderPath: selectedFolderPath,
           id: "session-new-factory",
           isDefault: false,
           project: "new-factory-root",
           target: {
-            kind: "default",
+            kind: "named",
+            name: "factory",
           },
         },
       ]);
     openFactorySession
       .mockResolvedValueOnce({
-        folderPath: emptyFolderPath,
+        folderPath: selectedFolderPath,
         initsNewFactory: true,
       })
       .mockResolvedValueOnce({
         session: {
-          factoryDir: emptyFolderPath,
-          folderPath: emptyFolderPath,
+          factoryDir: nestedFactoryPath,
+          folderPath: selectedFolderPath,
           id: "session-new-factory",
           isDefault: false,
           project: "new-factory-root",
           target: {
-            kind: "default",
+            kind: "named",
+            name: "factory",
           },
         },
       });
@@ -801,7 +958,7 @@ describe("DashboardSessionTabs", () => {
     fireEvent.change(
       screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
       {
-        target: { value: emptyFolderPath },
+        target: { value: selectedFolderPath },
       },
     );
     fireEvent.submit(
@@ -812,7 +969,7 @@ describe("DashboardSessionTabs", () => {
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
-        folderPath: emptyFolderPath,
+        folderPath: selectedFolderPath,
         validateOnly: true,
       });
     });
@@ -823,7 +980,15 @@ describe("DashboardSessionTabs", () => {
         }),
       ).toBeTruthy();
     });
-    expect(screen.getByText(emptyFolderPath)).toBeTruthy();
+    expect(
+      screen.getByText(
+        messages.openSessionInitNewFactoryDescriptionTemplate.replaceAll(
+          "{{folderPath}}",
+          selectedFolderPath,
+        ),
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText(nestedFactoryPath)).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: messages.openSessionSubmitLabel }),
     ).toBeNull();
@@ -836,7 +1001,7 @@ describe("DashboardSessionTabs", () => {
 
     await waitFor(() => {
       expect(openFactorySession.mock.calls[1]?.[0]).toEqual({
-        folderPath: emptyFolderPath,
+        folderPath: selectedFolderPath,
         initNewFactory: true,
       });
     });
@@ -845,10 +1010,96 @@ describe("DashboardSessionTabs", () => {
         screen.getByRole("tab", { name: "new-factory-root" }),
       ).toBeTruthy();
     });
+    const createdTab = screen.getByRole("tab", { name: "new-factory-root" });
+    expect(createdTab.textContent).toContain(
+      sessionTabSecondaryPath(selectedFolderPath),
+    );
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       "session-new-factory",
     );
     expect(openFactorySession).toHaveBeenCalledTimes(2);
+  });
+
+  it("reopens a nested init-new-factory session through the selected folder path", async () => {
+    const selectedFolderPath = "/workspace/reopen-project";
+    const nestedFactoryPath = `${selectedFolderPath}/factory`;
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: nestedFactoryPath,
+        folderPath: selectedFolderPath,
+        id: "session-reopen-project",
+        isDefault: false,
+        project: "reopen-project",
+        target: {
+          kind: "named",
+          name: "factory",
+        },
+      },
+    ]);
+    openFactorySession.mockResolvedValueOnce({
+      targets: [
+        {
+          factoryDir: nestedFactoryPath,
+          folderPath: selectedFolderPath,
+          label: "factory",
+          project: "reopen-project",
+          ref: {
+            kind: "named",
+            name: "factory",
+          },
+        },
+      ],
+    });
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: "reopen-project" }),
+      ).toBeTruthy();
+    });
+
+    const reopenTab = screen.getByRole("tab", { name: "reopen-project" });
+    expect(reopenTab.textContent).toContain(
+      sessionTabSecondaryPath(selectedFolderPath),
+    );
+    expect(reopenTab.textContent).not.toContain("factory/factory");
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: selectedFolderPath },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(openFactorySession.mock.calls[0]?.[0]).toEqual({
+        folderPath: selectedFolderPath,
+        validateOnly: true,
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByText(nestedFactoryPath)).toBeTruthy();
+    });
   });
 
   it("returns to folder entry when canceling init-new-factory confirmation", async () => {

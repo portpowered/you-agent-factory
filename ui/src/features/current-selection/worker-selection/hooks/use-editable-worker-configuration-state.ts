@@ -213,7 +213,9 @@ function createEditableWorkerDraftHandlers(
     onCommandChange: (value: string) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, command: value }));
     },
-    onExecutorProviderChange: (value: EditableWorkerDraft["executorProvider"]) => {
+    onExecutorProviderChange: (
+      value: EditableWorkerDraft["executorProvider"],
+    ) => {
       updateDraft(setSessionState, (draft) => ({
         ...draft,
         executorProvider: value,

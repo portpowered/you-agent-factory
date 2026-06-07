@@ -33,6 +33,8 @@ describe("CurrentSelectionDetailSection", () => {
       </CurrentSelectionDetailSection>,
     );
 
-    expect(screen.getByRole("region", { name: "Untitled detail" })).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Untitled detail" }),
+    ).toBeTruthy();
   });
 });

@@ -30,7 +30,9 @@ export function DashboardHeaderSessionControls({
             sessionTabsState.isSessionStreamPaused(activeSession.id),
             headerMessages,
           )}
-          aria-pressed={sessionTabsState.isSessionStreamPaused(activeSession.id)}
+          aria-pressed={sessionTabsState.isSessionStreamPaused(
+            activeSession.id,
+          )}
           compact
           onClick={() => {
             sessionTabsState.toggleSessionStreamPaused(activeSession.id);

@@ -96,12 +96,6 @@ export class CurrentFactoryDefinitionError extends Error {
   }
 }
 
-export async function getCurrentFactoryDefinition(
-  options: GetCurrentFactoryDefinitionOptions = {},
-): Promise<CanonicalFactoryDefinition> {
-  return getCurrentFactoryDocument(options);
-}
-
 export async function getCurrentFactoryDocument(
   options: GetCurrentFactoryDefinitionOptions = {},
 ): Promise<CurrentFactoryDocument> {
