@@ -937,14 +937,26 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 		return "", fmt.Errorf("factory root is required")
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(name)
+	canonicalName, err := canonicalNamedFactoryName(name)
+	if err != nil {
+		return "", err
+	}
+	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
 	if err != nil {
 		return "", err
 	}
 
 	factoryDir := filepath.Join(rootDir, segment)
 	if err := requireFactoryConfig(factoryDir); err != nil {
-		return "", fmt.Errorf("resolve factory %q: %w", segment, err)
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf(
+				"resolve named factory %q in root %s: %w",
+				canonicalName,
+				rootDir,
+				newNamedFactoryNotFoundError(canonicalName),
+			)
+		}
+		return "", fmt.Errorf("resolve named factory %q in root %s: %w", canonicalName, rootDir, err)
 	}
 	return factoryDir, nil
 }

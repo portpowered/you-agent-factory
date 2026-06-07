@@ -723,29 +723,31 @@ const (
 	scopedNamedFactoryPrefix       = "@"
 )
 
-// NamedFactoryNameToLayoutSegment maps a canonical named-factory display name
-// into the single on-disk directory segment used under a factory root.
+// NamedFactoryNameToLayoutSegment maps a canonical named-factory display name into the single on-disk directory segment used under a factory root.
 func NamedFactoryNameToLayoutSegment(name string) (string, error) {
 	trimmed := strings.TrimSpace(name)
 	if strings.HasPrefix(trimmed, scopedNamedFactoryPrefix) {
 		if err := validateScopedNamedFactoryName(trimmed); err != nil {
-			return "", err
+			return "", wrapInvalidNamedFactoryName(trimmed, err)
 		}
 		segment := encodeScopedNamedFactoryLayoutSegment(trimmed)
 		if _, err := safeFactoryLayoutSegment("factory", segment); err != nil {
-			return "", err
+			return "", wrapInvalidNamedFactoryName(trimmed, err)
 		}
 		return segment, nil
 	}
-	return safeFactoryLayoutSegment("factory", trimmed)
+	if segment, err := safeFactoryLayoutSegment("factory", trimmed); err != nil {
+		return "", wrapInvalidNamedFactoryName(trimmed, err)
+	} else {
+		return segment, nil
+	}
 }
 
 func encodeScopedNamedFactoryLayoutSegment(name string) string {
 	return strings.NewReplacer("%", "%25", "/", "%2F").Replace(name)
 }
 
-// NamedFactoryLayoutSegmentToName maps an on-disk named-factory directory
-// segment back to the canonical display name shown by list and API callers.
+// NamedFactoryLayoutSegmentToName maps an on-disk named-factory directory segment back to the canonical display name shown by list and API callers.
 func NamedFactoryLayoutSegmentToName(segment string) (string, error) {
 	safeSegment, err := safeFactoryLayoutSegment("factory", segment)
 	if err != nil {

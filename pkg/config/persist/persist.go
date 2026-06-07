@@ -12,7 +12,9 @@ import (
 // Re-export stable persist error values for callers that import pkg/config/persist only.
 var (
 	ErrInvalidNamedFactory       = config.ErrInvalidNamedFactory
+	ErrInvalidNamedFactoryName   = config.ErrInvalidNamedFactoryName
 	ErrNamedFactoryAlreadyExists = config.ErrNamedFactoryAlreadyExists
+	ErrNamedFactoryNotFound      = config.ErrNamedFactoryNotFound
 )
 
 // NamedFactoryPersistResult reports the staged named-factory directory together
@@ -149,7 +151,17 @@ func IsInvalidNamedFactory(err error) bool {
 	return errors.Is(err, ErrInvalidNamedFactory)
 }
 
+// IsInvalidNamedFactoryName reports whether err wraps ErrInvalidNamedFactoryName.
+func IsInvalidNamedFactoryName(err error) bool {
+	return errors.Is(err, ErrInvalidNamedFactoryName)
+}
+
 // IsNamedFactoryAlreadyExists reports whether err wraps ErrNamedFactoryAlreadyExists.
 func IsNamedFactoryAlreadyExists(err error) bool {
 	return errors.Is(err, ErrNamedFactoryAlreadyExists)
+}
+
+// IsNamedFactoryNotFound reports whether err wraps ErrNamedFactoryNotFound.
+func IsNamedFactoryNotFound(err error) bool {
+	return errors.Is(err, ErrNamedFactoryNotFound)
 }

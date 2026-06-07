@@ -916,7 +916,7 @@ func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*Name
 		canonicalName,
 		projectRoot,
 		globalRoot,
-		ErrFactoryLayoutNotFound,
+		newNamedFactoryNotFoundError(canonicalName),
 	)
 }
 

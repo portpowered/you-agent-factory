@@ -22,6 +22,54 @@ type WorkstationLoader interface {
 	Load(name string) (*interfaces.FactoryWorkstationConfig, error)
 }
 
+// ErrInvalidNamedFactoryName reports that the requested canonical named-factory
+// name failed validation before any on-disk lookup or persistence work began.
+var ErrInvalidNamedFactoryName = errors.New("invalid named factory name")
+
+// ErrNamedFactoryNotFound reports that a requested named factory was not found
+// in the searched root or roots.
+var ErrNamedFactoryNotFound = errors.New("named factory not found")
+
+type invalidNamedFactoryNameError struct {
+	name string
+	err  error
+}
+
+func (e *invalidNamedFactoryNameError) Error() string {
+	return fmt.Sprintf("invalid named factory name %q: %v", e.name, e.err)
+}
+
+func (e *invalidNamedFactoryNameError) Unwrap() []error {
+	return []error{ErrInvalidNamedFactoryName, e.err}
+}
+
+type namedFactoryNotFoundError struct{ name string }
+
+func (e *namedFactoryNotFoundError) Error() string {
+	return fmt.Sprintf("named factory %q not found", e.name)
+}
+
+func (e *namedFactoryNotFoundError) Unwrap() []error {
+	return []error{ErrNamedFactoryNotFound, os.ErrNotExist}
+}
+
+func wrapInvalidNamedFactoryName(name string, err error) error {
+	if err == nil || errors.Is(err, ErrInvalidNamedFactoryName) {
+		return err
+	}
+	return &invalidNamedFactoryNameError{name: strings.TrimSpace(name), err: err}
+}
+
+func newNamedFactoryNotFoundError(name string) error {
+	return &namedFactoryNotFoundError{name: strings.TrimSpace(name)}
+}
+
+// IsInvalidNamedFactoryName reports whether err wraps ErrInvalidNamedFactoryName.
+func IsInvalidNamedFactoryName(err error) bool { return errors.Is(err, ErrInvalidNamedFactoryName) }
+
+// IsNamedFactoryNotFound reports whether err wraps ErrNamedFactoryNotFound.
+func IsNamedFactoryNotFound(err error) bool { return errors.Is(err, ErrNamedFactoryNotFound) }
+
 // LoadWorkerConfig loads a worker configuration from the given directory.
 // It reads AGENTS.md, parses YAML frontmatter into WorkerConfig, and sets
 // Body to the remaining markdown content.

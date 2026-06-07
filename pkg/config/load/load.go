@@ -10,8 +10,10 @@ import (
 
 // Re-export stable load error values for callers that import pkg/config/load only.
 var (
-	ErrInvalidNamedFactory   = config.ErrInvalidNamedFactory
-	ErrFactoryLayoutNotFound = config.ErrFactoryLayoutNotFound
+	ErrInvalidNamedFactory     = config.ErrInvalidNamedFactory
+	ErrInvalidNamedFactoryName = config.ErrInvalidNamedFactoryName
+	ErrFactoryLayoutNotFound   = config.ErrFactoryLayoutNotFound
+	ErrNamedFactoryNotFound    = config.ErrNamedFactoryNotFound
 )
 
 // LoadOptions configures canonical JSON load behavior.
@@ -49,7 +51,17 @@ func IsInvalidNamedFactory(err error) bool {
 	return errors.Is(err, ErrInvalidNamedFactory)
 }
 
+// IsInvalidNamedFactoryName reports whether err wraps ErrInvalidNamedFactoryName.
+func IsInvalidNamedFactoryName(err error) bool {
+	return errors.Is(err, ErrInvalidNamedFactoryName)
+}
+
 // IsFactoryLayoutNotFound reports whether err wraps ErrFactoryLayoutNotFound.
 func IsFactoryLayoutNotFound(err error) bool {
 	return errors.Is(err, ErrFactoryLayoutNotFound)
+}
+
+// IsNamedFactoryNotFound reports whether err wraps ErrNamedFactoryNotFound.
+func IsNamedFactoryNotFound(err error) bool {
+	return errors.Is(err, ErrNamedFactoryNotFound)
 }

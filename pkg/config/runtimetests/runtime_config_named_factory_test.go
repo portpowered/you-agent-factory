@@ -2,6 +2,7 @@ package runtimetests
 
 import (
 	"encoding/json"
+	"errors"
 	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
@@ -487,6 +488,9 @@ func TestValidateNamedFactoryName_RejectsPathTraversal(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid named-factory segment to fail")
 	}
+	if !IsInvalidNamedFactoryName(err) {
+		t.Fatalf("error = %v, want IsInvalidNamedFactoryName", err)
+	}
 	if got := err.Error(); !containsAll(got, `factory name "../beta"`, "cannot contain path separators") {
 		t.Fatalf("expected path-separator validation error, got %v", err)
 	}
@@ -502,7 +506,13 @@ func TestResolveNamedFactoryDir_RejectsDirectoryWithoutFactoryConfig(t *testing.
 	if err == nil {
 		t.Fatal("expected missing named factory config to fail")
 	}
-	if got := err.Error(); !containsAll(got, `resolve factory "beta"`, "find factory config") {
+	if !errors.Is(err, ErrNamedFactoryNotFound) {
+		t.Fatalf("error = %v, want ErrNamedFactoryNotFound", err)
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("error = %v, want os.ErrNotExist", err)
+	}
+	if got := err.Error(); !containsAll(got, `resolve named factory "beta"`, "root", `named factory "beta" not found`) {
 		t.Fatalf("expected missing-config resolution error, got %v", err)
 	}
 }

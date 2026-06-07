@@ -303,6 +303,26 @@ func TestIsInvalidNamedFactory_DetectsPersistValidationFailure(t *testing.T) {
 	}
 }
 
+func TestIsInvalidNamedFactoryName_DetectsNameValidationFailure(t *testing.T) {
+	_, err := config.ResolveNamedFactoryDir(t.TempDir(), "@you")
+	if err == nil {
+		t.Fatal("expected invalid named factory name to fail")
+	}
+	if !persist.IsInvalidNamedFactoryName(err) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactoryName", err)
+	}
+}
+
+func TestIsNamedFactoryNotFound_DetectsResolveMiss(t *testing.T) {
+	_, err := config.ResolveNamedFactoryDir(t.TempDir(), "missing")
+	if err == nil {
+		t.Fatal("expected missing named factory to fail")
+	}
+	if !persist.IsNamedFactoryNotFound(err) {
+		t.Fatalf("error = %v, want ErrNamedFactoryNotFound", err)
+	}
+}
+
 func TestIsNamedFactoryAlreadyExists_DetectsDuplicatePersist(t *testing.T) {
 	rootDir := t.TempDir()
 	payload := namedFactoryPayload(t, "alpha")

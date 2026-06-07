@@ -86,11 +86,30 @@ func TestResolveNamedFactoryAcrossRoots_ReturnsNotFoundWhenBothRootsMiss(t *test
 	if err == nil {
 		t.Fatal("expected missing named factory to fail")
 	}
-	if !errors.Is(err, ErrFactoryLayoutNotFound) {
-		t.Fatalf("error = %v, want ErrFactoryLayoutNotFound", err)
+	if !errors.Is(err, ErrNamedFactoryNotFound) {
+		t.Fatalf("error = %v, want ErrNamedFactoryNotFound", err)
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("error = %v, want os.ErrNotExist", err)
 	}
 	if got := err.Error(); !containsAll(got, `resolve named factory "missing"`, "project root", "global root") {
 		t.Fatalf("expected cross-root not-found context, got %v", err)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_RejectsInvalidCanonicalName(t *testing.T) {
+	_, err := ResolveNamedFactoryAcrossRoots(t.TempDir(), t.TempDir(), "@you")
+	if err == nil {
+		t.Fatal("expected invalid named factory name to fail")
+	}
+	if !errors.Is(err, ErrInvalidNamedFactoryName) {
+		t.Fatalf("error = %v, want ErrInvalidNamedFactoryName", err)
+	}
+	if errors.Is(err, ErrNamedFactoryNotFound) {
+		t.Fatalf("error = %v, did not want ErrNamedFactoryNotFound", err)
+	}
+	if got := err.Error(); !containsAll(got, `invalid named factory name "@you"`, `must be scoped as @scope/name`) {
+		t.Fatalf("expected invalid-name error context, got %v", err)
 	}
 }
 
@@ -166,6 +185,22 @@ func TestResolveNamedFactoryAcrossRoots_ReportsCorruptMaterializedBuiltInTarget(
 	}
 	if got := err.Error(); !containsAll(got, `materialize built-in named factory "@you/tts"`, "existing target invalid", "find factory config") {
 		t.Fatalf("expected corrupt-target resolution error, got %v", err)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_ReturnsNotFoundForUnknownBuiltInName(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	_, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/missing")
+	if err == nil {
+		t.Fatal("expected unknown built-in name to fail")
+	}
+	if !errors.Is(err, ErrNamedFactoryNotFound) {
+		t.Fatalf("error = %v, want ErrNamedFactoryNotFound", err)
+	}
+	if got := err.Error(); strings.Contains(got, "materialize built-in named factory") || !containsAll(got, `resolve named factory "@you/missing"`, "project root", "global root") {
+		t.Fatalf("expected deterministic not-found error, got %v", err)
 	}
 }
 
