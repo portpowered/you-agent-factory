@@ -85,9 +85,8 @@ describe("prompt-editor neutral surface roles", () => {
   it("monaco-prompt-editor fallback helper and body copy use text-on-surface-variant", () => {
     const source = readPromptEditorSource("monaco-prompt-editor.tsx");
 
-    expect(source).toContain(
-      '<DashboardText className="m-0 text-on-surface-variant" variant="supporting">',
-    );
+    expect(source).toContain('className="m-0 text-on-surface-variant"');
+    expect(source).toContain('variant="supporting"');
     expect(source).toMatch(
       /<DashboardCode\s+as="pre"\s+className="m-0 whitespace-pre-wrap break-words text-on-surface-variant/,
     );
@@ -104,9 +103,8 @@ describe("prompt-editor neutral surface roles", () => {
   it("monaco-guard-selector-editor fallback uses text-on-surface-variant helper and text-on-surface textarea", () => {
     const source = readPromptEditorSource("monaco-guard-selector-editor.tsx");
 
-    expect(source).toContain(
-      '<DashboardText className="m-0 text-on-surface-variant" variant="supporting">',
-    );
+    expect(source).toContain('className="m-0 text-on-surface-variant"');
+    expect(source).toContain('variant="supporting"');
     expect(source).toContain('variant="plain"');
     expectNoForbiddenTransitionalNeutralText(source);
   });

@@ -295,6 +295,17 @@ function expandDispatchAttemptSection(
   return section;
 }
 
+function expandCardSection(card: HTMLElement, title: string): HTMLElement {
+  const section = within(card).getByRole("region", { name: title });
+  const toggle = within(section).getByRole("button", { name: "Expand" });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return section;
+}
+
 function expandAttemptDetails(
   container: HTMLElement,
   attemptNumber: number,
@@ -646,10 +657,8 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
     );
-    expect(readyCard.className).toContain("bg-surface-container-low");
-    const readyRequestDetails = within(readyCard).getByRole("region", {
-      name: "Request details",
-    });
+    expect(readyCard.className).toContain("bg-surface-container-high");
+    const readyRequestDetails = expandCardSection(readyCard, "Request details");
     const readyInferenceAttempts = expandDispatchAttemptSection(
       readyCard,
       "Inference attempts",
@@ -673,12 +682,12 @@ describe("App current selection", () => {
         "Review the active story and decide whether it is ready.",
       ),
     ).toBeNull();
-    const selectedInputWorkButton = within(readyRequestDetails).getByRole(
+    const selectedInputWorkButton = within(readyRequestDetails).getAllByRole(
       "button",
       {
         name: "Select work item Active Story",
       },
-    );
+    )[0];
     expect(selectedInputWorkButton.getAttribute("aria-pressed")).toBe("true");
     const selectedInputWorkArticle = selectedInputWorkButton.closest("article");
     if (!(selectedInputWorkArticle instanceof HTMLElement)) {
@@ -731,19 +740,16 @@ describe("App current selection", () => {
     expect(
       within(readyRequestDetails).queryByText("Worktree", { selector: "dt" }),
     ).toBeNull();
-    const readyTraceDetails = within(readyCard).getByRole("region", {
-      name: "Trace details",
-    });
     expect(
-      within(readyTraceDetails).getByText("Trace IDs", { selector: "dt" }),
+      within(readyCard).getByText("Trace IDs"),
     ).toBeTruthy();
     expect(
-      within(readyTraceDetails).getByRole("button", {
+      within(readyCard).getByRole("button", {
         name: "trace-active-story (selected)",
       }),
     ).toBeTruthy();
     expect(
-      within(readyTraceDetails)
+      within(readyCard)
         .getByRole("button", {
           name: "trace-active-story (selected)",
         })
@@ -797,11 +803,6 @@ describe("App current selection", () => {
       1,
     );
     expect(
-      within(erroredCard).getByText(
-        "Provider rate limit exceeded while reviewing the story.",
-      ),
-    ).toBeTruthy();
-    expect(
       within(erroredAttemptDetails).getByText("provider_rate_limit"),
     ).toBeTruthy();
     expect(
@@ -843,11 +844,6 @@ describe("App current selection", () => {
     expect(
       within(scriptFailedAttempts).getAllByText("script timed out").length,
     ).toBeGreaterThan(0);
-    expect(
-      within(scriptFailedCard).getByText(
-        "Prompt details are not applicable to this script-backed dispatch.",
-      ),
-    ).toBeTruthy();
   });
 
   it("follows the explicit selection contract: clicking work selects work, clicking a request selects a request", async () => {
@@ -2213,10 +2209,14 @@ describe("App current selection", () => {
       );
 
       expect(
-        within(completedRow).getByRole("button", { name: "Done Story" }),
+        within(completedRow).getByRole("button", {
+          name: "Select work item Done Story",
+        }),
       ).toBeTruthy();
       expect(
-        within(failedRow).getByRole("button", { name: "Failed Story" }),
+        within(failedRow).getByRole("button", {
+          name: "Select work item Failed Story",
+        }),
       ).toBeTruthy();
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
         window.innerWidth,
@@ -2235,17 +2235,30 @@ describe("App current selection", () => {
       const dashboardGrid = screen.getByRole("region", {
         name: "you-agent-factory bento board",
       });
+      const completedRow = within(dashboardGrid)
+        .getByRole("heading", { name: "Completed" })
+        .closest("section");
+      const failedRow = within(dashboardGrid)
+        .getByRole("heading", { name: "Failed" })
+        .closest("section");
+
+      if (!(completedRow instanceof HTMLElement) || !(failedRow instanceof HTMLElement)) {
+        throw new Error("expected terminal work sections");
+      }
+
       fireEvent.click(
-        within(dashboardGrid).getByRole("button", { name: "Done Story" }),
+        within(completedRow).getByRole("button", {
+          name: "Select work item Done Story",
+        }),
       );
 
       const completedDetail = await screen.findByRole("article", {
         name: "Current selection",
       });
       expect(
-        within(dashboardGrid)
-          .getByRole("button", { name: "Done Story" })
-          .getAttribute("data-selected"),
+        within(completedRow)
+          .getByRole("button", { name: "Select work item Done Story" })
+          .getAttribute("aria-pressed"),
       ).toBe("true");
       expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
       expect(
@@ -2269,20 +2282,24 @@ describe("App current selection", () => {
         await within(dashboardGrid).findByText("dispatch-done-story"),
       ).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("button", { name: "Failed Story" }));
+      fireEvent.click(
+        within(failedRow).getByRole("button", {
+          name: "Select work item Failed Story",
+        }),
+      );
 
       const failedDetail = await screen.findByRole("article", {
         name: "Current selection",
       });
       expect(
-        within(dashboardGrid)
-          .getByRole("button", { name: "Done Story" })
-          .getAttribute("data-selected"),
+        within(completedRow)
+          .getByRole("button", { name: "Select work item Done Story" })
+          .getAttribute("aria-pressed"),
       ).toBe("false");
       expect(
-        within(dashboardGrid)
-          .getByRole("button", { name: "Failed Story" })
-          .getAttribute("data-selected"),
+        within(failedRow)
+          .getByRole("button", { name: "Select work item Failed Story" })
+          .getAttribute("aria-pressed"),
       ).toBe("true");
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
       expect(

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { dashboardWorkstationRequestFixtures } from "../../../components/dashboard/fixtures";
@@ -139,6 +139,10 @@ function renderDispatchStartedAt(
     throw new Error("expected dispatch history card");
   }
 
+  const expandLabel = locale === "zh-CN" ? "展开" : "Expand";
+  fireEvent.click(
+    within(dispatchCard).getAllByRole("button", { name: expandLabel })[0]!,
+  );
   expect(
     within(getDetailRow(dispatchCard, startedAtLabel)).getByText(expected),
   ).toBeTruthy();

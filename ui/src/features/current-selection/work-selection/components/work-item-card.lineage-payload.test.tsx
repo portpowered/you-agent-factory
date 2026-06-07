@@ -54,6 +54,17 @@ function requestDetailsRegion() {
   );
 }
 
+function expandRequestDetails() {
+  const requestDetails = requestDetailsRegion();
+  const toggle = requestDetails.getByRole("button", { name: "Expand" });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return requestDetailsRegion();
+}
+
 describe("WorkItemDetailCard lineage payload rendering", () => {
   it("renders selected-work dispatch request payloads inline from lineage snapshots", () => {
     const { dispatchID, workItem } = getSelectedWorkItemFixture();
@@ -87,7 +98,7 @@ describe("WorkItemDetailCard lineage payload rendering", () => {
       }),
     });
 
-    const requestDetails = requestDetailsRegion();
+    const requestDetails = expandRequestDetails();
 
     expect(requestDetails.getByText("Consumed payload")).toBeTruthy();
     expect(
@@ -95,8 +106,11 @@ describe("WorkItemDetailCard lineage payload rendering", () => {
         "Historically consumed payload for selected work dispatch",
       ),
     ).toBeTruthy();
-    expect(requestDetails.getByText("State: review")).toBeTruthy();
-    expect(requestDetails.getByText("Work type: story")).toBeTruthy();
+    expect(
+      requestDetails.getByRole("button", {
+        name: "Select work item Blocked Story",
+      }),
+    ).toBeTruthy();
   });
 });
 
@@ -130,7 +144,7 @@ describe("WorkItemDetailCard lineage payload selection", () => {
       }),
     });
 
-    const requestDetails = requestDetailsRegion();
+    const requestDetails = expandRequestDetails();
 
     expect(
       requestDetails.getByText(

@@ -29,11 +29,10 @@ describe("EditableConfigurationSection async states", () => {
     const sectionBody = document.getElementById(
       expandButton.getAttribute("aria-controls") ?? "",
     );
-    expect(sectionBody?.className).toContain("bg-surface-container-high");
-    expect(sectionBody?.className).toContain("rounded-2xl");
-    expect(
-      screen.getByLabelText("Workstation name").closest(".rounded-2xl"),
-    ).toBe(sectionBody);
+    expect(sectionBody?.className).toContain("grid");
+    const form = screen.getByLabelText("Workstation name").closest("form");
+    expect(form).not.toBeNull();
+    expect(sectionBody?.contains(form)).toBe(true);
   });
 
   it("shows loading, error, and empty copy when expanded", () => {

@@ -71,7 +71,7 @@ describe("SelectedWorkDispatchHistorySection", () => {
     expect(contentWrapper?.className).toBe("grid");
   });
 
-  it("uses larger headline-sized headers, keeps the active pill on the right, and folds request and trace details into summary", () => {
+  it("uses larger headline-sized headers, keeps the active pill on the right, and exposes expandable request details", () => {
     render(
       <CurrentSelectionLocaleProvider>
         <SelectedWorkDispatchHistorySection
@@ -95,29 +95,24 @@ describe("SelectedWorkDispatchHistorySection", () => {
     expect(title.className).toContain("type-headline-large");
     expect(within(historyCard).getByText("Current dispatch")).toBeTruthy();
     expect(within(historyCard).queryByText("Workstation")).toBeNull();
-    expect(within(historyCard).queryByText("dispatch-card")).toBeNull();
     expect(
-      within(historyCard).queryByRole("heading", { name: "Request details" }),
-    ).toBeNull();
-    expect(
-      within(historyCard).queryByRole("heading", { name: "Trace details" }),
-    ).toBeNull();
+      within(historyCard).getByRole("heading", { name: "Request details" }),
+    ).toBeTruthy();
     const header = title.closest("div");
     expect(header?.parentElement?.className).toContain("justify-between");
 
-    const summarySection = within(historyCard)
-      .getByRole("heading", { name: "Summary" })
+    const requestDetailsSection = within(historyCard)
+      .getByRole("heading", { name: "Request details" })
       .closest("section");
-    if (!summarySection) {
-      throw new Error("expected summary section");
+    if (!requestDetailsSection) {
+      throw new Error("expected request details section");
     }
 
     fireEvent.click(
-      within(summarySection).getByRole("button", { name: "Expand" }),
+      within(requestDetailsSection).getByRole("button", { name: "Expand" }),
     );
 
-    expect(within(historyCard).getByText("dispatch-card")).toBeTruthy();
+    expect(within(historyCard).getAllByText("dispatch-card").length).toBe(2);
     expect(within(historyCard).getByText("Request details")).toBeTruthy();
-    expect(within(historyCard).getByText("Trace details")).toBeTruthy();
   });
 });

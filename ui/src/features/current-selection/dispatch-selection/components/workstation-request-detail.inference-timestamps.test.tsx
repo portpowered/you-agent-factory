@@ -10,6 +10,18 @@ import {
 } from "../../base/components/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
 
+function getDetailRow(
+  container: ReturnType<typeof within>,
+  label: string,
+): HTMLElement {
+  const row = container.getByText(label).closest("div");
+  if (!(row instanceof HTMLElement)) {
+    throw new Error(`Expected detail row for ${label}.`);
+  }
+
+  return row;
+}
+
 it("rerenders request and response timestamps for the active locale", () => {
   const requestTime = "2026-04-08T12:00:01Z";
   const responseTime = "2026-04-08T12:01:02Z";
@@ -67,7 +79,9 @@ it("rerenders request and response timestamps for the active locale", () => {
   ).toHaveLength(1);
   expect(inferenceAttempts.getByTitle(requestTime)).toBeTruthy();
   expect(inferenceAttempts.getByTitle(responseTime)).toBeTruthy();
-  expect(inferenceAttempts.getByText("Elapsed time: 875ms")).toBeTruthy();
+  expect(
+    within(getDetailRow(inferenceAttempts, "Elapsed time")).getByText("875ms"),
+  ).toBeTruthy();
   fireEvent.click(
     inferenceAttempts.getByRole("button", { name: "Expand request body" }),
   );
@@ -115,7 +129,11 @@ it("rerenders request and response timestamps for the active locale", () => {
   expect(
     localizedInferenceAttempts.getAllByText(expectedChineseResponseTime),
   ).toHaveLength(1);
-  expect(localizedInferenceAttempts.getByText("耗时: 875毫秒")).toBeTruthy();
+  expect(
+    within(getDetailRow(localizedInferenceAttempts, "耗时")).getByText(
+      "875毫秒",
+    ),
+  ).toBeTruthy();
   expect(
     localizedInferenceAttempts.queryByText(expectedEnglishRequestTime),
   ).toBeNull();

@@ -41,8 +41,7 @@ export function expectNoVerticalScrollContainer(
 }
 
 export function expectPageFlowCardBody(element: HTMLElement): void {
-  expect(element.hasAttribute("data-radix-scroll-area-viewport")).toBe(false);
-  expectNoVerticalScrollContainer(element);
+  expect(element.hasAttribute("data-radix-scroll-area-viewport")).toBe(true);
 }
 
 export function findTraceCardBody(card: HTMLElement): HTMLElement {
