@@ -183,9 +183,7 @@ describe("App streamed replay rendering flows", () => {
     const failedDetail = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(
-      within(failedDetail).getAllByText("Blocked Analysis Story").length,
-    ).toBeGreaterThan(0);
+    expect(failedDetail.textContent).toContain("Blocked Analysis Story");
     expect(
       within(failedDetail).queryByText(
         "Terminal summaries are reconstructed from retained runtime state.",

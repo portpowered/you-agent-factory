@@ -29,7 +29,8 @@ describe("EditableConfigurationSection async states", () => {
     const sectionBody = document.getElementById(
       expandButton.getAttribute("aria-controls") ?? "",
     );
-    expect(sectionBody?.className).toContain("grid");
+    expect(sectionBody).not.toBeNull();
+    expect(sectionBody?.className ?? "").toContain("grid");
     const form = screen.getByLabelText("Workstation name").closest("form");
     expect(form).not.toBeNull();
     expect(sectionBody?.contains(form)).toBe(true);
