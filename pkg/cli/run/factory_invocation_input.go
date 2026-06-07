@@ -21,10 +21,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	InvocationErrorCodeAmbiguousInput = "RUN_INVOCATION_AMBIGUOUS_INPUT"
-)
-
 type InvocationInputSource string
 
 const (
