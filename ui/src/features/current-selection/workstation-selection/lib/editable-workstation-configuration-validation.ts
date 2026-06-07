@@ -81,17 +81,15 @@ export function validateEditableWorkstationDraft(
   const requiresWorkerAssignment =
     selectedEditableValues == null ||
     workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: draft.workstationType,
     });
-  const isModelInvoke =
-    selectedEditableValues != null &&
-    isModelInvokeWorkstationType(selectedEditableValues.workstationType);
+  const isModelInvoke = isModelInvokeWorkstationType(draft.workstationType);
   const promptIsRequired =
     requiresWorkerAssignment &&
     !isModelInvoke &&
     workstationBehaviorRequiresPrompt(draft.behavior);
 
-  if (isModelInvoke) {
+  if (isModelInvoke && selectedEditableValues != null) {
     appendModelInvokeValidationErrors(
       validationErrors,
       draft,
@@ -244,7 +242,7 @@ export function resolveWorkerOptionsState(
 
   if (
     !workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: draft.workstationType,
     })
   ) {
     return {
@@ -253,13 +251,11 @@ export function resolveWorkerOptionsState(
     };
   }
 
-  const workerOptions = isModelInvokeWorkstationType(
-    selectedEditableValues.workstationType,
-  )
+  const workerOptions = isModelInvokeWorkstationType(draft.workstationType)
     ? selectedEditableValues.modelInvokeWorkerOptions
     : selectedEditableValues.workerOptions;
   const workerOptionsEmptyMessage = isModelInvokeWorkstationType(
-    selectedEditableValues.workstationType,
+    draft.workstationType,
   )
     ? messages.editableConfigurationModelInvokeWorkerOptionsEmpty
     : messages.editableConfigurationWorkerOptionsEmpty;

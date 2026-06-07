@@ -24,9 +24,11 @@ import {
   resolveModelInvokeDraftForOperationChange,
   resolveModelInvokeDraftForWorkerChange,
 } from "../editing/editable-workstation-model-invoke-mutators";
+import { resolveDraftForWorkstationTypeChange } from "../editing/editable-workstation-type-mutators";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import { resolveModelInvokeOperationOptionsState } from "../lib/editable-workstation-model-invoke-options";
 import type { RunnerID } from "../editing/runner-metadata";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation-type";
 import type {
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
@@ -136,9 +138,18 @@ function createEditableWorkstationDraftHandlers(
     onRunnerChange: (value: RunnerID | null) => {
       updateDraft((draft) => ({ ...draft, runnerName: value }));
     },
+    onWorkstationTypeChange: (value: EditableWorkstationType) => {
+      updateDraft((draft) =>
+        resolveDraftForWorkstationTypeChange(
+          draft,
+          value,
+          selectedEditableValues,
+        ),
+      );
+    },
     onWorkerChange: (value: string) => {
       updateDraft((draft) =>
-        isModelInvokeWorkstationType(selectedEditableValues.workstationType)
+        isModelInvokeWorkstationType(draft.workstationType)
           ? resolveModelInvokeDraftForWorkerChange(
               draft,
               value,
@@ -195,9 +206,9 @@ export function buildReadyEditableWorkstationConfigurationState({
     resolvedValidationErrors,
   );
   const promptValidationBlocksPendingFactory =
-    !isModelInvokeWorkstationType(selectedEditableValues.workstationType) &&
+    !isModelInvokeWorkstationType(sessionState.draft.workstationType) &&
     workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: sessionState.draft.workstationType,
     }) &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior) &&
     sessionState.draft.prompt.trim().length > 0 &&

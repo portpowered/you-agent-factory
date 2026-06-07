@@ -35,6 +35,7 @@ import type { EditableModelInvokeBindingDraft } from "./workstation-model-invoke
 import {
   type EditableWorkstationType,
   resolveEditableWorkstationType,
+  resolveEditableWorkstationTypeOptions,
 } from "./workstation-type";
 import { workstationRequiresWorkerAssignment } from "./workstation-worker-assignment";
 
@@ -96,6 +97,7 @@ export interface EditableWorkstationValues {
   workstationName: string;
   workstationOptions: string[];
   workstationType: EditableWorkstationType;
+  workstationTypeOptions: readonly EditableWorkstationType[];
 }
 
 export interface EditableWorkstationDraft {
@@ -109,6 +111,7 @@ export interface EditableWorkstationDraft {
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
+  workstationType: EditableWorkstationType;
 }
 
 export function resolveEditableWorkstationValues(
@@ -177,6 +180,7 @@ export function resolveEditableWorkstationValues(
     workstationName: workstation.name,
     workstationOptions: resolveFactoryWorkstationNameOptions(factory),
     workstationType,
+    workstationTypeOptions: resolveEditableWorkstationTypeOptions(workstationType),
   };
 }
 
@@ -203,6 +207,7 @@ export function editableWorkstationDraftFromValues(
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
+    workstationType: values.workstationType,
   };
 }
 
@@ -223,7 +228,7 @@ export function applyEditableWorkstationDraft(
   const trimmedName = draft.name.trim();
   const previousWorkstationName = workstation.name;
 
-  if (!workstationRequiresWorkerAssignment(workstation)) {
+  if (!workstationRequiresWorkerAssignment({ type: draft.workstationType })) {
     return applyWorkstationNameChangeToFactory(
       factory,
       workstationIndex,
@@ -241,8 +246,7 @@ export function applyEditableWorkstationDraft(
     return null;
   }
 
-  const workstationType = resolveEditableWorkstationType(workstation);
-  const nextWorkstation = isModelInvokeWorkstationType(workstationType)
+  const nextWorkstation = isModelInvokeWorkstationType(draft.workstationType)
     ? buildModelInvokeWorkstationFromDraft(workstation, draft, trimmedName)
     : buildPromptOrientedWorkstationFromDraft(workstation, draft, trimmedName);
 
@@ -265,6 +269,8 @@ function buildPromptOrientedWorkstationFromDraft(
     cron: _existingCron,
     guards: _existingGuards,
     inputs: _existingInputs,
+    operation: _operation,
+    operationBindings: _operationBindings,
     runner: _existingRunner,
     ...workstationWithoutCronRunner
   } = workstation;
@@ -274,6 +280,7 @@ function buildPromptOrientedWorkstationFromDraft(
     body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     name: trimmedName,
+    type: draft.workstationType,
     worker: draft.workerName,
     ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
     ...(draft.runnerName ? { runner: draft.runnerName } : {}),
@@ -292,13 +299,21 @@ function buildModelInvokeWorkstationFromDraft(
   draft: EditableWorkstationDraft,
   trimmedName: string,
 ): CanonicalWorkstation {
+  const {
+    body: _body,
+    cron: _cron,
+    operation: _existingOperation,
+    operationBindings: _existingBindings,
+    runner: _runner,
+    ...workstationWithoutPromptOrientedFields
+  } = workstation;
   const trimmedOperation = draft.operation.trim();
   const operationBindings = buildCanonicalModelInvokeBindingsFromDraft(
     draft.operationBindings,
   );
 
   return {
-    ...workstation,
+    ...workstationWithoutPromptOrientedFields,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     name: trimmedName,
     type: "MODEL_INVOKE",

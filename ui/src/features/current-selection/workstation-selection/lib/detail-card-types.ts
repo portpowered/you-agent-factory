@@ -108,7 +108,8 @@ export type EditableWorkstationOverwriteField =
   | "operationBindings"
   | "prompt"
   | "runner"
-  | "worker";
+  | "worker"
+  | "workstationType";
 
 export type EditableWorkstationWorkerOptionsState =
   | { status: "ready"; options: string[] }
@@ -155,6 +156,7 @@ export type EditableWorkstationConfigurationState =
       onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;
       onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => void;
       onRunnerChange: (value: RunnerID | null) => void;
+      onWorkstationTypeChange: (value: EditableWorkstationValues["workstationType"]) => void;
       onWorkerChange: (value: string) => void;
       operationOptionsState: EditableWorkstationOperationOptionsState;
       workstationOptionsState: EditableWorkstationWorkstationOptionsState;

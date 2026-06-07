@@ -39,6 +39,28 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
 };
 
 describe("factory graph editor additions model operations", () => {
+  it("rejects model workers with zero operations", () => {
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          argsText: "",
+          command: "",
+          kind: "worker",
+          model: "",
+          modelProvider: "CURSOR",
+          name: "tts-worker",
+          operations: [],
+          workerType: "MODEL_WORKER",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toMatchObject({
+      modelOperations: {
+        summary: "Add at least one model-invocation operation.",
+      },
+    });
+  });
+
   it("rejects invalid model operation contracts on model workers", () => {
     const invalidOperation = createEmptyFactoryGraphAddModelOperationDraft();
     invalidOperation.name = "tts";

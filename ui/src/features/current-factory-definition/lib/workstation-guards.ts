@@ -304,6 +304,7 @@ export function editableWorkstationDraftsEqual(
 ): boolean {
   return (
     left.behavior === right.behavior &&
+    left.workstationType === right.workstationType &&
     editableWorkstationDraftNamesEqual(left, right) &&
     left.operation === right.operation &&
     editableModelInvokeBindingsDraftEqual(

@@ -15,6 +15,8 @@ import {
 import { formatList } from "../../../../components/ui/formatters";
 import type { WorkstationLevelGuard } from "../../../current-factory-definition/lib/workstation-guards";
 import { isModelInvokeWorkstationType } from "../../../current-factory-definition/lib/workstation-model-invoke";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation-type";
+import { supportsEditableWorkstationTypeConversion } from "../../../current-factory-definition/lib/workstation-type";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
@@ -120,11 +122,12 @@ function EditableConfigurationReadyForm({
     validationErrors,
   };
   const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
-    type: state.initialValues.workstationType,
+    type: state.draft.workstationType,
   });
-  const isModelInvoke = isModelInvokeWorkstationType(
-    state.initialValues.workstationType,
-  );
+  const isModelInvoke = isModelInvokeWorkstationType(state.draft.workstationType);
+  const showWorkstationTypeField =
+    requiresWorkerAssignment &&
+    supportsEditableWorkstationTypeConversion(state.initialValues.workstationType);
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
@@ -159,6 +162,25 @@ function EditableConfigurationReadyForm({
           />
         }
       />
+      {showWorkstationTypeField ? (
+        <EditableConfigurationField
+          fieldId="editable-workstation-type"
+          input={
+            <EditableConfigurationWorkstationTypeInput
+              messages={messages}
+              state={renderState}
+            />
+          }
+          label={messages.workstationTypeLabel}
+          supportingContent={
+            <EditableConfigurationServerChangedHint
+              fieldName="workstationType"
+              messages={messages}
+              state={state}
+            />
+          }
+        />
+      ) : null}
       {isModelInvoke ? (
         <EditableConfigurationModelInvokeFields
           messages={messages}
@@ -383,6 +405,35 @@ function EditableConfigurationWorkerInput({
       {state.workerOptionsState.options.map((workerName) => (
         <option key={workerName} value={workerName}>
           {valueOrFallback(workerName, messages.notConfiguredValue)}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+function EditableConfigurationWorkstationTypeInput({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  return (
+    <Select
+      id="editable-workstation-type"
+      onChange={(event) =>
+        state.onWorkstationTypeChange(
+          event.target.value as EditableWorkstationType,
+        )
+      }
+      value={state.draft.workstationType}
+    >
+      {state.initialValues.workstationTypeOptions.map((workstationType) => (
+        <option key={workstationType} value={workstationType}>
+          {messages.localizeWorkstationType(workstationType)}
         </option>
       ))}
     </Select>

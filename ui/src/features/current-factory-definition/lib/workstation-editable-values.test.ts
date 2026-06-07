@@ -76,6 +76,7 @@ describe("resolveEditableWorkstationValues", () => {
       workstationName: "Review",
       workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
+      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
     });
   });
 
@@ -219,6 +220,7 @@ describe("resolveEditableWorkstationValues", () => {
         prompt: "",
         runnerName: null,
         workerName: "tts-worker",
+        workstationType: "MODEL_INVOKE",
       },
     );
 
@@ -242,6 +244,84 @@ describe("resolveEditableWorkstationValues", () => {
       factory.workstations?.[1],
     );
     expect(updatedFactory?.workers).toEqual(factory.workers);
+  });
+
+  it("converts a prompt-oriented workstation draft into MODEL_INVOKE on save", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "tts-factory",
+      workers: [
+        {
+          name: "tts-worker",
+          type: "MODEL_WORKER",
+          operations: [
+            {
+              name: "TTS",
+              inputs: [
+                { name: "text", contentTypes: ["TEXT"], required: true },
+              ],
+              outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+            },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          body: "Narrate the story.",
+          name: "speak-story",
+          type: "MODEL_WORKSTATION",
+          worker: "tts-worker",
+          inputs: [{ state: "init", workType: "story" }],
+          outputs: [{ state: "complete", workType: "story" }],
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      {
+        ...selectedNode,
+        transition_id: "speak-story",
+        workstation_name: "speak-story",
+      },
+      {
+        behavior: "STANDARD",
+        cron: null,
+        guards: [],
+        inputs: [{ guards: [], state: "init", workType: "story" }],
+        name: "speak-story",
+        operation: "TTS",
+        operationBindings: [
+          {
+            slot: "text",
+            configText: "",
+            defaultContentText: "",
+            selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+          },
+        ],
+        prompt: "Narrate the story.",
+        runnerName: null,
+        workerName: "tts-worker",
+        workstationType: "MODEL_INVOKE",
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]).toEqual({
+      name: "speak-story",
+      type: "MODEL_INVOKE",
+      worker: "tts-worker",
+      operation: "TTS",
+      operationBindings: [
+        {
+          slot: "text",
+          selector: { label: "utterance", type: "TEXT" },
+        },
+      ],
+      inputs: [{ state: "init", workType: "story" }],
+      outputs: [{ state: "complete", workType: "story" }],
+    });
+    expect(updatedFactory?.workstations?.[0]).not.toHaveProperty("body");
+    expect(updatedFactory?.workstations?.[0]).not.toHaveProperty("runner");
   });
 
   it("defaults omitted workstation type to MODEL_WORKSTATION", () => {
@@ -374,6 +454,7 @@ describe("resolveEditableWorkstationValues", () => {
       workstationName: "Review",
       workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
+      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
     });
   });
 
@@ -555,6 +636,7 @@ describe("resolveEditableWorkstationValues", () => {
       workstationName: "Review",
       workstationOptions: ["Review", "Plan", "Code"],
       workstationType: "MODEL_WORKSTATION",
+      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
     });
   });
 
@@ -809,9 +891,12 @@ describe("resolveEditableWorkstationValues", () => {
         guards: [],
         inputs: [],
         name: "Move",
+        operation: "",
+        operationBindings: [],
         prompt: "Draft prompt must not apply.",
         runnerName: "codex",
         workerName: "missing-worker",
+        workstationType: "LOGICAL_MOVE",
       },
     );
 

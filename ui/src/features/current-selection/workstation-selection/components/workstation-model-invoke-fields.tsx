@@ -31,17 +31,6 @@ export function EditableConfigurationModelInvokeFields({
   return (
     <>
       <EditableConfigurationField
-        fieldId="editable-workstation-type"
-        input={
-          <DashboardText className="m-0 text-sm text-on-surface" variant="body">
-            {messages.localizeWorkstationType(
-              state.initialValues.workstationType,
-            )}
-          </DashboardText>
-        }
-        label={messages.workstationTypeLabel}
-      />
-      <EditableConfigurationField
         errorMessage={validationErrors.workerName}
         fieldId="editable-workstation-worker"
         input={

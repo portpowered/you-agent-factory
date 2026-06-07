@@ -109,6 +109,7 @@ const modelWorkstationValues = {
   workstationName: "Review",
   workstationOptions: ["Review"],
   workstationType: "MODEL_WORKSTATION" as const,
+  workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"] as const,
 };
 
 const baseDraft: EditableWorkstationDraft = {
@@ -122,6 +123,7 @@ const baseDraft: EditableWorkstationDraft = {
   prompt: "",
   runnerName: "gemini",
   workerName: "",
+  workstationType: "MODEL_WORKSTATION",
 };
 
 describe("validateEditableWorkstationDraft workstation name", () => {
@@ -161,7 +163,7 @@ describe("validateEditableWorkstationDraft workstation name", () => {
 describe("validateEditableWorkstationDraft logical move", () => {
   it("skips worker and prompt requirements for LOGICAL_MOVE workstations", () => {
     const errors = validateEditableWorkstationDraft(
-      baseDraft,
+      { ...baseDraft, workstationType: "LOGICAL_MOVE" },
       {
         behavior: "STANDARD",
         behaviorOptions: ["STANDARD"],
@@ -169,6 +171,10 @@ describe("validateEditableWorkstationDraft logical move", () => {
         factoryRunnerName: "codex",
         guards: [],
         inputs: [],
+        modelInvokeWorkerOptions: [],
+        modelOperationsByWorkerName: {},
+        operation: "",
+        operationBindings: [],
         prompt: "",
         resolvedRunnerSelection: {
           runnerId: "gemini",
@@ -186,6 +192,7 @@ describe("validateEditableWorkstationDraft logical move", () => {
         workstationName: "Move",
         workstationOptions: ["Move"],
         workstationType: "LOGICAL_MOVE",
+        workstationTypeOptions: ["LOGICAL_MOVE"],
       },
       { status: "idle" },
       messages,
@@ -200,6 +207,7 @@ describe("validateEditableWorkstationDraft logical move", () => {
       {
         ...baseDraft,
         guards: [{ type: "VISIT_COUNT", workstation: "", maxVisits: 0 }],
+        workstationType: "LOGICAL_MOVE",
       },
       {
         behavior: "STANDARD",
@@ -251,12 +259,17 @@ describe("validateEditableWorkstationDraft model invoke", () => {
       ],
     },
     workstationType: "MODEL_INVOKE" as const,
+    workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"] as const,
+  };
+  const modelInvokeDraft = {
+    ...baseDraft,
+    workstationType: "MODEL_INVOKE" as const,
   };
 
   it("requires operation but not prompt for MODEL_INVOKE drafts", () => {
     const errors = validateEditableWorkstationDraft(
       {
-        ...baseDraft,
+        ...modelInvokeDraft,
         workerName: "tts-worker",
         prompt: "",
       },
@@ -274,7 +287,7 @@ describe("validateEditableWorkstationDraft model invoke", () => {
   it("blocks save when required model-invoke bindings are empty", () => {
     const errors = validateEditableWorkstationDraft(
       {
-        ...baseDraft,
+        ...modelInvokeDraft,
         workerName: "tts-worker",
         operation: "TTS",
         operationBindings: [
@@ -319,7 +332,7 @@ describe("validateEditableWorkstationDraft model invoke", () => {
     };
     const errors = validateEditableWorkstationDraft(
       {
-        ...baseDraft,
+        ...modelInvokeDraft,
         workerName: "tts-worker",
         operation: "TTS",
         operationBindings: [
@@ -453,7 +466,11 @@ describe("validateEditableWorkstationDraft model workstation", () => {
 describe("resolveWorkerOptionsState logical move", () => {
   it("returns ready options without worker membership checks for LOGICAL_MOVE", () => {
     const state = resolveWorkerOptionsState(
-      { ...baseDraft, workerName: "missing-worker" },
+      {
+        ...baseDraft,
+        workerName: "missing-worker",
+        workstationType: "LOGICAL_MOVE",
+      },
       {
         behavior: "STANDARD",
         behaviorOptions: ["STANDARD"],
@@ -461,6 +478,10 @@ describe("resolveWorkerOptionsState logical move", () => {
         factoryRunnerName: "codex",
         guards: [],
         inputs: [],
+        modelInvokeWorkerOptions: [],
+        modelOperationsByWorkerName: {},
+        operation: "",
+        operationBindings: [],
         prompt: "",
         resolvedRunnerSelection: {
           runnerId: "gemini",
@@ -478,6 +499,7 @@ describe("resolveWorkerOptionsState logical move", () => {
         workstationName: "Move",
         workstationOptions: ["Move"],
         workstationType: "LOGICAL_MOVE",
+        workstationTypeOptions: ["LOGICAL_MOVE"],
       },
       messages,
     );

@@ -52,9 +52,11 @@ export function useEditableWorkstationConfigurationState(
       selectedNode,
       selection,
     );
+  const draftWorkstationType =
+    sessionState?.draft.workstationType ?? selectedEditableValues?.workstationType;
   const usesPromptOrientedEditing =
-    selectedEditableValues != null &&
-    workstationUsesPromptOrientedEditing(selectedEditableValues.workstationType);
+    draftWorkstationType != null &&
+    workstationUsesPromptOrientedEditing(draftWorkstationType);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedEditableValues?.workstationName,
     isNodeSelection && selectedEditableValues != null && usesPromptOrientedEditing,
@@ -63,9 +65,10 @@ export function useEditableWorkstationConfigurationState(
     isNodeSelection &&
     sessionState != null &&
     selectedEditableValues != null &&
-    !isModelInvokeWorkstationType(selectedEditableValues.workstationType) &&
+    draftWorkstationType != null &&
+    !isModelInvokeWorkstationType(draftWorkstationType) &&
     workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: draftWorkstationType,
     }) &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(

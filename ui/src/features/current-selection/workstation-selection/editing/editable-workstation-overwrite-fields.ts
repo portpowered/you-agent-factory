@@ -43,6 +43,12 @@ export function resolveEditableWorkstationOverwriteFields(
     fields.push("worker");
   }
   if (
+    sessionStartDraft.workstationType !== latestDefinitionDraft.workstationType &&
+    draft.workstationType !== latestDefinitionDraft.workstationType
+  ) {
+    fields.push("workstationType");
+  }
+  if (
     sessionStartDraft.operation !== latestDefinitionDraft.operation &&
     draft.operation !== latestDefinitionDraft.operation
   ) {
@@ -165,6 +171,7 @@ export function formatEditableOverwriteFieldLabels(
     | "runnerFieldLabel"
     | "workerFieldLabel"
     | "workstationNameFieldLabel"
+    | "workstationTypeLabel"
   >,
 ) {
   return formatList(
@@ -187,11 +194,14 @@ function fieldLabel(
     | "runnerFieldLabel"
     | "workerFieldLabel"
     | "workstationNameFieldLabel"
+    | "workstationTypeLabel"
   >,
 ) {
   switch (field) {
     case "name":
       return messages.workstationNameFieldLabel.toLowerCase();
+    case "workstationType":
+      return messages.workstationTypeLabel.toLowerCase();
     case "behavior":
       return messages.kindLabel.toLowerCase();
     case "prompt":

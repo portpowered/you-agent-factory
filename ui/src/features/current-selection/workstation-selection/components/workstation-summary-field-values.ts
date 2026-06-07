@@ -11,7 +11,7 @@ export function resolveWorkstationSummaryRequiresWorkerAssignment(
 ): boolean {
   if (state?.status === "ready") {
     return workstationRequiresWorkerAssignment({
-      type: state.initialValues.workstationType,
+      type: state.draft.workstationType,
     });
   }
 
@@ -73,7 +73,7 @@ export function resolveWorkstationSummaryTypeValue(
     return messages.unavailableWorkstationTypeValue;
   }
 
-  return messages.localizeWorkstationType(state.initialValues.workstationType);
+  return messages.localizeWorkstationType(state.draft.workstationType);
 }
 
 export function resolveWorkstationSummaryRunnerValue(

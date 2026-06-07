@@ -115,6 +115,7 @@ export function buildEditableConfigurationSectionReadyState(
       prompt: overrides?.draft?.prompt ?? "Review prompt",
       runnerName: overrides?.draft?.runnerName ?? ("gemini" as const),
       workerName: overrides?.draft?.workerName ?? "reviewer",
+      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
     },
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
     initialValues: {
@@ -168,6 +169,10 @@ export function buildEditableConfigurationSectionReadyState(
       workstationName: "Review",
       workstationOptions: ["Plan", "Review"],
       workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
+      workstationTypeOptions:
+        overrides?.workstationType === "LOGICAL_MOVE"
+          ? (["LOGICAL_MOVE"] as const)
+          : (["MODEL_WORKSTATION", "MODEL_INVOKE"] as const),
     },
     isDirty: overrides?.isDirty ?? false,
     markChangesSaved: vi.fn(),
@@ -185,6 +190,7 @@ export function buildEditableConfigurationSectionReadyState(
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onRunnerChange: vi.fn(),
+    onWorkstationTypeChange: vi.fn(),
     onWorkerChange: vi.fn(),
     overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
     pendingFactoryDefinition:
