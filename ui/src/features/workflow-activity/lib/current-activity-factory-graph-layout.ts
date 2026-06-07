@@ -9,11 +9,12 @@ import type {
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
-import type {
-  FactoryGraphEdge,
-  FactoryGraphNode,
-  FactoryGraphNodeKind,
-  FactoryGraphTopology,
+import {
+  type FactoryGraphEdge,
+  type FactoryGraphNode,
+  type FactoryGraphNodeKind,
+  type FactoryGraphTopology,
+  parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
@@ -279,9 +280,10 @@ function seedNodeFromFactoryGraphNode(
       nodeId: node.id,
       nodeKind: "workstation",
       width: dimensions.width,
-      workstationNodeId: node.label,
+      workstationNodeId:
+        parseFactoryGraphWorkstationNodeId(node.id) ?? node.label,
     };
-  }
+   }
 
   return {
     height: dimensions.height,
