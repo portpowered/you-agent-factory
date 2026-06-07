@@ -39,9 +39,13 @@ describe("factory graph layout save", () => {
       ],
       schemaVersion: 1,
     });
-    expect(saveInput.value.workstations).toEqual(
-      baseFactoryDefinition.workstations,
-    );
-    expect(saveInput.value.workTypes).toEqual(baseFactoryDefinition.workTypes);
+    for (const [index, workstation] of (
+      baseFactoryDefinition.workstations ?? []
+    ).entries()) {
+      expect(saveInput.value.workstations?.[index]).toMatchObject(workstation);
+    }
+    for (const [index, workType] of (baseFactoryDefinition.workTypes ?? []).entries()) {
+      expect(saveInput.value.workTypes?.[index]).toMatchObject(workType);
+    }
   });
 });

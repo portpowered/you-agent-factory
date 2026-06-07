@@ -4,10 +4,12 @@ import type { CurrentFactoryDocument } from "../lib/factory-graph-draft-types";
 import {
   type FactoryLayout,
   type FactoryLayoutPoint,
+  type FactoryLayoutViewport,
   factoryLayoutFromDefinition,
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
+  updateFactoryLayoutViewport,
 } from "../lib/factory-graph-layout-operations";
 
 export interface FactoryGraphLayoutDraftDerivedState {
@@ -15,6 +17,7 @@ export interface FactoryGraphLayoutDraftDerivedState {
   baseLayout: FactoryLayout;
   hasChanges: boolean;
   layout: FactoryLayout;
+  layoutDirty: boolean;
   moveNode: (nodeId: string, position: FactoryLayoutPoint) => void;
   moveNodesByDelta: (
     nodeIds: readonly string[],
@@ -23,6 +26,7 @@ export interface FactoryGraphLayoutDraftDerivedState {
   ) => void;
   replaceLayout: (layout: FactoryLayout) => void;
   resetLayout: () => void;
+  updateViewport: (viewport: FactoryLayoutViewport) => void;
 }
 
 interface FactoryGraphLayoutSessionState {
@@ -107,6 +111,17 @@ export function useFactoryGraphLayoutDraftState(
       };
     });
   }, [documentBaseLayout]);
+  const updateViewport = useCallback((viewport: FactoryLayoutViewport) => {
+    setSessionState((currentState) => {
+      const currentLayout = currentState?.layout ?? documentBaseLayout;
+      const nextLayout = updateFactoryLayoutViewport(currentLayout, viewport);
+
+      return {
+        baseLayout: currentState?.baseLayout ?? documentBaseLayout,
+        layout: nextLayout,
+      };
+    });
+  }, [documentBaseLayout]);
   const moveNodesByDelta = useCallback(
     (
       nodeIds: readonly string[],
@@ -131,15 +146,19 @@ export function useFactoryGraphLayoutDraftState(
     [documentBaseLayout],
   );
 
+  const layoutDirty = hasFactoryLayoutChanges(baseLayout, layout);
+
   return {
     adoptSavedLayout,
     baseLayout,
-    hasChanges: hasFactoryLayoutChanges(baseLayout, layout),
+    hasChanges: layoutDirty,
     layout,
+    layoutDirty,
     moveNode,
     moveNodesByDelta,
     replaceLayout,
     resetLayout,
+    updateViewport,
   };
 }
 

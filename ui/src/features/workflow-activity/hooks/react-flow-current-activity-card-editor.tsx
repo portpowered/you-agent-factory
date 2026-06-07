@@ -24,6 +24,8 @@ export function useCurrentActivityGraphEditor(
   const {
     hiddenNodeClasses,
     hideShowMenuOpen,
+    preferencesDirty,
+    resetPreferences,
     setHideShowMenuOpen,
     toggleHiddenNodeClass,
   } = useHiddenFactoryGraphNodeClasses();
@@ -32,6 +34,7 @@ export function useCurrentActivityGraphEditor(
     useCurrentActivityEditableGraph({
       editorMode,
       factoryDocumentScopeKey,
+      hasPreferenceChanges: preferencesDirty,
       locale,
       snapshot,
     });
@@ -45,6 +48,7 @@ export function useCurrentActivityGraphEditor(
     draftState,
     editableDefinitionQuery: currentFactoryQuery,
     editorMode,
+    layoutDraftState: editableGraph.layoutDraftState,
     locale,
     ...leaveEditorBridge.sessionCallbacks,
     projectedFactory: snapshot.factory,
@@ -93,14 +97,16 @@ export function useCurrentActivityGraphEditor(
   useEffect(() => {
     useFactoryGraphTopologyEditorBridge
       .getState()
-      .setGraphDraftHasPendingChanges(draftState.hasChanges);
+      .setGraphDraftHasPendingChanges(
+        editableGraph.pendingState.topologyDirty,
+      );
 
     return () => {
       useFactoryGraphTopologyEditorBridge
         .getState()
         .setGraphDraftHasPendingChanges(false);
     };
-  }, [draftState.hasChanges]);
+  }, [editableGraph.pendingState.topologyDirty]);
 
   useEffect(() => {
     const normalizedScopeKey = factoryDocumentScopeKey ?? null;
@@ -131,8 +137,12 @@ export function useCurrentActivityGraphEditor(
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,
+    dirtyStateSummary: editableGraph.pendingState.dirtyState,
     layoutDraftState: editableGraph.layoutDraftState,
     moveLayoutNode: editableGraph.actions.moveLayoutNode,
+    resetLayout: editableGraph.actions.resetLayout,
+    resetPreferences,
+    updateLayoutViewport: editableGraph.actions.updateLayoutViewport,
     editableDefinitionQuery: currentFactoryQuery,
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,

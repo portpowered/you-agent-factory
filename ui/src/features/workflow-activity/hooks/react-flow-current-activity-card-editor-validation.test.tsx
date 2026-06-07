@@ -203,6 +203,26 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       clearSaveFeedback: vi.fn(),
     },
     draftState: hookState.draftState,
+    layoutDraftState: {
+      hasChanges: false,
+      layoutDirty: false,
+    },
+    pendingState: {
+      dirtyState: {
+        layoutDirty: false,
+        preferencesDirty: false,
+        topologyDirty: hookState.draftState.hasChanges,
+      },
+      hasChanges: hookState.draftState.hasChanges,
+      hasLayoutChanges: false,
+      hasPortableDocumentChanges: hookState.draftState.hasChanges,
+      hasPreferenceChanges: false,
+      hasTopologyChanges: hookState.draftState.hasChanges,
+      layoutDirty: false,
+      pendingFactoryDefinition: hookState.draftState.pendingFactoryDefinition,
+      preferencesDirty: false,
+      topologyDirty: hookState.draftState.hasChanges,
+    },
     saveMutation: {
       error: hookState.saveEditableDefinition.error,
       isPending: hookState.saveEditableDefinition.isPending,

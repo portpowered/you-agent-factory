@@ -1,6 +1,16 @@
-import { useCallback, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { DashboardActionRow } from "../../../components/ui";
+import { cn } from "../../../lib/cn";
+import {
+  FactoryGraphEditorModeToggle,
+  FactoryGraphEditorStatus,
+  type FactoryGraphEditorTool,
+} from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import {
+  type FactoryGraphEditorDirtyState,
+  hasAnyFactoryGraphEditorChanges,
+} from "../../factory-graph-editor/lib/factory-graph-editor-dirty-state";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
@@ -10,6 +20,7 @@ import {
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
 } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 
 export function useFactoryGraphAddEntityController({
@@ -92,4 +103,98 @@ export function useFactoryGraphAddEntityController({
     setAddEntityErrors,
     setAddMenuOpen,
   };
+}
+
+const FACTORY_GRAPH_HEADER_ACTIONS_CLASS = "min-w-0 justify-end";
+const FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS = "gap-1.5";
+const FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS = "gap-1.5";
+const STATUS_PILL_COMPACT_CLASS = "px-2.5 py-0.5 text-[0.7rem]";
+const MODE_TOGGLE_COMPACT_CLASS =
+  "size-8 rounded-md border-outline bg-transparent text-on-surface-variant hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface";
+const MODE_TOGGLE_COMPACT_DIRTY_CLASS = "size-8 rounded-md";
+
+export function CurrentActivityGraphHeaderActions({
+  compact = false,
+  dirtyState,
+  editorMode,
+  editorUnavailableClassifierWorkstationName,
+  headerActions,
+  hasChanges,
+  isDefinitionLoading,
+  loadErrorMessage,
+  locale,
+  onToggle,
+}: {
+  compact?: boolean;
+  dirtyState?: FactoryGraphEditorDirtyState;
+  editorMode: boolean;
+  editorUnavailableClassifierWorkstationName?: string;
+  headerActions?: ReactNode;
+  hasChanges: boolean;
+  isDefinitionLoading: boolean;
+  loadErrorMessage?: string;
+  locale?: string;
+  onToggle: () => void;
+}) {
+  const messages = getFactoryGraphEditorMessages(locale);
+  const editorUnavailableReason =
+    editorUnavailableClassifierWorkstationName === undefined
+      ? undefined
+      : messages.modeClassifierRoutesUnavailable(
+          editorUnavailableClassifierWorkstationName,
+        );
+  const hasDirtyIndicator = dirtyState
+    ? hasAnyFactoryGraphEditorChanges(dirtyState)
+    : hasChanges;
+
+  return (
+    <DashboardActionRow
+      actions={
+        <>
+          <FactoryGraphEditorModeToggle
+            className={
+              compact
+                ? hasDirtyIndicator
+                  ? MODE_TOGGLE_COMPACT_DIRTY_CLASS
+                  : MODE_TOGGLE_COMPACT_CLASS
+                : undefined
+            }
+            disabled={!editorMode && editorUnavailableReason !== undefined}
+            editorMode={editorMode}
+            hasChanges={hasDirtyIndicator}
+            locale={locale}
+            onClick={onToggle}
+            tooltipOverride={editorUnavailableReason}
+          />
+          {headerActions}
+        </>
+      }
+      actionsClassName={
+        compact
+          ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS
+          : undefined
+      }
+      className={cn(
+        FACTORY_GRAPH_HEADER_ACTIONS_CLASS,
+        compact && FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS,
+      )}
+      statuses={
+        <FactoryGraphEditorStatus
+          className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
+          dirtyState={dirtyState}
+          editorMode={editorMode}
+          editorUnavailableReason={editorUnavailableReason}
+          hasChanges={hasDirtyIndicator}
+          isDefinitionLoading={isDefinitionLoading}
+          locale={locale}
+          loadErrorMessage={loadErrorMessage}
+        />
+      }
+      statusesClassName={
+        compact
+          ? FACTORY_GRAPH_HEADER_ACTIONS_SECTIONS_COMPACT_CLASS
+          : undefined
+      }
+    />
+  );
 }

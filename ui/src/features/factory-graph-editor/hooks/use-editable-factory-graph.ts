@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 
+import { resolveFactoryGraphEditorDirtyState } from "../lib/factory-graph-editor-dirty-state";
 import { resolveProjectedLayoutPositions } from "../lib/factory-graph-layout-operations";
 import type {
   CanonicalFactoryDefinition,
@@ -27,7 +28,9 @@ import type {
 } from "./use-editable-factory-graph-types";
 
 export function useEditableFactoryGraph(
-  options: UseEditableFactoryGraphOptions,
+  options: UseEditableFactoryGraphOptions & {
+    hasPreferenceChanges?: boolean;
+  },
 ): EditableFactoryGraphViewModel {
   const [blockedOperation, setBlockedOperation] =
     useState<FactoryGraphOperationResult<never> | null>(null);
@@ -89,6 +92,21 @@ export function useEditableFactoryGraph(
     setBlockedOperation(null);
     saveController.resetSaveState();
   }, [draftState, layoutDraftState, saveController]);
+  const dirtyState = useMemo(
+    () =>
+      resolveFactoryGraphEditorDirtyState({
+        hasLayoutChanges: layoutDraftState.layoutDirty,
+        hasPreferenceChanges: options.hasPreferenceChanges ?? false,
+        hasTopologyChanges: draftState.hasChanges,
+      }),
+    [
+      draftState.hasChanges,
+      layoutDraftState.layoutDirty,
+      options.hasPreferenceChanges,
+    ],
+  );
+  const hasPortableDocumentChanges =
+    dirtyState.layoutDirty || dirtyState.topologyDirty;
 
   return {
     actions: {
@@ -98,7 +116,9 @@ export function useEditableFactoryGraph(
       disconnectEdge: mutationActions.disconnectEdge,
       moveLayoutNode: layoutDraftState.moveNode,
       removeNode: mutationActions.removeNode,
+      resetLayout: layoutDraftState.resetLayout,
       save: saveController.save,
+      updateLayoutViewport: layoutDraftState.updateViewport,
       updateNodeField: mutationActions.updateNodeField,
     },
     blockedOperation,
@@ -106,10 +126,16 @@ export function useEditableFactoryGraph(
     graphState,
     layoutDraftState,
     pendingState: {
-      hasChanges: draftState.hasChanges || layoutDraftState.hasChanges,
-      hasLayoutChanges: layoutDraftState.hasChanges,
-      hasTopologyChanges: draftState.hasChanges,
+      dirtyState,
+      hasChanges: hasPortableDocumentChanges,
+      hasLayoutChanges: dirtyState.layoutDirty,
+      hasPortableDocumentChanges,
+      hasPreferenceChanges: dirtyState.preferencesDirty,
+      hasTopologyChanges: dirtyState.topologyDirty,
+      layoutDirty: dirtyState.layoutDirty,
       pendingFactoryDefinition: draftState.pendingFactoryDefinition,
+      preferencesDirty: dirtyState.preferencesDirty,
+      topologyDirty: dirtyState.topologyDirty,
     },
     projection,
     documentSaveControls: saveController.documentSaveControls,

@@ -212,6 +212,7 @@ export function CurrentActivityGraphViewport({
   openAddMenu,
   saveDisabledReason,
   moveLayoutNode,
+  updateLayoutViewport,
   setStoredNodePosition,
   flowContainerRef,
   flowInstanceRef,
@@ -251,6 +252,7 @@ export function CurrentActivityGraphViewport({
   openAddMenu?: boolean;
   saveDisabledReason?: string;
   moveLayoutNode?: (nodeId: string, position: XYPosition) => void;
+  updateLayoutViewport?: (viewport: { x: number; y: number; zoom: number }) => void;
   setStoredNodePosition: (
     graphKey: string,
     nodeId: string,
@@ -365,6 +367,11 @@ export function CurrentActivityGraphViewport({
                   onEditorNodeClick?.(
                     factoryGraphNodeIdForRenderedNode(nodes, node.id),
                   );
+                }
+              }}
+              onMoveEnd={(_, viewport) => {
+                if (editorMode && updateLayoutViewport) {
+                  updateLayoutViewport(viewport);
                 }
               }}
               onNodeDragStop={(_, node) => {

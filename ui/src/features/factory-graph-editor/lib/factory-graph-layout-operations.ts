@@ -11,6 +11,7 @@ export type FactoryLayoutPoint = FactoryLayout["nodes"] extends
     ? Position
     : { x: number; y: number }
   : { x: number; y: number };
+export type FactoryLayoutViewport = NonNullable<FactoryLayout["viewport"]>;
 
 export const FACTORY_LAYOUT_SCHEMA_VERSION = 1;
 
@@ -73,6 +74,21 @@ export function moveFactoryLayoutNode(
     ...layout,
     nodes,
     schemaVersion: layout.schemaVersion ?? FACTORY_LAYOUT_SCHEMA_VERSION,
+  };
+}
+
+export function updateFactoryLayoutViewport(
+  layout: FactoryLayout,
+  viewport: FactoryLayoutViewport,
+): FactoryLayout {
+  return {
+    ...layout,
+    schemaVersion: layout.schemaVersion ?? FACTORY_LAYOUT_SCHEMA_VERSION,
+    viewport: {
+      x: viewport.x,
+      y: viewport.y,
+      zoom: viewport.zoom,
+    },
   };
 }
 

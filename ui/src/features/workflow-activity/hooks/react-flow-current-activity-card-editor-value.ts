@@ -5,6 +5,7 @@ import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks
 import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/factory-graph-layout-draft-hook";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
+import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/factory-graph-editor-dirty-state";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
@@ -26,9 +27,17 @@ export function buildCurrentActivityGraphEditorValue(args: {
   documentSave: FactoryDocumentSaveState;
   connectionNotice: string | null;
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
+  dirtyStateSummary: FactoryGraphEditorDirtyState;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   moveLayoutNode: (nodeId: string, position: { x: number; y: number }) => void;
+  resetLayout: () => void;
+  resetPreferences: () => void;
+  updateLayoutViewport: (viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  }) => void;
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
@@ -90,9 +99,13 @@ export function buildCurrentActivityGraphEditorValue(args: {
     documentSave: args.documentSave,
     connectionNotice: args.connectionNotice,
     currentFactoryDefinition: args.currentFactoryDefinition,
+    dirtyStateSummary: args.dirtyStateSummary,
     draftState: args.draftState,
     layoutDraftState: args.layoutDraftState,
     moveLayoutNode: args.moveLayoutNode,
+    resetLayout: args.resetLayout,
+    resetPreferences: args.resetPreferences,
+    updateLayoutViewport: args.updateLayoutViewport,
     editableDefinitionQuery: args.editableDefinitionQuery,
     editorUnavailableClassifierWorkstationName:
       args.editorUnavailableClassifierWorkstationName,

@@ -9,6 +9,7 @@ import {
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
   resolveProjectedLayoutPositions,
+  updateFactoryLayoutViewport,
 } from "./factory-graph-layout-operations";
 
 describe("factory graph layout operations", () => {
@@ -78,6 +79,23 @@ describe("factory graph layout operations", () => {
     expect(projected.get("worker:writer")).toEqual({ x: 10, y: 20 });
     expect(projected.get("workstation:draft")).toEqual({ x: 300, y: 150 });
     expect(projected.has("resource:gpu")).toBe(false);
+  });
+
+  it("updates canonical layout viewport metadata", () => {
+    const layout = createDefaultFactoryLayout();
+
+    const nextLayout = updateFactoryLayoutViewport(layout, {
+      x: 120,
+      y: 80,
+      zoom: 1.25,
+    });
+
+    expect(nextLayout.viewport).toEqual({
+      x: 120,
+      y: 80,
+      zoom: 1.25,
+    });
+    expect(hasFactoryLayoutChanges(layout, nextLayout)).toBe(true);
   });
 
   it("detects layout changes against the loaded factory document", () => {

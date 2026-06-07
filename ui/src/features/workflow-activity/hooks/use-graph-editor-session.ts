@@ -15,6 +15,7 @@ export function useGraphEditorSession({
   draftState,
   editableDefinitionQuery,
   editorMode,
+  layoutDraftState,
   locale,
   onAttemptLeaveEditor,
   onLeaveEditor,
@@ -25,6 +26,7 @@ export function useGraphEditorSession({
 }: {
   activeTool: FactoryGraphEditorTool;
   draftState: EditableFactoryGraphViewModel["draftState"];
+  layoutDraftState: EditableFactoryGraphViewModel["layoutDraftState"];
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   editorMode: boolean;
   locale?: string | null;
@@ -70,7 +72,11 @@ export function useGraphEditorSession({
       setEditorMode(true);
       return;
     }
-    if (draftState.hasChanges) {
+    if (
+      draftState.hasChanges ||
+      layoutDraftState.layoutDirty ||
+      layoutDraftState.hasChanges
+    ) {
       onAttemptLeaveEditor();
       return;
     }
@@ -78,6 +84,8 @@ export function useGraphEditorSession({
   }, [
     draftState.hasChanges,
     editorMode,
+    layoutDraftState.hasChanges,
+    layoutDraftState.layoutDirty,
     editorUnavailableClassifierWorkstationName,
     onAttemptLeaveEditor,
     onLeaveEditor,

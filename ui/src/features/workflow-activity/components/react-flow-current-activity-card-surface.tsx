@@ -186,7 +186,7 @@ export function CurrentActivityGraphSurface({
         }}
         hasPendingChanges={
           editor.draftState.hasChanges ||
-          (editor.layoutDraftState?.hasChanges ?? false)
+          (editor.layoutDraftState?.layoutDirty ?? false)
         }
         headingID={headingID}
         imports={imports}
@@ -209,6 +209,7 @@ export function CurrentActivityGraphSurface({
         openAddMenu={editor.addMenuOpen}
         saveDisabledReason={editor.saveBlockedReason}
         moveLayoutNode={editor.moveLayoutNode}
+        updateLayoutViewport={editor.updateLayoutViewport}
         setStoredNodePosition={graph.setStoredNodePosition}
       />
     </div>

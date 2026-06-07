@@ -58,7 +58,13 @@ export interface EditableFactoryGraphViewModel {
       nodeId: string,
       position: { x: number; y: number },
     ) => void;
+    resetLayout: () => void;
     save: () => Promise<boolean>;
+    updateLayoutViewport: (viewport: {
+      x: number;
+      y: number;
+      zoom: number;
+    }) => void;
     updateNodeField: (
       update: FactoryGraphNodeFieldUpdate,
     ) => FactoryGraphOperationResult<CanonicalFactoryDefinition>;
@@ -68,10 +74,20 @@ export interface EditableFactoryGraphViewModel {
   graphState: FactoryGraphState | null;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   pendingState: {
+    dirtyState: {
+      layoutDirty: boolean;
+      preferencesDirty: boolean;
+      topologyDirty: boolean;
+    };
     hasChanges: boolean;
     hasLayoutChanges: boolean;
+    hasPortableDocumentChanges: boolean;
+    hasPreferenceChanges: boolean;
     hasTopologyChanges: boolean;
+    layoutDirty: boolean;
     pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+    preferencesDirty: boolean;
+    topologyDirty: boolean;
   };
   projection: FactoryGraphReactFlowProjection;
   saveState: {

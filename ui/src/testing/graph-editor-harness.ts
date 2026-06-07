@@ -316,20 +316,25 @@ function createMockLayoutDraftState() {
       state.baseLayout = structuredClone(layout);
       state.layout = structuredClone(layout);
       state.hasChanges = false;
+      state.layoutDirty = false;
     }),
     baseLayout,
     hasChanges: false,
     layout: structuredClone(baseLayout),
+    layoutDirty: false,
     moveNode: vi.fn((nodeId: string, position: { x: number; y: number }) => {
       state.layout = moveFactoryLayoutNode(state.layout, nodeId, position);
       state.hasChanges = true;
+      state.layoutDirty = true;
     }),
     moveNodesByDelta: vi.fn(),
     replaceLayout: vi.fn(),
     resetLayout: vi.fn(() => {
       state.layout = structuredClone(state.baseLayout);
       state.hasChanges = false;
+      state.layoutDirty = false;
     }),
+    updateViewport: vi.fn(),
   };
 
   return state;
@@ -417,6 +422,7 @@ function createMockEditableFactoryGraphActions(
       return result;
     },
     moveLayoutNode: layoutDraftState.moveNode,
+    resetLayout: layoutDraftState.resetLayout,
     save: async () => {
       const hasPendingEdits =
         draftState.hasChanges || layoutDraftState.hasChanges;
@@ -450,6 +456,7 @@ function createMockEditableFactoryGraphActions(
       );
       return true;
     },
+    updateLayoutViewport: layoutDraftState.updateViewport,
     updateNodeField: () => ({
       message: "Field editing is not exercised by this component test.",
       ok: false,
@@ -488,10 +495,21 @@ export function createMockEditableFactoryGraph(
     graphState: null,
     layoutDraftState,
     pendingState: {
+      dirtyState: {
+        layoutDirty: layoutDraftState.layoutDirty,
+        preferencesDirty: false,
+        topologyDirty: draftState.hasChanges,
+      },
       hasChanges: draftState.hasChanges || layoutDraftState.hasChanges,
       hasLayoutChanges: layoutDraftState.hasChanges,
+      hasPortableDocumentChanges:
+        draftState.hasChanges || layoutDraftState.hasChanges,
+      hasPreferenceChanges: false,
       hasTopologyChanges: draftState.hasChanges,
+      layoutDirty: layoutDraftState.layoutDirty,
       pendingFactoryDefinition: draftState.pendingFactoryDefinition,
+      preferencesDirty: false,
+      topologyDirty: draftState.hasChanges,
     },
     projection: {
       edges: [],
