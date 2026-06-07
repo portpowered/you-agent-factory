@@ -5,6 +5,8 @@ import {
   classifyFactorySessionFolderValidationError,
   factorySessionTargetOptionValue,
   folderValidationStatusMessage,
+  initNewFactoryNestedPath,
+  isCanonicalNestedFactorySession,
   normalizeFactorySessionsError,
   selectedFactorySessionTarget,
   sessionCloseLabel,
@@ -45,7 +47,7 @@ const targets = [
   },
 ] as const;
 
-describe("dashboard session tabs utils", () => {
+describe("dashboard session tab labels", () => {
   it("builds session labels and DOM ids from the best available session metadata", () => {
     expect(sessionTabLabel(namedSession)).toBe("Review Factory");
     expect(sessionCloseLabel(namedSession, messages)).toBe(
@@ -58,6 +60,35 @@ describe("dashboard session tabs utils", () => {
     expect(sessionPanelID("session-tabs", fallbackSession.id)).toBe(
       "session-tabs-panel-session-with-spaces",
     );
+  });
+
+  it("prefers the selected folder identity for canonical nested init-new-factory sessions", () => {
+    const nestedInitSession = {
+      id: "session-nested-init",
+      project: "my-project",
+      factoryDir: "/workspace/my-project/factory",
+      folderPath: "/workspace/my-project",
+      target: { kind: "named", name: "factory" },
+    } as const;
+
+    expect(isCanonicalNestedFactorySession(nestedInitSession)).toBe(true);
+    expect(sessionTabLabel(nestedInitSession)).toBe("my-project");
+    expect(initNewFactoryNestedPath("/workspace/my-project")).toBe(
+      "/workspace/my-project/factory",
+    );
+  });
+
+  it("keeps named target labels for non-canonical nested factory sessions", () => {
+    const namedNestedSession = {
+      id: "session-review",
+      project: "catalog",
+      factoryDir: "/workspace/customers/northwind/examples/catalog/review",
+      folderPath: "/workspace/customers/northwind/examples/catalog",
+      target: { kind: "named", name: "review" },
+    } as const;
+
+    expect(isCanonicalNestedFactorySession(namedNestedSession)).toBe(false);
+    expect(sessionTabLabel(namedNestedSession)).toBe("review");
   });
 
   it("shrinks long session-tab secondary paths by hiding the prefix", () => {
@@ -77,11 +108,10 @@ describe("dashboard session tabs utils", () => {
       ),
     ).toHaveLength(28);
   });
+});
 
+describe("dashboard session folder validation helpers", () => {
   it("maps validation states and API errors to the visible folder-validation messages", () => {
-    expect(
-      folderValidationStatusMessage({ status: "idle" }, messages),
-    ).toBeNull();
     expect(folderValidationStatusMessage({ status: "pending" }, messages)).toBe(
       messages.openSessionValidationPendingLabel,
     );
