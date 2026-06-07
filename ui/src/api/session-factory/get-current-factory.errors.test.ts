@@ -139,6 +139,112 @@ describe("session factory getCurrentFactory error handling", () => {
     );
   });
 
+  it("maps NOT_FOUND current-factory failures to SessionFactoryAPIError", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "NOT_FOUND",
+              message: "Session factory not found.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 404,
+              statusText: "Not Found",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      message: "Session factory not found.",
+      status: 404,
+    });
+  });
+
+  it("maps STALE_FACTORY_VERSION current-factory failures to SessionFactoryAPIError", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "STALE_FACTORY_VERSION",
+              message: "The session factory version is stale.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "STALE_FACTORY_VERSION",
+      status: 409,
+    });
+  });
+
+  it("maps FACTORY_NOT_IDLE current-factory failures to SessionFactoryAPIError", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "FACTORY_NOT_IDLE",
+              message: "Current factory runtime must be idle before export.",
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 409,
+              statusText: "Conflict",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "FACTORY_NOT_IDLE",
+      status: 409,
+    });
+  });
+
+  it("maps INVALID_FACTORY_DEFINITION current-factory failures to INVALID_FACTORY", async () => {
+    await expect(
+      getCurrentFactory({
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              name: "Broken Factory",
+              workers: [],
+              workstations: [],
+              workTypes: [],
+              version: {
+                logical: "1",
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INVALID_FACTORY",
+      name: "SessionFactoryAPIError",
+    });
+  });
+
   it("falls back to the default current-factory error message when the error body has no string fields", async () => {
     await expect(
       getCurrentFactory({
