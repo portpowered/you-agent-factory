@@ -723,14 +723,6 @@ func ioWorkTypeCounts(ios []interfaces.IOConfig) map[string]int {
 	return counts
 }
 
-func workTypeNames(cfg *interfaces.FactoryConfig) []string {
-	names := make([]string, 0, len(cfg.WorkTypes))
-	for _, workType := range cfg.WorkTypes {
-		names = append(names, workType.Name)
-	}
-	return names
-}
-
 func workTypeIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
 	ids := make([]explicitIDValue, 0, len(cfg.WorkTypes))
 	for index, workType := range cfg.WorkTypes {
@@ -769,14 +761,6 @@ func resourceIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {
 		ids = append(ids, explicitIDValue{value: resource.ID, index: index})
 	}
 	return ids
-}
-
-func workstationNames(cfg *interfaces.FactoryConfig) []string {
-	names := make([]string, 0, len(cfg.Workstations))
-	for _, workstation := range cfg.Workstations {
-		names = append(names, workstation.Name)
-	}
-	return names
 }
 
 func workstationIDs(cfg *interfaces.FactoryConfig) []explicitIDValue {

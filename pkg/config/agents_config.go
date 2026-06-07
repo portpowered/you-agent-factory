@@ -22,6 +22,119 @@ type WorkstationLoader interface {
 	Load(name string) (*interfaces.FactoryWorkstationConfig, error)
 }
 
+func cloneStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneBoolPtr(value *bool) *bool {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneFactoryLayoutConfig(layout *interfaces.FactoryLayoutConfig) *interfaces.FactoryLayoutConfig {
+	if layout == nil {
+		return nil
+	}
+
+	return &interfaces.FactoryLayoutConfig{
+		SchemaVersion: layout.SchemaVersion,
+		Nodes:         cloneFactoryLayoutNodeConfigs(layout.Nodes),
+		Edges:         cloneFactoryLayoutEdgeConfigs(layout.Edges),
+		Groups:        cloneFactoryLayoutGroupConfigs(layout.Groups),
+		Viewport:      cloneFactoryLayoutViewportConfig(layout.Viewport),
+		Preferences:   cloneFactoryLayoutPreferencesConfig(layout.Preferences),
+	}
+}
+
+func cloneFactoryLayoutNodeConfigs(nodes []interfaces.FactoryLayoutNodeConfig) []interfaces.FactoryLayoutNodeConfig {
+	if len(nodes) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.FactoryLayoutNodeConfig, len(nodes))
+	for i, node := range nodes {
+		cloned[i] = interfaces.FactoryLayoutNodeConfig{
+			ID:       node.ID,
+			Position: node.Position,
+			Size:     cloneFactoryLayoutSizeConfig(node.Size),
+			Locked:   cloneBoolPtr(node.Locked),
+		}
+	}
+	return cloned
+}
+
+func cloneFactoryLayoutEdgeConfigs(edges []interfaces.FactoryLayoutEdgeConfig) []interfaces.FactoryLayoutEdgeConfig {
+	if len(edges) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.FactoryLayoutEdgeConfig, len(edges))
+	for i, edge := range edges {
+		cloned[i] = interfaces.FactoryLayoutEdgeConfig{
+			ID:            edge.ID,
+			Waypoints:     append([]interfaces.FactoryLayoutPointConfig(nil), edge.Waypoints...),
+			LabelPosition: cloneFactoryLayoutPointConfig(edge.LabelPosition),
+		}
+	}
+	return cloned
+}
+
+func cloneFactoryLayoutGroupConfigs(groups []interfaces.FactoryLayoutGroupConfig) []interfaces.FactoryLayoutGroupConfig {
+	if len(groups) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.FactoryLayoutGroupConfig, len(groups))
+	for i, group := range groups {
+		cloned[i] = interfaces.FactoryLayoutGroupConfig{
+			ID:            group.ID,
+			Label:         group.Label,
+			Bounds:        group.Bounds,
+			NodeIDs:       append([]string(nil), group.NodeIDs...),
+			ParentGroupID: cloneStringPtr(group.ParentGroupID),
+			Color:         group.Color,
+			Locked:        cloneBoolPtr(group.Locked),
+		}
+	}
+	return cloned
+}
+
+func cloneFactoryLayoutViewportConfig(viewport *interfaces.FactoryLayoutViewportConfig) *interfaces.FactoryLayoutViewportConfig {
+	if viewport == nil {
+		return nil
+	}
+	cloned := *viewport
+	return &cloned
+}
+
+func cloneFactoryLayoutPreferencesConfig(preferences *interfaces.FactoryLayoutPreferencesConfig) *interfaces.FactoryLayoutPreferencesConfig {
+	if preferences == nil {
+		return nil
+	}
+	cloned := *preferences
+	return &cloned
+}
+
+func cloneFactoryLayoutPointConfig(point *interfaces.FactoryLayoutPointConfig) *interfaces.FactoryLayoutPointConfig {
+	if point == nil {
+		return nil
+	}
+	cloned := *point
+	return &cloned
+}
+
+func cloneFactoryLayoutSizeConfig(size *interfaces.FactoryLayoutSizeConfig) *interfaces.FactoryLayoutSizeConfig {
+	if size == nil {
+		return nil
+	}
+	cloned := *size
+	return &cloned
+}
+
 // LoadWorkerConfig loads a worker configuration from the given directory.
 // It reads AGENTS.md, parses YAML frontmatter into WorkerConfig, and sets
 // Body to the remaining markdown content.

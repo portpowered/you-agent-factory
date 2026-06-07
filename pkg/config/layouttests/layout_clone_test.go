@@ -118,6 +118,74 @@ func TestCloneFactoryConfig_PreservesFactoryGuards(t *testing.T) {
 	}
 }
 
+func TestCloneFactoryConfig_PreservesPortableLayout(t *testing.T) {
+	locked := true
+	parentGroupID := "group-root"
+	cfg := &interfaces.FactoryConfig{
+		Layout: &interfaces.FactoryLayoutConfig{
+			SchemaVersion: 1,
+			Nodes: []interfaces.FactoryLayoutNodeConfig{{
+				ID:       "workstation:plan-task",
+				Position: interfaces.FactoryLayoutPointConfig{X: 144, Y: 288},
+				Size:     &interfaces.FactoryLayoutSizeConfig{Width: 320, Height: 180},
+				Locked:   &locked,
+			}},
+			Edges: []interfaces.FactoryLayoutEdgeConfig{{
+				ID: "output:workstation:plan-task->work-type:story",
+				Waypoints: []interfaces.FactoryLayoutPointConfig{{
+					X: 200,
+					Y: 300,
+				}},
+				LabelPosition: &interfaces.FactoryLayoutPointConfig{X: 220, Y: 280},
+			}},
+			Groups: []interfaces.FactoryLayoutGroupConfig{{
+				ID:            "group-1",
+				Label:         "Planning",
+				NodeIDs:       []string{"workstation:plan-task"},
+				Bounds:        interfaces.FactoryLayoutBoundsConfig{X: 100, Y: 220, Width: 420, Height: 240},
+				ParentGroupID: &parentGroupID,
+				Color:         "#ddeeff",
+				Locked:        &locked,
+			}},
+			Viewport:    &interfaces.FactoryLayoutViewportConfig{X: 40, Y: 60, Zoom: 0.85},
+			Preferences: &interfaces.FactoryLayoutPreferencesConfig{Direction: "RIGHT"},
+		},
+	}
+
+	cloned, err := CloneFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("CloneFactoryConfig: %v", err)
+	}
+	if cloned.Layout == nil || cloned.Layout.SchemaVersion != 1 {
+		t.Fatalf("cloned layout = %#v, want preserved layout", cloned.Layout)
+	}
+	if !reflect.DeepEqual(cloned.Layout, cfg.Layout) {
+		t.Fatalf("cloned layout = %#v, want %#v", cloned.Layout, cfg.Layout)
+	}
+
+	cfg.Layout.Nodes[0].Position.X = 999
+	cfg.Layout.Edges[0].Waypoints[0].X = 777
+	cfg.Layout.Groups[0].NodeIDs[0] = "mutated"
+	cfg.Layout.Viewport.Zoom = 0.5
+	cfg.Layout.Preferences.Direction = "LEFT"
+
+	if cloned.Layout.Nodes[0].Position.X != 144 {
+		t.Fatalf("cloned layout node position mutated with source: %#v", cloned.Layout.Nodes[0].Position)
+	}
+	if cloned.Layout.Edges[0].Waypoints[0].X != 200 {
+		t.Fatalf("cloned layout edge waypoint mutated with source: %#v", cloned.Layout.Edges[0].Waypoints)
+	}
+	if cloned.Layout.Groups[0].NodeIDs[0] != "workstation:plan-task" {
+		t.Fatalf("cloned layout group node ids mutated with source: %#v", cloned.Layout.Groups[0].NodeIDs)
+	}
+	if cloned.Layout.Viewport.Zoom != 0.85 {
+		t.Fatalf("cloned layout viewport mutated with source: %#v", cloned.Layout.Viewport)
+	}
+	if cloned.Layout.Preferences.Direction != "RIGHT" {
+		t.Fatalf("cloned layout preferences mutated with source: %#v", cloned.Layout.Preferences)
+	}
+}
+
 func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{

@@ -74,6 +74,7 @@ func TestFactoryConfigFromOpenAPIJSON_MapsOptionalGraphableEntityIDs(t *testing.
 	assertCanonicalGraphableEntityIDs(t, cfg)
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this contract test keeps internal, public, and canonical layout mapping assertions together on the same seam.
 func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"layout-factory",

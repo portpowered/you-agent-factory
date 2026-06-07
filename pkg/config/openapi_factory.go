@@ -43,6 +43,41 @@ func MarshalCanonicalFactoryConfig(cfg *interfaces.FactoryConfig) ([]byte, error
 	return defaultFactoryConfigMapper.Flatten(cfg)
 }
 
+func expandFactoryConfigForRuntimeLoad(data []byte) (*interfaces.FactoryConfig, error) {
+	mapper := NewFactoryConfigMapper()
+	cfg, err := mapper.Expand(data)
+	if err == nil {
+		return cfg, nil
+	}
+
+	stripped, removed, stripErr := stripTopLevelLayoutJSON(data)
+	if stripErr != nil || !removed {
+		return nil, err
+	}
+
+	fallbackCfg, fallbackErr := mapper.Expand(stripped)
+	if fallbackErr != nil {
+		return nil, err
+	}
+	return fallbackCfg, nil
+}
+
+func stripTopLevelLayoutJSON(data []byte) ([]byte, bool, error) {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, false, err
+	}
+	if _, ok := root["layout"]; !ok {
+		return data, false, nil
+	}
+	delete(root, "layout")
+	stripped, err := json.Marshal(root)
+	if err != nil {
+		return nil, false, err
+	}
+	return stripped, true, nil
+}
+
 func normalizeFactoryInputJSON(data []byte) ([]byte, error) {
 	var decoded any
 	if err := json.Unmarshal(data, &decoded); err != nil {

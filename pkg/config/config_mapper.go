@@ -708,6 +708,7 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),
 		Resources:        cloneResourceConfigs(cfg.Resources),
 		ResourceManifest: clonePortableResourceManifestConfig(cfg.ResourceManifest),
+		Layout:           cloneFactoryLayoutConfig(cfg.Layout),
 		Workers:          cloneWorkerConfigs(cfg.Workers),
 		Workstations:     cloneWorkstationConfigs(cfg.Workstations),
 	}

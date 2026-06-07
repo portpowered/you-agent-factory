@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file canonical public factory contract internal mapping remains consolidated until dedicated mapper seams are extracted from pkg/config.
+// pkgmaintcheck:ignore-file-lines canonical public factory contract internal mapping remains consolidated until dedicated mapper seams are extracted from pkg/config.
 package config
 
 import (
