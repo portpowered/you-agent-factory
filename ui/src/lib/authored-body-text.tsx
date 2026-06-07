@@ -52,10 +52,6 @@ export function AuthoredBodyText({
   );
 }
 
-export function RequestAuthoredText({ value }: { value: string }) {
-  return <AuthoredBodyText value={value} />;
-}
-
 function parseRequestAuthoredBlocks(value: string): RequestAuthoredBlock[] {
   const lines = value.split(/\r?\n/);
   const blocks: RequestAuthoredBlock[] = [];
