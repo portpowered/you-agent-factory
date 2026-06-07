@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	cursorprovider "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	"go.uber.org/zap"
 )
 
@@ -81,18 +83,30 @@ type serviceCoordinatorPolicy struct {
 }
 
 const (
-	runtimeMetricLifecycleStarted = "runtime.lifecycle.started"
-	runtimeMetricLifecycleStopped = "runtime.lifecycle.stopped"
-	runtimeMetricStateActive      = "runtime.state.active"
-	runtimeMetricStateIdle        = "runtime.state.idle"
-	runtimeMetricStatePaused      = "runtime.state.paused"
-	runtimeMetricStateFailed      = "runtime.state.failed"
-	runtimeMetricQueueInFlight    = "runtime.queue.in_flight"
-	runtimeMetricDispatchStarted  = "dispatch.started"
-	runtimeMetricDispatchComplete = "dispatch.completed"
-	runtimeMetricDispatchDuration = "dispatch.duration"
-	runtimeMetricDispatchRetries  = "dispatch.retry_count"
-	runtimeMetricDispatchCost     = "dispatch.cost"
+	runtimeMetricLifecycleStarted  = "runtime.lifecycle.started"
+	runtimeMetricLifecycleStopped  = "runtime.lifecycle.stopped"
+	runtimeMetricStateActive       = "runtime.state.active"
+	runtimeMetricStateIdle         = "runtime.state.idle"
+	runtimeMetricStatePaused       = "runtime.state.paused"
+	runtimeMetricStateFailed       = "runtime.state.failed"
+	runtimeMetricQueueInFlight     = "runtime.queue.in_flight"
+	runtimeMetricDispatchStarted   = "dispatch.started"
+	runtimeMetricDispatchComplete  = "dispatch.completed"
+	runtimeMetricDispatchDuration  = "dispatch.duration"
+	runtimeMetricDispatchRetries   = "dispatch.retry_count"
+	runtimeMetricDispatchCost      = "dispatch.cost"
+	runtimeMetricProviderRequest   = "provider.requested"
+	runtimeMetricProviderComplete  = "provider.completed"
+	runtimeMetricProviderFailed    = "provider.failed"
+	runtimeMetricProviderDuration  = "provider.duration"
+	runtimeMetricProviderInputTok  = "provider.input_tokens"
+	runtimeMetricProviderOutputTok = "provider.output_tokens"
+	runtimeMetricProviderCost      = "provider.cost"
+	runtimeMetricScriptStarted     = "script.started"
+	runtimeMetricScriptComplete    = "script.completed"
+	runtimeMetricScriptDuration    = "script.duration"
+	runtimeMetricScriptTimedOut    = "script.timed_out"
+	runtimeMetricScriptFailed      = "script.failed"
 )
 
 const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
@@ -489,6 +503,7 @@ func (r *factoryRuntimeBundle) recordDispatchMetric(record interfaces.FactoryDis
 	fields := runtimeDispatchMetricFields(record.Dispatch)
 	r.dispatchMetricFields.Store(record.DispatchID, fields)
 	r.emitMetricCounter(runtimeMetricDispatchStarted, 1, fields)
+	r.emitWorkerBoundaryStartMetrics(fields)
 }
 
 func (r *factoryRuntimeBundle) recordCompletionMetrics(record interfaces.FactoryCompletionRecord) {
@@ -504,6 +519,7 @@ func (r *factoryRuntimeBundle) recordCompletionMetrics(record interfaces.Factory
 	if record.Result.Metrics.Cost > 0 {
 		r.emitMetricSample(runtimeMetricDispatchCost, record.Result.Metrics.Cost, "usd", metricFields)
 	}
+	r.emitWorkerBoundaryCompletionMetrics(record.Result, metricFields)
 }
 
 func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Fields {
@@ -517,6 +533,161 @@ func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Field
 		fields.WorkID = strings.TrimSpace(dispatch.Execution.WorkIDs[0])
 	}
 	return fields
+}
+
+func (r *factoryRuntimeBundle) emitWorkerBoundaryStartMetrics(fields metrics.Fields) {
+	workerDef, ok := r.runtimeWorkerDefinition(fields.WorkerType)
+	if !ok || workerDef == nil {
+		return
+	}
+	switch workerDef.Type {
+	case interfaces.WorkerTypeModel:
+		providerFields := fields
+		providerFields.Provider = normalizedRuntimeMetricProvider(workerDef.ModelProvider)
+		r.emitMetricCounter(runtimeMetricProviderRequest, 1, providerFields)
+	case interfaces.WorkerTypeScript:
+		r.emitMetricCounter(runtimeMetricScriptStarted, 1, fields)
+	}
+}
+
+func (r *factoryRuntimeBundle) emitWorkerBoundaryCompletionMetrics(result interfaces.WorkResult, fields metrics.Fields) {
+	workerDef, ok := r.runtimeWorkerDefinition(fields.WorkerType)
+	if !ok || workerDef == nil {
+		return
+	}
+	switch workerDef.Type {
+	case interfaces.WorkerTypeModel:
+		r.emitProviderCompletionMetrics(result, fields, workerDef)
+	case interfaces.WorkerTypeScript:
+		r.emitScriptCompletionMetrics(result, fields)
+	}
+}
+
+func (r *factoryRuntimeBundle) emitProviderCompletionMetrics(
+	result interfaces.WorkResult,
+	fields metrics.Fields,
+	workerDef *interfaces.WorkerConfig,
+) {
+	providerFields := fields
+	providerFields.Provider = normalizedRuntimeMetricProvider(providerMetricProvider(result.Diagnostics, workerDef))
+	r.emitMetricCounter(runtimeMetricProviderComplete, 1, providerFields)
+	if result.Outcome == interfaces.OutcomeFailed {
+		providerFields.Reason = providerMetricFailureReason(result)
+		r.emitMetricCounter(runtimeMetricProviderFailed, 1, providerFields)
+	}
+	if durationMS, ok := providerMetricDurationMilliseconds(result.Diagnostics); ok {
+		r.emitMetricSample(runtimeMetricProviderDuration, durationMS, "ms", providerFields)
+	}
+	if inputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, cursorprovider.ResponseMetadataInputTokens); ok {
+		r.emitMetricSample(runtimeMetricProviderInputTok, inputTokens, "tokens", providerFields)
+	}
+	if outputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, cursorprovider.ResponseMetadataOutputTokens); ok {
+		r.emitMetricSample(runtimeMetricProviderOutputTok, outputTokens, "tokens", providerFields)
+	}
+	if result.Metrics.Cost > 0 {
+		r.emitMetricSample(runtimeMetricProviderCost, result.Metrics.Cost, "usd", providerFields)
+	}
+}
+
+func (r *factoryRuntimeBundle) emitScriptCompletionMetrics(result interfaces.WorkResult, fields metrics.Fields) {
+	scriptFields := fields
+	if timedOut := scriptMetricTimedOut(result); timedOut {
+		scriptFields.Reason = "timeout"
+	}
+	if result.Outcome == interfaces.OutcomeFailed && scriptFields.Reason == "" {
+		scriptFields.Reason = scriptMetricFailureReason(result)
+	}
+	r.emitMetricCounter(runtimeMetricScriptComplete, 1, scriptFields)
+	if durationMS, ok := scriptMetricDurationMilliseconds(result); ok {
+		r.emitMetricSample(runtimeMetricScriptDuration, durationMS, "ms", scriptFields)
+	}
+	if scriptMetricTimedOut(result) {
+		r.emitMetricCounter(runtimeMetricScriptTimedOut, 1, scriptFields)
+		return
+	}
+	if result.Outcome == interfaces.OutcomeFailed {
+		r.emitMetricCounter(runtimeMetricScriptFailed, 1, scriptFields)
+	}
+}
+
+func (r *factoryRuntimeBundle) runtimeWorkerDefinition(workerName string) (*interfaces.WorkerConfig, bool) {
+	if r == nil || r.runtimeCfg == nil || strings.TrimSpace(workerName) == "" {
+		return nil, false
+	}
+	return r.runtimeCfg.Worker(strings.TrimSpace(workerName))
+}
+
+func normalizedRuntimeMetricProvider(provider string) string {
+	return interfaces.CanonicalProviderSessionProvider(strings.TrimSpace(provider))
+}
+
+func providerMetricProvider(diagnostics *interfaces.WorkDiagnostics, workerDef *interfaces.WorkerConfig) string {
+	if diagnostics != nil && diagnostics.Provider != nil && strings.TrimSpace(diagnostics.Provider.Provider) != "" {
+		return diagnostics.Provider.Provider
+	}
+	if workerDef != nil {
+		return workerDef.ModelProvider
+	}
+	return ""
+}
+
+func providerMetricFailureReason(result interfaces.WorkResult) string {
+	if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
+		return string(result.FailureMetadata.Type)
+	}
+	return strings.TrimSpace(string(result.Outcome))
+}
+
+func providerMetricDurationMilliseconds(diagnostics *interfaces.WorkDiagnostics) (float64, bool) {
+	if durationMS, ok := providerMetricMetadataFloat(diagnostics, cursorprovider.ResponseMetadataDurationAPIMS); ok {
+		return durationMS, true
+	}
+	return providerMetricMetadataFloat(diagnostics, cursorprovider.ResponseMetadataDurationMS)
+}
+
+func providerMetricMetadataFloat(diagnostics *interfaces.WorkDiagnostics, key string) (float64, bool) {
+	if diagnostics == nil || diagnostics.Provider == nil || diagnostics.Provider.ResponseMetadata == nil {
+		return 0, false
+	}
+	value := strings.TrimSpace(diagnostics.Provider.ResponseMetadata[key])
+	if value == "" {
+		return 0, false
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
+}
+
+func scriptMetricTimedOut(result interfaces.WorkResult) bool {
+	if result.FailureMetadata != nil && result.FailureMetadata.Type == interfaces.WorkFailureTypeTimeout {
+		return true
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Command == nil {
+		return false
+	}
+	return result.Diagnostics.Command.TimedOut
+}
+
+func scriptMetricFailureReason(result interfaces.WorkResult) string {
+	if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
+		return string(result.FailureMetadata.Type)
+	}
+	if result.Diagnostics != nil && result.Diagnostics.Command != nil && result.Diagnostics.Command.ExitCode != 0 {
+		return "exit_code"
+	}
+	return strings.TrimSpace(string(result.Outcome))
+}
+
+func scriptMetricDurationMilliseconds(result interfaces.WorkResult) (float64, bool) {
+	if result.Diagnostics != nil && result.Diagnostics.Command != nil && result.Diagnostics.Command.Duration > 0 {
+		return float64(result.Diagnostics.Command.Duration.Milliseconds()), true
+	}
+	if result.Metrics.Duration <= 0 {
+		return 0, false
+	}
+	return float64(result.Metrics.Duration.Milliseconds()), true
 }
 
 // localModelDomain wires pkg/localmodels runtime dependencies constructed at
