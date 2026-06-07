@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -105,7 +104,6 @@ type liveRuntimeHandle struct {
 	sidecars      sync.WaitGroup
 	runErrMu      sync.RWMutex
 	runErr        error
-	stopCanceled  atomic.Bool
 	sidecarMu     sync.Mutex
 }
 
@@ -790,7 +788,7 @@ func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *f
 	go func() {
 		err := runtimeBundle.factory.Run(runCtx)
 		if err == nil && runCtx.Err() != nil {
-			handle.markStopCanceled()
+			err = context.Canceled
 		}
 		handle.setRunResult(err)
 	}()
@@ -899,7 +897,6 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 		return nil
 	}
 	if handle.runCancel != nil && !handle.completed() {
-		handle.markStopCanceled()
 		handle.runCancel()
 	}
 	runErr := handle.wait()
@@ -984,9 +981,6 @@ func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
 		}
 		select {
 		case <-ctx.Done():
-			if !handle.completed() {
-				handle.markStopCanceled()
-			}
 			_ = handle.wait()
 		case <-handle.runDone:
 		}

@@ -1291,23 +1291,7 @@ func boolMetricValue(active bool) float64 {
 	return 0
 }
 
-func (h *liveRuntimeHandle) markStopCanceled() {
-	if h != nil {
-		h.stopCanceled.Store(true)
-	}
-}
-
-func (h *liveRuntimeHandle) isStopCanceled() bool {
-	if h == nil {
-		return false
-	}
-	return h.stopCanceled.Load()
-}
-
-func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], err error, canceled bool) (string, string) {
-	if canceled {
-		return "canceled", ""
-	}
+func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], err error, forcedCancel bool) (string, string) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			return "canceled", ""
@@ -1316,6 +1300,12 @@ func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSn
 	}
 	if snapshot != nil && snapshot.FactoryState == string(interfaces.FactoryStateFailed) {
 		return "failed", ""
+	}
+	if snapshot != nil && snapshot.RuntimeStatus == interfaces.RuntimeStatusFinished {
+		return "completed", ""
+	}
+	if forcedCancel {
+		return "canceled", ""
 	}
 	return "completed", ""
 }
@@ -1353,11 +1343,11 @@ func (fs *FactoryService) finalizeRuntimeLifecycleMetrics(handle *liveRuntimeHan
 		if current.changedFrom(last) {
 			handle.runtime.emitRuntimeStateMetrics(snapshot)
 		}
-		outcome, reason := runtimeStopOutcome(snapshot, handle.result(), handle.isStopCanceled())
+		outcome, reason := runtimeStopOutcome(snapshot, handle.result(), false)
 		handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
 		return
 	}
-	outcome, reason := runtimeStopOutcome(nil, handle.result(), handle.isStopCanceled())
+	outcome, reason := runtimeStopOutcome(nil, handle.result(), false)
 	handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
 }
 
