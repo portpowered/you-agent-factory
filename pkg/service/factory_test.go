@@ -2883,36 +2883,28 @@ func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyRunnableFolderO
 	}
 }
 
-func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryCreatesScaffoldAndOpensSession(t *testing.T) {
-	harness := startRunningSessionService(t, runningSessionServiceOptions{
-		rootConfig: minimalFactoryConfig(),
-	})
-	defer harness.stop(t)
+func setupInitNewFactoryProjectDir(t *testing.T, rootDir, name string) (projectDir, sentinelPath string, sentinelContents []byte, existingDir string) {
+	t.Helper()
 
-	before := harness.svc.sessions.Count()
-	projectDir := filepath.Join(harness.rootDir, "new-factory")
+	projectDir = filepath.Join(rootDir, name)
 	if err := os.Mkdir(projectDir, 0o755); err != nil {
-		t.Fatalf("Mkdir(new-factory): %v", err)
+		t.Fatalf("Mkdir(%s): %v", name, err)
 	}
-	sentinelPath := filepath.Join(projectDir, "README.md")
-	sentinelContents := []byte("existing project notes\n")
+	sentinelPath = filepath.Join(projectDir, "README.md")
+	sentinelContents = []byte("existing project notes\n")
 	if err := os.WriteFile(sentinelPath, sentinelContents, 0o644); err != nil {
 		t.Fatalf("WriteFile(sentinel): %v", err)
 	}
-	existingDir := filepath.Join(projectDir, "src")
+	existingDir = filepath.Join(projectDir, "src")
 	if err := os.Mkdir(existingDir, 0o755); err != nil {
 		t.Fatalf("Mkdir(existing src): %v", err)
 	}
+	return projectDir, sentinelPath, sentinelContents, existingDir
+}
 
-	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), projectDir, nil, false, true)
-	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder(init new factory): %v", err)
-	}
-	if result == nil || result.SessionID == "" {
-		t.Fatalf("init-new-factory result = %#v, want session id", result)
-	}
+func assertNestedInitScaffoldLayout(t *testing.T, nestedFactoryDir string) {
+	t.Helper()
 
-	nestedFactoryDir := filepath.Join(projectDir, interfaces.FactoryDir)
 	factoryConfigPath := filepath.Join(nestedFactoryDir, interfaces.FactoryConfigFile)
 	written, err := os.ReadFile(factoryConfigPath)
 	if err != nil {
@@ -2929,6 +2921,10 @@ func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryCreatesScaffo
 	if _, err := os.Stat(defaultInputDir); err != nil {
 		t.Fatalf("Stat(default input dir): %v", err)
 	}
+}
+
+func assertNoRootLevelScaffoldPaths(t *testing.T, projectDir string) {
+	t.Helper()
 
 	for _, rootOnlyPath := range []string{
 		filepath.Join(projectDir, interfaces.FactoryConfigFile),
@@ -2940,6 +2936,10 @@ func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryCreatesScaffo
 			t.Fatalf("root scaffold path %q should not exist after init-new-factory, stat err=%v", rootOnlyPath, err)
 		}
 	}
+}
+
+func assertProjectRootContentsPreserved(t *testing.T, sentinelPath string, sentinelContents []byte, existingDir string) {
+	t.Helper()
 
 	preserved, err := os.ReadFile(sentinelPath)
 	if err != nil {
@@ -2951,17 +2951,59 @@ func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryCreatesScaffo
 	if _, err := os.Stat(existingDir); err != nil {
 		t.Fatalf("existing root directory removed: %v", err)
 	}
+}
+
+func assertValidateAfterNestedInit(
+	t *testing.T,
+	validateResult *FactorySessionOpenResult,
+	projectDir, nestedFactoryDir string,
+) {
+	t.Helper()
+
+	if validateResult == nil || validateResult.InitsNewFactory {
+		t.Fatalf("validate-after-init result = %#v, want runnable targets without initsNewFactory", validateResult)
+	}
+	if len(validateResult.Targets) != 1 {
+		t.Fatalf("validate-after-init targets = %#v, want one nested factory target", validateResult.Targets)
+	}
+	assertSessionTargetMetadata(
+		t,
+		validateResult.Targets[0],
+		FactorySessionTargetKindNamed,
+		interfaces.FactoryDir,
+		interfaces.FactoryDir,
+		nestedFactoryDir,
+		interfaces.FactoryDir,
+	)
+	if validateResult.Targets[0].FolderPath != projectDir {
+		t.Fatalf("validate-after-init folder path = %q, want %q", validateResult.Targets[0].FolderPath, projectDir)
+	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryCreatesScaffoldAndOpensSession(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	before := harness.svc.sessions.Count()
+	projectDir, sentinelPath, sentinelContents, existingDir := setupInitNewFactoryProjectDir(t, harness.rootDir, "new-factory")
+
+	result, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), projectDir, nil, false, true)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(init new factory): %v", err)
+	}
+	if result == nil || result.SessionID == "" {
+		t.Fatalf("init-new-factory result = %#v, want session id", result)
+	}
+
+	nestedFactoryDir := filepath.Join(projectDir, interfaces.FactoryDir)
+	assertNestedInitScaffoldLayout(t, nestedFactoryDir)
+	assertNoRootLevelScaffoldPaths(t, projectDir)
+	assertProjectRootContentsPreserved(t, sentinelPath, sentinelContents, existingDir)
 
 	session := harness.requireSession(t, result.SessionID)
-	if session.FolderPath != projectDir {
-		t.Fatalf("session folder path = %q, want %q", session.FolderPath, projectDir)
-	}
-	if session.FactoryDir != nestedFactoryDir {
-		t.Fatalf("session factory dir = %q, want %q", session.FactoryDir, nestedFactoryDir)
-	}
-	if liveSessionHandle(session).runtime.dir != nestedFactoryDir {
-		t.Fatalf("session runtime dir = %q, want %q", liveSessionHandle(session).runtime.dir, nestedFactoryDir)
-	}
+	assertNestedInitSessionMetadata(t, session, projectDir, nestedFactoryDir)
 	if got := harness.svc.sessions.Count(); got != before+1 {
 		t.Fatalf("live session count = %d, want %d", got, before+1)
 	}
@@ -3000,24 +3042,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryThenReopenThr
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder(validate after init): %v", err)
 	}
-	if validateResult == nil || validateResult.InitsNewFactory {
-		t.Fatalf("validate-after-init result = %#v, want runnable targets without initsNewFactory", validateResult)
-	}
-	if len(validateResult.Targets) != 1 {
-		t.Fatalf("validate-after-init targets = %#v, want one nested factory target", validateResult.Targets)
-	}
-	assertSessionTargetMetadata(
-		t,
-		validateResult.Targets[0],
-		FactorySessionTargetKindNamed,
-		interfaces.FactoryDir,
-		interfaces.FactoryDir,
-		nestedFactoryDir,
-		interfaces.FactoryDir,
-	)
-	if validateResult.Targets[0].FolderPath != projectDir {
-		t.Fatalf("validate-after-init folder path = %q, want %q", validateResult.Targets[0].FolderPath, projectDir)
-	}
+	assertValidateAfterNestedInit(t, validateResult, projectDir, nestedFactoryDir)
 
 	if err := harness.svc.CloseFactorySession(context.Background(), initResult.SessionID); err != nil {
 		t.Fatalf("CloseFactorySession(init session): %v", err)
