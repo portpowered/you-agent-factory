@@ -236,6 +236,35 @@ func TestInvoke_AudioUnreachableUsesEndpointMessage(t *testing.T) {
 	}
 }
 
+func TestPull_ClassifiedFailureReturnsManagedRuntimeOutcome(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"","cachePath":"","revision":"","downloadedFiles":[],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"SOURCE_FETCH_FAILED","readinessState":"FAILED"}}`)
+	}))
+	defer server.Close()
+
+	var out bytes.Buffer
+	err := Pull(PullConfig{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Server:    strings.TrimSuffix(server.URL, "/"),
+		JSON:      true,
+		Output:    &out,
+	})
+	if err == nil {
+		t.Fatal("expected classified pull failure error")
+	}
+	if !strings.Contains(err.Error(), "SOURCE_FETCH_FAILED") {
+		t.Fatalf("error = %q, want classified pull outcome", err.Error())
+	}
+	var response factoryapi.ModelPullResponse
+	if decodeErr := json.Unmarshal(out.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("json output is invalid: %v\n%s", decodeErr, out.String())
+	}
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
+		t.Fatalf("pull outcome = %s, want SOURCE_FETCH_FAILED", response.ManagedRuntimePull.PullOutcome)
+	}
+}
+
 func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {

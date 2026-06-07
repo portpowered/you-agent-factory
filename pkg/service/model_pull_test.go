@@ -98,8 +98,17 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 		modelPullMetrics: func() ModelPullMetricsRecorder { return recorder },
 	})
 
-	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); !errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed) {
-		t.Fatalf("PullModel error = %v, want source fetch failure", err)
+	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	pullErr, ok := apisurface.AsManagedRuntimePullError(err)
+	if !ok {
+		t.Fatalf("PullModel error = %v, want managed runtime pull failure", err)
+	}
+	if pullErr.Result.ManagedPullOutcome != "SOURCE_FETCH_FAILED" ||
+		pullErr.Result.ReadinessState != "FAILED" {
+		t.Fatalf("pull failure result = %#v, want SOURCE_FETCH_FAILED/FAILED", pullErr.Result)
+	}
+	if !errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed) {
+		t.Fatalf("PullModel error = %v, want source fetch failure cause", err)
 	}
 	recorder.assertContainsMetric(t, modelPullMetricFailure, map[string]string{
 		"model_name":   "OMNIVOICE_Q4_K_M",

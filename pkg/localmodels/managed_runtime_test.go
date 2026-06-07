@@ -57,6 +57,41 @@ func TestListModels_PopulatesManagedRuntimeContract(t *testing.T) {
 	}
 }
 
+func TestBuildManagedRuntimeProjection_ReportsLoadingAndFailedCacheStates(t *testing.T) {
+	loading := buildManagedRuntimeProjection(managedRuntimeProjection{
+		summary: factoryapi.ModelSummary{
+			Name:             "OMNIVOICE_Q4_K_M",
+			ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+		},
+		cacheInspection: &RuntimeCacheInspection{
+			Supported:          true,
+			Installed:          false,
+			InstalledFileCount: 1,
+			MissingAssets:      []string{"omnivoice-tokenizer-Q4_K_M.gguf"},
+		},
+	})
+	if loading.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING ||
+		loading.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLING {
+		t.Fatalf("loading runtime = (%s, %s), want LOADING/INSTALLING", loading.ReadinessState, loading.LifecycleState)
+	}
+
+	failed := buildManagedRuntimeProjection(managedRuntimeProjection{
+		summary: factoryapi.ModelSummary{
+			Name:             "OMNIVOICE_Q4_K_M",
+			ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+		},
+		cacheInspection: &RuntimeCacheInspection{
+			Supported:        true,
+			Installed:        false,
+			PartialArtifacts: true,
+		},
+	})
+	if failed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED ||
+		failed.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+		t.Fatalf("failed runtime = (%s, %s), want FAILED/NOT_INSTALLED", failed.ReadinessState, failed.LifecycleState)
+	}
+}
+
 func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) {
 	summary := factoryapi.ModelSummary{
 		Name:             "OMNIVOICE_Q4_K_M",

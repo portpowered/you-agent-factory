@@ -2,6 +2,7 @@ package localmodels
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -586,7 +587,23 @@ func PullModelWithOptions(
 
 	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
-		return apisurface.ModelPullResult{}, err
+		switch {
+		case errors.Is(err, apisurface.ErrModelNotFound), errors.Is(err, apisurface.ErrModelPullUnsupported):
+			return apisurface.ModelPullResult{}, err
+		default:
+			pullOutcome, readiness := ClassifyPullFailure(err)
+			failureResult := apisurface.ModelPullResult{
+				ModelName:          strings.TrimSpace(entry.Summary.Name),
+				ProviderLocality:   string(entry.Summary.ProviderLocality),
+				ManagedPullOutcome: pullOutcome,
+				ReadinessState:     readiness,
+				LifecycleState:     managedLifecycleNotInstalled,
+				SourceKind:         strings.TrimSpace(resolution.SourceKind),
+				SourceID:           strings.TrimSpace(resolution.SourceID),
+				ResolverNotes:      strings.TrimSpace(resolution.ResolverNotes),
+			}
+			return failureResult, &apisurface.ManagedRuntimePullError{Result: failureResult, Cause: err}
+		}
 	}
 
 	inspection := RuntimeCacheInspection{}

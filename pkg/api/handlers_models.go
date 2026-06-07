@@ -106,32 +106,16 @@ func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName str
 			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
 		case errors.Is(err, apisurface.ErrModelPullUnsupported):
 			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		case apisurface.IsManagedRuntimePullError(err):
+			pullErr, _ := apisurface.AsManagedRuntimePullError(err)
+			s.writeJSON(w, apisurface.ManagedRuntimePullHTTPStatus(pullErr.Result), apisurface.ModelPullResponseFromService(pullErr.Result))
+			return
 		default:
 			s.writeError(w, http.StatusInternalServerError, strings.TrimSpace(err.Error()), "INTERNAL_ERROR")
 		}
 		return
 	}
-	files := make([]factoryapi.ModelPullDownloadedFile, 0, len(result.DownloadedFiles))
-	for _, file := range result.DownloadedFiles {
-		current := factoryapi.ModelPullDownloadedFile{
-			Path:  file.Path,
-			Bytes: file.Bytes,
-		}
-		if sha := strings.TrimSpace(file.SHA256); sha != "" {
-			current.Sha256 = &sha
-		}
-		files = append(files, current)
-	}
-	response := factoryapi.ModelPullResponse{
-		ModelName:        result.ModelName,
-		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Outcome:          factoryapi.ModelPullOutcome(result.Outcome),
-		CachePath:        result.CachePath,
-		Revision:         result.Revision,
-		DownloadedFiles:  files,
-	}
-	response.ManagedRuntimePull = apisurface.ManagedRuntimePullResultFromService(result, files)
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeJSON(w, http.StatusOK, apisurface.ModelPullResponseFromService(result))
 }
 
 func decodeModelInvocationRequestBody(body io.Reader) (factoryapi.ModelInvocationRequest, error) {

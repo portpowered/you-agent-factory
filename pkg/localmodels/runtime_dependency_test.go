@@ -59,6 +59,78 @@ func TestManagedRuntimeReadinessForFactory_PackagedAndAuthoredFactoriesMatch(t *
 	}
 }
 
+func TestManagedRuntimeReadinessForFactory_ReportsLoadingAndFailedStates(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	loaded.FactoryConfig().Resources[0].Backend = "LLAMACPP"
+
+	loading, err := ManagedRuntimeReadinessForFactory(loaded, "OMNIVOICE_Q4_K_M", CatalogOptions{
+		RuntimeCacheInspector: staticRuntimeCacheInspector{
+			inspection: RuntimeCacheInspection{
+				Supported:          true,
+				Installed:          false,
+				InstalledFileCount: 1,
+				MissingAssets:      []string{"omnivoice-tokenizer-Q4_K_M.gguf"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("loading readiness: %v", err)
+	}
+	if loading.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING {
+		t.Fatalf("loading readiness = %s, want LOADING", loading.ReadinessState)
+	}
+
+	failed, err := ManagedRuntimeReadinessForFactory(loaded, "OMNIVOICE_Q4_K_M", CatalogOptions{
+		RuntimeCacheInspector: staticRuntimeCacheInspector{
+			inspection: RuntimeCacheInspection{
+				Supported:        true,
+				Installed:        false,
+				PartialArtifacts: true,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed readiness: %v", err)
+	}
+	if failed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("failed readiness = %s, want FAILED", failed.ReadinessState)
+	}
+}
+
+func TestManagedRuntimeReadinessForFactory_PackagedAndAuthoredFactoriesShareLoadingState(t *testing.T) {
+	authored := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	packagedCfg := catalogFactoryConfig(true)
+	packagedCfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
+		RequiredTools: []interfaces.RequiredToolConfig{{Name: "Go toolchain", Command: "go"}},
+	}
+	packaged := mustLoadedCatalogConfig(t, packagedCfg)
+	opts := CatalogOptions{
+		RuntimeCacheInspector: staticRuntimeCacheInspector{
+			inspection: RuntimeCacheInspection{
+				Supported:          true,
+				Installed:          false,
+				InstalledFileCount: 1,
+			},
+		},
+	}
+
+	authoredReadiness, err := ManagedRuntimeReadinessForFactory(authored, "OMNIVOICE_Q4_K_M", opts)
+	if err != nil {
+		t.Fatalf("authored readiness: %v", err)
+	}
+	packagedReadiness, err := ManagedRuntimeReadinessForFactory(packaged, "OMNIVOICE_Q4_K_M", opts)
+	if err != nil {
+		t.Fatalf("packaged readiness: %v", err)
+	}
+	if authoredReadiness.ReadinessState != packagedReadiness.ReadinessState ||
+		authoredReadiness.LifecycleState != packagedReadiness.LifecycleState {
+		t.Fatalf("authored = %#v, packaged = %#v, want identical loading readiness", authoredReadiness, packagedReadiness)
+	}
+	if authoredReadiness.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING {
+		t.Fatalf("readinessState = %s, want LOADING", authoredReadiness.ReadinessState)
+	}
+}
+
 func TestManagedRuntimeReadinessForFactory_UsesCacheInspectionWhenProvided(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
 	loaded.FactoryConfig().Resources[0].Backend = "LLAMACPP"

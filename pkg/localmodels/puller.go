@@ -60,5 +60,6 @@ func (p assetPuller) InspectRuntimeCache(ctx context.Context, runtimeCfg *factor
 		CachePath:          inspection.CachePath,
 		InstalledFileCount: inspection.InstalledFileCount,
 		MissingAssets:      inspection.MissingAssets,
+		PartialArtifacts:   inspection.PartialArtifacts,
 	}, nil
 }

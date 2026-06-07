@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -292,6 +293,61 @@ func TestPullModel_ReturnsManagedCachePullMetadata(t *testing.T) {
 		response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ||
 		response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 		t.Fatalf("managed runtime pull = %#v, want installed successfully", response.ManagedRuntimePull)
+	}
+}
+
+func TestPullModel_ReturnsManagedRuntimeSourceFetchFailureOutcome(t *testing.T) {
+	mf := &testutil.MockFactory{
+		PullModelErr: &apisurface.ManagedRuntimePullError{
+			Result: apisurface.ModelPullResult{
+				ModelName:          "OMNIVOICE_Q4_K_M",
+				ProviderLocality:   interfaces.ModelLocalityLocal,
+				ManagedPullOutcome: "SOURCE_FETCH_FAILED",
+				ReadinessState:     "FAILED",
+			},
+			Cause: apisurface.ErrManagedRuntimeSourceFetchFailed,
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d: %s", rec.Code, rec.Body.String())
+	}
+	response := decodeJSONResponse[factoryapi.ModelPullResponse](t, rec)
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
+		t.Fatalf("pull outcome = %s, want SOURCE_FETCH_FAILED", response.ManagedRuntimePull.PullOutcome)
+	}
+	if response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+		t.Fatalf("readiness = %s, want FAILED", response.ManagedRuntimePull.ReadinessState)
+	}
+}
+
+func TestPullModel_ReturnsManagedRuntimeTimeoutOutcome(t *testing.T) {
+	mf := &testutil.MockFactory{
+		PullModelErr: &apisurface.ManagedRuntimePullError{
+			Result: apisurface.ModelPullResult{
+				ModelName:          "OMNIVOICE_Q4_K_M",
+				ProviderLocality:   interfaces.ModelLocalityLocal,
+				ManagedPullOutcome: "TIMED_OUT",
+				ReadinessState:     "FAILED",
+			},
+			Cause: context.DeadlineExceeded,
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Fatalf("expected 504, got %d: %s", rec.Code, rec.Body.String())
+	}
+	response := decodeJSONResponse[factoryapi.ModelPullResponse](t, rec)
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeTIMEDOUT {
+		t.Fatalf("pull outcome = %s, want TIMED_OUT", response.ManagedRuntimePull.PullOutcome)
 	}
 }
 

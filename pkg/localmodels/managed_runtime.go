@@ -45,8 +45,15 @@ func buildManagedRuntimeProjection(input managedRuntimeProjection) factoryapi.Ma
 
 func managedRuntimeStates(input managedRuntimeProjection) (factoryapi.ManagedRuntimeReadinessState, factoryapi.ManagedRuntimeLifecycleState) {
 	if input.cacheInspection != nil && input.cacheInspection.Supported {
-		if input.cacheInspection.Installed {
+		inspection := *input.cacheInspection
+		if inspection.Installed {
 			return factoryapi.ManagedRuntimeReadinessStateREADY, factoryapi.ManagedRuntimeLifecycleStateINSTALLED
+		}
+		if inspection.PartialArtifacts && inspection.InstalledFileCount == 0 {
+			return factoryapi.ManagedRuntimeReadinessStateFAILED, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+		}
+		if inspection.InstalledFileCount > 0 || inspection.PartialArtifacts {
+			return factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateINSTALLING
 		}
 		return factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
 	}

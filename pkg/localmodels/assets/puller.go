@@ -48,6 +48,7 @@ type RuntimeCacheInspection struct {
 	CachePath          string
 	InstalledFileCount int
 	MissingAssets      []string
+	PartialArtifacts   bool
 }
 
 type Puller struct {
@@ -225,6 +226,9 @@ func (p *Puller) InspectRuntimeCache(_ context.Context, runtimeCfg *factoryconfi
 	result.InstalledFileCount = len(installed)
 	result.MissingAssets = missing
 	result.Installed = len(missing) == 0
+	if !result.Installed {
+		result.PartialArtifacts = p.hasPartialArtifacts(spec, result.CachePath)
+	}
 	return result, nil
 }
 
@@ -677,6 +681,48 @@ func shouldRetryModelAssetError(err error) bool {
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
 		return true
+	}
+	return false
+}
+
+func (p *Puller) hasPartialArtifacts(spec modelAssetSpec, cachePath string) bool {
+	metadataPath, err := p.metadataPath(spec)
+	if err == nil {
+		if _, statErr := os.Stat(metadataPath + ".partial"); statErr == nil {
+			return true
+		}
+	}
+	root, err := p.modelCacheRoot(spec)
+	if err != nil {
+		return false
+	}
+	dirs := []string{root}
+	if strings.TrimSpace(cachePath) != "" {
+		dirs = append(dirs, cachePath)
+	}
+	for _, dir := range dirs {
+		if dirHasPartialArtifacts(dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func dirHasPartialArtifacts(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasSuffix(name, ".partial") {
+			return true
+		}
+		if entry.IsDir() {
+			if dirHasPartialArtifacts(filepath.Join(dir, name)) {
+				return true
+			}
+		}
 	}
 	return false
 }

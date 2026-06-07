@@ -17,6 +17,7 @@ type RuntimeCacheInspection struct {
 	CachePath          string
 	InstalledFileCount int
 	MissingAssets      []string
+	PartialArtifacts   bool
 }
 
 // RuntimeCacheInspector probes installed managed-runtime assets from local cache.

@@ -2,6 +2,7 @@ package localmodels
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -25,6 +26,35 @@ func TestEnsureManagedRuntimeReadyForInvocation_BlocksMissingRuntime(t *testing.
 	}
 	if !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("error = %v, want missing readiness", err)
+	}
+}
+
+func TestEnsureManagedRuntimeReadyForInvocation_BlocksLoadingAndFailedRuntimes(t *testing.T) {
+	loaded := mustLoadedCatalogConfig(t, catalogFactoryConfig(true))
+	loadingOpts := CatalogOptions{
+		RuntimeCacheInspector: stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
+			"OMNIVOICE_Q4_K_M": {Supported: true, Installed: false, InstalledFileCount: 1},
+		}},
+	}
+	_, loadingErr := EnsureManagedRuntimeReadyForInvocation(loaded, "OMNIVOICE_Q4_K_M", loadingOpts)
+	if loadingErr == nil || !apisurface.IsManagedRuntimeInvocationBlocked(loadingErr) {
+		t.Fatalf("loading error = %v, want blocked invocation", loadingErr)
+	}
+	if !errors.Is(loadingErr, apisurface.ErrManagedRuntimeLoading) {
+		t.Fatalf("loading error = %v, want ErrManagedRuntimeLoading", loadingErr)
+	}
+
+	failedOpts := CatalogOptions{
+		RuntimeCacheInspector: stubRuntimeCacheInspector{byModel: map[string]RuntimeCacheInspection{
+			"OMNIVOICE_Q4_K_M": {Supported: true, Installed: false, PartialArtifacts: true},
+		}},
+	}
+	_, failedErr := EnsureManagedRuntimeReadyForInvocation(loaded, "OMNIVOICE_Q4_K_M", failedOpts)
+	if failedErr == nil || !apisurface.IsManagedRuntimeInvocationBlocked(failedErr) {
+		t.Fatalf("failed error = %v, want blocked invocation", failedErr)
+	}
+	if !errors.Is(failedErr, apisurface.ErrManagedRuntimeFailed) {
+		t.Fatalf("failed error = %v, want ErrManagedRuntimeFailed", failedErr)
 	}
 }
 

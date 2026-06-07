@@ -172,11 +172,16 @@ func Pull(cfg PullConfig) error {
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
 	})
+	if cfg.JSON {
+		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
+			return encodeErr
+		}
+	}
 	if err != nil {
 		return err
 	}
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(response)
+		return nil
 	}
 	return RenderPull(response, cfg.Output)
 }
@@ -362,7 +367,7 @@ func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 			)
 		},
 	}); err != nil {
-		return factoryapi.ModelPullResponse{}, err
+		return response, err
 	}
 	return response, nil
 }
@@ -418,6 +423,14 @@ func doModelsPOST(server, path string, payload any, out any, diagnostics request
 			return fmt.Errorf("read models response: %w", readErr)
 		}
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(responseBody)))
+		if pullErr := managedRuntimePullResponseError(resp.StatusCode, responseBody); pullErr != nil {
+			if out != nil {
+				if err := json.Unmarshal(responseBody, out); err != nil {
+					return fmt.Errorf("decode managed runtime pull response: %w", err)
+				}
+			}
+			return pullErr
+		}
 		return modelsRequestError(resp.StatusCode, responseBody)
 	}
 	responseBytes, err := modelsResponseBytes(out)
@@ -663,6 +676,28 @@ func modelModalities(modalities []factoryapi.ModelOperationContentType) string {
 	}
 	sort.Strings(values)
 	return strings.Join(values, ",")
+}
+
+func managedRuntimePullResponseError(statusCode int, body []byte) error {
+	if statusCode != http.StatusUnprocessableEntity && statusCode != http.StatusGatewayTimeout {
+		return nil
+	}
+	var response factoryapi.ModelPullResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil
+	}
+	switch response.ManagedRuntimePull.PullOutcome {
+	case factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED,
+		factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
+		factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
+		return fmt.Errorf(
+			"managed runtime pull failed (%s readiness %s)",
+			response.ManagedRuntimePull.PullOutcome,
+			response.ManagedRuntimePull.ReadinessState,
+		)
+	default:
+		return nil
+	}
 }
 
 func modelsRequestError(statusCode int, body []byte) error {
