@@ -1,3 +1,4 @@
+import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach } from "vitest";
@@ -932,9 +933,16 @@ describe("WorkerDetailCard", () => {
       canSave: false,
       draft: {
         argsText: "",
+        authSecretRef: "secrets/linear-api-key",
         body: "",
         command: "",
         executorProvider: null,
+        linearClaimAssigneeField: "",
+        linearMappingState: "queued",
+        linearMappingWorkType: "story",
+        linearPollInterval: "30s",
+        linearStateIdsText: "",
+        linearTeamIdsText: "team-a",
         model: "",
         modelLocality: null,
         modelProvider: null,
@@ -949,9 +957,17 @@ describe("WorkerDetailCard", () => {
       hasValidationErrors: false,
       initialValues: {
         args: [],
+        authSecretRef: "secrets/linear-api-key",
         body: null,
         command: null,
         executorProvider: null,
+        linearClaimAssigneeField: null,
+        linearClaimPresent: false,
+        linearMappingState: "queued",
+        linearMappingWorkType: "story",
+        linearPollInterval: "30s",
+        linearStateIds: [],
+        linearTeamIds: ["team-a"],
         model: null,
         modelLocality: null,
         modelProvider: null,
@@ -965,9 +981,16 @@ describe("WorkerDetailCard", () => {
       },
       isDirty: false,
       onArgsTextChange: vi.fn(),
+      onAuthSecretRefChange: vi.fn(),
       onBodyChange: vi.fn(),
       onCommandChange: vi.fn(),
       onExecutorProviderChange: vi.fn(),
+      onLinearClaimAssigneeFieldChange: vi.fn(),
+      onLinearMappingStateChange: vi.fn(),
+      onLinearMappingWorkTypeChange: vi.fn(),
+      onLinearPollIntervalChange: vi.fn(),
+      onLinearStateIdsTextChange: vi.fn(),
+      onLinearTeamIdsTextChange: vi.fn(),
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
@@ -1010,6 +1033,15 @@ describe("WorkerDetailCard", () => {
     );
 
     expect(screen.getByLabelText("Hosted provider")).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: "Secret reference" }),
+    ).toHaveValue("secrets/linear-api-key");
+    expect(
+      screen.getByRole("textbox", { name: "Mapping work type" }),
+    ).toHaveValue("story");
+    expect(
+      screen.getByText(/never stores or displays the secret value/i),
+    ).toBeTruthy();
   });
 
   it("renders script worker command and body fields in the editable configuration section", () => {

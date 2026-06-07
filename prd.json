@@ -1,0 +1,105 @@
+{
+  "project": "infinite-you",
+  "branchName": "ralph/you-ui-select-dropdown",
+  "description": "Converge dashboard dropdown menus onto one shared shadcn-style select primitive, migrate current-selection, factory-graph, submit-work, and remaining dashboard selectors to that primitive, and add lint guardrails so feature component code reuses shared UI form controls instead of bypassing components/ui.",
+  "context": {
+    "customerAsk": "Migrate dropdown select menus such as current-selection worker configuration, factory graph popup dialogs, and submit work to the shadcn select component, and add lint enforcement so feature component code does not bypass shared styled controls under components/ui.",
+    "problem": "Dashboard dropdowns still rely on a native select wrapper rather than a shared shadcn-style select experience, and feature component files can still bypass components/ui for standard form controls. That creates inconsistent dropdown interaction, repeated feature-level coupling to legacy select behavior, and weak guardrails against styling and accessibility regressions.",
+    "solution": "Introduce a shared shadcn-style select primitive under ui/src/components/ui/, migrate current-selection editors, factory graph add dialogs, submit work, and remaining dashboard selectors onto it while preserving form behavior, and add lint plus repo-owned guard checks that block feature component bypasses for guarded form-control categories."
+  },
+  "acceptanceCriteria": [
+    "Dashboard dropdowns use the shared shadcn-style select primitive for current-selection editable configuration, factory graph add dialogs, submit work, and other existing dashboard select menus that currently depend on the legacy shared select wrapper.",
+    "Affected dropdowns preserve existing selected values, validation messaging, disabled/loading behavior, and submission outcomes across success, empty, and error states relevant to each surface.",
+    "Keyboard behavior is consistent across migrated dropdowns: trigger focus is visible, Enter/Space opens, arrow keys move through options, Escape closes, and selection updates the owning form state.",
+    "Screen-reader semantics remain explicit through labels, descriptions, errors, and selected-value announcements for migrated form fields.",
+    "Feature component guardrails fail lint when new feature component code bypasses shared UI form-control primitives in places where the repository requires components/ui ownership.",
+    "Typecheck, lint, and affected automated tests pass."
+  ],
+  "userStories": [
+    {
+      "id": "you-ui-select-dropdown-001",
+      "title": "Shared shadcn select foundation",
+      "description": "As a maintainer, I want one shared dashboard select primitive with shadcn-style behavior so every dropdown can reuse consistent trigger, listbox, placeholder, and keyboard interaction instead of relying on a native wrapper.",
+      "acceptanceCriteria": [
+        "components/ui exposes a shared select primitive suitable for dashboard forms, including trigger, value, content, item, and disabled-state behavior.",
+        "The primitive supports labels, placeholder text, descriptions, inline validation wiring, controlled values, and keyboard interaction expected from shadcn/Radix select patterns.",
+        "Shared styling uses existing dashboard tokens and remains usable on narrow mobile widths and standard desktop form layouts.",
+        "UI foundation or shared-component tests cover open/close behavior, keyboard selection, disabled state, placeholder rendering, and accessible labeling.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "you-ui-select-dropdown-002",
+      "title": "Current-selection editable configuration uses the shared select",
+      "description": "As an operator editing workers, workstations, and resources from current selection, I want every dropdown field to use the shared select experience so the form feels consistent while preserving save, validation, and dirty-state behavior.",
+      "acceptanceCriteria": [
+        "Current-selection editable configuration dropdowns use the shared shadcn-style select for worker, workstation, and resource flows that currently render select menus.",
+        "Worker, workstation, and resource dropdowns keep their current selected values, conditional field behavior, and save/dirty-state wiring.",
+        "Validation and helper text remain associated with the correct field when a dropdown is invalid or disabled.",
+        "Existing loading, empty, error, and ready states for current-selection detail cards are unchanged outside the select interaction upgrade.",
+        "Affected current-selection component and hook tests prove value changes still update draft state and validation correctly.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: current-selection worker/workstation/resource editors open dropdowns, change values, and preserve visible validation and save behavior"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "you-ui-select-dropdown-003",
+      "title": "Factory graph add dialogs use the shared select",
+      "description": "As an operator adding or editing graph-backed factory entities, I want the graph dialog dropdowns to use the same shared select behavior so adding workers, workstations, work types, and states feels consistent and keyboard-safe.",
+      "acceptanceCriteria": [
+        "Factory graph add-dialog dropdowns use the shared shadcn-style select for kind, worker type, model provider, assigned worker, workstation type, work type, state type, and any other existing select-backed fields in that dialog flow.",
+        "Conditional field visibility continues to respond correctly when the selected kind or type changes.",
+        "Dialog submission, validation errors, disabled states, and focus management continue to work when the select menu is opened and closed from the modal.",
+        "Component and integration-style tests prove representative add flows still succeed and validation still blocks missing required selections.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: factory graph add dialog opens, dropdowns are keyboard-usable, conditional fields switch correctly, and save/validation still work"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "you-ui-select-dropdown-004",
+      "title": "Submit work and remaining dashboard selectors use the shared select",
+      "description": "As a dashboard user, I want submit-work and the remaining dashboard dropdowns to match the shared select interaction so every selector behaves consistently across the product.",
+      "acceptanceCriteria": [
+        "Submit-work work-type selection uses the shared shadcn-style select without changing submit gating, validation, or status-panel behavior.",
+        "Remaining dashboard select menus that still rely on the legacy shared select wrapper, such as dashboard add-widget selection and work-outcome range selection, use the new shared select contract.",
+        "Empty-option, placeholder, and disabled behavior remain explicit on each affected surface.",
+        "Affected tests and stories are updated so browser-visible dropdown behavior is asserted through the new trigger/content interaction instead of native select change assumptions.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: submit-work, add-widget selector, and trend-range selector open and change values correctly on desktop and mobile-width layouts"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "you-ui-select-dropdown-005",
+      "title": "Lint and guardrails prevent feature component bypasses",
+      "description": "As a maintainer, I want lint and repo-owned checks to block feature component files from bypassing shared UI form primitives so raw dropdown implementations and other standard form-control drift do not come back.",
+      "acceptanceCriteria": [
+        "Lint fails when feature component files introduce raw dropdown/select implementations instead of the shared components/ui select primitive.",
+        "Guardrails also block the standard form-control bypasses this project intends to prevent in feature component directories when shared components/ui primitives already own that control category.",
+        "Allowed exceptions, if any, are narrow, documented, and covered by tests for the guard itself.",
+        "The main ui lint/check commands execute the new guard automatically.",
+        "Guard tests prove both failure output and approved usage paths.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}

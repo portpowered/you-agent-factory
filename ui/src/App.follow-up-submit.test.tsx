@@ -6,12 +6,12 @@ import { describe, expect, it } from "vitest";
 
 import { selectComboboxOption } from "./testing/select-test-helpers";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import {
   activeWorkLabel,
   submitWorkCardControls,
 } from "./testing/app-shell-submit-follow-up-test-utils";
 import {
-  activeSnapshot,
   baselineSnapshot,
   chainRenderAppFetchMock,
   jsonResponse,
@@ -98,7 +98,9 @@ describe("App follow-up flows", () => {
 
   describe("submit request flows", () => {
     it("submits configured and empty work requests, while preserving failed form state", async () => {
-      const { fetchMock } = renderApp({ snapshot: activeSnapshot });
+      const { fetchMock } = renderApp({
+        snapshot: semanticWorkflowDashboardSnapshot,
+      });
       chainRenderAppFetchMock(fetchMock, async (path, method, _input, init) => {
         if (method !== "POST" || !path.endsWith("/work")) {
           return undefined;
@@ -245,7 +247,9 @@ describe("App follow-up flows", () => {
 
   describe("multimodal submit", () => {
     it("submits a light text-plus-image multimodal request through the dashboard shell", async () => {
-      const { fetchMock } = renderApp({ snapshot: activeSnapshot });
+      const { fetchMock } = renderApp({
+        snapshot: semanticWorkflowDashboardSnapshot,
+      });
       chainRenderAppFetchMock(fetchMock, async (path, method) => {
         if (method !== "POST") {
           return undefined;
@@ -358,7 +362,7 @@ describe("App follow-up flows", () => {
 
   describe("workstation and live totals", () => {
     it("shows workstation-scoped workstation runs on the free-floating cards", async () => {
-      renderApp({ snapshot: activeSnapshot });
+      renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
 
       fireEvent.click(
         await screen.findByRole("button", {

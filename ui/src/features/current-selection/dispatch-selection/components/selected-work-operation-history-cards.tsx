@@ -23,10 +23,6 @@ function OperationKindBadge({ label }: { label: string }) {
   return <CurrentSelectionBadge tone="info">{label}</CurrentSelectionBadge>;
 }
 
-export function WorkstationOperationKindBadge({ label }: { label: string }) {
-  return <CurrentSelectionBadge tone="neutral">{label}</CurrentSelectionBadge>;
-}
-
 function formatMoveOccurredAt(
   move: DashboardWorkMoveOperation,
   unavailableValue: string,

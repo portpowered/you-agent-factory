@@ -27,6 +27,7 @@ export * from "../components/current-selection-section-header";
 export * from "../components/current-selection-selectable-button";
 export * from "../components/current-selection-supporting-text";
 export * from "../components/current-selection-trace-button";
+export * from "../components/current-selection-work-row";
 export {
   DetailCardFactorySaveFeedback,
   type DetailCardFactorySaveFeedbackMessages,

@@ -1,5 +1,5 @@
-import { expect } from "storybook/test";
 import { within } from "@testing-library/react";
+import { expect } from "storybook/test";
 
 const DEFAULT_WORK_CHART_SERIES_LABELS = [
   "Queued",

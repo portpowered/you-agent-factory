@@ -1,0 +1,21 @@
+type: string
+description: >
+  Source-agnostic outcome for one managed runtime pull or install request.
+  Outcomes classify whether the runtime is already ready, newly installed,
+  still preparing, timed out, failed to fetch required assets, or unsupported.
+enum:
+  - ALREADY_READY
+  - INSTALLED_SUCCESSFULLY
+  - ALREADY_PRESENT
+  - STILL_LOADING
+  - TIMED_OUT
+  - SOURCE_FETCH_FAILED
+  - UNSUPPORTED_RUNTIME
+x-enum-descriptions:
+  - The managed runtime was already ready and no additional install work was required.
+  - Required managed runtime assets were installed successfully into the managed cache.
+  - Required managed runtime assets were already present in the managed cache at the requested revision.
+  - Managed runtime install or preparation is still in progress.
+  - Managed runtime install or preparation timed out before reaching a terminal readiness state.
+  - Required managed runtime assets could not be fetched from the configured backend source.
+  - The requested managed runtime does not support pull or install in the current configuration.

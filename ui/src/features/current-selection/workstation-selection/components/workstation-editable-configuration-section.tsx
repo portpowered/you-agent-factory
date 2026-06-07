@@ -39,8 +39,11 @@ import { EditableConfigurationWorkstationGuardsField } from "./workstation-guard
 import { EditableConfigurationWorkstationInputGuardsField } from "./workstation-input-guards-field";
 import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "./workstation-runner-field";
+import { GraphSemanticIcon } from "../../../flowchart/components/graph-semantic-icon";
+import { cn } from "../../../../lib/cn";
 import {
   resolveWorkstationSummaryKindValue,
+  resolveWorkstationSummaryPresentation,
   resolveWorkstationSummaryRequiresWorkerAssignment,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
@@ -386,25 +389,42 @@ function EditableConfigurationBehaviorInput({
     { status: "ready" }
   >;
 }) {
+  const behaviorHintId =
+    state.draft.behavior === "POLLER"
+      ? "editable-workstation-kind-hint"
+      : undefined;
+
   return (
-    <EnumSelect
-      aria-describedby={
-        state.validationErrors.behavior
-          ? "editable-workstation-kind-error"
-          : undefined
-      }
-      aria-invalid={state.validationErrors.behavior ? "true" : undefined}
-      aria-label={messages.kindLabel}
-      id="editable-workstation-kind"
-      onValueChange={(nextValue) =>
-        state.onBehaviorChange(nextValue as typeof state.draft.behavior)
-      }
-      options={state.initialValues.behaviorOptions.map((behavior) => ({
-        label: messages.localizeWorkstationBehavior(behavior),
-        value: behavior,
-      }))}
-      value={state.draft.behavior}
-    />
+    <>
+      <EnumSelect
+        aria-describedby={
+          [
+            behaviorHintId,
+            state.validationErrors.behavior
+              ? "editable-workstation-kind-error"
+              : undefined,
+          ]
+            .filter(Boolean)
+            .join(" ") || undefined
+        }
+        aria-invalid={state.validationErrors.behavior ? "true" : undefined}
+        aria-label={messages.kindLabel}
+        id="editable-workstation-kind"
+        onValueChange={(nextValue) =>
+          state.onBehaviorChange(nextValue as typeof state.draft.behavior)
+        }
+        options={state.initialValues.behaviorOptions.map((behavior) => ({
+          label: messages.localizeWorkstationBehavior(behavior),
+          value: behavior,
+        }))}
+        value={state.draft.behavior}
+      />
+      {state.draft.behavior === "POLLER" ? (
+        <FormDescription id={behaviorHintId}>
+          {messages.editableConfigurationBehaviorPollerHint}
+        </FormDescription>
+      ) : null}
+    </>
   );
 }
 
@@ -451,6 +471,7 @@ export function WorkstationSummary({
   editableConfigurationState,
   historyCount,
   historyLabel,
+  locale,
   messages,
   selectedNode,
 }: WorkstationSummaryProps) {
@@ -469,6 +490,11 @@ export function WorkstationSummary({
     editableConfigurationState,
     selectedNode,
     messages,
+  );
+  const summaryKindPresentation = resolveWorkstationSummaryPresentation(
+    editableConfigurationState,
+    selectedNode,
+    locale,
   );
 
   return (
@@ -502,6 +528,9 @@ export function WorkstationSummary({
         ) : null}
         {summaryKindValue != null ? (
           <WorkstationSummaryItem
+            iconClassName={summaryKindPresentation?.className}
+            iconKind={summaryKindPresentation?.iconKind}
+            iconLabel={summaryKindPresentation?.label}
             label={messages.kindLabel}
             value={summaryKindValue}
           />
@@ -553,17 +582,31 @@ function EditableConfigurationField({
   );
 }
 
-function WorkstationSummaryItem({ label, value }: WorkstationSummaryItemProps) {
+function WorkstationSummaryItem({
+  iconClassName,
+  iconKind,
+  iconLabel,
+  label,
+  value,
+}: WorkstationSummaryItemProps) {
   return (
     <li
       className={surfacePanelVariants({
         className: "grid min-w-0 gap-1 px-3 py-2",
         radius: "lg",
       })}
+      data-workstation-summary-item={label}
     >
       <DashboardLabel>{label}</DashboardLabel>
-      <strong className="min-w-0 text-sm text-on-surface [overflow-wrap:anywhere]">
-        {value}
+      <strong className="flex min-w-0 items-center gap-2 text-sm text-on-surface [overflow-wrap:anywhere]">
+        {iconKind && iconLabel ? (
+          <GraphSemanticIcon
+            className={cn("h-4 w-4 shrink-0", iconClassName)}
+            kind={iconKind}
+            label={iconLabel}
+          />
+        ) : null}
+        <span className="min-w-0">{value}</span>
       </strong>
     </li>
   );

@@ -39,6 +39,10 @@ func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryc
 	return s.cache, s.cacheErr
 }
 
+func (s staticModelAssetPuller) InspectRuntimeCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ string) (localmodels.RuntimeCacheInspection, error) {
+	return localmodels.RuntimeCacheInspection{}, nil
+}
+
 type fakeLocalModelRuntime struct {
 	mu          sync.Mutex
 	loads       []localModelLoadRequest

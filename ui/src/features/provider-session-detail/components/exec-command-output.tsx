@@ -1,5 +1,9 @@
 import { isAPIRecord } from "../../../api/transport";
-import { DashboardLabel, DashboardText, SurfacePanel } from "../../../components/ui";
+import {
+  DashboardLabel,
+  DashboardText,
+  SurfacePanel,
+} from "../../../components/ui";
 import { formatNumber } from "../../../i18n/formatters";
 import { cn } from "../../../lib/cn";
 import { getProviderSessionDetailMessages } from "../messages/provider-session-detail";
@@ -38,9 +42,7 @@ export function FriendlyExecCommandOutput({
       {text ? <DashboardText className="m-0">{text}</DashboardText> : null}
       <SurfacePanel asChild className="grid gap-2" radius="lg" surface="low">
         <section>
-          <DashboardLabel>
-            {messages.execCommandResultHeading}
-          </DashboardLabel>
+          <DashboardLabel>{messages.execCommandResultHeading}</DashboardLabel>
           <div className="grid gap-3">
             {friendlyOutput.exitCode !== null ? (
               <SummaryMetric

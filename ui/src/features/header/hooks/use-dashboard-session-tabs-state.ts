@@ -14,7 +14,9 @@ import {
   classifyFactorySessionFolderValidationError,
   type FolderValidationState,
   factorySessionTargetOptionValue,
+  moveSessionTabOrder,
   normalizeFactorySessionsError,
+  orderFactorySessions,
   selectedFactorySessionTarget,
 } from "../lib/dashboard-session-tabs-utils";
 
@@ -45,7 +47,9 @@ export function useDashboardSessionTabsState() {
   const {
     activeSession,
     activeSessionID,
+    moveSessionTab,
     pausedSessionIDs,
+    sessions: orderedSessions,
     setActiveSessionID,
     setSessionPaused,
   } = useActiveDashboardSession(sessions);
@@ -92,7 +96,8 @@ export function useDashboardSessionTabsState() {
     ...dialogState,
     handleCloseSession,
     isSessionStreamPaused,
-    sessions,
+    moveSessionTab,
+    sessions: orderedSessions,
     sessionsQuery,
     setActiveSessionID,
     toggleSessionStreamPaused,
@@ -397,24 +402,45 @@ function useActiveDashboardSession(sessions: FactorySessionSummary[]) {
   const pausedSessionIDs = useDashboardSessionStore(
     (state) => state.pausedSessionIDs,
   );
+  const orderedSessionIDs = useDashboardSessionStore(
+    (state) => state.sessionTabOrder,
+  );
   const setActiveSessionID = useDashboardSessionStore(
     (state) => state.setSelectedSessionID,
   );
   const setSessionPaused = useDashboardSessionStore(
     (state) => state.setSessionPaused,
   );
+  const setSessionTabOrder = useDashboardSessionStore(
+    (state) => state.setSessionTabOrder,
+  );
+  const orderedSessions = useMemo(
+    () => orderFactorySessions(sessions, orderedSessionIDs),
+    [orderedSessionIDs, sessions],
+  );
   const activeSession = useMemo(
     () =>
-      sessions.find((session) => session.id === activeSessionID) ??
-      sessions[0] ??
+      orderedSessions.find((session) => session.id === activeSessionID) ??
+      orderedSessions[0] ??
       null,
-    [activeSessionID, sessions],
+    [activeSessionID, orderedSessions],
   );
+
+  function moveSessionTab(sessionID: string, targetIndex: number) {
+    const nextOrder = moveSessionTabOrder(
+      orderedSessions.map((session) => session.id),
+      sessionID,
+      targetIndex,
+    );
+    setSessionTabOrder(nextOrder);
+  }
 
   return {
     activeSession,
     activeSessionID,
+    moveSessionTab,
     pausedSessionIDs,
+    sessions: orderedSessions,
     setActiveSessionID,
     setSessionPaused,
   };

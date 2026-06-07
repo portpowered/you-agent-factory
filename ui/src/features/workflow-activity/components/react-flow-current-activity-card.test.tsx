@@ -63,11 +63,11 @@ import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { resetCurrentActivityGraphLayoutCacheForTests } from "../hooks/react-flow-current-activity-card-graph-layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "../lib/current-activity-factory-graph-layout";
-import { resetCurrentActivityGraphLayoutCacheForTests } from "../hooks/react-flow-current-activity-card-graph-layout";
 import { buildGraphEdges } from "../lib/react-flow-current-activity-card-edges";
 import {
   buildActiveGraphHighlights,
@@ -999,7 +999,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       }),
     ).toBeTruthy();
     expect(within(toolbar).queryByRole("button", { name: "Add" })).toBeNull();
-    expect(screen.getByText("Observe")).toBeTruthy();
+    expect(screen.queryByText("Observe")).toBeNull();
   });
 
   it("shows the add, delete, and connect toolbar in editor mode", async () => {
@@ -1025,7 +1025,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     expect(
       within(toolbar).getByRole("button", { name: "Connect" }),
     ).toBeTruthy();
-    expect(screen.getByText("Editor mode active")).toBeTruthy();
+    expect(screen.queryByText("Editor mode active")).toBeNull();
   });
 
   it("keeps classifier workstations out of the editable graph flow", async () => {
@@ -1060,10 +1060,10 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
     expect(enterEditorButton.getAttribute("disabled")).not.toBeNull();
     expect(
-      screen.getByText(
+      screen.queryByText(
         'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
       ),
-    ).toBeTruthy();
+    ).toBeNull();
 
     fireEvent.click(enterEditorButton);
 
@@ -1652,7 +1652,10 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
         name: "Select Review workstation",
       }),
     ).toBeTruthy();
-    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    const toggle = screen.getByRole("button", {
+      name: "Leave editor",
+    });
+    expect(toggle.className).toContain("border-af-warning-border");
   });
 
   it("shows a loading editor state while the editable definition is still fetching", async () => {
@@ -1667,7 +1670,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
     });
-    expect(screen.getByText("Loading editor definition")).toBeTruthy();
+    expect(screen.queryByText("Loading editor definition")).toBeNull();
     expect(
       within(toolbar)
         .getByRole("button", { name: "Add" })
@@ -1761,7 +1764,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
         .getByRole("button", { name: "Leave editor" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
-    expect(screen.getByText("Unsaved changes")).toBeTruthy();
+    expect(screen.queryByText("Unsaved changes")).toBeNull();
   });
 
   it("shows explicit save and discard actions for pending graph changes", async () => {
@@ -1844,14 +1847,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     const statusSection = document.querySelector(
       '[data-dashboard-action-row-section="statuses"]',
     );
-    expect(statusSection).toBeTruthy();
-
-    expect(
-      within(statusSection as HTMLElement).getAllByRole("status"),
-    ).toHaveLength(1);
-    expect(
-      within(statusSection as HTMLElement).getByText("Unsaved changes"),
-    ).toBeTruthy();
+    expect(statusSection).toBeNull();
     expect(within(toolbar).queryAllByRole("status")).toHaveLength(0);
 
     const toggle = screen.getByRole("button", {
@@ -2259,7 +2255,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("Observe")).toBeTruthy();
+    expect(screen.queryByText("Observe")).toBeNull();
     expect(legend?.className).toContain("absolute");
     expect(legend?.className).toContain("left-4");
     expect(legend?.className).toContain("right-4");
@@ -2891,7 +2887,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
       fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
       await screen.findByRole("button", { name: "Save changes" });
-      expect(await screen.findByText("Unsaved changes")).toBeTruthy();
+      expect(screen.queryByText("Unsaved changes")).toBeNull();
       expect(screen.queryByText("Topology edits are blocked")).toBeNull();
       await expectRenderableCurrentActivityGraphEdges(idleSnapshot);
 
@@ -3258,6 +3254,18 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     });
 
     expect(cronButton.getAttribute("title")).toBe("Nightly Cron");
+    expect(cronButton.closest("article")?.className.includes("border-dashed"))
+      .toBe(true);
+
+    const pollerExpectation = workstationKindParityExpectations.find(
+      (expectation) => expectation.nodeID === "linear-poller",
+    );
+    const pollerButton = await screen.findByRole("button", {
+      name: pollerExpectation?.buttonName ?? "Select Linear Poller workstation",
+    });
+
+    expect(pollerButton.closest("article")?.className.includes("border-dotted"))
+      .toBe(true);
 
     fireEvent.click(cronButton);
 

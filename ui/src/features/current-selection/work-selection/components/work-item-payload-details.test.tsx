@@ -46,15 +46,18 @@ describe("WorkItemPayloadList", () => {
 
     expect(section).toBeTruthy();
     expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
-    expect(selectedWorkButton.className).toContain("bg-primary-container");
-    expect(selectedWorkButton.className).not.toContain("text-primary");
+    expect(selectedWorkButton.className).toContain("border-outline");
+    expect(selectedWorkButton.className).not.toContain("bg-primary-container");
+    expect(selectedWorkButton.className).not.toContain(
+      "bg-secondary-container",
+    );
 
     const plainArticle = selectedWorkButton.closest("article");
 
     expect(plainArticle?.className).toBe("grid gap-2");
     expect(plainArticle?.className).not.toContain("border-outline");
     expect(
-      within(plainArticle as HTMLElement).getByText("State: review"),
+      within(plainArticle as HTMLElement).getByText("Consumed payload"),
     ).toBeTruthy();
     expect(
       within(plainArticle as HTMLElement).getByText(

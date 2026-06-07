@@ -4,6 +4,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashbo
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import {
   resolveWorkstationSummaryKindValue,
+  resolveWorkstationSummaryPresentation,
   resolveWorkstationSummaryRequiresWorkerAssignment,
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
@@ -248,6 +249,34 @@ describe("resolveWorkstationSummaryKindValue", () => {
         getWorkstationDetailMessages("en"),
       ),
     ).toBeNull();
+  });
+});
+
+describe("resolveWorkstationSummaryPresentation", () => {
+  it("derives poller summary presentation from editable workstation behavior", () => {
+    expect(
+      resolveWorkstationSummaryPresentation(
+        {
+          draft: {
+            behavior: "POLLER",
+            name: "linear-poller",
+            prompt: "",
+            runnerName: "",
+            workerName: "linear-poller",
+          },
+          initialValues: readyEditableConfigurationState.initialValues,
+          status: "ready",
+        },
+        {
+          ...modelWorkstationNode,
+          workstation_kind: "poller",
+        },
+      ),
+    ).toMatchObject({
+      iconKind: "poller",
+      label: "Poller workstation",
+      semanticKind: "POLLER",
+    });
   });
 });
 

@@ -1,6 +1,7 @@
 type: object
 required:
   - modelName
+  - managedRuntimePull
   - providerLocality
   - outcome
   - cachePath
@@ -9,17 +10,25 @@ required:
 properties:
   modelName:
     type: string
-    description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+    description: >
+      Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors
+      `managedRuntimePull.identity` for compatibility with earlier pull fields.
+  managedRuntimePull:
+    $ref: './ManagedRuntimePullResult.yaml'
   providerLocality:
     $ref: '../data-models/WorkerModelLocality.yaml'
   outcome:
     $ref: './ModelPullOutcome.yaml'
   cachePath:
     type: string
-    description: Final managed cache directory that now contains the pulled model assets.
+    description: >
+      Final managed cache directory that now contains the installed runtime
+      assets. Mirrors `managedRuntimePull.cachePath`.
   revision:
     type: string
-    description: Pulled source revision identifier, such as an upstream repository commit SHA.
+    description: >
+      Managed revision identifier for the installed runtime assets. Mirrors
+      `managedRuntimePull.revision`.
   downloadedFiles:
     type: array
     description: Files that were downloaded or verified as already present for the managed cache entry.

@@ -14,15 +14,19 @@ import {
 } from "./factory-graph-editor-controls";
 
 function renderToolbar({
+  editMode = false,
   hasPendingChanges = true,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowVisible = true,
+  onToggleEditMode = vi.fn(),
   onToggleHiddenNodeClass = vi.fn(),
   visible = true,
 }: {
+  editMode?: boolean;
   hasPendingChanges?: boolean;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowVisible?: boolean;
+  onToggleEditMode?: () => void;
   onToggleHiddenNodeClass?: (kind: FactoryGraphNodeKind) => void;
   visible?: boolean;
 } = {}) {
@@ -45,6 +49,11 @@ function renderToolbar({
           canInteract={true}
           canSave={true}
           canDiscard={true}
+          editModeToggle={{
+            editorMode: editMode,
+            hasChanges: hasPendingChanges,
+            onToggle: onToggleEditMode,
+          }}
           hasPendingChanges={hasPendingChanges}
           hiddenNodeClasses={hiddenNodeClasses}
           hideShowMenuOpen={hideShowMenuOpen}
@@ -106,6 +115,7 @@ describe("factory graph editor toolbar controls", () => {
 
     renderToolbar();
 
+    const modeButton = screen.getByRole("button", { name: "Edit mode" });
     const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
@@ -114,15 +124,18 @@ describe("factory graph editor toolbar controls", () => {
     });
 
     expect(addButton.textContent).toBe("");
+    expect(modeButton.textContent).toBe("");
     expect(connectButton.textContent).toBe("");
     expect(deleteButton.textContent).toBe("");
     expect(saveButton.textContent).toBe("");
     expect(connectButton.getAttribute("aria-pressed")).toBe("false");
+    expect(modeButton.getAttribute("aria-pressed")).toBe("false");
     expect(saveButton).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Discard changes" }),
     ).toBeTruthy();
     expect(addButton.className).toContain("h-10");
+    expect(modeButton.className).toContain("h-10");
     expect(connectButton.className).toContain("h-10");
     expect(deleteButton.className).toContain("h-10");
 
@@ -426,7 +439,7 @@ describe("factory graph editor hide/show controls", () => {
     expect(hideShowButton.getAttribute("aria-pressed")).toBe("false");
     expect(hideShowButton.getAttribute("aria-expanded")).toBe("false");
 
-    await user.tab();
+    hideShowButton.focus();
     await user.keyboard("{Enter}");
 
     const menu = await screen.findByLabelText(
@@ -460,6 +473,7 @@ describe("factory graph editor hide/show controls", () => {
   it("renders hide/show in observer mode without editor tools", () => {
     renderToolbar({ hideShowVisible: true, visible: false });
 
+    expect(screen.getByRole("button", { name: "Edit mode" })).toBeTruthy();
     expect(
       screen.getByRole("button", {
         name: "Show or hide",

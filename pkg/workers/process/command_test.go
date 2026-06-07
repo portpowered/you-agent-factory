@@ -331,18 +331,7 @@ func TestExecCommandRunner_PostRunCleanupWaitsForParentWait(t *testing.T) {
 		})
 	}()
 
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(pidFile); err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if _, err := os.Stat(pidFile); err != nil {
-		t.Fatal("helper did not write child pid file while parent still running")
-	}
-
-	childPID := readCommandHelperPID(t, pidFile)
+	childPID := waitForCommandHelperPID(t, pidFile, 3*time.Second)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
@@ -888,16 +877,35 @@ func writeCommandHelperPID() {
 
 func readCommandHelperPID(t *testing.T, pidFile string) int {
 	t.Helper()
+	return waitForCommandHelperPID(t, pidFile, 0)
+}
 
-	raw, err := os.ReadFile(pidFile)
-	if err != nil {
-		t.Fatalf("read child pid file: %v", err)
+func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration) int {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for timeout <= 0 || time.Now().Before(deadline) {
+		raw, err := os.ReadFile(pidFile)
+		if err == nil {
+			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw)))
+			if parseErr == nil && pid > 0 {
+				return pid
+			}
+			lastErr = parseErr
+		} else {
+			lastErr = err
+		}
+		if timeout <= 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
-	if err != nil {
-		t.Fatalf("parse child pid %q: %v", raw, err)
+	if lastErr == nil {
+		lastErr = fmt.Errorf("child pid file %s is empty", pidFile)
 	}
-	return pid
+	t.Fatalf("parse child pid from %s: %v", pidFile, lastErr)
+	return 0
 }
 
 func waitForCommandHelperProcessExit(pid int, timeout time.Duration) bool {

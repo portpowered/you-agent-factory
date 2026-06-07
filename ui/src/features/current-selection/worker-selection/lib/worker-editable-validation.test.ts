@@ -1,4 +1,6 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile lint/complexity/noExcessiveLinesPerFunction: hosted Linear validation regressions share one draft-validation seam.
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
+import { EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS } from "../../../current-factory-definition/lib/worker-editable-values";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 import {
   hasEditableWorkerValidationErrors,
@@ -26,6 +28,7 @@ function buildDraft(
     timeoutAmount: "",
     timeoutUnit: "m",
     type: "MODEL_WORKER",
+    ...EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
     ...overrides,
   };
 }
@@ -141,9 +144,64 @@ describe("validateEditableWorkerDraft", () => {
       provider: messages.editableConfigurationProviderRequired,
     });
   });
+
+  it("requires hosted Linear poller fields for LINEAR hosted workers", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({
+          model: "",
+          modelProvider: null,
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        }),
+        messages,
+      ),
+    ).toEqual({
+      authSecretRef: messages.editableConfigurationAuthSecretRefRequired,
+      linearMappingState:
+        messages.editableConfigurationLinearMappingStateRequired,
+      linearMappingWorkType:
+        messages.editableConfigurationLinearMappingWorkTypeRequired,
+    });
+  });
+
+  it("allows hosted Linear workers when required poller fields are set", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({
+          authSecretRef: "secrets/linear-api-key",
+          linearMappingState: "init",
+          linearMappingWorkType: "story",
+          model: "",
+          modelProvider: null,
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        }),
+        messages,
+      ),
+    ).toEqual({});
+  });
+
+  it("allows clearing claim assignee field to remove existing linear.claim config", () => {
+    expect(
+      validateEditableWorkerDraft(
+        buildDraft({
+          authSecretRef: "secrets/linear-api-key",
+          linearClaimAssigneeField: "",
+          linearMappingState: "init",
+          linearMappingWorkType: "story",
+          model: "",
+          modelProvider: null,
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        }),
+        messages,
+        validationContext,
+      ),
+    ).toEqual({});
+  });
 });
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: contract validation merge cases stay grouped with decode field mapping.
 describe("mergeEditableWorkerContractValidationErrors", () => {
   it("maps contract decode failures onto worker fields when possible", () => {
     const pendingFactoryDefinition = {
@@ -195,12 +253,43 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
     ).toContain(messages.editableConfigurationContractInvalidPrefix);
   });
 
-  it("falls back to a scoped contract banner when the error is not field-specific", () => {
+  it("maps unsupported hosted auth fields onto authSecretRef", () => {
     const pendingFactoryDefinition = {
       name: "Current Factory",
       workers: [
         {
           auth: { clientId: "secret" },
+          name: "reviewer",
+          type: "HOSTED_WORKER",
+          provider: "LINEAR",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const errors = mergeEditableWorkerContractValidationErrors(
+      {},
+      pendingFactoryDefinition,
+      "reviewer",
+      messages,
+    );
+
+    expect(errors.authSecretRef).toContain(
+      messages.editableConfigurationContractInvalidPrefix,
+    );
+    expect(hasEditableWorkerValidationErrors(errors)).toBe(true);
+  });
+
+  it("falls back to a scoped contract banner when the error is not field-specific", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear-api-key" },
+          linear: {
+            mapping: { workType: "story", state: "init" },
+            unsupportedField: "value",
+          },
           name: "reviewer",
           type: "HOSTED_WORKER",
           provider: "LINEAR",
@@ -337,6 +426,55 @@ describe("mergeEditableWorkerContractValidationErrors", () => {
         messages,
       ).stopToken,
     ).toContain("factory.workers[0].stopToken");
+  });
+
+  it("maps contract failures onto hosted Linear auth secretRef fields", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          auth: { clientId: "abc" },
+          name: "linear-poller",
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "linear-poller",
+        messages,
+      ).authSecretRef,
+    ).toContain("factory.workers[0].auth.clientId");
+  });
+
+  it("maps contract failures onto hosted Linear mapping fields", () => {
+    const pendingFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear-api-key" },
+          linear: { mapping: { workType: 42, state: "init" } },
+          name: "linear-poller",
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      mergeEditableWorkerContractValidationErrors(
+        {},
+        pendingFactoryDefinition,
+        "linear-poller",
+        messages,
+      ).linearMappingWorkType,
+    ).toContain("factory.workers[0].linear.mapping.workType");
   });
 
   it("maps contract failures onto timeout", () => {

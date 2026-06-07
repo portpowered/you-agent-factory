@@ -23,11 +23,13 @@ export {
 } from "./factory-graph-editor-mode-controls";
 export { FactoryGraphEditorWorkStatePhaseLegend } from "./factory-graph-editor-work-state-phase-legend";
 
-import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show-menu";
 import { FactoryGraphEditorFloatingSurface } from "./factory-graph-editor-floating-surface";
+
+import { FactoryGraphEditorHideShowMenu } from "./factory-graph-editor-hide-show-menu";
 import { FactoryGraphEditorMenuHeader } from "./factory-graph-editor-menu-header";
 import { FactoryGraphEditorMenuItemButton } from "./factory-graph-editor-menu-item-button";
 import { FactoryGraphEditorMenuItemCopy } from "./factory-graph-editor-menu-item-copy";
+import { FactoryGraphEditorModeToggle } from "./factory-graph-editor-mode-controls";
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
@@ -58,6 +60,7 @@ export function FactoryGraphEditorToolbar({
   canInteract,
   canSave = false,
   canDiscard = true,
+  editModeToggle,
   hasPendingChanges = false,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowMenuOpen = false,
@@ -80,6 +83,13 @@ export function FactoryGraphEditorToolbar({
   canInteract: boolean;
   canSave?: boolean;
   canDiscard?: boolean;
+  editModeToggle?: {
+    disabled?: boolean;
+    editorMode: boolean;
+    hasChanges?: boolean;
+    onToggle: () => void;
+    tooltipOverride?: string;
+  };
   hasPendingChanges?: boolean;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen?: boolean;
@@ -109,6 +119,16 @@ export function FactoryGraphEditorToolbar({
       className="px-3 py-2"
       placement="bottomToolbar"
     >
+      {editModeToggle ? (
+        <FactoryGraphEditorModeToggle
+          disabled={editModeToggle.disabled}
+          editorMode={editModeToggle.editorMode}
+          hasChanges={editModeToggle.hasChanges}
+          locale={locale}
+          onClick={editModeToggle.onToggle}
+          tooltipOverride={editModeToggle.tooltipOverride}
+        />
+      ) : null}
       {hideShowVisible && onToggleHiddenNodeClass ? (
         <FactoryGraphEditorHideShowMenu
           hiddenNodeClasses={hiddenNodeClasses}

@@ -273,11 +273,14 @@ describe("workstation guard MATCHES_FIELDS save round-trip", () => {
     ]);
 
     const saveFetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(buildSavedDocumentVersion(normalizedFactory)), {
-        headers: { "Content-Type": "application/json" },
-        status: 200,
-        statusText: "OK",
-      }),
+      new Response(
+        JSON.stringify(buildSavedDocumentVersion(normalizedFactory)),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
     );
     await saveFactoryForSessionDocument(
       {

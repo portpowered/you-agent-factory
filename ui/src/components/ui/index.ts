@@ -23,7 +23,6 @@ export * from "./expandable-panel-trigger";
 export * from "./file-input";
 export * from "./form-field";
 export * from "./formatters";
-export * from "./graph-node-button";
 export * from "./input";
 export * from "./layout-primitives";
 export * from "./native-select";

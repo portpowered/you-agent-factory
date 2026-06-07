@@ -138,6 +138,19 @@ func assertGeneratedOpenAPISurfaceTypes(
 	t.Helper()
 
 	submitResponse := factoryapi.SubmitWorkResponse{TraceId: "trace-1", RequestId: "request-1", Accepted: true}
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	invocationRequest := factoryapi.InvocationRequest{
+		SourceKind: sourceKind,
+		Content:    []factoryapi.WorkContentPart{},
+	}
+	invocationResponse := factoryapi.InvocationResponse{
+		RequestId:     "invoke-1",
+		TraceId:       "trace-invoke-1",
+		Status:        factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: &factoryapi.WorkContent{},
+	}
+	invocationReturnPolicy := factoryapi.InvocationReturnPolicySubmittedWorkTerminal
+	invocationReturn := factoryapi.InvocationReturn{Policy: invocationReturnPolicy}
 	upsertResponse := factoryapi.UpsertWorkRequestResponse{
 		RequestId: workRequest.RequestId,
 		TraceId:   "trace-1",
@@ -158,7 +171,7 @@ func assertGeneratedOpenAPISurfaceTypes(
 		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 
-	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
 }

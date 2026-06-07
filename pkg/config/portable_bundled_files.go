@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"bytes"
 	"fmt"
 	"io/fs"
@@ -16,8 +17,6 @@ import (
 const portableFactoryDirName = "factory"
 
 var portableBundledDirectoryNames = []string{"scripts", "docs"}
-
-var portableBundledRootHelperFiles = []string{"Makefile"}
 
 var portableBundledFactoryRootHelperFiles = []string{"portable-dependencies.json"}
 
@@ -36,6 +35,11 @@ func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.Facto
 	if err != nil {
 		return err
 	}
+	rehydrated, err := rehydrateExplicitPortableRootHelpersFromManifest(factoryDir, cfg, includeInlineContent)
+	if err != nil {
+		return err
+	}
+	collected = append(collected, rehydrated...)
 	if len(collected) == 0 {
 		return nil
 	}
@@ -99,18 +103,6 @@ func collectSupportedPortableBundledFiles(factoryDir string, includeInlineConten
 		bundledFiles = append(bundledFiles, collected...)
 	}
 
-	for _, helperName := range portableBundledRootHelperFiles {
-		bundledFile, ok, err := collectPortableBundledRootHelperFileFromCandidates([]string{
-			filepath.Join(layout.factoryDir, helperName),
-			filepath.Join(layout.projectRoot, helperName),
-		}, helperName)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			bundledFiles = append(bundledFiles, bundledFile)
-		}
-	}
 	for _, helperName := range portableBundledFactoryRootHelperFiles {
 		targetPath := filepath.ToSlash(filepath.Join(layout.factoryPrefix, helperName))
 		bundledFile, ok, err := collectPortableBundledRootHelperFile(filepath.Join(layout.factoryDir, helperName), targetPath)
@@ -126,6 +118,31 @@ func collectSupportedPortableBundledFiles(factoryDir string, includeInlineConten
 		return bundledFiles[i].TargetPath < bundledFiles[j].TargetPath
 	})
 	return bundledFiles, nil
+}
+
+func rehydrateExplicitPortableRootHelpersFromManifest(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool) ([]interfaces.BundledFileConfig, error) {
+	if cfg == nil || cfg.ResourceManifest == nil || !includeInlineContent {
+		return nil, nil
+	}
+
+	rehydrated := make([]interfaces.BundledFileConfig, 0)
+	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
+		if bundledFile.Type != interfaces.BundledFileTypeRootHelper {
+			continue
+		}
+		sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, bundledFile)
+		if !ok {
+			continue
+		}
+		collected, ok, err := collectPortableBundledRootHelperFile(sourcePath, bundledFile.TargetPath)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			rehydrated = append(rehydrated, collected)
+		}
+	}
+	return rehydrated, nil
 }
 
 func supportedPortableBundledSourcePath(factoryDir string, bundledFile interfaces.BundledFileConfig) (string, bool) {
@@ -171,7 +188,6 @@ func supportedPortableBundledRootHelperPath(factoryDir, targetPath string) (stri
 }
 
 type portableBundledLayout struct {
-	projectRoot   string
 	factoryDir    string
 	factoryPrefix string
 }
@@ -180,7 +196,6 @@ func portableBundledLayoutForFactoryDir(factoryDir string) (portableBundledLayou
 	cleanFactoryDir := filepath.Clean(factoryDir)
 	if filepath.Base(cleanFactoryDir) == portableFactoryDirName {
 		return portableBundledLayout{
-			projectRoot:   filepath.Dir(cleanFactoryDir),
 			factoryDir:    cleanFactoryDir,
 			factoryPrefix: portableFactoryDirName,
 		}, true
@@ -196,7 +211,6 @@ func portableBundledLayoutForFactoryDir(factoryDir string) (portableBundledLayou
 	}
 
 	return portableBundledLayout{
-		projectRoot:   filepath.Dir(cleanFactoryDir),
 		factoryDir:    cleanFactoryDir,
 		factoryPrefix: portableFactoryDirName,
 	}, true
@@ -277,19 +291,6 @@ func collectPortableBundledRootHelperFile(sourcePath, targetPath string) (interf
 			Inline:   string(content),
 		},
 	}, true, nil
-}
-
-func collectPortableBundledRootHelperFileFromCandidates(sourcePaths []string, targetPath string) (interfaces.BundledFileConfig, bool, error) {
-	for _, sourcePath := range sourcePaths {
-		bundledFile, ok, err := collectPortableBundledRootHelperFile(sourcePath, targetPath)
-		if err != nil {
-			return interfaces.BundledFileConfig{}, false, err
-		}
-		if ok {
-			return bundledFile, true, nil
-		}
-	}
-	return interfaces.BundledFileConfig{}, false, nil
 }
 
 func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfig) []interfaces.BundledFileConfig {
@@ -724,4 +725,114 @@ func resolvePortableBundledLinkTarget(path, linkTarget string) (string, bool, er
 		return "", false, err
 	}
 	return resolvedPath, true, nil
+}
+// ReadCurrentFactoryPointer returns the current named factory selected for the
+// root directory's named-factory layout.
+func ReadCurrentFactoryPointer(rootDir string) (string, error) {
+	path := filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+
+	segment, err := safeFactoryLayoutSegment("factory", string(data))
+	if err != nil {
+		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
+	}
+	name, err := NamedFactoryLayoutSegmentToName(segment)
+	if err != nil {
+		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
+	}
+	return name, nil
+}
+
+// WriteCurrentFactoryPointer persists the selected named factory for later
+// restart-time resolution.
+func WriteCurrentFactoryPointer(rootDir, name string) error {
+	if strings.TrimSpace(rootDir) == "" {
+		return fmt.Errorf("factory root is required")
+	}
+
+	segment, err := NamedFactoryNameToLayoutSegment(name)
+	if err != nil {
+		return err
+	}
+	if err := requireFactoryConfig(filepath.Join(rootDir, segment)); err != nil {
+		return fmt.Errorf("set current factory %q: %w", segment, err)
+	}
+	if err := os.MkdirAll(rootDir, 0o755); err != nil {
+		return fmt.Errorf("create factory root %s: %w", rootDir, err)
+	}
+
+	path := filepath.Join(rootDir, interfaces.CurrentFactoryPointerFile)
+	if err := os.WriteFile(path, []byte(segment+"\n"), 0o644); err != nil {
+		return fmt.Errorf("write current factory pointer %s: %w", path, err)
+	}
+	return nil
+}
+
+// ResolveNamedFactoryDir returns the canonical on-disk directory for a
+// persisted named factory rooted under rootDir.
+func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
+	if strings.TrimSpace(rootDir) == "" {
+		return "", fmt.Errorf("factory root is required")
+	}
+
+	canonicalName, err := canonicalNamedFactoryName(name)
+	if err != nil {
+		return "", err
+	}
+	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
+	if err != nil {
+		return "", err
+	}
+
+	factoryDir := filepath.Join(rootDir, segment)
+	if err := requireFactoryConfig(factoryDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf(
+				"resolve named factory %q in root %s: %w",
+				canonicalName,
+				rootDir,
+				newNamedFactoryNotFoundError(canonicalName),
+			)
+		}
+		return "", fmt.Errorf("resolve named factory %q in root %s: %w", canonicalName, rootDir, err)
+	}
+	return factoryDir, nil
+}
+
+// ResolveCurrentFactoryDir returns the directory that should be treated as the
+// active runtime root. A persisted current-pointer layout takes precedence over
+// a legacy single-factory root.
+func ResolveCurrentFactoryDir(rootDir string) (string, error) {
+	if strings.TrimSpace(rootDir) == "" {
+		return "", fmt.Errorf("factory root is required")
+	}
+
+	if name, err := ReadCurrentFactoryPointer(rootDir); err == nil {
+		return ResolveNamedFactoryDir(rootDir, name)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	if err := requireFactoryConfig(rootDir); err == nil {
+		return rootDir, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+
+	return "", fmt.Errorf("resolve current factory in %s: %w", rootDir, ErrFactoryLayoutNotFound)
+}
+
+func requireFactoryConfig(factoryDir string) error {
+	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	info, err := os.Stat(factoryPath)
+	if err != nil {
+		return fmt.Errorf("find factory config %s: %w", factoryPath, err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("factory config %s is a directory", factoryPath)
+	}
+	return nil
 }

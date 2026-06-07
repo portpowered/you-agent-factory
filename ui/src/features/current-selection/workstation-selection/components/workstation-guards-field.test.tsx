@@ -45,10 +45,7 @@ function renderWorkstationGuardsField(
   );
 }
 
-function typeSelectorValue(
-  selectorInput: HTMLElement,
-  targetValue: string,
-) {
+function typeSelectorValue(selectorInput: HTMLElement, targetValue: string) {
   let draftValue = "";
   for (const character of targetValue) {
     draftValue += character;

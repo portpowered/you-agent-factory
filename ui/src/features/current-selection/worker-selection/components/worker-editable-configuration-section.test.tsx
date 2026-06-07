@@ -1,10 +1,14 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 
 import type { CanonicalFactoryDefinition } from "../../../../api/factory-definition/api";
+import {
+  EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
+  EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
+} from "../../../current-factory-definition/lib/worker-editable-values";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
@@ -43,6 +47,7 @@ function buildReadyWorkerEditableConfigurationState(
       timeoutAmount: "",
       timeoutUnit: "m",
       type: "MODEL_WORKER",
+      ...EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
     },
     hasValidationErrors: false,
     initialValues: {
@@ -61,12 +66,20 @@ function buildReadyWorkerEditableConfigurationState(
       type: "MODEL_WORKER",
       workerName: "reviewer",
       workstationNames,
+      ...EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
     },
     isDirty: true,
     onArgsTextChange: vi.fn(),
+    onAuthSecretRefChange: vi.fn(),
     onBodyChange: vi.fn(),
     onCommandChange: vi.fn(),
     onExecutorProviderChange: vi.fn(),
+    onLinearClaimAssigneeFieldChange: vi.fn(),
+    onLinearMappingStateChange: vi.fn(),
+    onLinearMappingWorkTypeChange: vi.fn(),
+    onLinearPollIntervalChange: vi.fn(),
+    onLinearStateIdsTextChange: vi.fn(),
+    onLinearTeamIdsTextChange: vi.fn(),
     onModelChange: vi.fn(),
     onModelLocalityChange: vi.fn(),
     onModelProviderChange: vi.fn(),
@@ -116,9 +129,7 @@ describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
       />,
     );
 
-    expect(
-      screen.queryByText(/updates workstations/i),
-    ).toBeNull();
+    expect(screen.queryByText(/updates workstations/i)).toBeNull();
   });
 });
 
@@ -259,5 +270,182 @@ describe("WorkerEditableConfigurationSection stopToken control", () => {
     expect(
       screen.getByRole("textbox", { name: messages.stopTokenFieldLabel }),
     ).toBeInTheDocument();
+  });
+});
+
+function buildHostedLinearWorkerEditableConfigurationState(): Extract<
+  EditableWorkerConfigurationState,
+  { status: "ready" }
+> {
+  return {
+    ...buildReadyWorkerEditableConfigurationState(["Sync"]),
+    canSave: true,
+    draft: {
+      ...buildReadyWorkerEditableConfigurationState(["Sync"]).draft,
+      model: "",
+      modelProvider: null,
+      name: "linear-poller",
+      provider: "LINEAR",
+      type: "HOSTED_WORKER",
+      authSecretRef: "secrets/linear-api-key",
+      linearClaimAssigneeField: "assignee.email",
+      linearMappingState: "queued",
+      linearMappingWorkType: "story",
+      linearPollInterval: "30s",
+      linearStateIdsText: "state-a",
+      linearTeamIdsText: "team-a",
+    },
+    hasValidationErrors: false,
+    initialValues: {
+      ...buildReadyWorkerEditableConfigurationState(["Sync"]).initialValues,
+      model: null,
+      modelProvider: null,
+      provider: "LINEAR",
+      type: "HOSTED_WORKER",
+      workerName: "linear-poller",
+      workstationNames: ["Sync"],
+      authSecretRef: "secrets/linear-api-key",
+      linearClaimAssigneeField: "assignee.email",
+      linearClaimPresent: true,
+      linearMappingState: "queued",
+      linearMappingWorkType: "story",
+      linearPollInterval: "30s",
+      linearStateIds: ["state-a"],
+      linearTeamIds: ["team-a"],
+    },
+    isDirty: false,
+    validationErrors: {},
+  };
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: hosted Linear field rendering regressions stay grouped in one section harness.
+describe("WorkerEditableConfigurationSection hosted Linear poller fields", () => {
+  it("renders hosted Linear poller inputs when provider is LINEAR", () => {
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={buildHostedLinearWorkerEditableConfigurationState()}
+        workerName="linear-poller"
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: messages.authSecretRefFieldLabel }),
+    ).toHaveValue("secrets/linear-api-key");
+    expect(
+      screen.getByRole("textbox", {
+        name: messages.linearPollIntervalFieldLabel,
+      }),
+    ).toHaveValue("30s");
+    expect(
+      screen.getByRole("textbox", { name: messages.linearTeamIdsFieldLabel }),
+    ).toHaveValue("team-a");
+    expect(
+      screen.getByRole("textbox", { name: messages.linearStateIdsFieldLabel }),
+    ).toHaveValue("state-a");
+    expect(
+      screen.getByRole("textbox", {
+        name: messages.linearMappingWorkTypeFieldLabel,
+      }),
+    ).toHaveValue("story");
+    expect(
+      screen.getByRole("textbox", {
+        name: messages.linearMappingStateFieldLabel,
+      }),
+    ).toHaveValue("queued");
+    expect(
+      screen.getByRole("textbox", {
+        name: messages.linearClaimAssigneeFieldLabel,
+      }),
+    ).toHaveValue("assignee.email");
+    expect(
+      screen.getByText(messages.authSecretRefFieldHelp),
+    ).toBeInTheDocument();
+  });
+
+  it("calls hosted Linear draft handlers when fields change", () => {
+    const state = buildHostedLinearWorkerEditableConfigurationState();
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={state}
+        workerName="linear-poller"
+      />,
+    );
+
+    fireEvent.change(
+      screen.getByRole("textbox", { name: messages.authSecretRefFieldLabel }),
+      { target: { value: "secrets/other-key" } },
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", {
+        name: messages.linearMappingWorkTypeFieldLabel,
+      }),
+      { target: { value: "task" } },
+    );
+
+    expect(state.onAuthSecretRefChange).toHaveBeenCalledWith(
+      "secrets/other-key",
+    );
+    expect(state.onLinearMappingWorkTypeChange).toHaveBeenCalledWith("task");
+  });
+
+  it("shows hosted Linear validation errors on matching fields", () => {
+    const state = {
+      ...buildHostedLinearWorkerEditableConfigurationState(),
+      canSave: false,
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        authSecretRef: messages.editableConfigurationAuthSecretRefRequired,
+        linearMappingWorkType:
+          messages.editableConfigurationLinearMappingWorkTypeRequired,
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={state}
+        workerName="linear-poller"
+      />,
+    );
+
+    expect(
+      screen.getByText(messages.editableConfigurationAuthSecretRefRequired),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        messages.editableConfigurationLinearMappingWorkTypeRequired,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        messages.editableConfigurationSaveDisabledValidationDetail,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("does not render hosted Linear poller inputs when provider is unset", () => {
+    const state = {
+      ...buildHostedLinearWorkerEditableConfigurationState(),
+      draft: {
+        ...buildHostedLinearWorkerEditableConfigurationState().draft,
+        provider: null,
+      },
+    };
+
+    render(
+      <WorkerEditableConfigurationSection
+        messages={messages}
+        state={state}
+        workerName="linear-poller"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("textbox", { name: messages.authSecretRefFieldLabel }),
+    ).toBeNull();
   });
 });

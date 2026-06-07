@@ -16,7 +16,7 @@ describe("CodePanel", () => {
   it("supports low-surface default-padding code panels", () => {
     render(
       <CodePanel padding="default" surface="low">
-        {"{ \"status\": \"ready\" }"}
+        {'{ "status": "ready" }'}
       </CodePanel>,
     );
 

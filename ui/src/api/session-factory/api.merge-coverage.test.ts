@@ -3,10 +3,6 @@ import { SessionFactoryAPIError } from "./errors";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 
 describe("saveSessionFactory environment and version edge cases", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("issues PUT without version in the factory payload when baseVersion is absent", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
@@ -60,18 +56,19 @@ describe("saveSessionFactory environment and version edge cases", () => {
   });
 
   it("throws NETWORK_ERROR when fetch is unavailable in the environment", async () => {
-    vi.stubGlobal("fetch", undefined);
-
     await expect(
-      saveSessionFactory({
-        sessionID: "~default",
-        factory: {
-          name: "Current Factory",
-          workers: [],
-          workstations: [],
-          workTypes: [],
+      saveSessionFactory(
+        {
+          sessionID: "~default",
+          factory: {
+            name: "Current Factory",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
         },
-      }),
+        { fetch: false as never },
+      ),
     ).rejects.toEqual(
       new SessionFactoryAPIError(
         sessionFactoryAPIErrorMessages.unavailableInEnvironment,
@@ -146,14 +143,10 @@ describe("saveSessionFactory environment and version edge cases", () => {
 });
 
 describe("getSessionFactory environment errors", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("throws when fetch is unavailable in the environment", async () => {
-    vi.stubGlobal("fetch", undefined);
-
-    await expect(getSessionFactory("~default")).rejects.toMatchObject({
+    await expect(
+      getSessionFactory("~default", { fetch: false as never }),
+    ).rejects.toMatchObject({
       code: "NETWORK_ERROR",
       name: "SessionFactoryAPIError",
     });

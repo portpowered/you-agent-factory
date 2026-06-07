@@ -128,7 +128,10 @@ export const StandardListSelectionItem = forwardRef<
   return (
     <SelectableCardButton
       className={standardListSelectionRowClassName({
-        className: cn(textRole === "body" && DASHBOARD_BODY_TEXT_CLASS, className),
+        className: cn(
+          textRole === "body" && DASHBOARD_BODY_TEXT_CLASS,
+          className,
+        ),
         selected,
         tone,
       })}

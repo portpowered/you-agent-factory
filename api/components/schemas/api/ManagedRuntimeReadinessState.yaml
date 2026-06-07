@@ -1,0 +1,17 @@
+type: string
+description: >
+  Customer-facing readiness for one managed runtime. Readiness describes whether
+  the runtime can be invoked now or what action is required next, without naming
+  upstream repository or provider-specific cache semantics.
+enum:
+  - READY
+  - MISSING
+  - LOADING
+  - FAILED
+  - UNSUPPORTED
+x-enum-descriptions:
+  - Required managed runtime assets are present and the runtime is ready for invocation.
+  - Required managed runtime assets are not present and pull or install is required.
+  - Managed runtime assets are being prepared or loaded.
+  - Managed runtime setup failed and requires operator attention.
+  - The managed runtime is not supported by the current factory or platform configuration.

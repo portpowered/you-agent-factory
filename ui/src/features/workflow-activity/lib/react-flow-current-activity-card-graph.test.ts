@@ -24,7 +24,7 @@ import {
 } from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
-  buildEditorHandles,
+  buildSemanticGraphHandles,
   supportedEditorHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
 import {
@@ -97,11 +97,15 @@ function resourceFamilyNodeIds(nodeIds: string[], resourceName: string) {
 
 describe("current activity graph editor handles", () => {
   it("projects work-state state_category on factory graph layout place nodes", async () => {
-    const factory = factoryFromDashboardTopology(mediumBranchingDashboardTopology);
-    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const factory = factoryFromDashboardTopology(
+      mediumBranchingDashboardTopology,
+    );
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
     const initNode = graphLayout.nodes.find(
       (node) =>
-        node.nodeKind === "state_position" && node.place.place_id === "story:init",
+        node.nodeKind === "state_position" &&
+        node.place.place_id === "story:init",
     );
     const blockedNode = graphLayout.nodes.find(
       (node) =>
@@ -1493,7 +1497,7 @@ describe("current activity graph editor handles", () => {
   it("wires shared handle click actions back through the editor anchor callback", () => {
     const onConnectionAnchorClick = vi.fn();
 
-    const handles = buildEditorHandles({
+    const handles = buildSemanticGraphHandles({
       editor: {
         activeTool: "connect",
         canInteractWithEditor: true,
@@ -1792,7 +1796,7 @@ describe("current activity graph active item labels", () => {
         },
       },
     ]);
-    const handles = buildEditorHandles({
+    const handles = buildSemanticGraphHandles({
       connectionAnchorContext,
       editor: {
         activeTool: "connect",
@@ -1845,7 +1849,7 @@ describe("current activity graph active item labels", () => {
         },
       },
     ]);
-    const handles = buildEditorHandles({
+    const handles = buildSemanticGraphHandles({
       connectionAnchorContext,
       editor: {
         activeTool: "connect",
