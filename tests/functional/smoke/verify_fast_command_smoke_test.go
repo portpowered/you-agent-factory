@@ -376,6 +376,81 @@ func TestLongTestsCommandSmoke_FailureReportsExactSpecialtyLaneRerun(t *testing.
 	}
 }
 
+func TestVerifyPRInferenceCommandSmoke_RunsSingleNamedRegressionOnly(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"pr-inference-approval":         "@printf '%s\\n' 'stub:pr-inference-approval'\n",
+		"long-tests":                    "@printf '%s\\n' 'unexpected:long-tests'\n\t@exit 99\n",
+		"long-tests-managed-runtime":    "@printf '%s\\n' 'unexpected:long-tests-managed-runtime'\n\t@exit 99\n",
+		"long-tests-functional-runtime": "@printf '%s\\n' 'unexpected:long-tests-functional-runtime'\n\t@exit 99\n",
+	})
+
+	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr-inference")
+	if err != nil {
+		t.Fatalf("run verify-pr-inference wrapper: %v\n%s", err, output)
+	}
+
+	assertOutputOrder(t, output,
+		"Running PR-gated inference approval lane: TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio",
+		"Required: export INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1",
+		"Runtime: omnivoice-llamacpp on PATH, or set INFINITE_YOU_OMNIVOICE_COMMAND to the executable",
+		"Optional: INFINITE_YOU_OMNIVOICE_CACHE_DIR to reuse managed model cache (omit to use a temp cache)",
+		"Broader specialty sweep remains on make long-tests; this lane is merge-blocking PR inference approval only",
+		"==> PR inference approval regression [make pr-inference-approval]",
+		"stub:pr-inference-approval",
+	)
+
+	for _, unwanted := range []string{
+		"unexpected:long-tests",
+		"unexpected:long-tests-managed-runtime",
+		"unexpected:long-tests-functional-runtime",
+	} {
+		if strings.Contains(output, unwanted) {
+			t.Fatalf("verify-pr-inference unexpectedly ran %q:\n%s", unwanted, output)
+		}
+	}
+}
+
+func TestVerifyPRInferenceCommandSmoke_FailureReportsOwnedRerunCommand(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"pr-inference-approval": "@printf '%s\\n' 'stub:pr-inference-approval'\n\t@exit 31\n",
+	})
+
+	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr-inference")
+	if err == nil {
+		t.Fatalf("verify-pr-inference unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(output, "FAIL: PR inference approval regression [make pr-inference-approval] failed. Rerun with: make pr-inference-approval") {
+		t.Fatalf("verify-pr-inference failure output missing exact rerun hint:\n%s", output)
+	}
+}
+
+func TestVerifyPRInferenceCommandSmoke_StaysOutsideRequiredPRAndExtendedTiers(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
+		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
+		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify-pr":                 "@printf '%s\\n' 'stub:verify-pr'\n",
+		"long-tests-managed-runtime":    "@printf '%s\\n' 'stub:long-tests-managed-runtime'\n",
+		"long-tests-functional-runtime": "@printf '%s\\n' 'stub:long-tests-functional-runtime'\n",
+		"pr-inference-approval":     "@printf '%s\\n' 'unexpected:pr-inference-approval'\n\t@exit 99\n",
+	})
+
+	for _, target := range []string{"verify-pr", "verify-extended", "long-tests"} {
+		output, err := runMakefileTarget(repoRoot, makefilePath, target)
+		if err != nil {
+			t.Fatalf("run %s wrapper: %v\n%s", target, err, output)
+		}
+		if strings.Contains(output, "unexpected:pr-inference-approval") {
+			t.Fatalf("%s unexpectedly ran verify-pr-inference lane:\n%s", target, output)
+		}
+	}
+}
+
 func writeVerifyFastWrapperMakefile(t *testing.T, repoRoot string, overrides map[string]string) string {
 	t.Helper()
 
