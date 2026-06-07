@@ -147,3 +147,35 @@ func TestDelete_RemovesDirectoryFromDisk(t *testing.T) {
 		t.Fatalf("alpha directory still exists: %v", err)
 	}
 }
+
+func TestDelete_ScopedNonCurrentFactoryLeavesCurrentPointerResolvableInExplicitDir(t *testing.T) {
+	rootDir := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(rootDir, "@you/tts", saveTestNamedFactoryPayload(t, "tts")); err != nil {
+		t.Fatalf("PersistNamedFactory(scoped): %v", err)
+	}
+	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	if err := Delete(DeleteConfig{
+		Name:   "@you/tts",
+		Dir:    rootDir,
+		Output: ioDiscard(t),
+	}); err != nil {
+		t.Fatalf("Delete(scoped): %v", err)
+	}
+
+	resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(rootDir)
+	if err != nil {
+		t.Fatalf("ResolveCurrentFactoryDir: %v", err)
+	}
+	if want := filepath.Join(rootDir, "alpha"); resolvedDir != want {
+		t.Fatalf("resolved dir = %q, want %q", resolvedDir, want)
+	}
+	if _, err := os.Stat(filepath.Join(rootDir, "@you%2Ftts")); !os.IsNotExist(err) {
+		t.Fatalf("scoped factory directory still exists: %v", err)
+	}
+}

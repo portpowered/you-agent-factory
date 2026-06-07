@@ -56,6 +56,27 @@ func TestDeleteNamedFactory_RejectsCurrentFactory(t *testing.T) {
 	}
 }
 
+func TestDeleteNamedFactory_RejectsCurrentScopedFactory(t *testing.T) {
+	rootDir := t.TempDir()
+	if _, err := PersistNamedFactory(rootDir, "@you/tts", namedFactoryPayload(t, "tts")); err != nil {
+		t.Fatalf("PersistNamedFactory(scoped): %v", err)
+	}
+	if err := WriteCurrentFactoryPointer(rootDir, "@you/tts"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(scoped): %v", err)
+	}
+
+	err := DeleteNamedFactory(rootDir, "@you/tts")
+	if err == nil {
+		t.Fatal("expected delete current scoped factory to fail")
+	}
+	if !errors.Is(err, ErrNamedFactoryIsCurrent) {
+		t.Fatalf("error = %v, want ErrNamedFactoryIsCurrent", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(rootDir, "@you%2Ftts")); statErr != nil {
+		t.Fatalf("scoped factory should remain on disk: %v", statErr)
+	}
+}
+
 func TestDeleteNamedFactory_RejectsMissingFactory(t *testing.T) {
 	rootDir := t.TempDir()
 

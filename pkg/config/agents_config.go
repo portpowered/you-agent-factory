@@ -22,118 +22,116 @@ type WorkstationLoader interface {
 	Load(name string) (*interfaces.FactoryWorkstationConfig, error)
 }
 
-func cloneStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
+// ErrInvalidNamedFactoryName reports that the requested canonical named-factory
+// name failed validation before any on-disk lookup or persistence work began.
+var ErrInvalidNamedFactoryName = errors.New("invalid named factory name")
+
+// ErrNamedFactoryNotFound reports that a requested named factory was not found
+// in the searched root or roots.
+var ErrNamedFactoryNotFound = errors.New("named factory not found")
+
+// NamedFactoryResolutionSource identifies the root that supplied a resolved
+// named factory.
+type NamedFactoryResolutionSource string
+
+const (
+	NamedFactoryResolutionSourceProjectLocal NamedFactoryResolutionSource = "project-local"
+	NamedFactoryResolutionSourceGlobal       NamedFactoryResolutionSource = "global"
+	NamedFactoryResolutionSourceBuiltin      NamedFactoryResolutionSource = "builtin-materialized"
+)
+
+// NamedFactoryPrecedenceDecision reports whether cross-root resolution observed
+// a local-over-global conflict before selecting a runnable directory.
+type NamedFactoryPrecedenceDecision string
+
+const (
+	NamedFactoryPrecedenceDecisionNone              NamedFactoryPrecedenceDecision = "none"
+	NamedFactoryPrecedenceDecisionProjectOverGlobal NamedFactoryPrecedenceDecision = "project-local-over-global"
+)
+
+// NamedFactoryResolution reports the selected runnable directory and the roots
+// considered during cross-root named-factory resolution.
+type NamedFactoryResolution struct {
+	Name               string
+	FactoryDir         string
+	Source             NamedFactoryResolutionSource
+	ProjectRoot        string
+	GlobalRoot         string
+	PrecedenceDecision NamedFactoryPrecedenceDecision
 }
 
-func cloneBoolPtr(value *bool) *bool {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
+type invalidNamedFactoryNameError struct {
+	name string
+	err  error
 }
 
-func cloneFactoryLayoutConfig(layout *interfaces.FactoryLayoutConfig) *interfaces.FactoryLayoutConfig {
-	if layout == nil {
-		return nil
-	}
+func (e *invalidNamedFactoryNameError) Error() string {
+	return fmt.Sprintf("invalid named factory name %q: %v", e.name, e.err)
+}
 
-	return &interfaces.FactoryLayoutConfig{
-		SchemaVersion: layout.SchemaVersion,
-		Nodes:         cloneFactoryLayoutNodeConfigs(layout.Nodes),
-		Edges:         cloneFactoryLayoutEdgeConfigs(layout.Edges),
-		Groups:        cloneFactoryLayoutGroupConfigs(layout.Groups),
-		Viewport:      cloneFactoryLayoutViewportConfig(layout.Viewport),
-		Preferences:   cloneFactoryLayoutPreferencesConfig(layout.Preferences),
+func (e *invalidNamedFactoryNameError) Unwrap() []error {
+	return []error{ErrInvalidNamedFactoryName, e.err}
+}
+
+type namedFactoryNotFoundError struct{ name string }
+
+func (e *namedFactoryNotFoundError) Error() string {
+	return fmt.Sprintf("named factory %q not found", e.name)
+}
+
+func (e *namedFactoryNotFoundError) Unwrap() []error {
+	return []error{ErrNamedFactoryNotFound, os.ErrNotExist}
+}
+
+func wrapInvalidNamedFactoryName(name string, err error) error {
+	if err == nil || errors.Is(err, ErrInvalidNamedFactoryName) {
+		return err
+	}
+	return &invalidNamedFactoryNameError{name: strings.TrimSpace(name), err: err}
+}
+
+func namedFactoryResolution(
+	name string,
+	factoryDir string,
+	source NamedFactoryResolutionSource,
+	projectRoot string,
+	globalRoot string,
+	precedence NamedFactoryPrecedenceDecision,
+) *NamedFactoryResolution {
+	return &NamedFactoryResolution{
+		Name:               name,
+		FactoryDir:         factoryDir,
+		Source:             source,
+		ProjectRoot:        projectRoot,
+		GlobalRoot:         globalRoot,
+		PrecedenceDecision: precedence,
 	}
 }
 
-func cloneFactoryLayoutNodeConfigs(nodes []interfaces.FactoryLayoutNodeConfig) []interfaces.FactoryLayoutNodeConfig {
-	if len(nodes) == 0 {
-		return nil
+func projectLocalPrecedenceDecision(globalRoot, canonicalName string) NamedFactoryPrecedenceDecision {
+	if globalRoot == "" {
+		return NamedFactoryPrecedenceDecisionNone
 	}
-	cloned := make([]interfaces.FactoryLayoutNodeConfig, len(nodes))
-	for i, node := range nodes {
-		cloned[i] = interfaces.FactoryLayoutNodeConfig{
-			ID:       node.ID,
-			Position: node.Position,
-			Size:     cloneFactoryLayoutSizeConfig(node.Size),
-			Locked:   cloneBoolPtr(node.Locked),
-		}
+	if hasNamedFactoryCandidate(globalRoot, canonicalName) {
+		return NamedFactoryPrecedenceDecisionProjectOverGlobal
 	}
-	return cloned
+	return NamedFactoryPrecedenceDecisionNone
 }
 
-func cloneFactoryLayoutEdgeConfigs(edges []interfaces.FactoryLayoutEdgeConfig) []interfaces.FactoryLayoutEdgeConfig {
-	if len(edges) == 0 {
-		return nil
-	}
-	cloned := make([]interfaces.FactoryLayoutEdgeConfig, len(edges))
-	for i, edge := range edges {
-		cloned[i] = interfaces.FactoryLayoutEdgeConfig{
-			ID:            edge.ID,
-			Waypoints:     append([]interfaces.FactoryLayoutPointConfig(nil), edge.Waypoints...),
-			LabelPosition: cloneFactoryLayoutPointConfig(edge.LabelPosition),
-		}
-	}
-	return cloned
+func hasNamedFactoryCandidate(rootDir, canonicalName string) bool {
+	_, found, err := resolveNamedFactoryCandidate(rootDir, canonicalName)
+	return err == nil && found
 }
 
-func cloneFactoryLayoutGroupConfigs(groups []interfaces.FactoryLayoutGroupConfig) []interfaces.FactoryLayoutGroupConfig {
-	if len(groups) == 0 {
-		return nil
-	}
-	cloned := make([]interfaces.FactoryLayoutGroupConfig, len(groups))
-	for i, group := range groups {
-		cloned[i] = interfaces.FactoryLayoutGroupConfig{
-			ID:            group.ID,
-			Label:         group.Label,
-			Bounds:        group.Bounds,
-			NodeIDs:       append([]string(nil), group.NodeIDs...),
-			ParentGroupID: cloneStringPtr(group.ParentGroupID),
-			Color:         group.Color,
-			Locked:        cloneBoolPtr(group.Locked),
-		}
-	}
-	return cloned
+func newNamedFactoryNotFoundError(name string) error {
+	return &namedFactoryNotFoundError{name: strings.TrimSpace(name)}
 }
 
-func cloneFactoryLayoutViewportConfig(viewport *interfaces.FactoryLayoutViewportConfig) *interfaces.FactoryLayoutViewportConfig {
-	if viewport == nil {
-		return nil
-	}
-	cloned := *viewport
-	return &cloned
-}
+// IsInvalidNamedFactoryName reports whether err wraps ErrInvalidNamedFactoryName.
+func IsInvalidNamedFactoryName(err error) bool { return errors.Is(err, ErrInvalidNamedFactoryName) }
 
-func cloneFactoryLayoutPreferencesConfig(preferences *interfaces.FactoryLayoutPreferencesConfig) *interfaces.FactoryLayoutPreferencesConfig {
-	if preferences == nil {
-		return nil
-	}
-	cloned := *preferences
-	return &cloned
-}
-
-func cloneFactoryLayoutPointConfig(point *interfaces.FactoryLayoutPointConfig) *interfaces.FactoryLayoutPointConfig {
-	if point == nil {
-		return nil
-	}
-	cloned := *point
-	return &cloned
-}
-
-func cloneFactoryLayoutSizeConfig(size *interfaces.FactoryLayoutSizeConfig) *interfaces.FactoryLayoutSizeConfig {
-	if size == nil {
-		return nil
-	}
-	cloned := *size
-	return &cloned
-}
+// IsNamedFactoryNotFound reports whether err wraps ErrNamedFactoryNotFound.
+func IsNamedFactoryNotFound(err error) bool { return errors.Is(err, ErrNamedFactoryNotFound) }
 
 // LoadWorkerConfig loads a worker configuration from the given directory.
 // It reads AGENTS.md, parses YAML frontmatter into WorkerConfig, and sets
