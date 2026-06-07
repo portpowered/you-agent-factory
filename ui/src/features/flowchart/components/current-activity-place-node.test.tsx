@@ -133,7 +133,6 @@ describe("CurrentActivity place node work-state phase styling", () => {
       workStatePhaseSemanticIconClassName("PROCESSING"),
     );
   });
-
 });
 
 describe("CurrentActivity place node work-state phase precedence", () => {
@@ -195,7 +194,9 @@ describe("CurrentActivity place node work-state phase precedence", () => {
       type_id: "story",
     };
     const { container } = render(
-      <StatePositionNodeView {...statePositionNodeProps(place, { activeFlow: true })} />,
+      <StatePositionNodeView
+        {...statePositionNodeProps(place, { activeFlow: true })}
+      />,
     );
     const shell = nodeShell(container);
 
@@ -215,7 +216,9 @@ describe("CurrentActivity place node work-state phase precedence", () => {
       type_id: "story",
     };
     const { container } = render(
-      <StatePositionNodeView {...statePositionNodeProps(place, { muted: true })} />,
+      <StatePositionNodeView
+        {...statePositionNodeProps(place, { muted: true })}
+      />,
     );
     const shell = nodeShell(container);
 

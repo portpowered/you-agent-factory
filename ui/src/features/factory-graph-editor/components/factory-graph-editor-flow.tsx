@@ -11,6 +11,8 @@ import {
   GraphSemanticIcon,
   type GraphSemanticIconKind,
 } from "../../flowchart/components/graph-semantic-icon";
+import { currentActivityGraphNodeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
@@ -24,7 +26,6 @@ import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../lib/factory-graph-react-flow-projection";
-import { currentActivityGraphNodeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSemanticIconKind,
@@ -32,7 +33,6 @@ import {
 } from "../lib/factory-graph-work-state-phase-styling";
 import type { FactoryGraphWorkStateType } from "../lib/factory-graph-work-state-type";
 import type { FactoryValidationGraphProjection } from "../lib/factory-validation-graph-projection";
-import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "./factory-graph-editor-edge";
 
 type FactoryGraphEditorNode = FactoryGraphReactFlowNode;
 
@@ -47,7 +47,10 @@ const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
 export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {
   factoryEntity: FactoryGraphEditorNodeView,
 };
-export { FACTORY_GRAPH_EDITOR_EDGE_TYPES };
+export {
+  FACTORY_GRAPH_EDGE_TYPES,
+  FACTORY_GRAPH_EDGE_TYPES as FACTORY_GRAPH_EDITOR_EDGE_TYPES,
+};
 
 export function buildFactoryGraphEditorFlowModel(input: {
   canEditConnections: boolean;
@@ -102,9 +105,7 @@ function FactoryGraphEditorNodeView({
   selected,
 }: NodeProps<FactoryGraphEditorNode>) {
   if (data.kind === "worker") {
-    return (
-      <FactoryGraphEditorWorkerNodeView data={data} selected={selected} />
-    );
+    return <FactoryGraphEditorWorkerNodeView data={data} selected={selected} />;
   }
 
   const surfaceClassName =

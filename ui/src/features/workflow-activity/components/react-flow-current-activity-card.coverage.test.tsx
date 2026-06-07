@@ -363,9 +363,8 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         this.callback(
           [
             {
-              contentRect: HTMLElement.prototype.getBoundingClientRect.call(
-                target,
-              ),
+              contentRect:
+                HTMLElement.prototype.getBoundingClientRect.call(target),
               target,
             } as ResizeObserverEntry,
           ],

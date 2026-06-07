@@ -2,12 +2,12 @@ import type { Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
-import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,
   resolveInitialPlacementTopLeft,
 } from "./graph-editor-add-node-placement";
+import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 
 function workerNode(id: string, position: { x: number; y: number }): Node {
   return {
@@ -19,10 +19,7 @@ function workerNode(id: string, position: { x: number; y: number }): Node {
   };
 }
 
-function workstationNode(
-  id: string,
-  position: { x: number; y: number },
-): Node {
+function workstationNode(id: string, position: { x: number; y: number }): Node {
   return {
     data: { kind: "workstation" },
     height: 196,
@@ -195,9 +192,7 @@ describe("resolveInitialPlacementTopLeft for workstations", () => {
       x: viewportCenter.x - workstationSize.width / 2,
       y: viewportCenter.y - workstationSize.height / 2,
     };
-    const nodes = [
-      workstationNode("workstation:writer", centeredTopLeft),
-    ];
+    const nodes = [workstationNode("workstation:writer", centeredTopLeft)];
 
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workstationDraft,

@@ -5,10 +5,7 @@ import {
   useId,
   useState,
 } from "react";
-import {
-  DashboardHeading,
-  DashboardText,
-} from "../../../components/ui";
+import { DashboardHeading, DashboardText } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { cn } from "../../../lib/cn";
 
@@ -107,10 +104,7 @@ export function StandardExpandableSection({
         />
       </div>
       {hasContent ? (
-        <div
-          className={cn("grid", contentClassName)}
-          id={resolvedContentID}
-        >
+        <div className={cn("grid", contentClassName)} id={resolvedContentID}>
           {expanded ? children : preview}
         </div>
       ) : null}

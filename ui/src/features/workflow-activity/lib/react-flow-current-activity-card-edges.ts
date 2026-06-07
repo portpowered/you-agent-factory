@@ -1,12 +1,11 @@
 import { type Edge, type FitViewOptions, MarkerType } from "@xyflow/react";
-
+import { currentActivityGraphEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import type {
   GraphLayout,
   PositionedEdge,
   PositionedPlaceNode,
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
-import { currentActivityGraphEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
   type ActiveGraphHighlights,

@@ -47,6 +47,7 @@ const targets = [
   },
 ] as const;
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps the utility contract coverage together in one focused spec block.
 describe("dashboard session tabs utils", () => {
   it("builds session labels and DOM ids from the best available session metadata", () => {
     expect(sessionTabLabel(namedSession)).toBe("Review Factory");

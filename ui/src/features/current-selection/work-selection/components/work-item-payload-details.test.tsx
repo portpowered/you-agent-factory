@@ -48,7 +48,9 @@ describe("WorkItemPayloadList", () => {
     expect(selectedWorkButton.getAttribute("aria-pressed")).toBe("true");
     expect(selectedWorkButton.className).toContain("border-outline");
     expect(selectedWorkButton.className).not.toContain("bg-primary-container");
-    expect(selectedWorkButton.className).not.toContain("bg-secondary-container");
+    expect(selectedWorkButton.className).not.toContain(
+      "bg-secondary-container",
+    );
 
     const plainArticle = selectedWorkButton.closest("article");
 

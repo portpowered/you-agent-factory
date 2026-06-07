@@ -166,9 +166,7 @@ export const CursorSessionSuccess = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await canvas.findByRole("heading", { name: "Transcript" });
-    expect(
-      canvas.getByText("Hello from Cursor session storage."),
-    ).toBeTruthy();
+    expect(canvas.getByText("Hello from Cursor session storage.")).toBeTruthy();
     expect(
       canvas.getAllByText(
         `cursor / Session ID / ${cursorProviderSessionVerificationSessionID}`,

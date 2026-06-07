@@ -1,14 +1,10 @@
 import type { DashboardInferenceAttempt } from "../../../../api/dashboard/types";
 import { surfacePanelVariants } from "../../../../components/ui";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
-import {
-  useCurrentSelectionOperationalEnumMessages,
-} from "../../base/components/current-selection-locale";
+import { useCurrentSelectionOperationalEnumMessages } from "../../base/components/current-selection-locale";
 import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../base/public";
-import {
-  InferenceAttemptProviderSessionPreview,
-} from "./inference-attempt-provider-session";
+import { InferenceAttemptProviderSessionPreview } from "./inference-attempt-provider-session";
 
 export interface InferenceAttemptSummaryHeaderProps {
   attempt: DashboardInferenceAttempt;

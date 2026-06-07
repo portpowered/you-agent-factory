@@ -31,11 +31,17 @@ describe("InferenceAttemptCard", () => {
       name: "Inference attempt 2",
     });
 
-    expect(within(article).getByRole("heading", { name: "Attempt 2" })).toBeTruthy();
-    expect(within(article).getByText("Unknown outcome: COMPLETED")).toBeTruthy();
+    expect(
+      within(article).getByRole("heading", { name: "Attempt 2" }),
+    ).toBeTruthy();
+    expect(
+      within(article).getByText("Unknown outcome: COMPLETED"),
+    ).toBeTruthy();
     expect(within(article).getByText("Elapsed time: 740ms")).toBeTruthy();
     expect(
-      within(article).getByRole("button", { name: /Select provider session .*sess-ready/i }),
+      within(article).getByRole("button", {
+        name: /Select provider session .*sess-ready/i,
+      }),
     ).toBeTruthy();
     expect(within(article).queryByText("dispatch-review")).toBeNull();
   });
@@ -70,9 +76,13 @@ describe("InferenceAttemptCard", () => {
       throw new Error("expected attempt section");
     }
 
-    fireEvent.click(within(section).getByRole("button", { name: "Expand attempt 1" }));
+    fireEvent.click(
+      within(section).getByRole("button", { name: "Expand attempt 1" }),
+    );
 
-    expect(within(article).getByText("dispatch-review/inference-request/full")).toBeTruthy();
+    expect(
+      within(article).getByText("dispatch-review/inference-request/full"),
+    ).toBeTruthy();
     expect(within(article).getByText("Provider session")).toBeTruthy();
   });
 });

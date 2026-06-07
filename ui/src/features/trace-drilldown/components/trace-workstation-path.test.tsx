@@ -579,14 +579,18 @@ describe("TraceWorkstationPath semantics", () => {
     if (!acceptedNode) {
       throw new Error("Expected accepted workstation node to render.");
     }
-    expect(acceptedNode.className).toContain("af-current-activity-node-surface-neutral");
+    expect(acceptedNode.className).toContain(
+      "af-current-activity-node-surface-neutral",
+    );
     expect(acceptedNode.className).toContain("border-info-border");
 
     const failedNode = screen.getByText("dispatch-repair").closest("article");
     if (!failedNode) {
       throw new Error("Expected failed workstation node to render.");
     }
-    expect(failedNode.className).toContain("af-current-activity-node-surface-neutral");
+    expect(failedNode.className).toContain(
+      "af-current-activity-node-surface-neutral",
+    );
     expect(failedNode.className).toContain("border-info-border");
   });
 });

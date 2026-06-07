@@ -72,9 +72,10 @@ describe("App dashboard session stream loading", () => {
     });
     expect(screen.queryByRole("slider", { name: "Timeline tick" })).toBeNull();
 
-    await emitTimelineMessagesAct(requireEventStream(MockEventSource.instances), [
-      selectedTickTimelineEvents[0],
-    ]);
+    await emitTimelineMessagesAct(
+      requireEventStream(MockEventSource.instances),
+      [selectedTickTimelineEvents[0]],
+    );
 
     const slider = await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",
@@ -226,7 +227,9 @@ describe("App dashboard session stream refresh", () => {
     });
 
     const initialStream = requireEventStream(MockEventSource.instances);
-    await emitTimelineMessagesAct(initialStream, [selectedTickTimelineEvents[0]]);
+    await emitTimelineMessagesAct(initialStream, [
+      selectedTickTimelineEvents[0],
+    ]);
 
     await screen.findByRole<HTMLInputElement>("slider", {
       name: "Timeline tick",

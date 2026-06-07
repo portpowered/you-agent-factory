@@ -49,9 +49,7 @@ describe("CompletedFailedWorkstationCard", () => {
     expect(completedHeading.className).toContain(
       "af-dashboard-section-heading",
     );
-    expect(failedHeading.className).toContain(
-      "af-dashboard-section-heading",
-    );
+    expect(failedHeading.className).toContain("af-dashboard-section-heading");
     const completedTitle = completedHeading.closest(
       "[data-terminal-work-title]",
     );
@@ -100,17 +98,18 @@ describe("CompletedFailedWorkstationCard", () => {
     const doneStoryCard = screen.getByText("Done Story").closest("li");
     expect(doneStoryCard?.className).toContain("af-dashboard-body-text");
     expect(
-      within(doneStoryCard as HTMLElement).getByText(messages.rowTitle("completed"))
-        .className,
+      within(doneStoryCard as HTMLElement).getByText(
+        messages.rowTitle("completed"),
+      ).className,
     ).toContain("text-on-success-container");
     const failedStoryAction = screen.getByRole("button", {
       name: messages.selectWorkItemLabel("Failed Story"),
     });
     expect(failedStoryAction.textContent).toBe(messages.openWorkItemAction);
     expect(
-      within(screen.getByText("Failed Story").closest("li") as HTMLElement).getByText(
-        messages.rowTitle("failed"),
-      ).className,
+      within(
+        screen.getByText("Failed Story").closest("li") as HTMLElement,
+      ).getByText(messages.rowTitle("failed")).className,
     ).toContain("text-on-error-container");
     const failedMeta = screen.getByText("Failed at setup-workspace");
     expect(failedMeta.className).toContain("af-dashboard-supporting-text");
@@ -329,7 +328,9 @@ describe("CompletedFailedWorkstationCard", () => {
       }),
       { selected: false, text: messages.openWorkItemAction },
     );
-    expect(screen.getByText(messages.selectedWorkItemLabel("Failed Story"))).toBeTruthy();
+    expect(
+      screen.getByText(messages.selectedWorkItemLabel("Failed Story")),
+    ).toBeTruthy();
   });
 
   it("keeps selection styling controlled by props across rerenders", () => {

@@ -9,27 +9,27 @@ import {
   formatDurationFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
-import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import {
-  REPEATER_WORKSTATION_KIND,
-  workstationIconMetadata,
-} from "../../flowchart/lib/workstation-icon-metadata";
-import { currentActivityGraphNodeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
-import { getActivityGraphMessages } from "../../flowchart/messages/activity-graph";
 import {
   ActivityGraphNodeBadge,
   activityGraphNodeTitleClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
+import { CurrentActivityWorkProgressMarker } from "../../flowchart/components/current-activity-work-progress-marker";
+import { GraphSemanticIcon } from "../../flowchart/components/graph-semantic-icon";
+import { currentActivityGraphNodeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
+import {
+  REPEATER_WORKSTATION_KIND,
+  workstationIconMetadata,
+} from "../../flowchart/lib/workstation-icon-metadata";
+import { getActivityGraphMessages } from "../../flowchart/messages/activity-graph";
+import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+import { GraphNodeButton } from "./graph-node-button";
 import type {
   ActivityGraphNodeHandle,
   ZAxisIncompleteHints,
-} from "../../flowchart/components/current-activity-node-shell";
-import { ActivityGraphNodeShell } from "../../flowchart/components/current-activity-node-shell";
-import { CurrentActivityWorkProgressMarker } from "../../flowchart/components/current-activity-work-progress-marker";
-import { GraphSemanticIcon } from "../../flowchart/components/graph-semantic-icon";
-import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
+} from "./graph-node-shell";
+import { ActivityGraphNodeShell } from "./graph-node-shell";
 
 export interface WorkstationNodeData extends Record<string, unknown> {
   active: boolean;
@@ -44,6 +44,7 @@ export interface WorkstationNodeData extends Record<string, unknown> {
   progressOutcomeRouteWorkstation?: WorkstationProgressOutcomeRouteContext;
   selectedWorkID: string | null;
   selectedWorkstation: boolean;
+  summaryOnly?: boolean;
   workstation: DashboardWorkstationNode;
   zAxisIncompleteHints?: ZAxisIncompleteHints | null;
   onSelectWorkstation?: (nodeId: string) => void;
@@ -128,6 +129,13 @@ export function WorkstationNodeView({
           semanticIconMetadata={semanticIconMetadata}
           workstationTitle={workstationTitle}
         />
+      ) : data.summaryOnly ? (
+        <SummaryWorkstationNodeContent
+          data={data}
+          messages={messages}
+          semanticIconMetadata={semanticIconMetadata}
+          workstationTitle={workstationTitle}
+        />
       ) : (
         <ActiveWorkstationNodeContent
           data={data}
@@ -140,6 +148,50 @@ export function WorkstationNodeView({
         />
       )}
     </ActivityGraphNodeShell>
+  );
+}
+
+function SummaryWorkstationNodeContent({
+  data,
+  messages,
+  semanticIconMetadata,
+  workstationTitle,
+}: {
+  data: WorkstationNodeData;
+  messages: ReturnType<typeof getWorkflowActivityShellMessages>;
+  semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
+  workstationTitle: string;
+}) {
+  return (
+    <GraphNodeButton
+      aria-label={
+        data.onSelectWorkstation
+          ? messages.selectWorkstationLabel(workstationTitle)
+          : undefined
+      }
+      aria-pressed={
+        data.onSelectWorkstation ? data.selectedWorkstation : undefined
+      }
+      className="flex min-w-0 w-full items-center justify-between gap-2 overflow-hidden"
+      data-selected-workstation={data.selectedWorkstation ? "true" : undefined}
+      data-workstation-kind={semanticIconMetadata.semanticKind}
+      disabled={data.onSelectWorkstation === undefined}
+      onClick={
+        data.onSelectWorkstation
+          ? (event) => {
+              event.stopPropagation();
+              data.onSelectWorkstation?.(data.workstation.node_id);
+            }
+          : undefined
+      }
+      title={workstationTitle}
+    >
+      <WorkstationHeaderContent
+        data={data}
+        semanticIconMetadata={semanticIconMetadata}
+        workstationTitle={workstationTitle}
+      />
+    </GraphNodeButton>
   );
 }
 

@@ -35,7 +35,7 @@ import { workChartPresentationClasses } from "./work-chart-presentation";
 import { WorkChartStatusPanel } from "./work-chart-status-panel";
 
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
-
+export type { WorkChartPresentation } from "./work-chart-presentation";
 const WORK_CHART_AXIS_LABEL_CLASS = dashboardChartAxisLabelClassName();
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
 const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
@@ -168,6 +168,7 @@ interface ReadyWorkChartProps {
   yAxisLabel: string;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps chart interaction, legend, and axis overlay wiring together in one render path.
 function ReadyWorkChart({
   ariaLabel,
   chartData,
@@ -227,6 +228,21 @@ function ReadyWorkChart({
           onMouseMove: updateSelection,
           onMouseUp: commitSelection,
         }}
+        overlay={
+          <div
+            className={cn(
+              overlayClassName,
+              "items-start justify-center text-on-surface-variant",
+            )}
+            data-work-chart-overlay="true"
+          >
+            <div className="flex min-h-0 flex-1 items-center">
+              <span className="-rotate-180 text-sm [writing-mode:vertical-rl]">
+                {yAxisLabel}
+              </span>
+            </div>
+          </div>
+        }
         presentation={presentation}
         rootAttributes={{
           "data-work-chart-legend-placement": "shell-row",

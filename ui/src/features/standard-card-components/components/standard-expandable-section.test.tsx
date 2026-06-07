@@ -31,6 +31,8 @@ describe("StandardExpandableSection", () => {
     expect(headerRow?.className).toContain("items-start");
     expect(trigger.className).toContain("self-start");
     expect(trigger.className).not.toContain("mt-0.5");
-    expect(within(section as HTMLElement).getByText("Expanded content")).toBeTruthy();
+    expect(
+      within(section as HTMLElement).getByText("Expanded content"),
+    ).toBeTruthy();
   });
 });

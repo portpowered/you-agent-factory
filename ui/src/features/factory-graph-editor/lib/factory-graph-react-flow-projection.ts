@@ -6,6 +6,7 @@ import type {
   ActivityGraphNodeHandle,
   ZAxisIncompleteHints,
 } from "../../flowchart/components/current-activity-node-shell";
+import { factoryGraphEditorEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "./factory-graph-customer-display";
 import type {
@@ -36,7 +37,6 @@ import {
   type FactoryGraphWorkStateType,
   resolveWorkStateTypeForGraphNode,
 } from "./factory-graph-work-state-type";
-import { factoryGraphEditorEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
 import {
   type FactoryValidationGraphProjection,
   filterValidationHandleErrorsForWorkstation,
@@ -332,6 +332,7 @@ function buildFactoryGraphReactFlowEdge(
             ? "workstation-output"
             : edge.kind,
         );
+  const visibleEdgeLabel = edge.kind === "work-type-state" ? "" : edgeLabel;
   const handleAssignment = getEdgeHandleAssignment(
     edge,
     input.topology,
@@ -356,7 +357,8 @@ function buildFactoryGraphReactFlowEdge(
       ? "7 5"
       : pendingAddition
         ? "9 4"
-        : edge.kind === "worker-resource" || edge.kind === "workstation-resource"
+        : edge.kind === "worker-resource" ||
+            edge.kind === "workstation-resource"
           ? "4 5"
           : undefined,
     strokeWidth: pendingRemoval || pendingAddition || active ? 2 : 1.7,
@@ -389,7 +391,7 @@ function buildFactoryGraphReactFlowEdge(
         input.editor?.canEditConnections === true ||
         input.editor?.pendingConnectionSource !== null,
       kind: edge.kind,
-      label: edgeLabel,
+      label: visibleEdgeLabel,
       pendingStatus: pendingRemoval
         ? "removal"
         : pendingAddition

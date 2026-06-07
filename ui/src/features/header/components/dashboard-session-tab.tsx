@@ -108,6 +108,7 @@ export function SessionTabButton({
   const label = sessionTabLabel(session);
   const secondaryPath = sessionTabSecondaryPath(session.folderPath);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop is attached to the tab shell while the semantic tab control remains the inner button.
     <div
       className={cn(
         SESSION_TAB_ITEM_CLASS,
@@ -115,7 +116,7 @@ export function SessionTabButton({
         dropIndicator === "before" &&
           "shadow-[-2px_0_0_0_var(--color-primary)]",
         dropIndicator === "after" && "shadow-[2px_0_0_0_var(--color-primary)]",
-        dragPreview && "opacity-70",
+        dragPreview && "bg-surface-container-low text-on-surface-disabled",
         "max-w-72",
       )}
       draggable={draggable}

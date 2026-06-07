@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 
 import { cn } from "../../../../lib/cn";
 import { StandardExpandableSection } from "../../../standard-card-components/public";

@@ -1,15 +1,15 @@
 import { type Node, Position } from "@xyflow/react";
-
-import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
-import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
+import type {
+  DashboardTraceDispatch,
+  DashboardWorkstationNode,
+} from "../../../api/dashboard/types";
 import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
-  type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
-import type { WorkstationNodeData } from "../../graphs/public";
 import { STANDARD_WORKSTATION_KIND } from "../../flowchart/lib/workstation-icon-metadata";
+import type { WorkstationNodeData } from "../../graphs/public";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,
@@ -73,6 +73,7 @@ export function buildTraceDispatchFactoryGraphFlow(
         now: 0,
         selectedWorkID: null,
         selectedWorkstation: false,
+        summaryOnly: true,
         workstation: traceDispatchWorkstationNode(overlay),
       },
       id: dispatchId,
@@ -84,6 +85,13 @@ export function buildTraceDispatchFactoryGraphFlow(
 
   const edges = factoryProjection.edges.map((edge) => ({
     ...edge,
+    data:
+      edge.data?.kind === "workstation-on-continue"
+        ? {
+            ...edge.data,
+            label: "",
+          }
+        : edge.data,
     source: traceProjection.dispatchIdByNodeId.get(edge.source) ?? edge.source,
     target: traceProjection.dispatchIdByNodeId.get(edge.target) ?? edge.target,
   }));

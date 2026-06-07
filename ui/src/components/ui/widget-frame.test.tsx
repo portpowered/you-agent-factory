@@ -105,7 +105,9 @@ describe("DashboardWidgetFrame chrome", () => {
 
     const card = screen.getByRole("article", { name: "Trace" });
 
-    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeTruthy();
+    expect(
+      card.querySelector("[data-radix-scroll-area-viewport]"),
+    ).toBeTruthy();
     expect(card.className).toContain("h-full");
     expect(card.className).toContain("overflow-hidden");
   });

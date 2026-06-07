@@ -10,15 +10,13 @@ import type { CanonicalFactoryDefinition } from "../../../api/factory-definition
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/factory-graph-customer-display";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
 import {
-  FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND,
-} from "../../factory-graph-editor/lib/factory-graph-editor-layout";
-import {
   type FactoryGraphEdge,
   type FactoryGraphNode,
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
@@ -278,7 +276,7 @@ function seedNodeFromFactoryGraphNode(
       workstationNodeId:
         parseFactoryGraphWorkstationNodeId(node.id) ?? node.label,
     };
-   }
+  }
 
   return {
     height: dimensions.height,

@@ -49,7 +49,7 @@ function renderWorkContentPart(part: WorkContentPart, index: number) {
   return (
     <SurfacePanel asChild key={`work-content-part-${index}`} radius="lg">
       <DashboardText className="text-on-surface-variant" variant="supporting">
-      {describeWorkContentPart(part)}
+        {describeWorkContentPart(part)}
       </DashboardText>
     </SurfacePanel>
   );

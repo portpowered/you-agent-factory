@@ -9,7 +9,6 @@ import {
   DashboardCode,
   DashboardDescriptionList,
   DashboardLabel,
-  DashboardStatusPill,
   ExpandablePanelTrigger,
 } from "../../../components/ui";
 import { Button } from "../../../components/ui/button";
@@ -288,7 +287,6 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
             {trace.dispatches.map((dispatch) => (
               <TableRow key={dispatch.dispatch_id}>
                 <TableCell className="align-top" scope="row">
-                  
                   {dispatch.dispatch_id}
                 </TableCell>
                 <TableCell className="align-top">

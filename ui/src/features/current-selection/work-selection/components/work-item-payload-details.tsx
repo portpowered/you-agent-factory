@@ -118,7 +118,7 @@ function WorkItemPayloadDetails({
   );
 }
 
-function resolveWorkTypeID(workItem: PayloadAwareWorkItem) {
+function _resolveWorkTypeID(workItem: PayloadAwareWorkItem) {
   return workItem.work_type_id ?? workItem.workTypeId;
 }
 

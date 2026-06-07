@@ -59,11 +59,11 @@ import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
 import { getImportPreviewDialogMessages } from "../../import/messages/import-preview-dialog";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
+import { resetCurrentActivityGraphLayoutCacheForTests } from "../hooks/react-flow-current-activity-card-graph-layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "../lib/current-activity-factory-graph-layout";
-import { resetCurrentActivityGraphLayoutCacheForTests } from "../hooks/react-flow-current-activity-card-graph-layout";
 import { buildGraphEdges } from "../lib/react-flow-current-activity-card-edges";
 import {
   buildActiveGraphHighlights,

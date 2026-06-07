@@ -65,17 +65,15 @@ function expectNoForbiddenTransitionalNeutralText(source: string): void {
 }
 
 describe("prompt-editor neutral surface roles", () => {
-  const productionSources = walkPromptEditorProductionSources(PROMPT_EDITOR_DIR);
+  const productionSources =
+    walkPromptEditorProductionSources(PROMPT_EDITOR_DIR);
 
   it.each(
     productionSources.map((path) => [relativePromptEditorPath(path), path]),
-  )(
-    "%s avoids transitional neutral text class tokens",
-    (_label, filePath) => {
-      const source = readFileSync(filePath, "utf8");
-      expectNoForbiddenTransitionalNeutralText(source);
-    },
-  );
+  )("%s avoids transitional neutral text class tokens", (_label, filePath) => {
+    const source = readFileSync(filePath, "utf8");
+    expectNoForbiddenTransitionalNeutralText(source);
+  });
 
   it("monaco-prompt-editor uses border-outline on editor shells", () => {
     const source = readPromptEditorSource("monaco-prompt-editor.tsx");
@@ -114,7 +112,9 @@ describe("prompt-editor neutral surface roles", () => {
   });
 
   it("prompt-editor-diagnostics-panel uses bg-surface-container-high on diagnostic list items", () => {
-    const source = readPromptEditorSource("prompt-editor-diagnostics-panel.tsx");
+    const source = readPromptEditorSource(
+      "prompt-editor-diagnostics-panel.tsx",
+    );
 
     expect(source).toContain("<SurfacePanel");
     expectNoForbiddenTransitionalNeutralSurfaces(source);

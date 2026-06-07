@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 
 import {
   DashboardActionButton,
-  DashboardActionRow,
   surfacePanelVariants,
 } from "../../../components/ui";
 import {
@@ -53,7 +52,6 @@ interface TerminalWorkRowProps {
 
 const TERMINAL_ROW_TITLE_ICON_CLASS = "h-4 w-4 shrink-0";
 const TERMINAL_BUTTON_META_CLASS = "leading-snug text-current";
-const TERMINAL_SECTION_CLASS = "mt-4 gap-2.5 py-0 [&_h4]:m-0";
 
 function terminalStatusIconKind(
   status: TerminalWorkStatus,
@@ -149,7 +147,7 @@ function TerminalWorkRow({
 
   return (
     <StandardExpandableSection
-      className={TERMINAL_SECTION_CLASS}
+      className="mt-4 gap-2.5 py-0 [&_h4]:m-0"
       contentClassName={surfacePanelVariants({
         className: "grid gap-3",
         radius: "2xl",

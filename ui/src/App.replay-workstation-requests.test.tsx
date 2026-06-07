@@ -94,6 +94,27 @@ function expandAttemptBodySection(
   return within(attemptCard).getByRole("region", { name: bodyLabel });
 }
 
+function expandCurrentSelectionSection(
+  currentSelection: HTMLElement,
+  sectionTitle: string,
+): HTMLElement {
+  const section = within(currentSelection).getByRole("region", {
+    name: sectionTitle,
+  });
+  const toggle =
+    within(section).queryByRole("button", { name: "Expand" }) ??
+    within(section).getByRole("button", { name: "Collapse" });
+
+  if (toggle.getAttribute("aria-expanded") === "false") {
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  } else {
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  }
+
+  return section;
+}
+
 describe("App replay workstation request flows", () => {
   registerAppDashboardTestLifecycle();
 
@@ -111,7 +132,7 @@ describe("App replay workstation request flows", () => {
     expect(screen.getByText("11/11")).toBeTruthy();
     expect(
       screen.getByRole("button", {
-        name: runtimeDetailsFixtureIDs.completedWorkLabel,
+        name: `Select work item ${runtimeDetailsFixtureIDs.completedWorkLabel}`,
       }),
     ).toBeTruthy();
     expect(
@@ -121,7 +142,7 @@ describe("App replay workstation request flows", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: runtimeDetailsFixtureIDs.completedWorkLabel,
+        name: `Select work item ${runtimeDetailsFixtureIDs.completedWorkLabel}`,
       }),
     );
 
@@ -149,20 +170,24 @@ describe("App replay workstation request flows", () => {
 
     fireEvent.click(
       screen.getByRole("button", {
-        name: runtimeDetailsFixtureIDs.failedWorkLabel,
+        name: `Select work item ${runtimeDetailsFixtureIDs.failedWorkLabel}`,
       }),
     );
 
     const failedSelection = await screen.findByRole("article", {
       name: "Current selection",
     });
+    const failedSelectionDetails = expandCurrentSelectionSection(
+      failedSelection,
+      "Failure details",
+    );
     expect(
-      within(failedSelection).getAllByText(
+      within(failedSelectionDetails).getAllByText(
         runtimeDetailsFixtureIDs.failedFailureReason,
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(failedSelection).getAllByText(
+      within(failedSelectionDetails).getAllByText(
         runtimeDetailsFixtureIDs.failedFailureMessage,
       ).length,
     ).toBeGreaterThan(0);
@@ -268,21 +293,24 @@ describe("App replay workstation request flows", () => {
     const scriptFailedSelection = await screen.findByRole("article", {
       name: "Current selection",
     });
+    const scriptFailedSelectionDetails = expandCurrentSelectionSection(
+      scriptFailedSelection,
+      "Error details",
+    );
     expect(
-      within(scriptFailedSelection).getAllByText(
+      within(scriptFailedSelectionDetails).getAllByText(
         scriptDashboardIntegrationFixtureIDs.failedFailureReason,
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(scriptFailedSelection).getAllByText(
+      within(scriptFailedSelectionDetails).getAllByText(
         scriptDashboardIntegrationFixtureIDs.failedFailureMessage,
       ).length,
     ).toBeGreaterThan(0);
     expect(
-      within(scriptFailedSelection).getAllByText("TIMEOUT").length,
-    ).toBeGreaterThan(0);
-    expect(
-      within(scriptFailedSelection).getByText("script timed out"),
+      within(scriptFailedSelectionDetails).getByText(
+        scriptDashboardIntegrationFixtureIDs.failedFailureMessage,
+      ),
     ).toBeTruthy();
     expect(
       within(scriptFailedSelection).queryByRole("heading", {

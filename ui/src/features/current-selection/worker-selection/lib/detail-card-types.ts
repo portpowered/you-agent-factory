@@ -85,9 +85,7 @@ export type EditableWorkerConfigurationState =
       onSkipPermissionsChange: (value: boolean) => void;
       onStopTokenChange: (value: string) => void;
       onTimeoutAmountChange: (value: string) => void;
-      onTimeoutUnitChange: (
-        value: EditableWorkerDraft["timeoutUnit"],
-      ) => void;
+      onTimeoutUnitChange: (value: EditableWorkerDraft["timeoutUnit"]) => void;
       markChangesSaved: () => void;
       onResetToLatest: () => void;
       onTypeChange: (value: EditableWorkerDraft["type"]) => void;

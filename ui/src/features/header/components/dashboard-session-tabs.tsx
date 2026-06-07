@@ -155,6 +155,7 @@ function DashboardSessionTabsView({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps tab focus, drag ordering, and empty/error states in one local renderer.
 function SessionTabsContent({
   activeSession,
   closingSessionID,

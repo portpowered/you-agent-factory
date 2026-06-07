@@ -51,7 +51,11 @@ export function LayoutRoleShowcase() {
           }
         />
 
-        <DashboardPanelShell as="article" className="grid gap-layout-group" inset>
+        <DashboardPanelShell
+          as="article"
+          className="grid gap-layout-group"
+          inset
+        >
           <h3 className={`m-0 ${DASHBOARD_SECTION_HEADING_CLASS}`}>
             Toolbar row layout
           </h3>
@@ -68,7 +72,11 @@ export function LayoutRoleShowcase() {
           </ToolbarRowLayout>
         </DashboardPanelShell>
 
-        <DashboardPanelShell as="article" className="grid gap-layout-group" inset>
+        <DashboardPanelShell
+          as="article"
+          className="grid gap-layout-group"
+          inset
+        >
           <h3 className={`m-0 ${DASHBOARD_SECTION_HEADING_CLASS}`}>
             Stacked card layout
           </h3>
@@ -82,7 +90,11 @@ export function LayoutRoleShowcase() {
           </CardContentStack>
         </DashboardPanelShell>
 
-        <DashboardPanelShell as="article" className="grid gap-layout-group" inset>
+        <DashboardPanelShell
+          as="article"
+          className="grid gap-layout-group"
+          inset
+        >
           <h3 className={`m-0 ${DASHBOARD_SECTION_HEADING_CLASS}`}>
             Form / dialog body layout
           </h3>

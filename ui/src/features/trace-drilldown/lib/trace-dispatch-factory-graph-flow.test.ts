@@ -3,7 +3,6 @@ import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-dispatch-factory-graph-node";
 import { buildTraceDispatchFactoryGraphFlow } from "./trace-dispatch-factory-graph-flow";
 
@@ -37,7 +36,6 @@ function buildDispatch(
 
 describe("buildTraceDispatchFactoryGraphFlow", () => {
   it("projects dispatch history into shared workstation nodes and editor edges", () => {
-    const editorMessages = getFactoryGraphEditorMessages();
     const flow = buildTraceDispatchFactoryGraphFlow([
       buildDispatch("dispatch-plan", {
         output_items: [buildWorkItem("work-reviewed")],
@@ -80,7 +78,7 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
           type: "factoryEditorEdge",
           data: expect.objectContaining({
             kind: "workstation-on-continue",
-            label: editorMessages.edgeKindLabel("workstation-on-continue"),
+            label: "",
           }),
         }),
       ]),
@@ -104,9 +102,7 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
     expect(Object.keys(TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES)).toEqual([
       "workstation",
     ]);
-    expect(flow.nodes.every((node) => node.type === "workstation")).toBe(
-      true,
-    );
+    expect(flow.nodes.every((node) => node.type === "workstation")).toBe(true);
     expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(
       true,
     );
