@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -15,19 +15,54 @@ vi.mock("@xyflow/react", async () => {
     ReactFlow: ({
       className,
       children,
+      defaultViewport,
       edges,
+      fitView,
       nodes,
       onEdgeClick,
+      onInit,
+      onMoveEnd,
       onNodeClick,
     }: {
       className?: string;
       children: ReactNode;
+      defaultViewport?: { x: number; y: number; zoom: number };
       edges?: Edge[];
+      fitView?: boolean;
       nodes?: Node[];
       onEdgeClick?: (_event: unknown, edge: Edge) => void;
+      onInit?: (instance: {
+        fitView: () => Promise<boolean>;
+        setViewport: () => Promise<boolean>;
+      }) => void;
+      onMoveEnd?: (
+        _event: unknown,
+        viewport: { x: number; y: number; zoom: number },
+      ) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
-    }) => (
-      <div className={className} data-testid="mock-react-flow">
+    }) => {
+      useEffect(() => {
+        onInit?.({
+          fitView: async () => true,
+          setViewport: async () => true,
+        });
+      }, [onInit]);
+
+      return (
+      <div
+        className={className}
+        data-default-viewport={JSON.stringify(defaultViewport ?? null)}
+        data-fit-view={String(fitView ?? false)}
+        data-testid="mock-react-flow"
+      >
+        <button
+          onClick={() =>
+            onMoveEnd?.(null, { x: 12, y: 34, zoom: 1.25 })
+          }
+          type="button"
+        >
+          pan-viewport
+        </button>
         {(nodes ?? []).map((node) => (
           <button
             key={node.id}
@@ -48,7 +83,8 @@ vi.mock("@xyflow/react", async () => {
         ))}
         {children}
       </div>
-    ),
+      );
+    },
   };
 });
 
@@ -330,6 +366,35 @@ describe("CurrentActivityGraphViewport", () => {
     expect(handleEditorEdgeClick).not.toHaveBeenCalled();
   });
 
+  it("projects saved canonical viewport into React Flow and skips fitView", () => {
+    renderViewport({
+      canonicalLayoutViewport: { x: 80, y: 120, zoom: 1.4 },
+    });
+
+    const reactFlow = screen.getByTestId("mock-react-flow");
+    expect(reactFlow.getAttribute("data-fit-view")).toBe("false");
+    expect(reactFlow.getAttribute("data-default-viewport")).toBe(
+      JSON.stringify({ x: 80, y: 120, zoom: 1.4 }),
+    );
+  });
+
+  it("persists viewport panning into canonical layout in editor mode", () => {
+    const updateLayoutViewport = vi.fn();
+
+    renderViewport({
+      editorMode: true,
+      updateLayoutViewport,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "pan-viewport" }));
+
+    expect(updateLayoutViewport).toHaveBeenCalledWith({
+      x: 12,
+      y: 34,
+      zoom: 1.25,
+    });
+  });
+
   it("keeps the current-activity graph shell and React Flow canvas flat", () => {
     renderViewport();
 
@@ -349,18 +414,26 @@ describe("CurrentActivityGraphViewport", () => {
 
 function renderViewport({
   activeTool = null,
+  canonicalLayoutViewport = null,
   edges = [],
   editorMode = false,
   nodes = [],
   onEditorEdgeClick = vi.fn(),
   onEditorNodeClick = vi.fn(),
+  updateLayoutViewport = vi.fn(),
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
+  canonicalLayoutViewport?: { x: number; y: number; zoom: number } | null;
   edges?: Edge[];
   editorMode?: boolean;
   nodes?: Node[];
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
+  updateLayoutViewport?: (viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  }) => void;
 } = {}) {
   const flowContainerRef = { current: null as HTMLElement | null };
 
@@ -369,6 +442,7 @@ function renderViewport({
       activeTool={activeTool}
       canInteractWithEditor={true}
       canSaveDraft={false}
+      canonicalLayoutViewport={canonicalLayoutViewport}
       editorUnavailableClassifierWorkstationName={undefined}
       editorMode={editorMode}
       edges={edges}
@@ -397,6 +471,7 @@ function renderViewport({
       onToggleHiddenNodeClass={vi.fn()}
       onSelectTool={vi.fn()}
       setStoredNodePosition={vi.fn()}
+      updateLayoutViewport={updateLayoutViewport}
     />,
   );
 }
