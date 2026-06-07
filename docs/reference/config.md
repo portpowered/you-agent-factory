@@ -614,6 +614,15 @@ and `LoadRuntimeConfig(...)` without redefining the manifest shape.
   from explicit dashboard edits to bundled docs. Dashboard edits persist DOC
   entries in the manifest and materialize or prune the matching files under
   `factory/docs/**` on save.
+- In the dashboard, bundled docs appear as **doc nodes** in the current activity
+  graph. Selecting a doc node opens the current-selection doc editor so you can
+  rename the file under `factory/docs/**` and edit UTF-8 text with the same
+  Monaco surface used for other factory text. Graph editor mode also supports
+  add and delete flows for docs before you save the factory document.
+- Workstation prompt authoring surfaces include attached docs in Monaco
+  suggestions. Inserted references use the canonical `{{ index .Docs
+  "factory/docs/<name>" }}` syntax and are validated against the current
+  factory's bundled DOC manifest.
 - `config flatten` adds supported `factory/scripts/**`, `factory/docs/**`, and
   root helper files such as `Makefile` to
   `supportingFiles.bundledFiles` automatically for checked-in `factory/`

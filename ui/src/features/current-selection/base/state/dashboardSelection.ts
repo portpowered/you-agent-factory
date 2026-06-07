@@ -87,6 +87,8 @@ interface ResolveDashboardSelectionInput {
   snapshot: DashboardSnapshot;
   /** When set, topology entity existence checks use this factory instead of snapshot.factory. */
   topologyFactory?: DashboardSnapshot["factory"];
+  /** Graph-editor draft factory used to retain unsaved doc selections. */
+  pendingFactoryDefinition?: DashboardSnapshot["factory"];
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
@@ -94,6 +96,7 @@ export function resolveDashboardSelection({
   selection,
   snapshot,
   topologyFactory,
+  pendingFactoryDefinition,
   workstationRequestsByDispatchID,
 }: ResolveDashboardSelectionInput): DashboardSelection | null {
   if (selection === null) {
@@ -142,7 +145,8 @@ export function resolveDashboardSelection({
   }
 
   if (selection.kind === "doc") {
-    return factoryBundledDocExists(factory, selection.targetPath)
+    return factoryBundledDocExists(factory, selection.targetPath) ||
+      factoryBundledDocExists(pendingFactoryDefinition, selection.targetPath)
       ? selection
       : selectDefaultSelection(snapshot);
   }

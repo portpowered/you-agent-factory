@@ -11,7 +11,6 @@ import { resourceTokenCountFromSnapshot } from "../resource-selection/lib/resour
 import {
   findFactoryWorkerInSnapshot,
   findFactoryWorkTypeInSnapshot,
-  resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
 } from "../state/dashboardSelection";
 import type {
@@ -35,55 +34,6 @@ import {
   terminalHistoryItemsForPlace,
   type WorkstationRequestLike,
 } from "./useCurrentSelection.helpers";
-
-export function useSelectionSynchronization({
-  projectedWorkstationRequestsByDispatchID,
-  replacePresent,
-  resetSelectionHistory,
-  selection,
-  snapshot,
-  terminalWorkDetail,
-  topologyFactory,
-}: {
-  projectedWorkstationRequestsByDispatchID:
-    | Record<string, DashboardWorkstationRequest>
-    | undefined;
-  replacePresent: (state: {
-    selection: DashboardSelection | null;
-    terminalWorkDetail: TerminalWorkDetail | null;
-  }) => void;
-  resetSelectionHistory: () => void;
-  selection: DashboardSelection | null;
-  snapshot: DashboardSnapshot | null | undefined;
-  terminalWorkDetail: TerminalWorkDetail | null;
-  topologyFactory?: DashboardSnapshot["factory"];
-}) {
-  useEffect(() => {
-    if (!snapshot) {
-      resetSelectionHistory();
-      return;
-    }
-
-    replacePresent({
-      selection: resolveDashboardSelection({
-        selection,
-        snapshot,
-        topologyFactory,
-        workstationRequestsByDispatchID:
-          projectedWorkstationRequestsByDispatchID,
-      }),
-      terminalWorkDetail,
-    });
-  }, [
-    projectedWorkstationRequestsByDispatchID,
-    replacePresent,
-    resetSelectionHistory,
-    selection,
-    snapshot,
-    terminalWorkDetail,
-    topologyFactory,
-  ]);
-}
 
 function useSelectedNode(
   selection: DashboardSelection | null,

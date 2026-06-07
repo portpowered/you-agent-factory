@@ -1,13 +1,9 @@
-import {
-  buildDocTargetPathFromFileName,
-  listFactoryDocTargetPaths,
-} from "../../current-factory-definition/lib/doc-editable-values";
 import { validateEditableWorkstationCronDraft } from "../../current-factory-definition/lib/editable-workstation-cron-validation";
-import { isFactoryBundledDocTargetPath } from "../../workflow-activity/lib/factory-bundled-docs";
 import {
-  resolveDocTargetPathFromFileName,
-  suggestDefaultDocFileName,
-} from "./factory-graph-doc-editor";
+  applyFactoryGraphDocAddEntityDraft,
+  createFactoryGraphDocAddEntityDraft,
+  validateFactoryGraphDocAddEntityDraft,
+} from "./factory-graph-editor-doc-additions";
 import { parseWorkerArgsText } from "../../current-factory-definition/lib/worker-editable-values";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
@@ -25,8 +21,7 @@ import {
   type EditableWorkstationType,
 } from "../../current-factory-definition/lib/workstation-type";
 import { workstationRequiresWorkerAssignment } from "../../current-factory-definition/lib/workstation-worker-assignment";
-import type { FactoryGraphEditorMenuAction } from "../components/factory-graph-editor-controls";
-import { getFactoryGraphEditorMessages } from "../messages/editor";
+export { buildFactoryGraphAddEntityMenuActions } from "./factory-graph-editor-add-menu";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -127,58 +122,12 @@ const FACTORY_GRAPH_ADD_CRON_VALIDATION_MESSAGES = {
 const DEFAULT_RESOURCE_CAPACITY = "1";
 const DEFAULT_WORK_STATE_TYPE: FactoryWorkState["type"] = "PROCESSING";
 
-export function buildFactoryGraphAddEntityMenuActions(
-  factoryDefinition: CanonicalFactoryDefinition | null,
-  locale?: string | null,
-): FactoryGraphEditorMenuAction[] {
-  const hasWorkTypes = (factoryDefinition?.workTypes?.length ?? 0) > 0;
-  const messages = getFactoryGraphEditorMessages(locale);
-
-  return [
-    {
-      description: messages.addMenuAction("doc").description,
-      id: "doc",
-      label: messages.addMenuAction("doc").label,
-    },
-    {
-      description: messages.addMenuAction("workstation").description,
-      id: "workstation",
-      label: messages.addMenuAction("workstation").label,
-    },
-    {
-      description: messages.addMenuAction("worker").description,
-      id: "worker",
-      label: messages.addMenuAction("worker").label,
-    },
-    {
-      description: messages.addMenuAction("work-type").description,
-      id: "work-type",
-      label: messages.addMenuAction("work-type").label,
-    },
-    {
-      description: messages.addMenuAction("work-state").description,
-      disabled: !hasWorkTypes,
-      id: "work-state",
-      label: messages.addMenuAction("work-state").label,
-    },
-    {
-      description: messages.addMenuAction("resource").description,
-      id: "resource",
-      label: messages.addMenuAction("resource").label,
-    },
-  ];
-}
-
 export function createFactoryGraphAddEntityDraft(
   kind: FactoryGraphAddEntityKind,
   factoryDefinition: CanonicalFactoryDefinition | null,
 ): FactoryGraphAddEntityDraft {
   if (kind === "doc") {
-    return {
-      fileName: suggestDefaultDocFileName(factoryDefinition),
-      inlineContent: "",
-      kind,
-    };
+    return createFactoryGraphDocAddEntityDraft(factoryDefinition);
   }
 
   if (kind === "resource") {
@@ -237,20 +186,7 @@ export function validateFactoryGraphAddEntityDraft(
   const errors: FactoryGraphAddEntityFieldErrors = {};
 
   if (draft.kind === "doc") {
-    const fileName = draft.fileName.trim();
-    if (fileName.length === 0) {
-      errors.fileName = "Enter a file name before adding this doc.";
-    } else {
-      const targetPath = resolveDocTargetPathFromFileName(fileName);
-      if (!isFactoryBundledDocTargetPath(targetPath)) {
-        errors.fileName =
-          "Doc file names must resolve to a path under factory/docs/.";
-      } else if (docTargetPathExists(targetPath, factoryDefinition)) {
-        errors.fileName = `A doc at "${targetPath}" already exists in the draft.`;
-      }
-    }
-
-    return errors;
+    return validateFactoryGraphDocAddEntityDraft(draft, factoryDefinition);
   }
 
   const name = draft.name.trim();
@@ -362,11 +298,7 @@ export function applyFactoryGraphAddEntityDraft(
   const nextDraft = structuredClone(currentDraft);
 
   if (entityDraft.kind === "doc") {
-    nextDraft.additions.docs.push({
-      inlineContent: entityDraft.inlineContent,
-      targetPath: buildDocTargetPathFromFileName(entityDraft.fileName.trim()),
-    });
-    return nextDraft;
+    return applyFactoryGraphDocAddEntityDraft(nextDraft, entityDraft);
   }
 
   if (entityDraft.kind === "resource") {
@@ -523,15 +455,6 @@ function workerExists(
   return (factoryDefinition?.workers ?? []).some(
     (worker) => worker.name === workerName,
   );
-}
-
-function docTargetPathExists(
-  targetPath: string,
-  factoryDefinition: CanonicalFactoryDefinition | null,
-) {
-  return listFactoryDocTargetPaths(
-    factoryDefinition ?? { name: "Current Factory" },
-  ).includes(targetPath);
 }
 
 export function editableWorkstationBehaviorOptions() {

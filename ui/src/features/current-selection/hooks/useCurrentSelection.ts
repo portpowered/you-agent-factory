@@ -25,9 +25,10 @@ import type { WorkSelectionHint } from "./useCurrentSelection.actions";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 import {
   useCurrentSelectionDerivedState,
-  useSelectionSynchronization,
   useTerminalWorkDetailCleanup,
 } from "./useCurrentSelection.derived";
+import { useSelectionSynchronization } from "./useCurrentSelection.synchronization";
+import { useGraphEditorPendingFactoryBridge } from "../../workflow-activity/state/graph-editor-pending-factory-bridge";
 import {
   resolveProjectedWorkstationRequestsByDispatchID,
   type WorkstationRequestLike,
@@ -136,6 +137,9 @@ export function useCurrentSelection({
     );
   const currentFactoryDocumentQuery = useCurrentFactoryDocument();
   const topologyFactory = currentFactoryDocumentQuery.data ?? undefined;
+  const pendingFactoryDefinition = useGraphEditorPendingFactoryBridge(
+    (state) => state.pendingFactoryDefinition,
+  );
 
   useEffect(() => {
     if (sessionChanged) {
@@ -145,6 +149,7 @@ export function useCurrentSelection({
   }, [sessionChanged, sessionID, store.resetSelectionHistory]);
 
   useSelectionSynchronization({
+    pendingFactoryDefinition: pendingFactoryDefinition ?? undefined,
     projectedWorkstationRequestsByDispatchID,
     replacePresent: store.replacePresent,
     resetSelectionHistory: store.resetSelectionHistory,

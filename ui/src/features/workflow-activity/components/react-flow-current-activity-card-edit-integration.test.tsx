@@ -22,6 +22,7 @@ import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/u
 import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/factory-graph-public-ids";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
+import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
 vi.mock("@xyflow/react", async () => {
@@ -534,7 +535,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     });
   });
 
-  it("renders a newly added doc node from the graph add flow", async () => {
+  it("renders a newly added doc node and exposes it through the pending factory bridge", async () => {
     renderCurrentActivity();
     enterEditorMode();
 
@@ -551,6 +552,17 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     expect(
       await screen.findByRole("button", { name: "doc:factory/docs/playbook.md" }),
     ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        useGraphEditorPendingFactoryBridge
+          .getState()
+          .pendingFactoryDefinition?.supportingFiles?.bundledFiles?.some(
+            (bundledFile) =>
+              bundledFile.type === "DOC" &&
+              bundledFile.targetPath === "factory/docs/playbook.md",
+          ),
+      ).toBe(true);
+    });
   });
 
   it("confirms doc deletion before removing the doc node from the draft graph", async () => {
@@ -739,7 +751,7 @@ function renderCurrentActivity(snapshot = createSnapshot()) {
       onSelectStateNode={vi.fn()}
       onSelectWorkID={vi.fn()}
       onSelectDoc={vi.fn()}
-          onSelectResource={vi.fn()}
+      onSelectResource={vi.fn()}
       onSelectWorker={vi.fn()}
       onSelectWorkType={vi.fn()}
       onSelectWorkstation={vi.fn()}

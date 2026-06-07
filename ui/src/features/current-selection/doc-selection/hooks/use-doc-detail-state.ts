@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useGraphEditorPendingFactoryBridge } from "../../../workflow-activity/state/graph-editor-pending-factory-bridge";
 import { factoryBundledDocDisplayLabel } from "../../../workflow-activity/lib/factory-bundled-docs";
 import { getDocDetailMessages } from "../messages/doc-detail";
 
@@ -20,6 +21,9 @@ export function useDocDetailState(
   locale?: string | null,
 ): DocDetailState {
   const documentQuery = useCurrentFactoryDocument();
+  const pendingFactoryDefinition = useGraphEditorPendingFactoryBridge(
+    (state) => state.pendingFactoryDefinition,
+  );
   const messages = getDocDetailMessages(locale);
 
   return useMemo((): DocDetailState => {
@@ -35,10 +39,15 @@ export function useDocDetailState(
       };
     }
 
-    const bundledFile = documentQuery.data?.supportingFiles?.bundledFiles?.find(
-      (candidate) =>
-        candidate.type === "DOC" && candidate.targetPath === targetPath,
-    );
+    const bundledFile =
+      documentQuery.data?.supportingFiles?.bundledFiles?.find(
+        (candidate) =>
+          candidate.type === "DOC" && candidate.targetPath === targetPath,
+      ) ??
+      pendingFactoryDefinition?.supportingFiles?.bundledFiles?.find(
+        (candidate) =>
+          candidate.type === "DOC" && candidate.targetPath === targetPath,
+      );
 
     if (!bundledFile) {
       return { status: "empty" };
@@ -55,6 +64,7 @@ export function useDocDetailState(
     documentQuery.error,
     documentQuery.status,
     messages.configurationUnknownError,
+    pendingFactoryDefinition,
     targetPath,
   ]);
 }

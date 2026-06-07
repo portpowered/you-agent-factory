@@ -24,6 +24,7 @@ export interface FactoryGraphDocRemovalIntent {
   title: string;
 }
 
+// hardcoded-ui-copy-exception: non-product-diagnostic
 const DEFAULT_DOC_FILE_NAME = "new-doc.md";
 
 export function parseFactoryBundledDocNodeId(nodeId: string): string | null {
@@ -48,12 +49,17 @@ export function suggestDefaultDocFileName(
     return DEFAULT_DOC_FILE_NAME;
   }
 
+  const extensionIndex = DEFAULT_DOC_FILE_NAME.lastIndexOf(".");
+  const stem = DEFAULT_DOC_FILE_NAME.slice(0, extensionIndex);
+  const extension = DEFAULT_DOC_FILE_NAME.slice(extensionIndex);
   let suffix = 2;
-  while (existingFileNames.has(`new-doc-${suffix}.md`)) {
+  let candidate = `${stem}-${suffix}${extension}`;
+  while (existingFileNames.has(candidate)) {
     suffix += 1;
+    candidate = `${stem}-${suffix}${extension}`;
   }
 
-  return `new-doc-${suffix}.md`;
+  return candidate;
 }
 
 export function docTargetPathExists(

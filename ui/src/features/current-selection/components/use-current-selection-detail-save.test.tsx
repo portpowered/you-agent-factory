@@ -173,6 +173,30 @@ describe("useCurrentSelectionDetailSave", () => {
     );
   });
 
+});
+
+describe("useCurrentSelectionDetailSave additional scopes", () => {
+  beforeEach(() => {
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkerConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableResourceConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkStateConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableDocConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+  });
+
   it("scopes work state saves to the selected place id", () => {
     const selection: DashboardSelection = {
       kind: "state-node",
@@ -236,6 +260,29 @@ describe("useCurrentSelectionDetailSave", () => {
       expect.objectContaining({
         scopeKey: "factory/docs/overview.md",
       }),
+    );
+  });
+});
+
+describe("useCurrentSelectionDetailSave header actions", () => {
+  beforeEach(() => {
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkerConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableResourceConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkStateConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableDocConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
     );
   });
 

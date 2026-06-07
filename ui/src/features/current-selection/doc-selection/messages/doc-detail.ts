@@ -22,9 +22,17 @@ const docDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "Expand doc editor",
     editableConfigurationFileNameDuplicate: (fileName) =>
       `A doc named "${fileName}" already exists in the running factory definition.`,
+    editableConfigurationFileNameDotSegments:
+      "Doc paths cannot contain '.' or '..' segments.",
     editableConfigurationFileNameFieldLabel: "file name",
+    editableConfigurationFileNameForwardSlashes:
+      "Doc paths must use forward slashes.",
     editableConfigurationFileNameInvalid:
       "Enter a valid file name under factory/docs/.",
+    editableConfigurationFileNameMustBeFile:
+      "Doc paths must point to a file.",
+    editableConfigurationFileNameOutsideDocsRoot:
+      "Doc paths must stay under factory/docs/.",
     editableConfigurationFileNameRequired:
       "Enter a doc file name before saving.",
     editableConfigurationHeading: "Doc editor",
@@ -69,9 +77,16 @@ const docDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "展开文档编辑器",
     editableConfigurationFileNameDuplicate: (fileName) =>
       `运行中的工厂定义中已存在名为“${fileName}”的文档。`,
+    editableConfigurationFileNameDotSegments:
+      "文档路径不能包含“.”或“..”段。",
     editableConfigurationFileNameFieldLabel: "文件名",
+    editableConfigurationFileNameForwardSlashes:
+      "文档路径必须使用正斜杠。",
     editableConfigurationFileNameInvalid:
       "请输入 factory/docs/ 下的有效文件名。",
+    editableConfigurationFileNameMustBeFile: "文档路径必须指向文件。",
+    editableConfigurationFileNameOutsideDocsRoot:
+      "文档路径必须位于 factory/docs/ 下。",
     editableConfigurationFileNameRequired: "保存前请输入文档文件名。",
     editableConfigurationHeading: "文档编辑器",
     editableConfigurationInlineContentFieldLabel: "文档内容",

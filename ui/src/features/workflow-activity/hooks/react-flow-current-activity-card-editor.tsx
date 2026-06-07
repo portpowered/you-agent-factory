@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import { useDraftAppliedFactoryValidation } from "./react-flow-current-activity-card-editor-draft-validation";
 import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
@@ -103,6 +104,17 @@ export function useCurrentActivityGraphEditor(
         .setGraphDraftHasPendingChanges(false);
     };
   }, [draftState.hasChanges]);
+
+  useEffect(() => {
+    const pendingFactoryBridge = useGraphEditorPendingFactoryBridge.getState();
+    pendingFactoryBridge.setPendingFactoryDefinition(
+      editorMode ? session.currentFactoryDefinition : null,
+    );
+
+    return () => {
+      pendingFactoryBridge.setPendingFactoryDefinition(null);
+    };
+  }, [editorMode, session.currentFactoryDefinition]);
 
   useEffect(() => {
     const normalizedScopeKey = factoryDocumentScopeKey ?? null;

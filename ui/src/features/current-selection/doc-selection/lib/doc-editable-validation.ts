@@ -24,8 +24,12 @@ export function validateEditableDocDraft(
   draft: EditableDocDraft,
   messages: Pick<
     DocDetailMessages,
+    | "editableConfigurationFileNameDotSegments"
     | "editableConfigurationFileNameDuplicate"
+    | "editableConfigurationFileNameForwardSlashes"
     | "editableConfigurationFileNameInvalid"
+    | "editableConfigurationFileNameMustBeFile"
+    | "editableConfigurationFileNameOutsideDocsRoot"
     | "editableConfigurationFileNameRequired"
     | "editableConfigurationInlineContentRequired"
   >,
@@ -41,7 +45,7 @@ export function validateEditableDocDraft(
     );
     const trimmedFileName = resolvedFileName.trim();
     const targetPath = buildDocTargetPathFromFileName(trimmedFileName);
-    const pathError = validateDocTargetPath(targetPath);
+    const pathError = validateDocTargetPath(targetPath, messages);
     if (pathError != null) {
       validationErrors.fileName = pathError;
     } else if (
@@ -85,27 +89,37 @@ export function resolvePendingDocTargetPath(draft: EditableDocDraft): string {
   return resolveDocTargetPathFromDraft(draft);
 }
 
-function validateDocTargetPath(targetPath: string): string | null {
+function validateDocTargetPath(
+  targetPath: string,
+  messages: Pick<
+    DocDetailMessages,
+    | "editableConfigurationFileNameDotSegments"
+    | "editableConfigurationFileNameForwardSlashes"
+    | "editableConfigurationFileNameMustBeFile"
+    | "editableConfigurationFileNameOutsideDocsRoot"
+    | "editableConfigurationFileNameRequired"
+  >,
+): string | null {
   if (targetPath.includes("\\")) {
-    return "Doc paths must use forward slashes.";
+    return messages.editableConfigurationFileNameForwardSlashes;
   }
 
   if (!isFactoryBundledDocTargetPath(targetPath)) {
-    return "Doc paths must stay under factory/docs/.";
+    return messages.editableConfigurationFileNameOutsideDocsRoot;
   }
 
   const segments = targetPath.split("/");
   if (segments.some((segment) => segment === "." || segment === "..")) {
-    return "Doc paths cannot contain '.' or '..' segments.";
+    return messages.editableConfigurationFileNameDotSegments;
   }
 
   if (targetPath.endsWith("/")) {
-    return "Doc paths must point to a file.";
+    return messages.editableConfigurationFileNameMustBeFile;
   }
 
   const fileName = segments[segments.length - 1] ?? "";
   if (fileName.length === 0) {
-    return "Enter a doc file name.";
+    return messages.editableConfigurationFileNameRequired;
   }
 
   return null;

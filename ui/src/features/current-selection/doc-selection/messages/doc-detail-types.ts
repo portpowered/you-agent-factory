@@ -13,7 +13,11 @@ export interface DocDetailMessages {
   editableConfigurationExpandActionLabel: string;
   editableConfigurationFileNameDuplicate: (fileName: string) => string;
   editableConfigurationFileNameFieldLabel: string;
+  editableConfigurationFileNameDotSegments: string;
+  editableConfigurationFileNameForwardSlashes: string;
   editableConfigurationFileNameInvalid: string;
+  editableConfigurationFileNameMustBeFile: string;
+  editableConfigurationFileNameOutsideDocsRoot: string;
   editableConfigurationFileNameRequired: string;
   editableConfigurationHeading: string;
   editableConfigurationInlineContentFieldLabel: string;
