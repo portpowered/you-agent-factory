@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -542,5 +543,81 @@ func TestRunCommand_PositionalPromptRequiresFactoryFlag(t *testing.T) {
 	}
 	if runCalled {
 		t.Fatal("run should not start for positional prompt without --factory")
+	}
+}
+
+func TestRunCommand_CleanInvocationFailureWritesPlaintextToStderr(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var stdout, stderr bytes.Buffer
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		return &runcli.InvocationError{
+			Code:    runcli.InvocationErrorCodeFailed,
+			Message: "clean invocation failed: mock worker rejected",
+		}
+	}
+
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix the lint issues"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected clean invocation failure")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+	if got := stderr.String(); got != "RUN_INVOCATION_FAILED: clean invocation failed: mock worker rejected\n" {
+		t.Fatalf("stderr = %q", got)
+	}
+}
+
+func TestRunCommand_CleanInvocationJSONFailureWritesSingleErrorObjectToStderr(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var stdout, stderr bytes.Buffer
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		return &runcli.InvocationError{
+			Code:    runcli.InvocationErrorCodeTimeout,
+			Message: "clean invocation timed out",
+		}
+	}
+
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected clean invocation timeout")
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty", stdout.String())
+	}
+
+	var payload map[string]string
+	if decodeErr := json.Unmarshal(stderr.Bytes(), &payload); decodeErr != nil {
+		t.Fatalf("stderr is not one JSON object: %v\n%s", decodeErr, stderr.String())
+	}
+	if payload["code"] != runcli.InvocationErrorCodeTimeout {
+		t.Fatalf("code = %q, want %q", payload["code"], runcli.InvocationErrorCodeTimeout)
+	}
+	if payload["message"] != "clean invocation timed out" {
+		t.Fatalf("message = %q", payload["message"])
 	}
 }

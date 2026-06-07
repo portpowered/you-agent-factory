@@ -483,33 +483,13 @@ func runFactoryServiceAndEmitResult(
 ) error {
 	err := factorySvc.Run(ctx)
 	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
+	if cfg.CleanInvocation {
+		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, err)
+	}
 	if err != nil {
 		return err
-	}
-	if cfg.CleanInvocation {
-		return emitCleanInvocationSuccess(ctx, cfg, factorySvc)
 	}
 	return nil
-}
-
-func emitCleanInvocationSuccess(ctx context.Context, cfg RunConfig, runner factoryServiceRunner) error {
-	provider, ok := runner.(engineStateSnapshotProvider)
-	if !ok {
-		return fmt.Errorf("clean invocation result snapshot is unavailable")
-	}
-	snapshot, err := provider.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return err
-	}
-	target, err := cleanInvocationWorkTargetFromFile(cfg.WorkFile)
-	if err != nil {
-		return err
-	}
-	result, ok := cleanInvocationSuccessFromSnapshot(snapshot, target)
-	if !ok {
-		return fmt.Errorf("clean invocation completed without a terminal result for work %q", target.WorkID)
-	}
-	return writeCleanInvocationSuccess(cfg, result)
 }
 
 func cleanInvocationWorkTargetFromFile(workFile string) (cleanInvocationWorkTarget, error) {

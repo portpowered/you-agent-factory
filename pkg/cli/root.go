@@ -713,8 +713,9 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cfg := defaultcmd.ExplicitRunConfig()
 
 	cmd := &cobra.Command{
-		Use:   "run",
-		Short: "Load workflow and run the factory engine",
+		Use:           "run",
+		Short:         "Load workflow and run the factory engine",
+		SilenceErrors: true,
 		Long: "Load workflow and run the factory engine.\n\n" +
 			"For the quickest local setup, run " + cliBinaryName + " with no arguments. " +
 			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
@@ -748,7 +749,11 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 					cfg.MockWorkersConfigPath = ""
 				}
 			}
-			return runFactory(cmd, cfg, promptArgs, globals, diagnostics.verboseEnabled(), diagnostics.debug)
+			err := runFactory(cmd, cfg, promptArgs, globals, diagnostics.verboseEnabled(), diagnostics.debug)
+			if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
+				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
+			}
+			return err
 		},
 	}
 

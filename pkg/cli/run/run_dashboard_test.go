@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -151,6 +152,180 @@ func TestRun_CleanInvocationJSONEmitsSinglePrimaryResultObject(t *testing.T) {
 		got.TraceID != "dashboard-render-test-trace" ||
 		got.SessionID != defaultFactorySessionID {
 		t.Fatalf("json result = %#v", got)
+	}
+}
+
+func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	_, workFile := writeDashboardRunFixture(t)
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error { return nil },
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+				return failedCleanInvocationSnapshot("mock worker rejected"), nil
+			},
+		}, nil
+	}
+
+	output, err := runWithCapturedStdout(t, RunConfig{
+		WorkFile:                workFile,
+		CleanInvocation:         true,
+		DisableDefaultRecording: true,
+		Logger:                  zap.NewNop(),
+	})
+	if output != "" {
+		t.Fatalf("stdout = %q, want empty on failure", output)
+	}
+
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) {
+		t.Fatalf("error = %#v, want InvocationError", err)
+	}
+	if invocationErr.Code != InvocationErrorCodeFailed {
+		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeFailed)
+	}
+	if invocationErr.Message != "clean invocation failed: mock worker rejected" {
+		t.Fatalf("message = %q", invocationErr.Message)
+	}
+}
+
+func TestRun_CleanInvocationTimeoutReturnsStableErrorAndNoStdout(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	_, workFile := writeDashboardRunFixture(t)
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error { return nil },
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+				return timedOutCleanInvocationSnapshot(), nil
+			},
+		}, nil
+	}
+
+	output, err := runWithCapturedStdout(t, RunConfig{
+		WorkFile:                workFile,
+		CleanInvocation:         true,
+		DisableDefaultRecording: true,
+		Logger:                  zap.NewNop(),
+	})
+	if output != "" {
+		t.Fatalf("stdout = %q, want empty on timeout", output)
+	}
+
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) {
+		t.Fatalf("error = %#v, want InvocationError", err)
+	}
+	if invocationErr.Code != InvocationErrorCodeTimeout {
+		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeTimeout)
+	}
+	if invocationErr.Message != "clean invocation timed out" {
+		t.Fatalf("message = %q", invocationErr.Message)
+	}
+}
+
+func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	_, workFile := writeDashboardRunFixture(t)
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error { return context.Canceled },
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+				return nil, errors.New("snapshot not needed")
+			},
+		}, nil
+	}
+
+	output, err := runWithCapturedStdout(t, RunConfig{
+		WorkFile:                workFile,
+		CleanInvocation:         true,
+		DisableDefaultRecording: true,
+		Logger:                  zap.NewNop(),
+	})
+	if output != "" {
+		t.Fatalf("stdout = %q, want empty on cancellation", output)
+	}
+
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) {
+		t.Fatalf("error = %#v, want InvocationError", err)
+	}
+	if invocationErr.Code != InvocationErrorCodeCancelled {
+		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeCancelled)
+	}
+	if invocationErr.Message != "clean invocation cancelled" {
+		t.Fatalf("message = %q", invocationErr.Message)
+	}
+}
+
+func TestRun_CleanInvocationKeepsStdoutEmptyUntilTerminalOutcome(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	_, workFile := writeDashboardRunFixture(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error {
+				close(started)
+				<-release
+				return context.Canceled
+			},
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+				return nil, errors.New("snapshot not needed")
+			},
+		}, nil
+	}
+
+	var stdout bytes.Buffer
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- Run(context.Background(), RunConfig{
+			WorkFile:                workFile,
+			CleanInvocation:         true,
+			Output:                  &stdout,
+			DisableDefaultRecording: true,
+			Logger:                  zap.NewNop(),
+		})
+	}()
+
+	select {
+	case <-started:
+	case err := <-errCh:
+		t.Fatalf("Run returned before blocking phase: %v", err)
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for clean invocation startup")
+	}
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout before terminal outcome = %q, want empty", got)
+	}
+
+	close(release)
+
+	err := <-errCh
+	if got := stdout.String(); got != "" {
+		t.Fatalf("stdout after terminal outcome = %q, want empty", got)
+	}
+	var invocationErr *InvocationError
+	if !errors.As(err, &invocationErr) {
+		t.Fatalf("error = %#v, want InvocationError", err)
+	}
+	if invocationErr.Code != InvocationErrorCodeCancelled {
+		t.Fatalf("code = %q, want %q", invocationErr.Code, InvocationErrorCodeCancelled)
 	}
 }
 
@@ -566,4 +741,43 @@ func runWithCapturedStdout(t *testing.T, cfg RunConfig) (string, error) {
 	}
 
 	return string(output), runErr
+}
+
+func failedCleanInvocationSnapshot(reason string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		DispatchHistory: []interfaces.CompletedDispatch{{
+			Outcome: interfaces.OutcomeFailed,
+			Reason:  reason,
+			ConsumedTokens: []interfaces.Token{{
+				ID:      "failed-token",
+				PlaceID: "task:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "dashboard-render-test-work",
+					WorkTypeID: "task",
+					TraceID:    "dashboard-render-test-trace",
+				},
+			}},
+		}},
+	}
+}
+
+func timedOutCleanInvocationSnapshot() *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		DispatchHistory: []interfaces.CompletedDispatch{{
+			Outcome: interfaces.OutcomeFailed,
+			ConsumedTokens: []interfaces.Token{{
+				ID:      "timeout-token",
+				PlaceID: "task:init",
+				Color: interfaces.TokenColor{
+					WorkID:     "dashboard-render-test-work",
+					WorkTypeID: "task",
+					TraceID:    "dashboard-render-test-trace",
+				},
+			}},
+			FailureMetadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyRetryable,
+				Type:   interfaces.WorkFailureTypeTimeout,
+			},
+		}},
+	}
 }
