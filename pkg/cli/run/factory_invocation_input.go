@@ -189,7 +189,10 @@ type sessionInvocationRunner interface {
 }
 
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
-	if strings.TrimSpace(cfg.FactoryConfigPath) == "" || strings.TrimSpace(cfg.WorkFile) != "" {
+	if strings.TrimSpace(cfg.WorkFile) != "" {
+		return nil, false, nil
+	}
+	if factoryInvocationRoot(cfg) == "" {
 		return nil, false, nil
 	}
 
@@ -241,6 +244,13 @@ func stdinIsTTY(cfg RunConfig) bool {
 		return false
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+func factoryInvocationRoot(cfg RunConfig) string {
+	if root := strings.TrimSpace(cfg.FactoryConfigPath); root != "" {
+		return root
+	}
+	return strings.TrimSpace(cfg.Dir)
 }
 
 func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *factoryapi.InvocationRequest {

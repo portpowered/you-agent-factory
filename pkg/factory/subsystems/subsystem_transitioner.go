@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -56,6 +57,7 @@ type generatedBatchWork struct {
 
 type mutationCalculationInput struct {
 	transition  *petri.Transition
+	workstation *interfaces.FactoryWorkstationConfig
 	arcs        []petri.Arc
 	consumed    []interfaces.Token
 	result      resolvedWorkResult
@@ -205,8 +207,14 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		return nil, interfaces.CompletedDispatch{}, nil, fmt.Errorf("transition %s has no arcs for outcome %s", result.TransitionID, resolved.outcome)
 	}
 
+	var workstationDef *interfaces.FactoryWorkstationConfig
+	if workstation, ok := workstationconfig.Workstation(currentTransition, t.runtimeConfig); ok {
+		workstationDef = workstation
+	}
+
 	mutations, err := calculateMutations(mutationCalculationInput{
 		transition:  currentTransition,
+		workstation: workstationDef,
 		arcs:        arcs,
 		consumed:    consumedTokens,
 		result:      resolved,
@@ -681,6 +689,9 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			if err != nil {
 				return nil, err
 			}
+			if err := applyPackagedTTSInvocationMetadata(newToken, in.workstation, in.result.output, in.inputColors); err != nil {
+				return nil, err
+			}
 			if newToken.Color.DataType != interfaces.DataTypeResource {
 				if workOutputIndex < len(in.result.recordedOutputWork) {
 					applyRecordedOutputWorkIdentity(newToken, in.result.recordedOutputWork[workOutputIndex])
@@ -874,5 +885,30 @@ func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColo
 			return &inputs[i]
 		}
 	}
+	return nil
+}
+
+func applyPackagedTTSInvocationMetadata(
+	token *interfaces.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+	workerOutput string,
+	inputColors []interfaces.TokenColor,
+) error {
+	if token == nil || !tts.ShouldFormatInvocationMetadata(workstation) {
+		return nil
+	}
+
+	traceID := ""
+	if source := firstNonResourceInput(inputColors); source != nil {
+		traceID = strings.TrimSpace(source.TraceID)
+	}
+
+	metadataContent, err := tts.MetadataContentFromWorkerOutput(workerOutput, traceID, "")
+	if err != nil {
+		return fmt.Errorf("shape packaged tts invocation metadata: %w", err)
+	}
+
+	token.Color.Content = metadataContent
+	token.Color.Payload = nil
 	return nil
 }

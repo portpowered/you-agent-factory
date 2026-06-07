@@ -856,11 +856,12 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 }
 
 func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {
-	cleanInvocation = cmd.Flags().Changed("factory") &&
+	invocationFactorySelected := cmd.Flags().Changed("factory") || cmd.Flags().Changed("named")
+	cleanInvocation = invocationFactorySelected &&
 		cmd.Flags().Changed("work") &&
 		strings.TrimSpace(cfg.WorkFile) != "" &&
 		!cfg.Continuously
-	textInvocation = cmd.Flags().Changed("factory") &&
+	textInvocation = invocationFactorySelected &&
 		!cmd.Flags().Changed("work") &&
 		!cfg.Continuously &&
 		(cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil)
@@ -934,6 +935,7 @@ func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
 
 func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptArgs []string) error {
 	factoryChanged := cmd.Flags().Changed("factory")
+	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
 	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
 		PromptArgs: promptArgs,
@@ -943,9 +945,9 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		return err
 	}
 
-	if !factoryChanged {
+	if !factoryChanged && !namedChanged {
 		if input.Payload != "" {
-			return fmt.Errorf("positional prompt arguments require --factory")
+			return fmt.Errorf("positional prompt arguments require --factory or --named")
 		}
 		return nil
 	}

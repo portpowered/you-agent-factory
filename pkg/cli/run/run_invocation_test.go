@@ -31,6 +31,26 @@ func (s stubInvocationService) InvokeFactorySession(ctx context.Context, session
 	return s.invoke(ctx, sessionID, request)
 }
 
+func TestResolveFactoryInvocationRequest_NamedFactoryDirPositionalText(t *testing.T) {
+	text := "hi there"
+
+	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Dir:                      "/tmp/builtin-tts",
+		NamedFactoryName:         "@you/tts",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+	})
+	if err != nil {
+		t.Fatalf("resolveFactoryInvocationRequest: %v", err)
+	}
+	if !invocationMode {
+		t.Fatal("expected invocation mode for named factory positional text")
+	}
+	if got := extractInvocationText(t, request); got != text {
+		t.Fatalf("invocation text = %q, want %q", got, text)
+	}
+}
+
 func TestResolveFactoryInvocationRequest_PositionalText(t *testing.T) {
 	text := "Fix the lint issues"
 

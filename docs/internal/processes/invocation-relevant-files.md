@@ -39,6 +39,16 @@ primary-result behavior.
   CLI and API adapters must not duplicate whitespace-only rejection.
 - `pkg/cli/root.go` owns the customer-facing `you run --factory` help text for
   invocation input-source rules and the canonical pointers into packaged docs.
+  `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
+  as an invocation factory selector for positional/stdin text.
+- `pkg/config/builtin_tts_factory.go` owns the built-in `@you/tts` factory JSON
+  registered from `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
+- `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
+  helpers used when MODEL_INVOKE work completes on the `execute-tts` workstation.
+- `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
+  invocation metadata to terminal token `Content` for the `execute-tts` TTS
+  MODEL_INVOKE workstation so primary-result selection returns JSON metadata
+  instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged

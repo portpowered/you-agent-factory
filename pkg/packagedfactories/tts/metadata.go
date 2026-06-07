@@ -1,0 +1,122 @@
+package tts
+
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+const defaultAudioContentType = "audio/wav"
+
+const (
+	// PackagedFactoryProject identifies the built-in @you/tts factory project id.
+	PackagedFactoryProject = "builtin-tts"
+	// PackagedInvokeWorkstationName is the MODEL_INVOKE workstation that runs TTS.
+	PackagedInvokeWorkstationName = "execute-tts"
+	// DefaultModelName is the default managed local TTS model for @you/tts.
+	DefaultModelName = "OMNIVOICE_Q4_K_M"
+	// DefaultBackendName is the default managed local TTS backend for @you/tts.
+	DefaultBackendName = "LLAMACPP"
+)
+
+// InvocationMetadata is the default primary invocation result for successful @you/tts runs.
+type InvocationMetadata struct {
+	ArtifactPath string `json:"artifactPath"`
+	MediaType    string `json:"mediaType"`
+	Backend      string `json:"backend"`
+	TraceID      string `json:"traceId,omitempty"`
+	SessionID    string `json:"sessionId,omitempty"`
+}
+
+// ShouldFormatInvocationMetadata reports whether workstation output should be
+// shaped into packaged TTS invocation metadata for terminal work content.
+func ShouldFormatInvocationMetadata(workstation *interfaces.FactoryWorkstationConfig) bool {
+	if workstation == nil {
+		return false
+	}
+	if strings.TrimSpace(workstation.Name) != PackagedInvokeWorkstationName {
+		return false
+	}
+	return workstation.Type == interfaces.WorkstationTypeInvoke &&
+		strings.EqualFold(strings.TrimSpace(workstation.Operation), "TTS")
+}
+
+// MetadataContentFromWorkerOutput parses a MODEL_INVOKE TTS worker output payload
+// and returns canonical text work content for invocation primary-result selection.
+func MetadataContentFromWorkerOutput(output, traceID, sessionID string) ([]interfaces.WorkContentPart, error) {
+	audioParts, err := parseAudioWorkContentOutput(output)
+	if err != nil {
+		return nil, err
+	}
+	if len(audioParts) == 0 {
+		return nil, fmt.Errorf("tts worker output did not include audio content")
+	}
+
+	audio := audioParts[0]
+	artifactPath := strings.TrimSpace(audio.File)
+	if artifactPath == "" {
+		artifactPath = strings.TrimSpace(audio.URL)
+	}
+	if artifactPath == "" {
+		return nil, fmt.Errorf("tts worker output did not include an artifact reference")
+	}
+
+	mediaType := strings.TrimSpace(audio.ContentType)
+	if mediaType == "" {
+		mediaType = defaultAudioContentType
+	}
+
+	metadata := InvocationMetadata{
+		ArtifactPath: artifactPath,
+		MediaType:    mediaType,
+		Backend:      defaultBackendLabel(),
+		TraceID:      strings.TrimSpace(traceID),
+		SessionID:    strings.TrimSpace(sessionID),
+	}
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, fmt.Errorf("marshal tts invocation metadata: %w", err)
+	}
+
+	return []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: string(encoded),
+	}}, nil
+}
+
+func parseAudioWorkContentOutput(output string) ([]interfaces.WorkContentPart, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return nil, fmt.Errorf("tts worker output is empty")
+	}
+
+	var parts []interfaces.WorkContentPart
+	if err := json.Unmarshal([]byte(trimmed), &parts); err == nil {
+		return audioPartsOnly(parts), nil
+	}
+
+	var envelope struct {
+		Content []interfaces.WorkContentPart `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) > 0 {
+		return audioPartsOnly(envelope.Content), nil
+	}
+
+	return nil, fmt.Errorf("tts worker output is not audio work content JSON")
+}
+
+func audioPartsOnly(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+	audio := make([]interfaces.WorkContentPart, 0, len(parts))
+	for _, part := range parts {
+		if part.Type.Normalized() == interfaces.WorkContentPartTypeAudio {
+			audio = append(audio, part)
+		}
+	}
+	return audio
+}
+
+func defaultBackendLabel() string {
+	return DefaultModelName + "/" + DefaultBackendName
+}

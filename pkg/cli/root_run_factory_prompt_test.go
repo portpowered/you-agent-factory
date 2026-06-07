@@ -437,6 +437,56 @@ func writePortableFactoryWithDefaultHandling(t *testing.T, dir string) string {
 	return factoryPath
 }
 
+func TestRunCommand_NamedFactoryPromptCarriesInvocationText(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	workingDirectory := t.TempDir()
+	homeDir := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "@you/tts", "--no-record", "hi", "there"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named @you/tts with prompt: %v", err)
+	}
+	if got.InvocationPositionalText == nil {
+		t.Fatal("expected invocation positional text for named factory prompt run")
+	}
+	if gotText := *got.InvocationPositionalText; gotText != "hi there" {
+		t.Fatalf("invocation positional text = %q, want joined prompt text", gotText)
+	}
+	if got.NamedFactoryName != "@you/tts" {
+		t.Fatalf("named factory = %q, want @you/tts", got.NamedFactoryName)
+	}
+	if !got.SuppressDashboardRendering {
+		t.Fatal("expected named text invocation to suppress dashboard rendering")
+	}
+}
+
 func TestRunCommand_FactoryPromptCarriesInvocationText(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

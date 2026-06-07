@@ -796,53 +796,7 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/tts": []byte(`{
-  "name": "@you/tts",
-  "id": "builtin-tts",
-  "workTypes": [
-    {
-      "name": "task",
-      "states": [
-        {
-          "name": "init",
-          "type": "INITIAL"
-        },
-        {
-          "name": "complete",
-          "type": "TERMINAL"
-        }
-      ]
-    }
-  ],
-  "workers": [
-    {
-      "name": "tts-executor",
-      "type": "MODEL_WORKER",
-      "body": "You are the @you/tts built-in factory worker."
-    }
-  ],
-  "workstations": [
-    {
-      "name": "execute-tts",
-      "type": "MODEL_WORKSTATION",
-      "worker": "tts-executor",
-      "inputs": [
-        {
-          "workType": "task",
-          "state": "init"
-        }
-      ],
-      "outputs": [
-        {
-          "workType": "task",
-          "state": "complete"
-        }
-      ],
-      "body": "Convert the requested text into speech for {{ .WorkID }}."
-    }
-  ]
-  }
-`),
+	"@you/tts": BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
