@@ -60,6 +60,7 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 
 const TOOLBAR_ACTIONS_CLASS =
   "flex items-center gap-2 border-l border-outline pl-2 max-md:ml-auto";
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: toolbar composes edit-mode toggle, hide/show, and layout history controls.
 export function FactoryGraphEditorToolbar({
   activeTool,
   addMenuActions = [],
