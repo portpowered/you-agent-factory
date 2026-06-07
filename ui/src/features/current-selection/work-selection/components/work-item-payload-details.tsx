@@ -1,5 +1,5 @@
 import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
-import { DashboardText, surfacePanelVariants } from "../../../../components/ui";
+import { surfacePanelVariants } from "../../../../components/ui";
 import { formatWorkItemLabel } from "../../../../components/ui/formatters";
 import { WorkContentReadOnlyList } from "../../../work-content/public";
 import { useCurrentSelectionDetailMessages } from "../../base/components/current-selection-locale";
@@ -70,28 +70,10 @@ export function WorkItemPayloadList({
                   aria-label={resolvedMessages.selectWorkItemLabel(workLabel)}
                   onClick={() => onSelectWorkID?.(workItem.work_id)}
                   selected={isSelected}
+                  selectedStyle="outline"
                 >
                   {workLabel}
                 </CurrentSelectionSelectableButton>
-                {workItem.state ? (
-                  <DashboardText
-                    as="span"
-                    className="text-on-surface-variant"
-                    variant="supporting"
-                  >
-                    {resolvedMessages.stateLabel}: {workItem.state}
-                  </DashboardText>
-                ) : null}
-                {resolveWorkTypeID(workItem) ? (
-                  <DashboardText
-                    as="span"
-                    className="text-on-surface-variant"
-                    variant="supporting"
-                  >
-                    {resolvedMessages.workTypeLabel}:{" "}
-                    {resolveWorkTypeID(workItem)}
-                  </DashboardText>
-                ) : null}
               </div>
               {hasPayloadDetails ? (
                 <WorkItemPayloadDetails
@@ -136,7 +118,7 @@ function WorkItemPayloadDetails({
   );
 }
 
-function resolveWorkTypeID(workItem: PayloadAwareWorkItem) {
+function _resolveWorkTypeID(workItem: PayloadAwareWorkItem) {
   return workItem.work_type_id ?? workItem.workTypeId;
 }
 

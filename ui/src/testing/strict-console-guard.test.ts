@@ -186,7 +186,7 @@ describe("strict-console-guard allowlisted warn", () => {
 
   it("passes when console.warn matches the allowlist", () => {
     console.warn(
-      'Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.',
+      "Warning: Missing `Description` or `aria-describedby={undefined}` for {DialogContent}.",
     );
   });
 });

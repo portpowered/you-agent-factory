@@ -1,16 +1,16 @@
 import { BaseEdge, type EdgeProps, getBezierPath } from "@xyflow/react";
 import { useEffect, useRef, useState } from "react";
 
-type FactoryGraphEditorEdgeData = {
+type FactoryGraphEdgeData = {
   alwaysShowLabel?: boolean;
   label?: string;
 };
 
-export const FACTORY_GRAPH_EDITOR_EDGE_TYPES = {
-  factoryEditorEdge: FactoryGraphEditorEdge,
+export const FACTORY_GRAPH_EDGE_TYPES = {
+  factoryEditorEdge: FactoryGraphEdge,
 };
 
-function FactoryGraphEditorEdge({
+function FactoryGraphEdge({
   data,
   id,
   interactionWidth,
@@ -26,7 +26,7 @@ function FactoryGraphEditorEdge({
 }: EdgeProps) {
   const edgeRef = useRef<SVGGElement | null>(null);
   const [inspected, setInspected] = useState(false);
-  const edgeData = (data ?? {}) as FactoryGraphEditorEdgeData;
+  const edgeData = (data ?? {}) as FactoryGraphEdgeData;
   const [edgePath, labelX, labelY] = getBezierPath({
     sourcePosition,
     sourceX,
@@ -35,6 +35,7 @@ function FactoryGraphEditorEdge({
     targetX,
     targetY,
   });
+
   useEffect(() => {
     const edgeElement = edgeRef.current?.parentElement;
     if (!edgeElement) {

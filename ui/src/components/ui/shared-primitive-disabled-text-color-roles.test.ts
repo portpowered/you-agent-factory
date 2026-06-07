@@ -23,12 +23,11 @@ function expectNoTransitionalDisabledText(source: string): void {
 }
 
 describe("shared primitive disabled text color roles", () => {
-  it.each(IN_SCOPE_FILES)(
-    "does not use transitional text-af-text-disabled in %s",
-    (fileName) => {
-      expectNoTransitionalDisabledText(readComponentSource(fileName));
-    },
-  );
+  it.each(
+    IN_SCOPE_FILES,
+  )("does not use transitional text-af-text-disabled in %s", (fileName) => {
+    expectNoTransitionalDisabledText(readComponentSource(fileName));
+  });
 
   it("maps input placeholder and disabled copy to on-surface-disabled role utilities", () => {
     const source = readComponentSource("input.tsx");

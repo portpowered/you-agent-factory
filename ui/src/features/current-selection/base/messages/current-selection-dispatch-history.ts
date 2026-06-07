@@ -41,6 +41,7 @@ export interface CurrentSelectionDispatchHistoryMessages {
   completedAttemptLabel: string;
   currentDispatchBadge: string;
   currentSelectionUnavailableValue: string;
+  dispatchIdLabel: string;
   dispatchedCountLabel: string;
   durationLabel: string;
   erroredCountLabel: string;
@@ -172,6 +173,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     completedAttemptLabel: "completed",
     currentDispatchBadge: "Current dispatch",
     currentSelectionUnavailableValue: "Unavailable",
+    dispatchIdLabel: "Dispatch ID",
     dispatchedCountLabel: "dispatchedCount",
     durationLabel: "Duration",
     erroredCountLabel: "erroredCount",
@@ -312,6 +314,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     completedAttemptLabel: "完了済み",
     currentDispatchBadge: "現在のディスパッチ",
     currentSelectionUnavailableValue: "利用不可",
+    dispatchIdLabel: "ディスパッチ ID",
     dispatchedCountLabel: "ディスパッチ数",
     durationLabel: "所要時間",
     erroredCountLabel: "エラー数",
@@ -448,6 +451,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     completedAttemptLabel: "완료됨",
     currentDispatchBadge: "현재 디스패치",
     currentSelectionUnavailableValue: "사용할 수 없음",
+    dispatchIdLabel: "디스패치 ID",
     dispatchedCountLabel: "디스패치 수",
     durationLabel: "소요 시간",
     erroredCountLabel: "오류 수",
@@ -577,6 +581,7 @@ const currentSelectionDispatchHistoryMessagesByLocale = {
     completedAttemptLabel: "已完成",
     currentDispatchBadge: "当前分派",
     currentSelectionUnavailableValue: "不可用",
+    dispatchIdLabel: "分派 ID",
     dispatchedCountLabel: "分派次数",
     durationLabel: "耗时",
     erroredCountLabel: "错误次数",

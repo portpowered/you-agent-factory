@@ -86,6 +86,9 @@ describe("CurrentSelectionBodyLayout", () => {
         })
         .getAttribute("aria-expanded"),
     ).toBe("true");
-    expect(screen.getByText("Summary details")).toBeTruthy();
+    const summaryDetails = screen.getByText("Summary details");
+    expect(summaryDetails).toBeTruthy();
+    const summaryContent = document.getElementById("summary-content");
+    expect(summaryContent?.className).toBe("grid");
   });
 });

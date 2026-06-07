@@ -58,11 +58,6 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/work-selection/components/inference-attempt-summary-header.tsx",
-  },
-  {
-    owner: "expandable-panel-trigger",
-    relativeFilePath:
       "src/features/current-selection/work-selection/components/inference-attempt-body-sections.tsx",
   },
   {

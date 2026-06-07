@@ -2,8 +2,8 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardWorkItemRef } from "../../../../api/dashboard/types";
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import { dashboardWorkstationRequestFixtures } from "../../../../components/dashboard/fixtures";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 import {
   formatDurationMillis,
   formatLocalDateTime,
@@ -21,8 +21,16 @@ import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails
 import { selectWorkItemExecutionDetails } from "../state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
 
+type QueryScope = HTMLElement | ReturnType<typeof within>;
+
+function scopedQueries(scope: QueryScope): ReturnType<typeof within> {
+  return scope instanceof HTMLElement ? within(scope) : scope;
+}
+
 function getDetailRow(container: HTMLElement, label: string): HTMLElement {
-  const term = within(container).getByText(label, { selector: "dt" });
+  const queries = within(container);
+  const term =
+    queries.queryByText(label, { selector: "dt" }) ?? queries.getByText(label);
   const row = term.closest("div");
 
   if (!(row instanceof HTMLElement)) {
@@ -42,16 +50,20 @@ function expectDispatchCardToHideTransitionId(
 }
 
 function expandDispatchSection(
-  container: HTMLElement,
+  container: QueryScope,
   title: string,
   expandLabel = "Expand",
 ): HTMLElement {
-  const section = within(container).getByRole("region", { name: title });
+  const queries = scopedQueries(container);
+  const section = queries.getByRole("region", { name: title });
   const toggle = within(section).getByRole("button", { name: expandLabel });
 
-  expect(toggle.getAttribute("aria-expanded")).toBe("false");
-  fireEvent.click(toggle);
-  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  if (toggle.getAttribute("aria-expanded") === "false") {
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  } else {
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  }
 
   return section;
 }
@@ -580,22 +592,19 @@ describe("WorkItemDetailCard summary", () => {
       }
 
       expect(
-        within(section).getByRole("button", { name: "Collapse" }).getAttribute(
-          "aria-expanded",
-        ),
+        within(section)
+          .getByRole("button", { name: "Collapse" })
+          .getAttribute("aria-expanded"),
       ).toBe("true");
     }
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
-    const requestDetailsRegion = screen.getByRole("region", {
-      name: "Request details",
-    });
+    const requestDetailsRegion = expandDispatchSection(
+      dispatchHistory,
+      "Request details",
+    );
     const requestDetails = within(requestDetailsRegion);
-    const traceDetailsRegion = screen.getByRole("region", {
-      name: "Trace details",
-    });
-    const traceDetails = within(traceDetailsRegion);
     const inferenceAttempts = within(
       expandDispatchSection(document.body, "Inference attempts"),
     );
@@ -624,10 +633,10 @@ describe("WorkItemDetailCard summary", () => {
       ),
     ).toBeTruthy();
     expect(
-      traceDetails.getByRole("button", { name: "trace-active-story" }),
+      requestDetails.getByRole("button", { name: "trace-active-story" }),
     ).toBeTruthy();
     expect(
-      within(getDetailRow(traceDetailsRegion, "Output work")).getByRole(
+      within(getDetailRow(requestDetailsRegion, "Output work")).getByRole(
         "button",
         {
           name: "Select work item Active Story",
@@ -635,7 +644,7 @@ describe("WorkItemDetailCard summary", () => {
       ),
     ).toBeTruthy();
     expect(
-      within(getDetailRow(traceDetailsRegion, "Trace IDs")).getByRole(
+      within(getDetailRow(requestDetailsRegion, "Trace IDs")).getByRole(
         "button",
         {
           name: "trace-active-story",
@@ -716,9 +725,9 @@ describe("WorkItemDetailCard summary", () => {
     expect(
       within(activeCard).getByText("Current dispatch").className,
     ).toContain("text-on-surface");
-    expect(activeCard.className).toContain("border-primary");
+    expect(activeCard.className).toContain("border-outline-variant");
     expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
-    expect(historicalCard.className).not.toContain("border-primary");
+    expect(historicalCard.className).not.toContain("border-outline-variant");
   });
 
   it("renders unavailable execution details with clear operator copy", () => {
@@ -977,8 +986,8 @@ describe("WorkItemDetailCard summary", () => {
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
-    const traceDetails = within(
-      screen.getByRole("region", { name: "Trace details" }),
+    const requestDetails = within(
+      expandDispatchSection(dispatchHistory, "Request details"),
     );
     const inferenceAttempts = within(
       expandDispatchSection(document.body, "Inference attempts"),
@@ -989,9 +998,7 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      within(
-        screen.getByRole("region", { name: "Request details" }),
-      ).queryByText(
+      requestDetails.queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
     ).toBeNull();
@@ -1011,7 +1018,7 @@ describe("WorkItemDetailCard summary", () => {
       }),
     ).toBeTruthy();
     expect(
-      traceDetails.getByRole("button", { name: "trace-active-story" }),
+      requestDetails.getByRole("button", { name: "trace-active-story" }),
     ).toBeTruthy();
   });
 
@@ -1053,7 +1060,10 @@ describe("WorkItemDetailCard summary", () => {
     );
 
     const traceButton = within(
-      screen.getByRole("region", { name: "Trace details" }),
+      expandDispatchSection(
+        screen.getByRole("region", { name: "Workstation dispatches" }),
+        "Request details",
+      ),
     ).getByRole("button", { name: "trace-active-story" });
 
     fireEvent.click(traceButton);
@@ -1227,10 +1237,7 @@ describe("WorkItemDetailCard relationship graph", () => {
     getTraceGraphNodeButton(traceGraph, "Parent Story").focus();
     await user.keyboard("{Enter}");
 
-    expect(onSelectWorkID).toHaveBeenNthCalledWith(
-      1,
-      "work-dependency-story",
-    );
+    expect(onSelectWorkID).toHaveBeenNthCalledWith(1, "work-dependency-story");
     expect(onSelectWorkID).toHaveBeenNthCalledWith(2, "work-parent-story");
   });
 
@@ -1454,9 +1461,9 @@ describe("WorkItemDetailCard relationship graph", () => {
     expect(
       traceGraph.querySelector('button[aria-label="Parent Story"]'),
     ).toBeNull();
-    expect(getTraceGraphNodeShell(traceGraph, "Parent Story").className).toContain(
-      "border-primary",
-    );
+    expect(
+      getTraceGraphNodeShell(traceGraph, "Parent Story").className,
+    ).toContain("border-primary");
     expect(
       within(
         screen.getByRole("region", { name: "Focused work summary" }),
@@ -1723,15 +1730,20 @@ describe("WorkItemDetailCard localization", () => {
       throw new Error("expected localized dispatch history card");
     }
 
-    expect(within(dispatchCard).getByText("开始时间")).toBeTruthy();
+    const requestDetails = expandDispatchSection(
+      dispatchCard,
+      "请求详情",
+      "展开",
+    );
+    expect(within(requestDetails).getByText("开始时间")).toBeTruthy();
     expect(
-      within(getDetailRow(dispatchCard, "开始时间")).getByText(
+      within(getDetailRow(requestDetails, "开始时间")).getByText(
         formatLocalDateTime("2026-04-08T12:00:01Z", "不可用", "zh-CN"),
       ),
     ).toBeTruthy();
-    expect(within(dispatchCard).getByText("耗时")).toBeTruthy();
+    expect(within(requestDetails).getByText("耗时")).toBeTruthy();
     expect(
-      within(getDetailRow(dispatchCard, "耗时")).getByText(
+      within(getDetailRow(requestDetails, "耗时")).getByText(
         formatDurationMillis(63_000, "zh-CN"),
       ),
     ).toBeTruthy();
@@ -2016,7 +2028,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       within(secondResponseBody).getByText("Ready for the next workstation."),
     ).toBeTruthy();
 
-    const traceButton = within(dispatchCard).getByRole("button", {
+    const requestDetails = expandDispatchSection(
+      dispatchCard,
+      "Request details",
+    );
+    const traceButton = within(requestDetails).getByRole("button", {
       name: "trace-active-story",
     });
     fireEvent.click(traceButton);
@@ -2075,7 +2091,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     );
 
     const failureDetails = within(
-      screen.getByRole("region", { name: "Failure details" }),
+      expandDispatchSection(document.body, "Failure details"),
     );
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
@@ -2103,8 +2119,12 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         screen.getByRole("article", { name: "Current selection" }),
       ).queryByText("Provider rate limit exceeded while reviewing the story."),
     ).toBeTruthy();
+    const failedRequestDetails = expandDispatchSection(
+      dispatchHistory,
+      "Request details",
+    );
     expect(
-      dispatchHistory.getAllByRole("button", {
+      within(failedRequestDetails).getAllByRole("button", {
         name: "Select work item Active Story",
       }).length,
     ).toBeGreaterThan(0);
@@ -2149,8 +2169,12 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected pending script dispatch history card");
     }
 
+    const requestDetails = expandDispatchSection(
+      dispatchCard,
+      "Request details",
+    );
     expect(
-      within(dispatchCard).getByText(
+      within(requestDetails).getByText(
         "Prompt details are not applicable to this script-backed dispatch.",
       ),
     ).toBeTruthy();
@@ -2244,9 +2268,13 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         { selector: "span" },
       ),
     ).toBeTruthy();
-    expect(within(dispatchCard).getByText("Started at")).toBeTruthy();
+    const requestDetails = expandDispatchSection(
+      dispatchCard,
+      "Request details",
+    );
+    expect(within(requestDetails).getByText("Started at")).toBeTruthy();
     expect(
-      within(getDetailRow(dispatchCard, "Started at")).getByText(
+      within(getDetailRow(requestDetails, "Started at")).getByText(
         formatLocalDateTime("2026-04-08T12:00:01Z", "Unavailable"),
       ),
     ).toBeTruthy();
@@ -2300,9 +2328,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       name: "Workstation dispatches",
     });
     const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.noResponse.dispatch_id, {
-        selector: "strong",
-      })
+      .getByText(dashboardWorkstationRequestFixtures.noResponse.dispatch_id)
       .closest("article");
 
     if (!(dispatchCard instanceof HTMLElement)) {
@@ -2359,14 +2385,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected fallback dispatch history card");
     }
 
-    expect(
-      within(dispatchCard).getByRole("region", {
-        name: "Request details",
-      }),
-    ).toBeTruthy();
-    const fallbackRequestDetails = within(dispatchCard).getByRole("region", {
-      name: "Request details",
-    });
+    const fallbackRequestDetails = expandDispatchSection(
+      dispatchCard,
+      "Request details",
+    );
     expect(
       within(dispatchCard).getByRole("region", {
         name: "Response details",
@@ -2383,7 +2405,9 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       ),
     ).toBeNull();
     expect(
-      within(dispatchCard).getByText("Workstation", { selector: "dt" }),
+      within(fallbackRequestDetails).getByText("Workstation", {
+        selector: "dt",
+      }),
     ).toBeTruthy();
     expect(
       within(fallbackRequestDetails).queryByText("Resolved args"),
@@ -2394,8 +2418,16 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(selectedWorkButton).toBeTruthy();
     expect(selectedWorkButton.textContent).toContain("Active Story");
     expect(selectedWorkButton.className).toContain("text-on-surface");
-    expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
-    const selectedTraceButton = within(dispatchCard).getByRole("button", {
+    const responseDetails = expandDispatchSection(
+      dispatchCard,
+      "Response details",
+    );
+    expect(
+      within(getDetailRow(responseDetails, "Trace IDs")).getByRole("button", {
+        name: "trace-active-story (selected)",
+      }),
+    ).toBeTruthy();
+    const selectedTraceButton = within(responseDetails).getByRole("button", {
       name: "trace-active-story (selected)",
     });
     expect(selectedTraceButton).toBeTruthy();
@@ -2442,8 +2474,12 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected script success dispatch history card");
     }
 
+    const requestDetails = expandDispatchSection(
+      dispatchCard,
+      "Request details",
+    );
     expect(
-      within(dispatchCard).getAllByText("Succeeded").length,
+      within(requestDetails).getAllByText("Succeeded").length,
     ).toBeGreaterThan(0);
     const scriptAttempts = within(
       expandDispatchSection(dispatchCard, "Script attempts"),
@@ -2478,9 +2514,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
         within(dispatchCard).getByRole("region", { name: "Response details" }),
       ).queryByText(/script success stdout/),
     ).toBeNull();
-    const responseDetails = within(dispatchCard).getByRole("region", {
-      name: "Response details",
-    });
+    const responseDetails = expandDispatchSection(
+      dispatchCard,
+      "Response details",
+    );
     expect(
       within(getDetailRow(responseDetails, "Trace IDs")).getByRole("button", {
         name: "trace-active-story",
@@ -2526,8 +2563,12 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
       throw new Error("expected script failure dispatch history card");
     }
 
+    const requestDetails = expandDispatchSection(
+      dispatchCard,
+      "Request details",
+    );
     expect(
-      within(dispatchCard).getAllByText("Timed out").length,
+      within(requestDetails).getAllByText("Timed out").length,
     ).toBeGreaterThan(0);
     const scriptAttempts = within(
       expandDispatchSection(dispatchCard, "Script attempts"),
@@ -2683,9 +2724,6 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
         name: "リクエストの詳細",
       }),
     ).toBeTruthy();
-    const localizedRequestDetails = within(dispatchCard).getByRole("region", {
-      name: "リクエストの詳細",
-    });
     expect(
       within(dispatchCard).getByRole("region", {
         name: "応答の詳細",
@@ -2701,8 +2739,15 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
         "このディスパッチにはまだスクリプト応答がありません。",
       ),
     ).toBeNull();
+    const localizedRequestDetails = expandDispatchSection(
+      dispatchCard,
+      "リクエストの詳細",
+      "展開",
+    );
     expect(
-      within(dispatchCard).getByText("ワークステーション", { selector: "dt" }),
+      within(localizedRequestDetails).getByText("ワークステーション", {
+        selector: "dt",
+      }),
     ).toBeTruthy();
     expectDispatchCardToHideTransitionId(
       dispatchCard,
@@ -2724,11 +2769,18 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
         name: "作業項目 Active Story を選択",
       }),
     ).toBeTruthy();
-    expect(within(dispatchCard).getByText("トレース ID")).toBeTruthy();
+    const localizedResponseDetails = expandDispatchSection(
+      dispatchCard,
+      "応答の詳細",
+      "展開",
+    );
     expect(
-      within(dispatchCard).getByRole("button", {
-        name: "trace-active-story（選択中）",
-      }),
+      within(getDetailRow(localizedResponseDetails, "トレース ID")).getByRole(
+        "button",
+        {
+          name: "trace-active-story（選択中）",
+        },
+      ),
     ).toBeTruthy();
   });
 });

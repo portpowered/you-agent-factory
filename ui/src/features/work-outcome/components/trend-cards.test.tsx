@@ -232,8 +232,9 @@ describe("dashboard trend cards", () => {
     const failureScope = within(resolvedFailureCard);
     const reworkScope = within(resolvedReworkCard);
     const timingScope = within(resolvedTimingCard);
-    const toolbar = failureScope.getByText("Time range").closest("div")
-      ?.parentElement;
+    const toolbar = failureScope
+      .getByText("Time range")
+      .closest("div")?.parentElement;
     const summary = failureScope.getByText("Failed in range").closest("dl");
     const failedInRangeMetric = failureScope
       .getByText("Failed in range")

@@ -20,7 +20,6 @@ describe("shared primitive neutral surface roles", () => {
     "dashboard-shell.tsx",
     "input.tsx",
     "dialog.tsx",
-    "table.tsx",
     "popover.tsx",
   ])("uses role-based neutral surfaces in %s", (fileName) => {
     const source = readComponentSource(fileName);
@@ -28,6 +27,14 @@ describe("shared primitive neutral surface roles", () => {
     expect(source).toContain("border-outline");
     expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
     expect(source).toMatch(/\bbg-surface-container-(low|high)\b/);
+    expectNoTransitionalNeutralSurfaces(source);
+  });
+
+  it("uses role-based neutral borders and text in table.tsx", () => {
+    const source = readComponentSource("table.tsx");
+
+    expect(source).toContain("border-outline");
+    expect(source).toMatch(/\btext-on-surface(-variant)?\b/);
     expectNoTransitionalNeutralSurfaces(source);
   });
 

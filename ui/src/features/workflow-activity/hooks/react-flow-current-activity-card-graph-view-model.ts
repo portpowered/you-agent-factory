@@ -18,6 +18,7 @@ import type {
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import { resolveStoredNodePositionsForGraphKey } from "../lib/bridge-graph-layout-positions";
 import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import {
   buildGraphEdges,
@@ -30,7 +31,6 @@ import {
   buildHandleAssignments,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
-import { resolveStoredNodePositionsForGraphKey } from "../lib/bridge-graph-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";

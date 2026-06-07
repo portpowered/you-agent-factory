@@ -20,7 +20,9 @@ const EXPECTED_CHART_COLORS: Record<DashboardChartSemanticRole, string> = {
 describe("dashboard chart contract", () => {
   it("exposes chart chrome helpers without exporting raw class constants", () => {
     expect(dashboardChartAxisClassName()).toContain("stroke-outline-variant");
-    expect(dashboardChartAxisLabelClassName()).toContain("fill-on-surface-subtle");
+    expect(dashboardChartAxisLabelClassName()).toContain(
+      "fill-on-surface-subtle",
+    );
     expect(dashboardChartSurfaceClassName()).toContain("af-chart-grid-surface");
   });
 

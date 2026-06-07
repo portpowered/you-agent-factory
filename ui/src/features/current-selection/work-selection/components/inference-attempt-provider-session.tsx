@@ -23,6 +23,9 @@ export interface InferenceAttemptProviderSessionDetailsProps {
   selectedProviderSessionKey?: string | null;
 }
 
+export interface InferenceAttemptProviderSessionPreviewProps
+  extends InferenceAttemptProviderSessionDetailsProps {}
+
 export function InferenceAttemptProviderSessionDetails({
   attempt,
   onSelectProviderSession,
@@ -83,6 +86,48 @@ export function InferenceAttemptProviderSessionDetails({
         {workstationMessages.providerSessionSelectionUnavailable}
       </CurrentSelectionSupportingText>
     </div>
+  );
+}
+
+export function InferenceAttemptProviderSessionPreview({
+  attempt,
+  onSelectProviderSession,
+  selectedProviderSessionKey,
+}: InferenceAttemptProviderSessionPreviewProps) {
+  const detailMessages = useCurrentSelectionDetailMessages();
+  const workstationMessages = useCurrentSelectionWorkstationDetailMessages();
+  const state = useInferenceAttemptProviderSessionState({
+    attempt,
+    selectedProviderSessionKey,
+  });
+
+  if (!state.providerSessionLabel) {
+    return null;
+  }
+
+  if (state.loadableProviderSession && onSelectProviderSession) {
+    const loadableProviderSession = state.loadableProviderSession;
+
+    return (
+      <CurrentSelectionSelectableButton
+        aria-label={workstationMessages.selectProviderSessionLabel(
+          state.providerSessionLabel,
+          attempt.dispatch_id,
+        )}
+        onClick={() => onSelectProviderSession(loadableProviderSession)}
+        selected={state.providerSessionSelected}
+      >
+        {state.providerSessionSelected
+          ? workstationMessages.providerSessionSelectedAction
+          : detailMessages.providerSessionLabel}
+      </CurrentSelectionSelectableButton>
+    );
+  }
+
+  return (
+    <CurrentSelectionSupportingText tone="status">
+      {workstationMessages.providerSessionSelectionUnavailable}
+    </CurrentSelectionSupportingText>
   );
 }
 

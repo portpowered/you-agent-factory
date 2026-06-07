@@ -94,7 +94,9 @@ describe("App follow-up flows", () => {
 
   describe("submit request flows", () => {
     it("submits configured and empty work requests, while preserving failed form state", async () => {
-      const { fetchMock } = renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
+      const { fetchMock } = renderApp({
+        snapshot: semanticWorkflowDashboardSnapshot,
+      });
       chainRenderAppFetchMock(fetchMock, async (path, method, _input, init) => {
         if (method !== "POST" || !path.endsWith("/work")) {
           return undefined;
@@ -236,7 +238,9 @@ describe("App follow-up flows", () => {
 
   describe("multimodal submit", () => {
     it("submits a light text-plus-image multimodal request through the dashboard shell", async () => {
-      const { fetchMock } = renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
+      const { fetchMock } = renderApp({
+        snapshot: semanticWorkflowDashboardSnapshot,
+      });
       chainRenderAppFetchMock(fetchMock, async (path, method) => {
         if (method !== "POST") {
           return undefined;
