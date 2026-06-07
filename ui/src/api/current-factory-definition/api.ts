@@ -62,6 +62,8 @@ export interface SaveCurrentFactoryInput {
 
 export interface SaveFactoryForSessionInput {
   baseVersion?: CurrentFactoryVersion;
+  /** When set for REPLACE_CURRENT, overrides a stale editable payload name before PUT. */
+  canonicalFactoryName?: string;
   factoryDefinition: CanonicalFactoryDefinition;
   includeVersion?: boolean;
   mode: FactorySaveMode;
@@ -130,7 +132,11 @@ export async function saveFactoryForSessionDocument(
     return await saveSessionFactory(
       {
         baseVersion: input.baseVersion,
-        factory: input.factoryDefinition,
+        factory: applyReplaceCurrentCanonicalFactoryName(
+          input.factoryDefinition,
+          input.mode,
+          input.canonicalFactoryName,
+        ),
         includeVersion: input.includeVersion,
         mode: input.mode,
         sessionID: resolveSessionID(options.sessionID),
@@ -142,6 +148,25 @@ export async function saveFactoryForSessionDocument(
   } catch (error) {
     throw toCurrentFactoryDefinitionError(error);
   }
+}
+
+function applyReplaceCurrentCanonicalFactoryName(
+  factoryDefinition: CanonicalFactoryDefinition,
+  mode: FactorySaveMode,
+  canonicalFactoryName: string | undefined,
+): CanonicalFactoryDefinition {
+  if (
+    mode !== CURRENT_FACTORY_EDITOR_SAVE_MODE ||
+    canonicalFactoryName === undefined ||
+    factoryDefinition.name === canonicalFactoryName
+  ) {
+    return factoryDefinition;
+  }
+
+  return {
+    ...factoryDefinition,
+    name: canonicalFactoryName,
+  };
 }
 
 function resolveSessionID(sessionID: string | null | undefined): string {

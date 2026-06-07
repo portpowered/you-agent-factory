@@ -34,12 +34,17 @@ export function useFactoryDocumentSave() {
     mutationFn: (input) => {
       const resolvedSessionID = input.sessionID ?? dashboardSessionID;
       const factoryDefinition = structuredClone(input.factory);
+      const resolvedMode = input.mode ?? CURRENT_FACTORY_EDITOR_SAVE_MODE;
+      const cachedDocument = queryClient.getQueryData<CurrentFactoryDocument>(
+        currentFactoryDocumentQueryKey(resolvedSessionID),
+      );
 
       return saveFactoryForSessionDocument(
         {
           baseVersion: input.baseVersion,
+          canonicalFactoryName: cachedDocument?.name,
           factoryDefinition,
-          mode: input.mode ?? CURRENT_FACTORY_EDITOR_SAVE_MODE,
+          mode: resolvedMode,
         },
         { sessionID: resolvedSessionID },
       );

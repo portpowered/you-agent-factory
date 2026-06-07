@@ -2,7 +2,6 @@ package factorysave
 
 import (
 	"context"
-	"fmt"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -93,15 +92,13 @@ func (s *Service) prepareEditableFactoryDefinitionSave(
 	current factoryapi.Factory,
 	request factoryapi.Factory,
 ) (string, factoryapi.Factory, error) {
-	if request.Name != current.Name {
-		return "", factoryapi.Factory{}, fmt.Errorf("%w: editable save must preserve current factory name %q", apisurface.ErrInvalidNamedFactoryName, current.Name)
-	}
 	if current.Name != apisurface.DefaultCurrentFactoryName {
-		if err := apisurface.ValidateWritableNamedFactoryName(request.Name); err != nil {
+		if err := apisurface.ValidateWritableNamedFactoryName(current.Name); err != nil {
 			return "", factoryapi.Factory{}, err
 		}
 	}
 	sanitized := request
+	sanitized.Name = current.Name
 	sanitized.Version = nil
 	if err := validateEditableFactoryTopology(sanitized, s.workstationLoader()); err != nil {
 		return "", factoryapi.Factory{}, err

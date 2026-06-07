@@ -1087,6 +1087,63 @@ describe("getCurrentFactoryDefinition", () => {
     });
   });
 
+  it("applies canonicalFactoryName on REPLACE_CURRENT saves when the editable payload name drifted", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "alpha",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "2",
+            physical: "2026-05-18T14:42:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveFactoryForSessionDocument(
+      {
+        canonicalFactoryName: "alpha",
+        factoryDefinition: {
+          name: "imported-factory",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        mode: "REPLACE_CURRENT",
+      },
+      {
+        fetch,
+        sessionID: "session-2",
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/session-2/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "REPLACE_CURRENT",
+          factory: {
+            name: "alpha",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        }),
+        method: "PUT",
+      }),
+    );
+  });
+
   it("delegates saveFactoryForSessionDocument to session-factory with explicit save mode", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
