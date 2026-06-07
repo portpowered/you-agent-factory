@@ -28,6 +28,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/invocations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Invoke one factory session and return its primary result
+     * @description Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+     */
+    post: operations["invokeFactorySessionBySessionId"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/work/staged-files": {
     parameters: {
       query?: never;
@@ -462,6 +482,46 @@ export interface components {
       /** @description Factory session that accepted the submit (~default for POST /work). */
       sessionId?: string;
     };
+    /**
+     * @description Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+     * @enum {string}
+     */
+    InvocationInputSourceKind: InvocationInputSourceKind;
+    InvocationRequest: {
+      /** @description Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
+      sourceKind: components["schemas"]["InvocationInputSourceKind"];
+      /** @description Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. */
+      content: components["schemas"]["WorkContent"];
+      /** @description Optional caller-supplied idempotency key for the invocation request. */
+      requestId?: string;
+      /**
+       * Format: int64
+       * @description Optional caller timeout budget in milliseconds for waiting on the primary result.
+       */
+      timeoutMillis?: number;
+    };
+    InvocationResponse: {
+      /** @description Stable invocation request identifier assigned or accepted by the server. */
+      requestId: string;
+      /** @description Trace identifier for the work submitted by this invocation. */
+      traceId: string;
+      /** @description Terminal invocation status after resolving or failing primary-result selection. */
+      status: components["schemas"]["InvocationTerminalStatus"];
+      /** @description Primary invocation result. Present only when the invocation resolves successfully with status `COMPLETED`. */
+      primaryResult?: components["schemas"]["WorkContent"];
+      /**
+       * @description Stable machine-readable invocation failure code when status is not `COMPLETED`.
+       * @enum {string}
+       */
+      errorCode?: InvocationResponseErrorCode;
+      /** @description Human-readable failure summary when status is not `COMPLETED`. */
+      message?: string;
+    };
+    /**
+     * @description Terminal status for a factory-session invocation.
+     * @enum {string}
+     */
+    InvocationTerminalStatus: InvocationTerminalStatus;
     /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
     SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
     /** @description One ordered dashboard-authored submit-work item. */
@@ -1694,6 +1754,9 @@ export interface components {
      *           ]
      *         }
      *       ],
+     *       "invocationReturn": {
+     *         "policy": "SUBMITTED_WORK_TERMINAL"
+     *       },
      *       "supportingFiles": {
      *         "requiredTools": [
      *           {
@@ -1830,6 +1893,8 @@ export interface components {
       metadata?: components["schemas"]["StringMap"];
       /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
       inputTypes?: components["schemas"]["InputType"][];
+      /** @description Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation. */
+      invocationReturn?: components["schemas"]["InvocationReturn"];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -1843,6 +1908,22 @@ export interface components {
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
     };
+    /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
+    InvocationReturn: {
+      /** @description Return selection policy for this factory. */
+      policy: components["schemas"]["InvocationReturnPolicy"];
+      /** @description Work type name used by EXPLICIT policy selection. */
+      workTypeName?: string;
+      /** @description Authored terminal state name used by EXPLICIT policy selection. */
+      terminalState?: string;
+      /** @description Optional authored work name filter used by EXPLICIT policy selection. */
+      workName?: string;
+    };
+    /**
+     * @description Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+     * @enum {string}
+     */
+    InvocationReturnPolicy: InvocationReturnPolicy;
     /** @description Factory-level guard attached at the root factory definition. */
     FactoryGuard: {
       /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
@@ -2669,6 +2750,36 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  invokeFactorySessionBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InvocationRequest"];
+      };
+    };
+    responses: {
+      /** @description Invocation reached a terminal status for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InvocationResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   stageSubmitWorkFileBySessionId: {
     parameters: {
       query?: never;
@@ -3227,6 +3338,36 @@ export interface operations {
     };
   };
 }
+export const InvocationInputSourceKind = {
+  // Text supplied in canonical WorkContent.
+  InvocationInputSourceKindText: "text",
+  // Reserved future file-reference input source.
+  InvocationInputSourceKindFileRef: "fileRef",
+  // Reserved future audio-stream input source.
+  InvocationInputSourceKindAudioStream: "audioStream",
+} as const;
+export type InvocationInputSourceKind =
+  (typeof InvocationInputSourceKind)[keyof typeof InvocationInputSourceKind];
+export const InvocationResponseErrorCode = {
+  INVOCATION_PRIMARY_RESULT_UNRESOLVED: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+  INVOCATION_TIMED_OUT: "INVOCATION_TIMED_OUT",
+  INVOCATION_CANCELED: "INVOCATION_CANCELED",
+  INVOCATION_RUNTIME_FAILURE: "INVOCATION_RUNTIME_FAILURE",
+} as const;
+export type InvocationResponseErrorCode =
+  (typeof InvocationResponseErrorCode)[keyof typeof InvocationResponseErrorCode];
+export const InvocationTerminalStatus = {
+  // Invocation completed and any primaryResult is authoritative.
+  InvocationTerminalStatusCompleted: "COMPLETED",
+  // Invocation reached a runtime or primary-result resolution failure.
+  InvocationTerminalStatusFailed: "FAILED",
+  // Invocation was canceled before successful completion.
+  InvocationTerminalStatusCanceled: "CANCELED",
+  // Invocation exceeded its caller or server timeout budget.
+  InvocationTerminalStatusTimedOut: "TIMED_OUT",
+} as const;
+export type InvocationTerminalStatus =
+  (typeof InvocationTerminalStatus)[keyof typeof InvocationTerminalStatus];
 export const SubmitWorkItemType = {
   SubmitWorkItemTypeText: "text",
   SubmitWorkItemTypeImage: "image",
@@ -3534,6 +3675,14 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const InvocationReturnPolicy = {
+  // Use the invocation-submitted work item terminal content as the primary result.
+  InvocationReturnPolicySubmittedWorkTerminal: "SUBMITTED_WORK_TERMINAL",
+  // Use the configured work type, terminal state, and optional work name as the primary result.
+  InvocationReturnPolicyExplicit: "EXPLICIT",
+} as const;
+export type InvocationReturnPolicy =
+  (typeof InvocationReturnPolicy)[keyof typeof InvocationReturnPolicy];
 export const BundledFileType = {
   SCRIPT: "SCRIPT",
   DOC: "DOC",

@@ -30,6 +30,8 @@ example:
           type: FAILED
         - name: complete
           type: TERMINAL
+  invocationReturn:
+    policy: SUBMITTED_WORK_TERMINAL
   supportingFiles:
     requiredTools:
       - name: python
@@ -128,6 +130,13 @@ properties:
     description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
     items:
       $ref: './InputType.yaml'
+  invocationReturn:
+    $ref: './InvocationReturn.yaml'
+    description: >-
+      Optional factory-authored invocation primary-result policy shared by CLI
+      and API entrypoints. When omitted, runtimes use the
+      SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for
+      the work item originally submitted by the invocation.
   guards:
     type: array
     description: Root-level guards that apply across the factory instead of one specific workstation or input.

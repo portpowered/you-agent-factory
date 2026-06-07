@@ -81,6 +81,34 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/invocations:
+    post:
+      tags:
+        - Work
+      operationId: invokeFactorySessionBySessionId
+      summary: Invoke one factory session and return its primary result
+      description: Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvocationRequest'
+      responses:
+        '200':
+          description: Invocation reached a terminal status for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvocationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/staged-files:
     post:
       tags:
@@ -1008,6 +1036,91 @@ components:
         sessionId:
           type: string
           description: Factory session that accepted the submit (~default for POST /work).
+    InvocationInputSourceKind:
+      type: string
+      description: Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+      enum:
+        - text
+        - fileRef
+        - audioStream
+      x-enum-varnames:
+        - InvocationInputSourceKindText
+        - InvocationInputSourceKindFileRef
+        - InvocationInputSourceKindAudioStream
+      x-enum-descriptions:
+        - Text supplied in canonical WorkContent.
+        - Reserved future file-reference input source.
+        - Reserved future audio-stream input source.
+    InvocationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceKind
+        - content
+      properties:
+        sourceKind:
+          $ref: '#/components/schemas/InvocationInputSourceKind'
+          description: Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice.
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions.
+        requestId:
+          type: string
+          description: Optional caller-supplied idempotency key for the invocation request.
+        timeoutMillis:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Optional caller timeout budget in milliseconds for waiting on the primary result.
+    InvocationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - requestId
+        - traceId
+        - status
+      properties:
+        requestId:
+          type: string
+          description: Stable invocation request identifier assigned or accepted by the server.
+        traceId:
+          type: string
+          description: Trace identifier for the work submitted by this invocation.
+        status:
+          $ref: '#/components/schemas/InvocationTerminalStatus'
+          description: Terminal invocation status after resolving or failing primary-result selection.
+        primaryResult:
+          $ref: '#/components/schemas/WorkContent'
+          description: Primary invocation result. Present only when the invocation resolves successfully with status `COMPLETED`.
+        errorCode:
+          type: string
+          description: Stable machine-readable invocation failure code when status is not `COMPLETED`.
+          enum:
+            - INVOCATION_PRIMARY_RESULT_UNRESOLVED
+            - INVOCATION_TIMED_OUT
+            - INVOCATION_CANCELED
+            - INVOCATION_RUNTIME_FAILURE
+        message:
+          type: string
+          description: Human-readable failure summary when status is not `COMPLETED`.
+    InvocationTerminalStatus:
+      type: string
+      description: Terminal status for a factory-session invocation.
+      enum:
+        - COMPLETED
+        - FAILED
+        - CANCELED
+        - TIMED_OUT
+      x-enum-varnames:
+        - InvocationTerminalStatusCompleted
+        - InvocationTerminalStatusFailed
+        - InvocationTerminalStatusCanceled
+        - InvocationTerminalStatusTimedOut
+      x-enum-descriptions:
+        - Invocation completed and any primaryResult is authoritative.
+        - Invocation reached a runtime or primary-result resolution failure.
+        - Invocation was canceled before successful completion.
+        - Invocation exceeded its caller or server timeout budget.
     SubmitWorkItemList:
       type: array
       description: Ordered dashboard-authored submit-work items preserved for one submission.
@@ -3599,6 +3712,8 @@ components:
                 type: FAILED
               - name: complete
                 type: TERMINAL
+        invocationReturn:
+          policy: SUBMITTED_WORK_TERMINAL
         supportingFiles:
           requiredTools:
             - name: python
@@ -3697,6 +3812,9 @@ components:
           description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
           items:
             $ref: '#/components/schemas/InputType'
+        invocationReturn:
+          $ref: '#/components/schemas/InvocationReturn'
+          description: Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
         guards:
           type: array
           description: Root-level guards that apply across the factory instead of one specific workstation or input.
@@ -3725,6 +3843,37 @@ components:
           description: Processing steps that consume work, invoke workers, and emit the next work states.
           items:
             $ref: '#/components/schemas/Workstation'
+    InvocationReturn:
+      type: object
+      additionalProperties: false
+      required:
+        - policy
+      description: Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+      properties:
+        policy:
+          $ref: '#/components/schemas/InvocationReturnPolicy'
+          description: Return selection policy for this factory.
+        workTypeName:
+          type: string
+          description: Work type name used by EXPLICIT policy selection.
+        terminalState:
+          type: string
+          description: Authored terminal state name used by EXPLICIT policy selection.
+        workName:
+          type: string
+          description: Optional authored work name filter used by EXPLICIT policy selection.
+    InvocationReturnPolicy:
+      type: string
+      description: Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+      enum:
+        - SUBMITTED_WORK_TERMINAL
+        - EXPLICIT
+      x-enum-varnames:
+        - InvocationReturnPolicySubmittedWorkTerminal
+        - InvocationReturnPolicyExplicit
+      x-enum-descriptions:
+        - Use the invocation-submitted work item terminal content as the primary result.
+        - Use the configured work type, terminal state, and optional work name as the primary result.
     FactoryGuard:
       type: object
       description: Factory-level guard attached at the root factory definition.

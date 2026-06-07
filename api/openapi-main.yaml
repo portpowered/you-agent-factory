@@ -81,6 +81,43 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/invocations:
+    post:
+      tags:
+        - Work
+      operationId: invokeFactorySessionBySessionId
+      summary: Invoke one factory session and return its primary result
+      description: >-
+        Resolves one text-first invocation input, submits it to the selected live
+        factory session, waits for terminal primary-result selection, and returns
+        the result using the factory's invocationReturn policy. When
+        invocationReturn is omitted, runtimes use the documented
+        SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is
+        rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input
+        is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be
+        resolved, the response status is FAILED with
+        INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvocationRequest'
+      responses:
+        '200':
+          description: Invocation reached a terminal status for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvocationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/staged-files:
     post:
       tags:
@@ -730,6 +767,14 @@ components:
       $ref: './components/schemas/api/SubmitRelation.yaml'
     SubmitWorkResponse:
       $ref: './components/schemas/api/SubmitWorkResponse.yaml'
+    InvocationInputSourceKind:
+      $ref: './components/schemas/api/InvocationInputSourceKind.yaml'
+    InvocationRequest:
+      $ref: './components/schemas/api/InvocationRequest.yaml'
+    InvocationResponse:
+      $ref: './components/schemas/api/InvocationResponse.yaml'
+    InvocationTerminalStatus:
+      $ref: './components/schemas/api/InvocationTerminalStatus.yaml'
     SubmitWorkItemList:
       $ref: './components/schemas/api/SubmitWorkItemList.yaml'
     SubmitWorkItem:
@@ -992,6 +1037,10 @@ components:
       $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    InvocationReturn:
+      $ref: './components/schemas/data-models/InvocationReturn.yaml'
+    InvocationReturnPolicy:
+      $ref: './components/schemas/data-models/InvocationReturnPolicy.yaml'
     FactoryGuard:
       $ref: './components/schemas/data-models/FactoryGuard.yaml'
     ResourceManifest:
