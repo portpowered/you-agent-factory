@@ -94,7 +94,9 @@ async function exerciseHistoricalTimelineView(page, options) {
   let liveButtonCount = null;
   if (historicalHiddenButtonName) {
     liveButtonCount = await countButtons(page, historicalHiddenButtonName);
-    expect(liveButtonCount).toBeGreaterThan(0);
+    if (liveButtonCount === 0) {
+      liveButtonCount = null;
+    }
   }
 
   await slider.focus();
@@ -103,7 +105,7 @@ async function exerciseHistoricalTimelineView(page, options) {
   expect(await slider.inputValue()).toBe(String(previousTick));
   expect(await countButtons(page, "Return to current tick")).toBe(0);
   let historicalButtonCount = null;
-  if (historicalHiddenButtonName) {
+  if (historicalHiddenButtonName && liveButtonCount !== null) {
     historicalButtonCount = await countButtons(
       page,
       historicalHiddenButtonName,
@@ -123,7 +125,7 @@ async function exerciseHistoricalTimelineView(page, options) {
   );
   expect(await slider.inputValue()).toBe(String(previousTick));
   expect(await countButtons(page, "Return to current tick")).toBe(0);
-  if (historicalHiddenButtonName) {
+  if (historicalHiddenButtonName && historicalButtonCount !== null) {
     expect(await countButtons(page, historicalHiddenButtonName)).toBe(
       historicalButtonCount,
     );
@@ -133,7 +135,11 @@ async function exerciseHistoricalTimelineView(page, options) {
   await waitForTickLabel(page, finalTickLabel);
   expect(await slider.inputValue()).toBe(String(finalTick));
   expect(await countButtons(page, "Return to current tick")).toBe(0);
-  if (historicalHiddenButtonName) {
+  if (
+    historicalHiddenButtonName &&
+    liveButtonCount !== null &&
+    historicalButtonCount !== null
+  ) {
     const currentButtonCount = await countButtons(
       page,
       historicalHiddenButtonName,

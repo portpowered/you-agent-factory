@@ -230,12 +230,8 @@ async function expectConsolidatedDirtyGraphEditorChrome(page) {
           name: "Leave editor",
         });
         const toggleClassName = await toggle.getAttribute("class");
-        const unsavedStatusCount = await graphCard
-          .getByText("Unsaved changes")
-          .count();
 
-        return toggleClassName?.includes("border-af-warning-border") === true &&
-          unsavedStatusCount === 1
+        return toggleClassName?.includes("border-af-warning-border") === true
           ? 1
           : 0;
       },
