@@ -1,9 +1,5 @@
-import { act, render, type RenderResult } from "@testing-library/react";
+import { act, type RenderResult, render } from "@testing-library/react";
 import type { ReactNode } from "react";
-import {
-  settleCurrentSelectionEffects,
-  waitForCurrentSelection,
-} from "../../../../testing/current-selection-test-utils";
 import type {
   DashboardActiveExecution,
   DashboardInferenceAttempt,
@@ -14,21 +10,24 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import { buildEmptyDashboardRuntimeFixture } from "../../../../components/dashboard/fixtures/runtime";
+import {
+  settleCurrentSelectionEffects,
+  waitForCurrentSelection,
+} from "../../../../testing/current-selection-test-utils";
 import { buildReplayFixtureTimelineSnapshot } from "../../../../testing/replay-fixtures";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { CurrentSelectionState } from "./useCurrentSelection";
+import { resolveDashboardSelection } from "../../state/dashboardSelection";
+import type { DashboardSelection } from "../../state/selection-types";
 import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "../../state/selectionHistoryStore";
-import { resolveDashboardSelection } from "../../state/dashboardSelection";
-import type { DashboardSelection } from "../../state/selection-types";
+import type { CurrentSelectionState } from "./useCurrentSelection";
 import { useCurrentSelection } from "./useCurrentSelection";
 
 vi.mock("./useCurrentSelection.derived", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("./useCurrentSelection.derived")
-  >();
+  const actual =
+    await importOriginal<typeof import("./useCurrentSelection.derived")>();
 
   return {
     ...actual,
@@ -370,7 +369,9 @@ function readDispatchAttempts(selection: CurrentSelectionState): string {
     .join(",");
 }
 
-function readHistoryInferenceAttempts(selection: CurrentSelectionState): string {
+function readHistoryInferenceAttempts(
+  selection: CurrentSelectionState,
+): string {
   return selection.selectedWorkRequestHistory
     .flatMap((request) =>
       "inference_attempts" in request
@@ -522,9 +523,7 @@ describe("useCurrentSelection", () => {
       expect(readProviderHistory(result.current)).toBe(
         "dispatch-review-active",
       );
-      expect(readProviderSessions(result.current)).toBe(
-        "sess-active",
-      );
+      expect(readProviderSessions(result.current)).toBe("sess-active");
     });
   });
 
@@ -577,9 +576,7 @@ describe("useCurrentSelection", () => {
       expect(readProviderHistory(result.current)).toBe(
         "dispatch-review-completed",
       );
-      expect(readProviderSessions(result.current)).toBe(
-        "sess-completed",
-      );
+      expect(readProviderSessions(result.current)).toBe("sess-completed");
     });
   });
 
@@ -618,16 +615,16 @@ describe("useCurrentSelection", () => {
     );
     const result = await renderCurrentSelectionHook({
       snapshot: buildSnapshot({
-          inferenceAttemptsByDispatchID,
-          providerSessions: [
-            buildProviderSessionAttempt({
-              dispatchID: "dispatch-review-runtime-fallback",
-              sessionID: "sess-runtime-fallback",
-              workItems: [selectedWorkItem],
-            }),
-          ],
-          runtimeRequestsByDispatchID,
-        }),
+        inferenceAttemptsByDispatchID,
+        providerSessions: [
+          buildProviderSessionAttempt({
+            dispatchID: "dispatch-review-runtime-fallback",
+            sessionID: "sess-runtime-fallback",
+            workItems: [selectedWorkItem],
+          }),
+        ],
+        runtimeRequestsByDispatchID,
+      }),
       workstationRequestsByDispatchID: {},
     });
 
@@ -679,22 +676,22 @@ describe("useCurrentSelection", () => {
     seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);
     const result = await renderCurrentSelectionHook({
       snapshot: buildSnapshot({
-          activeExecution,
-          providerSessions: [
-            buildProviderSessionAttempt({
-              dispatchID: "dispatch-review-active",
-              sessionID: "sess-review-active",
-              workItems: [selectedWorkItem],
-            }),
-          ],
-          runtimeRequestsByDispatchID: {
-            "dispatch-review-active": buildRuntimeWorkstationRequest({
-              dispatchID: "dispatch-review-active",
-              inputWorkItems: [selectedWorkItem],
-              startedAt: "2026-04-08T12:00:03Z",
-            }),
-          },
-        }),
+        activeExecution,
+        providerSessions: [
+          buildProviderSessionAttempt({
+            dispatchID: "dispatch-review-active",
+            sessionID: "sess-review-active",
+            workItems: [selectedWorkItem],
+          }),
+        ],
+        runtimeRequestsByDispatchID: {
+          "dispatch-review-active": buildRuntimeWorkstationRequest({
+            dispatchID: "dispatch-review-active",
+            inputWorkItems: [selectedWorkItem],
+            startedAt: "2026-04-08T12:00:03Z",
+          }),
+        },
+      }),
       workstationRequestsByDispatchID: initialProjectedRequests,
     });
 
@@ -702,14 +699,12 @@ describe("useCurrentSelection", () => {
       expect(readDispatchHistory(result.current)).toBe(
         "dispatch-review-active",
       );
-      expect(result.current.selectedWorkID ?? "").toBe(
-        "work-reanchored",
-      );
+      expect(result.current.selectedWorkID ?? "").toBe("work-reanchored");
     });
 
     act(() => {
       result.rerender({
-      snapshot: buildSnapshot({
+        snapshot: buildSnapshot({
           providerSessions: [
             buildProviderSessionAttempt({
               dispatchID: "dispatch-repair-completed",
@@ -727,7 +722,7 @@ describe("useCurrentSelection", () => {
             }),
           },
         }),
-      workstationRequestsByDispatchID: rerenderedProjectedRequests,
+        workstationRequestsByDispatchID: rerenderedProjectedRequests,
       });
     });
     await settleCurrentSelectionEffects();
@@ -742,9 +737,7 @@ describe("useCurrentSelection", () => {
       expect(readProviderHistory(result.current)).toBe(
         "dispatch-repair-completed",
       );
-      expect(result.current.selectedWorkID ?? "").toBe(
-        "work-reanchored",
-      );
+      expect(result.current.selectedWorkID ?? "").toBe("work-reanchored");
     });
   });
 
@@ -779,54 +772,54 @@ describe("useCurrentSelection", () => {
 
     seedSelectedWork("dispatch-review-active", "review", selectedWorkItem);
     const result = await renderCurrentSelectionHook({
-        snapshot: buildSnapshot({
-          activeExecution,
-          providerSessions: [
-            buildProviderSessionAttempt({
-              dispatchID: "dispatch-review-old",
-              sessionID: "sess-old-1",
-              workItems: [selectedWorkItem],
-            }),
-            buildProviderSessionAttempt({
-              dispatchID: "dispatch-review-output",
-              sessionID: "sess-output",
-              workItems: [selectedWorkItem],
-            }),
-            buildProviderSessionAttempt({
-              dispatchID: "dispatch-review-old",
-              sessionID: "sess-old-2",
-              workItems: [selectedWorkItem],
-            }),
-            buildProviderSessionAttempt({
-              dispatchID: "dispatch-unrelated",
-              sessionID: "sess-unrelated",
-              workItems: [unrelatedWorkItem],
-            }),
-            buildProviderSessionAttempt({
-              dispatchID: "dispatch-review-active",
-              sessionID: "sess-active",
-              workItems: [selectedWorkItem],
-            }),
-          ],
-          runtimeRequestsByDispatchID: {
-            "dispatch-review-active": buildRuntimeWorkstationRequest({
-              dispatchID: "dispatch-review-active",
-              inputWorkItems: [selectedWorkItem],
-              startedAt: "2026-04-08T12:00:03Z",
-            }),
-            "dispatch-review-old": buildRuntimeWorkstationRequest({
-              dispatchID: "dispatch-review-old",
-              inputWorkItems: [selectedWorkItem],
-              startedAt: "2026-04-08T12:00:01Z",
-            }),
-            "dispatch-review-output": buildRuntimeWorkstationRequest({
-              dispatchID: "dispatch-review-output",
-              outputWorkItems: [selectedWorkItem],
-              startedAt: "2026-04-08T12:00:02Z",
-            }),
-          },
-        }),
-        workstationRequestsByDispatchID: projectedRequests,
+      snapshot: buildSnapshot({
+        activeExecution,
+        providerSessions: [
+          buildProviderSessionAttempt({
+            dispatchID: "dispatch-review-old",
+            sessionID: "sess-old-1",
+            workItems: [selectedWorkItem],
+          }),
+          buildProviderSessionAttempt({
+            dispatchID: "dispatch-review-output",
+            sessionID: "sess-output",
+            workItems: [selectedWorkItem],
+          }),
+          buildProviderSessionAttempt({
+            dispatchID: "dispatch-review-old",
+            sessionID: "sess-old-2",
+            workItems: [selectedWorkItem],
+          }),
+          buildProviderSessionAttempt({
+            dispatchID: "dispatch-unrelated",
+            sessionID: "sess-unrelated",
+            workItems: [unrelatedWorkItem],
+          }),
+          buildProviderSessionAttempt({
+            dispatchID: "dispatch-review-active",
+            sessionID: "sess-active",
+            workItems: [selectedWorkItem],
+          }),
+        ],
+        runtimeRequestsByDispatchID: {
+          "dispatch-review-active": buildRuntimeWorkstationRequest({
+            dispatchID: "dispatch-review-active",
+            inputWorkItems: [selectedWorkItem],
+            startedAt: "2026-04-08T12:00:03Z",
+          }),
+          "dispatch-review-old": buildRuntimeWorkstationRequest({
+            dispatchID: "dispatch-review-old",
+            inputWorkItems: [selectedWorkItem],
+            startedAt: "2026-04-08T12:00:01Z",
+          }),
+          "dispatch-review-output": buildRuntimeWorkstationRequest({
+            dispatchID: "dispatch-review-output",
+            outputWorkItems: [selectedWorkItem],
+            startedAt: "2026-04-08T12:00:02Z",
+          }),
+        },
+      }),
+      workstationRequestsByDispatchID: projectedRequests,
     });
 
     await waitForCurrentSelection(() => {
@@ -928,12 +921,8 @@ describe("useCurrentSelection", () => {
     });
 
     await waitForCurrentSelection(() => {
-      expect(result.current.selectedWorkerName ?? "").toBe(
-        "writer",
-      );
-      expect(result.current.selectedWorker?.type ?? "").toBe(
-        "MODEL_WORKER",
-      );
+      expect(result.current.selectedWorkerName ?? "").toBe("writer");
+      expect(result.current.selectedWorker?.type ?? "").toBe("MODEL_WORKER");
       expect(result.current.selectedWorkerWorkstationNames.join(",")).toBe(
         "Review,Plan",
       );
@@ -966,9 +955,7 @@ describe("useCurrentSelection", () => {
     });
 
     await waitForCurrentSelection(() => {
-      expect(result.current.selectedResourceName ?? "").toBe(
-        "gpu",
-      );
+      expect(result.current.selectedResourceName ?? "").toBe("gpu");
       expect(result.current.selection?.kind ?? "").toBe("resource");
     });
   });
@@ -1015,17 +1002,15 @@ describe("useCurrentSelection", () => {
 
     act(() => {
       result.rerender({
-      snapshot,
-      workstationRequestsByDispatchID: {},
+        snapshot,
+        workstationRequestsByDispatchID: {},
       });
     });
     await settleCurrentSelectionEffects();
 
     await waitForCurrentSelection(() => {
       expect(result.current.selection?.kind ?? "").toBe("resource");
-      expect(result.current.selectedResourceName ?? "").toBe(
-        "gpu",
-      );
+      expect(result.current.selectedResourceName ?? "").toBe("gpu");
     });
   });
 
@@ -1074,17 +1059,15 @@ describe("useCurrentSelection", () => {
 
     act(() => {
       result.rerender({
-      snapshot,
-      workstationRequestsByDispatchID: {},
+        snapshot,
+        workstationRequestsByDispatchID: {},
       });
     });
     await settleCurrentSelectionEffects();
 
     await waitForCurrentSelection(() => {
       expect(result.current.selection?.kind ?? "").toBe("worker");
-      expect(result.current.selectedWorkerName ?? "").toBe(
-        "writer",
-      );
+      expect(result.current.selectedWorkerName ?? "").toBe("writer");
     });
   });
 
@@ -1105,22 +1088,20 @@ describe("useCurrentSelection", () => {
     });
 
     await waitForCurrentSelection(() => {
-      expect(result.current.selectedWorkID ?? "").toBe(
-        "work-active",
-      );
+      expect(result.current.selectedWorkID ?? "").toBe("work-active");
     });
 
     act(() => {
       result.rerender({
-      sessionID: "session-beta",
-      snapshot: buildSnapshot({
-        activeExecution: buildActiveExecution(
-          "dispatch-review-beta",
-          [buildWorkItem("work-beta", "Beta Story")],
-          "2026-04-08T12:01:03Z",
-        ),
-      }),
-      workstationRequestsByDispatchID: {},
+        sessionID: "session-beta",
+        snapshot: buildSnapshot({
+          activeExecution: buildActiveExecution(
+            "dispatch-review-beta",
+            [buildWorkItem("work-beta", "Beta Story")],
+            "2026-04-08T12:01:03Z",
+          ),
+        }),
+        workstationRequestsByDispatchID: {},
       });
     });
     await settleCurrentSelectionEffects();

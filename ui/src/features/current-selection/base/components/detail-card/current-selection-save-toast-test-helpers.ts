@@ -1,14 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { expect, vi } from "vitest";
-
+import { settleCurrentSelectionEffects } from "../../../../../testing/current-selection-test-utils";
 import {
   GLOBAL_TOAST_DURATION_MS,
   PERSISTENT_TOAST_DURATION_MS,
 } from "../../../../notifications/public";
-import { settleCurrentSelectionEffects } from "../../../../../testing/current-selection-test-utils";
-import { getCurrentSelectionGraphDraftConflictMessages } from "../../messages/operational/current-selection-graph-draft-conflict";
 import { getWorkstationDetailMessages } from "../../../workstation-selection/messages/workstation-detail";
+import { getCurrentSelectionGraphDraftConflictMessages } from "../../messages/operational/current-selection-graph-draft-conflict";
 
 const graphDraftConflictMessages =
   getCurrentSelectionGraphDraftConflictMessages("en");

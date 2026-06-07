@@ -120,10 +120,10 @@ describe("ProviderSessionAttempts", () => {
     expect(screen.getByText("Session selected")).toBeTruthy();
     expect(
       screen.getByText("Session selected").closest("button")?.className,
-    ).toContain("border-primary");
+    ).toContain("bg-secondary-container");
     expect(
       screen.getByText("Session selected").closest("button")?.className,
-    ).toContain("text-on-surface");
+    ).toContain("text-on-secondary-container");
     expect(screen.getByText("Session details unavailable")).toBeTruthy();
     expect(screen.getAllByText("Session log unavailable")).toHaveLength(2);
     expect(

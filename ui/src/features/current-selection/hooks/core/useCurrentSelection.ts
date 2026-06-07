@@ -8,7 +8,10 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
-import type { FactoryWorker, FactoryWorkType } from "../../../../api/events/types";
+import type {
+  FactoryWorker,
+  FactoryWorkType,
+} from "../../../../api/events/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type {
   TerminalWorkItem,

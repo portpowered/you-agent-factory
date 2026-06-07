@@ -31,9 +31,7 @@ describe("calendar color roles", () => {
 
     expect(source).toMatch(/day_button:[\s\S]*aria-selected:bg-primary/);
     expect(source).toMatch(/day_button:[\s\S]*aria-selected:text-on-primary/);
-    expect(source).toMatch(
-      /outside:[\s\S]*aria-selected:bg-primary-container/,
-    );
+    expect(source).toMatch(/outside:[\s\S]*aria-selected:bg-primary-container/);
     expect(source).toMatch(
       /outside:[\s\S]*aria-selected:text-on-primary-container/,
     );

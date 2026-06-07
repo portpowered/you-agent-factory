@@ -4,11 +4,11 @@ import {
 } from "../../../base/public";
 import type { WorkstationDetailCardProps } from "../../lib/keys/detail-card-types";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
-import { WorkstationActiveWorkList } from "./workstation-active-work-list";
 import {
   EditableConfigurationSection,
   WorkstationSummary,
 } from "../editable/workstation-editable-configuration-section";
+import { WorkstationActiveWorkList } from "./workstation-active-work-list";
 import { WorkstationHistorySection } from "./workstation-history-section";
 
 export function WorkstationDetailCard({

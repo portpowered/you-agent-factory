@@ -156,19 +156,22 @@ vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
   }),
 }));
 
-vi.mock("../../factory-graph-editor/hooks/validation/use-factory-validation", () => ({
-  useFactoryValidation: () => ({
-    data: { targets: [] },
-    isError: false,
-    isFetching: false,
-    isLoading: false,
-    projection: {
-      handleErrorsByAnchorId: new Map(),
-      nodeErrorsByNodeId: new Map(),
-    },
-    targets: [],
+vi.mock(
+  "../../factory-graph-editor/hooks/validation/use-factory-validation",
+  () => ({
+    useFactoryValidation: () => ({
+      data: { targets: [] },
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      projection: {
+        handleErrorsByAnchorId: new Map(),
+        nodeErrorsByNodeId: new Map(),
+      },
+      targets: [],
+    }),
   }),
-}));
+);
 
 vi.mock("./react-flow-current-activity-card-editor-value", () => ({
   buildCurrentActivityGraphEditorValue: (value: Record<string, unknown>) =>

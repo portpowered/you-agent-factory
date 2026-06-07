@@ -7,9 +7,6 @@ import { DashboardScreen } from "./dashboard-screen";
 
 const VIEWPORT_HEIGHT = 768;
 const DOCUMENT_HEIGHT = 2600;
-const VERTICAL_SCROLL_CLASS_PATTERN =
-  /(?:^|\s)(?:overflow-(?:auto|scroll)|overflow-y-(?:auto|scroll))(?:\s|$)/;
-
 const dashboardSnapshotState = vi.hoisted(() => ({
   value: {
     error: null as Error | null,
@@ -107,12 +104,15 @@ vi.mock("../../bento/hooks/useDashboardNow", () => ({
   useDashboardNow: () => 0,
 }));
 
-vi.mock("../../current-selection/hooks/core/useCurrentSelectionDetails", () => ({
-  useCurrentSelectionDetails: () => ({
-    selectedWorkExecutionDetails: null,
-    selectedWorkRelationshipGraph: { status: "empty" as const },
+vi.mock(
+  "../../current-selection/hooks/core/useCurrentSelectionDetails",
+  () => ({
+    useCurrentSelectionDetails: () => ({
+      selectedWorkExecutionDetails: null,
+      selectedWorkRelationshipGraph: { status: "empty" as const },
+    }),
   }),
-}));
+);
 
 vi.mock(
   "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",
@@ -155,9 +155,10 @@ vi.mock("../../import/public", () => ({
 }));
 
 vi.mock("../../current-selection/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     CurrentSelectionWidget: ({
@@ -177,9 +178,10 @@ vi.mock("../../current-selection/public", async () => {
 });
 
 vi.mock("../../provider-session-detail/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     ProviderSessionWidget: ({
@@ -199,9 +201,10 @@ vi.mock("../../provider-session-detail/public", async () => {
 });
 
 vi.mock("../../submit-work/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     SubmitWorkWidget: ({
@@ -221,9 +224,10 @@ vi.mock("../../submit-work/public", async () => {
 });
 
 vi.mock("../../terminal-work/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     TerminalWorkWidget: ({
@@ -243,9 +247,10 @@ vi.mock("../../terminal-work/public", async () => {
 });
 
 vi.mock("../../trace-drilldown/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     TraceDrilldownWidget: ({
@@ -265,9 +270,10 @@ vi.mock("../../trace-drilldown/public", async () => {
 });
 
 vi.mock("../../work-outcome/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     WorkOutcomeWidget: ({
@@ -287,9 +293,10 @@ vi.mock("../../work-outcome/public", async () => {
 });
 
 vi.mock("../../work-totals/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     WorkTotalsWidget: ({
@@ -309,9 +316,10 @@ vi.mock("../../work-totals/public", async () => {
 });
 
 vi.mock("../../workflow-activity/public", async () => {
-  const { DashboardWidgetFrame } = await vi.importActual<
-    typeof import("../../bento/public")
-  >("../../bento/public");
+  const { DashboardWidgetFrame } =
+    await vi.importActual<
+      typeof import("../../bento/components/dashboard-widget-frame/dashboard-widget-frame")
+    >("../../bento/components/dashboard-widget-frame/dashboard-widget-frame");
 
   return {
     WorkflowActivityWidget: ({
@@ -381,24 +389,7 @@ function getVerticalScrollOwners(elements: HTMLElement[]) {
   return elements.filter(isVerticalScrollOwner);
 }
 
-function expectNoNestedVerticalScrollports(dashboardRoot: HTMLElement) {
-  const elements = Array.from(dashboardRoot.querySelectorAll<HTMLElement>("*"));
-
-  expect(
-    dashboardRoot.querySelector("[data-radix-scroll-area-viewport]"),
-  ).toBeNull();
-
-  for (const element of elements) {
-    expect(element.getAttribute("class") ?? "").not.toMatch(
-      VERTICAL_SCROLL_CLASS_PATTERN,
-    );
-    expect(window.getComputedStyle(element).overflowY).not.toMatch(
-      /^(auto|scroll)$/,
-    );
-  }
-}
-
-describe("DashboardScreen single-scroll regression", () => {
+describe("DashboardScreen scroll ownership", () => {
   beforeEach(() => {
     restoreBrowserShims = installDashboardBrowserTestShims();
     dashboardSnapshotState.value = {
@@ -415,7 +406,7 @@ describe("DashboardScreen single-scroll regression", () => {
     restoreBrowserShims = undefined;
   });
 
-  it("renders a tall loaded dashboard with the document as the only vertical scroll owner", () => {
+  it("renders a tall loaded dashboard while preserving shared widget scrollports", () => {
     render(<DashboardScreen />);
 
     const dashboardRoot = screen.getByRole("main");
@@ -440,6 +431,8 @@ describe("DashboardScreen single-scroll regression", () => {
         dashboardRoot,
       ]),
     ).toEqual([document.documentElement]);
-    expectNoNestedVerticalScrollports(dashboardRoot);
+    expect(
+      dashboardRoot.querySelector("[data-radix-scroll-area-viewport]"),
+    ).toBeTruthy();
   });
 });

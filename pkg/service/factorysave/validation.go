@@ -68,10 +68,10 @@ func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLo
 	if err != nil {
 		return fmt.Errorf("%w: %v", apisurface.ErrInvalidNamedFactory, err)
 	}
-	if !result.HasTargets() {
+	if !result.HasBlockingTargets() {
 		return nil
 	}
-	return topologyValidationErrorFromTargets(result.Targets)
+	return topologyValidationErrorFromTargets(result.BlockingTargets())
 }
 
 func topologyValidationErrorFromTargets(targets []factoryvalidation.Target) *apisurface.TopologyValidationError {

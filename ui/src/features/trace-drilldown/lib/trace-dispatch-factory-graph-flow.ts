@@ -1,18 +1,21 @@
 import { type Node, Position } from "@xyflow/react";
-
-import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
+import type {
+  DashboardTraceDispatch,
+  DashboardWorkstationNode,
+} from "../../../api/dashboard/types";
 import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
-  type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
+import { STANDARD_WORKSTATION_KIND } from "../../flowchart/lib/workstation-icon-metadata";
+import type { WorkstationNodeData } from "../../graphs/public";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,
 } from "./trace-dispatch-factory-graph";
 
-export type TraceDispatchFlowNodeData = FactoryGraphReactFlowNode["data"] &
+export type TraceDispatchFlowNodeData = WorkstationNodeData &
   TraceDispatchNodeOverlay & {
     factoryNodeId: string;
     locale?: string;
@@ -20,7 +23,7 @@ export type TraceDispatchFlowNodeData = FactoryGraphReactFlowNode["data"] &
 
 export type TraceDispatchFlowNode = Node<
   TraceDispatchFlowNodeData,
-  "factoryEntity"
+  "workstation"
 >;
 
 export interface TraceDispatchFactoryGraphFlow {
@@ -55,20 +58,40 @@ export function buildTraceDispatchFactoryGraphFlow(
     nodes.push({
       ...node,
       data: {
-        ...node.data,
         ...overlay,
+        active: false,
+        activeFlow: false,
+        executions: [],
         factoryNodeId: node.id,
+        handles: node.data.connectionAnchors.map((handle) => ({
+          ...handle,
+          hidden: true,
+        })),
+        kind: "workstation",
         locale,
+        muted: false,
+        now: 0,
+        selectedWorkID: null,
+        selectedWorkstation: false,
+        summaryOnly: true,
+        workstation: traceDispatchWorkstationNode(overlay),
       },
       id: dispatchId,
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      type: "factoryEntity",
+      type: "workstation",
     });
   }
 
   const edges = factoryProjection.edges.map((edge) => ({
     ...edge,
+    data:
+      edge.data?.kind === "workstation-on-continue"
+        ? {
+            ...edge.data,
+            label: "",
+          }
+        : edge.data,
     source: traceProjection.dispatchIdByNodeId.get(edge.source) ?? edge.source,
     target: traceProjection.dispatchIdByNodeId.get(edge.target) ?? edge.target,
   }));
@@ -78,5 +101,16 @@ export function buildTraceDispatchFactoryGraphFlow(
     edges,
     nodes,
     topology: traceProjection.topology,
+  };
+}
+
+function traceDispatchWorkstationNode(
+  overlay: TraceDispatchNodeOverlay,
+): DashboardWorkstationNode {
+  return {
+    node_id: overlay.dispatchId,
+    transition_id: overlay.displayLabel,
+    workstation_kind: STANDARD_WORKSTATION_KIND,
+    workstation_name: overlay.displayLabel,
   };
 }

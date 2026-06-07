@@ -5,8 +5,8 @@ import {
   CurrentSelectionExpandableSection,
   CurrentSelectionSupportingText,
 } from "../../../base/public";
-import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "../../lib/selected-work-relationship-relations";
 import type { SelectedWorkRelationshipGraph } from "../../lib/selected-work-relationship-graph";
+import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "../../lib/selected-work-relationship-relations";
 import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
 
 export function WorkRelationshipsSection({

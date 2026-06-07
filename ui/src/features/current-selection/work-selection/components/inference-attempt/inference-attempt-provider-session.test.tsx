@@ -1,8 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import { inferenceAttempt } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import { InferenceAttemptProviderSessionDetails } from "./inference-attempt-provider-session";
 
 describe("InferenceAttemptProviderSessionDetails", () => {

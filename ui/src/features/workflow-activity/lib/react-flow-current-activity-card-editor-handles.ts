@@ -295,8 +295,6 @@ export function buildSemanticGraphHandles(args: {
   return handles;
 }
 
-export const buildEditorHandles = buildSemanticGraphHandles;
-
 function endpointNodeKind(
   nodeId: string,
   placeKind:

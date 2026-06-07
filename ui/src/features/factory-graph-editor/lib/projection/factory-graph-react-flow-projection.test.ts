@@ -1,10 +1,5 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: projection contract scenarios stay together around one adapter.
 import { describe, expect, it, vi } from "vitest";
-import {
-  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
-  SYSTEM_TIME_WORK_TYPE_ID,
-  systemTimeGraphNodeId,
-} from "../operations/factory-graph-customer-display";
 import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
 import type {
@@ -12,6 +7,11 @@ import type {
   FactoryGraphTopology,
 } from "../draft/factory-graph-draft-types";
 import { createFactoryGraphWorkstationResolver } from "../editor/factory-graph-editor-connections";
+import {
+  SYSTEM_TIME_EXPIRY_TRANSITION_ID,
+  SYSTEM_TIME_WORK_TYPE_ID,
+  systemTimeGraphNodeId,
+} from "../operations/factory-graph-customer-display";
 import { projectFactoryGraphToReactFlow } from "../projection/factory-graph-react-flow-projection";
 
 const FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS =

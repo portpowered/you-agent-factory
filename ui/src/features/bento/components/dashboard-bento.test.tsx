@@ -74,12 +74,15 @@ vi.mock("../../current-selection/hooks/core/useCurrentSelection", () => ({
   useCurrentSelection: () => currentSelectionState,
 }));
 
-vi.mock("../../current-selection/hooks/core/useCurrentSelectionDetails", () => ({
-  useCurrentSelectionDetails: () => ({
-    selectedWorkExecutionDetails: null,
-    selectedWorkRelationshipGraph: { status: "loading" as const },
+vi.mock(
+  "../../current-selection/hooks/core/useCurrentSelectionDetails",
+  () => ({
+    useCurrentSelectionDetails: () => ({
+      selectedWorkExecutionDetails: null,
+      selectedWorkRelationshipGraph: { status: "loading" as const },
+    }),
   }),
-}));
+);
 
 vi.mock(
   "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",

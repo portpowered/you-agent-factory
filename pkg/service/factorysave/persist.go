@@ -35,16 +35,12 @@ func namedFactoryExistsAtSessionRoot(
 	return false, err
 }
 
-func persistUpsertNamedFactoryPayload(
+func persistUpsertNamedFactoryPrepared(
 	sessionRootDir string,
 	request factoryapi.Factory,
-	nextVersion factoryapi.HybridLogicalTimestamp,
+	prepared *configpersist.PreparedFactoryLayoutPayload,
 	replaceExisting bool,
 ) (string, error) {
-	prepared, err := preparePersistedFactoryPayload(string(request.Name), request, nextVersion)
-	if err != nil {
-		return "", err
-	}
 	if replaceExisting {
 		targetDir, err := resolveNamedFactoryLayoutTargetDir(sessionRootDir, request.Name)
 		if err != nil {

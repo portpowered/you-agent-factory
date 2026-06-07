@@ -19,8 +19,8 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
-import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/operations/factory-graph-public-ids";
+import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
@@ -421,9 +421,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(screen.getByTestId("valid-qa-output-connection").textContent).toBe(
       "true",
@@ -446,9 +444,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
   it("shows validation feedback and leaves graph edges unchanged for invalid connects", async () => {
     renderCurrentActivity();
     enterEditorMode();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(
       screen.queryByRole("button", {
@@ -543,9 +539,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );
@@ -622,9 +616,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     expect(
       screen.queryByRole("button", { name: "workstation:review" }),
     ).toBeNull();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );

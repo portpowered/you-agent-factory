@@ -24,11 +24,12 @@ export {
 export { FactoryGraphEditorWorkStatePhaseLegend } from "../chrome/factory-graph-editor-work-state-phase-legend";
 
 import { FactoryGraphEditorHideShowMenu } from "../chrome/factory-graph-editor-hide-show-menu";
-import { FactoryGraphEditorFloatingSurface } from "../surface/factory-graph-editor-floating-surface";
+import { FactoryGraphEditorModeToggle } from "../chrome/factory-graph-editor-mode-controls";
+import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
 import { FactoryGraphEditorMenuHeader } from "../menu/factory-graph-editor-menu-header";
 import { FactoryGraphEditorMenuItemButton } from "../menu/factory-graph-editor-menu-item-button";
 import { FactoryGraphEditorMenuItemCopy } from "../menu/factory-graph-editor-menu-item-copy";
-import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
+import { FactoryGraphEditorFloatingSurface } from "../surface/factory-graph-editor-floating-surface";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorVisibilityPreset =
@@ -58,6 +59,7 @@ export function FactoryGraphEditorToolbar({
   canInteract,
   canSave = false,
   canDiscard = true,
+  editModeToggle,
   hasPendingChanges = false,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowMenuOpen = false,
@@ -80,6 +82,13 @@ export function FactoryGraphEditorToolbar({
   canInteract: boolean;
   canSave?: boolean;
   canDiscard?: boolean;
+  editModeToggle?: {
+    disabled?: boolean;
+    editorMode: boolean;
+    hasChanges?: boolean;
+    onToggle: () => void;
+    tooltipOverride?: string;
+  };
   hasPendingChanges?: boolean;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen?: boolean;
@@ -109,6 +118,16 @@ export function FactoryGraphEditorToolbar({
       className="px-3 py-2"
       placement="bottomToolbar"
     >
+      {editModeToggle ? (
+        <FactoryGraphEditorModeToggle
+          disabled={editModeToggle.disabled}
+          editorMode={editModeToggle.editorMode}
+          hasChanges={editModeToggle.hasChanges}
+          locale={locale}
+          onClick={editModeToggle.onToggle}
+          tooltipOverride={editModeToggle.tooltipOverride}
+        />
+      ) : null}
       {hideShowVisible && onToggleHiddenNodeClass ? (
         <FactoryGraphEditorHideShowMenu
           hiddenNodeClasses={hiddenNodeClasses}

@@ -25,6 +25,7 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	if apiCfg.InputTypes != nil {
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
 	}
+	cfg.InvocationReturn = invocationReturnInternalFromAPI(apiCfg.InvocationReturn)
 	if apiCfg.WorkTypes != nil {
 		cfg.WorkTypes = workTypesInternalFromAPI(*apiCfg.WorkTypes)
 	}
@@ -69,6 +70,18 @@ func inputTypesInternalFromAPI(inputTypes []factoryapi.InputType) []interfaces.I
 		}
 	}
 	return values
+}
+
+func invocationReturnInternalFromAPI(value *factoryapi.InvocationReturn) *interfaces.InvocationReturnConfig {
+	if value == nil {
+		return nil
+	}
+	return &interfaces.InvocationReturnConfig{
+		Policy:        string(value.Policy),
+		WorkTypeName:  stringValue(value.WorkTypeName),
+		TerminalState: stringValue(value.TerminalState),
+		WorkName:      stringValue(value.WorkName),
+	}
 }
 
 func workTypeHandlingBehaviorInternalFromAPI(behaviors *[]factoryapi.WorkTypeHandlingBehavior) []string {

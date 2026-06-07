@@ -167,12 +167,16 @@ export function CurrentActivityGraphSurface({
         addMenuActions={editor.addMenuActions}
         canInteractWithEditor={editor.canInteractWithEditor}
         canSaveDraft={editor.canSaveDraft}
+        editorUnavailableClassifierWorkstationName={
+          editor.editorUnavailableClassifierWorkstationName
+        }
         editorMode={editor.editorMode}
         edges={graph.edges}
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
         graphKey={graph.graphKey}
         handleDiscardPendingChanges={editor.handleDiscardPendingChanges}
+        handleEditorModeToggle={editor.handleEditorModeToggle}
         handleNodesChange={graph.handleNodesChange}
         handleSaveDraft={() => {
           editor.setIsConfirmingSave(true);

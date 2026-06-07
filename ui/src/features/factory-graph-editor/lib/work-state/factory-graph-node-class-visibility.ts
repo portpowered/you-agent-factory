@@ -1,8 +1,8 @@
-import { filterFactoryGraphTopologyForCustomerDisplay } from "../operations/factory-graph-customer-display";
 import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
 } from "../draft/factory-graph-draft-types";
+import { filterFactoryGraphTopologyForCustomerDisplay } from "../operations/factory-graph-customer-display";
 import { synthesizeWorkStateVisibilityBypassEdges } from "../work-state/factory-graph-work-state-visibility-bypass";
 
 export const FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS = [

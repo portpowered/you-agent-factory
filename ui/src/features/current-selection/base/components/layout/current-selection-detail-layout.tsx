@@ -2,9 +2,9 @@ import type { ReactNode } from "react";
 import { createContext, useContext } from "react";
 import { DashboardWidgetFrame } from "../../../../bento/public";
 import { useSelectionHistoryStore } from "../../state/selectionHistoryStore";
-import { CurrentSelectionHeaderActions } from "./current-selection-header-actions";
-import { useCurrentSelectionShellMessages } from "../presentation/current-selection-locale";
 import type { SelectionDetailLayoutProps } from "../detail-card/detail-card-types";
+import { useCurrentSelectionShellMessages } from "../presentation/current-selection-locale";
+import { CurrentSelectionHeaderActions } from "./current-selection-header-actions";
 
 const CurrentSelectionHeaderActionContext = createContext<ReactNode>(null);
 

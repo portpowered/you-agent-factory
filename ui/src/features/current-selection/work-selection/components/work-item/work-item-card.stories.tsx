@@ -6,12 +6,12 @@ import type {
   DashboardWorkMoveOperation,
 } from "../../../../../api/dashboard/types";
 import { dashboardWorkstationRequestFixtures } from "../../../../../components/dashboard/fixtures";
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
   workstationRequest,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import type { SelectedWorkRelationshipGraph } from "../../lib/selected-work-relationship-graph";
 import { selectWorkItemExecutionDetails } from "../../state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
@@ -176,7 +176,9 @@ export const DispatchHistoryStandardActions = {
         name: "Select work item Active Story",
       }),
     ).toHaveAttribute("aria-pressed", "true");
-    await expect(workstationCard.className).toContain("bg-surface-container-low");
+    await expect(workstationCard.className).toContain(
+      "bg-surface-container-low",
+    );
     await expect(operatorMoveCard.className).toContain(
       "bg-surface-container-low",
     );

@@ -31,7 +31,7 @@ export interface DashboardWidgetFrameProps {
 export function DashboardWidgetFrame({
   bodyClassName,
   bodyProps,
-  bodyScroll,
+  bodyScroll = false,
   children,
   className = "",
   headerAction,

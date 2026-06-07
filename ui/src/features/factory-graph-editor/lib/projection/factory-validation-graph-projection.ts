@@ -1,11 +1,11 @@
 import type { FactoryValidationTarget } from "../../../../api/factory-validation";
 import type { WorkstationProgressOutcomeRouteContext } from "../../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import { factoryGraphConnectionAnchorContext } from "../editor/factory-graph-editor-connections";
-import { workstationRendersProgressOutcomeHandleValidation } from "../projection/factory-graph-progress-outcome-handle-visibility";
 import {
   parseFactoryGraphWorkStateNodeId,
   parseFactoryGraphWorkTypeNodeId,
 } from "../draft/factory-graph-draft-types";
+import { factoryGraphConnectionAnchorContext } from "../editor/factory-graph-editor-connections";
+import { workstationRendersProgressOutcomeHandleValidation } from "../projection/factory-graph-progress-outcome-handle-visibility";
 
 export { parseFactoryGraphWorkStateNodeId, parseFactoryGraphWorkTypeNodeId };
 

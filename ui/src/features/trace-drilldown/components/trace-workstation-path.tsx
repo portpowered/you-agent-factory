@@ -6,9 +6,11 @@ import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
-  DashboardGraphFrame,
 } from "../../../components/dashboard/dashboard-graph";
-import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "../../factory-graph-editor/components/surface/factory-graph-editor-edge";
+import {
+  FACTORY_GRAPH_EDGE_TYPES,
+  GraphViewportSurface,
+} from "../../graphs/public";
 import {
   traceDispatchTopologyLayoutKey,
   useTraceDispatchFactoryGraphLayoutPositions,
@@ -108,27 +110,31 @@ export function TraceWorkstationPath({
   }
 
   return (
-    <DashboardGraphFrame
-      aria-label={messages.dispatchPathGraphLabel}
-      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-surface-container-low"
-      data-trace-workstation-path
+    <div
+      className="relative max-w-full min-w-80 resize overflow-hidden"
       style={GRAPH_SHELL_STYLE}
     >
-      <div
-        className="h-full min-w-0 w-full"
-        data-trace-graph-viewport
-        ref={graphViewportRef}
-        style={GRAPH_VIEWPORT_STYLE}
+      <GraphViewportSurface
+        aria-label={messages.dispatchPathGraphLabel}
+        className="h-full border-transparent"
+        data-trace-workstation-path
       >
-        {graphViewportReady ? (
-          <TraceWorkstationReactFlow
-            edges={graph.edges}
-            nodes={nodes}
-            onNodesChange={handleNodesChange}
-          />
-        ) : null}
-      </div>
-    </DashboardGraphFrame>
+        <div
+          className="h-full min-w-0 w-full"
+          data-trace-graph-viewport
+          ref={graphViewportRef}
+          style={GRAPH_VIEWPORT_STYLE}
+        >
+          {graphViewportReady ? (
+            <TraceWorkstationReactFlow
+              edges={graph.edges}
+              nodes={nodes}
+              onNodesChange={handleNodesChange}
+            />
+          ) : null}
+        </div>
+      </GraphViewportSurface>
+    </div>
   );
 }
 
@@ -144,7 +150,7 @@ function TraceWorkstationReactFlow({
   return (
     <ReactFlow
       edges={edges}
-      edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+      edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
       fitView
       fitViewOptions={TRACE_DISPATCH_FLOW_FIT_VIEW_OPTIONS}
       maxZoom={1.8}

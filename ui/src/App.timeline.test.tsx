@@ -66,14 +66,18 @@ describe("App timeline reconstruction flows", () => {
     expect(
       within(screen.getByLabelText("work totals")).getAllByText("1").length,
     ).toBeGreaterThan(0);
-    expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Select work item Done Story" }),
+    ).toBeTruthy();
 
     fireEvent.change(slider, { target: { value: "1" } });
 
     await waitFor(() => {
       expect(slider.value).toBe("1");
       expect(screen.getByText("1/4")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Done Story" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Select work item Done Story" }),
+      ).toBeNull();
     });
     expect(screen.queryByText("sess-done-story")).toBeNull();
   });
@@ -90,7 +94,9 @@ describe("App timeline reconstruction flows", () => {
     fireEvent.change(slider, { target: { value: "1" } });
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: "Done Story" })).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Select work item Done Story" }),
+      ).toBeNull();
     });
     expect(screen.queryByText("Current")).toBeNull();
     expect(
@@ -102,7 +108,9 @@ describe("App timeline reconstruction flows", () => {
     await waitFor(() => {
       expect(slider.value).toBe("4");
       expect(screen.getByText("4/4")).toBeTruthy();
-      expect(screen.getByRole("button", { name: "Done Story" })).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Select work item Done Story" }),
+      ).toBeTruthy();
     });
   });
 

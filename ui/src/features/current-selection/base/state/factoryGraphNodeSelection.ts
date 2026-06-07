@@ -1,8 +1,8 @@
 import type { DashboardSnapshot } from "../../../../api/dashboard";
 import {
   parseFactoryGraphWorkStateNodeId,
-  parseFactoryGraphWorkTypeNodeId,
   parseFactoryGraphWorkstationNodeId,
+  parseFactoryGraphWorkTypeNodeId,
 } from "../../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 
 type DashboardNodeSelection = {
@@ -58,8 +58,7 @@ export function factoryGraphWorkStateNodeExistsInSnapshot(
   const stateId = subjectId.slice(separatorIndex + 1);
 
   const workType = snapshot.factory?.workTypes?.find(
-    (candidate) =>
-      candidate.id === workTypeId || candidate.name === workTypeId,
+    (candidate) => candidate.id === workTypeId || candidate.name === workTypeId,
   );
 
   return (

@@ -240,8 +240,10 @@ function applyWorkerSkipPermissionsFromDraft(
   worker: CanonicalWorker,
   draft: EditableWorkerDraft,
 ): CanonicalWorker {
-  const { skipPermissions: _preservedSkipPermissions, ...withoutSkipPermissions } =
-    worker;
+  const {
+    skipPermissions: _preservedSkipPermissions,
+    ...withoutSkipPermissions
+  } = worker;
 
   return draft.skipPermissions
     ? { ...withoutSkipPermissions, skipPermissions: true }

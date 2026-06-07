@@ -33,11 +33,8 @@ import type {
   WorkstationSummaryProps,
 } from "../../lib/keys/detail-card-types";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
-import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
-import { EditableConfigurationCronFields } from "./workstation-cron-fields";
 import { EditableConfigurationWorkstationGuardsField } from "../fields/workstation-guards-field";
 import { EditableConfigurationWorkstationInputGuardsField } from "../fields/workstation-input-guards-field";
-import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "../fields/workstation-runner-field";
 import {
   resolveWorkstationSummaryKindValue,
@@ -45,6 +42,9 @@ import {
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "../fields/workstation-summary-field-values";
+import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
+import { EditableConfigurationCronFields } from "./workstation-cron-fields";
+import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
   messages,

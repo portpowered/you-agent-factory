@@ -6,10 +6,10 @@ import {
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
 import { FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS } from "../../lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
+import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
 import { FactoryGraphEditorMenuHeader } from "../menu/factory-graph-editor-menu-header";
 import { FactoryGraphEditorMenuItemButton } from "../menu/factory-graph-editor-menu-item-button";
 import { FactoryGraphEditorMenuItemCopy } from "../menu/factory-graph-editor-menu-item-copy";
-import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
 
 export function FactoryGraphEditorHideShowMenu({
   hiddenNodeClasses,

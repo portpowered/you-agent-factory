@@ -34,8 +34,11 @@ describe("WorkstationRequestDetailCard consumed payloads", () => {
     expect(
       requestDetails.getByText("Dispatch-time consumed payload"),
     ).toBeTruthy();
-    expect(requestDetails.getByText("State: review")).toBeTruthy();
-    expect(requestDetails.getByText("Work type: story")).toBeTruthy();
+    expect(
+      requestDetails.getByRole("button", {
+        name: "Select work item Blocked Story",
+      }),
+    ).toBeTruthy();
   });
 
   it("renders an explicit unavailable consumed payload state without breaking work selection", () => {

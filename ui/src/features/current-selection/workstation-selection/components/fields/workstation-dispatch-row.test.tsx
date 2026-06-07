@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react";
-
-import { CurrentSelectionSupportingText } from "../../../base/public";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
+import { CurrentSelectionSupportingText } from "../../../base/public";
 import { WorkstationDispatchRow } from "../detail-card/workstation-dispatch-row";
 
 describe("WorkstationDispatchRow", () => {
@@ -29,9 +28,7 @@ describe("WorkstationDispatchRow", () => {
     expect(item.className).toContain("rounded-lg");
     expect(screen.getByText("Review Story")).toBeTruthy();
     expect(screen.getByText("Elapsed: 15s")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Open request" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Open request" })).toBeTruthy();
     expect(
       screen.getByText("Request details unavailable for dispatch-1"),
     ).toBeTruthy();

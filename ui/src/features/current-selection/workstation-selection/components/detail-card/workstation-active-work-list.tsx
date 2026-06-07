@@ -1,6 +1,4 @@
-import {
-  DashboardActionButton,
-} from "../../../../../components/ui";
+import { DashboardActionButton } from "../../../../../components/ui";
 import {
   formatDurationFromISO,
   formatWorkItemLabel,
@@ -8,9 +6,11 @@ import {
 import { DetailCopy } from "../../../../../components/ui/widget-frame";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { CurrentSelectionExecutionPill } from "../../../base/components/presentation/current-selection-pill";
-import { CurrentSelectionSupportingText } from "../../../base/public";
+import {
+  CurrentSelectionSupportingText,
+  CurrentSelectionWorkRow,
+} from "../../../base/public";
 import type { WorkstationActiveWorkListProps } from "../../lib/keys/detail-card-types";
-import { WorkstationDispatchRow } from "./workstation-dispatch-row";
 
 export function WorkstationActiveWorkList({
   executions,
@@ -92,7 +92,7 @@ export function WorkstationActiveWorkList({
                 ) : undefined;
 
               return (
-                <WorkstationDispatchRow
+                <CurrentSelectionWorkRow
                   actions={headerActions}
                   key={`${execution.dispatch_id}-${workIdentifier}`}
                   status={
@@ -104,7 +104,9 @@ export function WorkstationActiveWorkList({
                     <>
                       {workItem ? null : (
                         <CurrentSelectionSupportingText tone="status">
-                          {messages.workDetailsUnavailable(execution.dispatch_id)}
+                          {messages.workDetailsUnavailable(
+                            execution.dispatch_id,
+                          )}
                         </CurrentSelectionSupportingText>
                       )}
                       {requestSelected ? (

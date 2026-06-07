@@ -20,6 +20,9 @@ describe("graphEditorNodeDimensionsForKind", () => {
     expect(graphEditorNodeDimensionsForKind("resource")).toEqual(
       FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.resource,
     );
+    expect(graphEditorNodeDimensionsForKind("worker")).toEqual(
+      FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.worker,
+    );
   });
 });
 

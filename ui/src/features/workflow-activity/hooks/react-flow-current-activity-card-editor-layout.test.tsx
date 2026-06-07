@@ -7,9 +7,12 @@ const { mockBuildFactoryGraphEditorLayout } = vi.hoisted(() => ({
   mockBuildFactoryGraphEditorLayout: vi.fn(),
 }));
 
-vi.mock("../../factory-graph-editor/lib/editor/factory-graph-editor-layout", () => ({
-  buildFactoryGraphEditorLayout: mockBuildFactoryGraphEditorLayout,
-}));
+vi.mock(
+  "../../factory-graph-editor/lib/editor/factory-graph-editor-layout",
+  () => ({
+    buildFactoryGraphEditorLayout: mockBuildFactoryGraphEditorLayout,
+  }),
+);
 
 const EMPTY_TOPOLOGY: FactoryGraphTopology = {
   edges: [],

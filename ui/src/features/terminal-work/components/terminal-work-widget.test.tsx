@@ -73,12 +73,12 @@ describe("TerminalWorkWidget", () => {
     expect(
       screen
         .getByRole("button", { name: /Done Story/ })
-        .getAttribute("data-selected"),
+        .getAttribute("aria-pressed"),
     ).toBe("true");
     expect(
       screen
         .getByRole("button", { name: /Failed Story/ })
-        .getAttribute("data-selected"),
+        .getAttribute("aria-pressed"),
     ).toBe("false");
 
     fireEvent.click(screen.getByRole("button", { name: /Failed Story/ }));

@@ -1,7 +1,7 @@
 import { DetailCopy } from "../../../../../components/ui/widget-frame";
+import type { NoSelectionDetailCardProps } from "../detail-card/detail-card-types";
 import { SelectionDetailLayout } from "../layout/current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "../presentation/current-selection-locale";
-import type { NoSelectionDetailCardProps } from "../detail-card/detail-card-types";
 
 export function NoSelectionDetailCard({
   widgetId = "current-selection",

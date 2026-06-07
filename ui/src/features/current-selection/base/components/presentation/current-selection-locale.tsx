@@ -3,6 +3,10 @@ import { createContext, useContext } from "react";
 import { getWorkstationDetailMessages } from "../../../messages/workstation-detail";
 import type { WorkstationDetailMessages } from "../../../messages/workstation-detail-types";
 import {
+  type CurrentSelectionOperationalEnumMessages,
+  getCurrentSelectionOperationalEnumMessages,
+} from "../../messages/operational/current-selection-operational-enums";
+import {
   type CurrentSelectionDetailMessages,
   getCurrentSelectionDetailMessages,
 } from "../../messages/shell/current-selection-detail";
@@ -10,10 +14,6 @@ import {
   type CurrentSelectionDispatchHistoryMessages,
   getCurrentSelectionDispatchHistoryMessages,
 } from "../../messages/shell/current-selection-dispatch-history";
-import {
-  type CurrentSelectionOperationalEnumMessages,
-  getCurrentSelectionOperationalEnumMessages,
-} from "../../messages/operational/current-selection-operational-enums";
 import {
   type CurrentSelectionShellMessages,
   getCurrentSelectionShellMessages,

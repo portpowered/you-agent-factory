@@ -1,7 +1,7 @@
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
 import type { CanonicalFactoryDefinition } from "../draft/factory-graph-draft-types";
-import { projectFactoryGraphByHiddenNodeClasses } from "../work-state/factory-graph-node-class-visibility";
 import { projectFactoryGraphToReactFlow } from "../projection/factory-graph-react-flow-projection";
+import { projectFactoryGraphByHiddenNodeClasses } from "../work-state/factory-graph-node-class-visibility";
 
 const workstationChainFactory = {
   name: "work-state-bypass-projection-fixture",

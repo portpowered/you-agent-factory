@@ -9,7 +9,6 @@ import {
   DashboardCode,
   DashboardDescriptionList,
   DashboardLabel,
-  DashboardStatusPill,
   ExpandablePanelTrigger,
 } from "../../../components/ui";
 import { Button } from "../../../components/ui/button";
@@ -72,6 +71,7 @@ export function TraceGridBentoCard({
 
   return (
     <DashboardWidgetFrame
+      bodyScroll
       bodyProps={
         { "data-trace-card-body": "" } as HTMLAttributes<HTMLDivElement>
       }
@@ -287,15 +287,9 @@ function TraceGrid({ locale, onSelectWorkID, trace }: TraceGridProps) {
           <TableBody>
             {trace.dispatches.map((dispatch) => (
               <TableRow key={dispatch.dispatch_id}>
-                <TableHead className="align-top" scope="row">
-                  <DashboardStatusPill
-                    size="compact"
-                    tone="info"
-                    typography="supportingCode"
-                  >
-                    {dispatch.dispatch_id}
-                  </DashboardStatusPill>
-                </TableHead>
+                <TableCell className="align-top" scope="row">
+                  {dispatch.dispatch_id}
+                </TableCell>
                 <TableCell className="align-top">
                   {dispatch.workstation_name || dispatch.transition_id}
                 </TableCell>
@@ -354,7 +348,7 @@ function SelectableWorkList({
         <li className="list-none" key={workItem.work_id}>
           {onSelectWorkID ? (
             <Button
-              className="h-auto min-h-0 justify-start border-primary bg-primary-container px-2.5 py-1.5 text-left text-primary"
+              className="h-auto min-h-0 justify-start px-2.5 py-1.5 text-left"
               onClick={() => onSelectWorkID(workItem.work_id)}
               size="sm"
               title={workItem.work_id}

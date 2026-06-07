@@ -25,6 +25,7 @@ import {
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
 import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
@@ -44,8 +45,10 @@ function CurrentActivityGraphEditorChrome(props: {
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteractWithEditor: boolean;
   canSaveDraft: boolean;
+  editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
   handleDiscardPendingChanges: () => void;
+  handleEditorModeToggle: () => void;
   handleSaveDraft: () => void;
   hasPendingChanges: boolean;
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
@@ -60,6 +63,14 @@ function CurrentActivityGraphEditorChrome(props: {
   openAddMenu?: boolean;
   saveDisabledReason?: string;
 }) {
+  const messages = getFactoryGraphEditorMessages(props.locale);
+  const editorUnavailableReason =
+    props.editorUnavailableClassifierWorkstationName === undefined
+      ? undefined
+      : messages.modeClassifierRoutesUnavailable(
+          props.editorUnavailableClassifierWorkstationName,
+        );
+
   return (
     <FactoryGraphEditorToolbar
       activeTool={props.activeTool}
@@ -67,6 +78,13 @@ function CurrentActivityGraphEditorChrome(props: {
       canDiscard={props.hasPendingChanges}
       canInteract={props.canInteractWithEditor}
       canSave={props.canSaveDraft}
+      editModeToggle={{
+        disabled: !props.editorMode && editorUnavailableReason !== undefined,
+        editorMode: props.editorMode,
+        hasChanges: props.hasPendingChanges,
+        onToggle: props.handleEditorModeToggle,
+        tooltipOverride: editorUnavailableReason,
+      }}
       hasPendingChanges={props.hasPendingChanges}
       hiddenNodeClasses={props.hiddenNodeClasses}
       hideShowMenuOpen={props.hideShowMenuOpen}
@@ -163,7 +181,9 @@ export function CurrentActivityGraphViewport({
   addMenuActions,
   canInteractWithEditor,
   canSaveDraft,
+  editorUnavailableClassifierWorkstationName,
   handleDiscardPendingChanges,
+  handleEditorModeToggle,
   handleSaveDraft,
   hiddenNodeClasses,
   hideShowMenuOpen,
@@ -199,7 +219,9 @@ export function CurrentActivityGraphViewport({
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteractWithEditor: boolean;
   canSaveDraft: boolean;
+  editorUnavailableClassifierWorkstationName?: string;
   handleDiscardPendingChanges: () => void;
+  handleEditorModeToggle: () => void;
   handleSaveDraft: () => void;
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen: boolean;
@@ -271,11 +293,11 @@ export function CurrentActivityGraphViewport({
         phaseItems={getDefaultDashboardFlowAxisLegendPhaseItems(locale)}
         locale={locale}
       />
-      <section
+      <GraphViewportSurface
         aria-describedby={headingID}
         aria-label={editorMessages.viewportLabel}
         className={cn(
-          "relative h-full max-h-full min-h-96 overflow-hidden rounded-3xl border shadow-none transition-colors",
+          "min-h-96",
           (imports.dropState.status === "drag-active" ||
             imports.dropState.status === "reading") &&
             "border-primary bg-primary-container",
@@ -365,8 +387,12 @@ export function CurrentActivityGraphViewport({
           addMenuActions={addMenuActions}
           canInteractWithEditor={canInteractWithEditor}
           canSaveDraft={canSaveDraft}
+          editorUnavailableClassifierWorkstationName={
+            editorUnavailableClassifierWorkstationName
+          }
           editorMode={editorMode}
           handleDiscardPendingChanges={handleDiscardPendingChanges}
+          handleEditorModeToggle={handleEditorModeToggle}
           handleSaveDraft={handleSaveDraft}
           hasPendingChanges={hasPendingChanges}
           hiddenNodeClasses={hiddenNodeClasses}
@@ -382,7 +408,7 @@ export function CurrentActivityGraphViewport({
           saveDisabledReason={saveDisabledReason}
         />
         <GraphDropOverlay dropState={imports.dropState} locale={locale} />
-      </section>
+      </GraphViewportSurface>
     </div>
   );
 }

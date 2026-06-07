@@ -12,13 +12,13 @@ import type {
 } from "../../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphConnectionEndpoint } from "../../lib/editor/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
+import { FactoryGraphEditorWorkStatePhaseLegend } from "../chrome/factory-graph-editor-work-state-phase-legend";
 import { FactoryGraphEditorVisibilityPanel } from "../controls/factory-graph-editor-controls";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "../flow/factory-graph-editor-flow";
-import { FactoryGraphEditorWorkStatePhaseLegend } from "../chrome/factory-graph-editor-work-state-phase-legend";
 
 const PENDING_REMOVAL_TOPOLOGY: FactoryGraphTopology = {
   edges: [

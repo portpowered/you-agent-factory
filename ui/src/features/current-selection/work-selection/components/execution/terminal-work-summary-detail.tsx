@@ -2,9 +2,9 @@ import {
   DetailCopy,
   WidgetSubtitle,
 } from "../../../../../components/ui/widget-frame";
+import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import { SelectionDetailLayout } from "../../../base/components/layout/current-selection-detail-layout";
 import { useCurrentSelectionShellMessages } from "../../../base/components/presentation/current-selection-locale";
-import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import type { TerminalWorkSummaryCardProps } from "../../lib/detail-card-types";
 import { ExecutionDetailsSection } from "./execution-details";
 

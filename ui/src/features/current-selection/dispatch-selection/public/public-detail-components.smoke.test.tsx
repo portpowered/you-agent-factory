@@ -1,8 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-
-import { CurrentSelectionLocaleProvider } from "../../base/components/presentation/current-selection-locale";
 import { workstationRequest } from "../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../base/components/presentation/current-selection-locale";
 import {
   SelectedWorkDispatchHistorySection,
   WorkstationRequestDetailCard,

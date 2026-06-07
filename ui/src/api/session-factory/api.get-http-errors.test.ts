@@ -104,10 +104,6 @@ describe("getSessionFactory invalid responses", () => {
 });
 
 describe("getSessionFactory HTTP error mapping", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("maps unrecognized API error codes on 4xx responses to INTERNAL_ERROR with API copy", async () => {
     await expect(
       getSessionFactory("~default", {
@@ -194,10 +190,6 @@ describe("getSessionFactory HTTP error mapping", () => {
 });
 
 describe("saveSessionFactory HTTP error mapping", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it.each([
     [
       "STALE_FACTORY_VERSION",

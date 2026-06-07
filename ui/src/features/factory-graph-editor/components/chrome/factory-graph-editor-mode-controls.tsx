@@ -48,11 +48,7 @@ export function FactoryGraphEditorModeToggle({
     <FactoryGraphEditorTooltipActionButton
       aria-label={label}
       aria-pressed={editorMode}
-      className={cn(
-        "shrink-0",
-        disabled && "cursor-not-allowed",
-        className,
-      )}
+      className={cn("shrink-0", disabled && "cursor-not-allowed", className)}
       disabled={disabled}
       iconOnly
       onClick={onClick}

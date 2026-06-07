@@ -1,16 +1,13 @@
-import type {
-  CanonicalFactoryDefinition,
-  CurrentFactoryDocument,
-  CurrentFactoryVersion,
-} from "../api/current-factory-definition";
 import type { DashboardSnapshot } from "../api/dashboard";
 import type { components } from "../api/generated/openapi";
-import type { ImportFactoryValue } from "../api/session-factory";
+import type {
+  CanonicalFactoryDefinition,
+  ImportFactoryValue,
+  SessionFactoryDocument,
+  SessionFactoryVersion,
+} from "../api/session-factory";
 import { currentFactorySessionPath } from "../api/session-routing";
 import { baseFactoryDefinition } from "./graph-editor-harness";
-
-export type SessionFactoryDocument = CurrentFactoryDocument;
-export type SessionFactoryVersion = CurrentFactoryVersion;
 
 export type SessionFactoryPutMode =
   | "success"

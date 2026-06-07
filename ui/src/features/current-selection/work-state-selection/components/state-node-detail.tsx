@@ -1,8 +1,8 @@
 import {
+  DashboardActionButton,
   DashboardCode,
   DashboardDescriptionList,
   DashboardText,
-  SurfacePanel,
 } from "../../../../components/ui";
 import {
   formatLocalDateTime,
@@ -10,19 +10,22 @@ import {
 } from "../../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
 import { DetailCopy } from "../../../../components/ui/widget-frame";
-import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
-import {
-  useCurrentSelectionDetailMessages,
-  useCurrentSelectionLocale,
-} from "../../base/components/presentation/current-selection-locale";
 import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,
 } from "../../base/components/detail-card/detail-card-shared";
+import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
+import {
+  useCurrentSelectionDetailMessages,
+  useCurrentSelectionLocale,
+  useCurrentSelectionWorkstationDetailMessages,
+} from "../../base/components/presentation/current-selection-locale";
 import {
   CurrentSelectionBodyLayout,
+  CurrentSelectionExecutionPill,
   CurrentSelectionExpandableSection,
-  CurrentSelectionSelectableButton,
+  CurrentSelectionSupportingText,
+  CurrentSelectionWorkRow,
 } from "../../base/public";
 import type {
   StateNodeDetailCardProps,
@@ -159,28 +162,37 @@ function StatePositionWorkListItem({
   workItem,
 }: StatePositionWorkListItemProps) {
   const locale = useCurrentSelectionLocale();
+  const workstationMessages = useCurrentSelectionWorkstationDetailMessages();
   const workLabel = formatWorkItemLabel(workItem);
   const workID = workItem.work_id?.trim();
   const startedAt = resolveStartedAt(workItem);
   const hasFailureReason = Boolean(failureDetail?.failure_reason);
   const hasFailureMessage = Boolean(failureDetail?.failure_message);
-  const content = (
+  const action = onSelectWorkItem ? (
+    <DashboardActionButton
+      aria-label={messages.selectWorkItemLabel(workLabel)}
+      onClick={() => onSelectWorkItem(workItem)}
+      type="button"
+    >
+      {workstationMessages.openWorkItemAction}
+    </DashboardActionButton>
+  ) : null;
+  const status = startedAt ? (
+    <CurrentSelectionExecutionPill>
+      <DashboardText as="time" dateTime={startedAt} title={startedAt}>
+        {messages.startedAtLabel}{" "}
+        {formatLocalDateTime(startedAt, messages.timestampUnavailable, locale)}
+      </DashboardText>
+    </CurrentSelectionExecutionPill>
+  ) : undefined;
+  const supportingContent = (
     <>
-      <strong className="min-w-0 [overflow-wrap:anywhere]">{workLabel}</strong>
       {workID ? (
-        <DashboardCode className="text-on-surface-variant" size="supporting">
-          {workID}
-        </DashboardCode>
-      ) : null}
-      {startedAt ? (
-        <DashboardText as="time" dateTime={startedAt} title={startedAt}>
-          {messages.startedAtLabel}{" "}
-          {formatLocalDateTime(
-            startedAt,
-            messages.timestampUnavailable,
-            locale,
-          )}
-        </DashboardText>
+        <CurrentSelectionSupportingText tone="status">
+          <DashboardCode className="text-on-surface-variant" size="supporting">
+            {workID}
+          </DashboardCode>
+        </CurrentSelectionSupportingText>
       ) : null}
       {hasFailureReason || hasFailureMessage ? (
         <DashboardDescriptionList className="[&_div]:grid-cols-[7rem_minmax(0,1fr)]">
@@ -205,25 +217,13 @@ function StatePositionWorkListItem({
     </>
   );
 
-  if (onSelectWorkItem) {
-    return (
-      <li>
-        <CurrentSelectionSelectableButton
-          aria-label={messages.selectWorkItemLabel(workLabel)}
-          className="min-w-0 gap-2"
-          onClick={() => onSelectWorkItem(workItem)}
-          variant="card"
-        >
-          {content}
-        </CurrentSelectionSelectableButton>
-      </li>
-    );
-  }
-
   return (
-    <SurfacePanel asChild className="grid min-w-0 gap-2 text-sm" radius="lg">
-      <li>{content}</li>
-    </SurfacePanel>
+    <CurrentSelectionWorkRow
+      actions={action}
+      status={status}
+      supportingContent={supportingContent}
+      title={workLabel}
+    />
   );
 }
 

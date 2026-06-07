@@ -1,12 +1,12 @@
-export {
-  CollapsibleProviderSessionAttempts,
-  ProviderSessionAttempts,
-} from "../components/fields/provider-session-attempts";
 export { WorkstationDetailCard } from "../components/detail-card/workstation-detail-card";
 export {
   EditableWorkstationConfigurationHeaderActions,
   EditableWorkstationSaveHeaderAction,
 } from "../components/editable/workstation-save-controls";
+export {
+  CollapsibleProviderSessionAttempts,
+  ProviderSessionAttempts,
+} from "../components/fields/provider-session-attempts";
 
 export {
   BUILT_IN_RUNNER_IDS,

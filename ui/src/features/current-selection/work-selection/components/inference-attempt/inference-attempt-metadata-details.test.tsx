@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { formatLocalDateTime } from "../../../../../components/ui/formatters";
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import { inferenceAttempt } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import { InferenceAttemptMetadataDetails } from "./inference-attempt-metadata-details";
 
 describe("InferenceAttemptMetadataDetails", () => {

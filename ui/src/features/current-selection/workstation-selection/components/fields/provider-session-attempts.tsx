@@ -12,15 +12,15 @@ import {
   providerSessionSelectionKey,
 } from "../../../../provider-session-detail/lib/provider-session-ref";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
-import { useCurrentSelectionOperationalEnumMessages } from "../../../base/components/presentation/current-selection-locale";
-import { CurrentSelectionBadge } from "../../../base/components/presentation/current-selection-pill";
-import { CurrentSelectionSectionHeader } from "../../../base/components/layout/current-selection-section-header";
-import { CurrentSelectionSelectableButton } from "../../../base/components/presentation/current-selection-selectable-button";
 import type {
   CollapsibleProviderSessionAttemptsProps,
   ProviderSessionAttemptsProps,
   ProviderSessionLogAccessProps,
 } from "../../../base/components/detail-card/detail-card-types";
+import { CurrentSelectionSectionHeader } from "../../../base/components/layout/current-selection-section-header";
+import { useCurrentSelectionOperationalEnumMessages } from "../../../base/components/presentation/current-selection-locale";
+import { CurrentSelectionBadge } from "../../../base/components/presentation/current-selection-pill";
+import { CurrentSelectionSelectableButton } from "../../../base/components/presentation/current-selection-selectable-button";
 import { CurrentSelectionSupportingText } from "../../../base/public";
 import {
   CurrentSelectionHistoryCard,

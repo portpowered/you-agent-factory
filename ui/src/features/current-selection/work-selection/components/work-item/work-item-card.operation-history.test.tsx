@@ -5,11 +5,11 @@ import type {
   DashboardWorkMoveOperation,
   DashboardWorkstationRequest,
 } from "../../../../../api/dashboard/types";
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import {
   getSelectedWorkItemFixture,
   workstationRequest,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import type { SelectedWorkOperationHistoryItem } from "../../../hooks/helpers/selected-work-operation-history";
 import { selectWorkItemExecutionDetails } from "../../state/executionDetails";
 import { WorkItemDetailCard } from "./work-item-card";
@@ -86,7 +86,7 @@ describe("WorkItemDetailCard operation history", () => {
     const operatorMoveCard = within(operationsRegion).getByRole("article", {
       name: "Operator move init → review",
     });
-    expect(operatorMoveCard.className).toContain("bg-surface-container-low");
+    expect(operatorMoveCard.className).toContain("bg-surface-container-high");
     expect(within(operatorMoveCard).getByText("Operator move")).toBeTruthy();
     expect(within(operatorMoveCard).getByText("Move")).toBeTruthy();
     expect(within(operatorMoveCard).getByText("CLI")).toBeTruthy();
@@ -99,10 +99,10 @@ describe("WorkItemDetailCard operation history", () => {
     const workstationCard = within(operationsRegion).getByRole("article", {
       name: "Workstation dispatch Active Story dispatch-model",
     });
-    expect(workstationCard.className).toContain("bg-surface-container-low");
+    expect(workstationCard.className).toContain("bg-surface-container-high");
     expect(
-      within(workstationCard).getAllByText("Workstation").length,
-    ).toBeGreaterThan(0);
+      within(workstationCard).getByRole("heading", { name: "Request details" }),
+    ).toBeTruthy();
     expect(
       within(workstationCard).getByRole("heading", {
         name: "Inference attempts",
@@ -130,7 +130,7 @@ describe("WorkItemDetailCard operation history", () => {
     const logicalMoveCard = within(operationsRegion).getByRole("article", {
       name: "Logical move dispatch Logical Move dispatch-logical-move",
     });
-    expect(logicalMoveCard.className).toContain("bg-surface-container-low");
+    expect(logicalMoveCard.className).toContain("bg-surface-container-high");
     expect(within(logicalMoveCard).getByText("Logical Move")).toBeTruthy();
     expect(within(logicalMoveCard).getByText("Move")).toBeTruthy();
     expect(

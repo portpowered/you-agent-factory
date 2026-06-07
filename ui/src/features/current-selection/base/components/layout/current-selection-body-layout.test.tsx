@@ -1,8 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-import { CurrentSelectionBodyLayout } from "./current-selection-body-layout";
 import { CurrentSelectionExpandableSection } from "../detail/current-selection-expandable-section";
+import { CurrentSelectionBodyLayout } from "./current-selection-body-layout";
 
 describe("CurrentSelectionBodyLayout", () => {
   it("renders the required primary title with workstation typography", () => {
@@ -86,6 +85,9 @@ describe("CurrentSelectionBodyLayout", () => {
         })
         .getAttribute("aria-expanded"),
     ).toBe("true");
-    expect(screen.getByText("Summary details")).toBeTruthy();
+    const summaryDetails = screen.getByText("Summary details");
+    expect(summaryDetails).toBeTruthy();
+    const summaryContent = document.getElementById("summary-content");
+    expect(summaryContent?.className).toBe("grid");
   });
 });

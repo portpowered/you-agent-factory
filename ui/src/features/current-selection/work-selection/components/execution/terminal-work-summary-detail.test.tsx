@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import { DETAIL_CARD_NOW } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
 import { TerminalWorkSummaryCard } from "./terminal-work-summary-detail";
 

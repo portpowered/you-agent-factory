@@ -1,17 +1,16 @@
 import { describe, expect, it } from "vitest";
-
-import { applyFactoryGraphAddEntityDraft } from "../editor/factory-graph-editor-additions";
+import {
+  factoryDefinitionSavePayloadHasGraphLayoutFields,
+  findGraphLayoutPropertyPaths,
+} from "../document-save/factory-graph-save-layout-boundary";
 import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
+import { applyFactoryGraphAddEntityDraft } from "../editor/factory-graph-editor-additions";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
   buildFactoryGraphState,
 } from "../operations/factory-graph-operations";
-import {
-  factoryDefinitionSavePayloadHasGraphLayoutFields,
-  findGraphLayoutPropertyPaths,
-} from "../document-save/factory-graph-save-layout-boundary";
 
 describe("findGraphLayoutPropertyPaths", () => {
   it("detects nested layout coordinate metadata", () => {

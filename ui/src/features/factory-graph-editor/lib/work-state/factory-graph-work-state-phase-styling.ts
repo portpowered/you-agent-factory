@@ -9,9 +9,9 @@
  * Dashboard workflow graph work-state nodes reuse these helpers from
  * `current-activity-place-node.tsx` via `place.state_category`.
  */
-import type { GraphSemanticIconKind } from "../../../flowchart/components/graph-semantic-icon";
 import { activityGraphNodeSurfaceClassName } from "../../../flowchart/components/current-activity-node-chrome";
-import type { FactoryGraphWorkStateType } from "../work-state/factory-graph-work-state-type";
+import type { GraphSemanticIconKind } from "../../../flowchart/components/graph-semantic-icon";
+import type { FactoryGraphWorkStateType } from "./factory-graph-work-state-type";
 
 export const WORK_STATE_PHASE_LEGEND_ORDER = [
   "INITIAL",

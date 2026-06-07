@@ -13,7 +13,9 @@ export const FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND: Record<
   { height: number; width: number }
 > = {
   resource: { height: 86, width: 168 },
-  worker: { height: 86, width: 164 },
+  // Keep shared factory/trace/editor layout geometry aligned with the
+  // current-activity graph's compact worker modeling.
+  worker: { height: 58, width: 156 },
   "work-state": { height: 86, width: 164 },
   "work-type": { height: 58, width: 156 },
   workstation: { height: 196, width: 156 },

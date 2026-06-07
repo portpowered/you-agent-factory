@@ -52,10 +52,7 @@ export function WorkStateEditableConfigurationSection({
         </CurrentSelectionDetailFeedback>
       ) : null}
       {state?.status === "error" ? (
-        <CurrentSelectionDetailFeedback
-          role="alert"
-          tone="danger"
-        >
+        <CurrentSelectionDetailFeedback role="alert" tone="danger">
           {messages.editableConfigurationErrorPrefix} {state.errorMessage}
         </CurrentSelectionDetailFeedback>
       ) : null}

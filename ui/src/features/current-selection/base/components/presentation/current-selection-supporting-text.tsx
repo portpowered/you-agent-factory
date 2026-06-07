@@ -27,11 +27,7 @@ export const CurrentSelectionSupportingText = forwardRef<
 ) {
   return (
     <DashboardText
-      className={cn(
-        "m-0",
-        SUPPORTING_TEXT_TONE_CLASS[tone],
-        className,
-      )}
+      className={cn("m-0", SUPPORTING_TEXT_TONE_CLASS[tone], className)}
       ref={ref}
       variant="supporting"
       {...props}

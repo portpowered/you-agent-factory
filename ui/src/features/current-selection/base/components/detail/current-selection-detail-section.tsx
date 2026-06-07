@@ -1,4 +1,4 @@
-import { useId, type HTMLAttributes, type ReactNode } from "react";
+import { type HTMLAttributes, type ReactNode, useId } from "react";
 
 import { DashboardHeading } from "../../../../../components/ui";
 import { cn } from "../../../../../lib/cn";
@@ -20,7 +20,9 @@ export function CurrentSelectionDetailSection({
   ...props
 }: CurrentSelectionDetailSectionProps) {
   const generatedHeadingId = useId();
-  const resolvedHeadingId = title ? (headingId ?? generatedHeadingId) : undefined;
+  const resolvedHeadingId = title
+    ? (headingId ?? generatedHeadingId)
+    : undefined;
 
   return (
     <section

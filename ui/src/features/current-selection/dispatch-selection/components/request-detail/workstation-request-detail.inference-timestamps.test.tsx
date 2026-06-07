@@ -3,12 +3,94 @@ import {
   formatLocalDateTime,
   formatLocalTimezoneContext,
 } from "../../../../../components/ui/formatters";
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import {
   inferenceAttempt,
   workstationRequest,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
+
+function getDetailRow(
+  container: ReturnType<typeof within>,
+  label: string,
+): HTMLElement {
+  const row = container.getByText(label).closest("div");
+  if (!(row instanceof HTMLElement)) {
+    throw new Error(`Expected detail row for ${label}.`);
+  }
+
+  return row;
+}
+
+function expectEnglishInferenceTimestamps(
+  inferenceAttempts: ReturnType<typeof within>,
+  requestTime: string,
+  responseTime: string,
+) {
+  const expectedEnglishRequestTime = formatLocalDateTime(
+    requestTime,
+    "Unavailable",
+    "en",
+  );
+  const expectedEnglishResponseTime = formatLocalDateTime(
+    responseTime,
+    "Unavailable",
+    "en",
+  );
+
+  expect(
+    inferenceAttempts.getAllByText(expectedEnglishRequestTime),
+  ).toHaveLength(1);
+  expect(
+    inferenceAttempts.getAllByText(expectedEnglishResponseTime),
+  ).toHaveLength(1);
+  expect(inferenceAttempts.getByTitle(requestTime)).toBeTruthy();
+  expect(inferenceAttempts.getByTitle(responseTime)).toBeTruthy();
+  expect(
+    within(getDetailRow(inferenceAttempts, "Elapsed time")).getByText("875ms"),
+  ).toBeTruthy();
+  expect(inferenceAttempts.queryByText(requestTime)).toBeNull();
+  expect(inferenceAttempts.queryByText(responseTime)).toBeNull();
+}
+
+function expectChineseInferenceTimestamps(
+  inferenceAttempts: ReturnType<typeof within>,
+  requestTime: string,
+  responseTime: string,
+) {
+  const expectedChineseRequestTime = formatLocalDateTime(
+    requestTime,
+    "不可用",
+    "zh-CN",
+  );
+  const expectedChineseResponseTime = formatLocalDateTime(
+    responseTime,
+    "不可用",
+    "zh-CN",
+  );
+  const expectedEnglishRequestTime = formatLocalDateTime(
+    requestTime,
+    "Unavailable",
+    "en",
+  );
+  const expectedEnglishResponseTime = formatLocalDateTime(
+    responseTime,
+    "Unavailable",
+    "en",
+  );
+
+  expect(
+    inferenceAttempts.getAllByText(expectedChineseRequestTime),
+  ).toHaveLength(1);
+  expect(
+    inferenceAttempts.getAllByText(expectedChineseResponseTime),
+  ).toHaveLength(1);
+  expect(
+    within(getDetailRow(inferenceAttempts, "耗时")).getByText("875毫秒"),
+  ).toBeTruthy();
+  expect(inferenceAttempts.queryByText(expectedEnglishRequestTime)).toBeNull();
+  expect(inferenceAttempts.queryByText(expectedEnglishResponseTime)).toBeNull();
+}
 
 it("rerenders request and response timestamps for the active locale", () => {
   const requestTime = "2026-04-08T12:00:01Z";
@@ -44,30 +126,16 @@ it("rerenders request and response timestamps for the active locale", () => {
   expect(
     screen.getByText(formatLocalTimezoneContext("Timezone", "en")),
   ).toBeTruthy();
-  const expectedEnglishRequestTime = formatLocalDateTime(
-    requestTime,
-    "Unavailable",
-    "en",
-  );
-  const expectedEnglishResponseTime = formatLocalDateTime(
-    responseTime,
-    "Unavailable",
-    "en",
-  );
 
   fireEvent.click(
     inferenceAttempts.getByRole("button", { name: "Expand attempt 1" }),
   );
 
-  expect(
-    inferenceAttempts.getAllByText(expectedEnglishRequestTime),
-  ).toHaveLength(1);
-  expect(
-    inferenceAttempts.getAllByText(expectedEnglishResponseTime),
-  ).toHaveLength(1);
-  expect(inferenceAttempts.getByTitle(requestTime)).toBeTruthy();
-  expect(inferenceAttempts.getByTitle(responseTime)).toBeTruthy();
-  expect(inferenceAttempts.getByText("Elapsed time: 875ms")).toBeTruthy();
+  expectEnglishInferenceTimestamps(
+    inferenceAttempts,
+    requestTime,
+    responseTime,
+  );
   fireEvent.click(
     inferenceAttempts.getByRole("button", { name: "Expand request body" }),
   );
@@ -98,30 +166,11 @@ it("rerenders request and response timestamps for the active locale", () => {
   expect(
     screen.getByText(formatLocalTimezoneContext("时区", "zh-CN")),
   ).toBeTruthy();
-  const expectedChineseRequestTime = formatLocalDateTime(
+  expectChineseInferenceTimestamps(
+    localizedInferenceAttempts,
     requestTime,
-    "不可用",
-    "zh-CN",
-  );
-  const expectedChineseResponseTime = formatLocalDateTime(
     responseTime,
-    "不可用",
-    "zh-CN",
   );
-
-  expect(
-    localizedInferenceAttempts.getAllByText(expectedChineseRequestTime),
-  ).toHaveLength(1);
-  expect(
-    localizedInferenceAttempts.getAllByText(expectedChineseResponseTime),
-  ).toHaveLength(1);
-  expect(localizedInferenceAttempts.getByText("耗时: 875毫秒")).toBeTruthy();
-  expect(
-    localizedInferenceAttempts.queryByText(expectedEnglishRequestTime),
-  ).toBeNull();
-  expect(
-    localizedInferenceAttempts.queryByText(expectedEnglishResponseTime),
-  ).toBeNull();
 });
 
 it("renders an explicit fallback for missing or invalid inference timestamps", () => {

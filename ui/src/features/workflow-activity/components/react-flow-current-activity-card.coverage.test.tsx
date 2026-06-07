@@ -238,19 +238,22 @@ vi.mock(
   },
 );
 
-vi.mock("../../factory-graph-editor/hooks/validation/use-factory-validation", () => ({
-  useFactoryValidation: () => ({
-    data: { targets: [] },
-    isError: false,
-    isFetching: false,
-    isLoading: false,
-    projection: {
-      handleErrorsByAnchorId: new Map(),
-      nodeErrorsByNodeId: new Map(),
-    },
-    targets: [],
+vi.mock(
+  "../../factory-graph-editor/hooks/validation/use-factory-validation",
+  () => ({
+    useFactoryValidation: () => ({
+      data: { targets: [] },
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      projection: {
+        handleErrorsByAnchorId: new Map(),
+        nodeErrorsByNodeId: new Map(),
+      },
+      targets: [],
+    }),
   }),
-}));
+);
 
 vi.mock("../../flowchart/lib/layout", async () => {
   const actual = await vi.importActual("../../flowchart/lib/layout");
@@ -363,9 +366,8 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         this.callback(
           [
             {
-              contentRect: HTMLElement.prototype.getBoundingClientRect.call(
-                target,
-              ),
+              contentRect:
+                HTMLElement.prototype.getBoundingClientRect.call(target),
               target,
             } as ResizeObserverEntry,
           ],
@@ -411,7 +413,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("Observe")).toBeTruthy();
     expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(
       screen.getByText(

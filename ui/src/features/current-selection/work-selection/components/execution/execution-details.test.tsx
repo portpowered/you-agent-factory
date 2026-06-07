@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { formatLocalDateTime } from "../../../../../components/ui/formatters";
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import {
   DETAIL_CARD_NOW,
   inferenceAttempt,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import type { SelectedWorkItemExecutionDetails } from "../../state/executionDetails";
 import {
   ExecutionDetailsSection,
@@ -366,7 +366,6 @@ describe("InferenceAttemptsSection", () => {
     expect(
       within(section).getByText("Awaiting provider response."),
     ).toBeTruthy();
-    expect(within(section).getByText("Pending")).toBeTruthy();
   });
 
   it("localizes current-selection operational outcomes and unknown fallbacks in zh-CN", () => {

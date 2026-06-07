@@ -1,13 +1,13 @@
+import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
+import type { CanonicalFactoryDefinition } from "../draft/factory-graph-draft-types";
+import { buildNode } from "../draft/factory-graph-draft-types";
+import { maintainerRuntimeShapedFactory } from "../fixtures/maintainer-runtime-shaped-factory.fixture";
 import {
   filterFactoryGraphTopologyForCustomerDisplay,
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
 } from "../operations/factory-graph-customer-display";
-import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
-import type { CanonicalFactoryDefinition } from "../draft/factory-graph-draft-types";
-import { buildNode } from "../draft/factory-graph-draft-types";
-import { maintainerRuntimeShapedFactory } from "../fixtures/maintainer-runtime-shaped-factory.fixture";
 
 const pureSystemTimeFactory = {
   name: "system-time-only",

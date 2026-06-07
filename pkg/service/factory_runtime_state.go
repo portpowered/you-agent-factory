@@ -25,7 +25,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
 
@@ -372,28 +371,6 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 		return nil
 	}
 	return &summaries
-}
-
-func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
-	if success != nil {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
-	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
-	}
-	return nil
-}
-
-func modelEventErrorClass(err error) string {
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) && providerErr.Type != "" {
-		return string(providerErr.Type)
-	}
-	if err == nil {
-		return ""
-	}
-	return "MODEL_EXECUTION_FAILED"
 }
 
 func modelEventOutputContent(raw string) *factoryapi.WorkContent {
@@ -926,6 +903,11 @@ func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntime
 			errs = append(errs, err)
 		}
 	}
+	if runtimeBundle.metricsSink != nil {
+		if err := runtimeBundle.metricsSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
 }
 
@@ -945,50 +927,4 @@ func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 		return interfaces.RuntimeModeBatch
 	}
 	return mode
-}
-
-func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
-	policy := fs.coordinatorPolicy()
-	if !serviceMode || policy.workFile == "" || policy.apiServerReady == nil || policy.port <= 0 || policy.apiServerStarter == nil {
-		return nil
-	}
-	apiServerExit := fs.apiServerExit
-	select {
-	case <-policy.apiServerReady:
-	case err := <-apiServerExit:
-		return startupReadinessError(err)
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	timer := time.NewTimer(serviceModeStartupWorkReadabilityDelay)
-	defer timer.Stop()
-
-	select {
-	case <-timer.C:
-		return nil
-	case err := <-apiServerExit:
-		return startupReadinessError(err)
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func (fs *FactoryService) failServiceModeStartup(currentRuntime *liveRuntimeHandle, startupErr error) error {
-	fs.clearRunState()
-	fs.unregisterLiveSession(defaultFactorySessionID)
-	if currentRuntime == nil {
-		return startupErr
-	}
-	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-		return errors.Join(startupErr, stopErr)
-	}
-	return startupErr
-}
-
-func startupReadinessError(err error) error {
-	if err == nil {
-		return fmt.Errorf("wait for service-mode startup work readiness: API server stopped before signaling readiness")
-	}
-	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
 }

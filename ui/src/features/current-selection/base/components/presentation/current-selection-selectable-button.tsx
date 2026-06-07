@@ -4,6 +4,7 @@ import { SelectableCardButton } from "../../../../../components/ui";
 import { cn } from "../../../../../lib/cn";
 
 type CurrentSelectionSelectableButtonVariant = "card" | "compact";
+type CurrentSelectionSelectableButtonSelectionStyle = "accent" | "outline";
 
 export interface CurrentSelectionSelectableButtonProps {
   "aria-label"?: string;
@@ -11,6 +12,7 @@ export interface CurrentSelectionSelectableButtonProps {
   className?: string;
   onClick?: () => void;
   selected?: boolean;
+  selectedStyle?: CurrentSelectionSelectableButtonSelectionStyle;
   type?: "button" | "submit" | "reset";
   variant?: CurrentSelectionSelectableButtonVariant;
 }
@@ -24,6 +26,7 @@ export const CurrentSelectionSelectableButton = forwardRef<
     className,
     onClick,
     selected = false,
+    selectedStyle = "accent",
     type = "button",
     variant = "compact",
     ...props
@@ -39,7 +42,9 @@ export const CurrentSelectionSelectableButton = forwardRef<
     <SelectableCardButton
       className={cn(
         variantClassName,
-        selected && "border-primary bg-primary-container text-on-surface",
+        selected &&
+          selectedStyle === "accent" &&
+          "border-outline-variant bg-secondary-container text-on-secondary-container",
         className,
       )}
       onClick={onClick}

@@ -367,8 +367,7 @@ const workerDetailMessagesByLocale = {
     stopTokenFieldHelp:
       "可选。Worker 拥有的标记；出现时可将面向模型的输出视为完成。与 workstation 停止词无关。",
     stopTokenFieldLabel: "停止标记",
-    timeoutFieldHelp:
-      "可选。限制 worker 运行的最长时间（例如 30s、5m、1h）。",
+    timeoutFieldHelp: "可选。限制 worker 运行的最长时间（例如 30s、5m、1h）。",
     timeoutFieldLabel: "执行超时",
     summaryHeading: "摘要",
     typeFieldLabel: "Worker 类型",

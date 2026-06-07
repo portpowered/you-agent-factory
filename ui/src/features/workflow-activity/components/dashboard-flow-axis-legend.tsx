@@ -2,8 +2,8 @@ import { useId, useState } from "react";
 import {
   DashboardLabel,
   DashboardText,
-  SurfacePanel,
   type DisclosureButtonProps,
+  SurfacePanel,
 } from "../../../components/ui";
 import { DisclosureButton } from "../../../components/ui/disclosure-button";
 import { ExpandablePanelIcon } from "../../../components/ui/expandable-panel-icon";

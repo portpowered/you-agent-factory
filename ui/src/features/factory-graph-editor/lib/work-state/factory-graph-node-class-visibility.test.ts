@@ -1,14 +1,14 @@
+import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
+import type { FactoryGraphNodeKind } from "../draft/factory-graph-draft-types";
+import { maintainerRuntimeShapedFactory } from "../fixtures/maintainer-runtime-shaped-factory.fixture";
 import {
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
 } from "../operations/factory-graph-customer-display";
-import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
-import type { FactoryGraphNodeKind } from "../draft/factory-graph-draft-types";
 import {
   FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS,
   projectFactoryGraphByHiddenNodeClasses,
 } from "../work-state/factory-graph-node-class-visibility";
-import { maintainerRuntimeShapedFactory } from "../fixtures/maintainer-runtime-shaped-factory.fixture";
 
 const runtimeTopology = buildFactoryGraphTopologyFromDefinition(
   maintainerRuntimeShapedFactory,

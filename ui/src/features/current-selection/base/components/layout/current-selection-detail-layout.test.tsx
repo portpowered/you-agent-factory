@@ -7,11 +7,11 @@ import {
   resetSelectionHistoryStore,
   useSelectionHistoryStore,
 } from "../../state/selectionHistoryStore";
+import { CurrentSelectionLocaleProvider } from "../presentation/current-selection-locale";
 import {
   CurrentSelectionHeaderActionProvider,
   SelectionDetailLayout,
 } from "./current-selection-detail-layout";
-import { CurrentSelectionLocaleProvider } from "../presentation/current-selection-locale";
 
 function resetSelectionHistory() {
   beforeEach(() => {

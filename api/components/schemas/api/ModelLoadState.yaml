@@ -1,5 +1,10 @@
 type: string
-description: Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+description: >
+  Compatibility lifecycle projection for one managed runtime. Prefer
+  `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary.
+  `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on
+  cache and load state; `NOT_APPLICABLE` maps to managed lifecycle
+  `NOT_APPLICABLE` for cloud-backed runtimes.
 enum:
   - UNLOADED
   - NOT_APPLICABLE

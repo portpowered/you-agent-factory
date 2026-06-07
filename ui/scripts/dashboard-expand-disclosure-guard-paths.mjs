@@ -58,12 +58,12 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/work-selection/components/inference-attempt/inference-attempt/inference-attempt-summary-header.tsx",
+      "src/features/current-selection/work-selection/components/inference-attempt/inference-attempt.tsx",
   },
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/work-selection/components/inference-attempt/inference-attempt/inference-attempt-body-sections.tsx",
+      "src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-body-sections.tsx",
   },
   {
     owner: "expandable-panel-trigger",

@@ -12,10 +12,7 @@ export const CurrentSelectionDescriptionList = forwardRef<
 >(function CurrentSelectionDescriptionList({ className, ...props }, ref) {
   return (
     <DashboardDescriptionList
-      className={cn(
-        "[&_div]:grid-cols-[8.5rem_minmax(0,1fr)]",
-        className,
-      )}
+      className={cn("[&_div]:grid-cols-[8.5rem_minmax(0,1fr)]", className)}
       ref={ref}
       {...props}
     />

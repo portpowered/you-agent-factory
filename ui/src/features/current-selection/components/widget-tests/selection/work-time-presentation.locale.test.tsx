@@ -1,15 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { dashboardWorkstationRequestFixtures } from "../../../../../components/dashboard/fixtures";
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import { formatLocalDateTime } from "../../../../../components/ui/formatters";
 import { formatTime } from "../../../../../i18n/formatters";
-import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import {
   DETAIL_CARD_NOW,
   getSelectedWorkItemFixture,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../../base/components/presentation/current-selection-locale";
 import { WorkItemDetailCard } from "../../../work-selection/components/work-item/work-item-card";
 import { selectWorkItemExecutionDetails } from "../../../work-selection/state/executionDetails";
 import { StateNodeDetailCard } from "../../../work-state-selection/components/state-node-detail";
@@ -139,6 +139,14 @@ function renderDispatchStartedAt(
     throw new Error("expected dispatch history card");
   }
 
+  const expandLabel = locale === "zh-CN" ? "展开" : "Expand";
+  const expandButton = within(dispatchCard).getAllByRole("button", {
+    name: expandLabel,
+  })[0];
+  if (!(expandButton instanceof HTMLElement)) {
+    throw new Error("expected dispatch history expand button");
+  }
+  fireEvent.click(expandButton);
   expect(
     within(getDetailRow(dispatchCard, startedAtLabel)).getByText(expected),
   ).toBeTruthy();

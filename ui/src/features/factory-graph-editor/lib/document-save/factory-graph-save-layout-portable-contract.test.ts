@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-
-import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
-import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
-import { applyFactoryGraphPendingEdits } from "../operations/factory-graph-operations";
 import {
   factoryDefinitionSavePayloadHasGraphLayoutFields,
   findGraphLayoutPropertyPaths,
 } from "../document-save/factory-graph-save-layout-boundary";
+import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
+import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
+import { applyFactoryGraphPendingEdits } from "../operations/factory-graph-operations";
 
 describe("factory graph portable layout contract", () => {
   it("allows the portable top-level layout contract", () => {
