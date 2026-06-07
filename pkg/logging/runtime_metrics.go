@@ -178,7 +178,11 @@ func (s *RuntimeMetricsSink) emit(ctx context.Context, name string, metricType s
 	if s.closed {
 		return errRuntimeMetricsSinkClosed
 	}
-	return s.encoder.Encode(runtimeMetricsRecord{
+	return s.encoder.Encode(s.newRecord(name, metricType, value, unit, fields))
+}
+
+func (s *RuntimeMetricsSink) newRecord(name string, metricType string, value float64, unit string, fields metrics.Fields) runtimeMetricsRecord {
+	return runtimeMetricsRecord{
 		Timestamp:         time.Now().UTC().Format(time.RFC3339Nano),
 		MetricName:        name,
 		MetricType:        metricType,
@@ -196,7 +200,7 @@ func (s *RuntimeMetricsSink) emit(ctx context.Context, name string, metricType s
 		Provider:          fields.Provider,
 		Outcome:           fields.Outcome,
 		Reason:            fields.Reason,
-	})
+	}
 }
 
 type runtimeMetricsRecord struct {
