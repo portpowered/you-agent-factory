@@ -22,11 +22,13 @@ primary-result behavior.
 - `pkg/service/runtime_sessions.go` owns the session-scoped invocation
   orchestration that resolves API input, submits the default handling work
   item, polls selected-tick world state, and maps timeout/cancel/unresolved
-  outcomes into `InvocationResponse`.
+  outcomes into `InvocationResponse`; it also owns invocation boundary logs and
+  optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
-  output instead of startup or dashboard noise.
+  output instead of startup or dashboard noise; CLI-only source conflicts are
+  logged and counted there before the service runtime exists.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.

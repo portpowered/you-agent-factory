@@ -102,7 +102,10 @@ type RunConfig struct {
 	// JSONOutput emits the API-shaped InvocationResponse on successful factory
 	// invocation instead of only the primary text result.
 	JSONOutput bool
-	Logger     *zap.Logger
+	// InvocationMetricsRecorder receives invocation counter emissions from the
+	// CLI boundary, including pre-runtime source conflicts.
+	InvocationMetricsRecorder service.InvocationMetricsRecorder
+	Logger                    *zap.Logger
 }
 
 type factoryServiceRunner interface {
@@ -304,36 +307,14 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	if cfg.ExecutionBaseDir == "" {
-		if workingDirectory, err := os.Getwd(); err == nil && workingDirectory != "" {
-			cfg.ExecutionBaseDir = workingDirectory
-		}
-	}
-
-	if cfg.Bootstrap {
-		if err := bootstrapFactory(cfg.Dir); err != nil {
-			return err
-		}
-	}
-
-	recordPath, err := resolveRecordPathForRun(cfg)
-	if err != nil {
-		return err
-	}
-	cfg.RecordPath = recordPath.servicePath
-
-	invocationRequest, invocationMode, err := resolveFactoryInvocationRequest(cfg)
+	cfg, invocationRequest, invocationMode, recordPath, err := prepareRunConfig(cfg)
 	if err != nil {
 		return err
 	}
 
-	var mockWorkersConfig *factoryconfig.MockWorkersConfig
-	if cfg.MockWorkersEnabled {
-		loadedMockWorkersConfig, err := factoryconfig.LoadMockWorkersConfig(cfg.MockWorkersConfigPath)
-		if err != nil {
-			return err
-		}
-		mockWorkersConfig = loadedMockWorkersConfig
+	mockWorkersConfig, err := loadMockWorkersConfig(cfg)
+	if err != nil {
+		return err
 	}
 
 	reservedAPIServer, err := reserveAPIServerListener(cfg.Port, cfg.AutoPort)
@@ -376,6 +357,39 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	return err
 }
 
+func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, bool, resolvedRunRecordPath, error) {
+	if cfg.ExecutionBaseDir == "" {
+		if workingDirectory, err := os.Getwd(); err == nil && workingDirectory != "" {
+			cfg.ExecutionBaseDir = workingDirectory
+		}
+	}
+
+	if cfg.Bootstrap {
+		if err := bootstrapFactory(cfg.Dir); err != nil {
+			return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+		}
+	}
+
+	recordPath, err := resolveRecordPathForRun(cfg)
+	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
+	cfg.RecordPath = recordPath.servicePath
+
+	invocationRequest, invocationMode, err := resolveFactoryInvocationRequest(cfg)
+	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
+	return cfg, invocationRequest, invocationMode, recordPath, nil
+}
+
+func loadMockWorkersConfig(cfg RunConfig) (*factoryconfig.MockWorkersConfig, error) {
+	if !cfg.MockWorkersEnabled {
+		return nil, nil
+	}
+	return factoryconfig.LoadMockWorkersConfig(cfg.MockWorkersConfigPath)
+}
+
 type sessionInvocationRunner interface {
 	factoryServiceRunner
 	apisurface.InvocationAPI
@@ -405,8 +419,10 @@ func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationReque
 
 	resolved, err := invocations.ResolveTextInput(sources)
 	if err != nil {
+		recordCLIInvocationFailure(cfg, err)
 		return nil, true, wrapInvocationInputError(err)
 	}
+	recordCLIInvocationResolved(cfg, resolved.Source)
 	return invocationRequestFromResolvedInput(resolved), true, nil
 }
 
@@ -666,22 +682,23 @@ func buildRunServiceConfig(
 		apiServerReady = dashboardReady
 	}
 	svcCfg := &service.FactoryServiceConfig{
-		Dir:               cfg.Dir,
-		RunnerID:          cfg.RunnerID,
-		ExecutionBaseDir:  cfg.ExecutionBaseDir,
-		RuntimeMode:       runtimeModeForRun(cfg),
-		Port:              cfg.Port,
-		Logger:            logger,
-		Verbose:           cfg.Verbose,
-		WorkFile:          cfg.WorkFile,
-		RecordPath:        cfg.RecordPath,
-		ReplayPath:        cfg.ReplayPath,
-		RuntimeLogDir:     cfg.RuntimeLogDir,
-		RuntimeLogConfig:  cfg.RuntimeLogConfig,
-		WorkflowID:        cfg.Workflow,
-		MockWorkersConfig: mockWorkersConfig,
-		APIServerStarter:  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
-		APIServerReady:    apiServerReady,
+		Dir:                       cfg.Dir,
+		RunnerID:                  cfg.RunnerID,
+		ExecutionBaseDir:          cfg.ExecutionBaseDir,
+		RuntimeMode:               runtimeModeForRun(cfg),
+		Port:                      cfg.Port,
+		Logger:                    logger,
+		Verbose:                   cfg.Verbose,
+		WorkFile:                  cfg.WorkFile,
+		RecordPath:                cfg.RecordPath,
+		ReplayPath:                cfg.ReplayPath,
+		RuntimeLogDir:             cfg.RuntimeLogDir,
+		RuntimeLogConfig:          cfg.RuntimeLogConfig,
+		WorkflowID:                cfg.Workflow,
+		MockWorkersConfig:         mockWorkersConfig,
+		APIServerStarter:          runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
+		InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
+		APIServerReady:            apiServerReady,
 	}
 	if !cfg.SuppressDashboardRendering {
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard

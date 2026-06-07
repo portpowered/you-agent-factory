@@ -3,21 +3,28 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	"go.uber.org/zap"
 )
 
 // ModelService owns direct model catalog, pull, and invocation operations.
@@ -210,6 +217,482 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
+}
+
+type sessionInvocationWaitInput struct {
+	RequestID        string
+	TraceID          string
+	InputSource      invocations.InputSourceLabel
+	InvocationReturn *interfaces.InvocationReturnConfig
+	TimeoutMillis    *int64
+}
+
+func (fs *FactoryService) InvokeFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.InvocationRequest,
+) (apisurface.FactoryInvocationResult, error) {
+	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
+	if err != nil {
+		return apisurface.FactoryInvocationResult{}, err
+	}
+	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
+		return apisurface.FactoryInvocationResult{}, fmt.Errorf("factory session runtime config is unavailable")
+	}
+
+	resolved, err := resolveSessionInvocationInput(request)
+	if err != nil {
+		return apisurface.FactoryInvocationResult{}, err
+	}
+
+	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(runtimeCfg.FactoryConfig())
+	if err != nil {
+		return apisurface.FactoryInvocationResult{}, fmt.Errorf("resolve invocation work type: %w", err)
+	}
+
+	requestID := strings.TrimSpace(stringValue(request.RequestId))
+	submitRequest := interfaces.SubmitRequest{
+		RequestID:  requestID,
+		WorkTypeID: workTypeName,
+		Content:    resolved.Content,
+	}
+	submitResult, err := fs.SubmitWorkRequestForSession(
+		ctx,
+		sessionID,
+		factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitRequest}),
+	)
+	if err != nil {
+		fs.logInvocationFailure(
+			sessionID,
+			resolved.Source,
+			runtimeCfg.FactoryConfig().InvocationReturn,
+			inputMetricLabels(resolved.Source),
+			"runtime_failure",
+			err,
+		)
+		return apisurface.FactoryInvocationResult{}, err
+	}
+	fs.recordInvocationMetric(invocationMetricAttempts, inputMetricLabels(resolved.Source))
+	if policyModeForInvocation(runtimeCfg.FactoryConfig().InvocationReturn) == invocationPolicyModeFallback {
+		fs.recordInvocationMetric(invocationMetricFallbackPolicyUsed, inputMetricLabels(resolved.Source))
+	}
+	fs.logger.Info(
+		"factory session invocation submitted",
+		invocationLogFields(
+			sessionID,
+			resolved.Source,
+			runtimeCfg.FactoryConfig().InvocationReturn,
+			zap.String("request_id", submitResult.RequestID),
+			zap.String("trace_id", submitResult.TraceID),
+		)...,
+	)
+	return fs.waitForSessionInvocationResult(
+		ctx,
+		sessionID,
+		sessionInvocationWaitInput{
+			RequestID:        submitResult.RequestID,
+			TraceID:          submitResult.TraceID,
+			InputSource:      resolved.Source,
+			InvocationReturn: runtimeCfg.FactoryConfig().InvocationReturn,
+			TimeoutMillis:    request.TimeoutMillis,
+		},
+	)
+}
+
+func resolveSessionInvocationInput(request factoryapi.InvocationRequest) (invocations.ResolvedInput, error) {
+	if request.SourceKind != factoryapi.InvocationInputSourceKindText {
+		return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
+			Message: "sourceKind must be text",
+		}
+	}
+
+	content := workcontent.PartsFromGenerated(&request.Content)
+	if len(content) == 0 {
+		return invocations.ResolvedInput{}, &invocations.InputError{
+			Code:    invocations.InputErrorCodeEmpty,
+			Message: "invocation input is empty",
+		}
+	}
+
+	textParts := make([]string, 0, len(content))
+	for _, part := range content {
+		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
+			return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
+				Message: "content must contain only text parts when sourceKind is text",
+			}
+		}
+		textParts = append(textParts, part.Text)
+	}
+
+	text := strings.Join(textParts, "\n")
+	if strings.TrimSpace(text) == "" {
+		return invocations.ResolvedInput{}, &invocations.InputError{
+			Code:    invocations.InputErrorCodeEmpty,
+			Message: "invocation input is empty",
+		}
+	}
+	return invocations.ResolveTextInput(invocations.TextInputSources{
+		PositionalText: &text,
+	})
+}
+
+func (fs *FactoryService) waitForSessionInvocationResult(
+	ctx context.Context,
+	sessionID string,
+	input sessionInvocationWaitInput,
+) (apisurface.FactoryInvocationResult, error) {
+	waitCtx := ctx
+	cancel := func() {}
+	if input.TimeoutMillis != nil && *input.TimeoutMillis > 0 {
+		waitCtx, cancel = context.WithTimeout(ctx, time.Duration(*input.TimeoutMillis)*time.Millisecond)
+	}
+	defer cancel()
+
+	result := apisurface.FactoryInvocationResult{
+		RequestID: input.RequestID,
+		TraceID:   input.TraceID,
+	}
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		snapshot, err := fs.GetEngineStateSnapshotForSession(waitCtx, sessionID)
+		if err != nil {
+			return fs.handleInvocationWaitError(result, err)
+		}
+
+		worldState, err := fs.sessionInvocationWorldState(waitCtx, sessionID, snapshot.TickCount)
+		if err != nil {
+			return fs.handleInvocationWaitError(result, err)
+		}
+
+		selection, selectionErr := invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
+			RequestID:        input.RequestID,
+			InvocationReturn: input.InvocationReturn,
+			WorldState:       worldState,
+		})
+		if selectionErr == nil {
+			return fs.handleInvocationSelectionSuccess(sessionID, input, selection), nil
+		}
+
+		primaryErr, ok := selectionErr.(*invocations.PrimaryResultError)
+		if !ok {
+			return apisurface.FactoryInvocationResult{}, selectionErr
+		}
+
+		if _, exists := worldState.WorkRequestsByID[input.RequestID]; exists && !snapshotHasActiveWork(snapshot) {
+			return fs.handleInvocationUnresolvedPrimary(sessionID, input, primaryErr), nil
+		}
+
+		select {
+		case <-waitCtx.Done():
+			terminalResult := invocationContextTerminalResult(result, waitCtx.Err())
+			fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
+			fs.logInvocationTerminalResult(sessionID, input, terminalResult)
+			return terminalResult, nil
+		case <-ticker.C:
+		}
+	}
+}
+
+func (fs *FactoryService) handleInvocationWaitError(
+	result apisurface.FactoryInvocationResult,
+	err error,
+) (apisurface.FactoryInvocationResult, error) {
+	if statusResult, ok := invocationContextResult(result, err); ok {
+		return statusResult, nil
+	}
+	return apisurface.FactoryInvocationResult{}, err
+}
+
+func (fs *FactoryService) handleInvocationSelectionSuccess(
+	sessionID string,
+	input sessionInvocationWaitInput,
+	selection invocations.PrimaryResultSelection,
+) apisurface.FactoryInvocationResult {
+	resultType := primaryResultMetricType(selection.PrimaryResult)
+	result := apisurface.FactoryInvocationResult{
+		RequestID:     input.RequestID,
+		TraceID:       input.TraceID,
+		Status:        factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: selection.PrimaryResult,
+	}
+	fs.recordInvocationMetric(invocationMetricSuccess, inputMetricLabels(input.InputSource))
+	fs.recordInvocationMetric(
+		invocationMetricResultType,
+		mergeMetricLabels(
+			inputMetricLabels(input.InputSource),
+			map[string]string{"result_type": resultType},
+		),
+	)
+	fs.logger.Info(
+		"factory session invocation completed",
+		invocationLogFields(
+			sessionID,
+			input.InputSource,
+			input.InvocationReturn,
+			zap.String("request_id", input.RequestID),
+			zap.String("trace_id", input.TraceID),
+			zap.String("status", string(result.Status)),
+			zap.String("resolved_work_id", selection.WorkID),
+			zap.String("resolved_work_type", selection.WorkTypeName),
+			zap.String("resolved_work_name", selection.WorkName),
+			zap.String("resolved_terminal_state", selection.TerminalState),
+			zap.String("result_type", resultType),
+		)...,
+	)
+	return result
+}
+
+func (fs *FactoryService) handleInvocationUnresolvedPrimary(
+	sessionID string,
+	input sessionInvocationWaitInput,
+	primaryErr *invocations.PrimaryResultError,
+) apisurface.FactoryInvocationResult {
+	result := apisurface.FactoryInvocationResult{
+		RequestID: input.RequestID,
+		TraceID:   input.TraceID,
+		Status:    factoryapi.InvocationTerminalStatusFailed,
+		ErrorCode: string(primaryErr.Code),
+		Message:   primaryErr.Message,
+	}
+	fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
+	fs.recordInvocationMetric(invocationMetricUnresolvedPrimary, inputMetricLabels(input.InputSource))
+	fs.logger.Warn(
+		"factory session invocation failed",
+		invocationLogFields(
+			sessionID,
+			input.InputSource,
+			input.InvocationReturn,
+			zap.String("request_id", input.RequestID),
+			zap.String("trace_id", input.TraceID),
+			zap.String("status", string(result.Status)),
+			zap.String("error_code", result.ErrorCode),
+			zap.String("failure_class", "unresolved_primary"),
+		)...,
+	)
+	return result
+}
+
+func (fs *FactoryService) sessionInvocationWorldState(
+	ctx context.Context,
+	sessionID string,
+	selectedTick int,
+) (interfaces.FactoryWorldState, error) {
+	activeFactory, err := fs.sessionFactory(sessionID)
+	if err != nil {
+		return interfaces.FactoryWorldState{}, err
+	}
+	events, err := activeFactory.GetFactoryEvents(ctx)
+	if err != nil {
+		return interfaces.FactoryWorldState{}, err
+	}
+	return projections.ReconstructFactoryWorldState(events, selectedTick)
+}
+
+func invocationContextResult(
+	result apisurface.FactoryInvocationResult,
+	err error,
+) (apisurface.FactoryInvocationResult, bool) {
+	if err == nil {
+		return apisurface.FactoryInvocationResult{}, false
+	}
+	return invocationContextTerminalResult(result, err), errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func invocationContextTerminalResult(
+	result apisurface.FactoryInvocationResult,
+	err error,
+) apisurface.FactoryInvocationResult {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		result.Status = factoryapi.InvocationTerminalStatusTimedOut
+		result.ErrorCode = string(factoryapi.INVOCATIONTIMEDOUT)
+		result.Message = "invocation timed out while waiting for primary result"
+	case errors.Is(err, context.Canceled):
+		result.Status = factoryapi.InvocationTerminalStatusCanceled
+		result.ErrorCode = string(factoryapi.INVOCATIONCANCELED)
+		result.Message = "invocation was canceled while waiting for primary result"
+	default:
+		result.Status = factoryapi.InvocationTerminalStatusFailed
+		result.ErrorCode = string(factoryapi.INVOCATIONRUNTIMEFAILURE)
+		result.Message = strings.TrimSpace(err.Error())
+	}
+	return result
+}
+
+const (
+	invocationPolicySubmittedWorkTerminal = "SUBMITTED_WORK_TERMINAL"
+	invocationPolicyExplicit              = "EXPLICIT"
+
+	invocationMetricAttempts           = "invocation.attempts"
+	invocationMetricSuccess            = "invocation.success"
+	invocationMetricFailure            = "invocation.failure"
+	invocationMetricUnresolvedPrimary  = "invocation.unresolved_primary"
+	invocationMetricFallbackPolicyUsed = "invocation.fallback_policy_used"
+	invocationMetricResultType         = "invocation.result_type"
+
+	invocationPolicyModeAuthored = "authored"
+	invocationPolicyModeFallback = "fallback"
+)
+
+func (fs *FactoryService) logInvocationTerminalResult(
+	sessionID string,
+	input sessionInvocationWaitInput,
+	result apisurface.FactoryInvocationResult,
+) {
+	failureClass := "runtime_failure"
+	switch result.Status {
+	case factoryapi.InvocationTerminalStatusTimedOut:
+		failureClass = "timeout"
+	case factoryapi.InvocationTerminalStatusCanceled:
+		failureClass = "cancellation"
+	case factoryapi.InvocationTerminalStatusFailed:
+		if strings.TrimSpace(result.ErrorCode) == string(invocations.PrimaryResultErrorCodeUnresolved) {
+			failureClass = "unresolved_primary"
+		}
+	}
+	fs.logger.Warn(
+		"factory session invocation failed",
+		invocationLogFields(
+			sessionID,
+			input.InputSource,
+			input.InvocationReturn,
+			zap.String("request_id", input.RequestID),
+			zap.String("trace_id", input.TraceID),
+			zap.String("status", string(result.Status)),
+			zap.String("error_code", result.ErrorCode),
+			zap.String("failure_class", failureClass),
+		)...,
+	)
+}
+
+func (fs *FactoryService) logInvocationFailure(
+	sessionID string,
+	source invocations.InputSourceLabel,
+	cfg *interfaces.InvocationReturnConfig,
+	labels map[string]string,
+	failureClass string,
+	err error,
+) {
+	fs.recordInvocationMetric(invocationMetricFailure, labels)
+	fs.logger.Warn(
+		"factory session invocation failed",
+		invocationLogFields(
+			sessionID,
+			source,
+			cfg,
+			zap.String("status", string(factoryapi.InvocationTerminalStatusFailed)),
+			zap.String("error_code", string(factoryapi.INVOCATIONRUNTIMEFAILURE)),
+			zap.String("failure_class", failureClass),
+			zap.Error(err),
+		)...,
+	)
+}
+
+func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]string) {
+	if fs == nil || fs.cfg == nil || fs.cfg.InvocationMetricsRecorder == nil {
+		return
+	}
+	fs.cfg.InvocationMetricsRecorder.RecordInvocationMetric(InvocationMetric{
+		Name:   name,
+		Labels: cloneMetricLabels(labels),
+	})
+}
+
+func invocationLogFields(
+	sessionID string,
+	source invocations.InputSourceLabel,
+	cfg *interfaces.InvocationReturnConfig,
+	extra ...zap.Field,
+) []zap.Field {
+	fields := []zap.Field{
+		zap.String("session_id", sessionID),
+		zap.String("input_source", string(source)),
+		zap.String("invocation_return_policy", invocationPolicyName(cfg)),
+		zap.String("invocation_return_policy_mode", policyModeForInvocation(cfg)),
+		zap.String("policy_resolution_path", invocationPolicyResolutionPath(cfg)),
+	}
+	return append(fields, extra...)
+}
+
+func inputMetricLabels(source invocations.InputSourceLabel) map[string]string {
+	return map[string]string{"input_source": string(source)}
+}
+
+func mergeMetricLabels(parts ...map[string]string) map[string]string {
+	merged := map[string]string{}
+	for _, part := range parts {
+		for key, value := range part {
+			merged[key] = value
+		}
+	}
+	return merged
+}
+
+func cloneMetricLabels(labels map[string]string) map[string]string {
+	if len(labels) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(labels))
+	for key, value := range labels {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func invocationPolicyName(cfg *interfaces.InvocationReturnConfig) string {
+	policy := strings.TrimSpace(invocationPolicyFromConfig(cfg))
+	if policy == "" {
+		return invocationPolicySubmittedWorkTerminal
+	}
+	return policy
+}
+
+func policyModeForInvocation(cfg *interfaces.InvocationReturnConfig) string {
+	if cfg == nil || strings.TrimSpace(cfg.Policy) == "" {
+		return invocationPolicyModeFallback
+	}
+	return invocationPolicyModeAuthored
+}
+
+func invocationPolicyResolutionPath(cfg *interfaces.InvocationReturnConfig) string {
+	if invocationPolicyName(cfg) == invocationPolicyExplicit {
+		return "explicit_scoped_terminal_match"
+	}
+	return "submitted_work_terminal"
+}
+
+func invocationPolicyFromConfig(cfg *interfaces.InvocationReturnConfig) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Policy
+}
+
+func primaryResultMetricType(parts []interfaces.WorkContentPart) string {
+	if len(parts) == 0 {
+		return "empty"
+	}
+	types := make(map[string]struct{}, len(parts))
+	for _, part := range parts {
+		partType := strings.TrimSpace(string(part.Type.Normalized()))
+		if partType == "" {
+			partType = "unknown"
+		}
+		types[partType] = struct{}{}
+	}
+	if len(types) == 1 {
+		for partType := range types {
+			return partType
+		}
+	}
+	names := make([]string, 0, len(types))
+	for partType := range types {
+		names = append(names, partType)
+	}
+	sort.Strings(names)
+	return "mixed:" + strings.Join(names, "+")
 }
 
 func (s *runtimeModelService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {

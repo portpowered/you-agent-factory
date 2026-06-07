@@ -7,25 +7,19 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"go.uber.org/zap"
 )
 
@@ -279,55 +273,6 @@ func (fs *FactoryService) SubmitWorkRequestForSession(ctx context.Context, sessi
 	return fs.requireCoordinator().SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) InvokeFactorySession(
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.InvocationRequest,
-) (apisurface.FactoryInvocationResult, error) {
-	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
-	if err != nil {
-		return apisurface.FactoryInvocationResult{}, err
-	}
-	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
-		return apisurface.FactoryInvocationResult{}, fmt.Errorf("factory session runtime config is unavailable")
-	}
-
-	resolved, err := resolveSessionInvocationInput(request)
-	if err != nil {
-		return apisurface.FactoryInvocationResult{}, err
-	}
-
-	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(runtimeCfg.FactoryConfig())
-	if err != nil {
-		return apisurface.FactoryInvocationResult{}, fmt.Errorf("resolve invocation work type: %w", err)
-	}
-
-	requestID := strings.TrimSpace(stringValue(request.RequestId))
-	submitRequest := interfaces.SubmitRequest{
-		RequestID:  requestID,
-		WorkTypeID: workTypeName,
-		Content:    resolved.Content,
-	}
-	submitResult, err := fs.SubmitWorkRequestForSession(
-		ctx,
-		sessionID,
-		factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitRequest}),
-	)
-	if err != nil {
-		return apisurface.FactoryInvocationResult{}, err
-	}
-	return fs.waitForSessionInvocationResult(
-		ctx,
-		sessionID,
-		sessionInvocationWaitInput{
-			RequestID:        submitResult.RequestID,
-			TraceID:          submitResult.TraceID,
-			InvocationReturn: runtimeCfg.FactoryConfig().InvocationReturn,
-			TimeoutMillis:    request.TimeoutMillis,
-		},
-	)
-}
-
 func (c *runtimeFactoryCoordinator) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	fs := c.service
 	activeFactory, err := fs.sessionFactory(sessionID)
@@ -339,164 +284,6 @@ func (c *runtimeFactoryCoordinator) SubmitWorkRequestForSession(ctx context.Cont
 
 func (fs *FactoryService) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
 	return fs.requireCoordinator().MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
-}
-
-type sessionInvocationWaitInput struct {
-	RequestID        string
-	TraceID          string
-	InvocationReturn *interfaces.InvocationReturnConfig
-	TimeoutMillis    *int64
-}
-
-func resolveSessionInvocationInput(request factoryapi.InvocationRequest) (invocations.ResolvedInput, error) {
-	if request.SourceKind != factoryapi.InvocationInputSourceKindText {
-		return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
-			Message: "sourceKind must be text",
-		}
-	}
-
-	content := workcontent.PartsFromGenerated(&request.Content)
-	if len(content) == 0 {
-		return invocations.ResolvedInput{}, &invocations.InputError{
-			Code:    invocations.InputErrorCodeEmpty,
-			Message: "invocation input is empty",
-		}
-	}
-
-	textParts := make([]string, 0, len(content))
-	for _, part := range content {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
-			return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
-				Message: "content must contain only text parts when sourceKind is text",
-			}
-		}
-		textParts = append(textParts, part.Text)
-	}
-
-	text := strings.Join(textParts, "\n")
-	if strings.TrimSpace(text) == "" {
-		return invocations.ResolvedInput{}, &invocations.InputError{
-			Code:    invocations.InputErrorCodeEmpty,
-			Message: "invocation input is empty",
-		}
-	}
-	return invocations.ResolveTextInput(invocations.TextInputSources{
-		PositionalText: &text,
-	})
-}
-
-func (fs *FactoryService) waitForSessionInvocationResult(
-	ctx context.Context,
-	sessionID string,
-	input sessionInvocationWaitInput,
-) (apisurface.FactoryInvocationResult, error) {
-	waitCtx := ctx
-	cancel := func() {}
-	if input.TimeoutMillis != nil && *input.TimeoutMillis > 0 {
-		waitCtx, cancel = context.WithTimeout(ctx, time.Duration(*input.TimeoutMillis)*time.Millisecond)
-	}
-	defer cancel()
-
-	result := apisurface.FactoryInvocationResult{
-		RequestID: input.RequestID,
-		TraceID:   input.TraceID,
-	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		snapshot, err := fs.GetEngineStateSnapshotForSession(waitCtx, sessionID)
-		if err != nil {
-			if statusResult, ok := invocationContextResult(result, err); ok {
-				return statusResult, nil
-			}
-			return apisurface.FactoryInvocationResult{}, err
-		}
-
-		worldState, err := fs.sessionInvocationWorldState(waitCtx, sessionID, snapshot.TickCount)
-		if err != nil {
-			if statusResult, ok := invocationContextResult(result, err); ok {
-				return statusResult, nil
-			}
-			return apisurface.FactoryInvocationResult{}, err
-		}
-
-		selection, selectionErr := invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
-			RequestID:        input.RequestID,
-			InvocationReturn: input.InvocationReturn,
-			WorldState:       worldState,
-		})
-		if selectionErr == nil {
-			result.Status = factoryapi.InvocationTerminalStatusCompleted
-			result.PrimaryResult = selection.PrimaryResult
-			return result, nil
-		}
-
-		primaryErr, ok := selectionErr.(*invocations.PrimaryResultError)
-		if !ok {
-			return apisurface.FactoryInvocationResult{}, selectionErr
-		}
-
-		if _, exists := worldState.WorkRequestsByID[input.RequestID]; exists && !snapshotHasActiveWork(snapshot) {
-			result.Status = factoryapi.InvocationTerminalStatusFailed
-			result.ErrorCode = string(primaryErr.Code)
-			result.Message = primaryErr.Message
-			return result, nil
-		}
-
-		select {
-		case <-waitCtx.Done():
-			return invocationContextTerminalResult(result, waitCtx.Err()), nil
-		case <-ticker.C:
-		}
-	}
-}
-
-func (fs *FactoryService) sessionInvocationWorldState(
-	ctx context.Context,
-	sessionID string,
-	selectedTick int,
-) (interfaces.FactoryWorldState, error) {
-	activeFactory, err := fs.sessionFactory(sessionID)
-	if err != nil {
-		return interfaces.FactoryWorldState{}, err
-	}
-	events, err := activeFactory.GetFactoryEvents(ctx)
-	if err != nil {
-		return interfaces.FactoryWorldState{}, err
-	}
-	return projections.ReconstructFactoryWorldState(events, selectedTick)
-}
-
-func invocationContextResult(
-	result apisurface.FactoryInvocationResult,
-	err error,
-) (apisurface.FactoryInvocationResult, bool) {
-	if err == nil {
-		return apisurface.FactoryInvocationResult{}, false
-	}
-	return invocationContextTerminalResult(result, err), errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
-}
-
-func invocationContextTerminalResult(
-	result apisurface.FactoryInvocationResult,
-	err error,
-) apisurface.FactoryInvocationResult {
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		result.Status = factoryapi.InvocationTerminalStatusTimedOut
-		result.ErrorCode = string(factoryapi.INVOCATIONTIMEDOUT)
-		result.Message = "invocation timed out while waiting for primary result"
-	case errors.Is(err, context.Canceled):
-		result.Status = factoryapi.InvocationTerminalStatusCanceled
-		result.ErrorCode = string(factoryapi.INVOCATIONCANCELED)
-		result.Message = "invocation was canceled while waiting for primary result"
-	default:
-		result.Status = factoryapi.InvocationTerminalStatusFailed
-		result.ErrorCode = string(factoryapi.INVOCATIONRUNTIMEFAILURE)
-		result.Message = strings.TrimSpace(err.Error())
-	}
-	return result
 }
 
 func (c *runtimeFactoryCoordinator) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {

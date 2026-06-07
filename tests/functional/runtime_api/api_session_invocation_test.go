@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -15,13 +16,18 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
+	core, observedLogs := observer.New(zap.InfoLevel)
+	recorder := &capturingInvocationMetricsRecorder{}
 	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+		cfg.Logger = zap.New(core)
+		cfg.InvocationMetricsRecorder = recorder
 	})
 
 	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
@@ -38,6 +44,41 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	if part.Text != "invoke this" {
 		t.Fatalf("primaryResult text = %q, want %q", part.Text, "invoke this")
 	}
+
+	submitted := observedLogs.FilterMessage("factory session invocation submitted").All()
+	if len(submitted) != 1 {
+		t.Fatalf("submitted invocation log count = %d, want 1", len(submitted))
+	}
+	submittedFields := submitted[0].ContextMap()
+	if got := submittedFields["input_source"]; got != "positional_text" {
+		t.Fatalf("submitted input_source = %#v, want positional_text", got)
+	}
+	if got := submittedFields["invocation_return_policy_mode"]; got != "fallback" {
+		t.Fatalf("submitted invocation_return_policy_mode = %#v, want fallback", got)
+	}
+	if got := submittedFields["policy_resolution_path"]; got != "submitted_work_terminal" {
+		t.Fatalf("submitted policy_resolution_path = %#v, want submitted_work_terminal", got)
+	}
+
+	completed := observedLogs.FilterMessage("factory session invocation completed").All()
+	if len(completed) != 1 {
+		t.Fatalf("completed invocation log count = %d, want 1", len(completed))
+	}
+	completedFields := completed[0].ContextMap()
+	if got := completedFields["status"]; got != "COMPLETED" {
+		t.Fatalf("completed status = %#v, want COMPLETED", got)
+	}
+	if got := completedFields["result_type"]; got != "text" {
+		t.Fatalf("completed result_type = %#v, want text", got)
+	}
+	if _, ok := completedFields["resolved_work_id"]; !ok {
+		t.Fatal("expected resolved_work_id field in completed invocation log")
+	}
+
+	recorder.assertContainsMetric(t, "invocation.attempts", map[string]string{"input_source": "positional_text"})
+	recorder.assertContainsMetric(t, "invocation.fallback_policy_used", map[string]string{"input_source": "positional_text"})
+	recorder.assertContainsMetric(t, "invocation.success", map[string]string{"input_source": "positional_text"})
+	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "positional_text", "result_type": "text"})
 }
 
 func TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus(t *testing.T) {
@@ -232,3 +273,39 @@ func postInvocation(t *testing.T, serverURL string, request factoryapi.Invocatio
 }
 
 var _ workers.CommandRunner = (*blockingInvocationRunner)(nil)
+
+type capturingInvocationMetricsRecorder struct {
+	mu      sync.Mutex
+	metrics []service.InvocationMetric
+}
+
+func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric service.InvocationMetric) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.metrics = append(r.metrics, metric)
+}
+
+func (r *capturingInvocationMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
+	t.Helper()
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, metric := range r.metrics {
+		if metric.Name != name {
+			continue
+		}
+		if metricLabelsContain(metric.Labels, labels) {
+			return
+		}
+	}
+	t.Fatalf("metric %q with labels %#v not found in %#v", name, labels, r.metrics)
+}
+
+func metricLabelsContain(got, want map[string]string) bool {
+	for key, value := range want {
+		if got[key] != value {
+			return false
+		}
+	}
+	return true
+}

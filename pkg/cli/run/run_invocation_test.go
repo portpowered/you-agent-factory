@@ -10,6 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type stubInvocationService struct {
@@ -83,6 +85,41 @@ func TestResolveFactoryInvocationRequest_RejectsConflictingSources(t *testing.T)
 	if !strings.Contains(err.Error(), "INVOCATION_INPUT_SOURCE_CONFLICT") {
 		t.Fatalf("error = %q, want stable conflict code", err.Error())
 	}
+}
+
+func TestResolveFactoryInvocationRequest_ConflictLogsAndCountsSourceConflict(t *testing.T) {
+	text := "from args"
+	core, observedLogs := observer.New(zap.InfoLevel)
+	recorder := &capturingInvocationMetricsRecorder{}
+
+	_, _, err := resolveFactoryInvocationRequest(RunConfig{
+		FactoryConfigPath:         "/tmp/factory.json",
+		InvocationPositionalText:  &text,
+		Stdin:                     strings.NewReader("from stdin"),
+		StdinIsTTY:                func() bool { return false },
+		Logger:                    zap.New(core),
+		InvocationMetricsRecorder: recorder,
+	})
+	if err == nil {
+		t.Fatal("expected conflicting invocation sources to fail")
+	}
+
+	entries := observedLogs.FilterMessage("factory invocation input resolution failed").All()
+	if len(entries) != 1 {
+		t.Fatalf("conflict log count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if got := fields["failure_class"]; got != "source_conflict" {
+		t.Fatalf("failure_class = %#v, want source_conflict", got)
+	}
+	if got := fields["error_code"]; got != "INVOCATION_INPUT_SOURCE_CONFLICT" {
+		t.Fatalf("error_code = %#v, want INVOCATION_INPUT_SOURCE_CONFLICT", got)
+	}
+	if _, ok := fields["conflicting_sources"]; !ok {
+		t.Fatal("expected conflicting_sources field in conflict log")
+	}
+
+	recorder.assertContainsMetricNames(t, "invocation.failure", "invocation.source_conflict")
 }
 
 func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
@@ -203,4 +240,29 @@ func extractInvocationText(t *testing.T, request *factoryapi.InvocationRequest) 
 		t.Fatalf("AsWorkTextContentPart: %v", err)
 	}
 	return part.Text
+}
+
+type capturingInvocationMetricsRecorder struct {
+	metrics []service.InvocationMetric
+}
+
+func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric service.InvocationMetric) {
+	r.metrics = append(r.metrics, metric)
+}
+
+func (r *capturingInvocationMetricsRecorder) assertContainsMetricNames(t *testing.T, want ...string) {
+	t.Helper()
+
+	if len(r.metrics) != len(want) {
+		t.Fatalf("metric count = %d, want %d (%#v)", len(r.metrics), len(want), r.metrics)
+	}
+	got := make(map[string]int, len(r.metrics))
+	for _, metric := range r.metrics {
+		got[metric.Name]++
+	}
+	for _, name := range want {
+		if got[name] == 0 {
+			t.Fatalf("metrics = %#v, want to include %q", r.metrics, name)
+		}
+	}
 }
