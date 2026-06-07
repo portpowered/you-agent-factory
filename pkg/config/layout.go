@@ -802,7 +802,58 @@ type NamedFactoryResolutionSource string
 const (
 	NamedFactoryResolutionSourceProjectLocal NamedFactoryResolutionSource = "project-local"
 	NamedFactoryResolutionSourceGlobal       NamedFactoryResolutionSource = "global"
+	NamedFactoryResolutionSourceBuiltin      NamedFactoryResolutionSource = "builtin-materialized"
 )
+
+var builtInNamedFactoryCatalog = map[string][]byte{
+	"@you/tts": []byte(`{
+  "name": "@you/tts",
+  "id": "builtin-tts",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "tts-executor",
+      "type": "MODEL_WORKER",
+      "body": "You are the @you/tts built-in factory worker."
+    }
+  ],
+  "workstations": [
+    {
+      "name": "execute-tts",
+      "type": "MODEL_WORKSTATION",
+      "worker": "tts-executor",
+      "inputs": [
+        {
+          "workType": "task",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "task",
+          "state": "complete"
+        }
+      ],
+      "body": "Convert the requested text into speech for {{ .WorkID }}."
+    }
+  ]
+  }
+`),
+}
 
 // NamedFactoryResolution reports the selected runnable directory and the roots
 // considered during cross-root named-factory resolution.
@@ -854,6 +905,12 @@ func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*Name
 		return namedFactoryResolution(canonicalName, factoryDir, NamedFactoryResolutionSourceGlobal, projectRoot, globalRoot), nil
 	}
 
+	if factoryDir, materialized, err := resolveBuiltInNamedFactory(globalRoot, canonicalName); err != nil {
+		return nil, err
+	} else if materialized {
+		return namedFactoryResolution(canonicalName, factoryDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot), nil
+	}
+
 	return nil, fmt.Errorf(
 		"resolve named factory %q in project root %s or global root %s: %w",
 		canonicalName,
@@ -896,4 +953,31 @@ func namedFactoryResolution(
 		ProjectRoot: projectRoot,
 		GlobalRoot:  globalRoot,
 	}
+}
+
+func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {
+	payload, ok := builtInNamedFactoryCatalog[canonicalName]
+	if !ok {
+		return "", false, nil
+	}
+
+	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
+	if err != nil {
+		return "", false, err
+	}
+	targetDir := filepath.Join(globalRoot, segment)
+	if _, err := os.Stat(targetDir); err == nil {
+		if err := requireFactoryConfig(targetDir); err != nil {
+			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
+		}
+		return targetDir, true, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
+	}
+
+	factoryDir, err := PersistNamedFactory(globalRoot, canonicalName, payload)
+	if err != nil {
+		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err)
+	}
+	return factoryDir, true, nil
 }

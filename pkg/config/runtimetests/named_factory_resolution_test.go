@@ -3,8 +3,12 @@ package runtimetests
 import (
 	"errors"
 	. "github.com/portpowered/infinite-you/pkg/config"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestResolveNamedFactoryAcrossRoots_ReturnsLocalFactory(t *testing.T) {
@@ -90,6 +94,81 @@ func TestResolveNamedFactoryAcrossRoots_ReturnsNotFoundWhenBothRootsMiss(t *test
 	}
 }
 
+func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInIntoGlobalRoot(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/tts")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(builtin): %v", err)
+	}
+
+	wantDir := filepath.Join(globalRoot, "@you%2Ftts")
+	assertNamedFactoryResolution(t, resolution, "@you/tts", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
+	assertBuiltInMaterializedLayout(t, wantDir)
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(materialized builtin): %v", err)
+	}
+	if loaded.FactoryConfig().Project != "builtin-tts" {
+		t.Fatalf("materialized builtin project = %q, want builtin-tts", loaded.FactoryConfig().Project)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_UsesEditedMaterializedBuiltInOnNextLoad(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/tts")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(initial builtin): %v", err)
+	}
+
+	workerPath := filepath.Join(resolution.FactoryDir, interfaces.WorkersDir, "tts-executor", interfaces.FactoryAgentsFileName)
+	editedBody := "You are the customer-edited @you/tts built-in.\n"
+	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(materialized worker body): %v", err)
+	}
+
+	resolvedDir, err := ResolveNamedFactoryDirAcrossRoots(projectRoot, globalRoot, "@you/tts")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryDirAcrossRoots(edited builtin): %v", err)
+	}
+	if resolvedDir != resolution.FactoryDir {
+		t.Fatalf("resolved dir after edit = %q, want %q", resolvedDir, resolution.FactoryDir)
+	}
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(resolvedDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(edited builtin): %v", err)
+	}
+	worker, ok := loaded.Worker("tts-executor")
+	if !ok {
+		t.Fatal("expected materialized builtin worker")
+	}
+	if worker.Body != strings.TrimSpace(editedBody) {
+		t.Fatalf("edited builtin worker body = %q, want %q", worker.Body, strings.TrimSpace(editedBody))
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_ReportsCorruptMaterializedBuiltInTarget(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	corruptDir := filepath.Join(globalRoot, "@you%2Ftts")
+	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(corrupt builtin dir): %v", err)
+	}
+
+	_, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/tts")
+	if err == nil {
+		t.Fatal("expected corrupt materialized builtin to fail")
+	}
+	if got := err.Error(); !containsAll(got, `materialize built-in named factory "@you/tts"`, "existing target invalid", "find factory config") {
+		t.Fatalf("expected corrupt-target resolution error, got %v", err)
+	}
+}
+
 func persistRuntimeNamedFactory(t *testing.T, rootDir, name, project string) string {
 	t.Helper()
 
@@ -137,4 +216,18 @@ func namedFactoryEntryNames(entries []NamedFactoryListEntry) []string {
 		names = append(names, entry.Name)
 	}
 	return names
+}
+
+func assertBuiltInMaterializedLayout(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	for _, path := range []string{
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "tts-executor", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-tts", interfaces.FactoryAgentsFileName),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected built-in materialized path %s: %v", path, err)
+		}
+	}
 }
