@@ -1,6 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { selectComboboxOption } from "../../../testing/select-test-helpers";
 import { DEFAULT_DASHBOARD_LAYOUT } from "../../bento/hooks/dashboardLayoutSchema";
 import { getDashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { InlineAddWidgetCard } from "./inline-add-widget-card";
@@ -27,6 +31,18 @@ function renderControlledCard(
 }
 
 describe("InlineAddWidgetCard content", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
   it("renders discoverable add-widget copy inside a dashboard grid card", () => {
     render(<InlineAddWidgetCard pickerAvailability={pickerAvailability} />);
 
@@ -65,18 +81,22 @@ describe("InlineAddWidgetCard content", () => {
     ).toBeNull();
   });
 
-  it("renders available and unavailable widgets in the selector", () => {
+  it("renders available and unavailable widgets in the selector", async () => {
+    const user = userEvent.setup();
+
     renderControlledCard();
 
     const selector = screen.getByRole("combobox", { name: "Browse widgets" });
 
-    expect(selector).toHaveProperty("value", "work-totals");
+    expect(selector).toHaveTextContent("Work totals");
+    await user.click(selector);
+    const listbox = await screen.findByRole("listbox");
     expect(
-      screen.getByRole("option", { name: "Workflow activity" }),
-    ).toHaveProperty("disabled", false);
+      within(listbox).getByRole("option", { name: "Workflow activity" }),
+    ).not.toHaveAttribute("data-disabled");
     expect(
-      screen.getByRole("option", { name: "Current selection" }),
-    ).toHaveProperty("disabled", true);
+      within(listbox).getByRole("option", { name: "Current selection" }),
+    ).toHaveAttribute("data-disabled");
   });
 
   it("supports keyboard selection and keeps the plus action focusable", async () => {
@@ -89,9 +109,9 @@ describe("InlineAddWidgetCard content", () => {
 
     expect(actionButton.className).toContain("focus-visible:ring-2");
 
-    await user.selectOptions(selector, "terminal-work");
+    await selectComboboxOption(user, selector, "Terminal work");
 
-    expect(selector).toHaveProperty("value", "terminal-work");
+    expect(selector).toHaveTextContent("Terminal work");
     expect(
       screen.getByRole("button", { name: "Add widget: Terminal work" }),
     ).toBeTruthy();
@@ -119,6 +139,18 @@ describe("InlineAddWidgetCard content", () => {
 });
 
 describe("InlineAddWidgetCard interactions", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
   it("reports the selected widget type back to the dashboard seam", () => {
     const onSelectWidget = vi.fn();
 
@@ -129,14 +161,17 @@ describe("InlineAddWidgetCard interactions", () => {
     expect(onSelectWidget).toHaveBeenCalledWith("work-totals");
   });
 
-  it("reports the selected widget type after choosing a different card", () => {
+  it("reports the selected widget type after choosing a different card", async () => {
+    const user = userEvent.setup();
     const onSelectWidget = vi.fn();
 
     renderControlledCard(onSelectWidget);
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Browse widgets" }), {
-      target: { value: "terminal-work" },
-    });
+    await selectComboboxOption(
+      user,
+      screen.getByRole("combobox", { name: "Browse widgets" }),
+      "Terminal work",
+    );
     fireEvent.click(
       screen.getByRole("button", { name: "Add widget: Terminal work" }),
     );
@@ -158,14 +193,11 @@ describe("InlineAddWidgetCard interactions", () => {
     );
 
     const actionButton = screen.getByRole("button", { name: "Add widget" });
+    const selector = screen.getByRole("combobox", { name: "Browse widgets" });
 
-    expect(
-      screen.getByRole("option", { name: "No widgets available" }),
-    ).toBeTruthy();
+    expect(selector).toHaveTextContent("No widgets available");
     expect(screen.queryByText(/Remove a singleton widget/)).toBeNull();
-    expect(
-      screen.getByRole("combobox", { name: "Browse widgets" }),
-    ).toHaveProperty("disabled", true);
+    expect(selector).toBeDisabled();
     expect(actionButton).toHaveProperty("disabled", true);
   });
 });

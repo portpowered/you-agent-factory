@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import "@testing-library/jest-dom/vitest";
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   renderHook,
@@ -8,8 +10,11 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import {
   DashboardSessionTestProvider,
   renderWithDashboardSessionTest,
@@ -21,14 +26,29 @@ import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 import { SubmitWorkWidget } from "./submit-work-widget";
 
+let restoreBrowserShims: (() => void) | undefined;
+let user: ReturnType<typeof userEvent.setup>;
+
+async function selectWorkType(
+  label: string | RegExp = "Work type",
+  optionName = "story",
+) {
+  await selectLabeledComboboxOption(user, label, optionName);
+}
+
 describe("SubmitWorkWidget form behavior", () => {
   beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+    user = userEvent.setup();
     useDashboardSessionStore.setState({
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
   });
 
   afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
     vi.unstubAllGlobals();
   });
 
@@ -163,7 +183,7 @@ describe("SubmitWorkWidget form behavior", () => {
     ).toBe(true);
   });
 
-  it("enables submission only after a configured work type and non-blank request name are present", () => {
+  it("enables submission only after a configured work type and non-blank request name are present", async () => {
     renderSubmitWorkWidget(
       <SubmitWorkWidget
         submitWorkTypes={[
@@ -173,7 +193,7 @@ describe("SubmitWorkWidget form behavior", () => {
       />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+    const workType = screen.getByRole("combobox", {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
@@ -193,7 +213,7 @@ describe("SubmitWorkWidget form behavior", () => {
       ),
     ).toBeNull();
 
-    fireEvent.change(workType, { target: { value: "story" } });
+    await selectWorkType();
     expect(submitButton.disabled).toBe(true);
     expect(screen.getByText("Enter a request name to continue.")).toBeTruthy();
 
@@ -369,12 +389,17 @@ describe("SubmitWorkWidget form behavior", () => {
 
 describe("SubmitWorkWidget file-backed item behavior", () => {
   beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+    user = userEvent.setup();
     useDashboardSessionStore.setState({
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
   });
 
   afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
     vi.unstubAllGlobals();
   });
 
@@ -976,9 +1001,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       />,
     );
 
-    fireEvent.change(screen.getByRole("combobox", { name: "工作类型" }), {
-      target: { value: "story" },
-    });
+    await selectWorkType("工作类型");
     fireEvent.change(screen.getByRole("textbox", { name: "请求名称" }), {
       target: { value: "中文请求" },
     });
@@ -1156,12 +1179,17 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
 
 describe("SubmitWorkWidget submission behavior", () => {
   beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+    user = userEvent.setup();
     useDashboardSessionStore.setState({
       selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
     });
   });
 
   afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
     vi.unstubAllGlobals();
   });
 
@@ -1180,7 +1208,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+    const workType = screen.getByRole("combobox", {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
@@ -1190,7 +1218,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Text item 1",
     });
 
-    fireEvent.change(workType, { target: { value: "story" } });
+    await selectWorkType();
     fireEvent.change(requestName, {
       target: { value: "Driver incident review" },
     });
@@ -1252,7 +1280,7 @@ describe("SubmitWorkWidget submission behavior", () => {
         "Your request was submitted. Trace ID: trace-submit-story.",
       ),
     ).toBeTruthy();
-    expect(workType.value).toBe("story");
+    expect(workType).toHaveTextContent("story");
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
   });
@@ -1267,12 +1295,12 @@ describe("SubmitWorkWidget submission behavior", () => {
       />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+    const workType = screen.getByRole("combobox", {
       name: "Work type",
     });
 
-    fireEvent.change(workType, { target: { value: "story" } });
-    expect(workType.value).toBe("story");
+    await selectWorkType();
+    expect(workType).toHaveTextContent("story");
 
     rerender(
       <QueryClientProvider client={new QueryClient()}>
@@ -1282,11 +1310,9 @@ describe("SubmitWorkWidget submission behavior", () => {
       </QueryClientProvider>,
     );
 
-    expect(
-      screen.getByRole<HTMLSelectElement>("combobox", {
-        name: "Work type",
-      }).value,
-    ).toBe("");
+    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
+      "Select a work type",
+    );
   });
 
   it("shows inline request-name validation and skips the network request when the name is blank", async () => {
@@ -1303,17 +1329,14 @@ describe("SubmitWorkWidget submission behavior", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Work type",
+    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Submit work",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Request name",
     });
-    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
-      name: "Submit work",
-    });
 
-    fireEvent.change(workType, { target: { value: "story" } });
+    await selectWorkType();
     expect(submitButton.disabled).toBe(true);
 
     fireEvent.change(requestName, { target: { value: "   " } });
@@ -1350,9 +1373,6 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const card = screen.getByRole("article", { name: "Submit work" });
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
-      name: "Work type",
-    });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Request name",
     });
@@ -1361,7 +1381,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
 
     expect(defaultTextItem.value).toBe("");
-    fireEvent.change(workType, { target: { value: "story" } });
+    await selectWorkType();
     fireEvent.change(requestName, {
       target: { value: "Header-only request" },
     });
@@ -1412,9 +1432,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       }),
     );
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Work type" }), {
-      target: { value: "story" },
-    });
+    await selectWorkType();
     fireEvent.change(screen.getByRole("textbox", { name: "Request name" }), {
       target: { value: "Ordered text payload" },
     });
@@ -1467,7 +1485,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+    const workType = screen.getByRole("combobox", {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
@@ -1477,7 +1495,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Text item 1",
     });
 
-    fireEvent.change(workType, { target: { value: "story" } });
+    await selectWorkType();
     fireEvent.change(requestName, {
       target: { value: "Retry dashboard request" },
     });
@@ -1487,7 +1505,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
 
     expect(await screen.findByText("work_type_name is required")).toBeTruthy();
-    expect(workType.value).toBe("story");
+    expect(workType).toHaveTextContent("story");
     expect(requestName.value).toBe("Retry dashboard request");
     expect(requestText.value).toBe("Retry the broken submission.");
   });
@@ -1507,12 +1525,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       { sessionID: "session-beta" },
     );
 
-    fireEvent.change(
-      screen.getByRole<HTMLSelectElement>("combobox", {
-        name: "Work type",
-      }),
-      { target: { value: "story" } },
-    );
+    await selectWorkType();
     fireEvent.change(
       screen.getByRole<HTMLInputElement>("textbox", {
         name: "Request name",
@@ -1555,7 +1568,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
     );
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+    const workType = screen.getByRole("combobox", {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
@@ -1565,7 +1578,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Text item 1",
     });
 
-    fireEvent.change(workType, { target: { value: "story" } });
+    await selectWorkType();
     fireEvent.change(requestName, {
       target: { value: "Switch session draft" },
     });
@@ -1578,12 +1591,12 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
 
     await waitFor(() => {
-      expect(workType.value).toBe("");
+      expect(workType).toHaveTextContent("Select a work type");
     });
     expect(requestName.value).toBe("");
     expect(requestText.value).toBe("");
 
-    fireEvent.change(workType, { target: { value: "story" } });
+    await selectWorkType();
     fireEvent.change(requestName, {
       target: { value: "Beta submission" },
     });
@@ -1605,7 +1618,7 @@ describe("SubmitWorkWidget submission behavior", () => {
   it("renders an explained disabled state when no submit work types are configured", () => {
     renderSubmitWorkWidget(<SubmitWorkWidget submitWorkTypes={[]} />);
 
-    const workType = screen.getByRole<HTMLSelectElement>("combobox", {
+    const workType = screen.getByRole("combobox", {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
@@ -1618,7 +1631,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Submit work",
     });
 
-    expect(workType.disabled).toBe(true);
+    expect(workType).toBeDisabled();
     expect(requestName.disabled).toBe(true);
     expect(requestText.disabled).toBe(true);
     expect(submitButton.disabled).toBe(true);

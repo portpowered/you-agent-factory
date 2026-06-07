@@ -1,6 +1,10 @@
+import "@testing-library/jest-dom/vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { act } from "react";
 import { describe, expect, it } from "vitest";
+
+import { selectComboboxOption } from "./testing/select-test-helpers";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import {
   activeWorkLabel,
@@ -132,12 +136,17 @@ describe("App follow-up flows", () => {
         workType,
       } = submitWorkCardControls();
 
-      expect(Array.from(workType.options, (option) => option.value)).toContain(
-        "story",
-      );
       expect(within(submissionItemsList).getAllByRole("listitem")).toHaveLength(
         1,
       );
+      const user = userEvent.setup();
+      await user.click(workType);
+      expect(
+        within(await screen.findByRole("listbox")).getByRole("option", {
+          name: "story",
+        }),
+      ).toBeTruthy();
+      await user.keyboard("{Escape}");
       expect(submitButton.disabled).toBe(true);
       expect(
         submitWorkScope.queryByText(
@@ -145,7 +154,7 @@ describe("App follow-up flows", () => {
         ),
       ).toBeNull();
 
-      fireEvent.change(workType, { target: { value: "story" } });
+      await selectComboboxOption(user, workType, "story");
       fireEvent.change(requestName, {
         target: { value: "Dashboard smoke request" },
       });
@@ -226,7 +235,7 @@ describe("App follow-up flows", () => {
         `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
         `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/work`,
       ]);
-      expect(workType.value).toBe("story");
+      expect(workType).toHaveTextContent("story");
       expect(requestName.value).toBe("Retry dashboard request");
       expect(requestText.value).toBe(
         "Retry the broken submission from the dashboard shell.",
@@ -285,7 +294,11 @@ describe("App follow-up flows", () => {
       );
       fireEvent.click(await screen.findByRole("button", { name: "Image" }));
 
-      fireEvent.change(workType, { target: { value: "story" } });
+      await selectComboboxOption(
+        userEvent.setup(),
+        workType,
+        "story",
+      );
       fireEvent.change(requestName, {
         target: { value: "Dashboard multimodal request" },
       });

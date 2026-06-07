@@ -11,8 +11,8 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  NativeSelect,
 } from "../../../components/ui";
+import { OptionalEnumSelect } from "../../../components/ui/enum-select";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";
 import { SubmitWorkStatusPanel } from "./submit-work-status-panel";
@@ -265,24 +265,22 @@ function SubmitWorkHeaderControls({
         <label className="sr-only" htmlFor={workTypeID}>
           {messages.workTypeLabel}
         </label>
-        <NativeSelect
+        <OptionalEnumSelect
           aria-describedby={
             validationErrors?.workTypeName ? workTypeErrorID : undefined
           }
           aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
           className="min-h-9 py-2 text-xs"
           disabled={controlsDisabled}
+          emptyOptionLabel={messages.selectWorkTypePlaceholder}
           id={workTypeID}
-          onChange={(event) => onWorkTypeNameChange(event.target.value)}
-          value={workTypeName}
-        >
-          <option value="">{messages.selectWorkTypePlaceholder}</option>
-          {submitWorkTypeNames.map((submitWorkTypeName) => (
-            <option key={submitWorkTypeName} value={submitWorkTypeName}>
-              {submitWorkTypeName}
-            </option>
-          ))}
-        </NativeSelect>
+          onValueChange={(value) => onWorkTypeNameChange(value ?? "")}
+          options={submitWorkTypeNames.map((submitWorkTypeName) => ({
+            label: submitWorkTypeName,
+            value: submitWorkTypeName,
+          }))}
+          value={workTypeName || null}
+        />
         {validationErrors?.workTypeName ? (
           <p className="sr-only" id={workTypeErrorID}>
             {validationErrors.workTypeName}

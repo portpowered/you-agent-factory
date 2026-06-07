@@ -1,5 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import "@testing-library/jest-dom/vitest";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { getDashboardChartSemanticStyle } from "../lib/chart-contract";
 import type {
   FailureTrendModel,
@@ -57,7 +62,20 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
 }
 
 describe("dashboard trend cards", () => {
-  it("renders the failure trend card with range changes and cause groups", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("renders the failure trend card with range changes and cause groups", async () => {
+    const user = userEvent.setup();
     const onRangeChange = vi.fn();
     const failureChartStyle = getDashboardChartSemanticStyle("failureTrend");
 
@@ -72,9 +90,7 @@ describe("dashboard trend cards", () => {
     expect(screen.getByRole("heading", { name: "Failure trend" })).toBeTruthy();
     expect(screen.getByText("Work type: story")).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("Time range"), {
-      target: { value: "5m" },
-    });
+    await selectLabeledComboboxOption(user, "Time range", "5m");
 
     const chart = screen.getByRole("img", { name: /Failed work trend/ });
 
@@ -240,7 +256,7 @@ describe("dashboard trend cards", () => {
       .closest("div");
 
     expect(failureScope.getByText("Time range").tagName).toBe("LABEL");
-    expect(failureScope.getByLabelText("Time range").tagName).toBe("SELECT");
+    expect(failureScope.getByLabelText("Time range").tagName).toBe("BUTTON");
     expect(
       requireValue(toolbar, "expected failure trend toolbar").className,
     ).toContain("md:flex-row");

@@ -1,9 +1,9 @@
 import {
   DashboardLabel,
   DashboardText,
-  NativeSelect,
   SurfacePanel,
 } from "../../../components/ui";
+import { EnumSelect } from "../../../components/ui/enum-select";
 import {
   formatDurationMillis,
   formatTraceOutcome,
@@ -93,19 +93,17 @@ export function FailureTrendCard({
           <DashboardLabel as="label" htmlFor={rangeSelectId}>
             {messages.rangeLabel}
           </DashboardLabel>
-          <NativeSelect
+          <EnumSelect
             aria-label={messages.rangeLabel}
             className="rounded-lg border-primary py-2"
             id={rangeSelectId}
-            onChange={(event) => changeRange(event.target.value)}
+            onValueChange={changeRange}
+            options={THROUGHPUT_RANGE_OPTIONS.map((option) => ({
+              label: messages.rangeOptionLabel(option.id, option.id),
+              value: option.id,
+            }))}
             value={rangeID}
-          >
-            {THROUGHPUT_RANGE_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {messages.rangeOptionLabel(option.id, option.id)}
-              </option>
-            ))}
-          </NativeSelect>
+          />
         </div>
       </div>
 

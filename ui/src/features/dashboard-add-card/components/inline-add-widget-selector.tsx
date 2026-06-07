@@ -1,6 +1,6 @@
-import type { ChangeEvent, ReactElement } from "react";
+import type { ReactElement } from "react";
 
-import { NativeSelect } from "../../../components/ui";
+import { EnumSelect } from "../../../components/ui/enum-select";
 import type {
   DashboardWidgetPickerAvailability,
   DashboardWidgetPickerWidgetType,
@@ -18,46 +18,46 @@ export interface InlineAddWidgetSelectorProps {
     DashboardWidgetPickerAvailability
   >;
   disabled: boolean;
-  onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  onValueChange: (value: string) => void;
   options: InlineAddWidgetSelectorOption[];
   unavailableLabel: string;
   value: string;
 }
 
+const INLINE_ADD_WIDGET_SELECTOR_ID = "inline-add-widget-selector";
+
 export function InlineAddWidgetSelector({
   actionLabel,
   availabilityByType,
   disabled,
-  onChange,
+  onValueChange,
   options,
   unavailableLabel,
   value,
 }: InlineAddWidgetSelectorProps): ReactElement {
+  const selectorOptions = disabled
+    ? [
+        {
+          disabled: true,
+          label: unavailableLabel,
+          value: unavailableLabel,
+        },
+      ]
+    : options.map((option) => ({
+        disabled: !availabilityByType.get(option.widgetType)?.enabled,
+        label: option.title,
+        value: option.widgetType,
+      }));
+
   return (
-    <NativeSelect
+    <EnumSelect
       aria-label={actionLabel}
       disabled={disabled}
-      onChange={onChange}
-      value={value}
-    >
-      {disabled ? (
-        <option disabled value="">
-          {unavailableLabel}
-        </option>
-      ) : null}
-      {options.map((option) => {
-        const availability = availabilityByType.get(option.widgetType);
-
-        return (
-          <option
-            disabled={!availability?.enabled}
-            key={option.widgetType}
-            value={option.widgetType}
-          >
-            {option.title}
-          </option>
-        );
-      })}
-    </NativeSelect>
+      id={INLINE_ADD_WIDGET_SELECTOR_ID}
+      onValueChange={onValueChange}
+      options={selectorOptions}
+      placeholder={disabled ? unavailableLabel : undefined}
+      value={disabled ? unavailableLabel : value}
+    />
   );
 }

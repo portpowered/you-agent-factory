@@ -22,6 +22,7 @@ type EnumSelectAriaProps = Pick<
 >;
 
 export interface EnumSelectProps extends EnumSelectAriaProps {
+  className?: string;
   disabled?: boolean;
   id: string;
   onValueChange: (value: string) => void;
@@ -31,6 +32,7 @@ export interface EnumSelectProps extends EnumSelectAriaProps {
 }
 
 export function EnumSelect({
+  className,
   disabled,
   id,
   onValueChange,
@@ -41,7 +43,7 @@ export function EnumSelect({
 }: EnumSelectProps) {
   return (
     <Select disabled={disabled} onValueChange={onValueChange} value={value}>
-      <SelectTrigger id={id} {...aria}>
+      <SelectTrigger className={className} id={id} {...aria}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>
@@ -60,6 +62,7 @@ export function EnumSelect({
 }
 
 export interface OptionalEnumSelectProps extends EnumSelectAriaProps {
+  className?: string;
   disabled?: boolean;
   emptyOptionLabel: string;
   id: string;
@@ -69,6 +72,7 @@ export interface OptionalEnumSelectProps extends EnumSelectAriaProps {
 }
 
 export function OptionalEnumSelect({
+  className,
   disabled,
   emptyOptionLabel,
   id,
@@ -85,7 +89,7 @@ export function OptionalEnumSelect({
       }
       value={value ?? ENUM_SELECT_EMPTY_VALUE}
     >
-      <SelectTrigger id={id} {...aria}>
+      <SelectTrigger className={className} id={id} {...aria}>
         <SelectValue placeholder={emptyOptionLabel} />
       </SelectTrigger>
       <SelectContent>
@@ -107,6 +111,7 @@ export function OptionalEnumSelect({
 }
 
 export interface ResetEnumSelectProps extends EnumSelectAriaProps {
+  className?: string;
   disabled?: boolean;
   id: string;
   onValueChange: (value: string) => void;
@@ -115,6 +120,7 @@ export interface ResetEnumSelectProps extends EnumSelectAriaProps {
 }
 
 export function ResetEnumSelect({
+  className,
   disabled,
   id,
   onValueChange,
@@ -134,7 +140,7 @@ export function ResetEnumSelect({
       }}
       value={undefined}
     >
-      <SelectTrigger id={id} {...aria}>
+      <SelectTrigger className={className} id={id} {...aria}>
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent>

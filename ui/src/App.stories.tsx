@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { expect, userEvent, waitFor, within } from "storybook/test";
+import { expect, screen, userEvent, waitFor, within } from "storybook/test";
 import { App } from "./App";
 import type { ImportFactoryValue } from "./api/session-factory";
 import {
@@ -33,6 +33,7 @@ import {
 } from "./stories/dashboardStorySupport";
 import { defaultFactorySessionSummary } from "./testing/app-shell-session-stream-test-utils";
 import { submitWorkCardQueryContract } from "./testing/submit-work-card-queries";
+import { selectComboboxOption } from "./testing/select-test-helpers";
 
 const editableConfigurationFactoryDefinition =
   buildEditableConfigurationFactoryDefinition();
@@ -1389,12 +1390,10 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     } = await submitWorkCardControls(canvasElement);
     const disabledSubmitStyle = buttonVisibleStyle(submitButton);
 
-    expect(
-      Array.from(
-        (workTypeField as HTMLSelectElement).options,
-        (option) => option.value,
-      ),
-    ).toContain("story");
+    await userEvent.click(workTypeField);
+    await expect(
+      await screen.findByRole("option", { name: "story" }),
+    ).toBeVisible();
     await expect(submitButton).toBeDisabled();
     await userEvent.type(requestNameField, "Dashboard smoke request");
     await expect(submitButton).toBeDisabled();
@@ -1403,7 +1402,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
       "Review the failed dashboard submission smoke.",
     );
     await expect(submitButton).toBeDisabled();
-    await userEvent.selectOptions(workTypeField, "story");
+    await selectComboboxOption(userEvent, workTypeField, "story");
     await expect(submitButton).toBeEnabled();
     await waitFor(() => {
       expect(buttonVisibleStyle(submitButton)).not.toEqual(disabledSubmitStyle);
@@ -1416,7 +1415,7 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     ).toBeVisible();
     await expect(requestNameField).toHaveValue("");
     await expect(requestField).toHaveValue("");
-    await expect(workTypeField).toHaveValue("story");
+    await expect(workTypeField).toHaveTextContent("story");
     await expect(submitButton).toBeDisabled();
     await waitFor(() => {
       expect(buttonVisibleStyle(submitButton)).toEqual(disabledSubmitStyle);
@@ -1456,7 +1455,7 @@ export const DashboardSubmitWorkRetryableFailure = {
     await expect(
       await scope.findByText("work_type_name is required"),
     ).toBeVisible();
-    await expect(workTypeField).toHaveValue("story");
+    await expect(workTypeField).toHaveTextContent("story");
     await expect(requestNameField).toHaveValue(requestName);
     await expect(requestField).toHaveValue(requestText);
   },
