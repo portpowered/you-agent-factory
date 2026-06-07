@@ -220,3 +220,48 @@ func TestUpdateFromFile_CurrentPointerUnchangedWhenReplacingCurrent(t *testing.T
 		t.Fatalf("list output = %q, want current alpha row %q", out.String(), wantRow)
 	}
 }
+
+func TestUpdateFromFile_ScopedCurrentPointerStillResolvesUpdatedFactoryInExplicitDir(t *testing.T) {
+	rootDir := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(rootDir, "@you/tts", saveTestNamedFactoryPayload(t, "tts")); err != nil {
+		t.Fatalf("PersistNamedFactory(scoped): %v", err)
+	}
+	if err := factoryconfig.WriteCurrentFactoryPointer(rootDir, "@you/tts"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(scoped): %v", err)
+	}
+	from := writeFactoryConfigFile(t, rootDir, "tts-updated", saveTestNamedFactoryPayload(t, "tts-v2"))
+
+	if err := UpdateFromFile(UpdateFromFileConfig{
+		Name:   "@you/tts",
+		From:   from,
+		Dir:    rootDir,
+		Output: ioDiscard(t),
+	}); err != nil {
+		t.Fatalf("UpdateFromFile(scoped): %v", err)
+	}
+
+	current, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
+	if err != nil {
+		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
+	}
+	if current != "@you/tts" {
+		t.Fatalf("current = %q, want @you/tts", current)
+	}
+
+	resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(rootDir)
+	if err != nil {
+		t.Fatalf("ResolveCurrentFactoryDir: %v", err)
+	}
+	wantDir := filepath.Join(rootDir, "@you%2Ftts")
+	if resolvedDir != wantDir {
+		t.Fatalf("resolved dir = %q, want %q", resolvedDir, wantDir)
+	}
+
+	data, err := os.ReadFile(filepath.Join(resolvedDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(updated scoped factory config): %v", err)
+	}
+	if !strings.Contains(string(data), "execute-tts-v2") {
+		t.Fatalf("factory config = %q, want updated scoped workstation body", string(data))
+	}
+}
