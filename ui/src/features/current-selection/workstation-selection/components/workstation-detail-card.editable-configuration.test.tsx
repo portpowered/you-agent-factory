@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
+import {
+  semanticWorkflowDashboardSnapshot,
+  workstationKindParityDashboardSnapshot,
+} from "../../../../components/dashboard/test-fixtures";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
 import { buildDetailCardEditableFactoryDocument } from "../../base/components/detail-card-test-helpers";
 import type {
@@ -755,6 +758,38 @@ describe("WorkstationDetailCard editable configuration", () => {
 
     expect(screen.queryByLabelText("Cron schedule")).toBeNull();
     expect(screen.queryByLabelText("Cron trigger at start")).toBeNull();
+  });
+
+  it("renders poller workstation summary annotation and behavior guidance from canonical behavior", () => {
+    const snapshot = workstationKindParityDashboardSnapshot;
+    const selectedNode =
+      snapshot.topology.workstation_nodes_by_id["linear-poller"];
+
+    render(
+      <WorkstationDetailCard
+        activeExecutions={[]}
+        editableConfigurationState={buildReadyEditableConfigurationState({
+          behavior: "POLLER",
+          workerName: "linear-poller",
+        })}
+        now={DETAIL_CARD_NOW}
+        providerSessions={[]}
+        selectedNode={selectedNode}
+      />,
+    );
+
+    const kindSummary = screen.getByRole("img", {
+      name: "Poller workstation",
+    });
+    expect(kindSummary.getAttribute("data-graph-semantic-icon")).toBe("poller");
+    expect(screen.getByText("Poller")).toBeTruthy();
+
+    expandEditableConfiguration();
+    expect(
+      screen.getByText(
+        /Poller workstations supervise a long-lived ingress worker/i,
+      ),
+    ).toBeTruthy();
   });
 
   it("shows cron validation errors and overwrite hints in the editable form", () => {
