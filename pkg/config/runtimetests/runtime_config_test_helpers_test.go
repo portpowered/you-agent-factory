@@ -617,7 +617,7 @@ func namedFactoryPayloadWithPortableLayout(t *testing.T, project string) []byte 
 	}
 	payload["layout"] = portableLayoutFixture(
 		"workstation:execute-"+project,
-		"output:workstation:execute-"+project+"->work-type:task",
+		"workstation-output:workstation:execute-"+project+"->work-state:task:complete",
 	)
 	updated, err := json.Marshal(payload)
 	if err != nil {

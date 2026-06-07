@@ -66,6 +66,9 @@ func (s *Service) saveReplaceCurrentForSession(
 
 		var readbackErr error
 		saved, readbackErr = s.host.GetCurrentFactoryForSession(ctx, sessionID)
+		if readbackErr == nil {
+			saved = withLayoutOutcomes(saved, prepared.LayoutOutcomes)
+		}
 		return readbackErr
 	})
 	if err != nil {
@@ -101,7 +104,7 @@ func (s *Service) prepareEditableFactoryDefinitionSave(
 			return "", factoryapi.Factory{}, err
 		}
 	}
-	sanitized := request
+	sanitized := stripEphemeralFactoryResponseFields(request)
 	sanitized.Version = nil
 	if err := validateEditableFactoryTopology(sanitized, s.workstationLoader()); err != nil {
 		return "", factoryapi.Factory{}, err

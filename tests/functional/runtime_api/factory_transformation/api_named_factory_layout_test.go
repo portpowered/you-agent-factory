@@ -94,7 +94,7 @@ func currentFactorySaveDocumentWithPortableLayout(t *testing.T, name, workType s
 				"locked":   true,
 			}},
 			"edges": []map[string]any{{
-				"id":        "output:workstation:plan-task->work-type:" + workType,
+				"id":        "workstation-output:workstation:plan-task->work-state:" + workType + ":done",
 				"waypoints": []map[string]any{{"x": 200, "y": 300}},
 			}},
 			"groups": []map[string]any{{
@@ -157,7 +157,7 @@ func assertNamedFactoryPortableLayoutResponse(t *testing.T, layout *factoryapi.F
 	if layout.Nodes == nil || len(*layout.Nodes) != 1 || (*layout.Nodes)[0].Id != wantNodeID {
 		t.Fatalf("layout nodes = %#v, want %s", layout.Nodes, wantNodeID)
 	}
-	wantEdgeID := "output:workstation:plan-task->work-type:" + wantWorkType
+	wantEdgeID := "workstation-output:workstation:plan-task->work-state:" + wantWorkType + ":done"
 	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != wantEdgeID {
 		t.Fatalf("layout edges = %#v, want %s", layout.Edges, wantEdgeID)
 	}

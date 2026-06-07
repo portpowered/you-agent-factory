@@ -31,7 +31,7 @@ func assertExportImportPortableLayoutResponse(t *testing.T, layout *factoryapi.F
 	if layout.Nodes == nil || len(*layout.Nodes) != 1 || (*layout.Nodes)[0].Id != "workstation:step-one" {
 		t.Fatalf("%s layout nodes = %#v, want workstation:step-one", contextLabel, layout.Nodes)
 	}
-	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != "output:workstation:step-one->work-type:task" {
+	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != "workstation-output:workstation:step-one->work-state:task:processing" {
 		t.Fatalf("%s layout edges = %#v, want step-one output edge", contextLabel, layout.Edges)
 	}
 	if layout.Viewport == nil || math.Abs(float64(layout.Viewport.Zoom)-0.9) > 1e-6 {

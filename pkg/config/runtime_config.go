@@ -733,7 +733,11 @@ func resolveNamedFactoryPersistPayload(
 	case prepared != nil:
 		return prepared.Config, prepared.Canonical, nil
 	case len(canonicalFactoryJSON) > 0:
-		return normalizeNamedFactoryPayload(segment, canonicalFactoryJSON)
+		prepared, err := PrepareFactoryLayoutPayload(segment, canonicalFactoryJSON)
+		if err != nil {
+			return nil, nil, err
+		}
+		return prepared.Config, prepared.Canonical, nil
 	default:
 		return nil, nil, fmt.Errorf("factory layout payload is required")
 	}

@@ -1442,7 +1442,7 @@ func serviceNamedFactoryPayloadWithPortableLayout(t *testing.T, project string) 
 			"locked":   true,
 		}},
 		"edges": []map[string]any{{
-			"id":        "output:workstation:process->work-type:task",
+			"id":        "workstation-output:workstation:process->work-state:task:complete",
 			"waypoints": []map[string]any{{"x": 180, "y": 220}},
 		}},
 		"groups": []map[string]any{{
@@ -1473,7 +1473,7 @@ func assertServicePortableLayoutResponse(t *testing.T, layout *factoryapi.Factor
 	if layout.Nodes == nil || len(*layout.Nodes) != 1 || (*layout.Nodes)[0].Id != wantNodeID {
 		t.Fatalf("layout nodes = %#v, want %s", layout.Nodes, wantNodeID)
 	}
-	wantEdgeID := "output:workstation:process->work-type:" + wantWorkType
+	wantEdgeID := "workstation-output:workstation:process->work-state:" + wantWorkType + ":complete"
 	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != wantEdgeID {
 		t.Fatalf("layout edges = %#v, want %s", layout.Edges, wantEdgeID)
 	}

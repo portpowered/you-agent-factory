@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -528,20 +529,33 @@ type factorySplitLayoutReplaceHooks struct {
 // PreparedFactoryLayoutPayload holds normalized factory state produced once from
 // submitted JSON for split-layout validation and persist.
 type PreparedFactoryLayoutPayload struct {
-	Config    *interfaces.FactoryConfig
-	Canonical []byte
+	Config         *interfaces.FactoryConfig
+	Canonical      []byte
+	LayoutOutcomes []factoryvalidation.Target
 }
 
 // PrepareFactoryLayoutPayload normalizes factory JSON into expanded config (with
-// inline runtime bodies for split writes) and thin canonical factory.json bytes.
+// inline runtime bodies for split writes), prunes stale layout references for
+// save, and returns thin canonical factory.json bytes.
 func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFactoryLayoutPayload, error) {
-	cfg, canonical, err := normalizeNamedFactoryPayload(segment, payload)
+	cfg, _, err := normalizeNamedFactoryPayload(segment, payload)
 	if err != nil {
 		return nil, err
 	}
+	layoutOutcomes := factoryvalidation.PruneLayout(cfg, interfaces.BuildPendingFactoryGraphTopology(cfg))
+	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("%w: normalize authored factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
+	mapper := NewFactoryConfigMapper()
+	canonical, err := mapper.Flatten(authoredFactoryCfg)
+	if err != nil {
+		return nil, fmt.Errorf("%w: normalize factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
 	return &PreparedFactoryLayoutPayload{
-		Config:    cfg,
-		Canonical: canonical,
+		Config:         cfg,
+		Canonical:      canonical,
+		LayoutOutcomes: layoutOutcomes.Targets,
 	}, nil
 }
 
@@ -701,10 +715,12 @@ func stageFactorySplitLayoutReplace(
 		factoryCfg = prepared.Config
 		canonical = prepared.Canonical
 	case len(payload) > 0:
-		factoryCfg, canonical, err = normalizeNamedFactoryPayload(segment, payload)
+		preparedPayload, err := PrepareFactoryLayoutPayload(segment, payload)
 		if err != nil {
 			return "", func() {}, err
 		}
+		factoryCfg = preparedPayload.Config
+		canonical = preparedPayload.Canonical
 	default:
 		return "", func() {}, fmt.Errorf("factory layout payload is required")
 	}

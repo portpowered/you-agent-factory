@@ -45,6 +45,15 @@ func persistUpsertNamedFactoryPayload(
 	if err != nil {
 		return "", err
 	}
+	return persistUpsertNamedFactoryPrepared(sessionRootDir, request, prepared, replaceExisting)
+}
+
+func persistUpsertNamedFactoryPrepared(
+	sessionRootDir string,
+	request factoryapi.Factory,
+	prepared *configpersist.PreparedFactoryLayoutPayload,
+	replaceExisting bool,
+) (string, error) {
 	if replaceExisting {
 		targetDir, err := resolveNamedFactoryLayoutTargetDir(sessionRootDir, request.Name)
 		if err != nil {

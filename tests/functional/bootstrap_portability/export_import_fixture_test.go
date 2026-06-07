@@ -81,7 +81,7 @@ func withExportImportPortableLayout(t *testing.T, canonicalFactoryJSON []byte) [
 			"locked":   true,
 		}},
 		"edges": []map[string]any{{
-			"id":        "output:workstation:step-one->work-type:task",
+			"id":        "workstation-output:workstation:step-one->work-state:task:processing",
 			"waypoints": []map[string]any{{"x": 180, "y": 220}},
 		}},
 		"groups": []map[string]any{{
