@@ -134,32 +134,38 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutAndReturnsLayoutOutcomes(t *testing.
 	server := startFactoryTransformationServer(t, rootDir)
 	current := getCurrentFactory(t, server.URL())
 
-	body, err := json.Marshal(map[string]any{
+	body, err := json.Marshal(staleLayoutPruningFactorySaveBody(t, current))
+	if err != nil {
+		t.Fatalf("marshal current factory save with stale layout: %v", err)
+	}
+
+	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	assertStaleLayoutPrunedOnDisk(t, rootDir)
+	assertStaleLayoutPruningOutcomes(t, saved)
+
+	reloaded := getCurrentFactory(t, server.URL())
+	if reloaded.LayoutOutcomes != nil {
+		t.Fatalf("reload layoutOutcomes = %#v, want omitted on GET", reloaded.LayoutOutcomes)
+	}
+}
+
+func staleLayoutPruningFactorySaveBody(t *testing.T, current factoryapi.Factory) map[string]any {
+	t.Helper()
+
+	return map[string]any{
 		"name":    "UNDEFINED",
 		"id":      "root-runtime",
 		"version": versionDocument(advancedFactoryVersion(t, current.Version)),
 		"layout": map[string]any{
 			"schemaVersion": 1,
 			"nodes": []map[string]any{{
-				"id": "workstation:plan-task",
-				"position": map[string]any{
-					"x": 144,
-					"y": 288,
-				},
-				"size": map[string]any{
-					"width":  320,
-					"height": 180,
-				},
+				"id":       "workstation:plan-task",
+				"position": map[string]any{"x": 144, "y": 288},
+				"size":     map[string]any{"width": 320, "height": 180},
 			}, {
-				"id": "workstation:removed-node",
-				"position": map[string]any{
-					"x": 10,
-					"y": 20,
-				},
-				"size": map[string]any{
-					"width":  100,
-					"height": 80,
-				},
+				"id":       "workstation:removed-node",
+				"position": map[string]any{"x": 10, "y": 20},
+				"size":     map[string]any{"width": 100, "height": 80},
 			}},
 			"edges": []map[string]any{{
 				"id": "workstation-output:workstation:plan-task->work-state:story:done",
@@ -169,19 +175,13 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutAndReturnsLayoutOutcomes(t *testing.
 			"groups": []map[string]any{{
 				"id":      "group-1",
 				"nodeIds": []string{"workstation:plan-task", "workstation:removed-node"},
-				"bounds": map[string]any{
-					"x": 0, "y": 0, "width": 100, "height": 80,
-				},
+				"bounds":  map[string]any{"x": 0, "y": 0, "width": 100, "height": 80},
 			}, {
 				"id":      "group-empty",
 				"nodeIds": []string{"workstation:removed-node"},
-				"bounds": map[string]any{
-					"x": 0, "y": 0, "width": 50, "height": 50,
-				},
+				"bounds":  map[string]any{"x": 0, "y": 0, "width": 50, "height": 50},
 			}},
-			"viewport": map[string]any{
-				"x": 0, "y": 0, "zoom": 1,
-			},
+			"viewport": map[string]any{"x": 0, "y": 0, "zoom": 1},
 		},
 		"workTypes": []map[string]any{{
 			"name": "story",
@@ -208,12 +208,11 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutAndReturnsLayoutOutcomes(t *testing.
 			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":  []map[string]string{{"workType": "story", "state": "done"}},
 		}},
-	})
-	if err != nil {
-		t.Fatalf("marshal current factory save with stale layout: %v", err)
 	}
+}
 
-	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+func assertStaleLayoutPrunedOnDisk(t *testing.T, rootDir string) {
+	t.Helper()
 
 	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
 	if err != nil {
@@ -235,6 +234,14 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutAndReturnsLayoutOutcomes(t *testing.
 	if !ok || node["id"] != "workstation:plan-task" {
 		t.Fatalf("persisted layout node = %#v, want workstation:plan-task", nodes[0])
 	}
+	groups, ok := layout["groups"].([]any)
+	if !ok || len(groups) != 2 {
+		t.Fatalf("persisted layout groups = %#v, want empty group preserved", layout["groups"])
+	}
+}
+
+func assertStaleLayoutPruningOutcomes(t *testing.T, saved factoryapi.Factory) {
+	t.Helper()
 
 	if saved.LayoutOutcomes == nil || len(*saved.LayoutOutcomes) == 0 {
 		t.Fatal("expected layoutOutcomes on save response")
@@ -243,16 +250,6 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutAndReturnsLayoutOutcomes(t *testing.
 		!hasValidationTargetCode(*saved.LayoutOutcomes, factoryvalidation.CodeLayoutUnknownEdgeReference) ||
 		!hasValidationTargetCode(*saved.LayoutOutcomes, factoryvalidation.CodeLayoutUnknownGroupMemberReference) {
 		t.Fatalf("layoutOutcomes = %#v, want stale layout pruning targets", *saved.LayoutOutcomes)
-	}
-
-	groups, ok := layout["groups"].([]any)
-	if !ok || len(groups) != 2 {
-		t.Fatalf("persisted layout groups = %#v, want empty group preserved", layout["groups"])
-	}
-
-	reloaded := getCurrentFactory(t, server.URL())
-	if reloaded.LayoutOutcomes != nil {
-		t.Fatalf("reload layoutOutcomes = %#v, want omitted on GET", reloaded.LayoutOutcomes)
 	}
 }
 
