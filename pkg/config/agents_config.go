@@ -841,9 +841,30 @@ const (
 	MockWorkerRunTypeReject MockWorkerRunType = "reject"
 )
 
+// MockWorkerUnmatchedDispatchPolicy controls how mock-worker mode handles
+// dispatches that do not match any mockWorkers entry.
+type MockWorkerUnmatchedDispatchPolicy string
+
+const (
+	// MockWorkerUnmatchedDispatchPolicyAccept returns the default synthetic
+	// accepted mock result for unmatched dispatches. This is the zero-value
+	// behavior when unmatchedDispatchPolicy is omitted.
+	MockWorkerUnmatchedDispatchPolicyAccept MockWorkerUnmatchedDispatchPolicy = "accept"
+	// MockWorkerUnmatchedDispatchPolicyPassthrough executes unmatched
+	// dispatches through the normal worker runner/provider path.
+	MockWorkerUnmatchedDispatchPolicyPassthrough MockWorkerUnmatchedDispatchPolicy = "passthrough"
+)
+
+// PassthroughUnmatched reports whether unmatched dispatches should execute
+// through the real worker path instead of returning the default accept result.
+func (p MockWorkerUnmatchedDispatchPolicy) PassthroughUnmatched() bool {
+	return p == MockWorkerUnmatchedDispatchPolicyPassthrough
+}
+
 // MockWorkersConfig is the JSON contract for agent-factory mock-worker runs.
 type MockWorkersConfig struct {
-	MockWorkers []MockWorkerConfig `json:"mockWorkers"`
+	MockWorkers              []MockWorkerConfig                `json:"mockWorkers"`
+	UnmatchedDispatchPolicy  MockWorkerUnmatchedDispatchPolicy `json:"unmatchedDispatchPolicy,omitempty"`
 }
 
 // MockWorkerConfig selects a worker dispatch and declares the deterministic
@@ -939,6 +960,16 @@ func ParseMockWorkersConfig(data []byte) (*MockWorkersConfig, error) {
 func (c *MockWorkersConfig) Validate() error {
 	if c == nil {
 		return fmt.Errorf("mock workers config is required")
+	}
+	switch c.UnmatchedDispatchPolicy {
+	case "", MockWorkerUnmatchedDispatchPolicyAccept, MockWorkerUnmatchedDispatchPolicyPassthrough:
+	default:
+		return fmt.Errorf(
+			`unmatchedDispatchPolicy must be one of %q or %q; got %q`,
+			MockWorkerUnmatchedDispatchPolicyAccept,
+			MockWorkerUnmatchedDispatchPolicyPassthrough,
+			c.UnmatchedDispatchPolicy,
+		)
 	}
 	for i := range c.MockWorkers {
 		if err := c.MockWorkers[i].Validate(); err != nil {

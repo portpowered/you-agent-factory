@@ -71,6 +71,40 @@ func TestParseMockWorkersConfig_ValidConfigPreservesSelectorsAndRunTypeOptions(t
 	assertMockWorkerRejectEntry(t, cfg.MockWorkers[2])
 }
 
+func TestParseMockWorkersConfig_AcceptsUnmatchedDispatchPolicyValues(t *testing.T) {
+	for _, policy := range []string{"", "accept", "passthrough"} {
+		t.Run(policy, func(t *testing.T) {
+			payload := `{"mockWorkers":[]`
+			if policy != "" {
+				payload += `,"unmatchedDispatchPolicy":"` + policy + `"`
+			}
+			payload += `}`
+
+			cfg, err := ParseMockWorkersConfig([]byte(payload))
+			if err != nil {
+				t.Fatalf("ParseMockWorkersConfig returned error: %v", err)
+			}
+			want := MockWorkerUnmatchedDispatchPolicy(policy)
+			if cfg.UnmatchedDispatchPolicy != want {
+				t.Fatalf("unmatchedDispatchPolicy = %q, want %q", cfg.UnmatchedDispatchPolicy, want)
+			}
+		})
+	}
+}
+
+func TestParseMockWorkersConfig_RejectsUnknownUnmatchedDispatchPolicy(t *testing.T) {
+	_, err := ParseMockWorkersConfig([]byte(`{
+		"mockWorkers": [],
+		"unmatchedDispatchPolicy": "maybe"
+	}`))
+	if err == nil {
+		t.Fatal("expected unknown unmatchedDispatchPolicy to fail validation")
+	}
+	if !strings.Contains(err.Error(), `unmatchedDispatchPolicy must be one of "accept" or "passthrough"; got "maybe"`) {
+		t.Fatalf("error = %q, want actionable unmatchedDispatchPolicy message", err)
+	}
+}
+
 func TestParseMockWorkersConfig_RejectsUnknownRunTypeWithActionableError(t *testing.T) {
 	_, err := ParseMockWorkersConfig([]byte(`{
 		"mockWorkers": [
