@@ -1,11 +1,13 @@
-# you-agent-factory
+# infinite-you
 
 [![CI](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/portpowered/infinite-you/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/portpowered/infinite-you?display_name=tag)](https://github.com/portpowered/infinite-you/releases)
 [![Go Version](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE.md)
 
-you-agent-factory is an AI agent factory. It orchestrates AI agents for you so you can do more work without doing everything manually.
+**infinite-you** is an AI agent factory for scheduling and orchestrating concurrent AI work—the `you` CLI and dashboard let you run many agents at once instead of babysitting each task manually.
+
+![infinite-you dashboard showing concurrent agent workstations, live work routing, and factory flow status](./docs/internal/resources/dashboard.png)
 
 ## Why?
 
