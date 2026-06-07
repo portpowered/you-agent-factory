@@ -1,5 +1,7 @@
 import { createContext, type ReactNode, useContext } from "react";
 
+import { Button } from "../components/ui/button";
+
 const MockDialogContext = createContext<{
   onOpenChange?: (open: boolean) => void;
 }>({});
@@ -38,7 +40,7 @@ export function DialogContent({
   return (
     <div aria-labelledby="mock-dashboard-dialog-title" role="dialog">
       {children}
-      <button
+      <Button
         aria-label={closeLabel}
         disabled={closeDisabled}
         onClick={() => {
@@ -46,10 +48,12 @@ export function DialogContent({
             onOpenChange?.(false);
           }
         }}
+        size="icon"
+        tone="ghost"
         type="button"
       >
         {closeLabel}
-      </button>
+      </Button>
     </div>
   );
 }
