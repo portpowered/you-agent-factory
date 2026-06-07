@@ -11,7 +11,7 @@ import (
 func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *testing.T) {
 	output := `[{"type":"AUDIO","file":"/tmp/speech.wav","contentType":"audio/wav","slot":"audio"}]`
 
-	got, err := MetadataContentFromWorkerOutput(output, "trace-tts", "~default")
+	got, err := MetadataContentFromWorkerOutput(output, "trace-tts", "~default", "")
 	if err != nil {
 		t.Fatalf("MetadataContentFromWorkerOutput: %v", err)
 	}

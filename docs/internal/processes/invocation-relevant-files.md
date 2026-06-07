@@ -47,6 +47,12 @@ primary-result behavior.
   registered from `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when MODEL_INVOKE work completes on the `execute-tts` workstation.
+  `metadata.go` derives the `backend` metadata field from the loaded on-disk
+  worker model so customer edits to materialized `factory.json` affect the next
+  invocation result.
+- `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
+  customer guide for `@you/tts` invocation, materialization, metadata result,
+  edit-after-materialize behavior, and raw-artifact streaming scope.
 - `pkg/packagedfactories/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
   error codes plus packaged-factory metric names.

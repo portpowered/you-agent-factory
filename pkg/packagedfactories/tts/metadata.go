@@ -43,9 +43,23 @@ func ShouldFormatInvocationMetadata(workstation *interfaces.FactoryWorkstationCo
 		strings.EqualFold(strings.TrimSpace(workstation.Operation), "TTS")
 }
 
+// BackendLabelFromWorker derives the packaged TTS backend identifier from the
+// loaded on-disk worker configuration. An empty or nil worker falls back to the
+// packaged factory defaults.
+func BackendLabelFromWorker(worker *interfaces.WorkerConfig) string {
+	model := DefaultModelName
+	if worker != nil {
+		if trimmed := strings.TrimSpace(worker.Model); trimmed != "" {
+			model = trimmed
+		}
+	}
+	return model + "/" + DefaultBackendName
+}
+
 // MetadataContentFromWorkerOutput parses a MODEL_INVOKE TTS worker output payload
 // and returns canonical text work content for invocation primary-result selection.
-func MetadataContentFromWorkerOutput(output, traceID, sessionID string) ([]interfaces.WorkContentPart, error) {
+// When backendLabel is empty, the packaged factory default backend label is used.
+func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel string) ([]interfaces.WorkContentPart, error) {
 	audioParts, err := parseAudioWorkContentOutput(output)
 	if err != nil {
 		return nil, err
@@ -68,10 +82,14 @@ func MetadataContentFromWorkerOutput(output, traceID, sessionID string) ([]inter
 		mediaType = defaultAudioContentType
 	}
 
+	if strings.TrimSpace(backendLabel) == "" {
+		backendLabel = defaultBackendLabel()
+	}
+
 	metadata := InvocationMetadata{
 		ArtifactPath: artifactPath,
 		MediaType:    mediaType,
-		Backend:      defaultBackendLabel(),
+		Backend:      backendLabel,
 		TraceID:      strings.TrimSpace(traceID),
 		SessionID:    strings.TrimSpace(sessionID),
 	}

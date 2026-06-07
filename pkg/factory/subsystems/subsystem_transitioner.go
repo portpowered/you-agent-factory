@@ -56,15 +56,16 @@ type generatedBatchWork struct {
 }
 
 type mutationCalculationInput struct {
-	transition  *petri.Transition
-	workstation *interfaces.FactoryWorkstationConfig
-	arcs        []petri.Arc
-	consumed    []interfaces.Token
-	result      resolvedWorkResult
-	now         time.Time
-	history     interfaces.TokenHistory
-	inputColors []interfaces.TokenColor
-	transformer *token_transformer.Transformer
+	transition    *petri.Transition
+	workstation   *interfaces.FactoryWorkstationConfig
+	arcs          []petri.Arc
+	consumed      []interfaces.Token
+	result        resolvedWorkResult
+	now           time.Time
+	history       interfaces.TokenHistory
+	inputColors   []interfaces.TokenColor
+	transformer   *token_transformer.Transformer
+	runtimeConfig interfaces.RuntimeWorkstationLookup
 }
 
 // TransitionerOption configures a TransitionerSubsystem.
@@ -213,15 +214,16 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 	}
 
 	mutations, err := calculateMutations(mutationCalculationInput{
-		transition:  currentTransition,
-		workstation: workstationDef,
-		arcs:        arcs,
-		consumed:    consumedTokens,
-		result:      resolved,
-		now:         now,
-		history:     history,
-		inputColors: inputColors,
-		transformer: t.transformer,
+		transition:    currentTransition,
+		workstation:   workstationDef,
+		arcs:          arcs,
+		consumed:      consumedTokens,
+		result:        resolved,
+		now:           now,
+		history:       history,
+		inputColors:   inputColors,
+		transformer:   t.transformer,
+		runtimeConfig: t.runtimeConfig,
 	})
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
@@ -689,7 +691,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			if err != nil {
 				return nil, err
 			}
-			if err := applyPackagedTTSInvocationMetadata(newToken, in.workstation, in.result.output, in.inputColors); err != nil {
+			if err := applyPackagedTTSInvocationMetadata(newToken, in.workstation, in.result.output, in.inputColors, in.runtimeConfig); err != nil {
 				return nil, err
 			}
 			if newToken.Color.DataType != interfaces.DataTypeResource {
@@ -893,6 +895,7 @@ func applyPackagedTTSInvocationMetadata(
 	workstation *interfaces.FactoryWorkstationConfig,
 	workerOutput string,
 	inputColors []interfaces.TokenColor,
+	runtimeConfig interfaces.RuntimeWorkstationLookup,
 ) error {
 	if token == nil || !tts.ShouldFormatInvocationMetadata(workstation) {
 		return nil
@@ -903,7 +906,16 @@ func applyPackagedTTSInvocationMetadata(
 		traceID = strings.TrimSpace(source.TraceID)
 	}
 
-	metadataContent, err := tts.MetadataContentFromWorkerOutput(workerOutput, traceID, "")
+	backendLabel := ""
+	if workstation != nil && runtimeConfig != nil {
+		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
+			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
+				backendLabel = tts.BackendLabelFromWorker(worker)
+			}
+		}
+	}
+
+	metadataContent, err := tts.MetadataContentFromWorkerOutput(workerOutput, traceID, "", backendLabel)
 	if err != nil {
 		return fmt.Errorf("shape packaged tts invocation metadata: %w", err)
 	}

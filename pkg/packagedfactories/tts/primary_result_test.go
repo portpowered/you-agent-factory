@@ -12,7 +12,7 @@ import (
 func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	output := `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav","slot":"audio"}]`
-	metadataContent, err := MetadataContentFromWorkerOutput(output, "trace-1", "session-1")
+	metadataContent, err := MetadataContentFromWorkerOutput(output, "trace-1", "session-1", "")
 	if err != nil {
 		t.Fatalf("MetadataContentFromWorkerOutput: %v", err)
 	}

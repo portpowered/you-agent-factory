@@ -737,6 +737,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Built-ins such as @you/tts materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
 			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
+			"Packaged @you/tts invocation details live in " + cliBinaryName + " docs packaged-tts. " +
 			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
 			"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
