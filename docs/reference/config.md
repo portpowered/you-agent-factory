@@ -295,6 +295,85 @@ Validation rejects more than one `DEFAULT` work type. Factories used with
 `you run --factory <factory.json> <prompt>` must declare `DEFAULT` on exactly
 one work type.
 
+## Invocation Contract
+
+Factory invocation is the shared one-shot contract used by:
+
+- `you run --factory <factory.json> <text>`
+- `cat request.txt | you run --factory <factory.json>`
+- `POST /factory-sessions/{session_id}/invocations`
+
+CLI and API invocations resolve one canonical input and one canonical
+`primaryResult`. The runtime does not treat CLI prompt runs as a separate
+submission mode with different return semantics.
+
+### Input sources
+
+The current invocation slice is text-first:
+
+| Surface | Supported source now | Notes |
+|---------|----------------------|-------|
+| CLI | Trailing positional text or non-TTY stdin | Supplying both is rejected with `INVOCATION_INPUT_SOURCE_CONFLICT`. Empty selected stdin is rejected with `INVOCATION_INPUT_EMPTY`. |
+| API | Top-level `sourceKind: "text"` plus canonical `content` (`WorkContent`) | `fileRef` and `audioStream` are reserved future source categories and are not accepted yet. |
+
+Use `you docs sessions` for the session-scoped invocation API examples. Reserve
+future source categories in authored configs and client code, but do not imply
+they are implemented today.
+
+### `invocationReturn`
+
+`Factory.invocationReturn` is the factory-authored policy that tells CLI and API
+invocations which completed work content should be returned as the
+`primaryResult`.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `policy` | Yes when `invocationReturn` is present | `SUBMITTED_WORK_TERMINAL` or `EXPLICIT`. |
+| `workTypeName` | Required for `EXPLICIT` | Work type name to select from the current invocation scope. |
+| `terminalState` | Required for `EXPLICIT` | Terminal state name that must be reached for the selected work. |
+| `workName` | No | Optional authored work name filter when multiple scoped work items share the same type and terminal state. |
+
+When `invocationReturn` is omitted, runtimes use the documented
+`SUBMITTED_WORK_TERMINAL` fallback. That fallback traces the work item
+originally submitted by the invocation until it reaches its first terminal
+output, then returns that work content as the `primaryResult`.
+
+Example using the default fallback by omission:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "queued", "type": "INITIAL" },
+        { "name": "done", "type": "TERMINAL" }
+      ],
+      "handlingBehavior": ["DEFAULT"]
+    }
+  ]
+}
+```
+
+Example with an explicit primary-result selector:
+
+```json
+{
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "workTypeName": "report",
+    "terminalState": "finalized",
+    "workName": "summary"
+  }
+}
+```
+
+Use `EXPLICIT` when the invocation should return a downstream derived result
+instead of the first terminal content for the originally submitted work item.
+If the configured selector cannot resolve a result in the current invocation
+scope, the invocation fails with `INVOCATION_PRIMARY_RESULT_UNRESOLVED` and no
+success payload.
+
 ## Workstation IO
 
 Workstation inputs, outputs, rejection routes, failure routes, and guarded
@@ -466,7 +545,8 @@ Clean invocation accepts exactly one primary input source per invocation:
 Do not combine multiple payload sources in the same invocation. If stdin and a
 non-empty positional prompt are both present, the command exits non-zero before
 runtime startup and writes a stable stderr error with code
-`RUN_INVOCATION_AMBIGUOUS_INPUT` naming the conflicting sources.
+`INVOCATION_INPUT_SOURCE_CONFLICT` naming the conflicting sources
+(`positional_text`, `stdin_text`).
 
 Example ambiguity failure:
 
@@ -477,13 +557,13 @@ printf 'from stdin' | you run --factory ./factory.json "from arg"
 Text stderr:
 
 ```text
-RUN_INVOCATION_AMBIGUOUS_INPUT: conflicting input sources: positional prompt, stdin
+INVOCATION_INPUT_SOURCE_CONFLICT: invocation input sources conflict: positional_text, stdin_text
 ```
 
 JSON stderr with global `--json`:
 
 ```json
-{"code":"RUN_INVOCATION_AMBIGUOUS_INPUT","message":"conflicting input sources: positional prompt, stdin"}
+{"code":"INVOCATION_INPUT_SOURCE_CONFLICT","message":"invocation input sources conflict: positional_text, stdin_text"}
 ```
 
 #### Success stdout contract
@@ -502,15 +582,20 @@ Text success example:
 you run --factory ./factory.json "Summarize the changelog" > result.txt
 ```
 
-JSON success example:
+JSON success example for text positional or stdin invocation:
 
 ```bash
 you --json run --factory ./factory.json "Summarize the changelog"
 ```
 
 ```json
-{"output":"Summary text","workId":"work-123","workTypeName":"task","traceId":"trace-123","sessionId":"~default"}
+{"requestId":"req-123","traceId":"trace-123","status":"COMPLETED","primaryResult":[{"type":"text","text":"Summary text"}]}
 ```
+
+`--work` clean invocations still emit the work-target JSON envelope
+`{"output":"...","workId":"...","workTypeName":"...","traceId":"...","sessionId":"..."}`
+because they resolve a submitted work file instead of the shared session
+invocation API.
 
 Stdin-only example:
 
@@ -528,7 +613,7 @@ Stable error codes include:
 - `RUN_INVOCATION_FAILED` for runtime or work failures
 - `RUN_INVOCATION_CANCELLED` for SIGINT or SIGTERM cancellation
 - `RUN_INVOCATION_TIMEOUT` when the invocation deadline is exceeded
-- `RUN_INVOCATION_AMBIGUOUS_INPUT` when payload sources conflict before startup
+- `INVOCATION_INPUT_SOURCE_CONFLICT` when positional text and stdin conflict before startup
 
 Without `--json`, stderr is a single concise text line beginning with the stable
 error code. With global `--json`, stderr is a single parseable JSON object with

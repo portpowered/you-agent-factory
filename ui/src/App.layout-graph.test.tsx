@@ -1,13 +1,15 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DASHBOARD_WIDGET_IDS } from "./features/bento/hooks/dashboardLayoutSchema";
-import { twentyNodeDashboardSnapshot } from "./components/dashboard/test-fixtures";
+import {
+  semanticWorkflowDashboardSnapshot,
+  twentyNodeDashboardSnapshot,
+} from "./components/dashboard/test-fixtures";
 import {
   singleNodeSnapshotWithoutEdges,
   tickZeroInitialStructureRequestEvents,
 } from "./testing/app-shell-layout-test-utils";
 import {
-  activeSnapshot,
   baselineSnapshot,
   registerAppDashboardTestLifecycle,
   renderApp,
@@ -229,7 +231,7 @@ describe("App layout and graph behavior", () => {
       JSON.stringify(storedLayout),
     );
 
-    await renderAppWithDashboardShell({ snapshot: activeSnapshot });
+    await renderAppWithDashboardShell({ snapshot: semanticWorkflowDashboardSnapshot });
 
     const dashboardGrid = screen.getByRole("region", {
       name: "you-agent-factory bento board",
@@ -238,7 +240,7 @@ describe("App layout and graph behavior", () => {
   });
 
   it("renders distinct graph semantics for topology places, active work, and retry outcomes", async () => {
-    await renderAppWithDashboardShell({ snapshot: activeSnapshot });
+    await renderAppWithDashboardShell({ snapshot: semanticWorkflowDashboardSnapshot });
 
     await waitFor(() => {
       expect(

@@ -172,11 +172,16 @@ func Pull(cfg PullConfig) error {
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
 	})
+	if cfg.JSON {
+		if encodeErr := json.NewEncoder(cfg.Output).Encode(response); encodeErr != nil {
+			return encodeErr
+		}
+	}
 	if err != nil {
 		return err
 	}
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(response)
+		return nil
 	}
 	return RenderPull(response, cfg.Output)
 }
@@ -224,7 +229,12 @@ func queryModel(cfg queryOptions) (factoryapi.ModelDetail, error) {
 		Server:    cfg.Server,
 		ModelName: strings.TrimSpace(cfg.ModelName),
 		SummaryFunc: func() string {
-			return fmt.Sprintf("status=%s loadState=%s operations=%d", response.Status, response.LoadState, len(response.Operations))
+			return fmt.Sprintf(
+				"readiness=%s lifecycle=%s operations=%d",
+				managedRuntimeReadiness(response.ManagedRuntime),
+				managedRuntimeLifecycle(response.ManagedRuntime),
+				len(response.Operations),
+			)
 		},
 	}); err != nil {
 		return factoryapi.ModelDetail{}, err
@@ -349,10 +359,15 @@ func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 		Server:    cfg.Server,
 		ModelName: strings.TrimSpace(cfg.ModelName),
 		SummaryFunc: func() string {
-			return fmt.Sprintf("outcome=%s downloadedFiles=%d", response.Outcome, len(response.DownloadedFiles))
+			return fmt.Sprintf(
+				"pullOutcome=%s readiness=%s downloadedFiles=%d",
+				response.ManagedRuntimePull.PullOutcome,
+				response.ManagedRuntimePull.ReadinessState,
+				len(response.DownloadedFiles),
+			)
 		},
 	}); err != nil {
-		return factoryapi.ModelPullResponse{}, err
+		return response, err
 	}
 	return response, nil
 }
@@ -408,6 +423,14 @@ func doModelsPOST(server, path string, payload any, out any, diagnostics request
 			return fmt.Errorf("read models response: %w", readErr)
 		}
 		logModelsResponse(diagnostics, endpoint, resp.StatusCode, time.Since(started), fmt.Sprintf("responseBytes=%d", len(responseBody)))
+		if pullErr := managedRuntimePullResponseError(resp.StatusCode, responseBody); pullErr != nil {
+			if out != nil {
+				if err := json.Unmarshal(responseBody, out); err != nil {
+					return fmt.Errorf("decode managed runtime pull response: %w", err)
+				}
+			}
+			return pullErr
+		}
 		return modelsRequestError(resp.StatusCode, responseBody)
 	}
 	responseBytes, err := modelsResponseBytes(out)
@@ -496,7 +519,7 @@ func logModelsResponse(diagnostics requestDiagnostics, endpoint url.URL, statusC
 }
 
 func RenderList(response factoryapi.ListModelsResponse, output io.Writer) error {
-	if _, err := fmt.Fprintln(output, "NAME\tLOCALITY\tSTATUS\tLOAD STATE\tOPERATIONS\tMODALITIES\tRESOURCES"); err != nil {
+	if _, err := fmt.Fprintln(output, "NAME\tREADINESS\tLIFECYCLE\tLOCALITY\tOPERATIONS\tMODALITIES\tRESOURCES"); err != nil {
 		return err
 	}
 	results := append([]factoryapi.ModelSummary(nil), response.Results...)
@@ -508,9 +531,9 @@ func RenderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 			output,
 			"%s\t%s\t%s\t%s\t%s\t%s\t%d\n",
 			model.Name,
+			managedRuntimeReadiness(model.ManagedRuntime),
+			managedRuntimeLifecycle(model.ManagedRuntime),
 			model.ProviderLocality,
-			model.Status,
-			model.LoadState,
 			modelOperationNames(model.Operations),
 			modelModalities(model.Modalities),
 			len(model.Resources),
@@ -522,7 +545,16 @@ func RenderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 }
 
 func RenderPull(response factoryapi.ModelPullResponse, output io.Writer) error {
-	if _, err := fmt.Fprintf(output, "MODEL\tOUTCOME\tREVISION\tCACHE PATH\n%s\t%s\t%s\t%s\n", response.ModelName, response.Outcome, response.Revision, response.CachePath); err != nil {
+	if _, err := fmt.Fprintf(
+		output,
+		"MODEL\tPULL OUTCOME\tREADINESS\tLIFECYCLE\tREVISION\tCACHE PATH\n%s\t%s\t%s\t%s\t%s\t%s\n",
+		response.ModelName,
+		response.ManagedRuntimePull.PullOutcome,
+		response.ManagedRuntimePull.ReadinessState,
+		managedRuntimeLifecycleFromPull(response),
+		response.Revision,
+		response.CachePath,
+	); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(output, "FILES"); err != nil {
@@ -548,9 +580,9 @@ func RenderModel(model factoryapi.ModelDetail, output io.Writer) error {
 		label string
 		value string
 	}{
+		{label: "Readiness", value: managedRuntimeReadiness(model.ManagedRuntime)},
+		{label: "Lifecycle", value: managedRuntimeLifecycle(model.ManagedRuntime)},
 		{label: "Locality", value: string(model.ProviderLocality)},
-		{label: "Status", value: string(model.Status)},
-		{label: "Load State", value: string(model.LoadState)},
 		{label: "Operations", value: modelOperationNames(model.Operations)},
 		{label: "Modalities", value: modelModalities(model.Modalities)},
 	} {
@@ -575,9 +607,10 @@ func RenderModel(model factoryapi.ModelDetail, output io.Writer) error {
 			return err
 		}
 	}
-	if len(model.Diagnostics) > 0 {
-		keys := make([]string, 0, len(model.Diagnostics))
-		for key := range model.Diagnostics {
+	diagnostics := managedRuntimeDiagnosticsMap(model)
+	if len(diagnostics) > 0 {
+		keys := make([]string, 0, len(diagnostics))
+		for key := range diagnostics {
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
@@ -585,12 +618,46 @@ func RenderModel(model factoryapi.ModelDetail, output io.Writer) error {
 			return err
 		}
 		for _, key := range keys {
-			if _, err := fmt.Fprintf(output, "- %s=%s\n", key, model.Diagnostics[key]); err != nil {
+			if _, err := fmt.Fprintf(output, "- %s=%s\n", key, diagnostics[key]); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func managedRuntimeReadiness(runtime factoryapi.ManagedRuntime) string {
+	if strings.TrimSpace(string(runtime.ReadinessState)) == "" {
+		return "UNKNOWN"
+	}
+	return string(runtime.ReadinessState)
+}
+
+func managedRuntimeLifecycle(runtime factoryapi.ManagedRuntime) string {
+	if strings.TrimSpace(string(runtime.LifecycleState)) == "" {
+		return "UNKNOWN"
+	}
+	return string(runtime.LifecycleState)
+}
+
+func managedRuntimeLifecycleFromPull(response factoryapi.ModelPullResponse) string {
+	switch response.ManagedRuntimePull.PullOutcome {
+	case factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
+		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
+	case factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT,
+		factoryapi.ManagedRuntimePullOutcomeALREADYREADY:
+		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
+	default:
+		return "UNKNOWN"
+	}
+}
+
+func managedRuntimeDiagnosticsMap(model factoryapi.ModelDetail) factoryapi.StringMap {
+	if model.ManagedRuntime.Diagnostics != nil && len(*model.ManagedRuntime.Diagnostics) > 0 {
+		return *model.ManagedRuntime.Diagnostics
+	}
+	return model.Diagnostics
 }
 
 func modelOperationNames(operations []factoryapi.ModelOperation) string {
@@ -609,6 +676,28 @@ func modelModalities(modalities []factoryapi.ModelOperationContentType) string {
 	}
 	sort.Strings(values)
 	return strings.Join(values, ",")
+}
+
+func managedRuntimePullResponseError(statusCode int, body []byte) error {
+	if statusCode != http.StatusUnprocessableEntity && statusCode != http.StatusGatewayTimeout {
+		return nil
+	}
+	var response factoryapi.ModelPullResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil
+	}
+	switch response.ManagedRuntimePull.PullOutcome {
+	case factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED,
+		factoryapi.ManagedRuntimePullOutcomeTIMEDOUT,
+		factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
+		return fmt.Errorf(
+			"managed runtime pull failed (%s readiness %s)",
+			response.ManagedRuntimePull.PullOutcome,
+			response.ManagedRuntimePull.ReadinessState,
+		)
+	default:
+		return nil
+	}
 }
 
 func modelsRequestError(statusCode int, body []byte) error {

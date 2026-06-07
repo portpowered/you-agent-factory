@@ -81,6 +81,43 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/invocations:
+    post:
+      tags:
+        - Work
+      operationId: invokeFactorySessionBySessionId
+      summary: Invoke one factory session and return its primary result
+      description: >-
+        Resolves one text-first invocation input, submits it to the selected live
+        factory session, waits for terminal primary-result selection, and returns
+        the result using the factory's invocationReturn policy. When
+        invocationReturn is omitted, runtimes use the documented
+        SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is
+        rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input
+        is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be
+        resolved, the response status is FAILED with
+        INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvocationRequest'
+      responses:
+        '200':
+          description: Invocation reached a terminal status for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvocationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/work/staged-files:
     post:
       tags:
@@ -259,11 +296,11 @@ paths:
       tags:
         - Models
       operationId: listModels
-      summary: List discovered models
-      description: Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+      summary: List managed runtimes
+      description: Lists named managed runtimes exposed by the currently loaded runtime configuration together with readiness, lifecycle state, locality, supported operations, and resource summary data using the managed-runtime contract.
       responses:
         '200':
-          description: Discovered models for the current runtime.
+          description: Managed runtimes for the current runtime.
           content:
             application/json:
               schema:
@@ -275,18 +312,18 @@ paths:
       tags:
         - Models
       operationId: getModel
-      summary: Get one discovered model
-      description: Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+      summary: Inspect one managed runtime
+      description: Returns one managed runtime's readiness, lifecycle state, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
       parameters:
         - name: model_name
           in: path
           required: true
-          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
           schema:
             type: string
       responses:
         '200':
-          description: Discovered model detail.
+          description: Managed runtime detail.
           content:
             application/json:
               schema:
@@ -338,18 +375,18 @@ paths:
       tags:
         - Models
       operationId: pullModel
-      summary: Pull local model assets into the managed cache
-      description: Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+      summary: Pull or install one managed runtime
+      description: Pulls or installs required managed runtime assets into the managed cache using one source-agnostic customer action. Cloud-backed runtimes and unsupported local targets return actionable errors instead of silently succeeding.
       parameters:
         - name: model_name
           in: path
           required: true
-          description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+          description: Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`.
           schema:
             type: string
       responses:
         '200':
-          description: Successful local-model asset pull or confirmation that the managed cache already contained the required revision.
+          description: Successful managed runtime pull or install, or confirmation that the managed cache already contained the required revision.
           content:
             application/json:
               schema:
@@ -730,6 +767,14 @@ components:
       $ref: './components/schemas/api/SubmitRelation.yaml'
     SubmitWorkResponse:
       $ref: './components/schemas/api/SubmitWorkResponse.yaml'
+    InvocationInputSourceKind:
+      $ref: './components/schemas/api/InvocationInputSourceKind.yaml'
+    InvocationRequest:
+      $ref: './components/schemas/api/InvocationRequest.yaml'
+    InvocationResponse:
+      $ref: './components/schemas/api/InvocationResponse.yaml'
+    InvocationTerminalStatus:
+      $ref: './components/schemas/api/InvocationTerminalStatus.yaml'
     SubmitWorkItemList:
       $ref: './components/schemas/api/SubmitWorkItemList.yaml'
     SubmitWorkItem:
@@ -776,6 +821,18 @@ components:
       $ref: './components/schemas/api/StatusResponse.yaml'
     ListModelsResponse:
       $ref: './components/schemas/api/ListModelsResponse.yaml'
+    ManagedRuntime:
+      $ref: './components/schemas/api/ManagedRuntime.yaml'
+    ManagedRuntimeLifecycleState:
+      $ref: './components/schemas/api/ManagedRuntimeLifecycleState.yaml'
+    ManagedRuntimePullOutcome:
+      $ref: './components/schemas/api/ManagedRuntimePullOutcome.yaml'
+    ManagedRuntimePullResult:
+      $ref: './components/schemas/api/ManagedRuntimePullResult.yaml'
+    ManagedRuntimeReadinessState:
+      $ref: './components/schemas/api/ManagedRuntimeReadinessState.yaml'
+    ManagedRuntimeSourceDiagnostics:
+      $ref: './components/schemas/api/ManagedRuntimeSourceDiagnostics.yaml'
     ModelSummary:
       $ref: './components/schemas/api/ModelSummary.yaml'
     ModelDetail:
@@ -992,6 +1049,10 @@ components:
       $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    InvocationReturn:
+      $ref: './components/schemas/data-models/InvocationReturn.yaml'
+    InvocationReturnPolicy:
+      $ref: './components/schemas/data-models/InvocationReturnPolicy.yaml'
     FactoryGuard:
       $ref: './components/schemas/data-models/FactoryGuard.yaml'
     ResourceManifest:

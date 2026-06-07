@@ -3,7 +3,6 @@ package run
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/api"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
@@ -27,7 +26,6 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -51,7 +49,14 @@ type RunConfig struct {
 	// FactoryConfigPath is the factory.json file path from you run --factory.
 	// The service uses Dir as the resolved factory root directory.
 	FactoryConfigPath string
-	RunnerID          string
+	// InvocationPositionalText is the optional text supplied positionally to
+	// `you run --factory`. When set, factory invocation mode resolves this
+	// alongside stdin text through the shared invocation input contract.
+	InvocationPositionalText *string
+	// InvocationStdinText carries stdin text resolved before Run when root
+	// already consumed the stdin stream for one-shot factory invocation.
+	InvocationStdinText *string
+	RunnerID            string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths. Empty defaults to the caller's current working
 	// directory for CLI-style runs.
@@ -74,6 +79,12 @@ type RunConfig struct {
 	RuntimeLogDir string
 	// RuntimeLogConfig controls service-owned structured runtime log rotation.
 	RuntimeLogConfig logging.RuntimeLogConfig
+	// RuntimeMetricsDir overrides the service-owned structured runtime metrics
+	// root. Empty uses the service default under the user's home directory.
+	RuntimeMetricsDir string
+	// RuntimeMetricsConfig controls service-owned structured runtime metrics
+	// rolling behavior.
+	RuntimeMetricsConfig logging.RuntimeMetricsConfig
 	// MockWorkersEnabled enables deterministic mock-worker execution. When
 	// true and MockWorkersConfigPath is empty, the runtime uses the default
 	// accept behavior for all worker dispatches.
@@ -91,7 +102,8 @@ type RunConfig struct {
 	// CleanInvocationInputSource describes how a one-shot clean invocation
 	// received its primary input payload.
 	CleanInvocationInputSource InvocationInputSource
-	// Output receives clean invocation success payloads. Nil defaults to stdout.
+	// Output receives clean invocation and shared factory-invocation success
+	// payloads. Nil defaults to stdout.
 	Output io.Writer
 	// OpenDashboard attempts to open the embedded dashboard URL in a browser.
 	OpenDashboard bool
@@ -101,7 +113,19 @@ type RunConfig struct {
 	// Diagnostics receives metadata-only verbose command diagnostics. Nil
 	// suppresses diagnostics for programmatic callers and tests.
 	Diagnostics io.Writer
-	Logger      *zap.Logger
+	// Stdin provides the CLI stdin stream for shared invocation input
+	// resolution. Nil defaults to os.Stdin.
+	Stdin io.Reader
+	// StdinIsTTY reports whether stdin is an interactive TTY. Nil inspects
+	// os.Stdin directly.
+	StdinIsTTY func() bool
+	// JSONOutput emits the API-shaped InvocationResponse on successful factory
+	// invocation instead of only the primary text result.
+	JSONOutput bool
+	// InvocationMetricsRecorder receives invocation counter emissions from the
+	// CLI boundary, including pre-runtime source conflicts.
+	InvocationMetricsRecorder service.InvocationMetricsRecorder
+	Logger                    *zap.Logger
 }
 
 type factoryServiceRunner interface {
@@ -321,31 +345,14 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	if cfg.ExecutionBaseDir == "" {
-		if workingDirectory, err := os.Getwd(); err == nil && workingDirectory != "" {
-			cfg.ExecutionBaseDir = workingDirectory
-		}
-	}
-
-	if cfg.Bootstrap {
-		if err := bootstrapFactory(cfg.Dir); err != nil {
-			return err
-		}
-	}
-
-	recordPath, err := resolveRecordPathForRun(cfg)
+	cfg, invocationRequest, invocationMode, recordPath, err := prepareRunConfig(cfg)
 	if err != nil {
 		return err
 	}
-	cfg.RecordPath = recordPath.servicePath
 
-	var mockWorkersConfig *factoryconfig.MockWorkersConfig
-	if cfg.MockWorkersEnabled {
-		loadedMockWorkersConfig, err := factoryconfig.LoadMockWorkersConfig(cfg.MockWorkersConfigPath)
-		if err != nil {
-			return err
-		}
-		mockWorkersConfig = loadedMockWorkersConfig
+	mockWorkersConfig, err := loadMockWorkersConfig(cfg)
+	if err != nil {
+		return err
 	}
 
 	reservedAPIServer, err := reserveAPIServerListener(cfg.Port, cfg.AutoPort)
@@ -363,6 +370,10 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	}
 	emitNamedFactoryResolutionDiagnostics(cfg, logger)
 	emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
+
+	if invocationMode {
+		return runFactoryInvocation(ctx, cfg, *invocationRequest, logger, mockWorkersConfig, reservedAPIServer)
+	}
 
 	dashboardReady := make(chan struct{})
 	var dashboardReadyOnce sync.Once
@@ -391,6 +402,39 @@ func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
 	cfg.StartupOutput = nil
 	cfg.OpenDashboard = false
 	return cfg
+}
+
+func prepareRunConfig(cfg RunConfig) (RunConfig, *factoryapi.InvocationRequest, bool, resolvedRunRecordPath, error) {
+	if cfg.ExecutionBaseDir == "" {
+		if workingDirectory, err := os.Getwd(); err == nil && workingDirectory != "" {
+			cfg.ExecutionBaseDir = workingDirectory
+		}
+	}
+
+	if cfg.Bootstrap {
+		if err := bootstrapFactory(cfg.Dir); err != nil {
+			return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+		}
+	}
+
+	recordPath, err := resolveRecordPathForRun(cfg)
+	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
+	cfg.RecordPath = recordPath.servicePath
+
+	invocationRequest, invocationMode, err := resolveFactoryInvocationRequest(cfg)
+	if err != nil {
+		return RunConfig{}, nil, false, resolvedRunRecordPath{}, err
+	}
+	return cfg, invocationRequest, invocationMode, recordPath, nil
+}
+
+func loadMockWorkersConfig(cfg RunConfig) (*factoryconfig.MockWorkersConfig, error) {
+	if !cfg.MockWorkersEnabled {
+		return nil, nil
+	}
+	return factoryconfig.LoadMockWorkersConfig(cfg.MockWorkersConfigPath)
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
@@ -462,22 +506,25 @@ func buildRunServiceConfig(
 		apiServerReady = dashboardReady
 	}
 	svcCfg := &service.FactoryServiceConfig{
-		Dir:               cfg.Dir,
-		RunnerID:          cfg.RunnerID,
-		ExecutionBaseDir:  cfg.ExecutionBaseDir,
-		RuntimeMode:       runtimeModeForRun(cfg),
-		Port:              cfg.Port,
-		Logger:            logger,
-		Verbose:           cfg.Verbose,
-		WorkFile:          cfg.WorkFile,
-		RecordPath:        cfg.RecordPath,
-		ReplayPath:        cfg.ReplayPath,
-		RuntimeLogDir:     cfg.RuntimeLogDir,
-		RuntimeLogConfig:  cfg.RuntimeLogConfig,
-		WorkflowID:        cfg.Workflow,
-		MockWorkersConfig: mockWorkersConfig,
-		APIServerStarter:  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
-		APIServerReady:    apiServerReady,
+		Dir:                       cfg.Dir,
+		RunnerID:                  cfg.RunnerID,
+		ExecutionBaseDir:          cfg.ExecutionBaseDir,
+		RuntimeMode:               runtimeModeForRun(cfg),
+		Port:                      cfg.Port,
+		Logger:                    logger,
+		Verbose:                   cfg.Verbose,
+		WorkFile:                  cfg.WorkFile,
+		RecordPath:                cfg.RecordPath,
+		ReplayPath:                cfg.ReplayPath,
+		RuntimeLogDir:             cfg.RuntimeLogDir,
+		RuntimeLogConfig:          cfg.RuntimeLogConfig,
+		RuntimeMetricsDir:         cfg.RuntimeMetricsDir,
+		RuntimeMetricsConfig:      cfg.RuntimeMetricsConfig,
+		WorkflowID:                cfg.Workflow,
+		MockWorkersConfig:         mockWorkersConfig,
+		APIServerStarter:          runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
+		InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
+		APIServerReady:            apiServerReady,
 	}
 	if !cfg.SuppressDashboardRendering {
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard
@@ -506,122 +553,12 @@ func runFactoryServiceAndEmitResult(
 	return nil
 }
 
-func cleanInvocationWorkTargetFromFile(workFile string) (cleanInvocationWorkTarget, error) {
-	request, err := LoadWorkFile(workFile)
-	if err != nil {
-		return cleanInvocationWorkTarget{}, err
-	}
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
-	if err != nil {
-		return cleanInvocationWorkTarget{}, err
-	}
-	if len(normalized) != 1 {
-		return cleanInvocationWorkTarget{}, fmt.Errorf("clean invocation requires exactly one work item, got %d", len(normalized))
-	}
-	return cleanInvocationWorkTarget{
-		WorkID:       normalized[0].WorkID,
-		WorkTypeName: normalized[0].WorkTypeID,
-	}, nil
-}
-
-func cleanInvocationSuccessFromSnapshot(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	target cleanInvocationWorkTarget,
-) (cleanInvocationSuccess, bool) {
-	if snapshot == nil || snapshot.Topology == nil {
-		return cleanInvocationSuccess{}, false
-	}
-	if result, ok := cleanInvocationSuccessFromTerminalTokens(snapshot, target); ok {
-		return result, true
-	}
-	return cleanInvocationSuccessFromDispatchHistory(snapshot, target)
-}
-
-func cleanInvocationSuccessFromTerminalTokens(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	target cleanInvocationWorkTarget,
-) (cleanInvocationSuccess, bool) {
-	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
-	for _, token := range snapshot.Marking.Tokens {
-		if token != nil {
-			tokens = append(tokens, token)
-		}
-	}
-	sort.Slice(tokens, func(i, j int) bool {
-		return tokens[i].ID < tokens[j].ID
-	})
-	for _, token := range tokens {
-		if cleanInvocationTokenMatches(snapshot.Topology, token, target) {
-			return cleanInvocationSuccessFromToken(token), true
-		}
-	}
-	return cleanInvocationSuccess{}, false
-}
-
-func cleanInvocationSuccessFromDispatchHistory(
-	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	target cleanInvocationWorkTarget,
-) (cleanInvocationSuccess, bool) {
-	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
-		completion := snapshot.DispatchHistory[i]
-		if completion.Outcome != interfaces.OutcomeAccepted {
-			continue
-		}
-		for _, mutation := range completion.OutputMutations {
-			if cleanInvocationTokenMatches(snapshot.Topology, mutation.Token, target) {
-				return cleanInvocationSuccessFromToken(mutation.Token), true
-			}
-		}
-	}
-	return cleanInvocationSuccess{}, false
-}
-
-func cleanInvocationTokenMatches(net *state.Net, token *interfaces.Token, target cleanInvocationWorkTarget) bool {
-	if net == nil || token == nil {
-		return false
-	}
-	if token.Color.DataType == interfaces.DataTypeResource {
-		return false
-	}
-	if token.Color.WorkID != target.WorkID || token.Color.WorkTypeID != target.WorkTypeName {
-		return false
-	}
-	return net.StateCategoryForPlace(token.PlaceID) == state.StateCategoryTerminal
-}
-
-func cleanInvocationSuccessFromToken(token *interfaces.Token) cleanInvocationSuccess {
-	return cleanInvocationSuccess{
-		Output:       string(token.Color.Payload),
-		WorkID:       token.Color.WorkID,
-		WorkTypeName: token.Color.WorkTypeID,
-		TraceID:      token.Color.TraceID,
-		SessionID:    defaultFactorySessionID,
-	}
-}
-
-func writeCleanInvocationSuccess(cfg RunConfig, result cleanInvocationSuccess) error {
-	output := cfg.Output
-	if output == nil {
-		output = os.Stdout
-	}
-	if cfg.JSON {
-		data, err := json.Marshal(result)
-		if err != nil {
-			return err
-		}
-		_, err = output.Write(data)
-		return err
-	}
-	_, err := io.WriteString(output, result.Output)
-	return err
-}
-
 func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {
 	resolvedFactoryDir := resolveFactoryDirForDiagnostics(cfg.Dir)
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q runnerOverride=%t mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
+		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q runnerOverride=%t mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
 		resolvedFactoryDir,
 		cfg.Dir,
 		runtimeModeForRun(cfg),
@@ -631,6 +568,9 @@ func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPa
 		cfg.MockWorkersConfigPath,
 		recordingDiagnostics(recordPath, cfg.ReplayPath),
 		runtimeLogDirLabel(cfg.RuntimeLogDir),
+		rollingPolicyDiagnostics(cfg.RuntimeLogConfig.MaxSize, cfg.RuntimeLogConfig.MaxBackups, cfg.RuntimeLogConfig.MaxAge, cfg.RuntimeLogConfig.Compress),
+		runtimeMetricsDirLabel(cfg.RuntimeMetricsDir),
+		rollingPolicyDiagnostics(cfg.RuntimeMetricsConfig.MaxSize, cfg.RuntimeMetricsConfig.MaxBackups, cfg.RuntimeMetricsConfig.MaxAge, cfg.RuntimeMetricsConfig.Compress),
 		cfg.Port,
 		requestedPort,
 		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
@@ -701,6 +641,17 @@ func runtimeLogDirLabel(dir string) string {
 		return "default"
 	}
 	return dir
+}
+
+func runtimeMetricsDirLabel(dir string) string {
+	if strings.TrimSpace(dir) == "" {
+		return "default"
+	}
+	return dir
+}
+
+func rollingPolicyDiagnostics(maxSize, maxBackups, maxAge int, compress bool) string {
+	return fmt.Sprintf("size_mb=%d backups=%d age_days=%d compress=%t", maxSize, maxBackups, maxAge, compress)
 }
 
 func recordingDiagnostics(recordPath resolvedRunRecordPath, replayPath string) string {
@@ -802,6 +753,10 @@ func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics
 	if strings.TrimSpace(runtimeLog.Path) != "" {
 		fmt.Fprintf(cfg.StartupOutput, "Runtime log: %s\n", runtimeLog.Path)
 		fmt.Fprintf(cfg.StartupOutput, "Runtime log start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.StartTimeUTC))
+	}
+	if strings.TrimSpace(runtimeLog.MetricsPath) != "" {
+		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics: %s\n", runtimeLog.MetricsPath)
+		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.MetricsStartTimeUTC))
 	}
 	if cfg.Port <= 0 {
 		fmt.Fprintln(cfg.StartupOutput, "Dashboard server disabled")
