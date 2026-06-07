@@ -28,6 +28,24 @@ describe("factory graph layout keyboard shortcuts", () => {
     canvas.remove();
   });
 
+  it("ignores shortcuts from contenteditable and select elements", () => {
+    const editable = document.createElement("div");
+    editable.contentEditable = "true";
+    const select = document.createElement("select");
+    document.body.append(editable, select);
+
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(editable)).toBe(false);
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(select)).toBe(false);
+
+    editable.remove();
+    select.remove();
+  });
+
+  it("ignores non-element event targets", () => {
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(null)).toBe(false);
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(document)).toBe(false);
+  });
+
   it("detects undo and redo keyboard combinations", () => {
     expect(
       isFactoryGraphEditorUndoKeyboardEvent({
@@ -53,5 +71,21 @@ describe("factory graph layout keyboard shortcuts", () => {
         shiftKey: true,
       }),
     ).toBe(true);
+    expect(
+      isFactoryGraphEditorUndoKeyboardEvent({
+        ctrlKey: false,
+        key: "Z",
+        metaKey: true,
+        shiftKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isFactoryGraphEditorRedoKeyboardEvent({
+        ctrlKey: false,
+        key: "y",
+        metaKey: true,
+        shiftKey: false,
+      }),
+    ).toBe(false);
   });
 });
