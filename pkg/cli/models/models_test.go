@@ -314,7 +314,7 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		case "/models/OMNIVOICE_Q4_K_M/invocations":
 			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/sensitive-generated-output.wav"}],"bindings":[]}`)
 		case "/models/OMNIVOICE_Q4_K_M/pull":
-			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
+			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`)
 		default:
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
@@ -342,7 +342,8 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		"operation=\"TTS\"",
 		"worker=tts-worker",
 		"models pull request",
-		"outcome=PULLED",
+		"pullOutcome=INSTALLED_SUCCESSFULLY",
+		"readiness=READY",
 		"downloadedFiles=1",
 	})
 	for _, forbidden := range []string{"secret direct input", "sensitive-generated-output.wav", "ghp_successResponseToken1234567890"} {

@@ -133,6 +133,10 @@ var ErrModelNotAvailable = errors.New("model not available")
 // managed local asset pulls in the current runtime or platform.
 var ErrModelPullUnsupported = errors.New("model pull is not supported")
 
+// ErrManagedRuntimeSourceFetchFailed reports that required managed runtime
+// assets could not be fetched from the configured backend source.
+var ErrManagedRuntimeSourceFetchFailed = errors.New("managed runtime source fetch failed")
+
 // ErrModelInvocationUnsupportedMode reports that the requested direct
 // invocation response mode is not valid for the selected operation output.
 var ErrModelInvocationUnsupportedMode = errors.New("model invocation response mode is not supported")
@@ -171,6 +175,12 @@ type ModelPullResult struct {
 	CachePath        string
 	Revision         string
 	DownloadedFiles  []ModelPullDownloadedFile
+	ManagedPullOutcome string
+	ReadinessState     string
+	LifecycleState     string
+	SourceKind         string
+	SourceID           string
+	ResolverNotes      string
 }
 
 // TopologyValidationError carries validation targets that the graph editor can

@@ -41,6 +41,8 @@ type modelServiceDependencies struct {
 	modelAssetPuller        func() modelAssetPuller
 	modelInvocationExecutor func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error)
 	factoryRunnerID         func() string
+	logger                  *zap.Logger
+	modelPullMetrics        func() ModelPullMetricsRecorder
 }
 
 type runtimeModelService struct {
@@ -63,6 +65,8 @@ func newFactoryModelService(fs *FactoryService) ModelService {
 		modelAssetPuller:        fs.modelAssetPuller,
 		modelInvocationExecutor: fs.modelInvocationExecutor,
 		factoryRunnerID:         fs.factoryRunnerID,
+		logger:                  fs.logger,
+		modelPullMetrics:        fs.modelPullMetricsRecorder,
 	})
 }
 
@@ -135,7 +139,15 @@ func (s *runtimeModelService) catalogOptions() localmodels.CatalogOptions {
 }
 
 func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	return localmodels.PullModel(s.modelAssetPuller(), ctx, s.currentRuntimeConfig(), modelName)
+	started := time.Now()
+	puller := s.modelAssetPuller()
+	opts := localmodels.PullOptions{
+		RuntimeCacheInspector: puller,
+		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+	}
+	result, err := localmodels.PullModelWithOptions(puller, ctx, s.currentRuntimeConfig(), modelName, opts)
+	s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
+	return result, err
 }
 
 func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
@@ -716,6 +728,80 @@ func (s *runtimeModelService) factoryRunnerID() string {
 		return ""
 	}
 	return s.deps.factoryRunnerID()
+}
+
+const (
+	modelPullMetricAttempts      = "managed_runtime.pull.attempts"
+	modelPullMetricSuccess       = "managed_runtime.pull.success"
+	modelPullMetricFailure       = "managed_runtime.pull.failure"
+	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
+)
+
+func (s *runtimeModelService) recordManagedRuntimePull(modelName string, result apisurface.ModelPullResult, err error, elapsed time.Duration) {
+	labels := map[string]string{"model_name": strings.TrimSpace(modelName)}
+	s.recordModelPullMetric(modelPullMetricAttempts, labels)
+	if err != nil {
+		pullOutcome, readiness := localmodels.ClassifyPullFailure(err)
+		failureLabels := mergeMetricLabels(labels, map[string]string{
+			"pull_outcome":    pullOutcome,
+			"readiness_state": readiness,
+		})
+		s.recordModelPullMetric(modelPullMetricFailure, failureLabels)
+		if errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed) || pullOutcome == "SOURCE_FETCH_FAILED" {
+			s.recordModelPullMetric(modelPullMetricSourceFailure, failureLabels)
+		}
+		if s.deps.logger != nil {
+			s.deps.logger.Warn(
+				"managed runtime pull failed",
+				zap.String("model_name", modelName),
+				zap.String("pull_outcome", pullOutcome),
+				zap.String("readiness_state", readiness),
+				zap.Duration("duration", elapsed),
+				zap.Error(err),
+			)
+		}
+		return
+	}
+	successLabels := mergeMetricLabels(labels, map[string]string{
+		"pull_outcome":    strings.TrimSpace(result.ManagedPullOutcome),
+		"readiness_state": strings.TrimSpace(result.ReadinessState),
+		"lifecycle_state": strings.TrimSpace(result.LifecycleState),
+		"source_kind":     strings.TrimSpace(result.SourceKind),
+	})
+	s.recordModelPullMetric(modelPullMetricSuccess, successLabels)
+	if s.deps.logger != nil {
+		s.deps.logger.Info(
+			"managed runtime pull completed",
+			zap.String("model_name", modelName),
+			zap.String("pull_outcome", result.ManagedPullOutcome),
+			zap.String("readiness_state", result.ReadinessState),
+			zap.String("lifecycle_state", result.LifecycleState),
+			zap.String("source_kind", result.SourceKind),
+			zap.String("source_id", result.SourceID),
+			zap.Duration("duration", elapsed),
+		)
+	}
+}
+
+func (s *runtimeModelService) recordModelPullMetric(name string, labels map[string]string) {
+	if s == nil || s.deps.modelPullMetrics == nil {
+		return
+	}
+	recorder := s.deps.modelPullMetrics()
+	if recorder == nil {
+		return
+	}
+	recorder.RecordModelPullMetric(InvocationMetric{
+		Name:   name,
+		Labels: cloneMetricLabels(labels),
+	})
+}
+
+func (fs *FactoryService) modelPullMetricsRecorder() ModelPullMetricsRecorder {
+	if fs == nil || fs.cfg == nil {
+		return nil
+	}
+	return fs.cfg.ModelPullMetricsRecorder
 }
 
 func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryConfig, factoryCfg *interfaces.FactoryConfig, workerName string) (workers.WorkstationRequestExecutor, error) {

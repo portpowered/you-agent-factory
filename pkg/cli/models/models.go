@@ -354,7 +354,12 @@ func pullModel(cfg pullOptions) (factoryapi.ModelPullResponse, error) {
 		Server:    cfg.Server,
 		ModelName: strings.TrimSpace(cfg.ModelName),
 		SummaryFunc: func() string {
-			return fmt.Sprintf("outcome=%s downloadedFiles=%d", response.Outcome, len(response.DownloadedFiles))
+			return fmt.Sprintf(
+				"pullOutcome=%s readiness=%s downloadedFiles=%d",
+				response.ManagedRuntimePull.PullOutcome,
+				response.ManagedRuntimePull.ReadinessState,
+				len(response.DownloadedFiles),
+			)
 		},
 	}); err != nil {
 		return factoryapi.ModelPullResponse{}, err
@@ -527,7 +532,16 @@ func RenderList(response factoryapi.ListModelsResponse, output io.Writer) error 
 }
 
 func RenderPull(response factoryapi.ModelPullResponse, output io.Writer) error {
-	if _, err := fmt.Fprintf(output, "MODEL\tOUTCOME\tREVISION\tCACHE PATH\n%s\t%s\t%s\t%s\n", response.ModelName, response.Outcome, response.Revision, response.CachePath); err != nil {
+	if _, err := fmt.Fprintf(
+		output,
+		"MODEL\tPULL OUTCOME\tREADINESS\tLIFECYCLE\tREVISION\tCACHE PATH\n%s\t%s\t%s\t%s\t%s\t%s\n",
+		response.ModelName,
+		response.ManagedRuntimePull.PullOutcome,
+		response.ManagedRuntimePull.ReadinessState,
+		managedRuntimeLifecycleFromPull(response),
+		response.Revision,
+		response.CachePath,
+	); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintln(output, "FILES"); err != nil {
@@ -611,6 +625,19 @@ func managedRuntimeLifecycle(runtime factoryapi.ManagedRuntime) string {
 		return "UNKNOWN"
 	}
 	return string(runtime.LifecycleState)
+}
+
+func managedRuntimeLifecycleFromPull(response factoryapi.ModelPullResponse) string {
+	switch response.ManagedRuntimePull.PullOutcome {
+	case factoryapi.ManagedRuntimePullOutcomeSTILLLOADING:
+		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLING)
+	case factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY,
+		factoryapi.ManagedRuntimePullOutcomeALREADYPRESENT,
+		factoryapi.ManagedRuntimePullOutcomeALREADYREADY:
+		return string(factoryapi.ManagedRuntimeLifecycleStateINSTALLED)
+	default:
+		return "UNKNOWN"
+	}
 }
 
 func managedRuntimeDiagnosticsMap(model factoryapi.ModelDetail) factoryapi.StringMap {

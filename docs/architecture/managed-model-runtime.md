@@ -60,3 +60,18 @@ When a required runtime is `MISSING`, `LOADING`, `FAILED`, or `UNSUPPORTED`,
 invocation returns actionable outcomes derived from the managed contract. When a
 runtime is `READY`, packaged and authored factories invoke through the same
 managed runtime layer.
+
+## Pull or Install Lifecycle
+
+`POST /models/{model_name}/pull` and `you models pull` use one canonical customer
+action. Pull results classify managed outcomes (`ALREADY_READY`,
+`INSTALLED_SUCCESSFULLY`, `ALREADY_PRESENT`, `STILL_LOADING`, `TIMED_OUT`,
+`SOURCE_FETCH_FAILED`, `UNSUPPORTED_RUNTIME`) and expose readiness through
+`managedRuntimePull`.
+
+Source selection runs through the resolver layer before asset materialization.
+Post-pull cache inspection classifies readiness and lifecycle without contacting
+upstream sources again. Pull lifecycle transitions are logged and emitted as
+`managed_runtime.pull.*` counters when a metrics recorder is configured. They do
+not currently emit canonical `FactoryEvent` records; invocation and factory
+session surfaces remain the event-first runtime contract.

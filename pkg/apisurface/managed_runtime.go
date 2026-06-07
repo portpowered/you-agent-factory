@@ -10,11 +10,10 @@ import (
 // ManagedRuntimePullResultFromService maps a service-owned pull result into the
 // public managed-runtime pull contract while preserving legacy outcome fields.
 func ManagedRuntimePullResultFromService(result ModelPullResult, files []factoryapi.ModelPullDownloadedFile) factoryapi.ManagedRuntimePullResult {
-	legacyOutcome := factoryapi.ModelPullOutcome(strings.TrimSpace(strings.ToUpper(result.Outcome)))
 	pull := factoryapi.ManagedRuntimePullResult{
 		Identity:       result.ModelName,
-		PullOutcome:    managedRuntimePullOutcomeFromLegacy(legacyOutcome),
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+		PullOutcome:    managedRuntimePullOutcomeFromService(result),
+		ReadinessState: managedRuntimeReadinessFromService(result),
 	}
 	if cachePath := strings.TrimSpace(result.CachePath); cachePath != "" {
 		pull.CachePath = &cachePath
@@ -26,11 +25,28 @@ func ManagedRuntimePullResultFromService(result ModelPullResult, files []factory
 		copied := append([]factoryapi.ModelPullDownloadedFile(nil), files...)
 		pull.DownloadedFiles = &copied
 	}
+	if diagnostics := managedRuntimePullSourceDiagnostics(result); diagnostics != nil {
+		pull.SourceDiagnostics = diagnostics
+	}
 	if strings.TrimSpace(result.ProviderLocality) == interfaces.ModelLocalityCloud {
 		pull.ReadinessState = factoryapi.ManagedRuntimeReadinessStateREADY
 		pull.PullOutcome = factoryapi.ManagedRuntimePullOutcomeALREADYREADY
 	}
 	return pull
+}
+
+func managedRuntimePullOutcomeFromService(result ModelPullResult) factoryapi.ManagedRuntimePullOutcome {
+	if outcome := strings.TrimSpace(result.ManagedPullOutcome); outcome != "" {
+		return factoryapi.ManagedRuntimePullOutcome(outcome)
+	}
+	return managedRuntimePullOutcomeFromLegacy(factoryapi.ModelPullOutcome(strings.TrimSpace(strings.ToUpper(result.Outcome))))
+}
+
+func managedRuntimeReadinessFromService(result ModelPullResult) factoryapi.ManagedRuntimeReadinessState {
+	if readiness := strings.TrimSpace(result.ReadinessState); readiness != "" {
+		return factoryapi.ManagedRuntimeReadinessState(readiness)
+	}
+	return factoryapi.ManagedRuntimeReadinessStateREADY
 }
 
 func managedRuntimePullOutcomeFromLegacy(outcome factoryapi.ModelPullOutcome) factoryapi.ManagedRuntimePullOutcome {
@@ -42,4 +58,24 @@ func managedRuntimePullOutcomeFromLegacy(outcome factoryapi.ModelPullOutcome) fa
 	default:
 		return factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME
 	}
+}
+
+func managedRuntimePullSourceDiagnostics(result ModelPullResult) *factoryapi.ManagedRuntimeSourceDiagnostics {
+	sourceKind := strings.TrimSpace(result.SourceKind)
+	sourceID := strings.TrimSpace(result.SourceID)
+	resolverNotes := strings.TrimSpace(result.ResolverNotes)
+	if sourceKind == "" && sourceID == "" && resolverNotes == "" {
+		return nil
+	}
+	diagnostics := factoryapi.ManagedRuntimeSourceDiagnostics{}
+	if sourceKind != "" {
+		diagnostics.SourceKind = &sourceKind
+	}
+	if sourceID != "" {
+		diagnostics.SourceId = &sourceID
+	}
+	if resolverNotes != "" {
+		diagnostics.ResolverNotes = &resolverNotes
+	}
+	return &diagnostics
 }

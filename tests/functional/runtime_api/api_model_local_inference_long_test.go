@@ -52,6 +52,11 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	if pull.ModelName != "OMNIVOICE_Q4_K_M" || pull.CachePath == "" || pull.Revision == "" || len(pull.DownloadedFiles) == 0 {
 		t.Fatalf("asset pull failure: response = %#v, want model identity, cache path, revision, and files", pull)
 	}
+	if pull.ManagedRuntimePull.Identity != "OMNIVOICE_Q4_K_M" ||
+		pull.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
+		pull.ManagedRuntimePull.PullOutcome == "" {
+		t.Fatalf("asset pull failure: managed runtime pull = %#v, want ready managed pull metadata", pull.ManagedRuntimePull)
+	}
 	t.Logf("asset pull diagnostics: model=%s revision=%s cachePath=%s files=%d", pull.ModelName, pull.Revision, pull.CachePath, len(pull.DownloadedFiles))
 
 	jsonInvocation := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{

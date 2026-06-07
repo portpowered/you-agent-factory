@@ -65,6 +65,12 @@ type InvocationMetricsRecorder interface {
 	RecordInvocationMetric(InvocationMetric)
 }
 
+// ModelPullMetricsRecorder receives managed-runtime pull counter emissions.
+// Implementations should treat each call as a single counter increment.
+type ModelPullMetricsRecorder interface {
+	RecordModelPullMetric(InvocationMetric)
+}
+
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
 var ErrFactoryActivationRequiresIdle = apisurface.ErrFactoryActivationRequiresIdle
@@ -266,6 +272,9 @@ type FactoryServiceConfig struct {
 	// InvocationMetricsRecorder, when non-nil, receives invocation boundary
 	// counter emissions without including full prompt or result bodies.
 	InvocationMetricsRecorder InvocationMetricsRecorder
+	// ModelPullMetricsRecorder, when non-nil, receives managed-runtime pull
+	// counter emissions without including cache paths or downloaded file bodies.
+	ModelPullMetricsRecorder ModelPullMetricsRecorder
 	// APIServerReady, when non-nil, is closed by the API starter once the
 	// service-mode HTTP surface is reachable. Service-mode startup work waits
 	// for this signal so external clients can observe the startup window before

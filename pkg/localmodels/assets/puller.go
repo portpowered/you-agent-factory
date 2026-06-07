@@ -345,12 +345,12 @@ func (p *Puller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelA
 	}
 	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
-		return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q: %w", spec.ModelName, err)
+		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q: %v", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q failed (%d): %s", spec.ModelName, resp.StatusCode, strings.TrimSpace(string(body)))
+		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q failed (%d): %s", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var payload huggingFaceModelResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -369,7 +369,7 @@ func (p *Puller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelA
 	for _, filename := range spec.RequiredFilenames {
 		sibling, ok := siblingByPath[filename]
 		if !ok {
-			return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q is missing required file %q", spec.ModelName, filename)
+			return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q is missing required file %q", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, filename)
 		}
 		size := sibling.Size
 		sha := ""
@@ -592,12 +592,12 @@ func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, 
 	}
 	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
-		return fmt.Errorf("download model asset %q: %w", remote.Path, err)
+		return fmt.Errorf("%w: download model asset %q: %v", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("download model asset %q failed (%d): %s", remote.Path, resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("%w: download model asset %q failed (%d): %s", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	tmpPath := targetPath + ".partial"
@@ -620,7 +620,7 @@ func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, 
 	gotSHA := hex.EncodeToString(hasher.Sum(nil))
 	if remote.SHA256 != "" && !strings.EqualFold(gotSHA, remote.SHA256) {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("download model asset %q failed checksum verification: expected %s, got %s", remote.Path, remote.SHA256, gotSHA)
+		return fmt.Errorf("%w: download model asset %q failed checksum verification: expected %s, got %s", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, remote.SHA256, gotSHA)
 	}
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		_ = os.Remove(tmpPath)

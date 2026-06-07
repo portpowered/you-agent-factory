@@ -535,12 +535,30 @@ func CanonicalModelName(model string) string {
 	return canonicalModelName(model)
 }
 
+// PullOptions configures runtime-aware managed-runtime projection for pull.
+type PullOptions struct {
+	RuntimeCacheInspector RuntimeCacheInspector
+	SourceResolver        ManagedRuntimeSourceResolver
+}
+
 // PullModel validates catalog locality and delegates asset pull to the injected puller.
 func PullModel(
 	puller AssetPuller,
 	ctx context.Context,
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
+) (apisurface.ModelPullResult, error) {
+	return PullModelWithOptions(puller, ctx, runtimeCfg, modelName, PullOptions{})
+}
+
+// PullModelWithOptions validates catalog locality, resolves backend source
+// diagnostics, delegates asset pull, and projects managed readiness outcomes.
+func PullModelWithOptions(
+	puller AssetPuller,
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+	opts PullOptions,
 ) (apisurface.ModelPullResult, error) {
 	if runtimeCfg == nil {
 		return apisurface.ModelPullResult{}, fmt.Errorf("factory service runtime is not available")
@@ -560,7 +578,43 @@ func PullModel(
 	if entry.Summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
 		return apisurface.ModelPullResult{}, fmt.Errorf("%w: model %q is not a local model", apisurface.ErrModelPullUnsupported, modelName)
 	}
-	return puller.PullModel(ctx, runtimeCfg, modelName)
+
+	var resolution ManagedRuntimeSourceResolution
+	if resource := modelScopedResource(runtimeCfg.FactoryConfig(), modelName); resource != nil && opts.SourceResolver != nil {
+		resolution = opts.SourceResolver.Resolve(modelName, resource)
+	}
+
+	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return apisurface.ModelPullResult{}, err
+	}
+
+	inspection := RuntimeCacheInspection{}
+	if opts.RuntimeCacheInspector != nil {
+		inspected, inspectErr := opts.RuntimeCacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+		if inspectErr == nil {
+			inspection = inspected
+		}
+	}
+	return EnrichPullResult(result, inspection, resolution), nil
+}
+
+func modelScopedResource(factoryCfg *interfaces.FactoryConfig, modelName string) *interfaces.ResourceConfig {
+	if factoryCfg == nil {
+		return nil
+	}
+	key := canonicalModelName(modelName)
+	for _, resource := range factoryCfg.Resources {
+		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+			continue
+		}
+		if canonicalModelName(resource.Model) != key {
+			continue
+		}
+		copied := resource
+		return &copied
+	}
+	return nil
 }
 
 // SelectInvocationWorker resolves the model worker and operation for direct invocation.

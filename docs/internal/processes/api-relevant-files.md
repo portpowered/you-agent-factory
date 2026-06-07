@@ -9,3 +9,4 @@ Use this map when changing the public REST contract.
 - `pkg/api/contracttests/` contains OpenAPI authoring, bundled-contract, and generated-type smoke tests for public API changes.
 - Adding a new OpenAPI operation updates `factoryapi.ServerInterface`; add or update the matching `pkg/api` handler before running package tests.
 - Managed-runtime discovery and inspect projection live in `pkg/localmodels/catalog.go` and `pkg/localmodels/managed_runtime.go`; wire runtime cache and source resolver inputs through `localmodels.CatalogOptions` from `pkg/service/model_catalog.go`.
+- Managed-runtime pull projection and outcome normalization live in `pkg/localmodels/pull_lifecycle.go` and `pkg/localmodels/catalog.go` (`PullModelWithOptions`); API transport mapping for `managedRuntimePull` belongs in `pkg/apisurface/managed_runtime.go`; pull logging and `managed_runtime.pull.*` metrics belong in `pkg/service/model_catalog.go`.

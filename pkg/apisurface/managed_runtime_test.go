@@ -36,4 +36,27 @@ func TestManagedRuntimePullResultFromService_MapsLegacyOutcomes(t *testing.T) {
 			t.Fatalf("pull outcome = %s, want ALREADY_PRESENT", result.PullOutcome)
 		}
 	})
+
+	t.Run("managed projection with source diagnostics", func(t *testing.T) {
+		sourceKind := "MANAGED_MIRROR"
+		sourceID := "managed-mirror:OMNIVOICE_Q4_K_M"
+		notes := "assets resolve through configured managed mirror source"
+		result := ManagedRuntimePullResultFromService(ModelPullResult{
+			ModelName:          "OMNIVOICE_Q4_K_M",
+			ProviderLocality:   interfaces.ModelLocalityLocal,
+			Outcome:            "ALREADY_PRESENT",
+			ManagedPullOutcome: "ALREADY_READY",
+			ReadinessState:     "READY",
+			SourceKind:         sourceKind,
+			SourceID:             sourceID,
+			ResolverNotes:        notes,
+		}, nil)
+
+		if result.PullOutcome != factoryapi.ManagedRuntimePullOutcomeALREADYREADY {
+			t.Fatalf("pull outcome = %s, want ALREADY_READY", result.PullOutcome)
+		}
+		if result.SourceDiagnostics == nil || result.SourceDiagnostics.SourceKind == nil || *result.SourceDiagnostics.SourceKind != sourceKind {
+			t.Fatalf("source diagnostics = %#v, want managed mirror kind", result.SourceDiagnostics)
+		}
+	})
 }
