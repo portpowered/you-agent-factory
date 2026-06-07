@@ -4,8 +4,8 @@ import {
   DashboardEmptyStateText,
   DashboardEmptyStateTitle,
 } from "../../../components/ui/widget-frame";
+import type { ChartPresentation } from "../../../components/ui/chart";
 import { cn } from "../../../lib/cn";
-import type { WorkChartPresentation } from "./work-chart-presentation";
 
 // tailwind-exception: intrinsic-sizing
 const WORK_CHART_STATUS_PANEL_CLASS =
@@ -18,7 +18,7 @@ export interface WorkChartStatusPanelProps {
   ariaBusy?: boolean;
   loading?: boolean;
   message: string;
-  presentation: WorkChartPresentation;
+  presentation: ChartPresentation;
   role: "alert" | "status";
   title: string;
 }
