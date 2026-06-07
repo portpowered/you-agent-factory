@@ -116,6 +116,9 @@ func invocationStdinIsTTY(cfg FactoryInvocationInputConfig) bool {
 	if cfg.StdinIsTTY != nil {
 		return cfg.StdinIsTTY()
 	}
+	if cfg.Stdin != nil && cfg.Stdin != os.Stdin {
+		return false
+	}
 	fi, err := os.Stdin.Stat()
 	if err != nil {
 		return true
@@ -238,6 +241,9 @@ func readInvocationStdin(cfg RunConfig) (string, error) {
 func stdinIsTTY(cfg RunConfig) bool {
 	if cfg.StdinIsTTY != nil {
 		return cfg.StdinIsTTY()
+	}
+	if cfg.Stdin != nil && cfg.Stdin != os.Stdin {
+		return false
 	}
 	fi, err := os.Stdin.Stat()
 	if err != nil {

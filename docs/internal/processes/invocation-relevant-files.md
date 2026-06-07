@@ -33,7 +33,9 @@ primary-result behavior.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
-  transport-specific empty-stdin errors.
+  transport-specific empty-stdin errors. When `Stdin` is overridden away from
+  `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
+  input even if the process-level `os.Stdin` is still a TTY.
 - `pkg/invocations/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.

@@ -78,6 +78,21 @@ func TestResolveFactoryInvocationInput_StdinOnlyFromPipe(t *testing.T) {
 	}
 }
 
+func TestResolveFactoryInvocationInput_StdinOnlyFromOverriddenReaderWithoutTTYHook(t *testing.T) {
+	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		Stdin: strings.NewReader("Fix from overridden reader\n"),
+	})
+	if err != nil {
+		t.Fatalf("ResolveFactoryInvocationInput: %v", err)
+	}
+	if got.Source != InvocationInputSourceStdin {
+		t.Fatalf("source = %q, want stdin", got.Source)
+	}
+	if got.Payload != "Fix from overridden reader\n" {
+		t.Fatalf("payload = %q, want raw stdin payload", got.Payload)
+	}
+}
+
 func TestResolveFactoryInvocationInput_PreservesSurroundingWhitespace(t *testing.T) {
 	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
 		PromptArgs: []string{"  keep", "surrounding", "whitespace  "},
