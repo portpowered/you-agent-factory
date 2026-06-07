@@ -81,5 +81,3 @@ export function WorkChartCard({
     </DashboardWidgetFrame>
   );
 }
-
-export const D3CompletionInformationCard = WorkChartCard;
