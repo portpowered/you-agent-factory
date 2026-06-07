@@ -74,6 +74,91 @@ func TestFactoryConfigFromOpenAPIJSON_MapsOptionalGraphableEntityIDs(t *testing.
 	assertCanonicalGraphableEntityIDs(t, cfg)
 }
 
+func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"layout-factory",
+		"layout":{
+			"schemaVersion":1,
+			"nodes":[{"id":"workstation:review","position":{"x":420,"y":180},"size":{"width":156,"height":196},"locked":false}],
+			"edges":[{"id":"workstation-output:workstation:review->work-state:task:done","waypoints":[{"x":540,"y":220}],"labelPosition":{"x":590,"y":204}}],
+			"groups":[{"id":"review-lane","label":"Review","bounds":{"x":360,"y":120,"width":520,"height":360},"nodeIds":["workstation:review"],"parentGroupId":null,"color":"blue","locked":false}],
+			"viewport":{"x":0,"y":0,"zoom":1},
+			"preferences":{"direction":"RIGHT"}
+		},
+		"workTypes": [{"id":"task","name":"task","states":[{"id":"ready","name":"ready","type":"INITIAL"},{"id":"done","name":"done","type":"TERMINAL"}]}],
+		"workers": [{"id":"writer","name":"writer","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"review",
+			"name":"review",
+			"worker":"writer",
+			"inputs":[{"workType":"task","state":"ready"}],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.Layout == nil {
+		t.Fatal("expected layout to map into internal config")
+	}
+	if cfg.Layout.SchemaVersion != 1 || cfg.Layout.Nodes[0].ID != "workstation:review" {
+		t.Fatalf("unexpected internal layout: %#v", cfg.Layout)
+	}
+	if cfg.Layout.Nodes[0].Locked == nil || *cfg.Layout.Nodes[0].Locked {
+		t.Fatalf("expected node locked=false to roundtrip, got %#v", cfg.Layout.Nodes[0].Locked)
+	}
+	if cfg.Layout.Groups[0].ParentGroupID != nil {
+		t.Fatalf("expected parentGroupId null to remain nil, got %#v", cfg.Layout.Groups[0].ParentGroupID)
+	}
+	public := FactoryConfigToOpenAPI(cfg)
+	if public.Layout == nil || public.Layout.Preferences == nil || public.Layout.Preferences.Direction == nil || *public.Layout.Preferences.Direction != factoryapi.RIGHT {
+		t.Fatalf("expected public layout preferences direction RIGHT, got %#v", public.Layout)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		t.Fatalf("unmarshal canonical config: %v", err)
+	}
+	layout := decoded["layout"].(map[string]any)
+	if layout["schemaVersion"] != float64(1) {
+		t.Fatalf("canonical schemaVersion = %#v", layout["schemaVersion"])
+	}
+	viewport := layout["viewport"].(map[string]any)
+	if viewport["zoom"] != float64(1) {
+		t.Fatalf("canonical viewport.zoom = %#v", viewport["zoom"])
+	}
+}
+
+func TestFactoryConfigFromOpenAPIJSON_RejectsMalformedPortableLayoutContract(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"layout-factory",
+		"layout":{
+			"nodes":[{"id":"workstation:review","position":{"x":420,"y":180}}]
+		},
+		"workTypes": [{"name":"task","states":[{"name":"ready","type":"INITIAL"},{"name":"done","type":"TERMINAL"}]}],
+		"workers": [{"name":"writer","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"name":"review",
+			"worker":"writer",
+			"inputs":[{"workType":"task","state":"ready"}],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`)
+
+	_, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err == nil {
+		t.Fatal("expected malformed layout payload to be rejected")
+	}
+	if !strings.Contains(err.Error(), "layout.schemaVersion is required") {
+		t.Fatalf("expected missing schemaVersion error, got %v", err)
+	}
+}
+
 func assertInternalGraphableEntityIDs(t *testing.T, cfg *interfaces.FactoryConfig) {
 	t.Helper()
 

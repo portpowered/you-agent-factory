@@ -1,0 +1,21 @@
+type: object
+description: Authored rectangular bounds in graph canvas units.
+additionalProperties: false
+required:
+  - x
+  - y
+  - width
+  - height
+properties:
+  x:
+    type: number
+    description: Left graph layout coordinate.
+  y:
+    type: number
+    description: Top graph layout coordinate.
+  width:
+    type: number
+    description: Authored group width.
+  height:
+    type: number
+    description: Authored group height.

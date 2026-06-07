@@ -135,6 +135,7 @@ type FactoryConfig struct {
 	WorkTypes        []WorkTypeConfig                `json:"work_types"`
 	Resources        []ResourceConfig                `json:"resources"`
 	ResourceManifest *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
+	Layout           *FactoryLayoutConfig            `json:"layout,omitempty"`
 	Workers          []WorkerConfig                  `json:"workers"`
 	Workstations     []FactoryWorkstationConfig      `json:"workstations"`
 }
@@ -144,6 +145,67 @@ type FactoryConfig struct {
 type FactoryVersion struct {
 	Logical  int64     `json:"logical"`
 	Physical time.Time `json:"physical"`
+}
+
+// FactoryLayoutConfig carries non-executable portable graph editor layout
+// metadata keyed by canonical graph ids.
+type FactoryLayoutConfig struct {
+	SchemaVersion int                             `json:"schemaVersion"`
+	Nodes         []FactoryLayoutNodeConfig       `json:"nodes,omitempty"`
+	Edges         []FactoryLayoutEdgeConfig       `json:"edges,omitempty"`
+	Groups        []FactoryLayoutGroupConfig      `json:"groups,omitempty"`
+	Viewport      *FactoryLayoutViewportConfig    `json:"viewport,omitempty"`
+	Preferences   *FactoryLayoutPreferencesConfig `json:"preferences,omitempty"`
+}
+
+type FactoryLayoutNodeConfig struct {
+	ID       string                   `json:"id"`
+	Position FactoryLayoutPointConfig `json:"position"`
+	Size     *FactoryLayoutSizeConfig `json:"size,omitempty"`
+	Locked   *bool                    `json:"locked,omitempty"`
+}
+
+type FactoryLayoutEdgeConfig struct {
+	ID            string                     `json:"id"`
+	Waypoints     []FactoryLayoutPointConfig `json:"waypoints,omitempty"`
+	LabelPosition *FactoryLayoutPointConfig  `json:"labelPosition,omitempty"`
+}
+
+type FactoryLayoutGroupConfig struct {
+	ID            string                    `json:"id"`
+	Label         string                    `json:"label,omitempty"`
+	Bounds        FactoryLayoutBoundsConfig `json:"bounds"`
+	NodeIDs       []string                  `json:"nodeIds"`
+	ParentGroupID *string                   `json:"parentGroupId,omitempty"`
+	Color         string                    `json:"color,omitempty"`
+	Locked        *bool                     `json:"locked,omitempty"`
+}
+
+type FactoryLayoutViewportConfig struct {
+	X    float64 `json:"x"`
+	Y    float64 `json:"y"`
+	Zoom float64 `json:"zoom"`
+}
+
+type FactoryLayoutPreferencesConfig struct {
+	Direction string `json:"direction,omitempty"`
+}
+
+type FactoryLayoutPointConfig struct {
+	X float64 `json:"x"`
+	Y float64 `json:"y"`
+}
+
+type FactoryLayoutSizeConfig struct {
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+type FactoryLayoutBoundsConfig struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
 }
 
 // InputTypeConfig declares a named input type that the factory accepts.

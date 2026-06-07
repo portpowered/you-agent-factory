@@ -1,0 +1,31 @@
+type: object
+description: Portable background grouping metadata for graph canvas presentation.
+additionalProperties: false
+required:
+  - id
+  - bounds
+  - nodeIds
+properties:
+  id:
+    type: string
+    description: Stable authored group id for future layout editing.
+  label:
+    type: string
+    description: Optional visible group label.
+  bounds:
+    $ref: './FactoryLayoutBounds.yaml'
+  nodeIds:
+    type: array
+    description: Canonical graph node ids visually contained by this group.
+    items:
+      type: string
+  parentGroupId:
+    type: string
+    nullable: true
+    description: Reserved for future nested groups. Omit or set null for flat groups.
+  color:
+    type: string
+    description: Optional authored group accent or fill color.
+  locked:
+    type: boolean
+    description: Optional authored group lock flag for future editor affordances.

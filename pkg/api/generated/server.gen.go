@@ -73,6 +73,14 @@ const (
 	FactoryEventTypeWorkStateChange           FactoryEventType = "WORK_STATE_CHANGE"
 )
 
+// Defines values for FactoryLayoutPreferencesDirection.
+const (
+	DOWN  FactoryLayoutPreferencesDirection = "DOWN"
+	LEFT  FactoryLayoutPreferencesDirection = "LEFT"
+	RIGHT FactoryLayoutPreferencesDirection = "RIGHT"
+	UP    FactoryLayoutPreferencesDirection = "UP"
+)
+
 // Defines values for FactorySaveMode.
 const (
 	FactorySaveModeReplaceCurrent         FactorySaveMode = "REPLACE_CURRENT"
@@ -605,7 +613,10 @@ type Factory struct {
 
 	// InputTypes Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
-	Metadata   *StringMap   `json:"metadata,omitempty"`
+
+	// Layout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
+	Layout   *FactoryLayout `json:"layout,omitempty"`
+	Metadata *StringMap     `json:"metadata,omitempty"`
 
 	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
@@ -713,6 +724,132 @@ type FactoryGuard struct {
 
 	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
 	Type GuardType `json:"type"`
+}
+
+// FactoryLayout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
+type FactoryLayout struct {
+	// Edges Optional authored graph edge geometry keyed by canonical graph edge id.
+	Edges *[]FactoryLayoutEdge `json:"edges,omitempty"`
+
+	// Groups Optional flat background groups keyed independently from topology.
+	Groups *[]FactoryLayoutGroup `json:"groups,omitempty"`
+
+	// Nodes Optional authored graph node geometry keyed by canonical graph node id.
+	Nodes *[]FactoryLayoutNode `json:"nodes,omitempty"`
+
+	// Preferences Portable graph display defaults that do not alter factory topology.
+	Preferences *FactoryLayoutPreferences `json:"preferences,omitempty"`
+
+	// SchemaVersion Portable layout contract schema version. Version 1 is the initial public layout contract.
+	SchemaVersion int32 `json:"schemaVersion"`
+
+	// Viewport Shared authored graph camera position.
+	Viewport *FactoryLayoutViewport `json:"viewport,omitempty"`
+}
+
+// FactoryLayoutBounds Authored rectangular bounds in graph canvas units.
+type FactoryLayoutBounds struct {
+	// Height Authored group height.
+	Height float32 `json:"height"`
+
+	// Width Authored group width.
+	Width float32 `json:"width"`
+
+	// X Left graph layout coordinate.
+	X float32 `json:"x"`
+
+	// Y Top graph layout coordinate.
+	Y float32 `json:"y"`
+}
+
+// FactoryLayoutEdge Portable graph edge layout keyed by canonical graph edge id.
+type FactoryLayoutEdge struct {
+	// Id Canonical graph edge id such as workstation-output:workstation:review->work-state:task:done.
+	Id string `json:"id"`
+
+	// LabelPosition Two-dimensional authored graph layout coordinate.
+	LabelPosition *FactoryLayoutPoint `json:"labelPosition,omitempty"`
+
+	// Waypoints Optional authored intermediate edge points in graph canvas space.
+	Waypoints *[]FactoryLayoutPoint `json:"waypoints,omitempty"`
+}
+
+// FactoryLayoutGroup Portable background grouping metadata for graph canvas presentation.
+type FactoryLayoutGroup struct {
+	// Bounds Authored rectangular bounds in graph canvas units.
+	Bounds FactoryLayoutBounds `json:"bounds"`
+
+	// Color Optional authored group accent or fill color.
+	Color *string `json:"color,omitempty"`
+
+	// Id Stable authored group id for future layout editing.
+	Id string `json:"id"`
+
+	// Label Optional visible group label.
+	Label *string `json:"label,omitempty"`
+
+	// Locked Optional authored group lock flag for future editor affordances.
+	Locked *bool `json:"locked,omitempty"`
+
+	// NodeIds Canonical graph node ids visually contained by this group.
+	NodeIds []string `json:"nodeIds"`
+
+	// ParentGroupId Reserved for future nested groups. Omit or set null for flat groups.
+	ParentGroupId *string `json:"parentGroupId"`
+}
+
+// FactoryLayoutNode Portable graph node layout keyed by canonical graph node id.
+type FactoryLayoutNode struct {
+	// Id Canonical graph node id such as workstation:<workstationId>.
+	Id string `json:"id"`
+
+	// Locked Optional authored node lock flag for future editor affordances.
+	Locked *bool `json:"locked,omitempty"`
+
+	// Position Two-dimensional authored graph layout coordinate.
+	Position FactoryLayoutPoint `json:"position"`
+
+	// Size Authored node size in graph canvas units.
+	Size *FactoryLayoutSize `json:"size,omitempty"`
+}
+
+// FactoryLayoutPoint Two-dimensional authored graph layout coordinate.
+type FactoryLayoutPoint struct {
+	// X Horizontal graph layout coordinate in authored canvas space.
+	X float32 `json:"x"`
+
+	// Y Vertical graph layout coordinate in authored canvas space.
+	Y float32 `json:"y"`
+}
+
+// FactoryLayoutPreferences Portable graph display defaults that do not alter factory topology.
+type FactoryLayoutPreferences struct {
+	// Direction Preferred authored graph direction for portable layout rendering.
+	Direction *FactoryLayoutPreferencesDirection `json:"direction,omitempty"`
+}
+
+// FactoryLayoutPreferencesDirection Preferred authored graph direction for portable layout rendering.
+type FactoryLayoutPreferencesDirection string
+
+// FactoryLayoutSize Authored node size in graph canvas units.
+type FactoryLayoutSize struct {
+	// Height Authored node height.
+	Height float32 `json:"height"`
+
+	// Width Authored node width.
+	Width float32 `json:"width"`
+}
+
+// FactoryLayoutViewport Shared authored graph camera position.
+type FactoryLayoutViewport struct {
+	// X Authored viewport horizontal offset.
+	X float32 `json:"x"`
+
+	// Y Authored viewport vertical offset.
+	Y float32 `json:"y"`
+
+	// Zoom Authored viewport zoom factor.
+	Zoom float32 `json:"zoom"`
 }
 
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.

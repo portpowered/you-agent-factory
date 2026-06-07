@@ -1,0 +1,17 @@
+type: object
+description: Portable graph node layout keyed by canonical graph node id.
+additionalProperties: false
+required:
+  - id
+  - position
+properties:
+  id:
+    type: string
+    description: Canonical graph node id such as workstation:<workstationId>.
+  position:
+    $ref: './FactoryLayoutPoint.yaml'
+  size:
+    $ref: './FactoryLayoutSize.yaml'
+  locked:
+    type: boolean
+    description: Optional authored node lock flag for future editor affordances.

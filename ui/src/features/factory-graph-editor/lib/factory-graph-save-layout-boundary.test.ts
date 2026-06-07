@@ -25,7 +25,10 @@ describe("findGraphLayoutPropertyPaths", () => {
         ],
       }),
     ).toEqual(
-      expect.arrayContaining(["workstations[0].layout", "workstations[0].layout.x"]),
+      expect.arrayContaining([
+        "workstations[0].layout",
+        "workstations[0].layout.x",
+      ]),
     );
   });
 
@@ -92,9 +95,9 @@ describe("factory graph save layout boundary", () => {
       return;
     }
 
-    expect(factoryDefinitionSavePayloadHasGraphLayoutFields(saveInput.value)).toBe(
-      false,
-    );
+    expect(
+      factoryDefinitionSavePayloadHasGraphLayoutFields(saveInput.value),
+    ).toBe(false);
     expect(
       saveInput.value.workstations?.find(
         (workstation) => workstation.name === "review-station",

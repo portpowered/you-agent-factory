@@ -32,6 +32,9 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 	if apiCfg.SupportingFiles != nil {
 		cfg.ResourceManifest = resourceManifestInternalFromAPI(apiCfg.SupportingFiles)
 	}
+	if apiCfg.Layout != nil {
+		cfg.Layout = factoryLayoutInternalFromAPI(apiCfg.Layout)
+	}
 	if apiCfg.Workers != nil {
 		workers, err := workersInternalFromAPI(*apiCfg.Workers)
 		if err != nil {
@@ -135,6 +138,135 @@ func resourceManifestInternalFromAPI(manifest *factoryapi.ResourceManifest) *int
 		return &interfaces.PortableResourceManifestConfig{}
 	}
 	return cfg
+}
+
+func factoryLayoutInternalFromAPI(layout *factoryapi.FactoryLayout) *interfaces.FactoryLayoutConfig {
+	if layout == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutConfig{
+		SchemaVersion: int(layout.SchemaVersion),
+		Nodes:         factoryLayoutNodesInternalFromAPI(layout.Nodes),
+		Edges:         factoryLayoutEdgesInternalFromAPI(layout.Edges),
+		Groups:        factoryLayoutGroupsInternalFromAPI(layout.Groups),
+		Viewport:      factoryLayoutViewportInternalFromAPI(layout.Viewport),
+		Preferences:   factoryLayoutPreferencesInternalFromAPI(layout.Preferences),
+	}
+}
+
+func factoryLayoutNodesInternalFromAPI(nodes *[]factoryapi.FactoryLayoutNode) []interfaces.FactoryLayoutNodeConfig {
+	if nodes == nil {
+		return nil
+	}
+	values := make([]interfaces.FactoryLayoutNodeConfig, len(*nodes))
+	for i, node := range *nodes {
+		values[i] = interfaces.FactoryLayoutNodeConfig{
+			ID:       node.Id,
+			Position: factoryLayoutPointInternalFromAPI(node.Position),
+			Size:     factoryLayoutSizeInternalFromAPI(node.Size),
+			Locked:   node.Locked,
+		}
+	}
+	return values
+}
+
+func factoryLayoutEdgesInternalFromAPI(edges *[]factoryapi.FactoryLayoutEdge) []interfaces.FactoryLayoutEdgeConfig {
+	if edges == nil {
+		return nil
+	}
+	values := make([]interfaces.FactoryLayoutEdgeConfig, len(*edges))
+	for i, edge := range *edges {
+		values[i] = interfaces.FactoryLayoutEdgeConfig{
+			ID:            edge.Id,
+			Waypoints:     factoryLayoutPointsInternalFromAPI(edge.Waypoints),
+			LabelPosition: factoryLayoutPointPtrInternalFromAPI(edge.LabelPosition),
+		}
+	}
+	return values
+}
+
+func factoryLayoutGroupsInternalFromAPI(groups *[]factoryapi.FactoryLayoutGroup) []interfaces.FactoryLayoutGroupConfig {
+	if groups == nil {
+		return nil
+	}
+	values := make([]interfaces.FactoryLayoutGroupConfig, len(*groups))
+	for i, group := range *groups {
+		values[i] = interfaces.FactoryLayoutGroupConfig{
+			ID:            group.Id,
+			Label:         stringValue(group.Label),
+			Bounds:        factoryLayoutBoundsInternalFromAPI(group.Bounds),
+			NodeIDs:       append([]string(nil), group.NodeIds...),
+			ParentGroupID: group.ParentGroupId,
+			Color:         stringValue(group.Color),
+			Locked:        group.Locked,
+		}
+	}
+	return values
+}
+
+func factoryLayoutViewportInternalFromAPI(viewport *factoryapi.FactoryLayoutViewport) *interfaces.FactoryLayoutViewportConfig {
+	if viewport == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutViewportConfig{
+		X:    float64(viewport.X),
+		Y:    float64(viewport.Y),
+		Zoom: float64(viewport.Zoom),
+	}
+}
+
+func factoryLayoutPreferencesInternalFromAPI(preferences *factoryapi.FactoryLayoutPreferences) *interfaces.FactoryLayoutPreferencesConfig {
+	if preferences == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutPreferencesConfig{
+		Direction: enumStringValue(preferences.Direction),
+	}
+}
+
+func factoryLayoutPointInternalFromAPI(point factoryapi.FactoryLayoutPoint) interfaces.FactoryLayoutPointConfig {
+	return interfaces.FactoryLayoutPointConfig{
+		X: float64(point.X),
+		Y: float64(point.Y),
+	}
+}
+
+func factoryLayoutPointPtrInternalFromAPI(point *factoryapi.FactoryLayoutPoint) *interfaces.FactoryLayoutPointConfig {
+	if point == nil {
+		return nil
+	}
+	value := factoryLayoutPointInternalFromAPI(*point)
+	return &value
+}
+
+func factoryLayoutPointsInternalFromAPI(points *[]factoryapi.FactoryLayoutPoint) []interfaces.FactoryLayoutPointConfig {
+	if points == nil {
+		return nil
+	}
+	values := make([]interfaces.FactoryLayoutPointConfig, len(*points))
+	for i, point := range *points {
+		values[i] = factoryLayoutPointInternalFromAPI(point)
+	}
+	return values
+}
+
+func factoryLayoutSizeInternalFromAPI(size *factoryapi.FactoryLayoutSize) *interfaces.FactoryLayoutSizeConfig {
+	if size == nil {
+		return nil
+	}
+	return &interfaces.FactoryLayoutSizeConfig{
+		Width:  float64(size.Width),
+		Height: float64(size.Height),
+	}
+}
+
+func factoryLayoutBoundsInternalFromAPI(bounds factoryapi.FactoryLayoutBounds) interfaces.FactoryLayoutBoundsConfig {
+	return interfaces.FactoryLayoutBoundsConfig{
+		X:      float64(bounds.X),
+		Y:      float64(bounds.Y),
+		Width:  float64(bounds.Width),
+		Height: float64(bounds.Height),
+	}
 }
 
 func requiredToolsInternalFromAPI(requiredTools *[]factoryapi.RequiredTool) []interfaces.RequiredToolConfig {

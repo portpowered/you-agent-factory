@@ -3715,6 +3715,9 @@ components:
         supportingFiles:
           $ref: '#/components/schemas/ResourceManifest'
           description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
+        layout:
+          $ref: '#/components/schemas/FactoryLayout'
+          description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
         workers:
           type: array
           description: Reusable worker definitions that workstations reference by name when dispatching work.
@@ -5040,6 +5043,185 @@ components:
         - DEFAULT
       x-enum-descriptions:
         - Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior.
+    FactoryLayoutPoint:
+      type: object
+      description: Two-dimensional authored graph layout coordinate.
+      additionalProperties: false
+      required:
+        - x
+        - 'y'
+      properties:
+        x:
+          type: number
+          description: Horizontal graph layout coordinate in authored canvas space.
+        'y':
+          type: number
+          description: Vertical graph layout coordinate in authored canvas space.
+    FactoryLayoutSize:
+      type: object
+      description: Authored node size in graph canvas units.
+      additionalProperties: false
+      required:
+        - width
+        - height
+      properties:
+        width:
+          type: number
+          description: Authored node width.
+        height:
+          type: number
+          description: Authored node height.
+    FactoryLayoutNode:
+      type: object
+      description: Portable graph node layout keyed by canonical graph node id.
+      additionalProperties: false
+      required:
+        - id
+        - position
+      properties:
+        id:
+          type: string
+          description: Canonical graph node id such as workstation:<workstationId>.
+        position:
+          $ref: '#/components/schemas/FactoryLayoutPoint'
+        size:
+          $ref: '#/components/schemas/FactoryLayoutSize'
+        locked:
+          type: boolean
+          description: Optional authored node lock flag for future editor affordances.
+    FactoryLayoutEdge:
+      type: object
+      description: Portable graph edge layout keyed by canonical graph edge id.
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Canonical graph edge id such as workstation-output:workstation:review->work-state:task:done.
+        waypoints:
+          type: array
+          description: Optional authored intermediate edge points in graph canvas space.
+          items:
+            $ref: '#/components/schemas/FactoryLayoutPoint'
+        labelPosition:
+          $ref: '#/components/schemas/FactoryLayoutPoint'
+    FactoryLayoutBounds:
+      type: object
+      description: Authored rectangular bounds in graph canvas units.
+      additionalProperties: false
+      required:
+        - x
+        - 'y'
+        - width
+        - height
+      properties:
+        x:
+          type: number
+          description: Left graph layout coordinate.
+        'y':
+          type: number
+          description: Top graph layout coordinate.
+        width:
+          type: number
+          description: Authored group width.
+        height:
+          type: number
+          description: Authored group height.
+    FactoryLayoutGroup:
+      type: object
+      description: Portable background grouping metadata for graph canvas presentation.
+      additionalProperties: false
+      required:
+        - id
+        - bounds
+        - nodeIds
+      properties:
+        id:
+          type: string
+          description: Stable authored group id for future layout editing.
+        label:
+          type: string
+          description: Optional visible group label.
+        bounds:
+          $ref: '#/components/schemas/FactoryLayoutBounds'
+        nodeIds:
+          type: array
+          description: Canonical graph node ids visually contained by this group.
+          items:
+            type: string
+        parentGroupId:
+          type: string
+          nullable: true
+          description: Reserved for future nested groups. Omit or set null for flat groups.
+        color:
+          type: string
+          description: Optional authored group accent or fill color.
+        locked:
+          type: boolean
+          description: Optional authored group lock flag for future editor affordances.
+    FactoryLayoutViewport:
+      type: object
+      description: Shared authored graph camera position.
+      additionalProperties: false
+      required:
+        - x
+        - 'y'
+        - zoom
+      properties:
+        x:
+          type: number
+          description: Authored viewport horizontal offset.
+        'y':
+          type: number
+          description: Authored viewport vertical offset.
+        zoom:
+          type: number
+          description: Authored viewport zoom factor.
+    FactoryLayoutPreferences:
+      type: object
+      description: Portable graph display defaults that do not alter factory topology.
+      additionalProperties: false
+      properties:
+        direction:
+          type: string
+          enum:
+            - UP
+            - DOWN
+            - LEFT
+            - RIGHT
+          description: Preferred authored graph direction for portable layout rendering.
+    FactoryLayout:
+      type: object
+      description: Non-executable portable graph editor layout metadata keyed by canonical graph ids.
+      additionalProperties: false
+      required:
+        - schemaVersion
+      properties:
+        schemaVersion:
+          type: integer
+          format: int32
+          minimum: 1
+          description: Portable layout contract schema version. Version 1 is the initial public layout contract.
+        nodes:
+          type: array
+          description: Optional authored graph node geometry keyed by canonical graph node id.
+          items:
+            $ref: '#/components/schemas/FactoryLayoutNode'
+        edges:
+          type: array
+          description: Optional authored graph edge geometry keyed by canonical graph edge id.
+          items:
+            $ref: '#/components/schemas/FactoryLayoutEdge'
+        groups:
+          type: array
+          description: Optional flat background groups keyed independently from topology.
+          items:
+            $ref: '#/components/schemas/FactoryLayoutGroup'
+        viewport:
+          $ref: '#/components/schemas/FactoryLayoutViewport'
+        preferences:
+          $ref: '#/components/schemas/FactoryLayoutPreferences'
     HostedWorkerProvider:
       type: string
       description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.

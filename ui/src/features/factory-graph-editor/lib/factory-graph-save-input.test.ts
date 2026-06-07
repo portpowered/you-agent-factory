@@ -26,6 +26,20 @@ const richFactoryDefinition: CanonicalFactoryDefinition = {
       type: "DEFAULT",
     },
   ],
+  layout: {
+    schemaVersion: 1,
+    nodes: [
+      {
+        id: "workstation:draft",
+        position: { x: 120, y: 80 },
+      },
+    ],
+    viewport: {
+      x: 0,
+      y: 0,
+      zoom: 1,
+    },
+  },
   metadata: {
     owner: "operations",
   },
@@ -204,6 +218,7 @@ describe("factory graph save input", () => {
     expect(saveInput.value).toMatchObject({
       guards: richFactoryDefinition.guards,
       inputTypes: richFactoryDefinition.inputTypes,
+      layout: richFactoryDefinition.layout,
       metadata: richFactoryDefinition.metadata,
       runner: richFactoryDefinition.runner,
       supportingFiles: richFactoryDefinition.supportingFiles,
