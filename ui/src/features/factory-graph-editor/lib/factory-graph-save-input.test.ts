@@ -284,12 +284,14 @@ describe("factory graph save input", () => {
     expect(saveInput.value.workers).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
+          id: "writer",
           name: "writer",
           type: "MODEL_WORKER",
         }),
         {
           args: ["--watch", "--verbose"],
           command: "node",
+          id: "poller-runner",
           name: "poller-runner",
           type: "SCRIPT_WORKER",
         },
@@ -346,6 +348,7 @@ describe("factory graph save input", () => {
       expect.arrayContaining([
         {
           command: "node",
+          id: "poller-runner",
           name: "poller-runner",
           type: "SCRIPT_WORKER",
         },
@@ -355,6 +358,7 @@ describe("factory graph save input", () => {
       expect.arrayContaining([
         expect.objectContaining({
           behavior: "POLLER",
+          id: "linear-poller",
           name: "linear-poller",
           worker: "poller-runner",
         }),
