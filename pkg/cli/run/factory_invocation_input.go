@@ -187,14 +187,6 @@ func (e *AmbiguousInvocationInputError) Unwrap() error {
 	return e.invocationErr
 }
 
-func invocationInputSourceLabels(sources []InvocationInputSource) []string {
-	labels := make([]string, 0, len(sources))
-	for _, source := range sources {
-		labels = append(labels, string(source))
-	}
-	return labels
-}
-
 type sessionInvocationRunner interface {
 	factoryServiceRunner
 	apisurface.InvocationAPI
