@@ -5,6 +5,10 @@ primary-result behavior.
 
 - `pkg/invocations/` contains shared pure invocation contract logic used by CLI
   and API adapters.
+- `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
+  against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
+  `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
+  polling logic.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
