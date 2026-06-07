@@ -56,7 +56,7 @@ const modelInvokeFactory: CanonicalFactoryDefinition = {
   workTypes: [],
 };
 
-describe("workstation model invoke helpers", () => {
+describe("workstation model invoke type helpers", () => {
   it("detects model invoke workstation types", () => {
     expect(isModelInvokeWorkstationType("MODEL_INVOKE")).toBe(true);
     expect(isModelInvokeWorkstationType("MODEL_WORKSTATION")).toBe(false);
@@ -80,6 +80,9 @@ describe("workstation model invoke helpers", () => {
     );
   });
 
+});
+
+describe("workstation model invoke binding projection", () => {
   it("round-trips editable model invoke bindings", () => {
     const bindings = resolveEditableModelInvokeBindings([
       {
@@ -127,6 +130,9 @@ describe("workstation model invoke helpers", () => {
     ]);
   });
 
+});
+
+describe("workstation model invoke binding validation", () => {
   it("omits empty optional bindings from canonical projection", () => {
     const operation = resolveModelWorkerOperations(
       modelInvokeFactory,
