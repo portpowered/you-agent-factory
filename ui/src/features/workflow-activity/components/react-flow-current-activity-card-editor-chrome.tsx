@@ -113,6 +113,35 @@ const MODE_TOGGLE_COMPACT_CLASS =
   "size-8 rounded-md border-outline bg-transparent text-on-surface-variant hover:border-outline-variant hover:bg-af-overlay hover:text-on-surface";
 const MODE_TOGGLE_COMPACT_DIRTY_CLASS = "size-8 rounded-md";
 
+function CurrentActivityGraphHeaderDirtySummary({
+  className,
+  dirtyState,
+  hasChanges,
+  locale,
+}: {
+  className?: string;
+  dirtyState?: FactoryGraphEditorDirtyState;
+  hasChanges: boolean;
+  locale?: string;
+}) {
+  const messages = getFactoryGraphEditorMessages(locale);
+  const hasDirtyIndicator = dirtyState
+    ? hasAnyFactoryGraphEditorChanges(dirtyState)
+    : hasChanges;
+
+  if (!hasDirtyIndicator) {
+    return null;
+  }
+
+  return (
+    <span className={cn("text-on-surface-variant", className)}>
+      {dirtyState
+        ? messages.dirtyStateSummary(dirtyState)
+        : messages.modeUnsavedChanges}
+    </span>
+  );
+}
+
 export function CurrentActivityGraphHeaderActions({
   compact = false,
   dirtyState,
@@ -124,6 +153,7 @@ export function CurrentActivityGraphHeaderActions({
   loadErrorMessage,
   locale,
   onToggle,
+  showModeToggle = true,
 }: {
   compact?: boolean;
   dirtyState?: FactoryGraphEditorDirtyState;
@@ -135,6 +165,7 @@ export function CurrentActivityGraphHeaderActions({
   loadErrorMessage?: string;
   locale?: string;
   onToggle: () => void;
+  showModeToggle?: boolean;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
   const editorUnavailableReason =
@@ -151,21 +182,23 @@ export function CurrentActivityGraphHeaderActions({
     <DashboardActionRow
       actions={
         <>
-          <FactoryGraphEditorModeToggle
-            className={
-              compact
-                ? hasDirtyIndicator
-                  ? MODE_TOGGLE_COMPACT_DIRTY_CLASS
-                  : MODE_TOGGLE_COMPACT_CLASS
-                : undefined
-            }
-            disabled={!editorMode && editorUnavailableReason !== undefined}
-            editorMode={editorMode}
-            hasChanges={hasDirtyIndicator}
-            locale={locale}
-            onClick={onToggle}
-            tooltipOverride={editorUnavailableReason}
-          />
+          {showModeToggle ? (
+            <FactoryGraphEditorModeToggle
+              className={
+                compact
+                  ? hasDirtyIndicator
+                    ? MODE_TOGGLE_COMPACT_DIRTY_CLASS
+                    : MODE_TOGGLE_COMPACT_CLASS
+                  : undefined
+              }
+              disabled={!editorMode && editorUnavailableReason !== undefined}
+              editorMode={editorMode}
+              hasChanges={hasDirtyIndicator}
+              locale={locale}
+              onClick={onToggle}
+              tooltipOverride={editorUnavailableReason}
+            />
+          ) : null}
           {headerActions}
         </>
       }
@@ -179,16 +212,25 @@ export function CurrentActivityGraphHeaderActions({
         compact && FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS,
       )}
       statuses={
-        <FactoryGraphEditorStatus
-          className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
-          dirtyState={dirtyState}
-          editorMode={editorMode}
-          editorUnavailableReason={editorUnavailableReason}
-          hasChanges={hasDirtyIndicator}
-          isDefinitionLoading={isDefinitionLoading}
-          locale={locale}
-          loadErrorMessage={loadErrorMessage}
-        />
+        showModeToggle ? (
+          <FactoryGraphEditorStatus
+            className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
+            dirtyState={dirtyState}
+            editorMode={editorMode}
+            editorUnavailableReason={editorUnavailableReason}
+            hasChanges={hasDirtyIndicator}
+            isDefinitionLoading={isDefinitionLoading}
+            locale={locale}
+            loadErrorMessage={loadErrorMessage}
+          />
+        ) : editorMode ? (
+          <CurrentActivityGraphHeaderDirtySummary
+            className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
+            dirtyState={dirtyState}
+            hasChanges={hasDirtyIndicator}
+            locale={locale}
+          />
+        ) : null
       }
       statusesClassName={
         compact

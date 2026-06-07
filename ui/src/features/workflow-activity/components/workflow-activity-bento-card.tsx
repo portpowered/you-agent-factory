@@ -115,6 +115,7 @@ export function WorkflowActivityBentoCard({
           loadErrorMessage={editor.editableDefinitionQuery.error?.message}
           locale={locale}
           onToggle={editor.handleEditorModeToggle}
+          showModeToggle={false}
         />
       }
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
