@@ -3,6 +3,7 @@ package bootstrap_portability
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +18,46 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
+
+func assertExportImportPortableLayoutResponse(t *testing.T, layout *factoryapi.FactoryLayout, contextLabel string) {
+	t.Helper()
+
+	if layout == nil {
+		t.Fatalf("%s layout = nil, want portable layout metadata", contextLabel)
+	}
+	if layout.SchemaVersion != 1 {
+		t.Fatalf("%s layout schemaVersion = %d, want 1", contextLabel, layout.SchemaVersion)
+	}
+	if layout.Nodes == nil || len(*layout.Nodes) != 1 || (*layout.Nodes)[0].Id != "workstation:step-one" {
+		t.Fatalf("%s layout nodes = %#v, want workstation:step-one", contextLabel, layout.Nodes)
+	}
+	if layout.Edges == nil || len(*layout.Edges) != 1 || (*layout.Edges)[0].Id != "output:workstation:step-one->work-type:task" {
+		t.Fatalf("%s layout edges = %#v, want step-one output edge", contextLabel, layout.Edges)
+	}
+	if layout.Viewport == nil || math.Abs(float64(layout.Viewport.Zoom)-0.9) > 1e-6 {
+		t.Fatalf("%s layout viewport = %#v, want zoom 0.9", contextLabel, layout.Viewport)
+	}
+}
+
+func assertExportImportPortableLayoutPayload(t *testing.T, value any, contextLabel string) {
+	t.Helper()
+
+	layout, ok := value.(map[string]any)
+	if !ok {
+		t.Fatalf("%s layout = %#v, want object", contextLabel, value)
+	}
+	if got := layout["schemaVersion"]; got != float64(1) {
+		t.Fatalf("%s layout schemaVersion = %#v, want 1", contextLabel, got)
+	}
+	nodes, ok := layout["nodes"].([]any)
+	if !ok || len(nodes) != 1 {
+		t.Fatalf("%s layout nodes = %#v, want one node", contextLabel, layout["nodes"])
+	}
+	node, ok := nodes[0].(map[string]any)
+	if !ok || node["id"] != "workstation:step-one" {
+		t.Fatalf("%s layout node = %#v, want workstation:step-one", contextLabel, nodes[0])
+	}
+}
 
 func TestExportImportSmoke_ExportedFactoryCanBeReimportedThroughCustomerPath(t *testing.T) {
 	fixture := newExportImportFixture(t)
@@ -62,6 +103,28 @@ func TestExportImportSmoke_PreservesBatchInboxGitkeepAfterImport(t *testing.T) {
 
 	result.AssertAPIContractSuccess(t, fixture)
 	assertBatchInboxGitkeepOnDisk(t, result.ImportedDir)
+}
+
+func TestExportImportSmoke_PreservesPortableLayoutThroughExportImportAndActivation(t *testing.T) {
+	fixture := newExportImportFixture(t)
+	harness := newExportImportSmokeHarness(fixture)
+
+	result := harness.Run(t)
+
+	result.AssertAPIContractSuccess(t, fixture)
+	assertExportImportPortableLayoutResponse(t, result.ExportedFactory.Layout, "exported factory")
+	assertExportImportPortableLayoutResponse(t, result.ImportedFactory.Layout, "imported factory")
+	assertExportImportPortableLayoutResponse(t, result.CurrentFactory.Layout, "current factory after import")
+
+	factoryJSON, err := os.ReadFile(filepath.Join(result.ImportedDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(imported factory.json): %v", err)
+	}
+	var persisted map[string]any
+	if err := json.Unmarshal(factoryJSON, &persisted); err != nil {
+		t.Fatalf("Unmarshal(imported factory.json): %v", err)
+	}
+	assertExportImportPortableLayoutPayload(t, persisted["layout"], "persisted imported factory")
 }
 
 func TestExportImportSmoke_ImportedFactoryPersistsThinSplitRuntimeLayout(t *testing.T) {

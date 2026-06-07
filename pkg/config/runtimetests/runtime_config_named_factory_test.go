@@ -267,6 +267,36 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	}
 }
 
+func TestReplaceNamedFactory_PreservesPortableLayoutAcrossReplace(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := PersistNamedFactory(rootDir, "alpha", namedFactoryPayloadWithPortableLayout(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	replacePayload := namedFactoryPayloadWithPortableLayout(t, "alpha")
+	if _, err := ReplaceNamedFactory(rootDir, "alpha", replacePayload); err != nil {
+		t.Fatalf("ReplaceNamedFactory: %v", err)
+	}
+
+	factoryDir := filepath.Join(rootDir, "alpha")
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(replaced layout factory): %v", err)
+	}
+	assertLoadedPortableLayoutConfig(t, loaded.FactoryConfig(), "workstation:execute-alpha")
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var persisted map[string]any
+	if err := json.Unmarshal(factoryJSON, &persisted); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	assertPortableLayoutJSONPayload(t, persisted["layout"], "workstation:execute-alpha")
+}
+
 func TestPersistNamedFactory_PreservesPortableLayoutAcrossNamedFactoryLoadFlattenAndExpand(t *testing.T) {
 	rootDir := t.TempDir()
 
