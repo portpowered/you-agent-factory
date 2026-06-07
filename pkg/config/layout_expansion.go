@@ -122,6 +122,11 @@ func finalizeFactorySplitLayoutWrite(
 			return err
 		}
 	}
+	if opts.OverwriteExistingSplitFiles {
+		if err := pruneRemovedPortableBundledDocs(targetDir, cfg); err != nil {
+			return err
+		}
+	}
 	if opts.CopyReferencedScripts && sourceDir != "" {
 		if err := writeExpandedReferencedScripts(sourceDir, targetDir, cfg); err != nil {
 			return err

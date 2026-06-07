@@ -907,6 +907,34 @@ func TestRuleBundledFiles_RejectsUnsupportedInputTargetShape(t *testing.T) {
 	}
 }
 
+func TestRuleBundledFiles_RejectsDuplicateTargetPath(t *testing.T) {
+	cfg := &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{
+				{
+					Type:       interfaces.BundledFileTypeDoc,
+					TargetPath: "factory/docs/overview.md",
+					Content: interfaces.BundledFileContentConfig{
+						Encoding: interfaces.BundledFileEncodingUTF8,
+						Inline:   "first",
+					},
+				},
+				{
+					Type:       interfaces.BundledFileTypeDoc,
+					TargetPath: "factory/docs/overview.md",
+					Content: interfaces.BundledFileContentConfig{
+						Encoding: interfaces.BundledFileEncodingUTF8,
+						Inline:   "second",
+					},
+				},
+			},
+		},
+	}
+
+	findings := ruleBundledFiles(cfg)
+	assertFindingExists(t, findings, "bundled-file-target-duplicate")
+}
+
 func TestRuleBundledFiles_RejectsUnsupportedRootHelperTarget(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{
