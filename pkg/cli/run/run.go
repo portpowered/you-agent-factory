@@ -3,15 +3,17 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -25,6 +27,8 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -41,7 +45,7 @@ type RunConfig struct {
 	// FactoryConfigPath is the factory.json file path from you run --factory.
 	// The service uses Dir as the resolved factory root directory.
 	FactoryConfigPath string
-	RunnerID     string
+	RunnerID          string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths. Empty defaults to the caller's current working
 	// directory for CLI-style runs.
@@ -73,6 +77,16 @@ type RunConfig struct {
 	// SuppressDashboardRendering disables the simple stdout dashboard while
 	// preserving the normal service-layer run path.
 	SuppressDashboardRendering bool
+	// CleanInvocation suppresses operator-facing stdout chatter for one-shot
+	// result-oriented invocations. It does not disable replay recording.
+	CleanInvocation bool
+	// JSON emits the clean invocation success result as a single JSON object.
+	JSON bool
+	// CleanInvocationInputSource describes how a one-shot clean invocation
+	// received its primary input payload.
+	CleanInvocationInputSource InvocationInputSource
+	// Output receives clean invocation success payloads. Nil defaults to stdout.
+	Output io.Writer
 	// OpenDashboard attempts to open the embedded dashboard URL in a browser.
 	OpenDashboard bool
 	// StartupOutput receives human-facing startup messages. Nil suppresses
@@ -90,6 +104,23 @@ type factoryServiceRunner interface {
 
 type runtimeLogDiagnosticsProvider interface {
 	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
+}
+
+type engineStateSnapshotProvider interface {
+	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
+}
+
+type cleanInvocationSuccess struct {
+	Output       string `json:"output"`
+	WorkID       string `json:"workId"`
+	WorkTypeName string `json:"workTypeName"`
+	TraceID      string `json:"traceId,omitempty"`
+	SessionID    string `json:"sessionId,omitempty"`
+}
+
+type cleanInvocationWorkTarget struct {
+	WorkID       string
+	WorkTypeName string
 }
 
 // FactoryServiceBuilder constructs the factory service used by Run.
@@ -279,6 +310,7 @@ func (r *reservedAPIServerListener) CloseIfUnused() error {
 // FactoryService. The CLI is a thin wrapper — all orchestration logic
 // (file watcher, dashboard, API server, engine) lives in the service layer.
 func Run(ctx context.Context, cfg RunConfig) error {
+	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
 		logger = zap.NewNop()
@@ -341,9 +373,17 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	}
 	defer waitForDashboardOpen()
 
-	err = factorySvc.Run(ctx)
-	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
-	return err
+	return runFactoryServiceAndEmitResult(ctx, cfg, factorySvc, recordPath)
+}
+
+func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
+	if !cfg.CleanInvocation {
+		return cfg
+	}
+	cfg.SuppressDashboardRendering = true
+	cfg.StartupOutput = nil
+	cfg.OpenDashboard = false
+	return cfg
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {
@@ -436,6 +476,137 @@ func buildRunServiceConfig(
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard
 	}
 	return svcCfg
+}
+
+func runFactoryServiceAndEmitResult(
+	ctx context.Context,
+	cfg RunConfig,
+	factorySvc factoryServiceRunner,
+	recordPath resolvedRunRecordPath,
+) error {
+	startedAt := time.Now().UTC()
+	if cfg.CleanInvocation {
+		recordCleanInvocationAttempt()
+	}
+	err := factorySvc.Run(ctx)
+	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
+	if cfg.CleanInvocation {
+		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, err, startedAt)
+	}
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func cleanInvocationWorkTargetFromFile(workFile string) (cleanInvocationWorkTarget, error) {
+	request, err := LoadWorkFile(workFile)
+	if err != nil {
+		return cleanInvocationWorkTarget{}, err
+	}
+	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	if err != nil {
+		return cleanInvocationWorkTarget{}, err
+	}
+	if len(normalized) != 1 {
+		return cleanInvocationWorkTarget{}, fmt.Errorf("clean invocation requires exactly one work item, got %d", len(normalized))
+	}
+	return cleanInvocationWorkTarget{
+		WorkID:       normalized[0].WorkID,
+		WorkTypeName: normalized[0].WorkTypeID,
+	}, nil
+}
+
+func cleanInvocationSuccessFromSnapshot(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	target cleanInvocationWorkTarget,
+) (cleanInvocationSuccess, bool) {
+	if snapshot == nil || snapshot.Topology == nil {
+		return cleanInvocationSuccess{}, false
+	}
+	if result, ok := cleanInvocationSuccessFromTerminalTokens(snapshot, target); ok {
+		return result, true
+	}
+	return cleanInvocationSuccessFromDispatchHistory(snapshot, target)
+}
+
+func cleanInvocationSuccessFromTerminalTokens(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	target cleanInvocationWorkTarget,
+) (cleanInvocationSuccess, bool) {
+	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
+	for _, token := range snapshot.Marking.Tokens {
+		if token != nil {
+			tokens = append(tokens, token)
+		}
+	}
+	sort.Slice(tokens, func(i, j int) bool {
+		return tokens[i].ID < tokens[j].ID
+	})
+	for _, token := range tokens {
+		if cleanInvocationTokenMatches(snapshot.Topology, token, target) {
+			return cleanInvocationSuccessFromToken(token), true
+		}
+	}
+	return cleanInvocationSuccess{}, false
+}
+
+func cleanInvocationSuccessFromDispatchHistory(
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	target cleanInvocationWorkTarget,
+) (cleanInvocationSuccess, bool) {
+	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
+		completion := snapshot.DispatchHistory[i]
+		if completion.Outcome != interfaces.OutcomeAccepted {
+			continue
+		}
+		for _, mutation := range completion.OutputMutations {
+			if cleanInvocationTokenMatches(snapshot.Topology, mutation.Token, target) {
+				return cleanInvocationSuccessFromToken(mutation.Token), true
+			}
+		}
+	}
+	return cleanInvocationSuccess{}, false
+}
+
+func cleanInvocationTokenMatches(net *state.Net, token *interfaces.Token, target cleanInvocationWorkTarget) bool {
+	if net == nil || token == nil {
+		return false
+	}
+	if token.Color.DataType == interfaces.DataTypeResource {
+		return false
+	}
+	if token.Color.WorkID != target.WorkID || token.Color.WorkTypeID != target.WorkTypeName {
+		return false
+	}
+	return net.StateCategoryForPlace(token.PlaceID) == state.StateCategoryTerminal
+}
+
+func cleanInvocationSuccessFromToken(token *interfaces.Token) cleanInvocationSuccess {
+	return cleanInvocationSuccess{
+		Output:       string(token.Color.Payload),
+		WorkID:       token.Color.WorkID,
+		WorkTypeName: token.Color.WorkTypeID,
+		TraceID:      token.Color.TraceID,
+		SessionID:    defaultFactorySessionID,
+	}
+}
+
+func writeCleanInvocationSuccess(cfg RunConfig, result cleanInvocationSuccess) error {
+	output := cfg.Output
+	if output == nil {
+		output = os.Stdout
+	}
+	if cfg.JSON {
+		data, err := json.Marshal(result)
+		if err != nil {
+			return err
+		}
+		_, err = output.Write(data)
+		return err
+	}
+	_, err := io.WriteString(output, result.Output)
+	return err
 }
 
 func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPath, requestedPort int) {

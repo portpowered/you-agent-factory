@@ -201,7 +201,7 @@
   "workers": [
     {
       "executorProvider": "SCRIPT_WRAP",
-      "modelProvider": "CODEX",
+      "modelProvider": "CURSOR",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
@@ -217,9 +217,12 @@
       "type": "SCRIPT_WORKER"
     },
     {
-      "modelProvider": "CURSOR",
+      "modelProvider": "CODEX",
       "name": "planner",
-      "type": "MODEL_WORKER"
+      "type": "MODEL_WORKER",
+      "skipPermissions": true,
+      "stopToken": "\u003cCOMPLETE\u003e",
+      "executorProvider": "SCRIPT_WRAP"
     }
   ],
   "workstations": [

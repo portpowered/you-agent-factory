@@ -17,8 +17,9 @@ run `you docs <topic>` for packaged topics such as `agents`,
   - prefer `factory/docs/overview.md` for the instance pipeline, work types, and
     read-before-submit guidance;
   - otherwise `factory/docs/README.md` when that file exists.
-- Repo-level factory pointers live in [`factory/README.md`](../factory/README.md);
-  do not duplicate instance walkthroughs in the root factory README.
+- Repo-level factory pointers live in
+  [`factory/docs/overview.md`](../factory/docs/overview.md); do not duplicate
+  instance walkthroughs in the root docs index.
 
 ## Packaged CLI Reference Topics
 
@@ -91,8 +92,8 @@ These are the fixed topic names accepted by `you docs <topic>`.
   `AGENTS.md` file shape, prompt placement, and authoring patterns.
 - [The Zen of flow](reference/the-zen-of-flow.md) explains the project’s workflow
   philosophy.
-- [Understand a run timeline](internal/development/run-timeline.md) explains how
-  `/events`, recordings, replay, and the dashboard use one ordered event timeline.
+- [Record/replay reference](reference/record-replay.md) explains how recordings,
+  replay, and related runtime inspection flows fit together.
 
 ## Maintainer workflow (packaged CLI reference)
 
@@ -104,12 +105,7 @@ These are the fixed topic names accepted by `you docs <topic>`.
 ## Contributor Guides
 
 - [Development guide](internal/development/development.md)
-- [Architecture](internal/development/architecture.md)
-- [API inventory](internal/development/api-inventory.md)
-- [CLI release policy](internal/development/cli-release-policy.md)
-- [Dashboard UI replay testing](internal/development/dashboard-ui-replay-testing.md)
-- [Factory config generated-schema boundary inventory](internal/development/factory-config-generated-schema-boundary-inventory.md)
-- [Live dashboard](internal/development/live-dashboard.md)
-- [Parent-aware fan-in](internal/development/parent-aware-fan-in.md)
-- [Record/replay maintainer guide](internal/development/record-replay.md)
-- [Workstation guards and guarded loop breakers](internal/development/workstation-guards-and-guarded-loop-breakers.md)
+- [Architecture](architecture/architecture.md)
+- [Data model](architecture/data-model.md)
+- [Cursor agent session storage](internal/development/cursor-agent-session-storage.md)
+- [React UI test warning inventory](internal/development/react-ui-test-warning-inventory.md)

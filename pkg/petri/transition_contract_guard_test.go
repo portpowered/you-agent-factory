@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/handwrittensourceguard"
+	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
 var retiredTransitionRuntimeFields = map[string]struct{}{
@@ -116,7 +116,14 @@ func walkTransitionGuardProductionFiles(moduleRoot string, visit func(path strin
 			return walkErr
 		}
 		if entry.IsDir() {
-			if handwrittensourceguard.ShouldSkipDir("pkg/petri/transition_contract_guard_test.go", moduleRoot, path) {
+			if contractguard.ShouldSkipDir(
+				moduleRoot,
+				path,
+				"pkg/api/generated",
+				"ui/dist",
+				"ui/node_modules",
+				"ui/storybook-static",
+			) {
 				return filepath.SkipDir
 			}
 			return nil
