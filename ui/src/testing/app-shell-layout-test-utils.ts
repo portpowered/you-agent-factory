@@ -5,7 +5,6 @@ import {
   buildDashboardSnapshotFixture,
   oneNodeDashboardTopology,
 } from "../components/dashboard/fixtures";
-import { twentyNodeDashboardSnapshot } from "../components/dashboard/test-fixtures";
 
 export const tickZeroInitialStructureRequestEvents: FactoryEvent[] = [
   {
@@ -47,5 +46,3 @@ export const singleNodeSnapshotWithoutEdges = {
     oneNodeDashboardTopology,
   ),
 } as unknown as DashboardSnapshot;
-
-export const twentyNodeSnapshot = twentyNodeDashboardSnapshot;
