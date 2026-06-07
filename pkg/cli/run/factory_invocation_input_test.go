@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -75,9 +76,9 @@ func TestResolveFactoryInvocationInput_RejectsPositionalAndStdinConflict(t *test
 		t.Fatal("expected ambiguous input error")
 	}
 	for _, want := range []string{
-		InvocationErrorCodeAmbiguousInput,
-		string(InvocationInputSourcePositional),
-		string(InvocationInputSourceStdin),
+		string(invocations.InputErrorCodeSourceConflict),
+		"positional_text",
+		"stdin_text",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want %q", err.Error(), want)

@@ -795,3 +795,174 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 	_ = os.RemoveAll(trashDir)
 }
 
+var builtInNamedFactoryCatalog = map[string][]byte{
+	"@you/tts": []byte(`{
+  "name": "@you/tts",
+  "id": "builtin-tts",
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        {
+          "name": "init",
+          "type": "INITIAL"
+        },
+        {
+          "name": "complete",
+          "type": "TERMINAL"
+        }
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "tts-executor",
+      "type": "MODEL_WORKER",
+      "body": "You are the @you/tts built-in factory worker."
+    }
+  ],
+  "workstations": [
+    {
+      "name": "execute-tts",
+      "type": "MODEL_WORKSTATION",
+      "worker": "tts-executor",
+      "inputs": [
+        {
+          "workType": "task",
+          "state": "init"
+        }
+      ],
+      "outputs": [
+        {
+          "workType": "task",
+          "state": "complete"
+        }
+      ],
+      "body": "Convert the requested text into speech for {{ .WorkID }}."
+    }
+  ]
+  }
+`),
+}
+
+// ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
+// name, checking the project-local root before the global root.
+func ResolveNamedFactoryDirAcrossRoots(projectRoot, globalRoot, name string) (string, error) {
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name)
+	if err != nil {
+		return "", err
+	}
+	return resolution.FactoryDir, nil
+}
+
+// ResolveNamedFactoryAcrossRoots resolves name from projectRoot first and
+// globalRoot second. It selects exactly one persisted factory directory and
+// never merges definitions across roots.
+func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*NamedFactoryResolution, error) {
+	projectRoot = strings.TrimSpace(projectRoot)
+	globalRoot = strings.TrimSpace(globalRoot)
+	if projectRoot == "" {
+		return nil, fmt.Errorf("project factory root is required")
+	}
+	if globalRoot == "" {
+		return nil, fmt.Errorf("global factory root is required")
+	}
+
+	canonicalName, err := canonicalNamedFactoryName(name)
+	if err != nil {
+		return nil, err
+	}
+
+	if factoryDir, found, err := resolveNamedFactoryCandidate(projectRoot, canonicalName); err != nil {
+		return nil, err
+	} else if found {
+		return namedFactoryResolution(
+			canonicalName,
+			factoryDir,
+			NamedFactoryResolutionSourceProjectLocal,
+			projectRoot,
+			globalRoot,
+			projectLocalPrecedenceDecision(globalRoot, canonicalName),
+		), nil
+	}
+
+	if factoryDir, found, err := resolveNamedFactoryCandidate(globalRoot, canonicalName); err != nil {
+		return nil, err
+	} else if found {
+		return namedFactoryResolution(
+			canonicalName,
+			factoryDir,
+			NamedFactoryResolutionSourceGlobal,
+			projectRoot,
+			globalRoot,
+			NamedFactoryPrecedenceDecisionNone,
+		), nil
+	}
+
+	if factoryDir, materialized, err := resolveBuiltInNamedFactory(globalRoot, canonicalName); err != nil {
+		return nil, err
+	} else if materialized {
+		return namedFactoryResolution(
+			canonicalName,
+			factoryDir,
+			NamedFactoryResolutionSourceBuiltin,
+			projectRoot,
+			globalRoot,
+			NamedFactoryPrecedenceDecisionNone,
+		), nil
+	}
+
+	return nil, fmt.Errorf(
+		"resolve named factory %q in project root %s or global root %s: %w",
+		canonicalName,
+		projectRoot,
+		globalRoot,
+		newNamedFactoryNotFoundError(canonicalName),
+	)
+}
+
+func canonicalNamedFactoryName(name string) (string, error) {
+	segment, err := NamedFactoryNameToLayoutSegment(name)
+	if err != nil {
+		return "", err
+	}
+	return NamedFactoryLayoutSegmentToName(segment)
+}
+
+func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
+	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
+	if err == nil {
+		return factoryDir, true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return "", false, nil
+	}
+	return "", false, err
+}
+
+func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {
+	payload, ok := builtInNamedFactoryCatalog[canonicalName]
+	if !ok {
+		return "", false, nil
+	}
+
+	segment, err := NamedFactoryNameToLayoutSegment(canonicalName)
+	if err != nil {
+		return "", false, err
+	}
+	targetDir := filepath.Join(globalRoot, segment)
+	if _, err := os.Stat(targetDir); err == nil {
+		if err := requireFactoryConfig(targetDir); err != nil {
+			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
+		}
+		return targetDir, true, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
+	}
+
+	factoryDir, err := PersistNamedFactory(globalRoot, canonicalName, payload)
+	if err != nil {
+		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err)
+	}
+	return factoryDir, true, nil
+}

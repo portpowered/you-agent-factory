@@ -53,23 +53,30 @@ func ResolveFactoryInvocationInput(cfg FactoryInvocationInputConfig) (FactoryInv
 		return FactoryInvocationInput{}, err
 	}
 
-	var sources []InvocationInputSource
+	sources := invocations.TextInputSources{}
 	if positionalPrompt != "" {
-		sources = append(sources, InvocationInputSourcePositional)
+		sources.PositionalText = &positionalPrompt
 	}
 	if hasStdin {
-		sources = append(sources, InvocationInputSourceStdin)
+		sources.StdinText = &stdinPayload
 	}
-	if len(sources) > 1 {
-		return FactoryInvocationInput{}, ambiguousInvocationInputError(sources)
+
+	resolved, err := invocations.ResolveTextInput(sources)
+	if err != nil {
+		return FactoryInvocationInput{}, factoryInvocationInputError(err)
 	}
-	if positionalPrompt != "" {
-		return FactoryInvocationInput{Source: InvocationInputSourcePositional, Payload: positionalPrompt}, nil
+	if resolved.Text == "" {
+		return FactoryInvocationInput{}, nil
 	}
-	if hasStdin {
-		return FactoryInvocationInput{Source: InvocationInputSourceStdin, Payload: stdinPayload}, nil
+
+	switch resolved.Source {
+	case invocations.InputSourcePositionalText:
+		return FactoryInvocationInput{Source: InvocationInputSourcePositional, Payload: resolved.Text}, nil
+	case invocations.InputSourceStdinText:
+		return FactoryInvocationInput{Source: InvocationInputSourceStdin, Payload: resolved.Text}, nil
+	default:
+		return FactoryInvocationInput{}, nil
 	}
-	return FactoryInvocationInput{}, nil
 }
 
 func splitInvocationPromptArgs(args []string) (prompt string, explicitStdin bool) {
@@ -118,14 +125,46 @@ func invocationStdinIsTTY(cfg FactoryInvocationInputConfig) bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func ambiguousInvocationInputError(sources []InvocationInputSource) error {
-	labels := invocationInputSourceLabels(sources)
+func factoryInvocationInputError(err error) error {
+	inputErr, ok := err.(*invocations.InputError)
+	if !ok {
+		return err
+	}
+	switch inputErr.Code {
+	case invocations.InputErrorCodeSourceConflict:
+		return ambiguousInvocationInputError(inputErr)
+	case invocations.InputErrorCodeEmpty:
+		if inputErr.Source == invocations.InputSourceStdinText {
+			return fmt.Errorf("stdin input is empty")
+		}
+		return &InvocationError{
+			Code:    string(inputErr.Code),
+			Message: inputErr.Message,
+		}
+	default:
+		return &InvocationError{
+			Code:    string(inputErr.Code),
+			Message: inputErr.Message,
+		}
+	}
+}
+
+func ambiguousInvocationInputError(inputErr *invocations.InputError) error {
+	sources := make([]InvocationInputSource, 0, len(inputErr.ConflictingSources))
+	for _, label := range inputErr.ConflictingSources {
+		switch label {
+		case invocations.InputSourcePositionalText:
+			sources = append(sources, InvocationInputSourcePositional)
+		case invocations.InputSourceStdinText:
+			sources = append(sources, InvocationInputSourceStdin)
+		}
+	}
 	return &AmbiguousInvocationInputError{
 		invocationErr: &InvocationError{
-			Code:    InvocationErrorCodeAmbiguousInput,
-			Message: fmt.Sprintf("ambiguous invocation input sources: %s", strings.Join(labels, " and ")),
+			Code:    string(inputErr.Code),
+			Message: inputErr.Message,
 		},
-		Sources: append([]InvocationInputSource(nil), sources...),
+		Sources: sources,
 	}
 }
 

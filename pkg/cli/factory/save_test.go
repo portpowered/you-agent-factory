@@ -199,6 +199,37 @@ func TestSaveFromFile_SetCurrentUpdatesPointer(t *testing.T) {
 	}
 }
 
+func TestSaveFromFile_SetCurrentScopedNameKeepsResolveCurrentFactoryDirAligned(t *testing.T) {
+	rootDir := t.TempDir()
+	from := writeFactoryConfigFile(t, rootDir, "tts", saveTestNamedFactoryPayload(t, "tts"))
+
+	if err := SaveFromFile(SaveFromFileConfig{
+		Name:       "@you/tts",
+		From:       from,
+		Dir:        rootDir,
+		SetCurrent: true,
+		Output:     ioDiscard(t),
+	}); err != nil {
+		t.Fatalf("SaveFromFile(scoped): %v", err)
+	}
+
+	current, err := factoryconfig.ReadCurrentFactoryPointer(rootDir)
+	if err != nil {
+		t.Fatalf("ReadCurrentFactoryPointer: %v", err)
+	}
+	if current != "@you/tts" {
+		t.Fatalf("current = %q, want @you/tts", current)
+	}
+
+	resolvedDir, err := factoryconfig.ResolveCurrentFactoryDir(rootDir)
+	if err != nil {
+		t.Fatalf("ResolveCurrentFactoryDir: %v", err)
+	}
+	if want := filepath.Join(rootDir, "@you%2Ftts"); resolvedDir != want {
+		t.Fatalf("resolved dir = %q, want %q", resolvedDir, want)
+	}
+}
+
 func TestSaveFromFile_OmitsSetCurrentLeavesPointerUnchanged(t *testing.T) {
 	rootDir := t.TempDir()
 	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {

@@ -23,6 +23,7 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -287,11 +288,16 @@ func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) 
 		Use:   "list",
 		Short: "List persisted named factories",
 		Long: "List persisted named factories stored under a factory root.\n\n" +
-			"By default the command writes a human-readable table with each factory name, " +
-			"on-disk directory, and whether it is selected by .current-factory. " +
-			"Use --dir to scope discovery to a different factory root. Use global --json for scripting output.",
+			"By default the command lists project-local named factories from ./factory and writes a " +
+			"human-readable table with each factory name, on-disk directory, and whether it is selected " +
+			"by .current-factory. Global built-ins and customer-edited shared factories live under " +
+			"~/.you-agent-factory/factories and are listed only when you point --dir there explicitly. " +
+			"The command lists exactly one root at a time and never merges project-local and global entries. " +
+			"Use global --json for scripting output.",
 		Example: "  # List named factories under the default factory root.\n" +
 			"  " + cliBinaryName + " factory list\n\n" +
+			"  # List global built-ins and shared factories.\n" +
+			"  " + cliBinaryName + " factory list --dir ~/.you-agent-factory/factories\n\n" +
 			"  # List factories from a custom root as JSON.\n" +
 			"  " + cliBinaryName + " --json factory list --dir my-factory",
 		SilenceUsage: true,
@@ -727,6 +733,8 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
+			"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
+			"Built-ins such as @you/tts materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
 			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
 			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
@@ -737,6 +745,8 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
 			"  # Run an existing factory once in explicit batch mode.\n" +
 			"  " + cliBinaryName + " run --dir factory\n\n" +
+			"  # Run a persisted named factory from any working directory.\n" +
+			"  " + cliBinaryName + " run --named @you/tts\n\n" +
 			"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
 			"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"",
 		PreRunE: rejectDeprecatedPortFlag,
@@ -764,6 +774,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
+	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable")
 	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs; use positional text or piped stdin for the invocation input")
 	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
 		interfaces.RunnerIDCodex,
@@ -804,8 +815,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 		runcli.ObserveInvocationRejection(logger, err)
 		return err
 	}
-	cleanInvocation := shouldUseCleanRunInvocation(cmd, cfg)
-	textInvocation := shouldUseSharedFactoryTextInvocation(cmd, cfg)
+	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
 	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation || textInvocation
@@ -838,18 +848,16 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	return runCLI(ctx, cfg)
 }
 
-func shouldUseCleanRunInvocation(cmd *cobra.Command, cfg runcli.RunConfig) bool {
-	return cmd.Flags().Changed("factory") &&
+func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {
+	cleanInvocation = cmd.Flags().Changed("factory") &&
 		cmd.Flags().Changed("work") &&
 		strings.TrimSpace(cfg.WorkFile) != "" &&
 		!cfg.Continuously
-}
-
-func shouldUseSharedFactoryTextInvocation(cmd *cobra.Command, cfg runcli.RunConfig) bool {
-	return cmd.Flags().Changed("factory") &&
+	textInvocation = cmd.Flags().Changed("factory") &&
 		!cmd.Flags().Changed("work") &&
 		!cfg.Continuously &&
 		(cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil)
+	return cleanInvocation, textInvocation
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {
@@ -870,6 +878,16 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error {
 	factoryChanged := cmd.Flags().Changed("factory")
 	dirChanged := cmd.Flags().Changed("dir")
+	namedChanged := cmd.Flags().Changed("named")
+	if namedChanged {
+		switch {
+		case factoryChanged:
+			return fmt.Errorf("--named cannot be used with --factory")
+		case dirChanged:
+			return fmt.Errorf("--named cannot be used with --dir")
+		}
+		return resolveRunNamedFactorySelection(cfg)
+	}
 	if factoryChanged && dirChanged {
 		return fmt.Errorf("--factory cannot be used with --dir")
 	}
@@ -882,6 +900,28 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 		return err
 	}
 	cfg.Dir = factoryRoot
+	return nil
+}
+
+func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve current working directory for --named: %w", err)
+	}
+	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("resolve project named-factory root: %w", err)
+	}
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		return fmt.Errorf("resolve global named-factory root: %w", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, cfg.NamedFactoryName)
+	if err != nil {
+		return err
+	}
+	cfg.Dir = resolution.FactoryDir
+	cfg.NamedFactoryResolution = resolution
 	return nil
 }
 
@@ -924,38 +964,4 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	}
 	cfg.CleanInvocationInputSource = input.Source
 	return nil
-}
-
-func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := submitcli.SubmitConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "submit",
-		Short: "Submit work to a running factory",
-		Long: "Submit work to a running you-agent-factory service.\n\n" +
-			"Unary submit (this command) posts one work item with --name, --work-type-name, and --payload. " +
-			"For multi-work FACTORY_REQUEST_BATCH ingress to an already-running session, use " +
-			cliBinaryName + " submit batch. See " + cliBinaryName + " submit batch --help and " +
-			cliBinaryName + " docs batch-inputs.\n\n" +
-			"By default unary submit targets the default compatibility session. " +
-			"Use --session to submit to one specific live factory session instead.",
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return submitWork(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.Name, "name", "", "authored request name for the submitted work (required)")
-	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
-	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
-	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	cmd.AddCommand(newSubmitBatchCommand(globals, diagnostics))
-	return cmd
 }

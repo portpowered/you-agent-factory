@@ -40,6 +40,12 @@ type RunConfig struct {
 	Continuously bool
 	WorkFile     string
 	Dir          string
+	// NamedFactoryName is the canonical persisted named factory requested via
+	// you run --named. The CLI resolves it into Dir before service startup.
+	NamedFactoryName string
+	// NamedFactoryResolution carries the selected named-factory source and
+	// precedence metadata captured by CLI resolution before service startup.
+	NamedFactoryResolution *factoryconfig.NamedFactoryResolution
 	// FactoryConfigPath is the factory.json file path from you run --factory.
 	// The service uses Dir as the resolved factory root directory.
 	FactoryConfigPath string
@@ -356,6 +362,7 @@ func Run(ctx context.Context, cfg RunConfig) error {
 		}()
 		cfg.Port = reservedAPIServer.Port()
 	}
+	emitNamedFactoryResolutionDiagnostics(cfg, logger)
 	emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 
 	if invocationMode {
@@ -557,6 +564,50 @@ func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPa
 		requestedPort,
 		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
 	)
+}
+
+func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
+	resolution := cfg.NamedFactoryResolution
+	if resolution == nil {
+		return
+	}
+
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"run named-factory resolution name=%q source=%s resolvedFactoryDir=%q projectRoot=%q globalRoot=%q precedence=%s",
+		resolution.Name,
+		resolution.Source,
+		resolution.FactoryDir,
+		resolution.ProjectRoot,
+		resolution.GlobalRoot,
+		resolution.PrecedenceDecision,
+	)
+	logger.Info(
+		"named factory resolved",
+		zap.String("named_factory_name", resolution.Name),
+		zap.String("named_factory_resolution_source", string(resolution.Source)),
+		zap.String("named_factory_dir", resolution.FactoryDir),
+		zap.String("named_factory_project_root", resolution.ProjectRoot),
+		zap.String("named_factory_global_root", resolution.GlobalRoot),
+		zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
+	)
+	if resolution.PrecedenceDecision == factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal {
+		logger.Info(
+			"named factory precedence selected",
+			zap.String("named_factory_name", resolution.Name),
+			zap.String("named_factory_precedence_decision", string(resolution.PrecedenceDecision)),
+			zap.String("named_factory_resolution_source", string(resolution.Source)),
+		)
+	}
+	if resolution.Source == factoryconfig.NamedFactoryResolutionSourceBuiltin {
+		logger.Info(
+			"named factory built-in materialized",
+			zap.String("named_factory_name", resolution.Name),
+			zap.String("named_factory_target_dir", resolution.FactoryDir),
+			zap.String("named_factory_global_root", resolution.GlobalRoot),
+		)
+	}
 }
 
 func resolveFactoryDirForDiagnostics(dir string) string {
