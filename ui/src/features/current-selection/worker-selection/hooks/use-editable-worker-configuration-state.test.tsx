@@ -675,6 +675,79 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("builds pending hosted Linear poller config for save when required fields are set", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            auth: { secretRef: "secrets/linear-api-key" },
+            linear: {
+              mapping: { state: "queued", workType: "story" },
+              pollInterval: "30s",
+              stateIds: ["state-a"],
+              teamIds: ["team-a"],
+            },
+            name: "linear-poller",
+            provider: "LINEAR",
+            type: "HOSTED_WORKER",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(
+        { kind: "worker", workerName: "linear-poller" },
+        "linear-poller",
+      ),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onLinearPollIntervalChange("45s");
+      result.current.onLinearTeamIdsTextChange("team-a\nteam-b");
+      result.current.onLinearMappingWorkTypeChange("task");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      hasValidationErrors: false,
+      isDirty: true,
+      draft: {
+        authSecretRef: "secrets/linear-api-key",
+        linearMappingState: "queued",
+        linearMappingWorkType: "task",
+        linearPollInterval: "45s",
+        linearTeamIdsText: "team-a\nteam-b",
+        provider: "LINEAR",
+        type: "HOSTED_WORKER",
+      },
+      pendingFactoryDefinition: {
+        workers: [
+          {
+            auth: { secretRef: "secrets/linear-api-key" },
+            linear: {
+              mapping: { state: "queued", workType: "task" },
+              pollInterval: "45s",
+              stateIds: ["state-a"],
+              teamIds: ["team-a", "team-b"],
+            },
+            name: "linear-poller",
+            provider: "LINEAR",
+            type: "HOSTED_WORKER",
+          },
+        ],
+      },
+    });
+  });
+
   it("blocks save when hosted Linear poller fields are incomplete", () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: buildFactoryDocument({

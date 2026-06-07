@@ -1,5 +1,6 @@
 export interface WorkerDetailMessages {
   argsFieldLabel: string;
+  authSecretRefFieldHelp: string;
   authSecretRefFieldLabel: string;
   bodyFieldLabel: string;
   collapseAction: string;
@@ -47,11 +48,17 @@ export interface WorkerDetailMessages {
   editableConfigurationLinearClaimAssigneeFieldRequired: string;
   editableConfigurationLinearMappingStateRequired: string;
   editableConfigurationLinearMappingWorkTypeRequired: string;
+  linearClaimAssigneeFieldFieldHelp: string;
   linearClaimAssigneeFieldLabel: string;
+  linearMappingStateFieldHelp: string;
   linearMappingStateFieldLabel: string;
+  linearMappingWorkTypeFieldHelp: string;
   linearMappingWorkTypeFieldLabel: string;
+  linearPollIntervalFieldHelp: string;
   linearPollIntervalFieldLabel: string;
+  linearStateIdsFieldHelp: string;
   linearStateIdsFieldLabel: string;
+  linearTeamIdsFieldHelp: string;
   linearTeamIdsFieldLabel: string;
   modelFieldHelp: string;
   modelLabel: string;

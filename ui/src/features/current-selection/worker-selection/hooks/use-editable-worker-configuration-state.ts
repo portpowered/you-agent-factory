@@ -209,6 +209,12 @@ function createEditableWorkerDraftHandlers(
     onArgsTextChange: (value: string) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, argsText: value }));
     },
+    onAuthSecretRefChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        authSecretRef: value,
+      }));
+    },
     onBodyChange: (value: string) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, body: value }));
     },
@@ -221,6 +227,42 @@ function createEditableWorkerDraftHandlers(
       updateDraft(setSessionState, (draft) => ({
         ...draft,
         executorProvider: value,
+      }));
+    },
+    onLinearClaimAssigneeFieldChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearClaimAssigneeField: value,
+      }));
+    },
+    onLinearMappingStateChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearMappingState: value,
+      }));
+    },
+    onLinearMappingWorkTypeChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearMappingWorkType: value,
+      }));
+    },
+    onLinearPollIntervalChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearPollInterval: value,
+      }));
+    },
+    onLinearStateIdsTextChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearStateIdsText: value,
+      }));
+    },
+    onLinearTeamIdsTextChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearTeamIdsText: value,
       }));
     },
     onModelChange: (value: string) => {
