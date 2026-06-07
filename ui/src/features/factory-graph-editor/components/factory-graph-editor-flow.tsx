@@ -105,12 +105,21 @@ function FactoryGraphEditorNodeView({
     data.kind === "work-state"
       ? workStatePhaseSurfaceClassName(data.workStateType)
       : KIND_CLASS[data.kind];
+  const semanticIconKind =
+    data.workstationSemanticIconKind ??
+    semanticIconKindForNodeKind(data.kind, data.workStateType);
+  const semanticIconClassName =
+    data.workstationSemanticIconClassName ??
+    semanticIconClassNameForNodeKind(data.kind, data.workStateType);
+  const semanticIconLabel =
+    data.workstationSemanticLabel ?? data.kindLabel;
 
   return (
     <ActivityGraphNodeShell
       className={cn(
         "min-w-0 w-full justify-start overflow-hidden text-left shadow-none",
         surfaceClassName,
+        data.workstationSemanticBorderClassName,
         data.draftStatus === "none"
           ? currentActivityGraphNodeHoverClassName({
               activeFlow: data.activeFlow,
@@ -139,16 +148,13 @@ function FactoryGraphEditorNodeView({
               title={data.kindLabel}
             >
               <GraphSemanticIcon
-                className={cn(
-                  "h-4 w-4",
-                  semanticIconClassName(data.kind, data.workStateType),
-                )}
-                kind={semanticIconKind(data.kind, data.workStateType)}
-                label={data.kindLabel}
+                className={cn("h-4 w-4", semanticIconClassName)}
+                kind={semanticIconKind}
+                label={semanticIconLabel}
               />
             </span>
             <ActivityGraphNodeBadge weight="label">
-              {data.kindLabel}
+              {semanticIconLabel}
             </ActivityGraphNodeBadge>
           </div>
           {data.kind === "worker" && data.workerStatus ? (
@@ -213,7 +219,7 @@ function FactoryGraphEditorNodeView({
   );
 }
 
-function semanticIconKind(
+function semanticIconKindForNodeKind(
   kind: FactoryGraphNodeKind,
   workStateType?: FactoryGraphWorkStateType,
 ): GraphSemanticIconKind {
@@ -233,7 +239,7 @@ function semanticIconKind(
   }
 }
 
-function semanticIconClassName(
+function semanticIconClassNameForNodeKind(
   kind: FactoryGraphNodeKind,
   workStateType?: FactoryGraphWorkStateType,
 ) {

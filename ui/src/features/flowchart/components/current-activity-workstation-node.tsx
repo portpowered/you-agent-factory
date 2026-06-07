@@ -13,10 +13,7 @@ import { GraphNodeButton } from "../../../components/ui/graph-node-button";
 import { cn } from "../../../lib/cn";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
-import {
-  REPEATER_WORKSTATION_KIND,
-  workstationIconMetadata,
-} from "../lib/workstation-icon-metadata";
+import { workstationGraphPresentation } from "../lib/workstation-graph-presentation";
 import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
 import {
@@ -69,7 +66,7 @@ export function WorkstationNodeView({
   data,
 }: NodeProps<CurrentActivityWorkstationNode>) {
   const messages = getWorkflowActivityShellMessages(data.locale);
-  const semanticIconMetadata = workstationIconMetadata(
+  const semanticIconMetadata = workstationGraphPresentation(
     data.workstation,
     data.locale,
   );
@@ -96,9 +93,7 @@ export function WorkstationNodeView({
     exhaustionRule
       ? "border-dashed border-af-danger-border"
       : "border-info-border",
-    !exhaustionRule &&
-      semanticIconMetadata.semanticKind === REPEATER_WORKSTATION_KIND &&
-      "border-double",
+    !exhaustionRule && semanticIconMetadata.borderClassName,
     !exhaustionRule &&
       data.active &&
       !data.selectedWorkstation &&
@@ -151,7 +146,7 @@ function ExhaustionRuleNodeButton({
 }: {
   data: WorkstationNodeData;
   messages: ReturnType<typeof getWorkflowActivityShellMessages>;
-  semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
+  semanticIconMetadata: ReturnType<typeof workstationGraphPresentation>;
   workstationTitle: string;
 }) {
   const header = (
@@ -221,7 +216,7 @@ function ActiveWorkstationNodeContent({
 }: {
   data: WorkstationNodeData;
   messages: ReturnType<typeof getWorkflowActivityShellMessages>;
-  semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
+  semanticIconMetadata: ReturnType<typeof workstationGraphPresentation>;
   selectedWork: boolean;
   visibleWorkItemEntries: Array<{
     execution: DashboardActiveExecution;
@@ -349,7 +344,7 @@ function WorkstationHeaderContent({
   workstationTitle,
 }: {
   data: WorkstationNodeData;
-  semanticIconMetadata: ReturnType<typeof workstationIconMetadata>;
+  semanticIconMetadata: ReturnType<typeof workstationGraphPresentation>;
   workstationTitle: string;
 }) {
   return (

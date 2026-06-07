@@ -196,11 +196,15 @@ export interface WorkstationSummaryProps {
   editableConfigurationState?: EditableWorkstationConfigurationState;
   historyCount: number;
   historyLabel: string;
+  locale?: string;
   messages: WorkstationDetailMessages;
   selectedNode: DashboardWorkstationNode;
 }
 
 export interface WorkstationSummaryItemProps {
+  iconClassName?: string;
+  iconKind?: string;
+  iconLabel?: string;
   label: string;
   value: string | number;
 }

@@ -37,6 +37,7 @@ import {
   resolveWorkStateTypeForGraphNode,
 } from "./factory-graph-work-state-type";
 import { factoryGraphEditorEdgeHoverClassName } from "../../flowchart/lib/current-activity-graph-hover";
+import { workstationGraphPresentationFromBehavior } from "../../flowchart/lib/workstation-graph-presentation";
 import {
   type FactoryValidationGraphProjection,
   filterValidationHandleErrorsForWorkstation,
@@ -69,6 +70,10 @@ export type FactoryGraphReactFlowNode = Node<
     workStateType?: FactoryGraphWorkStateType;
     workerStatus?: FactoryGraphWorkerRuntimeStatus;
     workerStatusLabel?: string;
+    workstationSemanticBorderClassName?: string;
+    workstationSemanticIconClassName?: string;
+    workstationSemanticIconKind?: string;
+    workstationSemanticLabel?: string;
     zAxisIncompleteHints?: ZAxisIncompleteHints | null;
   },
   "factoryEntity"
@@ -186,6 +191,14 @@ export function projectFactoryGraphToReactFlow(
         node.kind === "work-type"
           ? workTypeHasDefaultHandling(input.factoryDefinition, node.label)
           : false;
+      const workstationPresentation =
+        node.kind === "workstation" &&
+        anchorContext?.workstation?.behavior !== undefined
+          ? workstationGraphPresentationFromBehavior(
+              anchorContext.workstation.behavior,
+              input.locale,
+            )
+          : null;
 
       return {
         className: nodeClassName(node.id, input),
@@ -225,6 +238,17 @@ export function projectFactoryGraphToReactFlow(
           workerStatusLabel: workerStatus
             ? messages.workerStatusLabel(workerStatus)
             : undefined,
+          ...(workstationPresentation &&
+          workstationPresentation.semanticKind !== "STANDARD"
+            ? {
+                workstationSemanticBorderClassName:
+                  workstationPresentation.borderClassName,
+                workstationSemanticIconClassName:
+                  workstationPresentation.className,
+                workstationSemanticIconKind: workstationPresentation.iconKind,
+                workstationSemanticLabel: workstationPresentation.label,
+              }
+            : {}),
           zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
             anchorContext,
             canEditConnections,

@@ -51,6 +51,7 @@ export function WorkstationDetailCard({
               ? messages.historicalRequestsLabel
               : messages.historicalRunsLabel
           }
+          locale={locale}
           messages={messages}
           selectedNode={selectedNode}
         />
