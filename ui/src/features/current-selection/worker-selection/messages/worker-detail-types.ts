@@ -14,6 +14,7 @@ export interface WorkerDetailMessages {
   editableConfigurationExpandActionLabel: string;
   editableConfigurationHeading: string;
   editableConfigurationArgsInvalid: string;
+  editableConfigurationAuthSecretRefRequired: string;
   editableConfigurationBodyRequired: string;
   editableConfigurationCommandRequired: string;
   editableConfigurationContractInvalidPrefix: string;
@@ -43,6 +44,9 @@ export interface WorkerDetailMessages {
   editableConfigurationValidationStatus: string;
   executorProviderLabel: string;
   expandAction: string;
+  editableConfigurationLinearClaimAssigneeFieldRequired: string;
+  editableConfigurationLinearMappingStateRequired: string;
+  editableConfigurationLinearMappingWorkTypeRequired: string;
   linearClaimAssigneeFieldLabel: string;
   linearMappingStateFieldLabel: string;
   linearMappingWorkTypeFieldLabel: string;

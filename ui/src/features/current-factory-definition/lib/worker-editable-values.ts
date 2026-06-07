@@ -38,6 +38,7 @@ export const EDITABLE_HOSTED_PROVIDERS: HostedProvider[] = ["LINEAR"];
 export const EMPTY_HOSTED_LINEAR_EDITABLE_VALUES = {
   authSecretRef: null,
   linearClaimAssigneeField: null,
+  linearClaimPresent: false,
   linearMappingState: null,
   linearMappingWorkType: null,
   linearPollInterval: null,
@@ -62,6 +63,7 @@ export interface EditableWorkerValues {
   command: string | null;
   executorProvider: ExecutorProvider | null;
   linearClaimAssigneeField: string | null;
+  linearClaimPresent: boolean;
   linearMappingState: string | null;
   linearMappingWorkType: string | null;
   linearPollInterval: string | null;
@@ -121,6 +123,7 @@ export function resolveEditableWorkerValues(
     command: worker.command ?? null,
     executorProvider: worker.executorProvider ?? null,
     linearClaimAssigneeField: worker.linear?.claim?.assigneeField ?? null,
+    linearClaimPresent: worker.linear?.claim != null,
     linearMappingState: worker.linear?.mapping?.state ?? null,
     linearMappingWorkType: worker.linear?.mapping?.workType ?? null,
     linearPollInterval: worker.linear?.pollInterval ?? null,

@@ -37,6 +37,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationHeading: "Worker configuration",
     editableConfigurationArgsInvalid:
       "Each script argument must be a single non-empty line.",
+    editableConfigurationAuthSecretRefRequired:
+      "Enter a secret reference before saving this hosted Linear worker.",
     editableConfigurationBodyRequired:
       "Enter script body instructions before saving this worker.",
     editableConfigurationCommandRequired:
@@ -83,6 +85,12 @@ const workerDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this worker.",
     executorProviderLabel: "Executor provider",
     expandAction: "Expand",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "Enter a claim assignee field before saving this hosted Linear worker.",
+    editableConfigurationLinearMappingStateRequired:
+      "Enter a mapping state before saving this hosted Linear worker.",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "Enter a mapping work type before saving this hosted Linear worker.",
     linearClaimAssigneeFieldLabel: "Claim assignee field",
     linearMappingStateFieldLabel: "Mapping state",
     linearMappingWorkTypeFieldLabel: "Mapping work type",
@@ -137,6 +145,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationHeading: "ワーカー設定",
     editableConfigurationArgsInvalid:
       "各スクリプト引数は空でない 1 行である必要があります。",
+    editableConfigurationAuthSecretRefRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にシークレット参照を入力してください。",
     editableConfigurationBodyRequired:
       "このワーカーを保存する前にスクリプト本文を入力してください。",
     editableConfigurationCommandRequired:
@@ -182,6 +192,12 @@ const workerDetailMessagesByLocale = {
       "このワーカーを保存する前にハイライトされた項目を修正してください。",
     executorProviderLabel: "実行プロバイダー",
     expandAction: "展開",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にクレーム担当者フィールドを入力してください。",
+    editableConfigurationLinearMappingStateRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にマッピング状態を入力してください。",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にマッピング作業種別を入力してください。",
     linearClaimAssigneeFieldLabel: "クレーム担当者フィールド",
     linearMappingStateFieldLabel: "マッピング状態",
     linearMappingWorkTypeFieldLabel: "マッピング作業種別",
@@ -235,6 +251,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationHeading: "워커 구성",
     editableConfigurationArgsInvalid:
       "각 스크립트 인수는 비어 있지 않은 한 줄이어야 합니다.",
+    editableConfigurationAuthSecretRefRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 시크릿 참조를 입력하세요.",
     editableConfigurationBodyRequired:
       "이 워커를 저장하기 전에 스크립트 본문을 입력하세요.",
     editableConfigurationCommandRequired:
@@ -281,6 +299,12 @@ const workerDetailMessagesByLocale = {
       "이 워커를 저장하기 전에 강조된 필드를 해결하세요.",
     executorProviderLabel: "실행자 제공자",
     expandAction: "펼치기",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 클레임 담당자 필드를 입력하세요.",
+    editableConfigurationLinearMappingStateRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 매핑 상태를 입력하세요.",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 매핑 작업 유형을 입력하세요.",
     linearClaimAssigneeFieldLabel: "클레임 담당자 필드",
     linearMappingStateFieldLabel: "매핑 상태",
     linearMappingWorkTypeFieldLabel: "매핑 작업 유형",
@@ -331,6 +355,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "展开 worker 配置编辑器",
     editableConfigurationHeading: "Worker 配置",
     editableConfigurationArgsInvalid: "每个脚本参数必须是非空的一行。",
+    editableConfigurationAuthSecretRefRequired:
+      "保存此托管 LINEAR worker 前请输入密钥引用。",
     editableConfigurationBodyRequired: "保存此 worker 前请输入脚本正文。",
     editableConfigurationCommandRequired: "保存此 worker 前请输入命令。",
     editableConfigurationContractInvalidPrefix: "Worker 配置无效。",
@@ -370,6 +396,12 @@ const workerDetailMessagesByLocale = {
     editableConfigurationValidationStatus: "保存此 worker 前请修正高亮字段。",
     executorProviderLabel: "执行器 provider",
     expandAction: "展开",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "保存此托管 LINEAR worker 前请输入认领 assignee 字段。",
+    editableConfigurationLinearMappingStateRequired:
+      "保存此托管 LINEAR worker 前请输入映射 state。",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "保存此托管 LINEAR worker 前请输入映射 work type。",
     linearClaimAssigneeFieldLabel: "认领 assignee 字段",
     linearMappingStateFieldLabel: "映射 state",
     linearMappingWorkTypeFieldLabel: "映射 work type",

@@ -675,6 +675,52 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("blocks save when hosted Linear poller fields are incomplete", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "linear-poller",
+            type: "MODEL_WORKER",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(
+        { kind: "worker", workerName: "linear-poller" },
+        "linear-poller",
+      ),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onTypeChange("HOSTED_WORKER");
+      result.current.onProviderChange("LINEAR");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: false,
+      hasValidationErrors: true,
+      isDirty: true,
+      validationErrors: {
+        authSecretRef: expect.any(String),
+        linearMappingState: expect.any(String),
+        linearMappingWorkType: expect.any(String),
+      },
+    });
+  });
+
   it("includes renamed worker and updated workstation references in pending factory", () => {
     const { result } = renderHook(() =>
       useEditableWorkerConfigurationState(workerSelection, "reviewer"),
