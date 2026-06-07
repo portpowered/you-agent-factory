@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { EditableConfigurationModelInvokeFields } from "./workstation-model-invoke-fields";
 import {
@@ -43,8 +44,170 @@ describe("EditableConfigurationModelInvokeFields", () => {
     expect(screen.queryByLabelText("Runner")).not.toBeInTheDocument();
   });
 
-  it("surfaces operation option empty state", () => {
+  it("surfaces worker option empty and error states", () => {
+    const { rerender } = render(
+      <EditableConfigurationModelInvokeFields
+        messages={editableConfigurationSectionMessages}
+        state={buildEditableConfigurationSectionReadyState({
+          workstationType: "MODEL_INVOKE",
+          workerOptionsState: {
+            message: "Add a model worker to the factory first.",
+            status: "empty",
+          },
+        })}
+        validationErrors={{}}
+      />,
+    );
+
+    expect(
+      screen.getByText("Add a model worker to the factory first."),
+    ).toBeInTheDocument();
+
+    rerender(
+      <EditableConfigurationModelInvokeFields
+        messages={editableConfigurationSectionMessages}
+        state={buildEditableConfigurationSectionReadyState({
+          workstationType: "MODEL_INVOKE",
+          workerOptionsState: {
+            message: "Worker catalog unavailable.",
+            status: "error",
+          },
+        })}
+        validationErrors={{}}
+      />,
+    );
+
+    expect(
+      screen.getByText(/Worker catalog unavailable/i),
+    ).toBeInTheDocument();
+  });
+
+  it("updates worker, operation, and binding fields", async () => {
+    const user = userEvent.setup();
+    const onWorkerChange = vi.fn();
+    const onOperationChange = vi.fn();
+    const onOperationBindingsChange = vi.fn();
+
     render(
+      <EditableConfigurationModelInvokeFields
+        messages={editableConfigurationSectionMessages}
+        state={{
+          ...buildEditableConfigurationSectionReadyState({
+            workstationType: "MODEL_INVOKE",
+            draft: {
+              operation: "TTS",
+              operationBindings: [],
+              workerName: "tts-worker",
+            },
+            operationOptionsState: {
+              operations: [
+                {
+                  name: "TTS",
+                  inputs: [
+                    { name: "text", contentTypes: ["TEXT"], required: true },
+                  ],
+                  outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+                },
+              ],
+              options: ["TTS"],
+              status: "ready",
+            },
+            workerOptionsState: {
+              options: ["tts-worker", "reviewer"],
+              status: "ready",
+            },
+          }),
+          onWorkerChange,
+          onOperationChange,
+          onOperationBindingsChange,
+        }}
+        validationErrors={{
+          "operationBindings[text]": "Binding text is required.",
+        }}
+      />,
+    );
+
+    await user.selectOptions(screen.getByLabelText("Worker"), "reviewer");
+    expect(onWorkerChange).toHaveBeenCalledWith("reviewer");
+
+    await user.selectOptions(screen.getByLabelText("Operation"), "TTS");
+    expect(onOperationChange).toHaveBeenCalledWith("TTS");
+
+    fireEvent.change(screen.getByLabelText("Config content"), {
+      target: { value: "speak clearly" },
+    });
+    expect(onOperationBindingsChange).toHaveBeenCalledWith([
+      expect.objectContaining({
+        slot: "text",
+        configText: "speak clearly",
+      }),
+    ]);
+
+    fireEvent.change(screen.getByLabelText("Default content"), {
+      target: { value: "fallback text" },
+    });
+    expect(onOperationBindingsChange).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        slot: "text",
+        defaultContentText: "fallback text",
+      }),
+    ]);
+
+    expect(screen.getByText("Binding text is required.")).toBeInTheDocument();
+  });
+
+  it("shows empty bindings guidance when the selected operation has no input slots", () => {
+    const readyState = buildEditableConfigurationSectionReadyState({
+      workstationType: "MODEL_INVOKE",
+      draft: {
+        operation: "NO_INPUTS",
+        operationBindings: [],
+        workerName: "tts-worker",
+      },
+      operationOptionsState: {
+        operations: [
+          {
+            name: "NO_INPUTS",
+            inputs: [],
+            outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+          },
+        ],
+        options: ["NO_INPUTS"],
+        status: "ready",
+      },
+    });
+
+    render(
+      <EditableConfigurationModelInvokeFields
+        messages={editableConfigurationSectionMessages}
+        state={{
+          ...readyState,
+          initialValues: {
+            ...readyState.initialValues,
+            modelOperationsByWorkerName: {
+              "tts-worker": [
+                {
+                  name: "NO_INPUTS",
+                  inputs: [],
+                  outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+                },
+              ],
+            },
+          },
+        }}
+        validationErrors={{}}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Select a worker operation to edit input slot bindings.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces operation option empty and error states", () => {
+    const { rerender } = render(
       <EditableConfigurationModelInvokeFields
         messages={editableConfigurationSectionMessages}
         state={buildEditableConfigurationSectionReadyState({
@@ -67,6 +230,28 @@ describe("EditableConfigurationModelInvokeFields", () => {
       screen.getByText(
         "Select a model worker before choosing an operation.",
       ),
+    ).toBeInTheDocument();
+
+    rerender(
+      <EditableConfigurationModelInvokeFields
+        messages={editableConfigurationSectionMessages}
+        state={buildEditableConfigurationSectionReadyState({
+          workstationType: "MODEL_INVOKE",
+          draft: {
+            operation: "MISSING",
+            workerName: "tts-worker",
+          },
+          operationOptionsState: {
+            message: "Selected operation is no longer declared on the worker.",
+            status: "error",
+          },
+        })}
+        validationErrors={{}}
+      />,
+    );
+
+    expect(
+      screen.getByText("Selected operation is no longer declared on the worker."),
     ).toBeInTheDocument();
   });
 });

@@ -93,6 +93,19 @@ describe("resolveDraftForWorkstationTypeChange", () => {
     });
   });
 
+  it("falls back to the first compatible model worker when converting to MODEL_INVOKE", () => {
+    expect(
+      resolveDraftForWorkstationTypeChange(
+        {
+          ...baseDraft,
+          workerName: "reviewer",
+        },
+        "MODEL_INVOKE",
+        baseValues,
+      ).workerName,
+    ).toBe("tts-worker");
+  });
+
   it("clears model-invoke fields and restores prompt when returning to MODEL_WORKSTATION", () => {
     const invokeDraft: EditableWorkstationDraft = {
       ...baseDraft,
