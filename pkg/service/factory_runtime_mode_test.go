@@ -182,6 +182,10 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureLifecycleAndStateTr
 	if err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricQueueSubmissionCount, 1) &&
+			metricRecordString(record, "trace_id") == "trace-runtime-metrics-active"
+	}, "submission count")
 
 	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusActive, time.Second, "service runtime active work")
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {

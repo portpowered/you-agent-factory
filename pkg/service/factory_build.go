@@ -89,7 +89,8 @@ const (
 	runtimeMetricStateIdle         = "runtime.state.idle"
 	runtimeMetricStatePaused       = "runtime.state.paused"
 	runtimeMetricStateFailed       = "runtime.state.failed"
-	runtimeMetricQueueInFlight     = "runtime.queue.in_flight"
+	runtimeMetricQueueInFlight        = "runtime.queue.in_flight"
+	runtimeMetricQueueSubmissionCount = "queue.submission_count"
 	runtimeMetricDispatchStarted   = "dispatch.started"
 	runtimeMetricDispatchComplete  = "dispatch.completed"
 	runtimeMetricDispatchDuration  = "dispatch.duration"
@@ -202,9 +203,12 @@ func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, 
 // RuntimeLogDiagnostics describes the active runtime log selected during
 // service construction.
 type RuntimeLogDiagnostics struct {
-	Path         string
-	RootDir      string
-	StartTimeUTC time.Time
+	Path                string
+	RootDir             string
+	StartTimeUTC        time.Time
+	MetricsPath         string
+	MetricsRootDir      string
+	MetricsStartTimeUTC time.Time
 }
 
 // RuntimeLogDiagnostics returns the selected runtime log metadata for startup
@@ -215,10 +219,34 @@ func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
 		return RuntimeLogDiagnostics{}
 	}
 	return RuntimeLogDiagnostics{
-		Path:         bundle.logSink.Path(),
-		RootDir:      bundle.logSink.RootDir(),
-		StartTimeUTC: bundle.logSink.StartTimeUTC(),
+		Path:                bundle.logSink.Path(),
+		RootDir:             bundle.logSink.RootDir(),
+		StartTimeUTC:        bundle.logSink.StartTimeUTC(),
+		MetricsPath:         runtimeMetricsPath(bundle.metricsSink),
+		MetricsRootDir:      runtimeMetricsRootDir(bundle.metricsSink),
+		MetricsStartTimeUTC: runtimeMetricsStartTime(bundle.metricsSink),
 	}
+}
+
+func runtimeMetricsPath(sink *logging.RuntimeMetricsSink) string {
+	if sink == nil {
+		return ""
+	}
+	return sink.Path()
+}
+
+func runtimeMetricsRootDir(sink *logging.RuntimeMetricsSink) string {
+	if sink == nil {
+		return ""
+	}
+	return sink.RootDir()
+}
+
+func runtimeMetricsStartTime(sink *logging.RuntimeMetricsSink) time.Time {
+	if sink == nil {
+		return time.Time{}
+	}
+	return sink.StartTimeUTC()
 }
 
 func runtimeLogStartTimeString(value time.Time) string {
@@ -416,6 +444,7 @@ func assembleRuntimeBundle(
 		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID)),
 		factory.WithClock(input.clock),
 		factory.WithFactoryEventHistory(eventHistory),
+		factory.WithSubmissionRecorder(bundle.recordSubmissionMetric),
 		factory.WithDispatchRecorder(bundle.recordDispatchMetric),
 		factory.WithCompletionRecorder(bundle.recordCompletionMetrics),
 	}
@@ -502,6 +531,14 @@ func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *loggi
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (r *factoryRuntimeBundle) recordSubmissionMetric(record interfaces.FactorySubmissionRecord) {
+	fields := metrics.Fields{
+		WorkID:  strings.TrimSpace(record.Request.WorkID),
+		TraceID: strings.TrimSpace(record.Request.TraceID),
+	}
+	r.emitMetricCounter(runtimeMetricQueueSubmissionCount, 1, fields)
 }
 
 func (r *factoryRuntimeBundle) recordDispatchMetric(record interfaces.FactoryDispatchRecord) {
