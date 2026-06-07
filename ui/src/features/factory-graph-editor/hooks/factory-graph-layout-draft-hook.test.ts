@@ -8,7 +8,7 @@ import {
   moveFactoryLayoutNode,
 } from "../lib/factory-graph-layout-operations";
 
-describe("useFactoryGraphLayoutDraftState", () => {
+describe("useFactoryGraphLayoutDraftState movement history", () => {
   it("records layout commands and supports undo and redo", () => {
     const { result } = renderHook(() =>
       useFactoryGraphLayoutDraftState({
@@ -67,7 +67,9 @@ describe("useFactoryGraphLayoutDraftState", () => {
     expect(result.current.canUndoLayout).toBe(false);
     expect(result.current.canRedoLayout).toBe(false);
   });
+});
 
+describe("useFactoryGraphLayoutDraftState viewport and multi-node moves", () => {
   it("records viewport updates with undo and redo", () => {
     const { result } = renderHook(() =>
       useFactoryGraphLayoutDraftState({
@@ -137,7 +139,9 @@ describe("useFactoryGraphLayoutDraftState", () => {
       y: 200,
     });
   });
+});
 
+describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
   it("records reset layout in history when recordHistory is enabled", () => {
     const layoutDocument = {
       ...baseFactoryDefinition,
@@ -223,7 +227,9 @@ describe("useFactoryGraphLayoutDraftState", () => {
     });
     expect(result.current.canUndoLayout).toBe(false);
   });
+});
 
+describe("useFactoryGraphLayoutDraftState scope and pruning", () => {
   it("prunes layout history for deleted node ids", () => {
     const { result } = renderHook(() =>
       useFactoryGraphLayoutDraftState({
