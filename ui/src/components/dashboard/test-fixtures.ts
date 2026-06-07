@@ -84,8 +84,6 @@ export const twentyNodeDashboardSnapshot: DashboardSnapshot =
     failedOutcomeRuntimeOverlay,
   ]);
 
-export const twentyNodeDashboardTopology = twentyNodeDashboardSnapshot.topology;
-
 export function resourceOccupancySnapshotForTick(
   tick: number,
 ): DashboardSnapshot {
