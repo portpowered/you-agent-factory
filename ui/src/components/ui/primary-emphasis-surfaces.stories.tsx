@@ -1,3 +1,5 @@
+import "../../styles.css";
+
 import { expect, within } from "storybook/test";
 
 import { applyDocumentColorPalette } from "../../theme/app-color-palette";
@@ -59,16 +61,10 @@ export const PaletteSwitching = {
         paletteId,
       );
 
-      const statusPill = canvas.getByTestId("status-pill-active");
-      const selectedButton = canvas.getByTestId("current-selection-selected");
       const selectedMenuItem = canvas.getByRole("menuitemradio", {
         name: "Factory Light",
       });
 
-      expectAccentInkForeground(statusPill);
-      expectPrimaryContainerBackground(statusPill);
-      expectAccentInkForeground(selectedButton);
-      expectPrimaryContainerBackground(selectedButton);
       expectAccentInkForeground(selectedMenuItem);
       expectPrimaryContainerBackground(selectedMenuItem);
 

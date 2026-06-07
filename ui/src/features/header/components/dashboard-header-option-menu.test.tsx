@@ -55,7 +55,7 @@ describe("DashboardHeaderOptionMenuItem", () => {
     expect(unselected.className).toContain("text-on-surface-variant");
   });
 
-  it("keeps selected menu items on ghost tone so primary-container classes win at runtime", () => {
+  it("renders selected menu items without conflicting ghost button tone utilities", () => {
     render(
       <DashboardHeaderOptionMenuItem isSelected onClick={() => undefined}>
         Selected
@@ -66,7 +66,7 @@ describe("DashboardHeaderOptionMenuItem", () => {
 
     expect(selected.className).toContain("bg-primary-container");
     expect(selected.className).toContain("text-on-primary");
-    expect(selected.className).toContain("border-transparent bg-transparent");
-    expect(selected.className).not.toContain("text-primary hover:border-primary");
+    expect(selected.className).not.toContain("bg-transparent");
+    expect(selected.className).not.toContain("text-on-surface-variant");
   });
 });
