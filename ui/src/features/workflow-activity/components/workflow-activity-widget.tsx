@@ -10,6 +10,7 @@ export interface WorkflowActivityWidgetProps {
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
+  onDocAdded?: (targetPath: string) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
@@ -31,6 +32,7 @@ export function WorkflowActivityWidget({
   importController,
   locale,
   now,
+  onDocAdded,
   onNodeRemovedFromDraft,
   onSelectDoc,
   onSelectResource,
@@ -49,6 +51,7 @@ export function WorkflowActivityWidget({
       importController={importController}
       locale={locale}
       now={now}
+      onDocAdded={onDocAdded}
       onNodeRemovedFromDraft={onNodeRemovedFromDraft}
       selection={selection}
       snapshot={snapshot}

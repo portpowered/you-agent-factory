@@ -126,8 +126,14 @@ export interface FactoryGraphDraftEdgeChange {
   target: FactoryGraphNodeKey;
 }
 
+export interface FactoryGraphDocDraft {
+  inlineContent: string;
+  targetPath: string;
+}
+
 export interface FactoryGraphDraft {
   additions: {
+    docs: FactoryGraphDocDraft[];
     resources: FactoryResource[];
     workers: FactoryWorker[];
     workStates: Array<{
@@ -142,6 +148,7 @@ export interface FactoryGraphDraft {
     removals: FactoryGraphDraftEdgeChange[];
   };
   removals: {
+    docs: string[];
     resources: string[];
     workers: string[];
     workStates: Array<{
@@ -184,6 +191,7 @@ export interface FactoryGraphDraftSessionState {
 export function createEmptyFactoryGraphDraft(): FactoryGraphDraft {
   return {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -195,6 +203,7 @@ export function createEmptyFactoryGraphDraft(): FactoryGraphDraft {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -206,13 +215,15 @@ export function createEmptyFactoryGraphDraft(): FactoryGraphDraft {
 
 export function hasFactoryGraphDraftChanges(draft: FactoryGraphDraft): boolean {
   return Boolean(
-    draft.additions.resources.length ||
+    draft.additions.docs.length ||
+      draft.additions.resources.length ||
       draft.additions.workers.length ||
       draft.additions.workStates.length ||
       draft.additions.workTypes.length ||
       draft.additions.workstations.length ||
       draft.edgeChanges.additions.length ||
       draft.edgeChanges.removals.length ||
+      draft.removals.docs.length ||
       draft.removals.resources.length ||
       draft.removals.workers.length ||
       draft.removals.workStates.length ||

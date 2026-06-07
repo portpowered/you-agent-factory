@@ -18,6 +18,7 @@ interface WorkflowActivityBentoCardProps {
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
+  onDocAdded?: (targetPath: string) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
@@ -39,6 +40,7 @@ export function WorkflowActivityBentoCard({
   importController,
   locale,
   now,
+  onDocAdded,
   onNodeRemovedFromDraft,
   selection,
   snapshot,
@@ -60,6 +62,7 @@ export function WorkflowActivityBentoCard({
     snapshot,
     locale,
     sessionID,
+    onDocAdded,
     onNodeRemovedFromDraft,
   );
 

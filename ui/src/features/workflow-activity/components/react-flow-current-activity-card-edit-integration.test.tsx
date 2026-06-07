@@ -534,6 +534,70 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     });
   });
 
+  it("renders a newly added doc node from the graph add flow", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Doc" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "File name" }), {
+      target: { value: "playbook.md" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Doc text" }), {
+      target: { value: "# Playbook\n" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    expect(
+      await screen.findByRole("button", { name: "doc:factory/docs/playbook.md" }),
+    ).toBeTruthy();
+  });
+
+  it("confirms doc deletion before removing the doc node from the draft graph", async () => {
+    const factoryWithDoc: CurrentFactoryDocument = {
+      ...editableFactoryDocument,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Guide\n" },
+            targetPath: "factory/docs/guide.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryWithDoc,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderCurrentActivity(createSnapshot(factoryWithDoc));
+    enterEditorMode();
+
+    expect(
+      await screen.findByRole("button", { name: "doc:factory/docs/guide.md" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "doc:factory/docs/guide.md" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove guide.md doc?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete guide.md doc" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "doc:factory/docs/guide.md" }),
+      ).toBeNull();
+    });
+  });
+
   it("opens save confirmation from the activity card host portaled to document.body", async () => {
     renderCurrentActivity();
     enterEditorMode();

@@ -84,6 +84,7 @@ export interface CurrentSelectionState {
   selectResource: (resourceName: string) => void;
   selectWorker: (workerName: string) => void;
   selectedDocTargetPath: string | null;
+  clearSelectedDocIfMatching: (targetPath: string) => void;
   clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
   clearSelectedStateNodeIfMatching: (placeId: string) => void;
   clearSelectedWorkerIfMatching: (workerName: string) => void;
@@ -216,6 +217,7 @@ export function useCurrentSelection({
     selectWorkItem: actions.selectWorkItem,
     selectWorkstation: actions.selectWorkstation,
     selectWorkstationRequest: actions.selectWorkstationRequest,
+    clearSelectedDocIfMatching: actions.clearSelectedDocIfMatching,
     clearSelectedFactoryGraphNodeIfMatching:
       actions.clearSelectedFactoryGraphNodeIfMatching,
     clearSelectedStateNodeIfMatching: actions.clearSelectedStateNodeIfMatching,

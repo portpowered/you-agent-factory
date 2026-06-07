@@ -128,6 +128,17 @@ export function useCurrentSelectionActions({
     });
   };
 
+  const clearSelectedDocIfMatching = (targetPath: string) => {
+    if (selection?.kind !== "doc" || selection.targetPath !== targetPath) {
+      return;
+    }
+
+    commitSelectionState({
+      selection: snapshot ? selectDefaultSelection(snapshot) : null,
+      terminalWorkDetail: null,
+    });
+  };
+
   const selectWorkType = (workTypeName: string) => {
     commitSelectionState({
       selection: { kind: "work-type", workTypeName },
@@ -248,6 +259,7 @@ export function useCurrentSelectionActions({
   };
 
   return {
+    clearSelectedDocIfMatching,
     clearSelectedFactoryGraphNodeIfMatching,
     clearSelectedStateNodeIfMatching,
     clearSelectedWorkerIfMatching,

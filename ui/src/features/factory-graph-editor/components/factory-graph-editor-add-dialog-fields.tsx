@@ -49,19 +49,26 @@ export function FactoryGraphEditorAddField({
 
 export function FactoryGraphEditorTextareaField({
   error,
+  helpText,
   inputId,
   label,
   onChange,
   value,
 }: {
   error?: string;
+  helpText?: string;
   inputId: string;
   label: string;
   onChange: (value: string) => void;
   value: string;
 }) {
   return (
-    <FactoryGraphEditorAddField error={error} inputId={inputId} label={label}>
+    <FactoryGraphEditorAddField
+      error={error}
+      helpText={helpText}
+      inputId={inputId}
+      label={label}
+    >
       <Textarea
         aria-label={label}
         className={FACTORY_GRAPH_ADD_INPUT_CLASS}

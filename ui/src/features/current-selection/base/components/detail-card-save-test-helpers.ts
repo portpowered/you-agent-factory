@@ -284,6 +284,7 @@ export function buildDetailCardCurrentSelection(
     selectStateWorkItem: () => undefined,
     selectWorkByID: () => undefined,
     selectWorkItem: () => undefined,
+    clearSelectedDocIfMatching: () => undefined,
     clearSelectedFactoryGraphNodeIfMatching: () => undefined,
     clearSelectedStateNodeIfMatching: () => undefined,
     clearSelectedWorkerIfMatching: () => undefined,

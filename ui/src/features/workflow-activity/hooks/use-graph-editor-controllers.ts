@@ -19,6 +19,7 @@ export function useGraphEditorControllers({
   editableGraph,
   hiddenNodeClasses,
   locale,
+  onDocAdded,
   onNodeRemovedFromDraft,
   saveEditableDefinition,
   setActiveTool,
@@ -30,6 +31,7 @@ export function useGraphEditorControllers({
   editableGraph: EditableFactoryGraphViewModel;
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   locale?: string | null;
+  onDocAdded?: (targetPath: string) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
@@ -37,6 +39,7 @@ export function useGraphEditorControllers({
   const addEntityController = useFactoryGraphAddEntityController({
     currentFactoryDefinition,
     editableGraph,
+    onDocAdded,
     setActiveTool,
   });
   const connectionController = useFactoryGraphConnectionController({

@@ -254,7 +254,15 @@ function buildOverviewWidgetCard({
             importController={importController}
             locale={locale}
             now={now}
+            onDocAdded={currentSelection.selectDoc}
             onNodeRemovedFromDraft={(nodeId) => {
+              if (nodeId.startsWith("doc:")) {
+                currentSelection.clearSelectedDocIfMatching(
+                  nodeId.slice("doc:".length),
+                );
+                return;
+              }
+
               if (nodeId.startsWith("worker:")) {
                 currentSelection.clearSelectedWorkerIfMatching(
                   nodeId.slice("worker:".length),

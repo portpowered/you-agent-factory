@@ -4,6 +4,12 @@ import {
   nodeKeyId,
 } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import { factoryGraphDocNodeIdForTargetPath } from "../../factory-graph-editor/lib/factory-graph-doc-editor";
+import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
+import {
+  CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
+  CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+} from "./current-activity-doc-graph-layout";
 import type { GraphNodePosition } from "../state/currentActivityGraphStore";
 import {
   axisAlignedRectFromTopLeft,
@@ -16,6 +22,12 @@ import {
 export function factoryGraphNodeIdForAddEntityDraft(
   draft: FactoryGraphAddEntityDraft,
 ): string {
+  if (draft.kind === "doc") {
+    return factoryGraphDocNodeIdForTargetPath(
+      buildDocTargetPathFromFileName(draft.fileName.trim()),
+    );
+  }
+
   const name = draft.name.trim();
   switch (draft.kind) {
     case "resource":
@@ -37,7 +49,7 @@ export function factoryGraphNodeIdForAddEntityDraft(
 
 export function factoryGraphNodeKindForAddEntityDraft(
   draft: FactoryGraphAddEntityDraft,
-): FactoryGraphNodeKind {
+): FactoryGraphNodeKind | "doc" {
   return draft.kind;
 }
 
@@ -127,9 +139,14 @@ export function resolveInitialPlacementTopLeft(input: {
     return null;
   }
 
-  const candidateSize = graphEditorNodeDimensionsForKind(
-    factoryGraphNodeKindForAddEntityDraft(input.draft),
-  );
+  const kind = factoryGraphNodeKindForAddEntityDraft(input.draft);
+  const candidateSize =
+    kind === "doc"
+      ? {
+          height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
+          width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+        }
+      : graphEditorNodeDimensionsForKind(kind);
   const placement = resolveViewportCenterNodePlacement({
     candidateSize,
     occupiedRects: occupiedRectsFromRenderedNodes(input.nodes, nodeId),

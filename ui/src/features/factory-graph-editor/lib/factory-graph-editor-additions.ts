@@ -1,4 +1,13 @@
+import {
+  buildDocTargetPathFromFileName,
+  listFactoryDocTargetPaths,
+} from "../../current-factory-definition/lib/doc-editable-values";
 import { validateEditableWorkstationCronDraft } from "../../current-factory-definition/lib/editable-workstation-cron-validation";
+import { isFactoryBundledDocTargetPath } from "../../workflow-activity/lib/factory-bundled-docs";
+import {
+  resolveDocTargetPathFromFileName,
+  suggestDefaultDocFileName,
+} from "./factory-graph-doc-editor";
 import { parseWorkerArgsText } from "../../current-factory-definition/lib/worker-editable-values";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
@@ -35,6 +44,7 @@ export type FactoryGraphAddWorkerType = Extract<
 >;
 
 export type FactoryGraphAddEntityKind =
+  | "doc"
   | "resource"
   | "worker"
   | "work-type"
@@ -42,6 +52,11 @@ export type FactoryGraphAddEntityKind =
   | "workstation";
 
 export type FactoryGraphAddEntityDraft =
+  | {
+      fileName: string;
+      inlineContent: string;
+      kind: "doc";
+    }
   | {
       capacity: string;
       kind: "resource";
@@ -82,6 +97,8 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "args"
     | "capacity"
     | "command"
+    | "fileName"
+    | "inlineContent"
     | "initialStateName"
     | "model"
     | "modelProvider"
@@ -119,6 +136,11 @@ export function buildFactoryGraphAddEntityMenuActions(
 
   return [
     {
+      description: messages.addMenuAction("doc").description,
+      id: "doc",
+      label: messages.addMenuAction("doc").label,
+    },
+    {
       description: messages.addMenuAction("workstation").description,
       id: "workstation",
       label: messages.addMenuAction("workstation").label,
@@ -151,6 +173,14 @@ export function createFactoryGraphAddEntityDraft(
   kind: FactoryGraphAddEntityKind,
   factoryDefinition: CanonicalFactoryDefinition | null,
 ): FactoryGraphAddEntityDraft {
+  if (kind === "doc") {
+    return {
+      fileName: suggestDefaultDocFileName(factoryDefinition),
+      inlineContent: "",
+      kind,
+    };
+  }
+
   if (kind === "resource") {
     return {
       capacity: DEFAULT_RESOURCE_CAPACITY,
@@ -205,6 +235,24 @@ export function validateFactoryGraphAddEntityDraft(
   _locale?: string | null,
 ): FactoryGraphAddEntityFieldErrors {
   const errors: FactoryGraphAddEntityFieldErrors = {};
+
+  if (draft.kind === "doc") {
+    const fileName = draft.fileName.trim();
+    if (fileName.length === 0) {
+      errors.fileName = "Enter a file name before adding this doc.";
+    } else {
+      const targetPath = resolveDocTargetPathFromFileName(fileName);
+      if (!isFactoryBundledDocTargetPath(targetPath)) {
+        errors.fileName =
+          "Doc file names must resolve to a path under factory/docs/.";
+      } else if (docTargetPathExists(targetPath, factoryDefinition)) {
+        errors.fileName = `A doc at "${targetPath}" already exists in the draft.`;
+      }
+    }
+
+    return errors;
+  }
+
   const name = draft.name.trim();
 
   if (name.length === 0) {
@@ -312,6 +360,14 @@ export function applyFactoryGraphAddEntityDraft(
   entityDraft: FactoryGraphAddEntityDraft,
 ): FactoryGraphDraft {
   const nextDraft = structuredClone(currentDraft);
+
+  if (entityDraft.kind === "doc") {
+    nextDraft.additions.docs.push({
+      inlineContent: entityDraft.inlineContent,
+      targetPath: buildDocTargetPathFromFileName(entityDraft.fileName.trim()),
+    });
+    return nextDraft;
+  }
 
   if (entityDraft.kind === "resource") {
     nextDraft.additions.resources.push({
@@ -467,6 +523,15 @@ function workerExists(
   return (factoryDefinition?.workers ?? []).some(
     (worker) => worker.name === workerName,
   );
+}
+
+function docTargetPathExists(
+  targetPath: string,
+  factoryDefinition: CanonicalFactoryDefinition | null,
+) {
+  return listFactoryDocTargetPaths(
+    factoryDefinition ?? { name: "Current Factory" },
+  ).includes(targetPath);
 }
 
 export function editableWorkstationBehaviorOptions() {

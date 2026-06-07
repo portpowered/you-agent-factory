@@ -13,12 +13,14 @@ export function buildFactoryGraphSaveSummary(
   locale?: string | null,
 ): FactoryGraphSaveSummary {
   const createdEntities =
+    draft.additions.docs.length +
     draft.additions.resources.length +
     draft.additions.workers.length +
     draft.additions.workStates.length +
     draft.additions.workTypes.length +
     draft.additions.workstations.length;
   const removedEntities =
+    draft.removals.docs.length +
     draft.removals.resources.length +
     draft.removals.workers.length +
     draft.removals.workStates.length +

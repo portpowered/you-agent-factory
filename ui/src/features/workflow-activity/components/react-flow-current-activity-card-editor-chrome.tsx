@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
 import {
   createFactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityDraft,
@@ -15,10 +16,12 @@ import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 export function useFactoryGraphAddEntityController({
   currentFactoryDefinition,
   editableGraph,
+  onDocAdded,
   setActiveTool,
 }: {
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
   editableGraph: EditableFactoryGraphViewModel;
+  onDocAdded?: (targetPath: string) => void;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
 }) {
   const [addMenuOpen, setAddMenuOpen] = useState(false);
@@ -64,6 +67,11 @@ export function useFactoryGraphAddEntityController({
     }
 
     placeAddedNode?.(addEntityDraft);
+    if (addEntityDraft.kind === "doc") {
+      onDocAdded?.(
+        buildDocTargetPathFromFileName(addEntityDraft.fileName.trim()),
+      );
+    }
     setActiveTool(null);
     setAddEntityDraft(null);
     setAddEntityErrors({});
@@ -71,6 +79,7 @@ export function useFactoryGraphAddEntityController({
     addEntityDraft,
     currentFactoryDefinition,
     editableGraph.actions,
+    onDocAdded,
     placeAddedNode,
     setActiveTool,
   ]);

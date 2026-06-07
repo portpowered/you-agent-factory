@@ -107,16 +107,41 @@ function FactoryGraphEditorAddEntityFields({
         onSubmit();
       }}
     >
-      <FactoryGraphEditorTextField
-        error={errors.name}
-        helpText={messages.addDialogIdentifierHelp}
-        inputId="factory-graph-add-name"
-        label={messages.addDialogIdentifierLabel}
-        onChange={(value) => {
-          onChange({ ...draft, name: value });
-        }}
-        value={draft.name}
-      />
+      {draft.kind === "doc" ? (
+        <>
+          <FactoryGraphEditorTextField
+            error={errors.fileName}
+            helpText={messages.addDialogDocFileNameHelp}
+            inputId="factory-graph-add-doc-file-name"
+            label={messages.addDialogDocFileNameLabel}
+            onChange={(value) => {
+              onChange({ ...draft, fileName: value });
+            }}
+            value={draft.fileName}
+          />
+          <FactoryGraphEditorTextareaField
+            error={errors.inlineContent}
+            helpText={messages.addDialogDocContentHelp}
+            inputId="factory-graph-add-doc-content"
+            label={messages.addDialogDocContentLabel}
+            onChange={(value) => {
+              onChange({ ...draft, inlineContent: value });
+            }}
+            value={draft.inlineContent}
+          />
+        </>
+      ) : (
+        <FactoryGraphEditorTextField
+          error={errors.name}
+          helpText={messages.addDialogIdentifierHelp}
+          inputId="factory-graph-add-name"
+          label={messages.addDialogIdentifierLabel}
+          onChange={(value) => {
+            onChange({ ...draft, name: value });
+          }}
+          value={draft.name}
+        />
+      )}
 
       {renderEntitySpecificFields({
         currentFactoryDefinition,
@@ -144,6 +169,10 @@ function renderEntitySpecificFields({
   onChange: (draft: FactoryGraphAddEntityDraft) => void;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
+  if (draft.kind === "doc") {
+    return null;
+  }
+
   if (draft.kind === "resource") {
     return (
       <FactoryGraphEditorTextField

@@ -29,6 +29,11 @@ import {
   createFactoryGraphWorkstationResolver,
 } from "./factory-graph-editor-connections";
 import {
+  applyFactoryGraphDocRemoval,
+  buildFactoryGraphDocRemovalIntent,
+  parseFactoryBundledDocNodeId,
+} from "./factory-graph-doc-editor";
+import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
@@ -147,6 +152,34 @@ export function removeFactoryGraphNode(options: {
   nodeId: string;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
   const messages = getFactoryGraphEditorMessages(options.locale);
+  const docTargetPath = parseFactoryBundledDocNodeId(options.nodeId);
+  if (docTargetPath) {
+    const docIntent = buildFactoryGraphDocRemovalIntent(options);
+    if (!docIntent) {
+      return {
+        message: messages.operationNodeNotFound(options.nodeId),
+        ok: false,
+        reason: "NODE_NOT_FOUND",
+      };
+    }
+    if (docIntent.ineligibleReason) {
+      return {
+        message: docIntent.ineligibleReason,
+        ok: false,
+        reason: "BLOCKED_REMOVAL",
+      };
+    }
+
+    return {
+      ok: true,
+      value: applyFactoryGraphDocRemoval(
+        options.draft,
+        options.baseFactoryDefinition,
+        docIntent.targetPath,
+      ),
+    };
+  }
+
   const intent = buildFactoryGraphRemovalIntent(options);
   if (!intent) {
     return {

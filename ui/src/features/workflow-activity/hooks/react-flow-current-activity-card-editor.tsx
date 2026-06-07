@@ -17,6 +17,7 @@ export function useCurrentActivityGraphEditor(
   snapshot: DashboardSnapshot,
   locale?: string | null,
   factoryDocumentScopeKey?: string | null,
+  onDocAdded?: (targetPath: string) => void,
   onNodeRemovedFromDraft?: (nodeId: string) => void,
 ) {
   const [editorMode, setEditorMode] = useState(false);
@@ -60,6 +61,7 @@ export function useCurrentActivityGraphEditor(
     editableGraph,
     hiddenNodeClasses,
     locale,
+    onDocAdded,
     onNodeRemovedFromDraft,
     saveEditableDefinition,
     setActiveTool,
