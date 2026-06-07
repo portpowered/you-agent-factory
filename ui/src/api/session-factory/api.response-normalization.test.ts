@@ -2,10 +2,6 @@ import { getSessionFactory, saveSessionFactory } from "./api";
 import { sessionFactoryAPIErrorMessages } from "./messages";
 
 describe("getSessionFactory response normalization", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("rejects a successful response without an editable factory shape", async () => {
     await expect(
       getSessionFactory("~default", {
