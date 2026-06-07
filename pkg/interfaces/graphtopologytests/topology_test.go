@@ -1,44 +1,48 @@
-package interfaces
+package graphtopologytests
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
 
 func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing.T) {
 	t.Parallel()
 
-	cfg := &FactoryConfig{
-		Resources: []ResourceConfig{{
+	cfg := &interfaces.FactoryConfig{
+		Resources: []interfaces.ResourceConfig{{
 			ID:   "resource-slot",
 			Name: "executor-slot",
 		}},
-		WorkTypes: []WorkTypeConfig{{
+		WorkTypes: []interfaces.WorkTypeConfig{{
 			ID:   "work-type-story",
 			Name: "story",
-			States: []StateConfig{
-				{ID: "state-init", Name: "init", Type: StateTypeInitial},
-				{ID: "state-done", Name: "done", Type: StateTypeTerminal},
+			States: []interfaces.StateConfig{
+				{ID: "state-init", Name: "init", Type: interfaces.StateTypeInitial},
+				{ID: "state-done", Name: "done", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []WorkerConfig{{
+		Workers: []interfaces.WorkerConfig{{
 			ID:   "worker-executor",
 			Name: "executor",
-			Resources: []ResourceConfig{{
+			Resources: []interfaces.ResourceConfig{{
 				Name: "executor-slot",
 			}},
 		}},
-		Workstations: []FactoryWorkstationConfig{{
+		Workstations: []interfaces.FactoryWorkstationConfig{{
 			ID:             "workstation-plan",
 			Name:           "plan",
 			WorkerTypeName: "executor",
-			Resources: []ResourceConfig{{
+			Resources: []interfaces.ResourceConfig{{
 				ID:   "resource-slot",
 				Name: "executor-slot",
 			}},
-			Inputs:  []IOConfig{{WorkTypeName: "story", StateName: "init"}},
-			Outputs: []IOConfig{{WorkTypeName: "story", StateName: "done"}},
+			Inputs:  []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
 		}},
 	}
 
-	topology := BuildPendingFactoryGraphTopology(cfg)
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
 
 	wantNodes := []string{
 		"resource:resource-slot",
