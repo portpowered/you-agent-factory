@@ -22,6 +22,117 @@ type WorkstationLoader interface {
 	Load(name string) (*interfaces.FactoryWorkstationConfig, error)
 }
 
+// ErrInvalidNamedFactoryName reports that the requested canonical named-factory
+// name failed validation before any on-disk lookup or persistence work began.
+var ErrInvalidNamedFactoryName = errors.New("invalid named factory name")
+
+// ErrNamedFactoryNotFound reports that a requested named factory was not found
+// in the searched root or roots.
+var ErrNamedFactoryNotFound = errors.New("named factory not found")
+
+// NamedFactoryResolutionSource identifies the root that supplied a resolved
+// named factory.
+type NamedFactoryResolutionSource string
+
+const (
+	NamedFactoryResolutionSourceProjectLocal NamedFactoryResolutionSource = "project-local"
+	NamedFactoryResolutionSourceGlobal       NamedFactoryResolutionSource = "global"
+	NamedFactoryResolutionSourceBuiltin      NamedFactoryResolutionSource = "builtin-materialized"
+)
+
+// NamedFactoryPrecedenceDecision reports whether cross-root resolution observed
+// a local-over-global conflict before selecting a runnable directory.
+type NamedFactoryPrecedenceDecision string
+
+const (
+	NamedFactoryPrecedenceDecisionNone              NamedFactoryPrecedenceDecision = "none"
+	NamedFactoryPrecedenceDecisionProjectOverGlobal NamedFactoryPrecedenceDecision = "project-local-over-global"
+)
+
+// NamedFactoryResolution reports the selected runnable directory and the roots
+// considered during cross-root named-factory resolution.
+type NamedFactoryResolution struct {
+	Name               string
+	FactoryDir         string
+	Source             NamedFactoryResolutionSource
+	ProjectRoot        string
+	GlobalRoot         string
+	PrecedenceDecision NamedFactoryPrecedenceDecision
+}
+
+type invalidNamedFactoryNameError struct {
+	name string
+	err  error
+}
+
+func (e *invalidNamedFactoryNameError) Error() string {
+	return fmt.Sprintf("invalid named factory name %q: %v", e.name, e.err)
+}
+
+func (e *invalidNamedFactoryNameError) Unwrap() []error {
+	return []error{ErrInvalidNamedFactoryName, e.err}
+}
+
+type namedFactoryNotFoundError struct{ name string }
+
+func (e *namedFactoryNotFoundError) Error() string {
+	return fmt.Sprintf("named factory %q not found", e.name)
+}
+
+func (e *namedFactoryNotFoundError) Unwrap() []error {
+	return []error{ErrNamedFactoryNotFound, os.ErrNotExist}
+}
+
+func wrapInvalidNamedFactoryName(name string, err error) error {
+	if err == nil || errors.Is(err, ErrInvalidNamedFactoryName) {
+		return err
+	}
+	return &invalidNamedFactoryNameError{name: strings.TrimSpace(name), err: err}
+}
+
+func namedFactoryResolution(
+	name string,
+	factoryDir string,
+	source NamedFactoryResolutionSource,
+	projectRoot string,
+	globalRoot string,
+	precedence NamedFactoryPrecedenceDecision,
+) *NamedFactoryResolution {
+	return &NamedFactoryResolution{
+		Name:               name,
+		FactoryDir:         factoryDir,
+		Source:             source,
+		ProjectRoot:        projectRoot,
+		GlobalRoot:         globalRoot,
+		PrecedenceDecision: precedence,
+	}
+}
+
+func projectLocalPrecedenceDecision(globalRoot, canonicalName string) NamedFactoryPrecedenceDecision {
+	if globalRoot == "" {
+		return NamedFactoryPrecedenceDecisionNone
+	}
+	if hasNamedFactoryCandidate(globalRoot, canonicalName) {
+		return NamedFactoryPrecedenceDecisionProjectOverGlobal
+	}
+	return NamedFactoryPrecedenceDecisionNone
+}
+
+func hasNamedFactoryCandidate(rootDir, canonicalName string) bool {
+	_, found, err := resolveNamedFactoryCandidate(rootDir, canonicalName)
+	return err == nil && found
+}
+
+func newNamedFactoryNotFoundError(name string) error {
+	return &namedFactoryNotFoundError{name: strings.TrimSpace(name)}
+}
+
+// IsInvalidNamedFactoryName reports whether err wraps ErrInvalidNamedFactoryName.
+func IsInvalidNamedFactoryName(err error) bool { return errors.Is(err, ErrInvalidNamedFactoryName) }
+
+// IsNamedFactoryNotFound reports whether err wraps ErrNamedFactoryNotFound.
+func IsNamedFactoryNotFound(err error) bool { return errors.Is(err, ErrNamedFactoryNotFound) }
+
 // LoadWorkerConfig loads a worker configuration from the given directory.
 // It reads AGENTS.md, parses YAML frontmatter into WorkerConfig, and sets
 // Body to the remaining markdown content.

@@ -11,6 +11,9 @@ import (
 	"testing"
 
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
@@ -33,8 +36,225 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "--factory") {
 		t.Fatal("expected run command long help text to document --factory")
 	}
+	if !strings.Contains(runCmd.Long, "--named") {
+		t.Fatal("expected run command long help text to document --named")
+	}
+	if !strings.Contains(runCmd.Long, "resolve project-local factories before global built-ins") {
+		t.Fatal("expected run command long help text to document local-over-global named resolution")
+	}
+	if !strings.Contains(runCmd.Long, "materialize lazily into that global root on first use and stay editable on disk") {
+		t.Fatal("expected run command long help text to document built-in materialization and editability")
+	}
+	if !strings.Contains(runCmd.Example, "run --named @you/tts") {
+		t.Fatal("expected run command examples to document simplified --named run")
+	}
+	namedFlag := runCmd.Flags().Lookup("named")
+	if namedFlag == nil {
+		t.Fatal("expected --named flag on run command")
+	}
+	if !strings.Contains(namedFlag.Usage, "built-ins materialize there on first use and remain editable") {
+		t.Fatalf("--named usage = %q, want built-in editability guidance", namedFlag.Usage)
+	}
 	if !strings.Contains(runCmd.Example, "run --factory ./factory.json \"Fix the lint issues\"") {
 		t.Fatal("expected run command examples to document simplified --factory run")
+	}
+}
+
+func TestRunCommand_NamedFlagResolvesFactoryRootBeforeRun(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	workingDirectory := t.TempDir()
+	homeDirectory := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDirectory)
+
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+
+	wantRoot, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", portableFactoryPayloadWithDefaultHandling())
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "alpha"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named: %v", err)
+	}
+	if testutil.CanonicalPath(got.Dir) != testutil.CanonicalPath(wantRoot) {
+		t.Fatalf("dir = %q, want %q", got.Dir, wantRoot)
+	}
+	if got.NamedFactoryName != "alpha" {
+		t.Fatalf("named factory name = %q, want alpha", got.NamedFactoryName)
+	}
+}
+
+func TestRunCommand_NamedFlagPrefersProjectFactoryOverGlobal(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	homeDirectory := t.TempDir()
+	projectDirectory := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(projectDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", projectDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDirectory)
+
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(projectDirectory)
+	if err != nil {
+		t.Fatalf("DefaultProjectNamedFactoryRoot: %v", err)
+	}
+
+	if _, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", portableFactoryPayloadWithDefaultHandling()); err != nil {
+		t.Fatalf("PersistNamedFactory(global alpha): %v", err)
+	}
+
+	wantRoot, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", portableFactoryPayloadWithDefaultHandling())
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(local alpha): %v", err)
+	}
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "alpha"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named: %v", err)
+	}
+	if testutil.CanonicalPath(got.Dir) != testutil.CanonicalPath(wantRoot) {
+		t.Fatalf("dir = %q, want project-local %q", got.Dir, wantRoot)
+	}
+}
+
+func portableFactoryPayloadWithDefaultHandling() []byte {
+	return []byte(`{
+  "name": "portable",
+  "workTypes": [{
+    "name": "story",
+    "handlingBehavior": ["DEFAULT"],
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workstations": [{
+    "name": "ws",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}],
+    "onFailure": [{"workType": "story", "state": "failed"}]
+  }]
+}`)
+}
+
+func TestRunCommand_NamedAndDirFlagsRejectConflict(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "alpha", "--dir", "other-factory"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected conflict between --named and --dir")
+	}
+	if !strings.Contains(err.Error(), "--named cannot be used with --dir") {
+		t.Fatalf("error = %q, want conflict message", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start when --named conflicts with --dir")
+	}
+}
+
+func TestRunCommand_NamedAndFactoryFlagsRejectConflict(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	dir := t.TempDir()
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(factoryPath, []byte(`{"id":"portable"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "alpha", "--factory", factoryPath})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected conflict between --named and --factory")
+	}
+	if !strings.Contains(err.Error(), "--named cannot be used with --factory") {
+		t.Fatalf("error = %q, want conflict message", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start when --named conflicts with --factory")
 	}
 }
 

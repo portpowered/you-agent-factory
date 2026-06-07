@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/logging"
 )
 
@@ -954,5 +957,78 @@ func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
 	}
 	if got := stderr.String(); !strings.Contains(got, "diagnostic: run startup") {
 		t.Fatalf("stderr = %q, want run diagnostics", got)
+	}
+}
+
+func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	workingDirectory := t.TempDir()
+	homeDir := t.TempDir()
+	projectRoot := filepath.Join(workingDirectory, "factory")
+	projectPayload := []byte(`{
+	  "name": "project-alpha",
+	  "id": "project-alpha",
+	  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+	  "workers": [{"name":"executor","type":"MODEL_WORKER","body":"You are the executor."}],
+	  "workstations": [{"name":"execute-project-alpha","worker":"executor","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"type":"MODEL_WORKSTATION","body":"Implement {{ .WorkID }}."}]
+	}`)
+	if _, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", projectPayload); err != nil {
+		t.Fatalf("PersistNamedFactory(project alpha): %v", err)
+	}
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	globalPayload := []byte(`{
+	  "name": "global-alpha",
+	  "id": "global-alpha",
+	  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+	  "workers": [{"name":"executor","type":"MODEL_WORKER","body":"You are the executor."}],
+	  "workstations": [{"name":"execute-global-alpha","worker":"executor","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}],"type":"MODEL_WORKSTATION","body":"Implement {{ .WorkID }}."}]
+	}`)
+	if _, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", globalPayload); err != nil {
+		t.Fatalf("PersistNamedFactory(global alpha): %v", err)
+	}
+
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "alpha", "--no-record"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named alpha: %v", err)
+	}
+	if got.NamedFactoryResolution == nil {
+		t.Fatal("expected named-factory resolution metadata")
+	}
+	if got.Dir != got.NamedFactoryResolution.FactoryDir {
+		t.Fatalf("run dir = %q, want resolved named-factory dir %q", got.Dir, got.NamedFactoryResolution.FactoryDir)
+	}
+	if got.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceProjectLocal {
+		t.Fatalf("resolution source = %q, want %q", got.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceProjectLocal)
+	}
+	if got.NamedFactoryResolution.PrecedenceDecision != factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal {
+		t.Fatalf("resolution precedence = %q, want %q", got.NamedFactoryResolution.PrecedenceDecision, factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal)
 	}
 }

@@ -258,6 +258,49 @@ examples.
 Run `you docs mock-workers` for the `--with-mock-workers` JSON contract,
 selection fields, and deterministic outcome examples beyond this quick start.
 
+## Run Named Factories From Anywhere
+
+Persist reusable factories under a named-factory root when you want to run them
+without locating `factory.json` manually:
+
+```bash
+you factory save my-team-review --from ./factory.json
+```
+
+By default persisted project factories live under `./factory`, and
+`you run --named <name>` resolves that project-local root before checking the
+global shared root at `~/.you-agent-factory/factories`.
+
+```bash
+you run --named my-team-review
+```
+
+This precedence is selection-only: the CLI chooses exactly one matching named
+factory directory and never merges a project-local definition with a global
+definition of the same canonical name.
+
+First-party built-ins such as `@you/tts` also use the named-factory path:
+
+```bash
+you run --named @you/tts
+```
+
+On the first invocation the CLI materializes the built-in into
+`~/.you-agent-factory/factories`, then loads later runs from that on-disk copy.
+That keeps the built-in editable: if you modify the materialized
+`workers/*/AGENTS.md`, `workstations/*/AGENTS.md`, or other split-layout files,
+the next `you run --named @you/tts` invocation uses your edited version.
+
+Use `you factory list` to inspect one named-factory root at a time. The default
+command lists only the project-local `./factory` root; point `--dir` at the
+global root when you want to inspect shared built-ins and customer-wide named
+factories:
+
+```bash
+you factory list
+you factory list --dir ~/.you-agent-factory/factories
+```
+
 ### 4. Submit work
 
 Create a startup or watched-file request:

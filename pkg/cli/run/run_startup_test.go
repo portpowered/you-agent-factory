@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestRun_StartupOutputFallsBackWhenDashboardOpenFails(t *testing.T) {
@@ -355,6 +357,116 @@ func TestRun_StartupDiagnosticsStaySilentWhenVerboseDisabled(t *testing.T) {
 	}
 	if diagnostics.Len() != 0 {
 		t.Fatalf("diagnostics = %q, want empty when verbose is disabled", diagnostics.String())
+	}
+}
+
+func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	resolution := &factoryconfig.NamedFactoryResolution{
+		Name:               "alpha",
+		FactoryDir:         "/tmp/project/factory/alpha",
+		Source:             factoryconfig.NamedFactoryResolutionSourceProjectLocal,
+		ProjectRoot:        "/tmp/project/factory",
+		GlobalRoot:         "/tmp/home/.you-agent-factory/factories",
+		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionProjectOverGlobal,
+	}
+
+	var diagnostics bytes.Buffer
+	err := Run(context.Background(), RunConfig{
+		Dir:                     resolution.FactoryDir,
+		DisableDefaultRecording: true,
+		Verbose:                 true,
+		Diagnostics:             &diagnostics,
+		Logger:                  logger,
+		NamedFactoryResolution:  resolution,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	gotDiagnostics := diagnostics.String()
+	for _, want := range []string{
+		"run named-factory resolution",
+		`name="alpha"`,
+		"source=project-local",
+		`resolvedFactoryDir="/tmp/project/factory/alpha"`,
+		"precedence=project-local-over-global",
+	} {
+		if !strings.Contains(gotDiagnostics, want) {
+			t.Fatalf("diagnostics missing %q:\n%s", want, gotDiagnostics)
+		}
+	}
+	if strings.Contains(gotDiagnostics, "secret") {
+		t.Fatalf("diagnostics leaked payload content: %s", gotDiagnostics)
+	}
+
+	resolvedLogs := observed.FilterMessage("named factory resolved").All()
+	if len(resolvedLogs) != 1 {
+		t.Fatalf("named factory resolved logs = %d, want 1", len(resolvedLogs))
+	}
+	resolvedContext := resolvedLogs[0].ContextMap()
+	if got := resolvedContext["named_factory_precedence_decision"]; got != "project-local-over-global" {
+		t.Fatalf("resolved log precedence = %#v, want project-local-over-global", got)
+	}
+	if got := resolvedContext["named_factory_resolution_source"]; got != "project-local" {
+		t.Fatalf("resolved log source = %#v, want project-local", got)
+	}
+	if observed.FilterMessage("named factory precedence selected").Len() != 1 {
+		t.Fatalf("named factory precedence logs = %d, want 1", observed.FilterMessage("named factory precedence selected").Len())
+	}
+}
+
+func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+	}
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+	resolution := &factoryconfig.NamedFactoryResolution{
+		Name:               "@you/tts",
+		FactoryDir:         "/tmp/home/.you-agent-factory/factories/@you%2Ftts",
+		Source:             factoryconfig.NamedFactoryResolutionSourceBuiltin,
+		ProjectRoot:        "/tmp/project/factory",
+		GlobalRoot:         "/tmp/home/.you-agent-factory/factories",
+		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionNone,
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                     resolution.FactoryDir,
+		DisableDefaultRecording: true,
+		Logger:                  logger,
+		NamedFactoryResolution:  resolution,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	materializedLogs := observed.FilterMessage("named factory built-in materialized").All()
+	if len(materializedLogs) != 1 {
+		t.Fatalf("built-in materialized logs = %d, want 1", len(materializedLogs))
+	}
+	context := materializedLogs[0].ContextMap()
+	if got := context["named_factory_name"]; got != "@you/tts" {
+		t.Fatalf("built-in log name = %#v, want @you/tts", got)
+	}
+	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/factories/@you%2Ftts" {
+		t.Fatalf("built-in log target dir = %#v", got)
 	}
 }
 
