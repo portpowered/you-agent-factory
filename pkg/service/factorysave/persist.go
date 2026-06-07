@@ -35,19 +35,6 @@ func namedFactoryExistsAtSessionRoot(
 	return false, err
 }
 
-func persistUpsertNamedFactoryPayload(
-	sessionRootDir string,
-	request factoryapi.Factory,
-	nextVersion factoryapi.HybridLogicalTimestamp,
-	replaceExisting bool,
-) (string, error) {
-	prepared, err := preparePersistedFactoryPayload(string(request.Name), request, nextVersion)
-	if err != nil {
-		return "", err
-	}
-	return persistUpsertNamedFactoryPrepared(sessionRootDir, request, prepared, replaceExisting)
-}
-
 func persistUpsertNamedFactoryPrepared(
 	sessionRootDir string,
 	request factoryapi.Factory,
