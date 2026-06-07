@@ -9,7 +9,6 @@ import {
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "./dashboard-typography";
 
-const DASHBOARD_WIDGET_CLASS = "min-w-0";
 const DETAIL_CARD_CLASS = cn(
   "[&_dd]:m-0 [&_dl]:m-0 [&_dl]:grid [&_dl]:gap-3 [&_dl_div:first-child]:border-t-0 [&_dl_div:first-child]:pt-0 [&_dl_div]:border-t [&_dl_div]:border-outline [&_dl_div]:pt-3 [&_dt]:mb-1 [&_h3]:mt-0",
   DASHBOARD_SUPPORTING_LABELS_CLASS,
@@ -141,7 +140,7 @@ export function DashboardWidgetFrame({
   return (
     <AgentBentoCard
       className={cn(
-        DASHBOARD_WIDGET_CLASS,
+        "min-w-0",
         DETAIL_CARD_CLASS,
         wide && DETAIL_CARD_WIDE_CLASS,
         className,

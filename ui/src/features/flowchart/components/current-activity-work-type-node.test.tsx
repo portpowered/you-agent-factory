@@ -1,6 +1,6 @@
-import type { NodeProps } from "@xyflow/react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { NodeProps } from "@xyflow/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { DashboardPlaceRef } from "../../../api/dashboard/types";
@@ -76,9 +76,9 @@ describe("WorkTypeNodeView", () => {
     });
 
     expect(
-      screen.getByRole("button", { name: "Select story work type" }).getAttribute(
-        "aria-pressed",
-      ),
+      screen
+        .getByRole("button", { name: "Select story work type" })
+        .getAttribute("aria-pressed"),
     ).toBe("true");
   });
 });

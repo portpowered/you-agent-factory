@@ -10,7 +10,6 @@ import {
 import {
   type ProjectTraceRelationsToFactoryGraphOptions,
   projectTraceRelationsToFactoryGraph,
-  type TraceRelationEdgeOverlay,
   type TraceRelationNodeOverlay,
 } from "./trace-relation-factory-graph";
 
@@ -28,7 +27,7 @@ export type TraceRelationFlowNodeData = FactoryGraphReactFlowNode["data"] &
 
 export type TraceRelationFlowNode = Node<
   TraceRelationFlowNodeData,
-  "factoryEntity"
+  "workRelation"
 >;
 
 export interface TraceRelationFactoryGraphFlow {
@@ -79,37 +78,40 @@ export function buildTraceRelationFactoryGraphFlow(
         isSelectedWork,
         locale,
         onSelectWorkID,
-        selectable: Boolean(overlay.workID && onSelectWorkID && !isSelectedWork),
+        selectable: Boolean(
+          overlay.workID && onSelectWorkID && !isSelectedWork,
+        ),
       },
       id: endpointKey,
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      type: "factoryEntity",
+      type: "workRelation",
     });
   }
 
   const edges = factoryProjection.edges.map((edge) => {
     const overlay = traceProjection.edgeOverlaysByEdgeId.get(edge.id);
-    const relationLike = relationFromEdgeOverlay(
-      edge.source,
-      edge.target,
-      overlay,
-      traceProjection.endpointKeyByNodeId,
-    );
 
     return {
       ...edge,
       ariaLabel: overlay?.ariaLabel ?? edge.ariaLabel,
+      data: {
+        active: edge.data?.active ?? false,
+        alwaysShowLabel: edge.data?.alwaysShowLabel ?? false,
+        kind: edge.data?.kind ?? "work-type-state",
+        label: "",
+        pendingStatus: edge.data?.pendingStatus ?? "none",
+      },
       markerEnd: {
-        color: relationEdgeStroke(relationLike),
+        color: "var(--color-outline-variant)",
         type: MarkerType.ArrowClosed,
       },
       source:
         traceProjection.endpointKeyByNodeId.get(edge.source) ?? edge.source,
       sourceHandle: edge.sourceHandle ?? TRACE_RELATION_SOURCE_HANDLE_ID,
       style: {
-        ...edge.style,
-        ...relationEdgeStyle(relationLike),
+        stroke: "var(--color-outline-variant)",
+        strokeWidth: 1.7,
       },
       target:
         traceProjection.endpointKeyByNodeId.get(edge.target) ?? edge.target,
@@ -158,68 +160,4 @@ function traceRelationConnectionAnchors(
           },
         ]),
   ];
-}
-
-function relationFromEdgeOverlay(
-  sourceId: string,
-  targetId: string,
-  overlay: TraceRelationEdgeOverlay | undefined,
-  endpointKeyByNodeId: ReadonlyMap<string, string>,
-): DashboardWorkRelation {
-  return {
-    request_id: overlay?.requestId,
-    required_state: overlay?.requiredState,
-    source_work_id: endpointKeyByNodeId.get(sourceId) ?? sourceId,
-    target_work_id: endpointKeyByNodeId.get(targetId) ?? targetId,
-    type: overlay?.relationType ?? "RELATED_TO",
-  };
-}
-
-function relationStateToneClassName(relationState: string): string {
-  const normalizedState = relationState.trim().toUpperCase();
-  if (
-    normalizedState === "FAILED" ||
-    normalizedState === "FAIL" ||
-    normalizedState === "REJECTED"
-  ) {
-    return "danger";
-  }
-
-  if (
-    normalizedState === "DONE" ||
-    normalizedState === "ACCEPTED" ||
-    normalizedState === "COMPLETED"
-  ) {
-    return "success";
-  }
-
-  return "warning";
-}
-
-function relationEdgeStroke(relation: DashboardWorkRelation): string {
-  if (relation.required_state) {
-    const tone = relationStateToneClassName(relation.required_state);
-    if (tone === "danger") {
-      return "var(--color-on-error-container)";
-    }
-    if (tone === "success") {
-      return "var(--color-success)";
-    }
-
-    return "var(--color-on-warning-container)";
-  }
-
-  if (relation.type === "PARENT_CHILD") {
-    return "var(--color-primary)";
-  }
-
-  return "var(--color-outline-variant)";
-}
-
-function relationEdgeStyle(relation: DashboardWorkRelation) {
-  return {
-    stroke: relationEdgeStroke(relation),
-    strokeDasharray: relation.required_state ? "7 5" : undefined,
-    strokeWidth: relation.required_state ? 2 : 1.7,
-  };
 }

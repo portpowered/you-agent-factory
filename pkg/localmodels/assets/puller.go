@@ -39,6 +39,18 @@ type CacheLayout struct {
 	Files     []string
 }
 
+// RuntimeCacheInspection reports local managed-cache state without contacting
+// upstream asset sources.
+type RuntimeCacheInspection struct {
+	Supported          bool
+	Installed          bool
+	Revision           string
+	CachePath          string
+	InstalledFileCount int
+	MissingAssets      []string
+	PartialArtifacts   bool
+}
+
 type Puller struct {
 	cacheDir   string
 	baseURL    string
@@ -168,6 +180,58 @@ func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfi
 	return p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
 }
 
+// InspectRuntimeCache inspects the local managed cache without contacting upstream sources.
+func (p *Puller) InspectRuntimeCache(_ context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (RuntimeCacheInspection, error) {
+	spec, err := p.resolveSpec(runtimeCfg, modelName)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrModelPullUnsupported) {
+			return RuntimeCacheInspection{}, nil
+		}
+		return RuntimeCacheInspection{}, err
+	}
+	result := RuntimeCacheInspection{
+		Supported:     true,
+		MissingAssets: append([]string(nil), spec.RequiredFilenames...),
+	}
+	manifest, found, err := p.readLocalMetadata(spec)
+	if err != nil {
+		return RuntimeCacheInspection{}, err
+	}
+	if !found {
+		manifest, found, err = p.discoverLocalManifest(spec)
+		if err != nil {
+			return RuntimeCacheInspection{}, err
+		}
+	}
+	if !found {
+		return result, nil
+	}
+	cachePath, err := p.cachePath(spec, manifest.Revision)
+	if err != nil {
+		return RuntimeCacheInspection{}, err
+	}
+	result.CachePath = cachePath
+	result.Revision = manifest.Revision
+	installed := make([]string, 0, len(spec.RequiredFilenames))
+	missing := make([]string, 0)
+	for _, required := range spec.RequiredFilenames {
+		target := filepath.Join(cachePath, filepath.FromSlash(required))
+		info, statErr := os.Stat(target)
+		if statErr == nil && !info.IsDir() {
+			installed = append(installed, required)
+			continue
+		}
+		missing = append(missing, required)
+	}
+	result.InstalledFileCount = len(installed)
+	result.MissingAssets = missing
+	result.Installed = len(missing) == 0
+	if !result.Installed {
+		result.PartialArtifacts = p.hasPartialArtifacts(spec, result.CachePath)
+	}
+	return result, nil
+}
+
 func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
 	if worker == nil || strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
 		return CacheLayout{}, nil
@@ -285,12 +349,12 @@ func (p *Puller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelA
 	}
 	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
-		return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q: %w", spec.ModelName, err)
+		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q: %v", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q failed (%d): %s", spec.ModelName, resp.StatusCode, strings.TrimSpace(string(body)))
+		return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q failed (%d): %s", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var payload huggingFaceModelResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
@@ -309,7 +373,7 @@ func (p *Puller) fetchManifest(ctx context.Context, spec modelAssetSpec) (modelA
 	for _, filename := range spec.RequiredFilenames {
 		sibling, ok := siblingByPath[filename]
 		if !ok {
-			return modelAssetManifest{}, fmt.Errorf("pull model manifest for %q is missing required file %q", spec.ModelName, filename)
+			return modelAssetManifest{}, fmt.Errorf("%w: pull model manifest for %q is missing required file %q", apisurface.ErrManagedRuntimeSourceFetchFailed, spec.ModelName, filename)
 		}
 		size := sibling.Size
 		sha := ""
@@ -532,12 +596,12 @@ func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, 
 	}
 	resp, err := p.doWithRetry(req, shouldRetryModelAssetResponse)
 	if err != nil {
-		return fmt.Errorf("download model asset %q: %w", remote.Path, err)
+		return fmt.Errorf("%w: download model asset %q: %v", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("download model asset %q failed (%d): %s", remote.Path, resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("%w: download model asset %q failed (%d): %s", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	tmpPath := targetPath + ".partial"
@@ -560,7 +624,7 @@ func (p *Puller) downloadFile(ctx context.Context, remote modelAssetRemoteFile, 
 	gotSHA := hex.EncodeToString(hasher.Sum(nil))
 	if remote.SHA256 != "" && !strings.EqualFold(gotSHA, remote.SHA256) {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("download model asset %q failed checksum verification: expected %s, got %s", remote.Path, remote.SHA256, gotSHA)
+		return fmt.Errorf("%w: download model asset %q failed checksum verification: expected %s, got %s", apisurface.ErrManagedRuntimeSourceFetchFailed, remote.Path, remote.SHA256, gotSHA)
 	}
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		_ = os.Remove(tmpPath)
@@ -617,6 +681,48 @@ func shouldRetryModelAssetError(err error) bool {
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
 		return true
+	}
+	return false
+}
+
+func (p *Puller) hasPartialArtifacts(spec modelAssetSpec, cachePath string) bool {
+	metadataPath, err := p.metadataPath(spec)
+	if err == nil {
+		if _, statErr := os.Stat(metadataPath + ".partial"); statErr == nil {
+			return true
+		}
+	}
+	root, err := p.modelCacheRoot(spec)
+	if err != nil {
+		return false
+	}
+	dirs := []string{root}
+	if strings.TrimSpace(cachePath) != "" {
+		dirs = append(dirs, cachePath)
+	}
+	for _, dir := range dirs {
+		if dirHasPartialArtifacts(dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func dirHasPartialArtifacts(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasSuffix(name, ".partial") {
+			return true
+		}
+		if entry.IsDir() {
+			if dirHasPartialArtifacts(filepath.Join(dir, name)) {
+				return true
+			}
+		}
 	}
 	return false
 }

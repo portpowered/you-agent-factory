@@ -251,8 +251,7 @@ const providerSessionDetailMessagesByLocale = {
     maintainerDiagnosticsHeading: "유지보수 진단",
     malformedLineCountLabel: "잘못된 줄 수",
     kindLabel: "유형",
-    missingState:
-      "선택한 provider session을 서버에서 찾을 수 없습니다.",
+    missingState: "선택한 provider session을 서버에서 찾을 수 없습니다.",
     modifiedAtLabel: "수정 시각",
     parseSummaryHeading: "파싱 요약",
     providerLabel: "공급자",

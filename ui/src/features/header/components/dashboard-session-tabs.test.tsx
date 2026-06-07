@@ -241,6 +241,160 @@ describe("DashboardSessionTabs", () => {
     );
   });
 
+  it("lets the tab strip compress each tab instead of clipping overflowed sessions", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/alpha",
+        folderPath: "/workspace/root/alpha",
+        id: "session-alpha",
+        isDefault: false,
+        project: "alpha",
+        target: {
+          kind: "named",
+          name: "alpha",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root/beta",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("navigation", { name: messages.sessionTabsLabel }),
+      ).toBeTruthy();
+    });
+
+    const navigation = screen.getByRole("navigation", {
+      name: messages.sessionTabsLabel,
+    });
+    const tablist = screen.getByRole("tablist");
+    const shells = screen
+      .getAllByRole("tab")
+      .map((tab) => sessionTabShell(tab as HTMLElement));
+
+    expect(navigation.className).toContain("overflow-hidden");
+    expect(tablist.className).toContain("overflow-hidden");
+    for (const shell of shells) {
+      expect(shell.className).toContain("flex-1");
+      expect(shell.className).toContain("basis-0");
+      expect(shell.className).toContain("max-w-72");
+    }
+  });
+
+  it("reorders session tabs with drag-and-drop and preserves the moved tab as active", async () => {
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root/beta",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        target: {
+          kind: "named",
+          name: "beta",
+        },
+      },
+      {
+        factoryDir: "/workspace/root/gamma",
+        folderPath: "/workspace/root/gamma",
+        id: "session-gamma",
+        isDefault: false,
+        project: "gamma",
+        target: {
+          kind: "named",
+          name: "gamma",
+        },
+      },
+    ]);
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("navigation", { name: messages.sessionTabsLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "beta" }));
+    await waitFor(() => {
+      expect(
+        screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected"),
+      ).toBe("true");
+    });
+
+    const rootShell = sessionTabShell(
+      screen.getByRole("tab", { name: "root" }),
+    );
+    const gammaShell = sessionTabShell(
+      screen.getByRole("tab", { name: "gamma" }),
+    );
+    const dataTransfer = {
+      effectAllowed: "all",
+      setData: vi.fn(),
+    };
+
+    Object.defineProperty(gammaShell, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 40,
+        height: 40,
+        left: 200,
+        right: 320,
+        top: 0,
+        width: 120,
+        x: 200,
+        y: 0,
+        toJSON: () => "",
+      }),
+    });
+
+    fireEvent.dragStart(rootShell, { dataTransfer });
+    fireEvent.dragOver(gammaShell, { clientX: 319, dataTransfer });
+    fireEvent.drop(gammaShell, { clientX: 319, dataTransfer });
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("tab").map((tab) => tab.getAttribute("aria-label")),
+      ).toEqual(["beta", "root", "gamma"]);
+    });
+    expect(
+      screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
   it("shows the offline state and allows session refetch", async () => {
     listFactorySessions
       .mockRejectedValueOnce(

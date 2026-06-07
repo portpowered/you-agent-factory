@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/json"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,7 +11,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestWriteExpandedFactoryLayout_CopiesReferencedScriptForOptedInScriptWorkstation(t *testing.T) {
@@ -757,4 +762,67 @@ func writeFactorySplitLayoutForExpand(
 		SourceDir:             sourceDir,
 		CopyReferencedScripts: true,
 	})
+}
+
+func TestPrepareFactoryLayoutPayload_RejectsInvalidGroupBoundsGeometry(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(factoryWithPortableLayoutGroups())
+	if err != nil {
+		t.Fatalf("Marshal(factory): %v", err)
+	}
+	cfg, _, err := normalizeNamedFactoryPayload("alpha", payload)
+	if err != nil {
+		t.Fatalf("normalizeNamedFactoryPayload: %v", err)
+	}
+	cfg.Layout.Groups[0].Bounds.Width = math.NaN()
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	layoutOutcomes := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
+	validationassert.HasDomainTargetCode(t, layoutOutcomes.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+	if len(cfg.Layout.Groups) != 0 {
+		t.Fatalf("pruned layout groups = %#v, want []", cfg.Layout.Groups)
+	}
+
+	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfg)
+	if err != nil {
+		t.Fatalf("authoredFactoryConfigForExpandedLayout: %v", err)
+	}
+	mapper := NewFactoryConfigMapper()
+	canonical, err := mapper.Flatten(authoredFactoryCfg)
+	if err != nil {
+		t.Fatalf("Flatten: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		t.Fatalf("Unmarshal canonical: %v", err)
+	}
+	layout, ok := decoded["layout"].(map[string]any)
+	if !ok {
+		t.Fatalf("canonical layout = %#v, want object", decoded["layout"])
+	}
+	if groups, ok := layout["groups"].([]any); ok && len(groups) != 0 {
+		t.Fatalf("canonical layout groups = %#v, want []", layout["groups"])
+	}
+}
+
+func factoryWithPortableLayoutGroups() factoryapi.Factory {
+	return factoryapi.Factory{
+		Name: "alpha",
+		Layout: &factoryapi.FactoryLayout{
+			SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+			Nodes: &[]factoryapi.FactoryLayoutNode{{
+				Id:       "workstation:process",
+				Position: factoryapi.FactoryLayoutPoint{X: 10, Y: 20},
+				Size:     &factoryapi.FactoryLayoutSize{Width: 100, Height: 80},
+			}},
+			Groups: &[]factoryapi.FactoryLayoutGroup{{
+				Id:      "group-1",
+				NodeIds: []string{"workstation:process"},
+				Bounds:  factoryapi.FactoryLayoutBounds{X: 0, Y: 0, Width: 100, Height: 80},
+			}},
+			Viewport: &factoryapi.FactoryLayoutViewport{Zoom: 1},
+		},
+	}
 }

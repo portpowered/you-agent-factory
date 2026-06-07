@@ -1,0 +1,27 @@
+type: object
+required:
+  - identity
+  - readinessState
+  - lifecycleState
+  - locality
+  - supportedOperations
+properties:
+  identity:
+    type: string
+    description: >
+      Stable managed runtime identity shared by discovery, inspect, pull or
+      install, and factory dependency surfaces.
+  readinessState:
+    $ref: './ManagedRuntimeReadinessState.yaml'
+  lifecycleState:
+    $ref: './ManagedRuntimeLifecycleState.yaml'
+  locality:
+    $ref: '../data-models/WorkerModelLocality.yaml'
+  supportedOperations:
+    type: array
+    description: Provider-agnostic operations supported by this managed runtime.
+    items:
+      $ref: '../data-models/ModelOperation.yaml'
+  diagnostics:
+    $ref: '../shared/StringMap.yaml'
+    description: Concise managed-runtime diagnostics in customer-relevant terms.

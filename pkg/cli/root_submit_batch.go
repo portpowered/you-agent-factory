@@ -5,6 +5,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := submitcli.SubmitConfig{Server: globals.server}
+
+	cmd := &cobra.Command{
+		Use:   "submit",
+		Short: "Submit work to a running factory",
+		Long: "Submit work to a running you-agent-factory service.\n\n" +
+			"Unary submit (this command) posts one work item with --name, --work-type-name, and --payload. " +
+			"For multi-work FACTORY_REQUEST_BATCH ingress to an already-running session, use " +
+			cliBinaryName + " submit batch. See " + cliBinaryName + " submit batch --help and " +
+			cliBinaryName + " docs batch-inputs.\n\n" +
+			"By default unary submit targets the default compatibility session. " +
+			"Use --session to submit to one specific live factory session instead.",
+		PreRunE: rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Server = globals.server
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return submitWork(cfg)
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	cmd.Flags().StringVar(&cfg.Name, "name", "", "authored request name for the submitted work (required)")
+	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
+	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
+	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
+	cmd.AddCommand(newSubmitBatchCommand(globals, diagnostics))
+	return cmd
+}
+
 func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	cfg := submitcli.BatchConfig{Server: globals.server}
 

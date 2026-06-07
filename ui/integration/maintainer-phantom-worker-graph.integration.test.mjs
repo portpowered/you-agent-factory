@@ -164,7 +164,8 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
         await processorWorkerButton.click();
         await expect
           .poll(
-            async () => processorWorkerButton.getAttribute("data-selected-worker"),
+            async () =>
+              processorWorkerButton.getAttribute("data-selected-worker"),
             {
               timeout: uiInteractionTimeoutMs,
             },
@@ -184,7 +185,8 @@ describe.sequential("maintainer phantom worker graph browser integration", () =>
           .toBe("true");
         await expect
           .poll(
-            async () => processorWorkerButton.getAttribute("data-selected-worker"),
+            async () =>
+              processorWorkerButton.getAttribute("data-selected-worker"),
             {
               timeout: uiInteractionTimeoutMs,
             },

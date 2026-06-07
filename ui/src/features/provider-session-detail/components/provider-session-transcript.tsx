@@ -105,9 +105,7 @@ function TranscriptEntryCard({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <DashboardLabel>{entryTitle}</DashboardLabel>
             {entry.status ? (
-              <DashboardStatusPill
-                size="compact"
-              >
+              <DashboardStatusPill size="compact">
                 {entry.status}
               </DashboardStatusPill>
             ) : null}

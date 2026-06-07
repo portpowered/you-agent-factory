@@ -10,9 +10,9 @@ import type { EditableWorkTypeValidationErrors } from "../../../current-factory-
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
 import {
+  CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
   CurrentSelectionFormFields,
-  CurrentSelectionDetailFeedback,
   CurrentSelectionSupportingText,
 } from "../../base/public";
 import type {
