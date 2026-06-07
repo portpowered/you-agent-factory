@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -179,6 +180,96 @@ func TestValidate_RejectsDuplicateDefaultWorkTypesOnSavePath(t *testing.T) {
 
 	result := factoryvalidation.Validate(cfg)
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
+}
+
+func TestValidate_InvocationReturnExplicitValid(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        string(factoryapi.InvocationReturnPolicyExplicit),
+			WorkTypeName:  "story",
+			TerminalState: "complete",
+		},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	for _, target := range result.Targets {
+		if strings.HasPrefix(target.Code, "factory.invocationReturn.") {
+			t.Fatalf("targets = %#v, want no invocationReturn findings", result.Targets)
+		}
+	}
+}
+
+func TestValidate_InvocationReturnExplicitMissingWorkType(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        string(factoryapi.InvocationReturnPolicyExplicit),
+			TerminalState: "complete",
+		},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationReturnMissingWorkTypeName)
+}
+
+func TestValidate_InvocationReturnExplicitInvalidTerminalState(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        string(factoryapi.InvocationReturnPolicyExplicit),
+			WorkTypeName:  "story",
+			TerminalState: "review",
+		},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "review", Type: interfaces.StateTypeProcessing},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationReturnInvalidTerminalState)
+}
+
+func TestValidate_InvocationReturnOmitted(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+	}
+
+	result := factoryvalidation.Validate(cfg)
+	for _, target := range result.Targets {
+		if strings.HasPrefix(target.Code, "factory.invocationReturn.") {
+			t.Fatalf("targets = %#v, want omitted invocationReturn to stay valid", result.Targets)
+		}
+	}
 }
 
 type missingOutputRoutesCase struct {

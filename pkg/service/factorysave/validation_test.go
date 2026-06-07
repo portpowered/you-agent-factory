@@ -108,3 +108,43 @@ func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.
 		t.Fatalf("error = %v, want ErrInvalidNamedFactoryName", err)
 	}
 }
+
+func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForInvocationReturnFinding(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	explicit := factoryapi.InvocationReturnPolicyExplicit
+	factory.InvocationReturn = &factoryapi.InvocationReturn{
+		Policy:        explicit,
+		WorkTypeName:  stringPtr("missing-work-type"),
+		TerminalState: stringPtr("complete"),
+	}
+
+	apiResult, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
+		Profile: factoryvalidation.ProfilePrePersist,
+	})
+	if err != nil {
+		t.Fatalf("ValidateFactoryAPI: %v", err)
+	}
+
+	saveErr := validateEditableFactoryTopology(factory, nil)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(saveErr, &topologyErr) {
+		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
+	}
+
+	apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.Targets)
+	saveSignatures := factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
+	if !factoryvalidation.EquivalentCanonicalTargetSignatures(apiSignatures, saveSignatures) {
+		t.Fatalf("ValidateFactoryAPI signatures = %#v, save signatures = %#v",
+			apiSignatures, saveSignatures)
+	}
+	validationassert.HasTargetCode(t, topologyErr.Targets, factoryvalidation.CodeInvocationReturnUnknownWorkTypeName)
+}
+
+func stringPtr(value string) *string {
+	return &value
+}

@@ -137,16 +137,17 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	}
 
 	return factoryapi.Factory{
-		Name:            factoryReferenceName(cfg),
-		Id:              stringPtrIfNotEmpty(cfg.Project),
-		Version:         hybridLogicalTimestampPtr(cfg.Version),
-		Guards:          factoryGuardsAPIFromInternal(cfg.Guards),
-		InputTypes:      inputTypesAPIFromInternal(cfg.InputTypes),
-		WorkTypes:       workTypesAPIFromInternal(cfg.WorkTypes),
-		Resources:       resourcesAPIFromInternal(cfg.Resources),
-		SupportingFiles: resourceManifestAPIFromInternal(cfg.ResourceManifest),
-		Workers:         workersAPIFromInternal(cfg.Workers),
-		Workstations:    workstationsAPIFromInternal(cfg.Workstations),
+		Name:             factoryReferenceName(cfg),
+		Id:               stringPtrIfNotEmpty(cfg.Project),
+		Version:          hybridLogicalTimestampPtr(cfg.Version),
+		Guards:           factoryGuardsAPIFromInternal(cfg.Guards),
+		InputTypes:       inputTypesAPIFromInternal(cfg.InputTypes),
+		InvocationReturn: invocationReturnAPIFromInternal(cfg.InvocationReturn),
+		WorkTypes:        workTypesAPIFromInternal(cfg.WorkTypes),
+		Resources:        resourcesAPIFromInternal(cfg.Resources),
+		SupportingFiles:  resourceManifestAPIFromInternal(cfg.ResourceManifest),
+		Workers:          workersAPIFromInternal(cfg.Workers),
+		Workstations:     workstationsAPIFromInternal(cfg.Workstations),
 	}
 }
 
@@ -162,6 +163,25 @@ func inputTypesAPIFromInternal(inputTypes []interfaces.InputTypeConfig) *[]facto
 		}
 	}
 	return &result
+}
+
+func invocationReturnAPIFromInternal(value *interfaces.InvocationReturnConfig) *factoryapi.InvocationReturn {
+	if value == nil {
+		return nil
+	}
+	result := &factoryapi.InvocationReturn{
+		Policy: factoryapi.InvocationReturnPolicy(value.Policy),
+	}
+	if strings.TrimSpace(value.WorkTypeName) != "" {
+		result.WorkTypeName = stringPtrIfNotEmpty(value.WorkTypeName)
+	}
+	if strings.TrimSpace(value.TerminalState) != "" {
+		result.TerminalState = stringPtrIfNotEmpty(value.TerminalState)
+	}
+	if strings.TrimSpace(value.WorkName) != "" {
+		result.WorkName = stringPtrIfNotEmpty(value.WorkName)
+	}
+	return result
 }
 
 func workTypeHandlingBehaviorAPIFromInternal(behaviors []string) *[]factoryapi.WorkTypeHandlingBehavior {

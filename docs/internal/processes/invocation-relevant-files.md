@@ -5,6 +5,10 @@ primary-result behavior.
 
 - `pkg/invocations/` contains shared pure invocation contract logic used by CLI
   and API adapters.
+- `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
+  validation shared by validate-only and save pre-check flows.
+- `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
+  OpenAPI factory contract and the internal runtime config.
 - `pkg/interfaces/factory_runtime.go` owns the backend canonical
   `WorkContentPart` shape returned by invocation resolvers.
 - `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the

@@ -132,6 +132,7 @@ type FactoryConfig struct {
 	Runner           string                          `json:"runner,omitempty"`
 	Guards           []FactoryGuardConfig            `json:"guards,omitempty"`
 	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
+	InvocationReturn *InvocationReturnConfig         `json:"invocation_return,omitempty"`
 	WorkTypes        []WorkTypeConfig                `json:"work_types"`
 	Resources        []ResourceConfig                `json:"resources"`
 	ResourceManifest *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
@@ -164,10 +165,17 @@ const (
 // WorkTypeHandlingBehaviorDefault marks the work type that receives simplified CLI prompt submissions.
 const WorkTypeHandlingBehaviorDefault = "DEFAULT"
 
+type InvocationReturnConfig struct {
+	Policy        string `json:"policy"`
+	WorkTypeName  string `json:"workTypeName,omitempty"`
+	TerminalState string `json:"terminalState,omitempty"`
+	WorkName      string `json:"workName,omitempty"`
+}
+
 type WorkTypeConfig struct {
-	Name              string   `json:"name"`
-	States            []StateConfig `json:"states"`
-	HandlingBehavior  []string `json:"handlingBehavior,omitempty"`
+	Name             string        `json:"name"`
+	States           []StateConfig `json:"states"`
+	HandlingBehavior []string      `json:"handlingBehavior,omitempty"`
 }
 
 // StateConfig declares a state within a work type.
