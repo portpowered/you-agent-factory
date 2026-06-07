@@ -5,46 +5,101 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
-func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner factoryServiceRunner, runErr error) error {
+func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner factoryServiceRunner, runErr error, startedAt time.Time) error {
+	logger := cleanInvocationLogger(cfg.Logger)
 	provider, ok := runner.(engineStateSnapshotProvider)
 	if !ok {
 		if runErr == nil {
-			return &InvocationError{
+			err := &InvocationError{
 				Code:    InvocationErrorCodeFailed,
 				Message: "clean invocation result snapshot is unavailable",
 			}
+			recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+				StartedAt: startedAt,
+				Err:       err,
+			})
+			return err
 		}
-		return newInvocationErrorForRunFailure(runErr, nil)
+		err := newInvocationErrorForRunFailure(runErr, nil)
+		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+			StartedAt: startedAt,
+			Err:       err,
+		})
+		return err
 	}
 	snapshot, err := provider.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		if runErr == nil {
-			return &InvocationError{
+			invocationErr := &InvocationError{
 				Code:    InvocationErrorCodeFailed,
 				Message: "clean invocation result snapshot is unavailable",
 				Cause:   err,
 			}
+			recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+				StartedAt: startedAt,
+				Err:       invocationErr,
+			})
+			return invocationErr
 		}
-		return newInvocationErrorForRunFailure(runErr, nil)
+		invocationErr := newInvocationErrorForRunFailure(runErr, nil)
+		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+			StartedAt: startedAt,
+			Err:       invocationErr,
+		})
+		return invocationErr
 	}
 	if runErr != nil {
-		return newInvocationErrorForRunFailure(runErr, snapshot)
+		invocationErr := newInvocationErrorForRunFailure(runErr, snapshot)
+		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+			StartedAt: startedAt,
+			Snapshot:  snapshot,
+			Err:       invocationErr,
+		})
+		return invocationErr
 	}
 	target, err := cleanInvocationWorkTargetFromFile(cfg.WorkFile)
 	if err != nil {
+		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+			StartedAt: startedAt,
+			Snapshot:  snapshot,
+			Err:       err,
+		})
 		return err
 	}
 	result, ok := cleanInvocationSuccessFromSnapshot(snapshot, target)
 	if !ok {
-		return cleanInvocationFailureFromSnapshot(snapshot, target)
+		invocationErr := cleanInvocationFailureFromSnapshot(snapshot, target)
+		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+			StartedAt: startedAt,
+			Snapshot:  snapshot,
+			Target:    &target,
+			Err:       invocationErr,
+		})
+		return invocationErr
 	}
-	return writeCleanInvocationSuccess(cfg, result)
+	if err := writeCleanInvocationSuccess(cfg, result); err != nil {
+		recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+			StartedAt: startedAt,
+			Snapshot:  snapshot,
+			Target:    &target,
+			Err:       err,
+		})
+		return err
+	}
+	recordCleanInvocationCompletion(logger, cfg, cleanInvocationCompletionLogInput{
+		StartedAt: startedAt,
+		Snapshot:  snapshot,
+		Target:    &target,
+		Success:   &result,
+	})
+	return nil
 }
 
 func newInvocationErrorForRunFailure(

@@ -82,6 +82,9 @@ type RunConfig struct {
 	CleanInvocation bool
 	// JSON emits the clean invocation success result as a single JSON object.
 	JSON bool
+	// CleanInvocationInputSource describes how a one-shot clean invocation
+	// received its primary input payload.
+	CleanInvocationInputSource InvocationInputSource
 	// Output receives clean invocation success payloads. Nil defaults to stdout.
 	Output io.Writer
 	// OpenDashboard attempts to open the embedded dashboard URL in a browser.
@@ -481,10 +484,14 @@ func runFactoryServiceAndEmitResult(
 	factorySvc factoryServiceRunner,
 	recordPath resolvedRunRecordPath,
 ) error {
+	startedAt := time.Now().UTC()
+	if cfg.CleanInvocation {
+		recordCleanInvocationAttempt()
+	}
 	err := factorySvc.Run(ctx)
 	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
 	if cfg.CleanInvocation {
-		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, err)
+		return emitCleanInvocationOutcome(ctx, cfg, factorySvc, err, startedAt)
 	}
 	if err != nil {
 		return err

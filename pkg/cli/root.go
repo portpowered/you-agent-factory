@@ -785,6 +785,13 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 }
 
 func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, verbose, debug bool) error {
+	logger, err := logging.BuildLogger(verbose, debug)
+	if err != nil {
+		return err
+	}
+	cfg.Logger = logger
+	cfg.Verbose = verbose || debug
+
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
 	}
@@ -792,16 +799,10 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 		return err
 	}
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs); err != nil {
+		runcli.ObserveInvocationRejection(logger, err)
 		return err
 	}
 	cleanInvocation := shouldUseCleanRunInvocation(cmd, cfg)
-
-	logger, err := logging.BuildLogger(verbose, debug)
-	if err != nil {
-		return err
-	}
-	cfg.Logger = logger
-	cfg.Verbose = verbose || debug
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
 	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation
@@ -889,6 +890,9 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if workChanged && input.Payload != "" {
 		return fmt.Errorf("%s cannot be used with --work", input.Source)
 	}
+	if workChanged {
+		cfg.CleanInvocationInputSource = runcli.InvocationInputSourceWorkFile
+	}
 	if len(promptArgs) > 0 && input.Payload == "" {
 		return fmt.Errorf("prompt is required for you run --factory")
 	}
@@ -901,6 +905,7 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		return err
 	}
 	cfg.WorkFile = workFile
+	cfg.CleanInvocationInputSource = input.Source
 	return nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestRun_DefaultDashboardRendering_PrintsSimpleDashboardOutput(t *testing.T) {
@@ -155,6 +156,67 @@ func TestRun_CleanInvocationJSONEmitsSinglePrimaryResultObject(t *testing.T) {
 	}
 }
 
+func TestRun_CleanInvocationSuccessRecordsStructuredLogAndMetrics(t *testing.T) {
+	resetCleanInvocationMetricsForTest()
+
+	dir, workFile := writeDashboardRunFixture(t)
+	core, observed := observer.New(zap.InfoLevel)
+
+	output, err := runWithCapturedStdout(t, RunConfig{
+		Dir:                        dir,
+		Port:                       0,
+		WorkFile:                   workFile,
+		MockWorkersEnabled:         true,
+		CleanInvocation:            true,
+		CleanInvocationInputSource: InvocationInputSourcePositional,
+		DisableDefaultRecording:    true,
+		Logger:                     zap.New(core),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if output != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want primary clean invocation output", output)
+	}
+
+	entry := observed.FilterMessage(cleanInvocationLogMessageCompleted).AllUntimed()
+	if len(entry) != 1 {
+		t.Fatalf("completed logs = %d, want 1", len(entry))
+	}
+	fields := entry[0].ContextMap()
+	if fields["outcome"] != cleanInvocationOutcomeSuccess {
+		t.Fatalf("outcome = %#v, want success", fields["outcome"])
+	}
+	if fields["mode"] != cleanInvocationModeLabel {
+		t.Fatalf("mode = %#v, want clean", fields["mode"])
+	}
+	if fields["inputSource"] != "positional_prompt" {
+		t.Fatalf("inputSource = %#v, want positional_prompt", fields["inputSource"])
+	}
+	if fields["workId"] != "dashboard-render-test-work" {
+		t.Fatalf("workId = %#v", fields["workId"])
+	}
+	if fields["workTypeName"] != "task" {
+		t.Fatalf("workTypeName = %#v", fields["workTypeName"])
+	}
+	if fields["traceId"] != "dashboard-render-test-trace" {
+		t.Fatalf("traceId = %#v", fields["traceId"])
+	}
+	if fields["sessionId"] != defaultFactorySessionID {
+		t.Fatalf("sessionId = %#v", fields["sessionId"])
+	}
+	if duration, ok := fields["durationMs"].(int64); !ok || duration < 0 {
+		t.Fatalf("durationMs = %#v, want non-negative int64", fields["durationMs"])
+	}
+
+	if got := snapshotCleanInvocationMetrics(); got != (CleanInvocationMetricsSnapshot{
+		Attempts:  1,
+		Successes: 1,
+	}) {
+		t.Fatalf("metrics = %#v", got)
+	}
+}
+
 func TestRun_CleanInvocationFailureReturnsStableErrorAndNoStdout(t *testing.T) {
 	originalBuilder := buildFactoryService
 	defer func() {
@@ -266,6 +328,59 @@ func TestRun_CleanInvocationCancellationReturnsStableErrorAndNoStdout(t *testing
 	}
 	if invocationErr.Message != "clean invocation cancelled" {
 		t.Fatalf("message = %q", invocationErr.Message)
+	}
+}
+
+func TestRun_CleanInvocationCancellationRecordsStructuredLogAndMetrics(t *testing.T) {
+	resetCleanInvocationMetricsForTest()
+
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	_, workFile := writeDashboardRunFixture(t)
+	core, observed := observer.New(zap.InfoLevel)
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error { return context.Canceled },
+			snapshot: func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+				return nil, errors.New("snapshot not needed")
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		WorkFile:                   workFile,
+		CleanInvocation:            true,
+		CleanInvocationInputSource: InvocationInputSourceWorkFile,
+		DisableDefaultRecording:    true,
+		Logger:                     zap.New(core),
+	})
+	if err == nil {
+		t.Fatal("expected cancellation error")
+	}
+
+	entry := observed.FilterMessage(cleanInvocationLogMessageCompleted).AllUntimed()
+	if len(entry) != 1 {
+		t.Fatalf("completed logs = %d, want 1", len(entry))
+	}
+	fields := entry[0].ContextMap()
+	if fields["outcome"] != cleanInvocationOutcomeCancelled {
+		t.Fatalf("outcome = %#v, want cancelled", fields["outcome"])
+	}
+	if fields["errorCode"] != InvocationErrorCodeCancelled {
+		t.Fatalf("errorCode = %#v, want %q", fields["errorCode"], InvocationErrorCodeCancelled)
+	}
+	if fields["inputSource"] != "work_file" {
+		t.Fatalf("inputSource = %#v, want work_file", fields["inputSource"])
+	}
+
+	if got := snapshotCleanInvocationMetrics(); got != (CleanInvocationMetricsSnapshot{
+		Attempts:      1,
+		Cancellations: 1,
+	}) {
+		t.Fatalf("metrics = %#v", got)
 	}
 }
 

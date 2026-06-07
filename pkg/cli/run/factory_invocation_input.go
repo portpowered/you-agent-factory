@@ -16,6 +16,7 @@ type InvocationInputSource string
 const (
 	InvocationInputSourcePositional InvocationInputSource = "positional prompt"
 	InvocationInputSourceStdin      InvocationInputSource = "stdin"
+	InvocationInputSourceWorkFile   InvocationInputSource = "work file"
 )
 
 type FactoryInvocationInputConfig struct {
@@ -104,9 +105,39 @@ func invocationStdinIsTTY(cfg FactoryInvocationInputConfig) bool {
 }
 
 func ambiguousInvocationInputError(sources []InvocationInputSource) error {
+	labels := invocationInputSourceLabels(sources)
+	return &AmbiguousInvocationInputError{
+		invocationErr: &InvocationError{
+			Code:    InvocationErrorCodeAmbiguousInput,
+			Message: fmt.Sprintf("ambiguous invocation input sources: %s", strings.Join(labels, " and ")),
+		},
+		Sources: append([]InvocationInputSource(nil), sources...),
+	}
+}
+
+type AmbiguousInvocationInputError struct {
+	invocationErr *InvocationError
+	Sources       []InvocationInputSource
+}
+
+func (e *AmbiguousInvocationInputError) Error() string {
+	if e == nil || e.invocationErr == nil {
+		return ""
+	}
+	return e.invocationErr.Error()
+}
+
+func (e *AmbiguousInvocationInputError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.invocationErr
+}
+
+func invocationInputSourceLabels(sources []InvocationInputSource) []string {
 	labels := make([]string, 0, len(sources))
 	for _, source := range sources {
 		labels = append(labels, string(source))
 	}
-	return fmt.Errorf("%s: ambiguous invocation input sources: %s", InvocationErrorCodeAmbiguousInput, strings.Join(labels, " and "))
+	return labels
 }
