@@ -372,6 +372,50 @@ func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.
 	assertPortableBundledPersistedThinManifest(t, filepath.Join(targetDir, interfaces.FactoryConfigFile))
 }
 
+func TestMaterializePortableBundledFiles_OmitsMakefileWhenManifestDeclaresNone(t *testing.T) {
+	targetDir := t.TempDir()
+	writePortableBundledTestFile(t, filepath.Join(targetDir, "Makefile"), "stale makefile\n")
+
+	cfg := &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{
+				portableBundledFixtureFile(interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n"),
+			},
+		},
+	}
+
+	replacements, err := materializePortableBundledFiles(targetDir, cfg)
+	if err != nil {
+		t.Fatalf("materializePortableBundledFiles: %v", err)
+	}
+	if len(replacements) != 0 {
+		t.Fatalf("replacement report = %#v, want no Makefile replacement when manifest omits it", replacements)
+	}
+	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "Makefile"), "stale makefile\n")
+}
+
+func TestMaterializePortableBundledFiles_RestoresExplicitMakefileWithMode(t *testing.T) {
+	targetDir := t.TempDir()
+
+	cfg := &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{
+				portableBundledFixtureFile(interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n"),
+			},
+		},
+	}
+
+	replacements, err := materializePortableBundledFiles(targetDir, cfg)
+	if err != nil {
+		t.Fatalf("materializePortableBundledFiles: %v", err)
+	}
+	if len(replacements) != 0 {
+		t.Fatalf("replacement report = %#v, want none for fresh explicit Makefile", replacements)
+	}
+	assertPortableBundledExpandedFile(t, targetDir, "Makefile", "test:\n\tgo test ./...\n")
+	assertPortableBundledRegularFileMode(t, filepath.Join(targetDir, "Makefile"), 0o644)
+}
+
 func TestMaterializePortableBundledFiles_ReportsDifferingExistingFileReplacement(t *testing.T) {
 	targetDir := t.TempDir()
 	existingScriptPath := filepath.Join(targetDir, "scripts", "execute-story.ps1")
@@ -660,6 +704,30 @@ func assertPortableBundledExecutableScriptMode(t *testing.T, path string) {
 	}
 	if info.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("%s mode = %#o, want executable bit set", path, info.Mode().Perm())
+	}
+}
+
+func assertPortableBundledRegularFileMode(t *testing.T, path string, wantPerm os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat(%s): %v", path, err)
+	}
+	if info.Mode().Perm() != wantPerm {
+		t.Fatalf("%s mode = %#o, want %#o", path, info.Mode().Perm(), wantPerm)
+	}
+}
+
+func assertPortableBundledRoundTripFile(t *testing.T, path, want string) {
+	t.Helper()
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(got) != want {
+		t.Fatalf("%s content = %q, want %q", path, string(got), want)
 	}
 }
 

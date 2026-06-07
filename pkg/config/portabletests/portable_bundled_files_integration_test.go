@@ -137,6 +137,94 @@ func TestPortableBundledFiles_LoadRuntimeConfigMaterializesStandalonePortableCon
 	assertPortableBundledLoadedWorker(t, loaded)
 }
 
+func TestPortableBundledFiles_LoadDoesNotCreateMakefileWhenManifestOmitsIt(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactoryWithoutMakefile(t)
+
+	flattened, err := factoryconfig.FlattenFactoryConfig(sourceDir)
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+
+	portableDir := t.TempDir()
+	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(portablePath, flattened, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", portablePath, err)
+	}
+	copyPortableBundledDiskBackedExport(t, projectDir, sourceDir, portableDir)
+
+	loaded, err := factoryconfig.LoadRuntimeConfig(portableDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(standalone portable config): %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(portableDir, "Makefile")); !os.IsNotExist(err) {
+		t.Fatalf("expected load to omit implicit Makefile, stat err = %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projectDir, "Makefile")); !os.IsNotExist(err) {
+		t.Fatalf("expected load to avoid creating project-root Makefile, stat err = %v", err)
+	}
+	assertPortableBundledReplacementPaths(t, loaded.PortableBundledFileReplacements(), nil)
+}
+
+func TestPortableBundledFiles_LoadDoesNotReportMakefileReplacementWhenManifestOmitsIt(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+
+	flattened, err := factoryconfig.FlattenFactoryConfig(sourceDir)
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+
+	portableDir := t.TempDir()
+	portablePath := filepath.Join(portableDir, interfaces.FactoryConfigFile)
+	if err := os.WriteFile(portablePath, flattened, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", portablePath, err)
+	}
+	copyPortableBundledDiskBackedExport(t, projectDir, sourceDir, portableDir)
+	writePortableBundledRoundTripFile(t, filepath.Join(portableDir, "Makefile"), "stale makefile\n")
+
+	loaded, err := factoryconfig.LoadRuntimeConfig(portableDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(standalone portable config with stale Makefile): %v", err)
+	}
+	assertPortableBundledReplacementPaths(t, loaded.PortableBundledFileReplacements(), nil)
+	assertPortableBundledRoundTripFile(t, filepath.Join(portableDir, "Makefile"), "stale makefile\n")
+}
+
+func TestPortableBundledFiles_ExpandRestoresExplicitMakefileFromManifest(t *testing.T) {
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+
+	writePortableBundledRoundTripFile(t, filepath.Join(sourceDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-roundtrip-factory",
+  "supportingFiles":{
+    "bundledFiles":[
+      {"type":"ROOT_HELPER","targetPath":"Makefile","content":{"encoding":"utf-8","inline":"test:\n\tgo test ./...\n"}},
+      {"type":"DOC","targetPath":"factory/docs/README.md","content":{}},
+      {"type":"INPUT","targetPath":"factory/inputs/task/default/starter.md","content":{}},
+      {"type":"SCRIPT","targetPath":"factory/scripts/execute-story.ps1","content":{}}
+    ]
+  },
+  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "workers": [{"name":"executor"}],
+  "workstations": [{
+    "name":"execute-story",
+    "worker":"executor",
+    "inputs":[{"workType":"task","state":"init"}],
+    "outputs":[{"workType":"task","state":"complete"}],
+    "onFailure":[{"workType":"task","state":"failed"}]
+  }]
+}`)
+	copyPortableBundledDiskBackedExport(t, projectDir, sourceDir, sourceDir)
+
+	targetDir, report, err := factoryconfig.ExpandFactoryConfigLayoutWithExpansionReport(filepath.Join(sourceDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ExpandFactoryConfigLayoutWithExpansionReport: %v", err)
+	}
+	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "Makefile"), "test:\n\tgo test ./...\n")
+	assertPortableBundledRoundTripFileMode(t, filepath.Join(targetDir, "Makefile"), 0o644)
+	if len(report.BundledReplacements) != 0 {
+		t.Fatalf("bundled replacements = %#v, want none for fresh explicit Makefile materialization", report.BundledReplacements)
+	}
+}
+
 func TestPortableBundledFiles_LoadRuntimeConfigOverwritesDifferingExistingFile(t *testing.T) {
 	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
 
@@ -247,6 +335,16 @@ func TestPortableBundledFiles_FlattenRehydratesThinDiskBackedManifestFromDisk(t 
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeInput, "factory/inputs/task/default/starter.md", "starter work\n")
 	assertBundledFileRoundTripEntry(t, cfg.ResourceManifest.BundledFiles[3], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
+}
+
+func seedPortableBundledRoundTripFactoryWithoutMakefile(t *testing.T) (string, string) {
+	t.Helper()
+
+	projectDir, sourceDir := seedPortableBundledRoundTripFactory(t)
+	if err := os.Remove(filepath.Join(projectDir, "Makefile")); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("Remove(project Makefile): %v", err)
+	}
+	return projectDir, sourceDir
 }
 
 func seedPortableBundledRoundTripFactory(t *testing.T) (string, string) {
@@ -524,6 +622,18 @@ func assertPortableBundledRoundTripScriptExecutable(t *testing.T, path string) {
 	}
 	if info.Mode().Perm()&0o111 == 0 {
 		t.Fatalf("%s mode = %#o, want executable bit set", path, info.Mode().Perm())
+	}
+}
+
+func assertPortableBundledRoundTripFileMode(t *testing.T, path string, wantPerm os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat(%s): %v", path, err)
+	}
+	if info.Mode().Perm() != wantPerm {
+		t.Fatalf("%s mode = %#o, want %#o", path, info.Mode().Perm(), wantPerm)
 	}
 }
 
