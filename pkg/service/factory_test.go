@@ -2967,6 +2967,98 @@ func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryCreatesScaffo
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryRejectsConflictingNestedFactoryDir(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	before := harness.svc.sessions.Count()
+	projectDir := filepath.Join(harness.rootDir, "conflicting-nested-factory")
+	if err := os.Mkdir(projectDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(projectDir): %v", err)
+	}
+	rootSentinelPath := filepath.Join(projectDir, "README.md")
+	rootSentinelContents := []byte("existing project notes\n")
+	if err := os.WriteFile(rootSentinelPath, rootSentinelContents, 0o644); err != nil {
+		t.Fatalf("WriteFile(root sentinel): %v", err)
+	}
+
+	nestedFactoryDir := filepath.Join(projectDir, interfaces.FactoryDir)
+	if err := os.Mkdir(nestedFactoryDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(nested factory): %v", err)
+	}
+	nestedSentinelPath := filepath.Join(nestedFactoryDir, "notes.txt")
+	nestedSentinelContents := []byte("pre-existing nested notes\n")
+	if err := os.WriteFile(nestedSentinelPath, nestedSentinelContents, 0o644); err != nil {
+		t.Fatalf("WriteFile(nested sentinel): %v", err)
+	}
+	beforeSnapshot := snapshotDirectoryTree(t, projectDir)
+
+	_, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), projectDir, nil, false, true)
+	if err == nil || !strings.Contains(err.Error(), "conflicting content") {
+		t.Fatalf("OpenFactorySessionFromFolder(conflicting nested factory) error = %v, want conflict failure", err)
+	}
+	assertFactorySessionValidationTarget(t, err, factorysessions.ValidationReasonConflict, "folderPath")
+	if got := harness.svc.sessions.Count(); got != before {
+		t.Fatalf("init-new-factory conflict mutated live sessions to %d, want %d", got, before)
+	}
+
+	afterSnapshot := snapshotDirectoryTree(t, projectDir)
+	if afterSnapshot != beforeSnapshot {
+		t.Fatalf("directory tree changed after rejected init-new-factory:\nbefore=%s\nafter=%s", beforeSnapshot, afterSnapshot)
+	}
+	preservedRoot, err := os.ReadFile(rootSentinelPath)
+	if err != nil {
+		t.Fatalf("ReadFile(root sentinel): %v", err)
+	}
+	if string(preservedRoot) != string(rootSentinelContents) {
+		t.Fatalf("root sentinel contents = %q, want %q", preservedRoot, rootSentinelContents)
+	}
+	preservedNested, err := os.ReadFile(nestedSentinelPath)
+	if err != nil {
+		t.Fatalf("ReadFile(nested sentinel): %v", err)
+	}
+	if string(preservedNested) != string(nestedSentinelContents) {
+		t.Fatalf("nested sentinel contents = %q, want %q", preservedNested, nestedSentinelContents)
+	}
+}
+
+func snapshotDirectoryTree(t *testing.T, root string) string {
+	t.Helper()
+	var lines []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		if rel == "." {
+			return nil
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			return infoErr
+		}
+		line := rel + "\t" + info.Mode().String()
+		if !entry.IsDir() {
+			contents, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			line += "\t" + string(contents)
+		}
+		lines = append(lines, line)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("snapshotDirectoryTree(%s): %v", root, err)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryRejectsRunnableFolder(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
