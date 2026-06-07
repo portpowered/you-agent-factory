@@ -715,4 +715,42 @@ describe("registerWorkstationPromptMonaco", () => {
       ],
     });
   });
+
+  it("offers bundled doc references from the prompt-template contract", () => {
+    const contract = {
+      availableVariables: [
+        {
+          category: "DOC",
+          description: "Bundled factory documentation at factory/docs/overview.md.",
+          example: '{{ index .Docs "factory/docs/overview.md" }}',
+          path: '.Docs["factory/docs/overview.md"]',
+        },
+      ],
+      inputCount: 0,
+      unavailableAccessPatterns: [],
+    } as const;
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: 'index .Docs "factory/docs/overview.md"',
+        label: '.Docs["factory/docs/overview.md"]',
+      }),
+    ]);
+
+    expect(
+      buildWorkstationPromptCompletionItems(contract, {
+        currentTemplateExpression: 'index .Docs "factory/docs/over',
+        currentWordText: "over",
+        insideTemplateExpression: true,
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        insertText: 'view.md"',
+      }),
+    ]);
+  });
 });

@@ -54,6 +54,9 @@ export function useFactoryDocumentSave() {
         currentFactoryDefinitionQueryKey(resolvedSessionID),
         document,
       );
+      void queryClient.invalidateQueries({
+        queryKey: ["current-workstation-prompt-template-contract"],
+      });
     },
   });
 

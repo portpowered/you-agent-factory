@@ -286,6 +286,11 @@ function getMapAccessTargetExpression(path: string) {
     return `(index .Inputs ${inputTagsMatch[1]}).Tags`;
   }
 
+  const docsMatch = path.match(/^\.Docs\["(.+)"\]$/);
+  if (docsMatch?.[1]) {
+    return ".Docs";
+  }
+
   return null;
 }
 

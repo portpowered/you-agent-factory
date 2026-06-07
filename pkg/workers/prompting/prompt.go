@@ -39,6 +39,7 @@ type TokenData struct {
 
 // PromptData is the data object passed to Go text/template execution.
 type PromptData struct {
+	Docs    map[string]string
 	Inputs  []TokenData
 	Context PromptContext
 }
@@ -95,6 +96,7 @@ func BuildPromptData(tokens []interfaces.Token, wfCtx *factory_context.FactoryCo
 	}
 
 	if wfCtx != nil {
+		data.Docs = loadBundledDocContentsFromFactoryDir(wfCtx.FactoryDirectory)
 		data.Context = PromptContext{
 			WorkDir:     wfCtx.WorkDirectory,
 			ArtifactDir: wfCtx.ArtifactDir,
@@ -107,6 +109,9 @@ func BuildPromptData(tokens []interfaces.Token, wfCtx *factory_context.FactoryCo
 		}
 	} else {
 		data.Context.Project = promptContextProject(tokens, nil)
+	}
+	if data.Docs == nil {
+		data.Docs = map[string]string{}
 	}
 
 	return data

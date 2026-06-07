@@ -165,7 +165,10 @@ func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w
 		return
 	}
 
-	contract := workerprompting.BuildPromptTemplateContract(len(workstation.Inputs))
+	contract := workerprompting.BuildPromptTemplateContract(
+		len(workstation.Inputs),
+		currentFactoryBundledDocTargetPaths(namedFactory),
+	)
 	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
 }
 
@@ -189,7 +192,12 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 		return
 	}
 
-	result := workerprompting.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
+	docPaths := currentFactoryBundledDocTargetPaths(namedFactory)
+	result := workerprompting.ValidatePromptTemplate(
+		req.Prompt,
+		len(workstation.Inputs),
+		docPaths,
+	)
 	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
 }
 
@@ -322,6 +330,25 @@ func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactory
 
 func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
 	return decodeStrictJSON[factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody](body)
+}
+
+func currentFactoryBundledDocTargetPaths(factory factoryapi.Factory) []string {
+	if factory.SupportingFiles == nil || factory.SupportingFiles.BundledFiles == nil {
+		return nil
+	}
+
+	paths := make([]string, 0, len(*factory.SupportingFiles.BundledFiles))
+	for _, bundledFile := range *factory.SupportingFiles.BundledFiles {
+		if bundledFile.Type != factoryapi.BundledFileTypeDOC {
+			continue
+		}
+		if bundledFile.TargetPath == "" {
+			continue
+		}
+		paths = append(paths, bundledFile.TargetPath)
+	}
+
+	return paths
 }
 
 func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {

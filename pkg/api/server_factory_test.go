@@ -412,7 +412,13 @@ func TestSaveCurrentFactory_MapsStaleVersion(t *testing.T) {
 func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CurrentFactory: &factoryapi.Factory{
-			Name:         "beta",
+			Name: "beta",
+			SupportingFiles: &factoryapi.ResourceManifest{
+				BundledFiles: &[]factoryapi.BundledFile{{
+					TargetPath: "factory/docs/overview.md",
+					Type:       factoryapi.BundledFileTypeDOC,
+				}},
+			},
 			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 		},
 	})
@@ -430,6 +436,37 @@ func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 	}
 	if !promptTemplateContractHasPath(contract.AvailableVariables, ".Context.SessionID") {
 		t.Fatalf("prompt contract = %#v, want .Context.SessionID", contract.AvailableVariables)
+	}
+	if !promptTemplateContractHasPath(contract.AvailableVariables, `.Docs["factory/docs/overview.md"]`) {
+		t.Fatalf("prompt contract = %#v, want bundled doc reference", contract.AvailableVariables)
+	}
+}
+
+func TestValidateCurrentFactoryWorkstationPromptTemplate_AcceptsBundledDocReference(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentFactory: &factoryapi.Factory{
+			Name: "beta",
+			SupportingFiles: &factoryapi.ResourceManifest{
+				BundledFiles: &[]factoryapi.BundledFile{{
+					TargetPath: "factory/docs/overview.md",
+					Type:       factoryapi.BundledFileTypeDOC,
+				}},
+			},
+			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ index .Docs \"factory/docs/overview.md\" }}"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSONResponse[factoryapi.PromptTemplateValidationResult](t, rec)
+	if !result.Valid || len(result.Diagnostics) != 0 {
+		t.Fatalf("validation result = %#v, want valid with no diagnostics", result)
 	}
 }
 

@@ -1,6 +1,8 @@
 package prompting
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -49,7 +51,7 @@ func TestPromptData_ExposesOnlyCanonicalTemplateRoots(t *testing.T) {
 		fields = append(fields, dataType.Field(i).Name)
 	}
 
-	want := []string{"Inputs", "Context"}
+	want := []string{"Docs", "Inputs", "Context"}
 	if !reflect.DeepEqual(fields, want) {
 		t.Fatalf("PromptData fields = %v, want %v", fields, want)
 	}
@@ -123,6 +125,30 @@ Reviewer feedback: {{ (index .Inputs 0).RejectionFeedback }}
 	}
 	if !strings.Contains(result, "Missing error handling section") {
 		t.Errorf("expected rejection feedback, got: %s", result)
+	}
+}
+
+func TestPromptRenderer_RendersBundledDocReference(t *testing.T) {
+	renderer := &DefaultPromptRenderer{}
+	factoryDir := t.TempDir()
+	docsDir := filepath.Join(factoryDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "overview.md"), []byte("overview-content"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	result, err := renderer.Render(
+		`{{ index .Docs "factory/docs/overview.md" }}`,
+		nil,
+		&factory_context.FactoryContext{FactoryDirectory: factoryDir},
+	)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if result != "overview-content" {
+		t.Fatalf("result = %q, want overview-content", result)
 	}
 }
 

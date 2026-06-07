@@ -20,6 +20,7 @@ const (
 	PromptTemplateVariableCategoryHistory   PromptTemplateVariableCategory = "HISTORY"
 	PromptTemplateVariableCategoryContext   PromptTemplateVariableCategory = "CONTEXT"
 	PromptTemplateVariableCategoryMapAccess PromptTemplateVariableCategory = "MAP_ACCESS"
+	PromptTemplateVariableCategoryDoc       PromptTemplateVariableCategory = "DOC"
 )
 
 type PromptTemplateVariableReference struct {
@@ -63,7 +64,8 @@ type PromptTemplateValidationResult struct {
 	Valid       bool
 }
 
-func BuildPromptTemplateContract(inputCount int) PromptTemplateContract {
+func BuildPromptTemplateContract(inputCount int, docPaths []string) PromptTemplateContract {
+	normalizedDocPaths := NormalizeFactoryBundledDocTargetPaths(docPaths)
 	references := []PromptTemplateVariableReference{
 		{
 			Category:    PromptTemplateVariableCategoryRoot,
@@ -106,11 +108,9 @@ func BuildPromptTemplateContract(inputCount int) PromptTemplateContract {
 	for inputIndex := 0; inputIndex < inputCount; inputIndex++ {
 		references = append(references, inputVariableReferences(inputIndex)...)
 	}
+	references = append(references, bundledDocVariableReferences(normalizedDocPaths)...)
 
-	return PromptTemplateContract{
-		AvailableVariables: references,
-		InputCount:         inputCount,
-		UnavailableAccessPatterns: []PromptTemplateUnavailableAccessPattern{
+	unavailablePatterns := []PromptTemplateUnavailableAccessPattern{
 			{
 				Example: unavailableInputExample(inputCount),
 				Path:    ".Inputs[N]",
@@ -126,11 +126,28 @@ func BuildPromptTemplateContract(inputCount int) PromptTemplateContract {
 				Path:    ".Context.Env.<key>",
 				Reason:  "Environment map keys are not addressable as struct fields. Use index with a quoted key, for example {{ index .Context.Env \"API_KEY\" }}.",
 			},
-		},
+			{
+				Example: `{{ .Docs.overview }}`,
+				Path:    ".Docs.<path>",
+				Reason:  "Bundled doc target paths are not addressable as struct fields. Use index with a quoted target path, for example {{ index .Docs \"factory/docs/overview.md\" }}.",
+			},
+		}
+	if len(normalizedDocPaths) == 0 {
+		unavailablePatterns = append(unavailablePatterns, PromptTemplateUnavailableAccessPattern{
+			Example: `{{ index .Docs "factory/docs/overview.md" }}`,
+			Path:    `.Docs["factory/docs/<name>"]`,
+			Reason:  "The current factory does not bundle any documentation under factory/docs/** in this editing context.",
+		})
+	}
+
+	return PromptTemplateContract{
+		AvailableVariables:        references,
+		InputCount:                inputCount,
+		UnavailableAccessPatterns: unavailablePatterns,
 	}
 }
 
-func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidationResult {
+func ValidatePromptTemplate(tmpl string, inputCount int, docPaths []string) PromptTemplateValidationResult {
 	parsed, err := template.New("prompt").Parse(tmpl)
 	if err != nil {
 		return PromptTemplateValidationResult{
@@ -140,6 +157,7 @@ func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidatio
 	}
 
 	validator := promptTemplateValidator{
+		docPaths:   bundledDocTargetPathSet(NormalizeFactoryBundledDocTargetPaths(docPaths)),
 		inputCount: inputCount,
 		seen:       make(map[string]struct{}),
 	}
@@ -148,7 +166,7 @@ func ValidatePromptTemplate(tmpl string, inputCount int) PromptTemplateValidatio
 		dot:      promptValidationValue{kind: promptValidationValueRoot},
 	}
 	validator.walkList(parsed.Tree.Root, rootScope)
-	validator.addRuntimeExecutionDiagnostic(parsed, tmpl)
+	validator.addRuntimeExecutionDiagnostic(parsed, tmpl, NormalizeFactoryBundledDocTargetPaths(docPaths))
 
 	return PromptTemplateValidationResult{
 		Diagnostics: validator.diagnostics,
@@ -338,6 +356,7 @@ const (
 	promptValidationValueContext
 	promptValidationValueTagsMap
 	promptValidationValueEnvMap
+	promptValidationValueDocsMap
 	promptValidationValueRelationsSlice
 	promptValidationValueRelation
 	promptValidationValueFailureLog
@@ -367,17 +386,18 @@ func (s *promptValidationScope) lookup(name string) (promptValidationValue, bool
 
 type promptTemplateValidator struct {
 	diagnostics []PromptTemplateDiagnostic
+	docPaths    map[string]struct{}
 	inputCount  int
 	seen        map[string]struct{}
 }
 
-func (v *promptTemplateValidator) addRuntimeExecutionDiagnostic(parsed *template.Template, tmpl string) {
+func (v *promptTemplateValidator) addRuntimeExecutionDiagnostic(parsed *template.Template, tmpl string, docPaths []string) {
 	if parsed == nil {
 		return
 	}
 
 	var rendered bytes.Buffer
-	if err := parsed.Execute(&rendered, buildPromptValidationData(v.inputCount)); err != nil {
+	if err := parsed.Execute(&rendered, buildPromptValidationData(v.inputCount, docPaths)); err != nil {
 		diagnostic, ok := promptTemplateExecutionDiagnostic(err, tmpl)
 		if !ok {
 			return
@@ -487,6 +507,27 @@ func (v *promptTemplateValidator) resolveIndexCommand(cmd *parse.CommandNode, sc
 			current = promptValidationValue{kind: promptValidationValueScalar, displayPath: current.displayPath}
 		case promptValidationValueEnvMap:
 			current = promptValidationValue{kind: promptValidationValueScalar, displayPath: current.displayPath}
+		case promptValidationValueDocsMap:
+			key, ok := literalString(arg)
+			if !ok {
+				current = promptValidationValue{kind: promptValidationValueScalar, displayPath: current.displayPath + "[*]"}
+				continue
+			}
+			path := fmt.Sprintf(`.Docs[%q]`, key)
+			source := fmt.Sprintf(`index .Docs %q`, key)
+			if _, available := v.docPaths[key]; !available {
+				v.addDiagnostic(PromptTemplateDiagnostic{
+					Kind:        PromptTemplateDiagnosticKindUnavailableVariable,
+					Message:     unavailableBundledDocReason(key),
+					Path:        path,
+					SourceText:  source,
+					StartOffset: int(arg.Position()),
+					EndOffset:   int(arg.Position()) + len(strconv.Quote(key)) - 1,
+				})
+				current = promptValidationValue{kind: promptValidationValueUnknown, displayPath: path}
+				continue
+			}
+			current = promptValidationValue{kind: promptValidationValueScalar, displayPath: path}
 		case promptValidationValueRelationsSlice:
 			current = promptValidationValue{kind: promptValidationValueRelation, displayPath: current.displayPath + "[*]"}
 		default:
@@ -577,7 +618,7 @@ func (v *promptTemplateValidator) resolveNextFieldValue(
 		return v.resolveNamedField(field, nextPath, pos, "prompt context", resolveContextField)
 	case promptValidationValueRelation:
 		return v.resolveNamedField(field, nextPath, pos, "relation", resolveRelationField)
-	case promptValidationValueTagsMap, promptValidationValueEnvMap:
+	case promptValidationValueTagsMap, promptValidationValueEnvMap, promptValidationValueDocsMap:
 		v.addCollectionAccessDiagnostic(pos, nextPath, fmt.Sprintf("%s is a map. Access keys with index and a quoted key instead of dot notation.", current.displayPath))
 		return promptValidationValue{}, false
 	case promptValidationValueInputsSlice, promptValidationValueRelationsSlice, promptValidationValueFailureLog, promptValidationValueContent:
@@ -597,6 +638,8 @@ func (v *promptTemplateValidator) resolveRootField(field, nextPath string, pos p
 		return promptValidationValue{kind: promptValidationValueInputsSlice, displayPath: ".Inputs"}, true
 	case "Context":
 		return promptValidationValue{kind: promptValidationValueContext, displayPath: ".Context"}, true
+	case "Docs":
+		return promptValidationValue{kind: promptValidationValueDocsMap, displayPath: ".Docs"}, true
 	default:
 		v.addUnknownFieldDiagnostic(pos, nextPath, field, "prompt root")
 		return promptValidationValue{}, false
@@ -751,6 +794,14 @@ func literalInteger(node parse.Node) (int, bool) {
 	return int(number.Int64), true
 }
 
+func literalString(node parse.Node) (string, bool) {
+	text, ok := node.(*parse.StringNode)
+	if !ok {
+		return "", false
+	}
+	return text.Text, true
+}
+
 func fieldPath(base, field string) string {
 	if base == "" {
 		return field
@@ -772,7 +823,11 @@ func normalizeDiagnosticSourceText(sourceText string) string {
 	return strings.Trim(sourceText, "() ")
 }
 
-func buildPromptValidationData(inputCount int) PromptData {
+func unavailableBundledDocReason(targetPath string) string {
+	return fmt.Sprintf("The current factory does not bundle documentation at %q in this editing context.", targetPath)
+}
+
+func buildPromptValidationData(inputCount int, docPaths []string) PromptData {
 	inputs := make([]TokenData, 0, inputCount)
 	for index := 0; index < inputCount; index++ {
 		inputs = append(inputs, TokenData{
@@ -813,6 +868,7 @@ func buildPromptValidationData(inputCount int) PromptData {
 	}
 
 	return PromptData{
+		Docs:   bundledDocPlaceholderContents(docPaths),
 		Inputs: inputs,
 		Context: PromptContext{
 			WorkDir:     "/tmp/workdir",

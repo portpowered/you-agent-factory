@@ -4052,6 +4052,7 @@ export const PromptTemplateVariableReferenceCategory = {
   HISTORY: "HISTORY",
   CONTEXT: "CONTEXT",
   MAP_ACCESS: "MAP_ACCESS",
+  DOC: "DOC",
 } as const;
 export type PromptTemplateVariableReferenceCategory =
   (typeof PromptTemplateVariableReferenceCategory)[keyof typeof PromptTemplateVariableReferenceCategory];
