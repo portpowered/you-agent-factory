@@ -204,6 +204,115 @@ func TestResolveFactoryInvocationRequest_ConflictLogsAndCountsSourceConflict(t *
 	recorder.assertContainsMetricNames(t, "invocation.failure", "invocation.source_conflict")
 }
 
+func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "hi there"
+	var output bytes.Buffer
+	recorder := &capturingInvocationMetricsRecorder{}
+	core, observedLogs := observer.New(zap.InfoLevel)
+
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-tts-not-ready",
+					TraceID:   "trace-tts-not-ready",
+					Status:    factoryapi.InvocationTerminalStatusFailed,
+					ErrorCode: tts.InvocationErrorCodeModelNotReady,
+					Message:   "model not available: required assets missing",
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-tts",
+		NamedFactoryName:         "@you/tts",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+		Logger:                   zap.New(core),
+		InvocationMetricsRecorder: recorder,
+	})
+	if err == nil {
+		t.Fatal("expected model-not-ready invocation failure")
+	}
+	if !strings.Contains(err.Error(), tts.InvocationErrorCodeModelNotReady) {
+		t.Fatalf("error = %q, want %s", err.Error(), tts.InvocationErrorCodeModelNotReady)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty without success metadata", output.String())
+	}
+
+	failedLogs := observedLogs.FilterMessage("packaged tts invocation failed").All()
+	if len(failedLogs) != 1 {
+		t.Fatalf("packaged failure logs = %d, want 1", len(failedLogs))
+	}
+	fields := failedLogs[0].ContextMap()
+	if got := fields["failure_class"]; got != tts.FailureClassModelNotReady {
+		t.Fatalf("failure_class = %#v, want %s", got, tts.FailureClassModelNotReady)
+	}
+	if got := fields["tts_backend"]; got == "" {
+		t.Fatal("expected tts_backend field in packaged failure log")
+	}
+
+	recorder.assertContainsMetricNames(
+		t,
+		tts.MetricPackagedFactoryAttempts,
+		tts.MetricPackagedFactoryFailure,
+		tts.MetricPackagedFactoryNotReady,
+	)
+}
+
+func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "hi there"
+	var output bytes.Buffer
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-tts-failed",
+					TraceID:   "trace-tts-failed",
+					Status:    factoryapi.InvocationTerminalStatusFailed,
+					ErrorCode: tts.InvocationErrorCodeGenerationFailed,
+					Message:   "omnivoice invoke failed: exit status 1",
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-tts",
+		NamedFactoryName:         "@you/tts",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err == nil {
+		t.Fatal("expected generation failure")
+	}
+	if !strings.Contains(err.Error(), tts.InvocationErrorCodeGenerationFailed) {
+		t.Fatalf("error = %q, want %s", err.Error(), tts.InvocationErrorCodeGenerationFailed)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty without success metadata", output.String())
+	}
+}
+
 func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T) {
 	preserveRunGlobals(t)
 

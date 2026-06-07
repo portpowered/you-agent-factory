@@ -11,6 +11,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -386,6 +387,9 @@ func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *fact
 }
 
 func modelEventErrorClass(err error) string {
+	if errors.Is(err, apisurface.ErrModelNotAvailable) {
+		return "MODEL_NOT_AVAILABLE"
+	}
 	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) && providerErr.Type != "" {
 		return string(providerErr.Type)

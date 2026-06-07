@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -276,6 +277,20 @@ func (fs *FactoryService) InvokeFactorySession(
 	if policyModeForInvocation(runtimeCfg.FactoryConfig().InvocationReturn) == invocationPolicyModeFallback {
 		fs.recordInvocationMetric(invocationMetricFallbackPolicyUsed, inputMetricLabels(resolved.Source))
 	}
+	if tts.IsPackagedFactory(runtimeCfg.FactoryConfig()) {
+		fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryAttempts, resolved.Source, nil)
+		fs.logger.Info(
+			"packaged tts invocation submitted",
+			packagedTTSInvocationLogFields(
+				sessionID,
+				resolved.Source,
+				runtimeCfg.FactoryConfig().InvocationReturn,
+				zap.String("request_id", submitResult.RequestID),
+				zap.String("trace_id", submitResult.TraceID),
+				zap.String("readiness_outcome", tts.FailureClassLoading),
+			)...,
+		)
+	}
 	fs.logger.Info(
 		"factory session invocation submitted",
 		invocationLogFields(
@@ -339,6 +354,14 @@ func (fs *FactoryService) waitForSessionInvocationResult(
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
+	var (
+		packagedTTSInvocation bool
+		loggedPackagedLoading bool
+	)
+	if runtimeCfg, err := fs.sessionRuntimeConfig(sessionID); err == nil && runtimeCfg != nil {
+		packagedTTSInvocation = tts.IsPackagedFactory(runtimeCfg.FactoryConfig())
+	}
+
 	for {
 		snapshot, err := fs.GetEngineStateSnapshotForSession(waitCtx, sessionID)
 		if err != nil {
@@ -350,12 +373,21 @@ func (fs *FactoryService) waitForSessionInvocationResult(
 			return fs.handleInvocationWaitError(result, err)
 		}
 
+		activeWork := snapshotHasActiveWork(snapshot)
+		if packagedTTSInvocation && activeWork && !loggedPackagedLoading {
+			fs.logPackagedTTSInvocationLoading(sessionID, input)
+			loggedPackagedLoading = true
+		}
+
 		selection, selectionErr := invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
 			RequestID:        input.RequestID,
 			InvocationReturn: input.InvocationReturn,
 			WorldState:       worldState,
 		})
 		if selectionErr == nil {
+			if packagedTTSInvocation {
+				fs.logPackagedTTSInvocationCompleted(sessionID, input, selection)
+			}
 			return fs.handleInvocationSelectionSuccess(sessionID, input, selection), nil
 		}
 
@@ -364,7 +396,12 @@ func (fs *FactoryService) waitForSessionInvocationResult(
 			return apisurface.FactoryInvocationResult{}, selectionErr
 		}
 
-		if _, exists := worldState.WorkRequestsByID[input.RequestID]; exists && !snapshotHasActiveWork(snapshot) {
+		if _, exists := worldState.WorkRequestsByID[input.RequestID]; exists && !activeWork {
+			if packagedTTSInvocation {
+				if _, failure := tts.ClassifyInvocationWait(worldState, input.RequestID, false); failure != nil {
+					return fs.handlePackagedTTSInvocationFailure(sessionID, input, failure), nil
+				}
+			}
 			return fs.handleInvocationUnresolvedPrimary(sessionID, input, primaryErr), nil
 		}
 
@@ -582,6 +619,109 @@ func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]
 		Name:   name,
 		Labels: cloneMetricLabels(labels),
 	})
+}
+
+func (fs *FactoryService) recordPackagedTTSInvocationMetric(
+	name string,
+	source invocations.InputSourceLabel,
+	extra map[string]string,
+) {
+	labels := mergeMetricLabels(
+		inputMetricLabels(source),
+		map[string]string{"packaged_factory": tts.PackagedFactoryName},
+		extra,
+	)
+	fs.recordInvocationMetric(name, labels)
+}
+
+func (fs *FactoryService) handlePackagedTTSInvocationFailure(
+	sessionID string,
+	input sessionInvocationWaitInput,
+	failure *tts.InvocationFailure,
+) apisurface.FactoryInvocationResult {
+	result := apisurface.FactoryInvocationResult{
+		RequestID: input.RequestID,
+		TraceID:   input.TraceID,
+		Status:    factoryapi.InvocationTerminalStatusFailed,
+		ErrorCode: failure.ErrorCode,
+		Message:   failure.Message,
+	}
+	fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
+	fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryFailure, input.InputSource, map[string]string{
+		"failure_class": failure.FailureClass,
+	})
+	if failure.FailureClass == tts.FailureClassModelNotReady {
+		fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactoryNotReady, input.InputSource, nil)
+	}
+	fs.logger.Warn(
+		"packaged tts invocation failed",
+		packagedTTSInvocationLogFields(
+			sessionID,
+			input.InputSource,
+			input.InvocationReturn,
+			zap.String("request_id", input.RequestID),
+			zap.String("trace_id", input.TraceID),
+			zap.String("status", string(result.Status)),
+			zap.String("error_code", result.ErrorCode),
+			zap.String("failure_class", failure.FailureClass),
+			zap.String("readiness_outcome", failure.FailureClass),
+		)...,
+	)
+	return result
+}
+
+func (fs *FactoryService) logPackagedTTSInvocationLoading(
+	sessionID string,
+	input sessionInvocationWaitInput,
+) {
+	fs.logger.Info(
+		"packaged tts invocation loading",
+		packagedTTSInvocationLogFields(
+			sessionID,
+			input.InputSource,
+			input.InvocationReturn,
+			zap.String("request_id", input.RequestID),
+			zap.String("trace_id", input.TraceID),
+			zap.String("readiness_outcome", tts.FailureClassLoading),
+		)...,
+	)
+}
+
+func (fs *FactoryService) logPackagedTTSInvocationCompleted(
+	sessionID string,
+	input sessionInvocationWaitInput,
+	selection invocations.PrimaryResultSelection,
+) {
+	fs.recordPackagedTTSInvocationMetric(tts.MetricPackagedFactorySuccess, input.InputSource, map[string]string{
+		"readiness_outcome": tts.FailureClassSuccess,
+	})
+	fs.logger.Info(
+		"packaged tts invocation completed",
+		packagedTTSInvocationLogFields(
+			sessionID,
+			input.InputSource,
+			input.InvocationReturn,
+			zap.String("request_id", input.RequestID),
+			zap.String("trace_id", input.TraceID),
+			zap.String("status", string(factoryapi.InvocationTerminalStatusCompleted)),
+			zap.String("resolved_work_id", selection.WorkID),
+			zap.String("resolved_work_type", selection.WorkTypeName),
+			zap.String("readiness_outcome", tts.FailureClassSuccess),
+		)...,
+	)
+}
+
+func packagedTTSInvocationLogFields(
+	sessionID string,
+	source invocations.InputSourceLabel,
+	cfg *interfaces.InvocationReturnConfig,
+	extra ...zap.Field,
+) []zap.Field {
+	fields := invocationLogFields(sessionID, source, cfg,
+		zap.String("packaged_factory_name", tts.PackagedFactoryName),
+		zap.String("tts_backend", tts.BackendRuntimeLabel()),
+	)
+	return append(fields, extra...)
 }
 
 func invocationLogFields(
