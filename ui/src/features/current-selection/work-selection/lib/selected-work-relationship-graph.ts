@@ -1,6 +1,7 @@
 import type {
   DashboardSnapshot,
   DashboardWorkItemRef,
+  DashboardWorkRelation,
 } from "../../../../api/dashboard/types";
 import type { FactoryRelation } from "../../../../api/events/types";
 import { findWorkItemReference } from "../../base/state/dashboardSelection";
@@ -35,12 +36,14 @@ export type SelectedWorkRelationshipGraph =
     }
   | {
       edges: [];
+      relations: [];
       relatedWork: [];
       selectedWork: SelectedWorkRelationshipNode;
       status: "empty";
     }
   | {
       edges: SelectedWorkRelationshipEdge[];
+      relations: DashboardWorkRelation[];
       relatedWork: SelectedWorkRelationshipNode[];
       selectedWork: SelectedWorkRelationshipNode;
       status: "ready";
@@ -49,6 +52,12 @@ export type SelectedWorkRelationshipGraph =
 interface RelationshipAwareSnapshot extends DashboardSnapshot {
   relationsByWorkID?: Record<string, FactoryRelation[]>;
 }
+
+type ConnectedDashboardWorkRelation = DashboardWorkRelation & {
+  source_work_id: string;
+  target_work_id: string;
+  type: string;
+};
 
 export function buildSelectedWorkRelationshipGraph({
   selectedWorkItem,
@@ -78,25 +87,40 @@ export function buildSelectedWorkRelationshipGraph({
     };
   }
 
+  const relations = connectedSupportedRelations(
+    relationsByWorkID,
+    selectedWork,
+  );
   const relatedWorkByID = new Map<string, SelectedWorkRelationshipNode>();
-  const edges = [
-    ...outboundEdges(
-      snapshot,
-      relationsByWorkID,
-      selectedWorkItem,
-      relatedWorkByID,
-    ),
-    ...inboundEdges(
-      snapshot,
-      relationsByWorkID,
-      selectedWorkItem,
-      relatedWorkByID,
-    ),
-  ].sort(compareEdges);
+  const edges = relations.map(edgeForRelation).sort(compareEdges);
+
+  for (const relation of relations) {
+    if (relation.source_work_id !== selectedWork.workID) {
+      relatedWorkByID.set(
+        relation.source_work_id,
+        resolveRelatedNode(
+          snapshot,
+          relation.source_work_id,
+          relation.source_work_name,
+        ),
+      );
+    }
+    if (relation.target_work_id !== selectedWork.workID) {
+      relatedWorkByID.set(
+        relation.target_work_id,
+        resolveRelatedNode(
+          snapshot,
+          relation.target_work_id,
+          relation.target_work_name,
+        ),
+      );
+    }
+  }
 
   if (edges.length === 0) {
     return {
       edges: [],
+      relations: [],
       relatedWork: [],
       selectedWork,
       status: "empty",
@@ -105,121 +129,11 @@ export function buildSelectedWorkRelationshipGraph({
 
   return {
     edges,
+    relations,
     relatedWork: [...relatedWorkByID.values()].sort(compareNodes),
     selectedWork,
     status: "ready",
   };
-}
-
-function outboundEdges(
-  snapshot: DashboardSnapshot,
-  relationsByWorkID: Record<string, FactoryRelation[]>,
-  selectedWorkItem: DashboardWorkItemRef,
-  relatedWorkByID: Map<string, SelectedWorkRelationshipNode>,
-): SelectedWorkRelationshipEdge[] {
-  const outbound = relationsByWorkID[selectedWorkItem.work_id] ?? [];
-  const edges: SelectedWorkRelationshipEdge[] = [];
-
-  for (const relation of outbound) {
-    const relationship = outboundRelationshipRole(relation.type);
-    const targetWorkID = relation.targetWorkId;
-    if (
-      !relationship ||
-      !targetWorkID ||
-      targetWorkID === selectedWorkItem.work_id
-    ) {
-      continue;
-    }
-
-    relatedWorkByID.set(
-      targetWorkID,
-      resolveRelatedNode(snapshot, targetWorkID, relation.targetWorkName),
-    );
-    edges.push({
-      relationship,
-      requiredState: relation.requiredState,
-      sourceWorkID: selectedWorkItem.work_id,
-      targetWorkID,
-    });
-  }
-
-  return dedupeEdges(edges);
-}
-
-function inboundEdges(
-  snapshot: DashboardSnapshot,
-  relationsByWorkID: Record<string, FactoryRelation[]>,
-  selectedWorkItem: DashboardWorkItemRef,
-  relatedWorkByID: Map<string, SelectedWorkRelationshipNode>,
-): SelectedWorkRelationshipEdge[] {
-  const edges: SelectedWorkRelationshipEdge[] = [];
-
-  for (const relations of Object.values(relationsByWorkID)) {
-    for (const relation of relations) {
-      if (relation.targetWorkId !== selectedWorkItem.work_id) {
-        continue;
-      }
-
-      const relationship = inboundRelationshipRole(relation.type);
-      const sourceWorkID = relationSourceWorkID(relation);
-      if (
-        !relationship ||
-        !sourceWorkID ||
-        sourceWorkID === selectedWorkItem.work_id
-      ) {
-        continue;
-      }
-
-      relatedWorkByID.set(
-        sourceWorkID,
-        resolveRelatedNode(snapshot, sourceWorkID, relation.sourceWorkName),
-      );
-      edges.push({
-        relationship,
-        requiredState: relation.requiredState,
-        sourceWorkID: selectedWorkItem.work_id,
-        targetWorkID: sourceWorkID,
-      });
-    }
-  }
-
-  return dedupeEdges(edges);
-}
-
-function relationSourceWorkID(relation: FactoryRelation): string | undefined {
-  return "source_work_id" in relation ? relation.source_work_id : undefined;
-}
-
-function outboundRelationshipRole(
-  relationType: string,
-): SelectedWorkRelationshipRole | null {
-  switch (relationType.trim().toUpperCase()) {
-    case "PARENT":
-    case "PARENT_CHILD":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "PARENT";
-    case "DEPENDS_ON":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "DEPENDS_ON";
-    default:
-      return null;
-  }
-}
-
-function inboundRelationshipRole(
-  relationType: string,
-): SelectedWorkRelationshipRole | null {
-  switch (relationType.trim().toUpperCase()) {
-    case "PARENT":
-    case "PARENT_CHILD":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "CHILD";
-    case "DEPENDS_ON":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return "REQUIRED_BY";
-    default:
-      return null;
-  }
 }
 
 function resolveRelatedNode(
@@ -250,7 +164,7 @@ function nodeForWorkItem(
   };
 }
 
-function dedupeEdges(
+function _dedupeEdges(
   edges: SelectedWorkRelationshipEdge[],
 ): SelectedWorkRelationshipEdge[] {
   const deduped = new Map<string, SelectedWorkRelationshipEdge>();
@@ -264,6 +178,158 @@ function dedupeEdges(
     deduped.set(key, edge);
   }
   return [...deduped.values()];
+}
+
+function connectedSupportedRelations(
+  relationsByWorkID: Record<string, FactoryRelation[]>,
+  selectedWork: SelectedWorkRelationshipNode,
+): ConnectedDashboardWorkRelation[] {
+  const relations = dedupeDashboardRelations(
+    Object.values(relationsByWorkID)
+      .flat()
+      .map(normalizeSupportedRelation)
+      .filter(
+        (relation): relation is ConnectedDashboardWorkRelation =>
+          relation !== null,
+      ),
+  );
+  const incidentByWorkID = new Map<string, ConnectedDashboardWorkRelation[]>();
+
+  for (const relation of relations) {
+    const sourceRelations = incidentByWorkID.get(relation.source_work_id) ?? [];
+    sourceRelations.push(relation);
+    incidentByWorkID.set(relation.source_work_id, sourceRelations);
+
+    const targetRelations = incidentByWorkID.get(relation.target_work_id) ?? [];
+    targetRelations.push(relation);
+    incidentByWorkID.set(relation.target_work_id, targetRelations);
+  }
+
+  const visited = new Set<string>([selectedWork.workID]);
+  const queue = [selectedWork.workID];
+
+  while (queue.length > 0) {
+    const workID = queue.shift();
+    if (!workID) {
+      continue;
+    }
+
+    for (const relation of incidentByWorkID.get(workID) ?? []) {
+      for (const neighborID of [
+        relation.source_work_id,
+        relation.target_work_id,
+      ]) {
+        if (!visited.has(neighborID)) {
+          visited.add(neighborID);
+          queue.push(neighborID);
+        }
+      }
+    }
+  }
+
+  return relations
+    .filter(
+      (relation) =>
+        visited.has(relation.source_work_id) &&
+        visited.has(relation.target_work_id),
+    )
+    .sort(compareRelations);
+}
+
+function normalizeSupportedRelation(
+  relation: FactoryRelation,
+): ConnectedDashboardWorkRelation | null {
+  const type = relation.type?.trim().toUpperCase();
+  if (type !== "PARENT" && type !== "PARENT_CHILD" && type !== "DEPENDS_ON") {
+    return null;
+  }
+
+  const sourceWorkID = trimString(
+    "source_work_id" in relation ? relation.source_work_id : undefined,
+  );
+  const targetWorkID =
+    trimString(
+      "targetWorkId" in relation ? relation.targetWorkId : undefined,
+    ) ||
+    trimString(
+      "target_work_id" in relation ? relation.target_work_id : undefined,
+    );
+
+  if (!sourceWorkID || !targetWorkID || sourceWorkID === targetWorkID) {
+    return null;
+  }
+
+  return {
+    required_state:
+      trimString(
+        "requiredState" in relation ? relation.requiredState : undefined,
+      ) ||
+      trimString(
+        "required_state" in relation ? relation.required_state : undefined,
+      ),
+    source_work_id: sourceWorkID,
+    source_work_name:
+      trimString(
+        "sourceWorkName" in relation ? relation.sourceWorkName : undefined,
+      ) ||
+      trimString(
+        "source_work_name" in relation ? relation.source_work_name : undefined,
+      ),
+    target_work_id: targetWorkID,
+    target_work_name:
+      trimString(
+        "targetWorkName" in relation ? relation.targetWorkName : undefined,
+      ) ||
+      trimString(
+        "target_work_name" in relation ? relation.target_work_name : undefined,
+      ),
+    type: type === "PARENT" ? "PARENT_CHILD" : type,
+  };
+}
+
+function edgeForRelation(
+  relation: ConnectedDashboardWorkRelation,
+): SelectedWorkRelationshipEdge {
+  return {
+    relationship: relation.type === "PARENT_CHILD" ? "PARENT" : "DEPENDS_ON",
+    requiredState: relation.required_state,
+    sourceWorkID: relation.source_work_id,
+    targetWorkID: relation.target_work_id,
+  };
+}
+
+function dedupeDashboardRelations(
+  relations: ConnectedDashboardWorkRelation[],
+): ConnectedDashboardWorkRelation[] {
+  const deduped = new Map<string, ConnectedDashboardWorkRelation>();
+  for (const relation of relations) {
+    const key = [
+      relation.type,
+      relation.source_work_id,
+      relation.target_work_id,
+      relation.required_state ?? "",
+    ].join("|");
+    if (!deduped.has(key)) {
+      deduped.set(key, relation);
+    }
+  }
+  return [...deduped.values()];
+}
+
+function compareRelations(
+  left: ConnectedDashboardWorkRelation,
+  right: ConnectedDashboardWorkRelation,
+): number {
+  return (
+    left.source_work_id.localeCompare(right.source_work_id) ||
+    left.target_work_id.localeCompare(right.target_work_id) ||
+    left.type.localeCompare(right.type) ||
+    (left.required_state ?? "").localeCompare(right.required_state ?? "")
+  );
+}
+
+function trimString(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim() || undefined : undefined;
 }
 
 function compareEdges(

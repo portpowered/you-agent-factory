@@ -102,9 +102,7 @@ describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
       />,
     );
 
-    expect(
-      screen.queryByText(/updates workstations/i),
-    ).toBeNull();
+    expect(screen.queryByText(/updates workstations/i)).toBeNull();
   });
 });
 

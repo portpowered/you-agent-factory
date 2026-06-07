@@ -188,9 +188,7 @@ describe("workstation-guards draft equality and rename", () => {
         "Planning",
       ),
     ).toEqual({
-      guards: [
-        { maxVisits: 1, type: "VISIT_COUNT", workstation: "Planning" },
-      ],
+      guards: [{ maxVisits: 1, type: "VISIT_COUNT", workstation: "Planning" }],
       inputs: [
         {
           guards: [

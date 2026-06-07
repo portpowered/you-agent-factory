@@ -1,0 +1,18 @@
+type: object
+description: >
+  Optional advanced diagnostics for how one managed runtime resolved assets from
+  a configured backend source. Source details are implementation diagnostics and
+  are not required for the primary customer lifecycle contract.
+properties:
+  sourceKind:
+    type: string
+    description: >
+      Resolver-classified backend source kind, such as `UPSTREAM_REPOSITORY` or
+      `MANAGED_MIRROR`, without exposing provider-native repository vocabulary in
+      the primary customer contract.
+  sourceId:
+    type: string
+    description: Opaque resolver identifier for the selected backend source instance.
+  resolverNotes:
+    type: string
+    description: Concise resolver note suitable for operator diagnostics.

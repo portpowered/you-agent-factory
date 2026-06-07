@@ -7,9 +7,6 @@ import { DashboardScreen } from "./dashboard-screen";
 
 const VIEWPORT_HEIGHT = 768;
 const DOCUMENT_HEIGHT = 2600;
-const VERTICAL_SCROLL_CLASS_PATTERN =
-  /(?:^|\s)(?:overflow-(?:auto|scroll)|overflow-y-(?:auto|scroll))(?:\s|$)/;
-
 const dashboardSnapshotState = vi.hoisted(() => ({
   value: {
     error: null as Error | null,
@@ -381,24 +378,7 @@ function getVerticalScrollOwners(elements: HTMLElement[]) {
   return elements.filter(isVerticalScrollOwner);
 }
 
-function expectNoNestedVerticalScrollports(dashboardRoot: HTMLElement) {
-  const elements = Array.from(dashboardRoot.querySelectorAll<HTMLElement>("*"));
-
-  expect(
-    dashboardRoot.querySelector("[data-radix-scroll-area-viewport]"),
-  ).toBeNull();
-
-  for (const element of elements) {
-    expect(element.getAttribute("class") ?? "").not.toMatch(
-      VERTICAL_SCROLL_CLASS_PATTERN,
-    );
-    expect(window.getComputedStyle(element).overflowY).not.toMatch(
-      /^(auto|scroll)$/,
-    );
-  }
-}
-
-describe("DashboardScreen single-scroll regression", () => {
+describe("DashboardScreen scroll ownership", () => {
   beforeEach(() => {
     restoreBrowserShims = installDashboardBrowserTestShims();
     dashboardSnapshotState.value = {
@@ -415,7 +395,7 @@ describe("DashboardScreen single-scroll regression", () => {
     restoreBrowserShims = undefined;
   });
 
-  it("renders a tall loaded dashboard with the document as the only vertical scroll owner", () => {
+  it("renders a tall loaded dashboard while preserving shared widget scrollports", () => {
     render(<DashboardScreen />);
 
     const dashboardRoot = screen.getByRole("main");
@@ -440,6 +420,8 @@ describe("DashboardScreen single-scroll regression", () => {
         dashboardRoot,
       ]),
     ).toEqual([document.documentElement]);
-    expectNoNestedVerticalScrollports(dashboardRoot);
+    expect(
+      dashboardRoot.querySelector("[data-radix-scroll-area-viewport]"),
+    ).toBeTruthy();
   });
 });

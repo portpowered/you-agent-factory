@@ -28,6 +28,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/invocations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Invoke one factory session and return its primary result
+     * @description Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+     */
+    post: operations["invokeFactorySessionBySessionId"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/work/staged-files": {
     parameters: {
       query?: never;
@@ -176,8 +196,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * List discovered models
-     * @description Lists the concrete model identifiers exposed by the currently loaded runtime configuration together with capability, readiness, locality, load-state, and resource summary data.
+     * List managed runtimes
+     * @description Lists named managed runtimes exposed by the currently loaded runtime configuration together with readiness, lifecycle state, locality, supported operations, and resource summary data using the managed-runtime contract.
      */
     get: operations["listModels"];
     put?: never;
@@ -196,8 +216,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get one discovered model
-     * @description Returns one discovered model's readiness, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
+     * Inspect one managed runtime
+     * @description Returns one managed runtime's readiness, lifecycle state, supported operations, resource metadata, worker capabilities, and diagnostics for the currently loaded runtime configuration.
      */
     get: operations["getModel"];
     put?: never;
@@ -238,8 +258,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Pull local model assets into the managed cache
-     * @description Pulls the required local assets for one discovered model into the managed cache directory. Cloud-backed models and unsupported local targets return actionable errors instead of silently succeeding.
+     * Pull or install one managed runtime
+     * @description Pulls or installs required managed runtime assets into the managed cache using one source-agnostic customer action. Cloud-backed runtimes and unsupported local targets return actionable errors instead of silently succeeding.
      */
     post: operations["pullModel"];
     delete?: never;
@@ -462,6 +482,46 @@ export interface components {
       /** @description Factory session that accepted the submit (~default for POST /work). */
       sessionId?: string;
     };
+    /**
+     * @description Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+     * @enum {string}
+     */
+    InvocationInputSourceKind: InvocationInputSourceKind;
+    InvocationRequest: {
+      /** @description Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
+      sourceKind: components["schemas"]["InvocationInputSourceKind"];
+      /** @description Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. */
+      content: components["schemas"]["WorkContent"];
+      /** @description Optional caller-supplied idempotency key for the invocation request. */
+      requestId?: string;
+      /**
+       * Format: int64
+       * @description Optional caller timeout budget in milliseconds for waiting on the primary result.
+       */
+      timeoutMillis?: number;
+    };
+    InvocationResponse: {
+      /** @description Stable invocation request identifier assigned or accepted by the server. */
+      requestId: string;
+      /** @description Trace identifier for the work submitted by this invocation. */
+      traceId: string;
+      /** @description Terminal invocation status after resolving or failing primary-result selection. */
+      status: components["schemas"]["InvocationTerminalStatus"];
+      /** @description Primary invocation result. Present only when the invocation resolves successfully with status `COMPLETED`. */
+      primaryResult?: components["schemas"]["WorkContent"];
+      /**
+       * @description Stable machine-readable invocation failure code when status is not `COMPLETED`.
+       * @enum {string}
+       */
+      errorCode?: InvocationResponseErrorCode;
+      /** @description Human-readable failure summary when status is not `COMPLETED`. */
+      message?: string;
+    };
+    /**
+     * @description Terminal status for a factory-session invocation.
+     * @enum {string}
+     */
+    InvocationTerminalStatus: InvocationTerminalStatus;
     /** @description Ordered dashboard-authored submit-work items preserved for one submission. */
     SubmitWorkItemList: components["schemas"]["SubmitWorkItem"][];
     /** @description One ordered dashboard-authored submit-work item. */
@@ -605,16 +665,66 @@ export interface components {
       resources?: components["schemas"]["ResourceUsage"][];
     };
     ListModelsResponse: {
-      /** @description Discovered models exposed by the currently loaded runtime configuration. */
+      /** @description Managed runtimes exposed by the currently loaded runtime configuration. */
       results: components["schemas"]["ModelSummary"][];
     };
+    ManagedRuntime: {
+      /** @description Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces. */
+      identity: string;
+      readinessState: components["schemas"]["ManagedRuntimeReadinessState"];
+      lifecycleState: components["schemas"]["ManagedRuntimeLifecycleState"];
+      locality: components["schemas"]["WorkerModelLocality"];
+      /** @description Provider-agnostic operations supported by this managed runtime. */
+      supportedOperations: components["schemas"]["ModelOperation"][];
+      /** @description Concise managed-runtime diagnostics in customer-relevant terms. */
+      diagnostics?: components["schemas"]["StringMap"];
+    };
+    /**
+     * @description Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
+     * @enum {string}
+     */
+    ManagedRuntimeLifecycleState: ManagedRuntimeLifecycleState;
+    /**
+     * @description Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+     * @enum {string}
+     */
+    ManagedRuntimePullOutcome: ManagedRuntimePullOutcome;
+    ManagedRuntimePullResult: {
+      /** @description Stable managed runtime identity targeted by the pull or install request. */
+      identity: string;
+      pullOutcome: components["schemas"]["ManagedRuntimePullOutcome"];
+      readinessState: components["schemas"]["ManagedRuntimeReadinessState"];
+      /** @description Managed cache directory that now contains the installed runtime assets. */
+      cachePath?: string;
+      /** @description Managed revision identifier for the installed runtime assets. */
+      revision?: string;
+      /** @description Files downloaded or verified as already present for the managed cache entry. */
+      downloadedFiles?: components["schemas"]["ModelPullDownloadedFile"][];
+      sourceDiagnostics?: components["schemas"]["ManagedRuntimeSourceDiagnostics"];
+    };
+    /**
+     * @description Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+     * @enum {string}
+     */
+    ManagedRuntimeReadinessState: ManagedRuntimeReadinessState;
+    /** @description Optional advanced diagnostics for how one managed runtime resolved assets from a configured backend source. Source details are implementation diagnostics and are not required for the primary customer lifecycle contract. */
+    ManagedRuntimeSourceDiagnostics: {
+      /** @description Resolver-classified backend source kind, such as `UPSTREAM_REPOSITORY` or `MANAGED_MIRROR`, without exposing provider-native repository vocabulary in the primary customer contract. */
+      sourceKind?: string;
+      /** @description Opaque resolver identifier for the selected backend source instance. */
+      sourceId?: string;
+      /** @description Concise resolver note suitable for operator diagnostics. */
+      resolverNotes?: string;
+    };
     ModelSummary: {
-      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields. */
       name: string;
+      managedRuntime: components["schemas"]["ManagedRuntime"];
+      /** @description Managed runtime locality summary. Mirrors `managedRuntime.locality` for compatibility with earlier discovery fields. */
       providerLocality: components["schemas"]["WorkerModelLocality"];
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
-      /** @description Provider-agnostic operations supported by the discovered model. */
+      /** @description Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields. */
       operations: components["schemas"]["ModelOperation"][];
       /** @description Uppercase content modalities observed across the model's declared operation inputs and outputs. */
       modalities: components["schemas"]["ModelOperationContentType"][];
@@ -622,12 +732,14 @@ export interface components {
       resources: components["schemas"]["ModelResourceSummary"][];
     };
     ModelDetail: {
-      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields. */
       name: string;
+      managedRuntime: components["schemas"]["ManagedRuntime"];
+      /** @description Managed runtime locality summary. Mirrors `managedRuntime.locality` for compatibility with earlier inspect fields. */
       providerLocality: components["schemas"]["WorkerModelLocality"];
       status: components["schemas"]["ModelStatus"];
       loadState: components["schemas"]["ModelLoadState"];
-      /** @description Union of provider-agnostic operations supported by workers for this model. */
+      /** @description Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields. */
       operations: components["schemas"]["ModelOperation"][];
       /** @description Uppercase content modalities observed across all declared operation inputs and outputs. */
       modalities: components["schemas"]["ModelOperationContentType"][];
@@ -680,18 +792,19 @@ export interface components {
       sha256?: string;
     };
     /**
-     * @description Outcome of a managed local-model asset pull request.
+     * @description Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
      * @enum {string}
      */
     ModelPullOutcome: ModelPullOutcome;
     ModelPullResponse: {
-      /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+      /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields. */
       modelName: string;
+      managedRuntimePull: components["schemas"]["ManagedRuntimePullResult"];
       providerLocality: components["schemas"]["WorkerModelLocality"];
       outcome: components["schemas"]["ModelPullOutcome"];
-      /** @description Final managed cache directory that now contains the pulled model assets. */
+      /** @description Final managed cache directory that now contains the installed runtime assets. Mirrors `managedRuntimePull.cachePath`. */
       cachePath: string;
-      /** @description Pulled source revision identifier, such as an upstream repository commit SHA. */
+      /** @description Managed revision identifier for the installed runtime assets. Mirrors `managedRuntimePull.revision`. */
       revision: string;
       /** @description Files that were downloaded or verified as already present for the managed cache entry. */
       downloadedFiles: components["schemas"]["ModelPullDownloadedFile"][];
@@ -734,12 +847,12 @@ export interface components {
       provider?: string;
     };
     /**
-     * @description Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+     * @description Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
      * @enum {string}
      */
     ModelStatus: ModelStatus;
     /**
-     * @description Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+     * @description Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
      * @enum {string}
      */
     ModelLoadState: ModelLoadState;
@@ -1694,6 +1807,9 @@ export interface components {
      *           ]
      *         }
      *       ],
+     *       "invocationReturn": {
+     *         "policy": "SUBMITTED_WORK_TERMINAL"
+     *       },
      *       "supportingFiles": {
      *         "requiredTools": [
      *           {
@@ -1830,6 +1946,8 @@ export interface components {
       metadata?: components["schemas"]["StringMap"];
       /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
       inputTypes?: components["schemas"]["InputType"][];
+      /** @description Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation. */
+      invocationReturn?: components["schemas"]["InvocationReturn"];
       /** @description Root-level guards that apply across the factory instead of one specific workstation or input. */
       guards?: components["schemas"]["FactoryGuard"][];
       /** @description Customer-authored work item categories and the lifecycle states each one can occupy. */
@@ -1840,11 +1958,29 @@ export interface components {
       supportingFiles?: components["schemas"]["ResourceManifest"];
       /** @description Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids. */
       layout?: components["schemas"]["FactoryLayout"];
+      /** @description Ephemeral save-response metadata listing layout pruning or validation outcomes. Omitted from persisted factory documents, ignored on save requests, and cleared before split-layout writes. */
+      layoutOutcomes?: components["schemas"]["FactoryValidationTarget"][];
       /** @description Reusable worker definitions that workstations reference by name when dispatching work. */
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
     };
+    /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
+    InvocationReturn: {
+      /** @description Return selection policy for this factory. */
+      policy: components["schemas"]["InvocationReturnPolicy"];
+      /** @description Work type name used by EXPLICIT policy selection. */
+      workTypeName?: string;
+      /** @description Authored terminal state name used by EXPLICIT policy selection. */
+      terminalState?: string;
+      /** @description Optional authored work name filter used by EXPLICIT policy selection. */
+      workName?: string;
+    };
+    /**
+     * @description Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+     * @enum {string}
+     */
+    InvocationReturnPolicy: InvocationReturnPolicy;
     /** @description Factory-level guard attached at the root factory definition. */
     FactoryGuard: {
       /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
@@ -1941,11 +2077,11 @@ export interface components {
       type?: components["schemas"]["ResourceType"];
       /** @description Total units of this resource available to the factory at one time. */
       capacity: number;
-      /** @description Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`. */
+      /** @description Stable managed runtime identity for `MODEL` resources, such as `OMNIVOICE_Q4_K_M`. Packaged and authored factories declare the same managed-runtime dependency through this field plus matching `MODEL_WORKER.model` values. */
       model?: string;
-      /** @description Backend identifier for local model resources, such as a managed runtime or embedded inference backend. */
+      /** @description Managed runtime backend identifier for `MODEL` resources, such as `LLAMACPP`. Backend selection stays provider-agnostic in customer-facing factory config. */
       backend?: string;
-      /** @description Load policy for local model resources, such as `ON_DEMAND` or `EAGER`. */
+      /** @description Managed runtime load policy for `MODEL` resources, such as `ON_DEMAND` or `EAGER`. */
       loadPolicy?: string;
       /** @description Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources. */
       provider?: string;
@@ -2770,6 +2906,36 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  invokeFactorySessionBySessionId: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["InvocationRequest"];
+      };
+    };
+    responses: {
+      /** @description Invocation reached a terminal status for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InvocationResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   stageSubmitWorkFileBySessionId: {
     parameters: {
       query?: never;
@@ -2968,7 +3134,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Discovered models for the current runtime. */
+      /** @description Managed runtimes for the current runtime. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -2985,14 +3151,14 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+        /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. */
         model_name: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Discovered model detail. */
+      /** @description Managed runtime detail. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3041,14 +3207,14 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description Concrete public model identifier such as `OMNIVOICE_Q4_K_M`. */
+        /** @description Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. */
         model_name: string;
       };
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Successful local-model asset pull or confirmation that the managed cache already contained the required revision. */
+      /** @description Successful managed runtime pull or install, or confirmation that the managed cache already contained the required revision. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3328,6 +3494,38 @@ export interface operations {
     };
   };
 }
+export const InvocationInputSourceKind = {
+  // Text supplied in canonical WorkContent.
+  InvocationInputSourceKindText: "text",
+  // Reserved future file-reference input source.
+  InvocationInputSourceKindFileRef: "fileRef",
+  // Reserved future audio-stream input source.
+  InvocationInputSourceKindAudioStream: "audioStream",
+} as const;
+export type InvocationInputSourceKind =
+  (typeof InvocationInputSourceKind)[keyof typeof InvocationInputSourceKind];
+export const InvocationResponseErrorCode = {
+  INVOCATION_PRIMARY_RESULT_UNRESOLVED: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+  INVOCATION_TIMED_OUT: "INVOCATION_TIMED_OUT",
+  INVOCATION_CANCELED: "INVOCATION_CANCELED",
+  INVOCATION_RUNTIME_FAILURE: "INVOCATION_RUNTIME_FAILURE",
+  INVOCATION_TTS_MODEL_NOT_READY: "INVOCATION_TTS_MODEL_NOT_READY",
+  INVOCATION_TTS_GENERATION_FAILED: "INVOCATION_TTS_GENERATION_FAILED",
+} as const;
+export type InvocationResponseErrorCode =
+  (typeof InvocationResponseErrorCode)[keyof typeof InvocationResponseErrorCode];
+export const InvocationTerminalStatus = {
+  // Invocation completed and any primaryResult is authoritative.
+  InvocationTerminalStatusCompleted: "COMPLETED",
+  // Invocation reached a runtime or primary-result resolution failure.
+  InvocationTerminalStatusFailed: "FAILED",
+  // Invocation was canceled before successful completion.
+  InvocationTerminalStatusCanceled: "CANCELED",
+  // Invocation exceeded its caller or server timeout budget.
+  InvocationTerminalStatusTimedOut: "TIMED_OUT",
+} as const;
+export type InvocationTerminalStatus =
+  (typeof InvocationTerminalStatus)[keyof typeof InvocationTerminalStatus];
 export const SubmitWorkItemType = {
   SubmitWorkItemTypeText: "text",
   SubmitWorkItemTypeImage: "image",
@@ -3362,6 +3560,54 @@ export const SubmitWorkDocumentItemType = {
 } as const;
 export type SubmitWorkDocumentItemType =
   (typeof SubmitWorkDocumentItemType)[keyof typeof SubmitWorkDocumentItemType];
+export const ManagedRuntimeLifecycleState = {
+  // Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
+  NOT_APPLICABLE: "NOT_APPLICABLE",
+  // Required managed runtime assets are not installed in the managed cache.
+  NOT_INSTALLED: "NOT_INSTALLED",
+  // Managed runtime assets are being pulled or installed into the managed cache.
+  INSTALLING: "INSTALLING",
+  // Required managed runtime assets are installed in the managed cache but not loaded for invocation.
+  INSTALLED: "INSTALLED",
+  // Managed runtime assets are being loaded into an invocation-ready runtime handle.
+  LOADING: "LOADING",
+  // Managed runtime assets are loaded and available for invocation subject to readiness checks.
+  LOADED: "LOADED",
+} as const;
+export type ManagedRuntimeLifecycleState =
+  (typeof ManagedRuntimeLifecycleState)[keyof typeof ManagedRuntimeLifecycleState];
+export const ManagedRuntimePullOutcome = {
+  // The managed runtime was already ready and no additional install work was required.
+  ALREADY_READY: "ALREADY_READY",
+  // Required managed runtime assets were installed successfully into the managed cache.
+  INSTALLED_SUCCESSFULLY: "INSTALLED_SUCCESSFULLY",
+  // Required managed runtime assets were already present in the managed cache at the requested revision.
+  ALREADY_PRESENT: "ALREADY_PRESENT",
+  // Managed runtime install or preparation is still in progress.
+  STILL_LOADING: "STILL_LOADING",
+  // Managed runtime install or preparation timed out before reaching a terminal readiness state.
+  TIMED_OUT: "TIMED_OUT",
+  // Required managed runtime assets could not be fetched from the configured backend source.
+  SOURCE_FETCH_FAILED: "SOURCE_FETCH_FAILED",
+  // The requested managed runtime does not support pull or install in the current configuration.
+  UNSUPPORTED_RUNTIME: "UNSUPPORTED_RUNTIME",
+} as const;
+export type ManagedRuntimePullOutcome =
+  (typeof ManagedRuntimePullOutcome)[keyof typeof ManagedRuntimePullOutcome];
+export const ManagedRuntimeReadinessState = {
+  // Required managed runtime assets are present and the runtime is ready for invocation.
+  READY: "READY",
+  // Required managed runtime assets are not present and pull or install is required.
+  MISSING: "MISSING",
+  // Managed runtime assets are being prepared or loaded.
+  LOADING: "LOADING",
+  // Managed runtime setup failed and requires operator attention.
+  FAILED: "FAILED",
+  // The managed runtime is not supported by the current factory or platform configuration.
+  UNSUPPORTED: "UNSUPPORTED",
+} as const;
+export type ManagedRuntimeReadinessState =
+  (typeof ManagedRuntimeReadinessState)[keyof typeof ManagedRuntimeReadinessState];
 export const ModelInvocationResponseMode = {
   METADATA: "METADATA",
   AUDIO_STREAM: "AUDIO_STREAM",
@@ -3635,6 +3881,14 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const InvocationReturnPolicy = {
+  // Use the invocation-submitted work item terminal content as the primary result.
+  InvocationReturnPolicySubmittedWorkTerminal: "SUBMITTED_WORK_TERMINAL",
+  // Use the configured work type, terminal state, and optional work name as the primary result.
+  InvocationReturnPolicyExplicit: "EXPLICIT",
+} as const;
+export type InvocationReturnPolicy =
+  (typeof InvocationReturnPolicy)[keyof typeof InvocationReturnPolicy];
 export const BundledFileType = {
   SCRIPT: "SCRIPT",
   DOC: "DOC",

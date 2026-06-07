@@ -21,7 +21,10 @@ vi.mock(
       title: string;
       tone: string;
     }) => (
-      <section data-testid={`notice-${tone}`} role={tone === "danger" ? "alert" : "status"}>
+      <section
+        data-testid={`notice-${tone}`}
+        role={tone === "danger" ? "alert" : "status"}
+      >
         <h3>{title}</h3>
         <div>{children}</div>
         {onDismiss && dismissLabel ? (

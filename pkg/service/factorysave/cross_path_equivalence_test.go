@@ -51,7 +51,7 @@ func TestCrossPathFixtures_ValidateFactoryAPIPrePersistMatchesEditableSavePreChe
 			}
 
 			saveErr := validateEditableFactoryTopology(factory, nil)
-			apiFailed := apiResult.HasTargets()
+			apiFailed := apiResult.HasBlockingTargets()
 			var topologyErr *apisurface.TopologyValidationError
 			saveFailed := errors.As(saveErr, &topologyErr)
 
@@ -69,7 +69,7 @@ func TestCrossPathFixtures_ValidateFactoryAPIPrePersistMatchesEditableSavePreChe
 				return
 			}
 
-			apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.Targets)
+			apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.BlockingTargets())
 			saveSignatures := factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
 			if !factoryvalidation.EquivalentCanonicalTargetSignatures(apiSignatures, saveSignatures) {
 				t.Fatalf("ValidateFactoryAPI signatures = %#v, save signatures = %#v",

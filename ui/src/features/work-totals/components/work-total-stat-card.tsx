@@ -48,6 +48,6 @@ function workTotalStatAlertTone(
     case "success":
       return "success";
     case "neutral":
-      return "neutral";
+      return "info";
   }
 }

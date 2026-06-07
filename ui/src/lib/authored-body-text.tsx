@@ -3,7 +3,7 @@ import { Fragment } from "react";
 import { DASHBOARD_BODY_TEXT_CLASS } from "../components/ui/dashboard-typography";
 import { cn } from "./cn";
 
-export const REQUEST_AUTHORED_TEXT_CLASS = cn(
+export const AUTHORED_BODY_TEXT_CLASS = cn(
   "grid gap-3 rounded-lg border border-outline bg-surface-container-high p-3 [overflow-wrap:anywhere] [&_code]:rounded-sm [&_code]:bg-surface-container [&_code]:px-1 [&_code]:py-0.5 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:text-base [&_h3]:font-semibold [&_ol]:m-0 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:m-0 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-outline [&_pre]:bg-surface-container-low [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_ul]:m-0 [&_ul]:list-disc [&_ul]:pl-5",
   DASHBOARD_BODY_TEXT_CLASS,
 );
@@ -46,7 +46,7 @@ export function AuthoredBodyText({
   const blocks = parseRequestAuthoredBlocks(value);
 
   return (
-    <div className={cn(REQUEST_AUTHORED_TEXT_CLASS, className)}>
+    <div className={cn(AUTHORED_BODY_TEXT_CLASS, className)}>
       {blocks.map((block, index) => renderRequestAuthoredBlock(block, index))}
     </div>
   );

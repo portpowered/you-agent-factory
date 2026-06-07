@@ -1,8 +1,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import {
-  activeSnapshot,
   registerAppDashboardTestLifecycle,
   renderApp,
 } from "./testing/app-shell-test-utils";
@@ -198,7 +198,7 @@ describe("App replay dispatch selection flows", () => {
     verify,
   }) => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       workstationRequestsByDispatchID: {
         [requestProjection.dispatch_id]: requestProjection,
       },

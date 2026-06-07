@@ -117,6 +117,11 @@ describe("CurrentActivityGraphViewport", () => {
 
     expect(
       screen.getByRole("button", {
+        name: "Edit mode",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", {
         name: "Show or hide",
       }),
     ).toBeTruthy();
@@ -364,11 +369,13 @@ function renderViewport({
       activeTool={activeTool}
       canInteractWithEditor={true}
       canSaveDraft={false}
+      editorUnavailableClassifierWorkstationName={undefined}
       editorMode={editorMode}
       edges={edges}
       flowContainerRef={flowContainerRef}
       graphKey="test-graph"
       handleDiscardPendingChanges={vi.fn()}
+      handleEditorModeToggle={vi.fn()}
       handleNodesChange={vi.fn()}
       handleSaveDraft={vi.fn()}
       hasPendingChanges={false}

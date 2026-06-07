@@ -2,12 +2,12 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import type { DashboardTrace } from "./api/dashboard";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "./components/ui/formatters";
 import {
-  activeSnapshot,
   registerAppDashboardTestLifecycle,
   renderApp,
 } from "./testing/app-shell-test-utils";
@@ -138,7 +138,7 @@ it("rerenders current-selection request history and request-detail times when th
   try {
     renderApp({
       initialLocale: "en",
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID: {
         [dashboardWorkstationRequestFixtures.ready.dispatch_id]:
@@ -263,7 +263,7 @@ it("shows localized fallback copy for invalid request-detail timestamps without 
 
     renderApp({
       initialLocale: "en",
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID: {
         [invalidRequest.dispatch_id]: invalidRequest,

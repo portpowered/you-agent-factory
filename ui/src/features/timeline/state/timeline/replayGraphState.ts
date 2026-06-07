@@ -13,7 +13,7 @@ import { uniqueSortedWorkRefs } from "./cloneTimelineSnapshot";
 import { uniqueSorted } from "./shared";
 import { dashboardPlaceID, dashboardWorkTypeID } from "./systemTime";
 import type { ReplayWorldState, ResourceUnit, WorldCompletion } from "./types";
-import { workRef } from "./workItemRef";
+import { workItemRef } from "./workItemRef";
 
 interface RelationKeyFields {
   request_id?: string;
@@ -95,7 +95,7 @@ export function addTraceWork(
   trace.work_ids = uniqueSorted([...trace.work_ids, item.id]);
   trace.work_items = uniqueSortedWorkRefs([
     ...(trace.work_items ?? []),
-    workRef(item),
+    workItemRef(item),
   ]);
   state.tracesByID[item.trace_id] = trace;
 }

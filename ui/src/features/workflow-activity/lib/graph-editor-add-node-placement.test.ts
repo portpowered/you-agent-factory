@@ -2,33 +2,32 @@ import type { Node } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
-import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,
   resolveInitialPlacementTopLeft,
 } from "./graph-editor-add-node-placement";
+import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 
 function workerNode(id: string, position: { x: number; y: number }): Node {
+  const dimensions = graphEditorNodeDimensionsForKind("worker");
   return {
     data: { kind: "worker" },
-    height: 86,
+    height: dimensions.height,
     id,
     position,
-    width: 164,
+    width: dimensions.width,
   };
 }
 
-function workstationNode(
-  id: string,
-  position: { x: number; y: number },
-): Node {
+function workstationNode(id: string, position: { x: number; y: number }): Node {
+  const dimensions = graphEditorNodeDimensionsForKind("workstation");
   return {
     data: { kind: "workstation" },
-    height: 196,
+    height: dimensions.height,
     id,
     position,
-    width: 156,
+    width: dimensions.width,
   };
 }
 
@@ -69,6 +68,7 @@ describe("resolveInitialPlacementTopLeft", () => {
   };
 
   it("returns a viewport-centered top-left position when the canvas center is free", () => {
+    const workerSize = graphEditorNodeDimensionsForKind("worker");
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes: [],
@@ -76,7 +76,10 @@ describe("resolveInitialPlacementTopLeft", () => {
       viewportCenter: { x: 500, y: 300 },
     });
 
-    expect(topLeft).toEqual({ x: 418, y: 257 });
+    expect(topLeft).toEqual({
+      x: 500 - workerSize.width / 2,
+      y: 300 - workerSize.height / 2,
+    });
   });
 
   it("skips placement when the new node already has a stored position", () => {
@@ -93,7 +96,12 @@ describe("resolveInitialPlacementTopLeft", () => {
   });
 
   it("nudges away from occupied nodes at the viewport center", () => {
-    const nodes = [workerNode("worker:writer", { x: 418, y: 257 })];
+    const workerSize = graphEditorNodeDimensionsForKind("worker");
+    const centeredTopLeft = {
+      x: 500 - workerSize.width / 2,
+      y: 300 - workerSize.height / 2,
+    };
+    const nodes = [workerNode("worker:writer", centeredTopLeft)];
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes,
@@ -101,12 +109,17 @@ describe("resolveInitialPlacementTopLeft", () => {
       viewportCenter: { x: 500, y: 300 },
     });
 
-    expect(topLeft).not.toEqual({ x: 418, y: 257 });
+    expect(topLeft).not.toEqual(centeredTopLeft);
     expect(topLeft).not.toBeNull();
   });
 
   it("does not include the new node id in occupied bounds when it is already rendered", () => {
-    const nodes = [workerNode("worker:reviewer", { x: 418, y: 257 })];
+    const workerSize = graphEditorNodeDimensionsForKind("worker");
+    const centeredTopLeft = {
+      x: 500 - workerSize.width / 2,
+      y: 300 - workerSize.height / 2,
+    };
+    const nodes = [workerNode("worker:reviewer", centeredTopLeft)];
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes,
@@ -114,7 +127,7 @@ describe("resolveInitialPlacementTopLeft", () => {
       viewportCenter: { x: 500, y: 300 },
     });
 
-    expect(topLeft).toEqual({ x: 418, y: 257 });
+    expect(topLeft).toEqual(centeredTopLeft);
   });
 
   it("changes the computed top-left when the viewport center moves for worker and workstation kinds", () => {
@@ -195,9 +208,7 @@ describe("resolveInitialPlacementTopLeft for workstations", () => {
       x: viewportCenter.x - workstationSize.width / 2,
       y: viewportCenter.y - workstationSize.height / 2,
     };
-    const nodes = [
-      workstationNode("workstation:writer", centeredTopLeft),
-    ];
+    const nodes = [workstationNode("workstation:writer", centeredTopLeft)];
 
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
@@ -213,11 +224,14 @@ describe("resolveInitialPlacementTopLeft for workstations", () => {
 
 describe("occupiedRectsFromRenderedNodes", () => {
   it("builds axis-aligned rects from rendered node positions and kind dimensions", () => {
+    const dimensions = graphEditorNodeDimensionsForKind("worker");
     const rects = occupiedRectsFromRenderedNodes([
       workerNode("worker:writer", { x: 100, y: 200 }),
     ]);
 
-    expect(rects).toEqual([{ height: 86, width: 164, x: 100, y: 200 }]);
+    expect(rects).toEqual([
+      { height: dimensions.height, width: dimensions.width, x: 100, y: 200 },
+    ]);
   });
 
   it("uses measured node size when kind metadata is unavailable", () => {

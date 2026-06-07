@@ -1,8 +1,3 @@
-export {
-  CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
-  FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
-  MonacoPromptEditor,
-} from "./monaco-prompt-editor";
 export { MonacoGuardSelectorEditor } from "./monaco-guard-selector-editor";
 export {
   buildWorkstationGuardSelectorCompletionItems,
@@ -12,6 +7,11 @@ export {
   WORKSTATION_GUARD_SELECTOR_LANGUAGE_ID,
   WORKSTATION_GUARD_SELECTOR_THEME_ID,
 } from "./monaco-guard-selector-setup";
+export {
+  CURRENT_SELECTION_WORKSTATION_PROMPT_MODEL_PATH,
+  FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH,
+  MonacoPromptEditor,
+} from "./monaco-prompt-editor";
 export {
   buildWorkstationPromptCompletionItems,
   buildWorkstationPromptMarkers,

@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
@@ -939,4 +940,51 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEve
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
+}
+
+func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"~default": {},
+		},
+		InvokeFactoryResult: apisurface.FactoryInvocationResult{
+			RequestID:     "invoke-1",
+			TraceID:       "trace-invoke-1",
+			Status:        factoryapi.InvocationTerminalStatusCompleted,
+			PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(`{"sourceKind":"text","content":[{"type":"text","text":"invoke this"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	response := decodeJSONResponse[factoryapi.InvocationResponse](t, rec)
+	if response.RequestId != "invoke-1" || response.TraceId != "trace-invoke-1" || response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		t.Fatalf("invocation response = %#v, want completed invocation identifiers", response)
+	}
+	assertGeneratedWorkContentParts(t, response.PrimaryResult, []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}})
+}
+
+func TestFactorySessionsAPI_InvokeFactorySession_InputConflictReturnsStableBadRequest(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"~default": {},
+		},
+		InvokeFactoryErr: &invocations.InputError{
+			Code:    invocations.InputErrorCodeSourceConflict,
+			Message: "invocation input sources conflict: positional_text, stdin_text",
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(`{"sourceKind":"text","content":[{"type":"text","text":"invoke this"}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, string(invocations.InputErrorCodeSourceConflict), "invocation input sources conflict: positional_text, stdin_text")
 }

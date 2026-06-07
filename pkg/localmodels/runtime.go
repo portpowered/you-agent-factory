@@ -134,6 +134,9 @@ func (m *Manager) execute(
 	if err != nil {
 		return interfaces.InferenceResponse{}, true, err
 	}
+	if _, err := EnsureManagedRuntimeReadyForInvocation(loaded, workerDef.Model, m.catalogOptions()); err != nil {
+		return interfaces.InferenceResponse{}, true, err
+	}
 	cacheLayout, err := m.assetPuller.ResolveModelCache(ctx, loaded, workerDef)
 	if err != nil {
 		return interfaces.InferenceResponse{}, true, err
@@ -193,6 +196,13 @@ func (m *Manager) loadHandle(ctx context.Context, key string, request LoadReques
 	}
 	entry.handle = handle
 	return handle, nil
+}
+
+func (m *Manager) catalogOptions() CatalogOptions {
+	return CatalogOptions{
+		RuntimeCacheInspector: m.assetPuller,
+		SourceResolver:        DefaultManagedRuntimeSourceResolver(),
+	}
 }
 
 func (m *Manager) entry(key string) *managedLocalModelEntry {

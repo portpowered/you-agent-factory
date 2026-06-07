@@ -1,3 +1,4 @@
+/* biome-ignore lint/nursery/noExcessiveLinesPerFile: keeps the workflow-activity bento coverage in one file while the toolbar migration settles. */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -297,20 +298,21 @@ describe("WorkflowActivityBentoCard", () => {
     expect(graphCard.className).toContain("shadow-af-card");
     expect(graphHeader?.className).toContain("min-h-11");
     expect(graphHeader?.className).toContain("px-3");
-    expect(
-      within(graphCard).getByRole("button", {
-        name: editorMessages.modeEnterEditor,
-      }),
-    ).toBeTruthy();
     expect(graphHeader?.getAttribute("data-bento-drag-handle")).toBe("true");
     expect(graphHeader?.className).toContain("cursor-grab");
     expect(
       within(graphCard).queryByRole("button", { name: "Move 工厂图" }),
     ).toBeNull();
     expect(
-      within(graphCard).getByText(editorMessages.modeObserve),
-    ).toBeTruthy();
-    expect(graphHeader?.textContent).toContain(editorMessages.modeObserve);
+      within(graphHeader as HTMLElement).queryByRole("button", {
+        name: editorMessages.modeEnterEditor,
+      }),
+    ).toBeNull();
+    expect(
+      within(graphHeader as HTMLElement).queryByText(
+        editorMessages.modeObserve,
+      ),
+    ).toBeNull();
     expect(
       within(graphCard).queryByRole("heading", { name: "当前活动" }),
     ).toBeNull();
@@ -322,9 +324,14 @@ describe("WorkflowActivityBentoCard", () => {
     expect(
       screen.queryByRole("button", { name: /collapse inspector/i }),
     ).toBeNull();
+    expect(
+      within(graphViewport).getByRole("button", {
+        name: editorMessages.modeEnterEditor,
+      }),
+    ).toBeTruthy();
   });
 
-  it("keeps the header as the visible editor entry point in observe and loading editor states", async () => {
+  it("keeps the toolbar as the visible editor entry point in observe and loading editor states", async () => {
     const user = userEvent.setup();
     const locale = "zh-CN";
     const shellMessages = getWorkflowActivityShellMessages(locale);
@@ -335,15 +342,24 @@ describe("WorkflowActivityBentoCard", () => {
       name: shellMessages.widgetTitle,
     });
     const graphHeader = graphCard.querySelector("header");
+    const toolbar = await screen.findByRole("region", {
+      name: editorMessages.toolbarAriaLabel,
+    });
 
     expect(graphHeader).toBeTruthy();
     const headerScope = within(graphHeader as HTMLElement);
     expect(graphHeader?.className).toContain("min-h-11");
-    expect(headerScope.getByText(editorMessages.modeObserve)).toBeTruthy();
     expect(
-      headerScope.getByRole("button", { name: editorMessages.modeEnterEditor })
-        .className,
-    ).toContain("size-8");
+      headerScope.queryByRole("button", {
+        name: editorMessages.modeEnterEditor,
+      }),
+    ).toBeNull();
+    expect(headerScope.queryByText(editorMessages.modeObserve)).toBeNull();
+    expect(
+      within(toolbar).getByRole("button", {
+        name: editorMessages.modeEnterEditor,
+      }).className,
+    ).toContain("h-10");
     expect(
       within(graphCard).queryByRole("heading", { name: shellMessages.title }),
     ).toBeNull();
@@ -355,14 +371,15 @@ describe("WorkflowActivityBentoCard", () => {
     } as never);
 
     await user.click(
-      headerScope.getByRole("button", { name: editorMessages.modeEnterEditor }),
+      within(toolbar).getByRole("button", {
+        name: editorMessages.modeEnterEditor,
+      }),
     );
 
     expect(
-      headerScope.getByText(editorMessages.modeLoadingDefinition),
-    ).toBeTruthy();
-    expect(
-      headerScope.getByRole("button", { name: editorMessages.modeLeaveEditor }),
+      within(toolbar).getByRole("button", {
+        name: editorMessages.modeLeaveEditor,
+      }),
     ).toBeTruthy();
   });
 
@@ -406,10 +423,9 @@ describe("WorkflowActivityBentoCard", () => {
 describe("WorkflowActivityBentoCard header actions", () => {
   registerWorkflowActivityBentoCardTestSetup();
 
-  it("orders the remove action with the graph header controls instead of before the status pill", async () => {
+  it("keeps the remove action in the header without editor chrome beside it", async () => {
     const locale = "zh-CN";
     const shellMessages = getWorkflowActivityShellMessages(locale);
-    const editorMessages = getFactoryGraphEditorMessages(locale);
     renderWorkflowActivityBentoCard({
       headerAction: <button type="button">Remove card</button>,
       locale,
@@ -418,29 +434,22 @@ describe("WorkflowActivityBentoCard header actions", () => {
     const graphCard = await screen.findByRole("article", {
       name: shellMessages.widgetTitle,
     });
-    const actionSections = graphCard.querySelectorAll(
-      "[data-dashboard-action-row-section]",
-    );
+    const graphHeader = graphCard.querySelector("header");
 
-    expect(actionSections).toHaveLength(2);
+    expect(graphHeader).toBeTruthy();
     expect(
-      actionSections[0]?.getAttribute("data-dashboard-action-row-section"),
-    ).toBe("statuses");
+      within(graphHeader as HTMLElement).getByRole("button", {
+        name: "Remove card",
+      }),
+    ).toBeTruthy();
     expect(
-      actionSections[1]?.getAttribute("data-dashboard-action-row-section"),
-    ).toBe("actions");
-
-    const actions = within(actionSections[1] as HTMLElement).getAllByRole(
-      "button",
-    );
-
-    expect(actions[0]?.getAttribute("aria-label")).toBe(
-      editorMessages.modeEnterEditor,
-    );
-    expect(actions[1]?.textContent).toBe("Remove card");
+      within(graphHeader as HTMLElement).queryByRole("button", {
+        name: "Edit mode",
+      }),
+    ).toBeNull();
   });
 
-  it("shows consolidated unsaved chrome on the compact bento header when dirty", async () => {
+  it("shows unsaved edit chrome in the toolbar instead of the compact bento header", async () => {
     const locale = "en";
     const shellMessages = getWorkflowActivityShellMessages(locale);
     const editorMessages = getFactoryGraphEditorMessages(locale);
@@ -475,30 +484,28 @@ describe("WorkflowActivityBentoCard header actions", () => {
     });
     const graphHeader = graphCard.querySelector("header");
     expect(graphHeader).toBeTruthy();
+    const toolbar = await screen.findByRole("region", {
+      name: editorMessages.toolbarAriaLabel,
+    });
 
     await user.click(
-      within(graphHeader as HTMLElement).getByRole("button", {
+      within(toolbar).getByRole("button", {
         name: editorMessages.modeEnterEditor,
       }),
     );
 
     const headerScope = within(graphHeader as HTMLElement);
-    expect(headerScope.getAllByRole("status")).toHaveLength(1);
+    expect(headerScope.queryAllByRole("status")).toHaveLength(0);
     expect(
-      headerScope.getByText(editorMessages.modeUnsavedChanges),
-    ).toBeTruthy();
+      headerScope.queryByText(editorMessages.modeUnsavedChanges),
+    ).toBeNull();
 
-    const toggle = headerScope.getByRole("button", {
+    const toggle = within(toolbar).getByRole("button", {
       name: editorMessages.modeLeaveEditor,
     });
     expect(toggle.className).toContain("border-af-warning-border");
     expect(toggle.className).toContain("bg-warning-container");
     expect(toggle.className).toContain("text-on-warning-container");
-    expect(toggle.className).toContain("size-8");
-
-    const toolbar = await screen.findByRole("region", {
-      name: editorMessages.toolbarAriaLabel,
-    });
     expect(within(toolbar).queryAllByRole("status")).toHaveLength(0);
   });
 });

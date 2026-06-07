@@ -1773,10 +1773,11 @@ describe("editable workstation name draft", () => {
   it("initializes draft name from the selected workstation", () => {
     const values = resolveEditableWorkstationValues(factory, selectedNode);
     expect(values).not.toBeNull();
-    expect(editableWorkstationDraftFromValues(values as NonNullable<typeof values>))
-      .toMatchObject({
-        name: "Review",
-      });
+    expect(
+      editableWorkstationDraftFromValues(values as NonNullable<typeof values>),
+    ).toMatchObject({
+      name: "Review",
+    });
   });
 
   it("treats trimmed name-only changes as dirty and unchanged trims as clean", () => {
@@ -1795,16 +1796,20 @@ describe("editable workstation name draft", () => {
   });
 
   it("applies a trimmed rename onto the selected workstation in the pending factory", () => {
-    const updatedFactory = applyEditableWorkstationDraft(factory, selectedNode, {
-      behavior: "STANDARD",
-      cron: null,
-      guards: [],
-      inputs: [{ guards: [], state: "queued", workType: "story" }],
-      name: "  Reviewed  ",
-      prompt: "Review work",
-      runnerName: null,
-      workerName: "reviewer",
-    });
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      selectedNode,
+      {
+        behavior: "STANDARD",
+        cron: null,
+        guards: [],
+        inputs: [{ guards: [], state: "queued", workType: "story" }],
+        name: "  Reviewed  ",
+        prompt: "Review work",
+        runnerName: null,
+        workerName: "reviewer",
+      },
+    );
 
     expect(updatedFactory?.workstations?.[0]?.name).toBe("Reviewed");
     expect(updatedFactory?.workstations?.[1]?.name).toBe("Plan");

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
@@ -46,5 +46,73 @@ describe("SelectedWorkDispatchHistorySection", () => {
     expect(
       screen.getByRole("heading", { name: "Workstation dispatches" }),
     ).toBeTruthy();
+  });
+
+  it("renders dispatch history without the outer outlined content container", () => {
+    render(
+      <CurrentSelectionLocaleProvider>
+        <SelectedWorkDispatchHistorySection
+          currentDispatchID="dispatch-flush"
+          fallbackProviderSessions={[]}
+          requests={[
+            workstationRequest("dispatch-flush", {
+              workstation_name: "Review",
+            }),
+          ]}
+          selectedWorkID="work-flush"
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const contentWrapper = document.getElementById(
+      "current-selection-work-item-dispatches-content",
+    );
+
+    expect(contentWrapper?.className).toBe("grid");
+  });
+
+  it("uses larger headline-sized headers, keeps the active pill on the right, and exposes expandable request details", () => {
+    render(
+      <CurrentSelectionLocaleProvider>
+        <SelectedWorkDispatchHistorySection
+          currentDispatchID="dispatch-card"
+          fallbackProviderSessions={[]}
+          requests={[
+            workstationRequest("dispatch-card", {
+              workstation_name: "Review",
+            }),
+          ]}
+          selectedWorkID="work-card"
+        />
+      </CurrentSelectionLocaleProvider>,
+    );
+
+    const historyCard = screen.getByRole("article", {
+      name: /Active Story.*dispatch-card/i,
+    });
+    const title = within(historyCard).getByText("Active Story");
+
+    expect(title.className).toContain("type-headline-large");
+    expect(within(historyCard).getByText("Current dispatch")).toBeTruthy();
+    expect(within(historyCard).queryByText("Workstation")).toBeNull();
+    expect(
+      within(historyCard).getByRole("heading", { name: "Request details" }),
+    ).toBeTruthy();
+    const header = title.closest("div");
+    expect(header?.parentElement?.className).toContain("justify-between");
+
+    const requestDetailsSection = within(historyCard)
+      .getByRole("heading", { name: "Request details" })
+      .closest("section");
+    if (!requestDetailsSection) {
+      throw new Error("expected request details section");
+    }
+
+    fireEvent.click(
+      within(requestDetailsSection).getByRole("button", { name: "Expand" }),
+    );
+
+    expect(within(historyCard).getAllByText("dispatch-card").length).toBe(2);
+    expect(within(historyCard).getByText("Request details")).toBeTruthy();
   });
 });

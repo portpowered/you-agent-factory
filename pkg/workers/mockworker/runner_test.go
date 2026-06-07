@@ -95,6 +95,64 @@ func TestMockWorkerCommandRunner_RejectConfigWithZeroExitCodeStillFails(t *testi
 	}
 }
 
+func TestMockWorkerCommandRunner_UnmatchedDispatchPassthroughUsesNextRunner(t *testing.T) {
+	next := &recordingCommandRunner{}
+	runner := &MockWorkerCommandRunner{
+		Config: &factoryconfig.MockWorkersConfig{
+			UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
+			MockWorkers: []factoryconfig.MockWorkerConfig{{
+				WorkerName: "matched-worker",
+				RunType:    factoryconfig.MockWorkerRunTypeReject,
+				RejectConfig: &factoryconfig.MockWorkerRejectConfig{
+					Stderr: "matched reject",
+				},
+			}},
+		},
+		Next: next,
+	}
+
+	req := workerprocess.CommandRequest{
+		WorkerType:      "other-worker",
+		WorkstationName: "process",
+	}
+	result, err := runner.Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(next.requests) != 1 {
+		t.Fatalf("next runner call count = %d, want 1 passthrough dispatch", len(next.requests))
+	}
+	got := next.requests[0]
+	if got.WorkerType != req.WorkerType || got.WorkstationName != req.WorkstationName {
+		t.Fatalf("next runner request = %#v, want worker %q workstation %q", got, req.WorkerType, req.WorkstationName)
+	}
+	if result.ExitCode != 0 || string(result.Stdout) != "passthrough" {
+		t.Fatalf("result = %#v, want passthrough runner output", result)
+	}
+}
+
+func TestMockWorkerCommandRunner_UnmatchedDispatchDefaultAcceptSkipsNextRunner(t *testing.T) {
+	runner := &MockWorkerCommandRunner{
+		Config: &factoryconfig.MockWorkersConfig{
+			MockWorkers: []factoryconfig.MockWorkerConfig{{
+				WorkerName: "matched-worker",
+				RunType:    factoryconfig.MockWorkerRunTypeReject,
+			}},
+		},
+		Next: failCommandRunner{t: t},
+	}
+
+	result, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+		WorkerType: "other-worker",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if string(result.Stdout) != defaultMockWorkerAcceptedOutput {
+		t.Fatalf("Stdout = %q, want default accepted output", result.Stdout)
+	}
+}
+
 func TestMockWorkerCommandRunner_SelectsByWorkerWorkstationAndInput(t *testing.T) {
 	runner := &MockWorkerCommandRunner{
 		Config: &factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{
@@ -154,6 +212,15 @@ type failCommandRunner struct {
 func (r failCommandRunner) Run(context.Context, workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	r.t.Fatal("next command runner should not be called")
 	return workerprocess.CommandResult{}, nil
+}
+
+type recordingCommandRunner struct {
+	requests []workerprocess.CommandRequest
+}
+
+func (r *recordingCommandRunner) Run(_ context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	r.requests = append(r.requests, req)
+	return workerprocess.CommandResult{Stdout: []byte("passthrough")}, nil
 }
 
 func inputTokens(tokens ...interfaces.Token) []any {

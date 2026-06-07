@@ -285,6 +285,9 @@ First-party built-ins such as `@you/tts` also use the named-factory path:
 you run --named @you/tts
 ```
 
+See `you docs packaged-tts` for the full packaged TTS workflow, default
+metadata result, materialization path, and edit-after-materialize behavior.
+
 On the first invocation the CLI materializes the built-in into
 `~/.you-agent-factory/factories`, then loads later runs from that on-disk copy.
 That keeps the built-in editable: if you modify the materialized
@@ -672,7 +675,8 @@ Use mock workers when you want to verify routing, rejection loops, failure
 paths, and script side effects without making live provider calls.
 
 Run `you docs mock-workers` for the full JSON contract, selection fields,
-`runType` values, and examples. For this review-loop walkthrough, start with:
+`runType` values, `unmatchedDispatchPolicy`, and script or mixed-mode examples.
+For this review-loop walkthrough, start with:
 
 ```bash
 you run --dir ./factory --with-mock-workers
@@ -685,8 +689,10 @@ you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
 ```
 
 Reusable inputs live under [`docs/examples/`](../examples/README.md), including
-[`docs/examples/mock-workers.json`](../examples/mock-workers.json) and
-[`docs/examples/startup-work.json`](../examples/startup-work.json). The
+[`docs/examples/mock-workers.json`](../examples/mock-workers.json),
+[`docs/examples/mock-workers-script.json`](../examples/mock-workers-script.json),
+[`docs/examples/mock-workers-mixed.json`](../examples/mock-workers-mixed.json),
+and [`docs/examples/startup-work.json`](../examples/startup-work.json). The
 companion [`docs/examples/README.md`](../examples/README.md) shows how to combine
 startup work, mock-worker config, and record/replay commands with the checked-in
 [`examples/write-code-review`](../../examples/write-code-review/factory.json)

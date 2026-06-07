@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
-
-import { applyFactoryGraphAddEntityDraft } from "./factory-graph-editor-additions";
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { applyFactoryGraphAddEntityDraft } from "./factory-graph-editor-additions";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
