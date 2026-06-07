@@ -1,10 +1,10 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DASHBOARD_WIDGET_IDS } from "./features/bento/hooks/dashboardLayoutSchema";
+import { twentyNodeDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import {
   singleNodeSnapshotWithoutEdges,
   tickZeroInitialStructureRequestEvents,
-  twentyNodeSnapshot,
 } from "./testing/app-shell-layout-test-utils";
 import {
   activeSnapshot,
@@ -318,7 +318,7 @@ describe("App layout and graph behavior", () => {
   it(
     "renders a 20-node workflow through React Flow",
     async () => {
-      renderApp({ snapshot: twentyNodeSnapshot });
+      renderApp({ snapshot: twentyNodeDashboardSnapshot });
       await waitForDashboardShell();
       await waitForAppShellWorkGraphReady();
 
