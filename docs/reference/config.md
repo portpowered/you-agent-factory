@@ -243,6 +243,85 @@ Validation rejects more than one `DEFAULT` work type. Factories used with
 `you run --factory <factory.json> <prompt>` must declare `DEFAULT` on exactly
 one work type.
 
+## Invocation Contract
+
+Factory invocation is the shared one-shot contract used by:
+
+- `you run --factory <factory.json> <text>`
+- `cat request.txt | you run --factory <factory.json>`
+- `POST /factory-sessions/{session_id}/invocations`
+
+CLI and API invocations resolve one canonical input and one canonical
+`primaryResult`. The runtime does not treat CLI prompt runs as a separate
+submission mode with different return semantics.
+
+### Input sources
+
+The current invocation slice is text-first:
+
+| Surface | Supported source now | Notes |
+|---------|----------------------|-------|
+| CLI | Trailing positional text or non-TTY stdin | Supplying both is rejected with `INVOCATION_INPUT_SOURCE_CONFLICT`. Empty selected stdin is rejected with `INVOCATION_INPUT_EMPTY`. |
+| API | `InvocationRequest.content` with `source.kind: text` | `fileRef` and `audioStream` are reserved future source categories and are not accepted yet. |
+
+Use `you docs sessions` for the session-scoped invocation API examples. Reserve
+future source categories in authored configs and client code, but do not imply
+they are implemented today.
+
+### `invocationReturn`
+
+`Factory.invocationReturn` is the factory-authored policy that tells CLI and API
+invocations which completed work content should be returned as the
+`primaryResult`.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `policy` | Yes when `invocationReturn` is present | `SUBMITTED_WORK_TERMINAL` or `EXPLICIT`. |
+| `workTypeName` | Required for `EXPLICIT` | Work type name to select from the current invocation scope. |
+| `terminalState` | Required for `EXPLICIT` | Terminal state name that must be reached for the selected work. |
+| `workName` | No | Optional authored work name filter when multiple scoped work items share the same type and terminal state. |
+
+When `invocationReturn` is omitted, runtimes use the documented
+`SUBMITTED_WORK_TERMINAL` fallback. That fallback traces the work item
+originally submitted by the invocation until it reaches its first terminal
+output, then returns that work content as the `primaryResult`.
+
+Example using the default fallback by omission:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "queued", "type": "INITIAL" },
+        { "name": "done", "type": "TERMINAL" }
+      ],
+      "handlingBehavior": ["DEFAULT"]
+    }
+  ]
+}
+```
+
+Example with an explicit primary-result selector:
+
+```json
+{
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "workTypeName": "report",
+    "terminalState": "finalized",
+    "workName": "summary"
+  }
+}
+```
+
+Use `EXPLICIT` when the invocation should return a downstream derived result
+instead of the first terminal content for the originally submitted work item.
+If the configured selector cannot resolve a result in the current invocation
+scope, the invocation fails with `INVOCATION_PRIMARY_RESULT_UNRESOLVED` and no
+success payload.
+
 ## Workstation IO
 
 Workstation inputs, outputs, rejection routes, failure routes, and guarded

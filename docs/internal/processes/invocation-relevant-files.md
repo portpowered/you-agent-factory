@@ -30,5 +30,10 @@ primary-result behavior.
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
   logged and counted there before the service runtime exists.
+- `pkg/cli/root.go` owns the customer-facing `you run --factory` help text for
+  invocation input-source rules and the canonical pointers into packaged docs.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
+  `you docs` reference topics for invocation input sources, return policy, and
+  the session-scoped invocation API.

@@ -727,6 +727,8 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
+			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
+			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
 		Example: "  # Start the out-of-the-box continuous factory.\n" +
 			"  " + cliBinaryName + "\n\n" +
@@ -757,7 +759,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
-	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs")
+	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs; use positional text or piped stdin for the invocation input")
 	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
 		interfaces.RunnerIDCodex,
 		interfaces.RunnerIDGemini,
