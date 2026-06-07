@@ -12,6 +12,7 @@ import type { LegendPayload } from "recharts/types/component/DefaultLegendConten
 import { Button } from "../../../components/ui/button";
 import {
   ChartContainer,
+  type ChartPresentation,
   ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
@@ -30,15 +31,11 @@ import {
   useReadyWorkChartInteractions,
   type WorkChartZoomRange,
 } from "./work-chart-interactions";
-import {
-  type WorkChartPresentation,
-  workChartPresentationClasses,
-} from "./work-chart-presentation";
+import { workChartPresentationClasses } from "./work-chart-presentation";
 import { WorkChartStatusPanel } from "./work-chart-status-panel";
 
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
 
-export type { WorkChartPresentation } from "./work-chart-presentation";
 const WORK_CHART_AXIS_LABEL_CLASS = dashboardChartAxisLabelClassName();
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
 const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";
@@ -59,7 +56,7 @@ export interface WorkChartProps {
   emptyTitle?: string;
   locale?: string;
   model?: WorkChartModel;
-  presentation?: WorkChartPresentation;
+  presentation?: ChartPresentation;
   series: readonly WorkChartSeriesDefinition[];
   state?: WorkChartState;
   xAxisLabel?: string;
@@ -166,7 +163,7 @@ interface ReadyWorkChartProps {
   chartData: WorkChartData;
   className: string;
   locale?: string;
-  presentation: WorkChartPresentation;
+  presentation: ChartPresentation;
   xAxisLabel: string;
   yAxisLabel: string;
 }

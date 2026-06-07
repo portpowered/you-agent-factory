@@ -1,5 +1,9 @@
 type: string
-description: Outcome of a managed local-model asset pull request.
+description: >
+  Compatibility pull outcome projection for one managed runtime. Prefer
+  `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary.
+  `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT`
+  maps to managed pull outcome `ALREADY_PRESENT`.
 enum:
   - PULLED
   - ALREADY_PRESENT

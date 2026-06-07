@@ -2,6 +2,7 @@ package localmodels
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -17,6 +18,12 @@ import (
 type CatalogEntry struct {
 	Summary factoryapi.ModelSummary
 	Detail  factoryapi.ModelDetail
+}
+
+// CatalogOptions configures runtime-aware managed-runtime projection for discovery.
+type CatalogOptions struct {
+	RuntimeCacheInspector RuntimeCacheInspector
+	SourceResolver        ManagedRuntimeSourceResolver
 }
 
 type catalogAggregate struct {
@@ -37,6 +44,12 @@ type catalogAggregate struct {
 
 // BuildCatalog projects configured model workers into API catalog entries.
 func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]CatalogEntry {
+	return BuildCatalogWithOptions(runtimeCfg, CatalogOptions{})
+}
+
+// BuildCatalogWithOptions projects configured model workers into API catalog entries
+// with optional runtime cache and source resolver inputs.
+func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts CatalogOptions) map[string]CatalogEntry {
 	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
 		return map[string]CatalogEntry{}
 	}
@@ -97,10 +110,16 @@ func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]Cata
 			return aggregate.capabilities[i].Worker < aggregate.capabilities[j].Worker
 		})
 		summary := buildModelSummary(*aggregate)
+		detailDiagnostics := modelDiagnostics(*aggregate, summary)
+		listManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, opts, false)
+		summary.ManagedRuntime = listManagedRuntime
+		inspectManagedRuntime := buildCatalogManagedRuntime(runtimeCfg, factoryCfg, *aggregate, summary, detailDiagnostics, opts, true)
+		inspectDiagnostics := mergeInspectDiagnostics(detailDiagnostics, inspectManagedRuntime)
 		catalog[key] = CatalogEntry{
 			Summary: summary,
 			Detail: factoryapi.ModelDetail{
 				Name:             summary.Name,
+				ManagedRuntime:   inspectManagedRuntime,
 				ProviderLocality: summary.ProviderLocality,
 				Status:           summary.Status,
 				LoadState:        summary.LoadState,
@@ -108,7 +127,7 @@ func BuildCatalog(runtimeCfg *factoryconfig.LoadedFactoryConfig) map[string]Cata
 				Modalities:       summary.Modalities,
 				Resources:        summary.Resources,
 				Capabilities:     aggregate.capabilities,
-				Diagnostics:      modelDiagnostics(*aggregate, summary),
+				Diagnostics:      inspectDiagnostics,
 			},
 		}
 	}
@@ -340,9 +359,9 @@ func modelDiagnostics(aggregate catalogAggregate, summary factoryapi.ModelSummar
 		"mixedLocality":    strconv.FormatBool(len(aggregate.localities) > 1),
 	}
 	if summary.Status == factoryapi.ModelStatusUNAVAILABLE {
-		diagnostics["statusReason"] = "local model workers require a matching MODEL resource declaration for readiness"
+		diagnostics["statusReason"] = "managed runtime assets are missing or not yet installed"
 	} else {
-		diagnostics["statusReason"] = "declared worker capabilities and resources are discoverable"
+		diagnostics["statusReason"] = "managed runtime is discoverable with declared operations and resources"
 	}
 	return diagnostics
 }
@@ -426,12 +445,60 @@ func canonicalModelName(model string) string {
 }
 
 
+func buildCatalogManagedRuntime(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	factoryCfg *interfaces.FactoryConfig,
+	aggregate catalogAggregate,
+	summary factoryapi.ModelSummary,
+	diagnostics factoryapi.StringMap,
+	opts CatalogOptions,
+	forInspect bool,
+) factoryapi.ManagedRuntime {
+	projection := managedRuntimeProjection{
+		summary:         summary,
+		baseDiagnostics: diagnostics,
+		includeInspect:  forInspect,
+	}
+	if resource := primaryModelScopedResource(aggregate, factoryCfg); resource != nil {
+		if opts.SourceResolver != nil {
+			resolution := opts.SourceResolver.Resolve(aggregate.name, resource)
+			projection.sourceResolution = &resolution
+		}
+		if opts.RuntimeCacheInspector != nil && aggregate.localCount > 0 {
+			inspection, err := opts.RuntimeCacheInspector.InspectRuntimeCache(context.Background(), runtimeCfg, aggregate.name)
+			if err == nil {
+				projection.cacheInspection = &inspection
+			}
+		}
+	}
+	return buildManagedRuntimeProjection(projection)
+}
+
+func mergeInspectDiagnostics(base factoryapi.StringMap, managed factoryapi.ManagedRuntime) factoryapi.StringMap {
+	merged := factoryapi.StringMap{}
+	for key, value := range base {
+		merged[key] = value
+	}
+	if managed.Diagnostics == nil {
+		return merged
+	}
+	for key, value := range *managed.Diagnostics {
+		merged[key] = value
+	}
+	return merged
+}
+
 // ListModels builds the list-models API response from runtime config.
 func ListModels(runtimeCfg *factoryconfig.LoadedFactoryConfig) (factoryapi.ListModelsResponse, error) {
+	return ListModelsWithOptions(runtimeCfg, CatalogOptions{})
+}
+
+// ListModelsWithOptions builds the list-models API response with runtime-aware projection.
+func ListModelsWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts CatalogOptions) (factoryapi.ListModelsResponse, error) {
 	if runtimeCfg == nil {
 		return factoryapi.ListModelsResponse{}, fmt.Errorf("factory service runtime is not available")
 	}
-	catalog := BuildCatalog(runtimeCfg)
+	catalog := BuildCatalogWithOptions(runtimeCfg, opts)
 	results := make([]factoryapi.ModelSummary, 0, len(catalog))
 	for _, entry := range catalog {
 		results = append(results, entry.Summary)
@@ -444,10 +511,15 @@ func ListModels(runtimeCfg *factoryconfig.LoadedFactoryConfig) (factoryapi.ListM
 
 // GetModel returns model detail for a catalog model name.
 func GetModel(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (factoryapi.ModelDetail, error) {
+	return GetModelWithOptions(runtimeCfg, modelName, CatalogOptions{})
+}
+
+// GetModelWithOptions returns model detail with runtime-aware managed-runtime projection.
+func GetModelWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string, opts CatalogOptions) (factoryapi.ModelDetail, error) {
 	if runtimeCfg == nil {
 		return factoryapi.ModelDetail{}, fmt.Errorf("factory service runtime is not available")
 	}
-	catalog := BuildCatalog(runtimeCfg)
+	catalog := BuildCatalogWithOptions(runtimeCfg, opts)
 	key := CanonicalModelName(modelName)
 	if key == "" {
 		return factoryapi.ModelDetail{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
@@ -464,12 +536,30 @@ func CanonicalModelName(model string) string {
 	return canonicalModelName(model)
 }
 
+// PullOptions configures runtime-aware managed-runtime projection for pull.
+type PullOptions struct {
+	RuntimeCacheInspector RuntimeCacheInspector
+	SourceResolver        ManagedRuntimeSourceResolver
+}
+
 // PullModel validates catalog locality and delegates asset pull to the injected puller.
 func PullModel(
 	puller AssetPuller,
 	ctx context.Context,
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
+) (apisurface.ModelPullResult, error) {
+	return PullModelWithOptions(puller, ctx, runtimeCfg, modelName, PullOptions{})
+}
+
+// PullModelWithOptions validates catalog locality, resolves backend source
+// diagnostics, delegates asset pull, and projects managed readiness outcomes.
+func PullModelWithOptions(
+	puller AssetPuller,
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+	opts PullOptions,
 ) (apisurface.ModelPullResult, error) {
 	if runtimeCfg == nil {
 		return apisurface.ModelPullResult{}, fmt.Errorf("factory service runtime is not available")
@@ -489,7 +579,59 @@ func PullModel(
 	if entry.Summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
 		return apisurface.ModelPullResult{}, fmt.Errorf("%w: model %q is not a local model", apisurface.ErrModelPullUnsupported, modelName)
 	}
-	return puller.PullModel(ctx, runtimeCfg, modelName)
+
+	var resolution ManagedRuntimeSourceResolution
+	if resource := modelScopedResource(runtimeCfg.FactoryConfig(), modelName); resource != nil && opts.SourceResolver != nil {
+		resolution = opts.SourceResolver.Resolve(modelName, resource)
+	}
+
+	result, err := puller.PullModel(ctx, runtimeCfg, modelName)
+	if err != nil {
+		switch {
+		case errors.Is(err, apisurface.ErrModelNotFound), errors.Is(err, apisurface.ErrModelPullUnsupported):
+			return apisurface.ModelPullResult{}, err
+		default:
+			pullOutcome, readiness := ClassifyPullFailure(err)
+			failureResult := apisurface.ModelPullResult{
+				ModelName:          strings.TrimSpace(entry.Summary.Name),
+				ProviderLocality:   string(entry.Summary.ProviderLocality),
+				ManagedPullOutcome: pullOutcome,
+				ReadinessState:     readiness,
+				LifecycleState:     managedLifecycleNotInstalled,
+				SourceKind:         strings.TrimSpace(resolution.SourceKind),
+				SourceID:           strings.TrimSpace(resolution.SourceID),
+				ResolverNotes:      strings.TrimSpace(resolution.ResolverNotes),
+			}
+			return failureResult, &apisurface.ManagedRuntimePullError{Result: failureResult, Cause: err}
+		}
+	}
+
+	inspection := RuntimeCacheInspection{}
+	if opts.RuntimeCacheInspector != nil {
+		inspected, inspectErr := opts.RuntimeCacheInspector.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+		if inspectErr == nil {
+			inspection = inspected
+		}
+	}
+	return EnrichPullResult(result, inspection, resolution), nil
+}
+
+func modelScopedResource(factoryCfg *interfaces.FactoryConfig, modelName string) *interfaces.ResourceConfig {
+	if factoryCfg == nil {
+		return nil
+	}
+	key := canonicalModelName(modelName)
+	for _, resource := range factoryCfg.Resources {
+		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+			continue
+		}
+		if canonicalModelName(resource.Model) != key {
+			continue
+		}
+		copied := resource
+		return &copied
+	}
+	return nil
 }
 
 // SelectInvocationWorker resolves the model worker and operation for direct invocation.
@@ -529,4 +671,120 @@ func SelectInvocationWorker(
 		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, modelName, operationName)
 	}
 	return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
+}
+
+const (
+	legacyPullOutcomePulled         = "PULLED"
+	legacyPullOutcomeAlreadyPresent = "ALREADY_PRESENT"
+
+	managedPullOutcomeAlreadyReady          = "ALREADY_READY"
+	managedPullOutcomeInstalledSuccessfully = "INSTALLED_SUCCESSFULLY"
+	managedPullOutcomeAlreadyPresent        = "ALREADY_PRESENT"
+	managedPullOutcomeStillLoading          = "STILL_LOADING"
+	managedPullOutcomeTimedOut              = "TIMED_OUT"
+	managedPullOutcomeSourceFetchFailed     = "SOURCE_FETCH_FAILED"
+	managedPullOutcomeUnsupportedRuntime    = "UNSUPPORTED_RUNTIME"
+
+	managedReadinessReady       = "READY"
+	managedReadinessMissing     = "MISSING"
+	managedReadinessLoading     = "LOADING"
+	managedReadinessFailed      = "FAILED"
+	managedReadinessUnsupported = "UNSUPPORTED"
+
+	managedLifecycleInstalling   = "INSTALLING"
+	managedLifecycleInstalled    = "INSTALLED"
+	managedLifecycleNotInstalled = "NOT_INSTALLED"
+)
+
+// EnrichPullResult projects a service-owned pull result into managed-runtime
+// readiness, lifecycle, and source diagnostics using post-pull cache inspection.
+func EnrichPullResult(
+	result apisurface.ModelPullResult,
+	inspection RuntimeCacheInspection,
+	resolution ManagedRuntimeSourceResolution,
+) apisurface.ModelPullResult {
+	outcome, readiness, lifecycle := classifySuccessfulPull(result, inspection)
+	result.ManagedPullOutcome = outcome
+	result.ReadinessState = readiness
+	result.LifecycleState = lifecycle
+	result.SourceKind = strings.TrimSpace(resolution.SourceKind)
+	result.SourceID = strings.TrimSpace(resolution.SourceID)
+	result.ResolverNotes = strings.TrimSpace(resolution.ResolverNotes)
+	return result
+}
+
+// ClassifyPullFailure maps pull errors to managed-runtime pull outcomes and
+// readiness states for logging, metrics, and stable customer-facing vocabulary.
+func ClassifyPullFailure(err error) (pullOutcome string, readiness string) {
+	if err == nil {
+		return "", ""
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return managedPullOutcomeTimedOut, managedReadinessFailed
+	case errors.Is(err, apisurface.ErrModelPullUnsupported):
+		return managedPullOutcomeUnsupportedRuntime, managedReadinessUnsupported
+	case errors.Is(err, apisurface.ErrManagedRuntimeSourceFetchFailed):
+		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
+	case isSourceFetchFailureMessage(err.Error()):
+		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
+	default:
+		return managedPullOutcomeSourceFetchFailed, managedReadinessFailed
+	}
+}
+
+func classifySuccessfulPull(result apisurface.ModelPullResult, inspection RuntimeCacheInspection) (pullOutcome, readiness, lifecycle string) {
+	legacyOutcome := strings.ToUpper(strings.TrimSpace(result.Outcome))
+	switch legacyOutcome {
+	case legacyPullOutcomePulled:
+		pullOutcome = managedPullOutcomeInstalledSuccessfully
+	case legacyPullOutcomeAlreadyPresent:
+		pullOutcome = managedPullOutcomeAlreadyPresent
+	default:
+		pullOutcome = managedPullOutcomeUnsupportedRuntime
+	}
+
+	if inspection.Supported {
+		if inspection.Installed {
+			readiness = managedReadinessReady
+			lifecycle = managedLifecycleInstalled
+			if pullOutcome == managedPullOutcomeAlreadyPresent {
+				pullOutcome = managedPullOutcomeAlreadyReady
+			}
+			return pullOutcome, readiness, lifecycle
+		}
+		readiness = managedReadinessMissing
+		lifecycle = managedLifecycleNotInstalled
+		if pullOutcome == managedPullOutcomeInstalledSuccessfully {
+			readiness = managedReadinessLoading
+			lifecycle = managedLifecycleInstalling
+			pullOutcome = managedPullOutcomeStillLoading
+		}
+		return pullOutcome, readiness, lifecycle
+	}
+
+	readiness = managedReadinessReady
+	lifecycle = managedLifecycleInstalled
+	if pullOutcome == managedPullOutcomeAlreadyPresent {
+		pullOutcome = managedPullOutcomeAlreadyReady
+	}
+	return pullOutcome, readiness, lifecycle
+}
+
+func isSourceFetchFailureMessage(message string) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(message))
+	if trimmed == "" {
+		return false
+	}
+	for _, fragment := range []string{
+		"pull model manifest",
+		"download model asset",
+		"model asset request failed",
+		"checksum verification",
+	} {
+		if strings.Contains(trimmed, fragment) {
+			return true
+		}
+	}
+	return false
 }

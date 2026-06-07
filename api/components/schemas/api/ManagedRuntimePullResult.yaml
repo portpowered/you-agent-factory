@@ -1,0 +1,26 @@
+type: object
+required:
+  - identity
+  - pullOutcome
+  - readinessState
+properties:
+  identity:
+    type: string
+    description: Stable managed runtime identity targeted by the pull or install request.
+  pullOutcome:
+    $ref: './ManagedRuntimePullOutcome.yaml'
+  readinessState:
+    $ref: './ManagedRuntimeReadinessState.yaml'
+  cachePath:
+    type: string
+    description: Managed cache directory that now contains the installed runtime assets.
+  revision:
+    type: string
+    description: Managed revision identifier for the installed runtime assets.
+  downloadedFiles:
+    type: array
+    description: Files downloaded or verified as already present for the managed cache entry.
+    items:
+      $ref: './ModelPullDownloadedFile.yaml'
+  sourceDiagnostics:
+    $ref: './ManagedRuntimeSourceDiagnostics.yaml'

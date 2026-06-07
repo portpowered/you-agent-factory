@@ -48,6 +48,7 @@ func newExportImportFixture(t *testing.T) exportImportFixture {
 		t.Fatalf("FlattenFactoryConfig(%s): %v", authoredFactoryDir, err)
 	}
 	canonicalFactoryJSON = withExportImportPortableBundledFiles(t, canonicalFactoryJSON)
+	canonicalFactoryJSON = withExportImportPortableLayout(t, canonicalFactoryJSON)
 
 	flattenedFactory, err := config.GeneratedFactoryFromOpenAPIJSON(canonicalFactoryJSON)
 	if err != nil {
@@ -61,6 +62,43 @@ func newExportImportFixture(t *testing.T) exportImportFixture {
 		FlattenedFactory:      flattenedFactory,
 		GeneratedExportFactor: flattenedFactory,
 	}
+}
+
+func withExportImportPortableLayout(t *testing.T, canonicalFactoryJSON []byte) []byte {
+	t.Helper()
+
+	var payload map[string]any
+	if err := json.Unmarshal(canonicalFactoryJSON, &payload); err != nil {
+		t.Fatalf("Unmarshal(canonical export/import fixture): %v", err)
+	}
+
+	payload["layout"] = map[string]any{
+		"schemaVersion": 1,
+		"nodes": []map[string]any{{
+			"id":       "workstation:step-one",
+			"position": map[string]any{"x": 128, "y": 256},
+			"size":     map[string]any{"width": 320, "height": 180},
+			"locked":   true,
+		}},
+		"edges": []map[string]any{{
+			"id":        "workstation-output:workstation:step-one->work-state:task:processing",
+			"waypoints": []map[string]any{{"x": 180, "y": 220}},
+		}},
+		"groups": []map[string]any{{
+			"id":      "group-1",
+			"label":   "Main lane",
+			"nodeIds": []string{"workstation:step-one"},
+			"bounds":  map[string]any{"x": 100, "y": 200, "width": 400, "height": 240},
+		}},
+		"viewport":    map[string]any{"x": 40, "y": 60, "zoom": 0.9},
+		"preferences": map[string]any{"direction": "RIGHT"},
+	}
+
+	updated, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("Marshal(canonical export/import fixture with layout): %v", err)
+	}
+	return updated
 }
 
 func withExportImportPortableBundledFiles(t *testing.T, canonicalFactoryJSON []byte) []byte {

@@ -66,6 +66,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-tts",
 		"batch-inputs",
 		"templates",
 	}
@@ -99,6 +100,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-tts",
 		"batch-inputs",
 		"batch-work",
 		"templates",
@@ -185,6 +187,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
+		"`packaged-tts` - Packaged @you/tts invocation",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
 		"`you docs agents`",
@@ -195,6 +198,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`you docs work`",
 		"`you docs sessions`",
 		"`you docs workstations`",
+		"`you docs packaged-tts`",
 		"`you docs batch-inputs`",
 	} {
 		if !strings.Contains(got, want) {
@@ -365,6 +369,44 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	} {
 		if strings.Contains(got, wrapper) {
 			t.Fatalf("Markdown(authoring-factories) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_ConfigDocumentsInvocationContract(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("config")
+	if err != nil {
+		t.Fatalf("Markdown(config) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"## Invocation Contract",
+		"`you run --factory <factory.json> <text>`",
+		"`POST /factory-sessions/{session_id}/invocations`",
+		"`INVOCATION_INPUT_SOURCE_CONFLICT`",
+		"`INVOCATION_INPUT_EMPTY`",
+		"`invocationReturn`",
+		"`SUBMITTED_WORK_TERMINAL`",
+		"`EXPLICIT`",
+		"`INVOCATION_PRIMARY_RESULT_UNRESOLVED`",
+		"`you docs sessions`",
+		"`fileRef` and `audioStream` are reserved future source categories",
+		"Top-level `sourceKind: \"text\"` plus canonical `content` (`WorkContent`)",
+		`"status":"COMPLETED","primaryResult":[{"type":"text"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"RUN_INVOCATION_AMBIGUOUS_INPUT",
+		`"output":"Summary text","workId":"work-123"`,
+		"source.kind: text",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("Markdown(config) still contains stale invocation contract %q:\n%s", forbidden, got)
 		}
 	}
 }
@@ -677,6 +719,46 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_PackagedTTSReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("packaged-tts")
+	if err != nil {
+		t.Fatalf("Markdown(packaged-tts) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Packaged TTS (`@you/tts`)",
+		"you run --named @you/tts",
+		"~/.you-agent-factory/factories",
+		"@you%2Ftts",
+		"artifactPath",
+		"mediaType",
+		"backend",
+		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"editable",
+		"raw audio",
+		"shared invocation contract",
+		"INVOCATION_TTS_MODEL_NOT_READY",
+		"INVOCATION_TTS_GENERATION_FAILED",
+		"`you docs authoring-factories`",
+		"`you docs config`",
+		"`you docs sessions`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(packaged-tts) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs packaged-tts`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(packaged-tts) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -700,6 +782,15 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"runtimeStatus",
 		"categories",
 		"totalTokens",
+		"## Session invocation API",
+		"POST /factory-sessions/{session_id}/invocations",
+		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"INVOCATION_INPUT_EMPTY",
+		"INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+		"status: TIMED_OUT",
+		"`primaryResult`",
+		`"sourceKind": "text"`,
+		`"primaryResult": [`,
 		"http://localhost:7437/dashboard/ui",
 		"## `--server` and `--session` routing",
 		"you submit --session session-beta",
@@ -707,9 +798,20 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"`you docs agents`",
 		"`you docs work`",
 		"`you docs config`",
+		"`fileRef`",
+		"`audioStream`",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(sessions) missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"source.kind",
+		`"parts": [`,
+		`primaryResult": {`,
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("Markdown(sessions) still contains stale invocation contract %q:\n%s", forbidden, got)
 		}
 	}
 	for _, wrapper := range []string{
@@ -767,7 +869,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, workstations, workers, resources, models, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }
