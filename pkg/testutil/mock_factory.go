@@ -47,6 +47,10 @@ type MockFactory struct {
 	InvokedModelNames        []string
 	InvokeModelResult        apisurface.ModelInvocationResult
 	InvokeModelErr           error
+	InvokedFactorySessions   []factoryapi.InvocationRequest
+	InvokedFactorySessionIDs []string
+	InvokeFactoryResult      apisurface.FactoryInvocationResult
+	InvokeFactoryErr         error
 	PulledModelNames         []string
 	PullModelResult          apisurface.ModelPullResult
 	PullModelErr             error
@@ -68,6 +72,7 @@ var _ apisurface.ModelAPI = (*MockFactory)(nil)
 var _ apisurface.FactorySaveAPI = (*MockFactory)(nil)
 var _ apisurface.SessionAPI = (*MockFactory)(nil)
 var _ apisurface.WorkAPI = (*MockFactory)(nil)
+var _ apisurface.InvocationAPI = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
 var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 
@@ -370,6 +375,18 @@ func (m *MockFactory) GetCurrentFactoryForSession(ctx context.Context, sessionID
 		return factoryapi.Factory{}, err
 	}
 	return session.GetCurrentFactory(ctx)
+}
+
+func (m *MockFactory) InvokeFactorySession(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	if m.InvokeFactoryErr != nil {
+		return apisurface.FactoryInvocationResult{}, m.InvokeFactoryErr
+	}
+	if _, err := m.sessionFactory(sessionID); err != nil {
+		return apisurface.FactoryInvocationResult{}, err
+	}
+	m.InvokedFactorySessionIDs = append(m.InvokedFactorySessionIDs, sessionID)
+	m.InvokedFactorySessions = append(m.InvokedFactorySessions, request)
+	return m.InvokeFactoryResult, nil
 }
 
 func (m *MockFactory) SaveCurrentFactoryForSession(

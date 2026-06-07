@@ -19,6 +19,10 @@ primary-result behavior.
   backend-owned `interfaces.WorkContentPart` shape.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers.
+- `pkg/service/runtime_sessions.go` owns the session-scoped invocation
+  orchestration that resolves API input, submits the default handling work
+  item, polls selected-tick world state, and maps timeout/cancel/unresolved
+  outcomes into `InvocationResponse`.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
