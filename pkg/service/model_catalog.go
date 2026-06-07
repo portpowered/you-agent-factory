@@ -340,11 +340,7 @@ func (fs *FactoryService) waitForSessionInvocationResult(
 	sessionID string,
 	input sessionInvocationWaitInput,
 ) (apisurface.FactoryInvocationResult, error) {
-	waitCtx := ctx
-	cancel := func() {}
-	if input.TimeoutMillis != nil && *input.TimeoutMillis > 0 {
-		waitCtx, cancel = context.WithTimeout(ctx, time.Duration(*input.TimeoutMillis)*time.Millisecond)
-	}
+	waitCtx, cancel := invocationWaitContext(ctx, input.TimeoutMillis)
 	defer cancel()
 
 	result := apisurface.FactoryInvocationResult{
@@ -354,63 +350,26 @@ func (fs *FactoryService) waitForSessionInvocationResult(
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
-	var (
-		packagedTTSInvocation bool
-		loggedPackagedLoading bool
-	)
-	if runtimeCfg, err := fs.sessionRuntimeConfig(sessionID); err == nil && runtimeCfg != nil {
-		packagedTTSInvocation = tts.IsPackagedFactory(runtimeCfg.FactoryConfig())
-	}
+	packagedTTSInvocation := fs.isPackagedTTSSession(sessionID)
+	loggedPackagedLoading := false
 
 	for {
-		snapshot, err := fs.GetEngineStateSnapshotForSession(waitCtx, sessionID)
-		if err != nil {
-			return fs.handleInvocationWaitError(result, err)
-		}
-
-		worldState, err := fs.sessionInvocationWorldState(waitCtx, sessionID, snapshot.TickCount)
-		if err != nil {
-			return fs.handleInvocationWaitError(result, err)
-		}
-
-		activeWork := snapshotHasActiveWork(snapshot)
-		if packagedTTSInvocation && activeWork && !loggedPackagedLoading {
-			fs.logPackagedTTSInvocationLoading(sessionID, input)
-			loggedPackagedLoading = true
-		}
-
-		selection, selectionErr := invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
-			RequestID:        input.RequestID,
-			InvocationReturn: input.InvocationReturn,
-			WorldState:       worldState,
-		})
-		if selectionErr == nil {
-			if packagedTTSInvocation {
-				fs.logPackagedTTSInvocationCompleted(sessionID, input, selection)
-			}
-			return fs.handleInvocationSelectionSuccess(sessionID, input, selection), nil
-		}
-
-		primaryErr, ok := selectionErr.(*invocations.PrimaryResultError)
-		if !ok {
-			return apisurface.FactoryInvocationResult{}, selectionErr
-		}
-
-		if _, exists := worldState.WorkRequestsByID[input.RequestID]; exists && !activeWork {
-			if packagedTTSInvocation {
-				if _, failure := tts.ClassifyInvocationWait(worldState, input.RequestID, false); failure != nil {
-					return fs.handlePackagedTTSInvocationFailure(sessionID, input, failure), nil
-				}
-			}
-			return fs.handleInvocationUnresolvedPrimary(sessionID, input, primaryErr), nil
+		tick := fs.processInvocationWaitTick(
+			waitCtx,
+			sessionID,
+			input,
+			result,
+			packagedTTSInvocation,
+			loggedPackagedLoading,
+		)
+		loggedPackagedLoading = tick.loggedLoading
+		if tick.done {
+			return tick.result, tick.err
 		}
 
 		select {
 		case <-waitCtx.Done():
-			terminalResult := invocationContextTerminalResult(result, waitCtx.Err())
-			fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
-			fs.logInvocationTerminalResult(sessionID, input, terminalResult)
-			return terminalResult, nil
+			return fs.invocationWaitTimedOut(sessionID, input, result, waitCtx.Err()), nil
 		case <-ticker.C:
 		}
 	}
