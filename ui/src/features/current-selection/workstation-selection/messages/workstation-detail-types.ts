@@ -65,12 +65,17 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
+  editableConfigurationModelInvokeBindingDuplicate: (slotName: string) => string;
+  editableConfigurationModelInvokeBindingRequired: (slotName: string) => string;
+  editableConfigurationModelInvokeBindingsSummary: string;
   editableConfigurationModelInvokeOperationInvalid: string;
   editableConfigurationModelInvokeOperationMissing: string;
   editableConfigurationModelInvokeOperationOptionsEmpty: string;
   editableConfigurationModelInvokeOperationRequired: string;
   editableConfigurationModelInvokeWorkerOptionsEmpty: string;
   editableConfigurationModelInvokeWorkerRequired: string;
+  modelInvokeBindingConfigContentFieldLabel: string;
+  modelInvokeBindingDefaultContentFieldLabel: string;
   modelInvokeBindingsEmpty: string;
   modelInvokeBindingsFieldHint: string;
   modelInvokeBindingsFieldLabel: string;

@@ -12,6 +12,7 @@ type WorkstationOperationBinding =
   components["schemas"]["WorkstationOperationBinding"];
 type ModelOperationContentType =
   components["schemas"]["ModelOperationContentType"];
+type WorkContent = components["schemas"]["WorkContent"];
 
 export interface EditableModelInvokeBindingSelectorDraft {
   label: string;
@@ -21,8 +22,16 @@ export interface EditableModelInvokeBindingSelectorDraft {
 }
 
 export interface EditableModelInvokeBindingDraft {
+  configText: string;
+  defaultContentText: string;
   selector: EditableModelInvokeBindingSelectorDraft;
   slot: string;
+}
+
+export interface ModelInvokeBindingValidationMessages {
+  bindingDuplicate: (slotName: string) => string;
+  bindingRequired: (slotName: string) => string;
+  bindingSummary: string;
 }
 
 export function isModelInvokeWorkstationType(
@@ -96,6 +105,10 @@ export function resolveEditableModelInvokeBindings(
 ): EditableModelInvokeBindingDraft[] {
   return (bindings ?? []).map((binding) => ({
     slot: binding.slot,
+    configText: resolveEditableModelInvokeBindingText(binding.config),
+    defaultContentText: resolveEditableModelInvokeBindingText(
+      binding.defaultContent,
+    ),
     selector: {
       label: binding.selector?.label ?? "",
       role: binding.selector?.role ?? "",
@@ -124,13 +137,20 @@ function buildCanonicalModelInvokeBindingFromDraft(
   }
 
   const selector = buildCanonicalModelInvokeBindingSelector(binding.selector);
-  if (!selector) {
-    return { slot };
+  const config = buildCanonicalModelInvokeBindingContent(binding.configText);
+  const defaultContent = buildCanonicalModelInvokeBindingContent(
+    binding.defaultContentText,
+  );
+
+  if (!selector && !config && !defaultContent) {
+    return null;
   }
 
   return {
     slot,
-    selector,
+    ...(selector ? { selector } : {}),
+    ...(config ? { config } : {}),
+    ...(defaultContent ? { defaultContent } : {}),
   };
 }
 
@@ -159,6 +179,94 @@ function buildCanonicalModelInvokeBindingSelector(
   return Object.keys(nextSelector).length > 0 ? nextSelector : undefined;
 }
 
+function buildCanonicalModelInvokeBindingContent(
+  text: string,
+): WorkContent | undefined {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  return [{ text: trimmed, type: "text" }];
+}
+
+function resolveEditableModelInvokeBindingText(
+  content: WorkContent | undefined,
+): string {
+  const firstPart = content?.[0];
+  if (!firstPart || !("text" in firstPart)) {
+    return "";
+  }
+
+  return firstPart.text ?? "";
+}
+
+export function modelInvokeBindingDraftHasContent(
+  binding: EditableModelInvokeBindingDraft,
+): boolean {
+  return (
+    modelInvokeBindingSelectorHasContent(binding.selector) ||
+    binding.configText.trim().length > 0 ||
+    binding.defaultContentText.trim().length > 0
+  );
+}
+
+function modelInvokeBindingSelectorHasContent(
+  selector: EditableModelInvokeBindingSelectorDraft,
+): boolean {
+  return (
+    selector.label.trim().length > 0 ||
+    selector.role.trim().length > 0 ||
+    selector.slot.trim().length > 0 ||
+    selector.type !== ""
+  );
+}
+
+export function validateEditableModelInvokeBindings(
+  bindings: EditableModelInvokeBindingDraft[],
+  operation: ModelOperation | undefined,
+  messages: ModelInvokeBindingValidationMessages,
+): Record<string, string> {
+  const validationErrors: Record<string, string> = {};
+  const seenSlots = new Set<string>();
+
+  for (const binding of bindings) {
+    const slotName = binding.slot.trim();
+    if (slotName.length === 0) {
+      continue;
+    }
+
+    if (seenSlots.has(slotName)) {
+      validationErrors[`operationBindings[${slotName}]`] =
+        messages.bindingDuplicate(slotName);
+      continue;
+    }
+    seenSlots.add(slotName);
+  }
+
+  for (const inputSlot of resolveModelOperationInputSlots(operation)) {
+    const binding = bindings.find((entry) => entry.slot === inputSlot.name);
+    if (!binding) {
+      if (inputSlot.required) {
+        validationErrors[`operationBindings[${inputSlot.name}]`] =
+          messages.bindingRequired(inputSlot.name);
+      }
+      continue;
+    }
+
+    if (inputSlot.required && !modelInvokeBindingDraftHasContent(binding)) {
+      validationErrors[`operationBindings[${inputSlot.name}]`] =
+        messages.bindingRequired(inputSlot.name);
+    }
+  }
+
+  if (Object.keys(validationErrors).length > 0) {
+    validationErrors.operationBindings = messages.bindingSummary;
+  }
+
+  return validationErrors;
+}
+
 export function syncEditableModelInvokeBindingsForOperation(
   operation: ModelOperation | undefined,
   currentBindings: EditableModelInvokeBindingDraft[],
@@ -172,6 +280,8 @@ export function syncEditableModelInvokeBindingsForOperation(
     return (
       existing ?? {
         slot: inputSlot.name,
+        configText: "",
+        defaultContentText: "",
         selector: createEmptyEditableModelInvokeBindingSelectorDraft(),
       }
     );
@@ -199,6 +309,8 @@ export function editableModelInvokeBindingsEqual(
     const other = right[index];
     return (
       binding.slot === other.slot &&
+      binding.configText === other.configText &&
+      binding.defaultContentText === other.defaultContentText &&
       binding.selector.label === other.selector.label &&
       binding.selector.role === other.selector.role &&
       binding.selector.slot === other.selector.slot &&

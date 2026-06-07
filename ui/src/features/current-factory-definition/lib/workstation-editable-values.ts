@@ -196,6 +196,8 @@ export function editableWorkstationDraftFromValues(
     operation: values.operation ?? "",
     operationBindings: (values.operationBindings ?? []).map((binding) => ({
       slot: binding.slot,
+      configText: binding.configText,
+      defaultContentText: binding.defaultContentText,
       selector: { ...binding.selector },
     })),
     prompt: values.prompt ?? "",

@@ -3,6 +3,7 @@ import type {
   EditableWorkstationDraft,
   EditableWorkstationInputDraft,
 } from "./workstation-editable-values";
+import { editableModelInvokeBindingsEqual } from "./workstation-model-invoke";
 
 type WorkstationGuard = EditableWorkstationDraft["guards"][number];
 type InputGuardBase = EditableWorkstationInputDraft["guards"][number];
@@ -322,18 +323,5 @@ function editableModelInvokeBindingsDraftEqual(
   left: EditableWorkstationDraft["operationBindings"],
   right: EditableWorkstationDraft["operationBindings"],
 ): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  return left.every((binding, index) => {
-    const other = right[index];
-    return (
-      binding.slot === other.slot &&
-      binding.selector.label === other.selector.label &&
-      binding.selector.role === other.selector.role &&
-      binding.selector.slot === other.selector.slot &&
-      binding.selector.type === other.selector.type
-    );
-  });
+  return editableModelInvokeBindingsEqual(left, right);
 }

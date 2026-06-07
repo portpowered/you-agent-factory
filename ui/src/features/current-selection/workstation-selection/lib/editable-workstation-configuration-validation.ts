@@ -10,6 +10,7 @@ import type {
 import {
   isModelInvokeWorkstationType,
   resolveModelOperationByName,
+  validateEditableModelInvokeBindings,
 } from "../../../current-factory-definition/lib/workstation-model-invoke";
 import { isValidUppercaseModelOperationName } from "../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
@@ -43,6 +44,9 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationPromptValidationErrorPrefix"
     | "editableConfigurationPromptFieldHint"
     | "editableConfigurationBehaviorPollerWorkerUnsupported"
+    | "editableConfigurationModelInvokeBindingDuplicate"
+    | "editableConfigurationModelInvokeBindingRequired"
+    | "editableConfigurationModelInvokeBindingsSummary"
     | "editableConfigurationModelInvokeOperationMissing"
     | "editableConfigurationModelInvokeOperationRequired"
     | "editableConfigurationModelInvokeOperationInvalid"
@@ -180,6 +184,9 @@ function appendModelInvokeValidationErrors(
   selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
   messages: Pick<
     WorkstationDetailMessages,
+    | "editableConfigurationModelInvokeBindingDuplicate"
+    | "editableConfigurationModelInvokeBindingRequired"
+    | "editableConfigurationModelInvokeBindingsSummary"
     | "editableConfigurationModelInvokeOperationInvalid"
     | "editableConfigurationModelInvokeOperationMissing"
     | "editableConfigurationModelInvokeOperationRequired"
@@ -200,10 +207,21 @@ function appendModelInvokeValidationErrors(
 
   const operations =
     selectedEditableValues?.modelOperationsByWorkerName[draft.workerName] ?? [];
-  if (!resolveModelOperationByName(operations, trimmedOperation)) {
+  const operation = resolveModelOperationByName(operations, trimmedOperation);
+  if (!operation) {
     validationErrors.operation =
       messages.editableConfigurationModelInvokeOperationMissing;
+    return;
   }
+
+  Object.assign(
+    validationErrors,
+    validateEditableModelInvokeBindings(draft.operationBindings, operation, {
+      bindingDuplicate: messages.editableConfigurationModelInvokeBindingDuplicate,
+      bindingRequired: messages.editableConfigurationModelInvokeBindingRequired,
+      bindingSummary: messages.editableConfigurationModelInvokeBindingsSummary,
+    }),
+  );
 }
 
 export function resolveWorkerOptionsState(

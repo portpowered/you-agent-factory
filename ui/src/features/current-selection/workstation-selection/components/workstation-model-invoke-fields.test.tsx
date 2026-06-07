@@ -36,6 +36,8 @@ describe("EditableConfigurationModelInvokeFields", () => {
     expect(screen.getByLabelText("Operation")).toBeInTheDocument();
     expect(screen.getByText("Operation bindings")).toBeInTheDocument();
     expect(screen.getByText("text (required)")).toBeInTheDocument();
+    expect(screen.getByLabelText("Config content")).toBeInTheDocument();
+    expect(screen.getByLabelText("Default content")).toBeInTheDocument();
     expect(screen.queryByLabelText("Prompt")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Kind")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Runner")).not.toBeInTheDocument();

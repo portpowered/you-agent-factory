@@ -487,6 +487,168 @@ describe("useSaveEditableWorkstationConfiguration", () => {
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
   });
 
+  it("saves model invoke workstation bindings through the scoped running-factory save payload", async () => {
+    const saveAsync = vi.fn().mockResolvedValue({
+      name: "tts-factory",
+      version: {
+        logical: "8",
+        physical: "2026-05-23T15:52:00.001Z",
+      },
+      workers: [
+        {
+          name: "tts-worker",
+          type: "MODEL_WORKER",
+          operations: [
+            {
+              name: "TTS",
+              inputs: [
+                { name: "text", contentTypes: ["TEXT"], required: true },
+              ],
+              outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+            },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          name: "speak-story",
+          type: "MODEL_INVOKE",
+          worker: "tts-worker",
+          operation: "TTS",
+          operationBindings: [
+            {
+              slot: "text",
+              selector: { label: "utterance", type: "TEXT" },
+              config: [{ text: "static narration", type: "text" }],
+            },
+          ],
+          inputs: [{ state: "init", workType: "story" }],
+          outputs: [{ state: "complete", workType: "story" }],
+        },
+      ],
+    });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue({
+      isPending: false,
+      saveAsync,
+    } as never);
+    const markChangesSaved = vi.fn();
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableWorkstationConfiguration({
+          editableConfigurationState: buildReadyEditableConfigurationState({
+            markChangesSaved,
+            pendingFactoryDefinition: {
+              name: "tts-factory",
+              workers: [
+                {
+                  name: "tts-worker",
+                  type: "MODEL_WORKER",
+                  operations: [
+                    {
+                      name: "TTS",
+                      inputs: [
+                        { name: "text", contentTypes: ["TEXT"], required: true },
+                      ],
+                      outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+                    },
+                  ],
+                },
+              ],
+              workstations: [
+                {
+                  name: "speak-story",
+                  type: "MODEL_INVOKE",
+                  worker: "tts-worker",
+                  operation: "TTS",
+                  operationBindings: [
+                    {
+                      slot: "text",
+                      selector: { label: "utterance", type: "TEXT" },
+                      config: [{ text: "static narration", type: "text" }],
+                    },
+                  ],
+                  inputs: [{ state: "init", workType: "story" }],
+                  outputs: [{ state: "complete", workType: "story" }],
+                },
+              ],
+            },
+            prompt: "",
+            workstationType: "MODEL_INVOKE",
+            draft: {
+              operation: "TTS",
+              operationBindings: [
+                {
+                  slot: "text",
+                  configText: "static narration",
+                  defaultContentText: "",
+                  selector: {
+                    label: "utterance",
+                    role: "",
+                    slot: "",
+                    type: "TEXT",
+                  },
+                },
+              ],
+              workerName: "tts-worker",
+            },
+          }),
+          scopeKey: "review:transition:speak-story",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(saveAsync).toHaveBeenCalledWith({
+      baseVersion: {
+        logical: "7",
+        physical: "2026-05-23T15:52:00Z",
+      },
+      factory: {
+        name: "tts-factory",
+        workers: [
+          {
+            name: "tts-worker",
+            type: "MODEL_WORKER",
+            operations: [
+              {
+                name: "TTS",
+                inputs: [
+                  { name: "text", contentTypes: ["TEXT"], required: true },
+                ],
+                outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+              },
+            ],
+          },
+        ],
+        workstations: [
+          {
+            name: "speak-story",
+            type: "MODEL_INVOKE",
+            worker: "tts-worker",
+            operation: "TTS",
+            operationBindings: [
+              {
+                slot: "text",
+                selector: { label: "utterance", type: "TEXT" },
+                config: [{ text: "static narration", type: "text" }],
+              },
+            ],
+            inputs: [{ state: "init", workType: "story" }],
+            outputs: [{ state: "complete", workType: "story" }],
+          },
+        ],
+      },
+    });
+    expect(markChangesSaved).toHaveBeenCalledTimes(1);
+  });
+
   it("maps targeted save validation failures onto workstation field errors", async () => {
     const saveAsync = vi.fn().mockRejectedValue(
       new CurrentFactoryDefinitionError(
@@ -564,6 +726,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     schedule: string;
     triggerAtStart?: boolean;
   };
+  draft?: Partial<Extract<EditableWorkstationConfigurationState, { status: "ready" }>["draft"]>;
   hasValidationErrors?: boolean;
   markChangesSaved?: () => void;
   pendingFactoryDefinition?: EditableWorkstationConfigurationState extends {
@@ -585,6 +748,7 @@ function buildReadyEditableConfigurationState(overrides?: {
     EditableWorkstationConfigurationState,
     { status: "ready" }
   >["validationErrors"];
+  workstationType?: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE";
 }): EditableWorkstationConfigurationState {
   const behavior = overrides?.behavior ?? "STANDARD";
   const cron =
@@ -604,9 +768,12 @@ function buildReadyEditableConfigurationState(overrides?: {
       guards: [],
       inputs: [],
       name: "Review",
+      operation: overrides?.draft?.operation ?? "",
+      operationBindings: overrides?.draft?.operationBindings ?? [],
       prompt: overrides?.prompt ?? "Review the story.",
       runnerName: null,
-      workerName: "reviewer",
+      workerName: overrides?.draft?.workerName ?? "reviewer",
+      ...overrides?.draft,
     },
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
     initialValues: {
@@ -634,9 +801,13 @@ function buildReadyEditableConfigurationState(overrides?: {
       },
       workstationName: "Review",
       workstationOptions: ["Review"],
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
       guards: [],
       inputs: [],
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {},
+      operation: overrides?.draft?.operation ?? "",
+      operationBindings: overrides?.draft?.operationBindings ?? [],
     },
     isDirty: true,
     markChangesSaved: overrides?.markChangesSaved ?? vi.fn(),

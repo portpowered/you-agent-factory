@@ -67,6 +67,12 @@ const messages = {
     "The selected operation is not declared on the chosen model worker.",
   editableConfigurationModelInvokeOperationRequired:
     "Select an operation before saving this workstation.",
+  editableConfigurationModelInvokeBindingDuplicate: (slotName: string) =>
+    `Operation binding for slot "${slotName}" is declared more than once.`,
+  editableConfigurationModelInvokeBindingRequired: (slotName: string) =>
+    `Required slot "${slotName}" needs a selector, config content, or default content.`,
+  editableConfigurationModelInvokeBindingsSummary:
+    "Resolve the highlighted operation binding fields before saving this workstation.",
   editableConfigurationModelInvokeWorkerOptionsEmpty:
     "No model workers with compatible operations are available in the current factory definition.",
 } as const;
@@ -263,6 +269,82 @@ describe("validateEditableWorkstationDraft model invoke", () => {
       messages.editableConfigurationModelInvokeOperationRequired,
     );
     expect(errors.prompt).toBeUndefined();
+  });
+
+  it("blocks save when required model-invoke bindings are empty", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseDraft,
+        workerName: "tts-worker",
+        operation: "TTS",
+        operationBindings: [
+          {
+            slot: "text",
+            configText: "",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+        ],
+        prompt: "",
+      },
+      modelInvokeValues,
+      { status: "idle" },
+      messages,
+    );
+
+    expect(errors["operationBindings[text]"]).toBe(
+      messages.editableConfigurationModelInvokeBindingRequired("text"),
+    );
+    expect(errors.operationBindings).toBe(
+      messages.editableConfigurationModelInvokeBindingsSummary,
+    );
+    expect(hasEditableWorkstationValidationErrors(errors)).toBe(true);
+  });
+
+  it("allows optional model-invoke bindings to remain omitted", () => {
+    const valuesWithOptionalSlot = {
+      ...modelInvokeValues,
+      modelOperationsByWorkerName: {
+        "tts-worker": [
+          {
+            name: "TTS",
+            inputs: [
+              { name: "text", contentTypes: ["TEXT"], required: true },
+              { name: "voice", contentTypes: ["JSON"] },
+            ],
+            outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+          },
+        ],
+      },
+    };
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseDraft,
+        workerName: "tts-worker",
+        operation: "TTS",
+        operationBindings: [
+          {
+            slot: "text",
+            configText: "",
+            defaultContentText: "",
+            selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+          },
+          {
+            slot: "voice",
+            configText: "",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+        ],
+        prompt: "",
+      },
+      valuesWithOptionalSlot,
+      { status: "idle" },
+      messages,
+    );
+
+    expect(errors.operationBindings).toBeUndefined();
+    expect(hasEditableWorkstationValidationErrors(errors)).toBe(false);
   });
 });
 

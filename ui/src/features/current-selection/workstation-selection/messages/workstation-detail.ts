@@ -122,6 +122,12 @@ const workstationDetailMessagesByLocale = {
       "The selected worker is no longer available. Choose another worker before saving this workstation.",
     editableConfigurationWorkerUnavailablePrefix:
       "Worker selection unavailable.",
+    editableConfigurationModelInvokeBindingDuplicate: (slotName) =>
+      `Operation binding for slot "${slotName}" is declared more than once.`,
+    editableConfigurationModelInvokeBindingRequired: (slotName) =>
+      `Required slot "${slotName}" needs a selector, config content, or default content.`,
+    editableConfigurationModelInvokeBindingsSummary:
+      "Resolve the highlighted operation binding fields before saving this workstation.",
     editableConfigurationModelInvokeOperationInvalid:
       "Operation names must be uppercase letters, digits, or underscores.",
     editableConfigurationModelInvokeOperationMissing:
@@ -134,10 +140,12 @@ const workstationDetailMessagesByLocale = {
       "No model workers with compatible operations are available in the current factory definition.",
     editableConfigurationModelInvokeWorkerRequired:
       "Select a model worker before choosing an operation.",
+    modelInvokeBindingConfigContentFieldLabel: "Config content",
+    modelInvokeBindingDefaultContentFieldLabel: "Default content",
     modelInvokeBindingsEmpty:
       "Select a worker operation to edit input slot bindings.",
     modelInvokeBindingsFieldHint:
-      "Bindings resolve runtime input using selector fields. Leave optional slots empty to omit them.",
+      "Bindings resolve runtime input using selector fields, static config content, or default content. Leave optional slots empty to omit them.",
     modelInvokeBindingsFieldLabel: "Operation bindings",
     modelInvokeBindingOptionalSlotLabel: "optional",
     modelInvokeBindingRequiredSlotLabel: "required",
@@ -399,6 +407,12 @@ const workstationDetailMessagesByLocale = {
       "選択したワーカーは利用できなくなりました。保存前に別のワーカーを選択してください。",
     editableConfigurationWorkerUnavailablePrefix:
       "ワーカー選択は利用できません。",
+    editableConfigurationModelInvokeBindingDuplicate: (slotName) =>
+      `スロット "${slotName}" の操作バインドが重複しています。`,
+    editableConfigurationModelInvokeBindingRequired: (slotName) =>
+      `必須スロット "${slotName}" にはセレクター、設定コンテンツ、またはデフォルトコンテンツが必要です。`,
+    editableConfigurationModelInvokeBindingsSummary:
+      "保存する前に強調表示された操作バインド項目を解決してください。",
     editableConfigurationModelInvokeOperationInvalid:
       "操作名は大文字の英字、数字、アンダースコアのみ使用できます。",
     editableConfigurationModelInvokeOperationMissing:
@@ -411,10 +425,12 @@ const workstationDetailMessagesByLocale = {
       "現在のファクトリー定義で互換性のある操作を持つモデルワーカーがありません。",
     editableConfigurationModelInvokeWorkerRequired:
       "操作を選択する前にモデルワーカーを選択してください。",
+    modelInvokeBindingConfigContentFieldLabel: "設定コンテンツ",
+    modelInvokeBindingDefaultContentFieldLabel: "デフォルトコンテンツ",
     modelInvokeBindingsEmpty:
       "入力スロットのバインドを編集するにはワーカー操作を選択してください。",
     modelInvokeBindingsFieldHint:
-      "バインドはセレクター項目を使ってランタイム入力を解決します。任意スロットは空のままにすると省略されます。",
+      "バインドはセレクター項目、静的設定コンテンツ、またはデフォルトコンテンツでランタイム入力を解決します。任意スロットは空のままにすると省略されます。",
     modelInvokeBindingsFieldLabel: "操作バインド",
     modelInvokeBindingOptionalSlotLabel: "任意",
     modelInvokeBindingRequiredSlotLabel: "必須",
@@ -674,6 +690,12 @@ const workstationDetailMessagesByLocale = {
       "선택한 워커를 더 이상 사용할 수 없습니다. 저장하기 전에 다른 워커를 선택하세요.",
     editableConfigurationWorkerUnavailablePrefix:
       "워커 선택을 사용할 수 없습니다.",
+    editableConfigurationModelInvokeBindingDuplicate: (slotName) =>
+      `슬롯 "${slotName}"에 대한 작업 바인딩이 중복되었습니다.`,
+    editableConfigurationModelInvokeBindingRequired: (slotName) =>
+      `필수 슬롯 "${slotName}"에는 선택자, 구성 콘텐츠 또는 기본 콘텐츠가 필요합니다.`,
+    editableConfigurationModelInvokeBindingsSummary:
+      "저장하기 전에 강조된 작업 바인딩 항목을 해결하세요.",
     editableConfigurationModelInvokeOperationInvalid:
       "작업 이름은 대문자, 숫자, 밑줄만 사용할 수 있습니다.",
     editableConfigurationModelInvokeOperationMissing:
@@ -686,10 +708,12 @@ const workstationDetailMessagesByLocale = {
       "현재 팩토리 정의에 호환되는 작업을 가진 모델 워커가 없습니다.",
     editableConfigurationModelInvokeWorkerRequired:
       "작업을 선택하기 전에 모델 워커를 선택하세요.",
+    modelInvokeBindingConfigContentFieldLabel: "구성 콘텐츠",
+    modelInvokeBindingDefaultContentFieldLabel: "기본 콘텐츠",
     modelInvokeBindingsEmpty:
       "입력 슬롯 바인딩을 편집하려면 워커 작업을 선택하세요.",
     modelInvokeBindingsFieldHint:
-      "바인딩은 선택자 필드를 사용해 런타임 입력을 해석합니다. 선택 슬롯은 비워 두면 생략됩니다.",
+      "바인딩은 선택자 필드, 정적 구성 콘텐츠 또는 기본 콘텐츠로 런타임 입력을 해석합니다. 선택 슬롯은 비워 두면 생략됩니다.",
     modelInvokeBindingsFieldLabel: "작업 바인딩",
     modelInvokeBindingOptionalSlotLabel: "선택",
     modelInvokeBindingRequiredSlotLabel: "필수",
@@ -932,6 +956,12 @@ const workstationDetailMessagesByLocale = {
     editableConfigurationWorkerUnavailable:
       "所选工作器已不可用。保存前请选择其他工作器。",
     editableConfigurationWorkerUnavailablePrefix: "工作器选择不可用。",
+    editableConfigurationModelInvokeBindingDuplicate: (slotName) =>
+      `槽位 "${slotName}" 的操作绑定重复声明。`,
+    editableConfigurationModelInvokeBindingRequired: (slotName) =>
+      `必填槽位 "${slotName}" 需要选择器、配置内容或默认内容。`,
+    editableConfigurationModelInvokeBindingsSummary:
+      "保存前请解决高亮的操作绑定字段。",
     editableConfigurationModelInvokeOperationInvalid:
       "操作名称只能使用大写字母、数字或下划线。",
     editableConfigurationModelInvokeOperationMissing:
@@ -944,9 +974,11 @@ const workstationDetailMessagesByLocale = {
       "当前工厂定义中没有声明兼容操作的模型工作器。",
     editableConfigurationModelInvokeWorkerRequired:
       "选择操作前请先选择模型工作器。",
+    modelInvokeBindingConfigContentFieldLabel: "配置内容",
+    modelInvokeBindingDefaultContentFieldLabel: "默认内容",
     modelInvokeBindingsEmpty: "请选择工作器操作以编辑输入槽位绑定。",
     modelInvokeBindingsFieldHint:
-      "绑定通过选择器字段解析运行时输入。可选槽位留空即可省略。",
+      "绑定通过选择器字段、静态配置内容或默认内容解析运行时输入。可选槽位留空即可省略。",
     modelInvokeBindingsFieldLabel: "操作绑定",
     modelInvokeBindingOptionalSlotLabel: "可选",
     modelInvokeBindingRequiredSlotLabel: "必填",

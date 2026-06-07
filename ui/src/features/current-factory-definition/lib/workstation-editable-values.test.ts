@@ -128,11 +128,120 @@ describe("resolveEditableWorkstationValues", () => {
       operationBindings: [
         {
           slot: "text",
+          configText: "",
+          defaultContentText: "",
           selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
         },
       ],
       workstationType: "MODEL_INVOKE",
     });
+  });
+
+  it("applies model invoke workstation edits without mutating unrelated factory data", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "tts-factory",
+      workers: [
+        {
+          name: "tts-worker",
+          type: "MODEL_WORKER",
+          operations: [
+            {
+              name: "TTS",
+              inputs: [
+                { name: "text", contentTypes: ["TEXT"], required: true },
+                { name: "voice", contentTypes: ["JSON"] },
+              ],
+              outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+            },
+          ],
+        },
+        {
+          name: "reviewer",
+          type: "MODEL_WORKER",
+          model: "gpt-5.4",
+        },
+      ],
+      workstations: [
+        {
+          name: "speak-story",
+          type: "MODEL_INVOKE",
+          worker: "tts-worker",
+          operation: "TTS",
+          operationBindings: [
+            {
+              slot: "text",
+              selector: { label: "utterance", type: "TEXT" },
+            },
+          ],
+          inputs: [{ state: "init", workType: "story" }],
+          outputs: [{ state: "complete", workType: "story" }],
+        },
+        {
+          body: "Review work",
+          id: "review",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "Review",
+          outputs: [{ state: "approved", workType: "story" }],
+          worker: "reviewer",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkstationDraft(
+      factory,
+      {
+        ...selectedNode,
+        transition_id: "speak-story",
+        workstation_name: "speak-story",
+      },
+      {
+        behavior: "STANDARD",
+        cron: null,
+        guards: [],
+        inputs: [{ guards: [], state: "init", workType: "story" }],
+        name: "speak-story",
+        operation: "TTS",
+        operationBindings: [
+          {
+            slot: "text",
+            configText: "static narration",
+            defaultContentText: "fallback narration",
+            selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+          },
+          {
+            slot: "voice",
+            configText: "",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+        ],
+        prompt: "",
+        runnerName: null,
+        workerName: "tts-worker",
+      },
+    );
+
+    expect(updatedFactory?.workstations?.[0]).toEqual({
+      name: "speak-story",
+      type: "MODEL_INVOKE",
+      worker: "tts-worker",
+      operation: "TTS",
+      operationBindings: [
+        {
+          slot: "text",
+          selector: { label: "utterance", type: "TEXT" },
+          config: [{ text: "static narration", type: "text" }],
+          defaultContent: [{ text: "fallback narration", type: "text" }],
+        },
+      ],
+      inputs: [{ state: "init", workType: "story" }],
+      outputs: [{ state: "complete", workType: "story" }],
+    });
+    expect(updatedFactory?.workstations?.[1]).toEqual(
+      factory.workstations?.[1],
+    );
+    expect(updatedFactory?.workers).toEqual(factory.workers);
   });
 
   it("defaults omitted workstation type to MODEL_WORKSTATION", () => {

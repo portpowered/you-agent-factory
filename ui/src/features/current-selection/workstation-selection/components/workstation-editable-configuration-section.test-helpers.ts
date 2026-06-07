@@ -38,6 +38,8 @@ export function buildEditableConfigurationSectionReadyState(
       operation?: string;
       operationBindings?: Array<{
         slot: string;
+        configText?: string;
+        defaultContentText?: string;
         selector: {
           label: string;
           role: string;
@@ -105,6 +107,8 @@ export function buildEditableConfigurationSectionReadyState(
       operationBindings: overrides?.draft?.operationBindings ?? [
         {
           slot: "text",
+          configText: "",
+          defaultContentText: "",
           selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
         },
       ],
@@ -137,6 +141,8 @@ export function buildEditableConfigurationSectionReadyState(
       operationBindings: [
         {
           slot: "text",
+          configText: "",
+          defaultContentText: "",
           selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
         },
       ],

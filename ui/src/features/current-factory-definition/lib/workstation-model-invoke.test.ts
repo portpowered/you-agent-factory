@@ -5,10 +5,12 @@ import {
   buildCanonicalModelInvokeBindingsFromDraft,
   editableModelInvokeBindingsEqual,
   isModelInvokeWorkstationType,
+  modelInvokeBindingDraftHasContent,
   resolveCompatibleModelWorkerNames,
   resolveEditableModelInvokeBindings,
   resolveModelWorkerOperations,
   syncEditableModelInvokeBindingsForOperation,
+  validateEditableModelInvokeBindings,
   workstationUsesPromptOrientedEditing,
 } from "./workstation-model-invoke";
 
@@ -89,6 +91,8 @@ describe("workstation model invoke helpers", () => {
     expect(bindings).toEqual([
       {
         slot: "text",
+        configText: "",
+        defaultContentText: "",
         selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
       },
     ]);
@@ -99,6 +103,104 @@ describe("workstation model invoke helpers", () => {
       },
     ]);
     expect(editableModelInvokeBindingsEqual(bindings, bindings)).toBe(true);
+  });
+
+  it("round-trips config and default content bindings", () => {
+    const bindings = resolveEditableModelInvokeBindings([
+      {
+        slot: "text",
+        config: [{ text: "static copy", type: "text" }],
+        defaultContent: [{ text: "fallback copy", type: "text" }],
+      },
+    ]);
+
+    expect(bindings[0]).toMatchObject({
+      configText: "static copy",
+      defaultContentText: "fallback copy",
+    });
+    expect(buildCanonicalModelInvokeBindingsFromDraft(bindings)).toEqual([
+      {
+        slot: "text",
+        config: [{ text: "static copy", type: "text" }],
+        defaultContent: [{ text: "fallback copy", type: "text" }],
+      },
+    ]);
+  });
+
+  it("omits empty optional bindings from canonical projection", () => {
+    const operation = resolveModelWorkerOperations(
+      modelInvokeFactory,
+      "tts-worker",
+    )[0];
+    const bindings = syncEditableModelInvokeBindingsForOperation(operation, [
+      {
+        slot: "text",
+        configText: "",
+        defaultContentText: "",
+        selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+      },
+    ]);
+
+    expect(buildCanonicalModelInvokeBindingsFromDraft(bindings)).toEqual([
+      {
+        slot: "text",
+        selector: { label: "utterance", type: "TEXT" },
+      },
+    ]);
+    expect(modelInvokeBindingDraftHasContent(bindings[1] as NonNullable<typeof bindings[1]>)).toBe(
+      false,
+    );
+  });
+
+  it("validates required slots and duplicate bindings", () => {
+    const operation = resolveModelWorkerOperations(
+      modelInvokeFactory,
+      "tts-worker",
+    )[0];
+    const messages = {
+      bindingDuplicate: (slotName: string) => `duplicate ${slotName}`,
+      bindingRequired: (slotName: string) => `required ${slotName}`,
+      bindingSummary: "fix bindings",
+    };
+
+    expect(
+      validateEditableModelInvokeBindings(
+        [
+          {
+            slot: "text",
+            configText: "",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+        ],
+        operation,
+        messages,
+      ),
+    ).toMatchObject({
+      "operationBindings[text]": "required text",
+      operationBindings: "fix bindings",
+    });
+
+    expect(
+      validateEditableModelInvokeBindings(
+        [
+          {
+            slot: "text",
+            configText: "hello",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+          {
+            slot: "text",
+            configText: "again",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+        ],
+        operation,
+        messages,
+      )["operationBindings[text]"],
+    ).toBe("duplicate text");
   });
 
   it("syncs binding rows to the selected operation input slots", () => {
@@ -120,6 +222,10 @@ describe("workstation model invoke helpers", () => {
       role: "",
       slot: "",
       type: "",
+    });
+    expect(synced[1]).toMatchObject({
+      configText: "",
+      defaultContentText: "",
     });
   });
 });

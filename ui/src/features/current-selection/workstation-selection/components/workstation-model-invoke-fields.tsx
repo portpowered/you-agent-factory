@@ -61,7 +61,7 @@ export function EditableConfigurationModelInvokeFields({
       <EditableConfigurationModelInvokeBindingsField
         messages={messages}
         state={state}
-        validationError={validationErrors.operationBindings}
+        validationErrors={validationErrors}
       />
     </>
   );
@@ -153,11 +153,11 @@ function EditableConfigurationModelInvokeOperationInput({
 function EditableConfigurationModelInvokeBindingsField({
   messages,
   state,
-  validationError,
+  validationErrors,
 }: {
   messages: ReturnType<typeof getWorkstationDetailMessages>;
   state: ReadyEditableConfigurationState;
-  validationError?: string;
+  validationErrors: ReadyEditableConfigurationState["validationErrors"];
 }) {
   const inputSlots = resolveModelInvokeBindingInputSlots(
     state.draft,
@@ -180,110 +180,21 @@ function EditableConfigurationModelInvokeBindingsField({
 
   return (
     <EditableConfigurationField
-      errorMessage={validationError}
+      errorMessage={validationErrors.operationBindings}
       fieldId="editable-workstation-operation-bindings"
       input={
         <div className="grid gap-3">
-          {inputSlots.map((inputSlot) => {
-            const binding =
-              state.draft.operationBindings.find(
-                (entry) => entry.slot === inputSlot.name,
-              ) ?? null;
-            const selector = binding?.selector ?? {
-              label: "",
-              role: "",
-              slot: "",
-              type: "",
-            };
-
-            return (
-              <div
-                className="grid gap-2 rounded-xl border border-outline-variant p-3"
-                key={inputSlot.name}
-              >
-                <DashboardLabel as="p">
-                  {messages.modelInvokeBindingSlotHeading(
-                    inputSlot.name,
-                    inputSlot.required
-                      ? messages.modelInvokeBindingRequiredSlotLabel
-                      : messages.modelInvokeBindingOptionalSlotLabel,
-                  )}
-                </DashboardLabel>
-                <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
-                  <BindingSelectorField
-                    fieldId={`editable-workstation-binding-${inputSlot.name}-label`}
-                    label={messages.modelInvokeBindingSelectorLabelFieldLabel}
-                    onChange={(value) =>
-                      updateBindingSelector(
-                        state,
-                        inputSlot.name,
-                        "label",
-                        value,
-                      )
-                    }
-                    value={selector.label}
-                  />
-                  <BindingSelectorField
-                    fieldId={`editable-workstation-binding-${inputSlot.name}-slot`}
-                    label={messages.modelInvokeBindingSelectorSlotFieldLabel}
-                    onChange={(value) =>
-                      updateBindingSelector(
-                        state,
-                        inputSlot.name,
-                        "slot",
-                        value,
-                      )
-                    }
-                    value={selector.slot}
-                  />
-                  <BindingSelectorField
-                    fieldId={`editable-workstation-binding-${inputSlot.name}-role`}
-                    label={messages.modelInvokeBindingSelectorRoleFieldLabel}
-                    onChange={(value) =>
-                      updateBindingSelector(
-                        state,
-                        inputSlot.name,
-                        "role",
-                        value,
-                      )
-                    }
-                    value={selector.role}
-                  />
-                  <div className="grid gap-1">
-                    <DashboardLabel
-                      as="label"
-                      htmlFor={`editable-workstation-binding-${inputSlot.name}-type`}
-                    >
-                      {messages.modelInvokeBindingSelectorTypeFieldLabel}
-                    </DashboardLabel>
-                    <Select
-                      id={`editable-workstation-binding-${inputSlot.name}-type`}
-                      onChange={(event) =>
-                        updateBindingSelector(
-                          state,
-                          inputSlot.name,
-                          "type",
-                          event.target.value,
-                        )
-                      }
-                      value={selector.type}
-                    >
-                      <option value="">
-                        {messages.modelInvokeBindingSelectorTypeNoneOption}
-                      </option>
-                      {FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES.map(
-                        (contentType) => (
-                          <option key={contentType} value={contentType}>
-                            {contentType}
-                          </option>
-                        ),
-                      )}
-                    </Select>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {inputSlots.map((inputSlot) => (
+            <EditableConfigurationModelInvokeBindingSlotCard
+              inputSlot={inputSlot}
+              key={inputSlot.name}
+              messages={messages}
+              state={state}
+              validationError={
+                validationErrors[`operationBindings[${inputSlot.name}]`]
+              }
+            />
+          ))}
         </div>
       }
       label={messages.modelInvokeBindingsFieldLabel}
@@ -293,6 +204,124 @@ function EditableConfigurationModelInvokeBindingsField({
         </FormDescription>
       }
     />
+  );
+}
+
+function EditableConfigurationModelInvokeBindingSlotCard({
+  inputSlot,
+  messages,
+  state,
+  validationError,
+}: {
+  inputSlot: {
+    name: string;
+    required?: boolean;
+  };
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: ReadyEditableConfigurationState;
+  validationError?: string;
+}) {
+  const binding =
+    state.draft.operationBindings.find(
+      (entry) => entry.slot === inputSlot.name,
+    ) ?? null;
+  const selector = binding?.selector ?? {
+    label: "",
+    role: "",
+    slot: "",
+    type: "",
+  };
+
+  return (
+    <div className="grid gap-2 rounded-xl border border-outline-variant p-3">
+      <DashboardLabel as="p">
+        {messages.modelInvokeBindingSlotHeading(
+          inputSlot.name,
+          inputSlot.required
+            ? messages.modelInvokeBindingRequiredSlotLabel
+            : messages.modelInvokeBindingOptionalSlotLabel,
+        )}
+      </DashboardLabel>
+      <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(8.75rem,1fr))]">
+        <BindingSelectorField
+          fieldId={`editable-workstation-binding-${inputSlot.name}-label`}
+          label={messages.modelInvokeBindingSelectorLabelFieldLabel}
+          onChange={(value) =>
+            updateBindingSelector(state, inputSlot.name, "label", value)
+          }
+          value={selector.label}
+        />
+        <BindingSelectorField
+          fieldId={`editable-workstation-binding-${inputSlot.name}-slot`}
+          label={messages.modelInvokeBindingSelectorSlotFieldLabel}
+          onChange={(value) =>
+            updateBindingSelector(state, inputSlot.name, "slot", value)
+          }
+          value={selector.slot}
+        />
+        <BindingSelectorField
+          fieldId={`editable-workstation-binding-${inputSlot.name}-role`}
+          label={messages.modelInvokeBindingSelectorRoleFieldLabel}
+          onChange={(value) =>
+            updateBindingSelector(state, inputSlot.name, "role", value)
+          }
+          value={selector.role}
+        />
+        <div className="grid gap-1">
+          <DashboardLabel
+            as="label"
+            htmlFor={`editable-workstation-binding-${inputSlot.name}-type`}
+          >
+            {messages.modelInvokeBindingSelectorTypeFieldLabel}
+          </DashboardLabel>
+          <Select
+            id={`editable-workstation-binding-${inputSlot.name}-type`}
+            onChange={(event) =>
+              updateBindingSelector(
+                state,
+                inputSlot.name,
+                "type",
+                event.target.value,
+              )
+            }
+            value={selector.type}
+          >
+            <option value="">
+              {messages.modelInvokeBindingSelectorTypeNoneOption}
+            </option>
+            {FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES.map(
+              (contentType) => (
+                <option key={contentType} value={contentType}>
+                  {contentType}
+                </option>
+              ),
+            )}
+          </Select>
+        </div>
+        <BindingSelectorField
+          fieldId={`editable-workstation-binding-${inputSlot.name}-config`}
+          label={messages.modelInvokeBindingConfigContentFieldLabel}
+          onChange={(value) =>
+            updateBindingContent(state, inputSlot.name, "configText", value)
+          }
+          value={binding?.configText ?? ""}
+        />
+        <BindingSelectorField
+          fieldId={`editable-workstation-binding-${inputSlot.name}-default`}
+          label={messages.modelInvokeBindingDefaultContentFieldLabel}
+          onChange={(value) =>
+            updateBindingContent(
+              state,
+              inputSlot.name,
+              "defaultContentText",
+              value,
+            )
+          }
+          value={binding?.defaultContentText ?? ""}
+        />
+      </div>
+      {validationError ? <FormError>{validationError}</FormError> : null}
+    </div>
   );
 }
 
@@ -310,6 +339,8 @@ function updateBindingSelector(
           ...existingBindings,
           {
             slot,
+            configText: "",
+            defaultContentText: "",
             selector: { label: "", role: "", slot: "", type: "" as const },
           },
         ];
@@ -326,6 +357,34 @@ function updateBindingSelector(
                 | "")
             : value,
       },
+    })),
+  );
+}
+
+function updateBindingContent(
+  state: ReadyEditableConfigurationState,
+  slot: string,
+  field: "configText" | "defaultContentText",
+  value: string,
+) {
+  const existingBindings = state.draft.operationBindings;
+  const bindings =
+    existingBindings.find((binding) => binding.slot === slot) != null
+      ? existingBindings
+      : [
+          ...existingBindings,
+          {
+            slot,
+            configText: "",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" as const },
+          },
+        ];
+
+  state.onOperationBindingsChange(
+    updateEditableModelInvokeBindingDraft(bindings, slot, (binding) => ({
+      ...binding,
+      [field]: value,
     })),
   );
 }
