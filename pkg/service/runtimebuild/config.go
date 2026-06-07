@@ -20,6 +20,8 @@ type Config struct {
 	RuntimeInstanceID                       string
 	RuntimeLogDir                           string
 	RuntimeLogConfig                        logging.RuntimeLogConfig
+	RuntimeMetricsDir                       string
+	RuntimeMetricsConfig                    logging.RuntimeMetricsConfig
 	RecordPath                              string
 	WorkflowID                              string
 	MockWorkersConfig                       *factoryconfig.MockWorkersConfig

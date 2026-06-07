@@ -154,6 +154,67 @@ is up but no work is in flight. Read `factoryState`, `runtimeStatus`, and
 `categories` together when deciding whether to submit more work or wait for
 completion.
 
+## Session invocation API
+
+Use the invocation API when you want one request to submit text input, wait for
+the factory's invocation policy to resolve, and return one canonical
+`primaryResult` without reconstructing work history yourself.
+
+```http
+POST /factory-sessions/{session_id}/invocations
+```
+
+The current API contract is text-first. Send top-level `sourceKind: "text"` and
+canonical `content` as ordered `WorkContent` parts. Reserved source kinds such
+as `fileRef` and `audioStream` are named in the contract for future
+compatibility, but current runtimes do not accept them yet.
+
+### Example request
+
+```bash
+curl -s \
+  -X POST \
+  -H "Content-Type: application/json" \
+  "http://localhost:7437/factory-sessions/~default/invocations" \
+  -d '{
+    "sourceKind": "text",
+    "content": [
+      { "type": "text", "text": "Summarize the failing test output." }
+    ]
+  }'
+```
+
+### Example success response
+
+```json
+{
+  "requestId": "req-123",
+  "traceId": "trace-123",
+  "status": "COMPLETED",
+  "primaryResult": [
+    { "type": "text", "text": "The root failure is a missing fixture path." }
+  ]
+}
+```
+
+`primaryResult` is present only when the invocation resolves successfully.
+Selection follows the session's active `Factory.invocationReturn` policy. When
+that field is omitted, the runtime uses the documented
+`SUBMITTED_WORK_TERMINAL` fallback from `you docs config`.
+
+### Non-success outcomes
+
+| Case | Result |
+|------|--------|
+| Conflicting or ambiguous input sources | HTTP `400` with stable code `INVOCATION_INPUT_SOURCE_CONFLICT` |
+| Empty selected text input | HTTP `400` with stable code `INVOCATION_INPUT_EMPTY` |
+| No primary result can be resolved | `status: FAILED`, code `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, no `primaryResult` |
+| Invocation times out or is canceled | `status: TIMED_OUT` or `status: CANCELED`, no success payload |
+
+The CLI `you run --factory` mode uses the same invocation contract for input
+resolution and primary-result selection; it just writes the successful
+`primaryResult` to stdout instead of returning an HTTP response.
+
 ## Dashboard
 
 When the service was started via `you` or `you run` without `--quiet`, open:

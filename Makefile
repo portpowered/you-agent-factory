@@ -13,6 +13,7 @@ FUNCTIONAL_DEFAULT_JOBS ?= 2
 FUNCTIONAL_LONG_TAGS ?= functionallong
 FUNCTIONAL_LONG_PACKAGES := ./tests/functional/...
 MODEL_LONG_TEST_TIMEOUT ?= 20m
+PR_INFERENCE_APPROVAL_REGRESSION ?= TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST := TestIntegrationSmoke_ScriptTimeoutCompanionRequeuesBeforeLaterCompletion
 SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT ?= 100
 SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT ?= 120s
@@ -67,7 +68,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -147,6 +148,14 @@ verify-pr:
 	$(call run_verification_step,verify-build-contracts,build contracts and static verification)
 	$(call run_verification_step,verify-tests,required CI-equivalent test lanes)
 
+verify-pr-inference:
+	@printf '%s\n' "Running PR-gated inference approval lane: $(PR_INFERENCE_APPROVAL_REGRESSION)"
+	@printf '%s\n' "Required: export INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1"
+	@printf '%s\n' "Runtime: omnivoice-llamacpp on PATH, or set INFINITE_YOU_OMNIVOICE_COMMAND to the executable"
+	@printf '%s\n' "Optional: INFINITE_YOU_OMNIVOICE_CACHE_DIR to reuse managed model cache (omit to use a temp cache)"
+	@printf '%s\n' "Broader specialty sweep remains on make long-tests; this lane is merge-blocking PR inference approval only"
+	$(call run_verification_step,pr-inference-approval,PR inference approval regression)
+
 verify-extended:
 	@printf '%s\n' "Running extended verification tier: required PR verification + opt-in long and specialty suites"
 	$(call run_verification_step,verify-pr,pull-request verification tier)
@@ -181,8 +190,11 @@ long-tests:
 long-tests-managed-runtime:
 	$(GO) test ./pkg/service -run 'Test(InvokeModelHTTP_UsesManagedLocalModelRuntimePath|InvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle|LoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath|OmniVoiceLocalRuntime_)' -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+pr-inference-approval:
+	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run '$(PR_INFERENCE_APPROVAL_REGRESSION)' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
+
 long-tests-functional-runtime:
-	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/runtime_api -run 'TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio' -count=1 -timeout $(MODEL_LONG_TEST_TIMEOUT)
+	$(MAKE) pr-inference-approval
 
 test-coverage-go:
 	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_TEST_TIMEOUT)

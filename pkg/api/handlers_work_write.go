@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -26,6 +27,57 @@ const (
 	submitWorkItemTypeMetadataKey = "submissionItemType"
 	submitWorkFileNameMetadataKey = "fileName"
 )
+
+func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	req, err := decodeInvocationRequestBody(r.Body)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+	if s.sessionRuntime == nil {
+		s.writeError(w, http.StatusInternalServerError, "session invocation API is unavailable", "INTERNAL_ERROR")
+		return
+	}
+
+	result, err := s.sessionRuntime.InvokeFactorySession(r.Context(), string(sessionID), req)
+	if err != nil {
+		switch typed := err.(type) {
+		case *invocations.InputError:
+			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
+		case *apisurface.RequestValidationError:
+			s.writeError(w, http.StatusBadRequest, typed.Message, "BAD_REQUEST")
+		default:
+			if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+				return
+			}
+			s.logger.Error("invoke factory session failed", zap.Error(err), zap.String("session_id", string(sessionID)))
+			s.writeError(w, http.StatusInternalServerError, "failed to invoke factory session", "INTERNAL_ERROR")
+		}
+		return
+	}
+
+	response := factoryapi.InvocationResponse{
+		RequestId: result.RequestID,
+		TraceId:   result.TraceID,
+		Status:    result.Status,
+	}
+	if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
+		response.PrimaryResult = content
+	}
+	if code := strings.TrimSpace(result.ErrorCode); code != "" {
+		value := factoryapi.InvocationResponseErrorCode(code)
+		response.ErrorCode = &value
+	}
+	if message := strings.TrimSpace(result.Message); message != "" {
+		response.Message = &message
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func decodeInvocationRequestBody(body io.Reader) (factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody, error) {
+	return decodeStrictJSON[factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody](body)
+}
 
 func submitWorkContent(req factoryapi.SubmitWorkRequest) ([]interfaces.WorkContentPart, error) {
 	if req.Items == nil {

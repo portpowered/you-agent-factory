@@ -1,0 +1,17 @@
+type: string
+description: >-
+  Invocation input source category. `text` is the only implemented API source
+  for the text-first invocation slice. `fileRef` and `audioStream` are reserved
+  future source categories and are not accepted by current runtimes.
+enum:
+  - text
+  - fileRef
+  - audioStream
+x-enum-varnames:
+  - InvocationInputSourceKindText
+  - InvocationInputSourceKindFileRef
+  - InvocationInputSourceKindAudioStream
+x-enum-descriptions:
+  - Text supplied in canonical WorkContent.
+  - Reserved future file-reference input source.
+  - Reserved future audio-stream input source.

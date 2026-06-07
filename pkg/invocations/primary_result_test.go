@@ -1,0 +1,213 @@
+package invocations
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+func TestResolvePrimaryResult_SubmittedWorkTerminalFallbackReturnsSubmittedTerminalContent(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
+	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal)
+	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
+
+	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+
+	assertPrimaryResultSelection(t, got, invocationReturnPolicySubmittedWorkTerminal, rootTerminal)
+}
+
+func TestResolvePrimaryResult_ExplicitPolicyReturnsConfiguredTerminalContentInInvocationScope(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
+	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
+	summaryTerminal := invocationWorkItem("work-summary", "summary", "complete", "summary", "summary:complete")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal, summaryTerminal)
+	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
+	state.TerminalWorkByID[summaryTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: summaryTerminal, Status: "TERMINAL"}
+
+	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID: "request-1",
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        invocationReturnPolicyExplicit,
+			WorkTypeName:  "summary",
+			TerminalState: "complete",
+			WorkName:      "summary",
+		},
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+
+	assertPrimaryResultSelection(t, got, invocationReturnPolicyExplicit, summaryTerminal)
+}
+
+func TestResolvePrimaryResult_FallbackDoesNotCrossTalkAcrossInvocationScopes(t *testing.T) {
+	state := invocationWorldStateFixture()
+	requestOneRoot := invocationWorkItem("work-root-1", "task", "draft", "root-1", "task:init")
+	requestOneTerminal := invocationWorkItem("work-root-1", "task", "complete", "root-1", "task:complete")
+	requestTwoRoot := invocationWorkItem("work-root-2", "task", "draft", "root-2", "task:init")
+	requestTwoTerminal := invocationWorkItem("work-root-2", "task", "complete", "root-2", "task:complete")
+	recordInvocationSubmittedWork(&state, 1, "request-1", requestOneRoot)
+	recordInvocationSubmittedWork(&state, 2, "request-2", requestTwoRoot)
+	recordInvocationDispatchOutput(&state, 3, "dispatch-root-1", []interfaces.FactoryWorkItem{requestOneRoot}, requestOneTerminal)
+	recordInvocationDispatchOutput(&state, 4, "dispatch-root-2", []interfaces.FactoryWorkItem{requestTwoRoot}, requestTwoTerminal)
+	state.TerminalWorkByID[requestOneTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: requestOneTerminal, Status: "TERMINAL"}
+	state.TerminalWorkByID[requestTwoTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: requestTwoTerminal, Status: "TERMINAL"}
+
+	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+
+	assertPrimaryResultSelection(t, got, invocationReturnPolicySubmittedWorkTerminal, requestOneTerminal)
+}
+
+func TestResolvePrimaryResult_FallbackPrefersSubmittedLogicalWorkOverFanoutSibling(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
+	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
+	fanoutTerminal := invocationWorkItem("work-fanout", "summary", "complete", "fanout", "summary:complete")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal, fanoutTerminal)
+	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
+	state.TerminalWorkByID[fanoutTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: fanoutTerminal, Status: "TERMINAL"}
+
+	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+
+	assertPrimaryResultSelection(t, got, invocationReturnPolicySubmittedWorkTerminal, rootTerminal)
+}
+
+func TestResolvePrimaryResult_UnresolvedWhenNoPrimaryOutputExists(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+
+	_, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+
+	var selectionErr *PrimaryResultError
+	if !errors.As(err, &selectionErr) {
+		t.Fatalf("error = %v, want PrimaryResultError", err)
+	}
+	if selectionErr.Code != PrimaryResultErrorCodeUnresolved {
+		t.Fatalf("code = %q, want %q", selectionErr.Code, PrimaryResultErrorCodeUnresolved)
+	}
+	if selectionErr.Policy != invocationReturnPolicySubmittedWorkTerminal {
+		t.Fatalf("policy = %q, want %q", selectionErr.Policy, invocationReturnPolicySubmittedWorkTerminal)
+	}
+}
+
+func invocationWorldStateFixture() interfaces.FactoryWorldState {
+	return interfaces.FactoryWorldState{
+		PayloadLineage:   interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
+		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
+	}
+}
+
+func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) interfaces.FactoryWorkItem {
+	return interfaces.FactoryWorkItem{
+		ID:          workID,
+		WorkTypeID:  workTypeName,
+		State:       stateName,
+		DisplayName: name,
+		TraceID:     workID + "-trace",
+		PlaceID:     placeID,
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: workID + "-content",
+		}},
+	}
+}
+
+func recordInvocationSubmittedWork(
+	state *interfaces.FactoryWorldState,
+	tick int,
+	requestID string,
+	items ...interfaces.FactoryWorkItem,
+) {
+	if state == nil {
+		return
+	}
+	request := interfaces.WorkRequestPayload{
+		RequestID: requestID,
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: append([]interfaces.FactoryWorkItem(nil), items...),
+	}
+	state.WorkRequestsByID[requestID] = request
+	for _, item := range items {
+		state.PayloadLineage.RecordWorkRequestSnapshot(tick, requestID, item)
+	}
+}
+
+func recordInvocationDispatchOutput(
+	state *interfaces.FactoryWorldState,
+	tick int,
+	dispatchID string,
+	consumed []interfaces.FactoryWorkItem,
+	outputs ...interfaces.FactoryWorkItem,
+) {
+	if state == nil {
+		return
+	}
+	for _, item := range consumed {
+		state.PayloadLineage.RecordConsumedInputSnapshot(dispatchID, item)
+	}
+	for i, item := range outputs {
+		state.PayloadLineage.RecordDispatchOutputSnapshot(tick, dispatchID, consumed, item, i)
+	}
+}
+
+func assertPrimaryResultSelection(
+	t *testing.T,
+	got PrimaryResultSelection,
+	wantPolicy string,
+	want interfaces.FactoryWorkItem,
+) {
+	t.Helper()
+
+	if got.Policy != wantPolicy {
+		t.Fatalf("policy = %q, want %q", got.Policy, wantPolicy)
+	}
+	if got.WorkID != want.ID {
+		t.Fatalf("work ID = %q, want %q", got.WorkID, want.ID)
+	}
+	if got.WorkTypeName != want.WorkTypeID {
+		t.Fatalf("work type name = %q, want %q", got.WorkTypeName, want.WorkTypeID)
+	}
+	if got.WorkName != want.DisplayName {
+		t.Fatalf("work name = %q, want %q", got.WorkName, want.DisplayName)
+	}
+	if got.TerminalState != want.State {
+		t.Fatalf("terminal state = %q, want %q", got.TerminalState, want.State)
+	}
+	if len(got.PrimaryResult) != len(want.Content) {
+		t.Fatalf("primary result = %#v, want %#v", got.PrimaryResult, want.Content)
+	}
+	if got.PrimaryResult[0].Text != want.Content[0].Text {
+		t.Fatalf("primary result text = %q, want %q", got.PrimaryResult[0].Text, want.Content[0].Text)
+	}
+}

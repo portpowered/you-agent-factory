@@ -1,0 +1,17 @@
+type: string
+description: Terminal status for a factory-session invocation.
+enum:
+  - COMPLETED
+  - FAILED
+  - CANCELED
+  - TIMED_OUT
+x-enum-varnames:
+  - InvocationTerminalStatusCompleted
+  - InvocationTerminalStatusFailed
+  - InvocationTerminalStatusCanceled
+  - InvocationTerminalStatusTimedOut
+x-enum-descriptions:
+  - Invocation completed and any primaryResult is authoritative.
+  - Invocation reached a runtime or primary-result resolution failure.
+  - Invocation was canceled before successful completion.
+  - Invocation exceeded its caller or server timeout budget.

@@ -7,6 +7,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -846,4 +847,50 @@ func (fs *FactoryService) probeFactorySessionTarget(
 		}
 	}
 	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true
+}
+
+func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
+	policy := fs.coordinatorPolicy()
+	if !serviceMode || policy.workFile == "" || policy.apiServerReady == nil || policy.port <= 0 || policy.apiServerStarter == nil {
+		return nil
+	}
+	apiServerExit := fs.apiServerExit
+	select {
+	case <-policy.apiServerReady:
+	case err := <-apiServerExit:
+		return startupReadinessError(err)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	timer := time.NewTimer(serviceModeStartupWorkReadabilityDelay)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return nil
+	case err := <-apiServerExit:
+		return startupReadinessError(err)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (fs *FactoryService) failServiceModeStartup(currentRuntime *liveRuntimeHandle, startupErr error) error {
+	fs.clearRunState()
+	fs.unregisterLiveSession(defaultFactorySessionID)
+	if currentRuntime == nil {
+		return startupErr
+	}
+	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+		return errors.Join(startupErr, stopErr)
+	}
+	return startupErr
+}
+
+func startupReadinessError(err error) error {
+	if err == nil {
+		return fmt.Errorf("wait for service-mode startup work readiness: API server stopped before signaling readiness")
+	}
+	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
 }

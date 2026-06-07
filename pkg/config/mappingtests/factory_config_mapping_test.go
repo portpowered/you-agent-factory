@@ -273,6 +273,41 @@ func TestFactoryConfigFromOpenAPI_CopiesOptionalCollections(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigFromOpenAPI_MapsInvocationReturn(t *testing.T) {
+	apiCfg := factoryapi.Factory{
+		Name: "invocation-return-openapi",
+		InvocationReturn: &factoryapi.InvocationReturn{
+			Policy:        factoryapi.InvocationReturnPolicyExplicit,
+			WorkTypeName:  stringPtr("story"),
+			TerminalState: stringPtr("complete"),
+			WorkName:      stringPtr("summary"),
+		},
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+			},
+		}},
+		Workers:      &[]factoryapi.Worker{{Name: "executor"}},
+		Workstations: &[]factoryapi.Workstation{{Name: "execute-story", Worker: "executor", Outputs: &[]factoryapi.WorkstationIO{{WorkType: "story", State: "complete"}}}},
+	}
+
+	cfg, err := FactoryConfigFromOpenAPI(apiCfg)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	if cfg.InvocationReturn == nil {
+		t.Fatal("InvocationReturn = nil, want mapped policy")
+	}
+	if cfg.InvocationReturn.Policy != string(factoryapi.InvocationReturnPolicyExplicit) ||
+		cfg.InvocationReturn.WorkTypeName != "story" ||
+		cfg.InvocationReturn.TerminalState != "complete" ||
+		cfg.InvocationReturn.WorkName != "summary" {
+		t.Fatalf("InvocationReturn = %#v, want mapped explicit policy", cfg.InvocationReturn)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

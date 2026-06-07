@@ -760,8 +760,8 @@ func ComposeFactoryCore(
 	coreBuilt := false
 	var runtimeBundle *factoryRuntimeBundle
 	defer func() {
-		if !coreBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
-			_ = runtimeBundle.logSink.Close()
+		if !coreBuilt && runtimeBundle != nil {
+			_ = closeRuntimeBundleSinks(runtimeBundle.logSink, runtimeBundle.metricsSink)
 		}
 	}()
 	if cfg.ReplayPath == "" {
