@@ -34,6 +34,9 @@ func (r *MockWorkerCommandRunner) Run(ctx context.Context, req workerprocess.Com
 	}
 	entry, matched := r.match(req)
 	if !matched {
+		if r.Config.UnmatchedDispatchPolicy.PassthroughUnmatched() {
+			return r.runNext(ctx, req)
+		}
 		return r.acceptResult(req), nil
 	}
 

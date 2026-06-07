@@ -1,20 +1,35 @@
-package config
+package topologytests
 
 import (
 	"testing"
 
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func topologyTestBaseConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "w1"}},
+	}
+}
+
 func TestCanonicalStructuralFindings_InvalidInputPlaceReference(t *testing.T) {
-	cfg := testBaseConfig()
+	cfg := topologyTestBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:   "ws",
 		Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
-	findings := CanonicalStructuralFindings(cfg)
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
 	assertCanonicalFindingCode(t, findings, factoryvalidation.CodeDanglingPlaceReference)
 	assertCanonicalFindingPath(t, findings, "factory.workstations[0].inputs[0]")
 	assertCanonicalTargetSubject(t, cfg, factoryvalidation.Subject{
@@ -25,14 +40,14 @@ func TestCanonicalStructuralFindings_InvalidInputPlaceReference(t *testing.T) {
 }
 
 func TestCanonicalStructuralFindings_InvalidOutputPlaceReference(t *testing.T) {
-	cfg := testBaseConfig()
+	cfg := topologyTestBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:    "ws",
 		Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 		Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
-	findings := CanonicalStructuralFindings(cfg)
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
 	assertCanonicalFindingCode(t, findings, factoryvalidation.CodeDanglingPlaceReference)
 	assertCanonicalFindingPath(t, findings, "factory.workstations[0].outputs[0]")
 	assertCanonicalTargetSubject(t, cfg, factoryvalidation.Subject{
@@ -43,14 +58,14 @@ func TestCanonicalStructuralFindings_InvalidOutputPlaceReference(t *testing.T) {
 }
 
 func TestCanonicalStructuralFindings_InvalidOnRejectionPlaceReference(t *testing.T) {
-	cfg := testBaseConfig()
+	cfg := topologyTestBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:        "ws",
 		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 		OnRejection: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
-	findings := CanonicalStructuralFindings(cfg)
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
 	assertCanonicalFindingCode(t, findings, factoryvalidation.CodeDanglingPlaceReference)
 	assertCanonicalFindingPath(t, findings, "factory.workstations[0].onRejection[0]")
 	assertCanonicalTargetSubject(t, cfg, factoryvalidation.Subject{
@@ -61,14 +76,14 @@ func TestCanonicalStructuralFindings_InvalidOnRejectionPlaceReference(t *testing
 }
 
 func TestCanonicalStructuralFindings_InvalidOnFailurePlaceReference(t *testing.T) {
-	cfg := testBaseConfig()
+	cfg := topologyTestBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:      "ws",
 		Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 		OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "bogus"}},
 	}}
 
-	findings := CanonicalStructuralFindings(cfg)
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
 	assertCanonicalFindingCode(t, findings, factoryvalidation.CodeDanglingPlaceReference)
 	assertCanonicalFindingPath(t, findings, "factory.workstations[0].onFailure[0]")
 	assertCanonicalTargetSubject(t, cfg, factoryvalidation.Subject{
@@ -79,7 +94,7 @@ func TestCanonicalStructuralFindings_InvalidOnFailurePlaceReference(t *testing.T
 }
 
 func TestCanonicalStructuralFindings_ValidPlaceReferences(t *testing.T) {
-	cfg := testBaseConfig()
+	cfg := topologyTestBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:        "ws",
 		Inputs:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
@@ -88,7 +103,7 @@ func TestCanonicalStructuralFindings_ValidPlaceReferences(t *testing.T) {
 		OnFailure:   []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
 	}}
 
-	findings := CanonicalStructuralFindings(cfg)
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
 	for _, finding := range findings {
 		if finding.Rule == factoryvalidation.CodeDanglingPlaceReference {
 			t.Fatalf("unexpected dangling place finding: %#v", finding)
@@ -97,7 +112,7 @@ func TestCanonicalStructuralFindings_ValidPlaceReferences(t *testing.T) {
 }
 
 func TestCanonicalStructuralFindings_InvalidClassificationRouteOutput(t *testing.T) {
-	cfg := testBaseConfig()
+	cfg := topologyTestBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:           "classifier",
 		Type:           interfaces.WorkstationTypeClassify,
@@ -109,7 +124,7 @@ func TestCanonicalStructuralFindings_InvalidClassificationRouteOutput(t *testing
 		}},
 	}}
 
-	findings := CanonicalStructuralFindings(cfg)
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
 	assertCanonicalFindingCode(t, findings, factoryvalidation.CodeDanglingPlaceReference)
 	assertCanonicalFindingPath(t, findings, "factory.workstations[0].classificationRoutes[0].outputs[0]")
 }
@@ -173,7 +188,7 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 		},
 	}
 
-	result := NewConfigValidator().Validate(cfg)
+	result := factoryconfig.NewConfigValidator().Validate(cfg)
 	if !result.HasErrors() {
 		t.Fatal("expected validation errors")
 	}
@@ -193,17 +208,45 @@ func TestConfigValidator_PreservesOperationalAndStructuralValidationCoverage(t *
 	assertFindingExists(t, result.Findings, "bundled-file-target-path")
 }
 
-func assertCanonicalFindingCode(t *testing.T, findings []Finding, code string) {
+func TestCanonicalStructuralFindings_RejectsUnsupportedManagedRuntimeIdentity(t *testing.T) {
+	cfg := topologyTestBaseConfig()
+	cfg.Resources = []interfaces.ResourceConfig{{
+		Name:       "unknown-cache",
+		Type:       interfaces.ResourceTypeModel,
+		Capacity:   1,
+		Model:      "UNKNOWN_RUNTIME",
+		Backend:    "LLAMACPP",
+		LoadPolicy: "ON_DEMAND",
+	}}
+
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
+	assertFindingExists(t, findings, factoryvalidation.CodeManagedRuntimeUnsupportedIdentity)
+}
+
+func TestCanonicalStructuralFindings_RejectsLocalWorkerWithoutModelResource(t *testing.T) {
+	cfg := topologyTestBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:          "voice-local",
+		Type:          interfaces.WorkerTypeModel,
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelLocality: interfaces.ModelLocalityLocal,
+	}}
+
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
+	assertFindingExists(t, findings, factoryvalidation.CodeManagedRuntimeWorkerMissingDep)
+}
+
+func assertCanonicalFindingCode(t *testing.T, findings []factoryconfig.Finding, code string) {
 	t.Helper()
 	for _, finding := range findings {
-		if finding.Rule == code && finding.Severity == SeverityError {
+		if finding.Rule == code && finding.Severity == factoryconfig.SeverityError {
 			return
 		}
 	}
 	t.Fatalf("expected canonical finding code %q, got %#v", code, findings)
 }
 
-func assertCanonicalFindingPath(t *testing.T, findings []Finding, path string) {
+func assertCanonicalFindingPath(t *testing.T, findings []factoryconfig.Finding, path string) {
 	t.Helper()
 	for _, finding := range findings {
 		if finding.Path == path {
@@ -222,30 +265,13 @@ func assertCanonicalTargetSubject(t *testing.T, cfg *interfaces.FactoryConfig, w
 	}
 	t.Fatalf("expected canonical subject %#v, got targets %#v", want, factoryvalidation.Validate(cfg).Targets)
 }
-func TestCanonicalStructuralFindings_RejectsUnsupportedManagedRuntimeIdentity(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
-		Name:       "unknown-cache",
-		Type:       interfaces.ResourceTypeModel,
-		Capacity:   1,
-		Model:      "UNKNOWN_RUNTIME",
-		Backend:    "LLAMACPP",
-		LoadPolicy: "ON_DEMAND",
-	}}
 
-	findings := CanonicalStructuralFindings(cfg)
-	assertFindingExists(t, findings, factoryvalidation.CodeManagedRuntimeUnsupportedIdentity)
-}
-
-func TestCanonicalStructuralFindings_RejectsLocalWorkerWithoutModelResource(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
-		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
-		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
-	}}
-
-	findings := CanonicalStructuralFindings(cfg)
-	assertFindingExists(t, findings, factoryvalidation.CodeManagedRuntimeWorkerMissingDep)
+func assertFindingExists(t *testing.T, findings []factoryconfig.Finding, rule string) {
+	t.Helper()
+	for _, finding := range findings {
+		if finding.Rule == rule && finding.Severity == factoryconfig.SeverityError {
+			return
+		}
+	}
+	t.Fatalf("expected error finding with rule %q, got %v", rule, findings)
 }

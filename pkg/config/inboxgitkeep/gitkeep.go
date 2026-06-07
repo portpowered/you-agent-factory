@@ -1,4 +1,4 @@
-package config
+package inboxgitkeep
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 )
 
-func ensureInputInboxGitkeep(targetDir, relativePath string) error {
+func EnsureInputInboxGitkeep(targetDir, relativePath string) error {
 	path := filepath.Join(targetDir, relativePath)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create %s parent directory: %w", relativePath, err)

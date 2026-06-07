@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/config/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -955,7 +956,7 @@ func ensureDefaultInputChannelDirectories(targetDir string, cfg *interfaces.Fact
 const batchInputInboxChannelName = "BATCH"
 
 func ensureCanonicalInputInboxSentinels(targetDir string, cfg *interfaces.FactoryConfig) error {
-	if err := ensureInputInboxGitkeep(
+	if err := inboxgitkeep.EnsureInputInboxGitkeep(
 		targetDir,
 		filepath.Join(interfaces.InputsDir, batchInputInboxChannelName, interfaces.DefaultChannelName, ".gitkeep"),
 	); err != nil {
@@ -975,7 +976,7 @@ func ensureCanonicalInputInboxSentinels(targetDir string, cfg *interfaces.Factor
 			interfaces.DefaultChannelName,
 			".gitkeep",
 		)
-		if err := ensureInputInboxGitkeep(targetDir, relativePath); err != nil {
+		if err := inboxgitkeep.EnsureInputInboxGitkeep(targetDir, relativePath); err != nil {
 			return fmt.Errorf("ensure inputs/%s/%s .gitkeep: %w", workTypeName, interfaces.DefaultChannelName, err)
 		}
 	}
