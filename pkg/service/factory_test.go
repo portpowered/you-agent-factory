@@ -2967,6 +2967,139 @@ func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryCreatesScaffo
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryThenReopenThroughSelectedFolder(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	projectDir := filepath.Join(harness.rootDir, "reopen-project")
+	if err := os.Mkdir(projectDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(reopen-project): %v", err)
+	}
+	nestedFactoryDir := filepath.Join(projectDir, interfaces.FactoryDir)
+
+	initResult, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), projectDir, nil, false, true)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(init new factory): %v", err)
+	}
+	if initResult == nil || initResult.SessionID == "" {
+		t.Fatalf("init-new-factory result = %#v, want session id", initResult)
+	}
+
+	initSession := harness.requireSession(t, initResult.SessionID)
+	assertNestedInitSessionMetadata(t, initSession, projectDir, nestedFactoryDir)
+
+	listAfterInit, err := harness.svc.ListFactorySessions(context.Background())
+	if err != nil {
+		t.Fatalf("ListFactorySessions after init: %v", err)
+	}
+	assertListContainsNestedInitSession(t, listAfterInit.Sessions, initResult.SessionID, projectDir, nestedFactoryDir)
+
+	validateResult, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), projectDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate after init): %v", err)
+	}
+	if validateResult == nil || validateResult.InitsNewFactory {
+		t.Fatalf("validate-after-init result = %#v, want runnable targets without initsNewFactory", validateResult)
+	}
+	if len(validateResult.Targets) != 1 {
+		t.Fatalf("validate-after-init targets = %#v, want one nested factory target", validateResult.Targets)
+	}
+	assertSessionTargetMetadata(
+		t,
+		validateResult.Targets[0],
+		FactorySessionTargetKindNamed,
+		interfaces.FactoryDir,
+		interfaces.FactoryDir,
+		nestedFactoryDir,
+		interfaces.FactoryDir,
+	)
+	if validateResult.Targets[0].FolderPath != projectDir {
+		t.Fatalf("validate-after-init folder path = %q, want %q", validateResult.Targets[0].FolderPath, projectDir)
+	}
+
+	if err := harness.svc.CloseFactorySession(context.Background(), initResult.SessionID); err != nil {
+		t.Fatalf("CloseFactorySession(init session): %v", err)
+	}
+
+	reopenAPI, err := harness.svc.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
+		FolderPath: projectDir,
+	})
+	if err != nil {
+		t.Fatalf("OpenFactorySession(reopen via API): %v", err)
+	}
+	if reopenAPI.Session == nil || reopenAPI.Session.Id == "" {
+		t.Fatalf("reopen API response.session = %#v, want live session summary", reopenAPI.Session)
+	}
+	if reopenAPI.Session.Id == initResult.SessionID {
+		t.Fatalf("reopened session id = %q, want a new session identity", reopenAPI.Session.Id)
+	}
+	assertNestedInitAPISessionMetadata(t, *reopenAPI.Session, reopenAPI.Session.Id, projectDir, nestedFactoryDir)
+
+	reopenSession := harness.requireSession(t, reopenAPI.Session.Id)
+	assertNestedInitSessionMetadata(t, reopenSession, projectDir, nestedFactoryDir)
+
+	listAfterReopen, err := harness.svc.ListFactorySessions(context.Background())
+	if err != nil {
+		t.Fatalf("ListFactorySessions after reopen: %v", err)
+	}
+	assertListContainsNestedInitSession(t, listAfterReopen.Sessions, reopenAPI.Session.Id, projectDir, nestedFactoryDir)
+}
+
+func assertNestedInitSessionMetadata(t *testing.T, session *factorysessions.LiveSession, projectDir, nestedFactoryDir string) {
+	t.Helper()
+
+	if session.FolderPath != projectDir {
+		t.Fatalf("session folder path = %q, want %q", session.FolderPath, projectDir)
+	}
+	if session.FactoryDir != nestedFactoryDir {
+		t.Fatalf("session factory dir = %q, want %q", session.FactoryDir, nestedFactoryDir)
+	}
+	if liveSessionHandle(session).runtime.dir != nestedFactoryDir {
+		t.Fatalf("session runtime dir = %q, want %q", liveSessionHandle(session).runtime.dir, nestedFactoryDir)
+	}
+}
+
+func assertNestedInitAPISessionMetadata(
+	t *testing.T,
+	summary factoryapi.FactorySessionSummary,
+	wantSessionID string,
+	projectDir string,
+	nestedFactoryDir string,
+) {
+	t.Helper()
+
+	if summary.Id != wantSessionID {
+		t.Fatalf("session summary id = %q, want %q", summary.Id, wantSessionID)
+	}
+	if summary.FolderPath != projectDir {
+		t.Fatalf("session summary folderPath = %q, want %q", summary.FolderPath, projectDir)
+	}
+	if summary.FactoryDir != nestedFactoryDir {
+		t.Fatalf("session summary factoryDir = %q, want %q", summary.FactoryDir, nestedFactoryDir)
+	}
+}
+
+func assertListContainsNestedInitSession(
+	t *testing.T,
+	summaries []factoryapi.FactorySessionSummary,
+	wantSessionID string,
+	projectDir string,
+	nestedFactoryDir string,
+) {
+	t.Helper()
+
+	for _, summary := range summaries {
+		if summary.Id != wantSessionID {
+			continue
+		}
+		assertNestedInitAPISessionMetadata(t, summary, wantSessionID, projectDir, nestedFactoryDir)
+		return
+	}
+	t.Fatalf("session list = %#v, want session %q", summaries, wantSessionID)
+}
+
 func TestFactoryService_OpenFactorySessionFromFolder_InitNewFactoryRejectsConflictingNestedFactoryDir(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		rootConfig: minimalFactoryConfig(),
@@ -3102,21 +3235,22 @@ func TestFactoryService_OpenFactorySession_InitNewFactoryMapsToAPIResponseAndLis
 	if response.Session.FolderPath != emptyDir {
 		t.Fatalf("response.session.folderPath = %q, want %q", response.Session.FolderPath, emptyDir)
 	}
+	wantFactoryDir := filepath.Join(emptyDir, interfaces.FactoryDir)
+	if response.Session.FactoryDir != wantFactoryDir {
+		t.Fatalf("response.session.factoryDir = %q, want %q", response.Session.FactoryDir, wantFactoryDir)
+	}
 
 	listResponse, err := harness.svc.ListFactorySessions(context.Background())
 	if err != nil {
 		t.Fatalf("ListFactorySessions: %v", err)
 	}
-	found := false
-	for _, summary := range listResponse.Sessions {
-		if summary.Id == response.Session.Id {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("ListFactorySessions = %#v, want session %q", listResponse.Sessions, response.Session.Id)
-	}
+	assertListContainsNestedInitSession(
+		t,
+		listResponse.Sessions,
+		response.Session.Id,
+		emptyDir,
+		wantFactoryDir,
+	)
 }
 
 func TestFactoryService_OpenFactorySession_InitNewFactoryRejectsValidateOnlyCombination(t *testing.T) {
