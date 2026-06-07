@@ -67,4 +67,202 @@ describe("useFactoryGraphLayoutDraftState", () => {
     expect(result.current.canUndoLayout).toBe(false);
     expect(result.current.canRedoLayout).toBe(false);
   });
+
+  it("records viewport updates with undo and redo", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-viewport",
+      }),
+    );
+
+    act(() => {
+      result.current.updateViewport({ x: 40, y: 60, zoom: 1.5 });
+    });
+
+    expect(result.current.layout.viewport).toEqual({ x: 40, y: 60, zoom: 1.5 });
+    expect(result.current.layoutDirty).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(result.current.layout.viewport).toBeUndefined();
+    expect(result.current.canRedoLayout).toBe(true);
+
+    act(() => {
+      result.current.redoLayout();
+    });
+
+    expect(result.current.layout.viewport).toEqual({ x: 40, y: 60, zoom: 1.5 });
+  });
+
+  it("moves multiple nodes by delta and supports undo", () => {
+    const layoutDocument = {
+      ...baseFactoryDefinition,
+      layout: moveFactoryLayoutNode(baseFactoryDefinition.layout ?? {}, "workstation:draft", {
+        x: 100,
+        y: 200,
+      }),
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: layoutDocument,
+        factoryDocumentScopeKey: "session-multi",
+      }),
+    );
+    const resolvedPositions = new Map([
+      ["workstation:draft", { x: 100, y: 200 }],
+    ]);
+
+    act(() => {
+      result.current.moveNodesByDelta(
+        ["workstation:draft"],
+        { x: 20, y: -10 },
+        resolvedPositions,
+      );
+    });
+
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 120,
+      y: 190,
+    });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 100,
+      y: 200,
+    });
+  });
+
+  it("records reset layout in history when recordHistory is enabled", () => {
+    const layoutDocument = {
+      ...baseFactoryDefinition,
+      layout: moveFactoryLayoutNode(baseFactoryDefinition.layout ?? {}, "workstation:draft", {
+        x: 40,
+        y: 80,
+      }),
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: layoutDocument,
+        factoryDocumentScopeKey: "session-reset",
+      }),
+    );
+
+    act(() => {
+      result.current.moveNode("workstation:draft", { x: 120, y: 160 });
+      result.current.resetLayout();
+    });
+
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 40,
+      y: 80,
+    });
+    expect(result.current.canUndoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 120,
+      y: 160,
+    });
+  });
+
+  it("adopts saved layout and clears dirty state", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-adopt",
+      }),
+    );
+    const savedLayout = moveFactoryLayoutNode(baseFactoryDefinition.layout ?? {}, "workstation:draft", {
+      x: 300,
+      y: 400,
+    });
+
+    act(() => {
+      result.current.moveNode("workstation:draft", { x: 10, y: 20 });
+      result.current.adoptSavedLayout(savedLayout);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 300,
+      y: 400,
+    });
+    expect(result.current.canUndoLayout).toBe(false);
+  });
+
+  it("replaces layout and clears undo history", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-replace",
+      }),
+    );
+    const replacementLayout = moveFactoryLayoutNode(
+      baseFactoryDefinition.layout ?? {},
+      "workstation:draft",
+      { x: 55, y: 66 },
+    );
+
+    act(() => {
+      result.current.moveNode("workstation:draft", { x: 1, y: 2 });
+      result.current.replaceLayout(replacementLayout);
+    });
+
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 55,
+      y: 66,
+    });
+    expect(result.current.canUndoLayout).toBe(false);
+  });
+
+  it("prunes layout history for deleted node ids", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-prune",
+      }),
+    );
+
+    act(() => {
+      result.current.moveNode("workstation:draft", { x: 80, y: 90 });
+      result.current.pruneLayoutHistoryForNodeIds([]);
+    });
+
+    expect(result.current.canUndoLayout).toBe(false);
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 80,
+      y: 90,
+    });
+  });
+
+  it("resets session state when the factory document scope changes", () => {
+    const { result, rerender } = renderHook(
+      ({ scopeKey }) =>
+        useFactoryGraphLayoutDraftState({
+          currentFactoryDocument: baseFactoryDefinition,
+          factoryDocumentScopeKey: scopeKey,
+        }),
+      { initialProps: { scopeKey: "scope-a" } },
+    );
+
+    act(() => {
+      result.current.moveNode("workstation:draft", { x: 12, y: 34 });
+    });
+    expect(result.current.layoutDirty).toBe(true);
+
+    rerender({ scopeKey: "scope-b" });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toBeUndefined();
+    expect(result.current.canUndoLayout).toBe(false);
+  });
 });
