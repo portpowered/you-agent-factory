@@ -288,8 +288,17 @@ const invokeWorkstationDetail = (
     case "localizeWorkstationType":
       return [
         formatter("MODEL_WORKSTATION" as never),
+        formatter("MODEL_INVOKE" as never),
         formatter("LOGICAL_MOVE" as never),
         formatter("FUTURE_TYPE" as never),
+      ];
+    case "editableConfigurationModelInvokeBindingDuplicate":
+    case "editableConfigurationModelInvokeBindingRequired":
+      return [formatter("prompt" as never)];
+    case "modelInvokeBindingSlotHeading":
+      return [
+        formatter("prompt" as never, "required" as never),
+        formatter("voice" as never, "optional" as never),
       ];
     case "localizeRunnerSelectionSource":
       return [
