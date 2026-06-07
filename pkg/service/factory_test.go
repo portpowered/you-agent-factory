@@ -455,6 +455,83 @@ func TestFactoryService_ObserveRuntimeMetrics_EmitsFailedLifecycleMetric(t *test
 	}
 }
 
+func startRuntimeMetricsShutdownTestHandle(
+	t *testing.T,
+	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+) (*FactoryService, *liveRuntimeHandle, string) {
+	t.Helper()
+
+	metricsSink, err := logging.BuildRuntimeMetricsSink(
+		"session-shutdown",
+		"runtime-shutdown",
+		"/factory",
+		"/factory/current",
+		t.TempDir(),
+		logging.RuntimeMetricsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+
+	factoryStub := &runtimeMetricsObserverFactory{}
+	factoryStub.setEngineState(engineState)
+
+	runCtx, runCancel := context.WithCancel(context.Background())
+	t.Cleanup(runCancel)
+
+	handle := &liveRuntimeHandle{
+		runtime: &factoryRuntimeBundle{
+			factory:     factoryStub,
+			metricsSink: metricsSink,
+			logger:      zap.NewNop(),
+		},
+		runDone:   make(chan struct{}),
+		runCancel: runCancel,
+	}
+
+	svc := &FactoryService{}
+	if err := svc.startLiveRuntimeSidecars(runCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+
+	return svc, handle, metricsSink.Path()
+}
+
+func TestFactoryService_StopLiveRuntime_EmitsCompletedLifecycleMetricThroughShutdownPath(t *testing.T) {
+	svc, handle, metricsPath := startRuntimeMetricsShutdownTestHandle(t, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		RuntimeStatus: interfaces.RuntimeStatusFinished,
+		FactoryState:  string(interfaces.FactoryStateRunning),
+	})
+
+	handle.setRunResult(nil)
+	if err := svc.stopLiveRuntime(handle); err != nil {
+		t.Fatalf("stopLiveRuntime: %v", err)
+	}
+
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStopped, 1) &&
+			metricRecordString(record, "outcome") == "completed"
+	}, "completed stop through shutdown path")
+}
+
+func TestFactoryService_StopLiveRuntime_EmitsFailedLifecycleMetricThroughShutdownPath(t *testing.T) {
+	svc, handle, metricsPath := startRuntimeMetricsShutdownTestHandle(t, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		RuntimeStatus: interfaces.RuntimeStatusFinished,
+		FactoryState:  string(interfaces.FactoryStateFailed),
+	})
+
+	handle.setRunResult(fmt.Errorf("execution failed"))
+	if err := svc.stopLiveRuntime(handle); err == nil {
+		t.Fatal("stopLiveRuntime error = nil, want execution failure")
+	}
+
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStopped, 1) &&
+			metricRecordString(record, "outcome") == "failed" &&
+			strings.Contains(metricRecordString(record, "reason"), "execution failed")
+	}, "failed stop through shutdown path")
+}
+
 func TestFactoryService_Pause_RequiresActiveRuntimeAndWrapsPauseErrors(t *testing.T) {
 	svc := &FactoryService{}
 	if err := svc.Pause(context.Background()); err == nil || !strings.Contains(err.Error(), "runtime is not available") {

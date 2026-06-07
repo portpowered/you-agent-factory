@@ -892,11 +892,12 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 	if handle == nil {
 		return nil
 	}
-	fs.stopLiveRuntimeSidecars(handle)
 	if handle.runCancel != nil {
 		handle.runCancel()
 	}
-	return errors.Join(handle.wait(), fs.finalizeRuntimeArtifacts(handle.runtime))
+	runErr := handle.wait()
+	fs.stopLiveRuntimeSidecars(handle)
+	return errors.Join(runErr, fs.finalizeRuntimeArtifacts(handle.runtime))
 }
 
 func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {

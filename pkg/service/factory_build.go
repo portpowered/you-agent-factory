@@ -28,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
@@ -1219,4 +1220,163 @@ func asRuntimeBundle(bundle any) *factoryRuntimeBundle {
 		return nil
 	}
 	return bundle.(*factoryRuntimeBundle)
+}
+
+func (r *factoryRuntimeBundle) metricsEmitter() metrics.MetricsEmitter {
+	if r == nil {
+		return metrics.NoopEmitter{}
+	}
+	return metrics.EnsureEmitter(r.metricsSink)
+}
+
+func (r *factoryRuntimeBundle) emitMetricCounter(name string, value float64, fields metrics.Fields) {
+	if r == nil {
+		return
+	}
+	if err := r.metricsEmitter().Counter(context.Background(), name, value, fields); err != nil {
+		r.runtimeLogger().Warn("runtime metrics counter emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
+}
+
+func (r *factoryRuntimeBundle) emitMetricGauge(name string, value float64, fields metrics.Fields) {
+	if r == nil {
+		return
+	}
+	if err := r.metricsEmitter().Gauge(context.Background(), name, value, fields); err != nil {
+		r.runtimeLogger().Warn("runtime metrics gauge emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
+}
+
+func (r *factoryRuntimeBundle) emitMetricSample(name string, value float64, unit string, fields metrics.Fields) {
+	if r == nil {
+		return
+	}
+	if err := r.metricsEmitter().Sample(context.Background(), name, value, unit, fields); err != nil {
+		r.runtimeLogger().Warn("runtime metrics sample emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
+}
+
+func (r *factoryRuntimeBundle) emitRuntimeLifecycleStart() {
+	if r == nil {
+		return
+	}
+	r.emitMetricCounter(runtimeMetricLifecycleStarted, 1, metrics.Fields{})
+}
+
+func (r *factoryRuntimeBundle) emitRuntimeLifecycleStop(outcome string, reason string) {
+	if r == nil {
+		return
+	}
+	r.emitMetricCounter(runtimeMetricLifecycleStopped, 1, metrics.Fields{
+		Outcome: outcome,
+		Reason:  strings.TrimSpace(reason),
+	})
+}
+
+func (r *factoryRuntimeBundle) emitRuntimeStateMetrics(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
+	if r == nil || snapshot == nil {
+		return
+	}
+	r.emitMetricGauge(runtimeMetricStateActive, boolMetricValue(snapshot.RuntimeStatus == interfaces.RuntimeStatusActive), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricStateIdle, boolMetricValue(snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricStatePaused, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStatePaused)), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricStateFailed, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStateFailed)), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricQueueInFlight, float64(snapshot.InFlightCount), metrics.Fields{})
+}
+
+func boolMetricValue(active bool) float64 {
+	if active {
+		return 1
+	}
+	return 0
+}
+
+func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], err error, canceled bool) (string, string) {
+	if canceled {
+		return "canceled", ""
+	}
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return "canceled", ""
+		}
+		return "failed", err.Error()
+	}
+	if snapshot != nil && snapshot.FactoryState == string(interfaces.FactoryStateFailed) {
+		return "failed", ""
+	}
+	return "completed", ""
+}
+
+func metricsObservationFromSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) runtimeMetricsObservation {
+	observation := runtimeMetricsObservation{initialized: snapshot != nil}
+	if snapshot == nil {
+		return observation
+	}
+	observation.runtimeStatus = snapshot.RuntimeStatus
+	observation.factoryState = interfaces.FactoryState(snapshot.FactoryState)
+	observation.inFlightCount = snapshot.InFlightCount
+	return observation
+}
+
+func (o runtimeMetricsObservation) changedFrom(previous runtimeMetricsObservation) bool {
+	if !previous.initialized {
+		return o.initialized
+	}
+	if !o.initialized {
+		return false
+	}
+	return o.runtimeStatus != previous.runtimeStatus ||
+		o.factoryState != previous.factoryState ||
+		o.inFlightCount != previous.inFlightCount
+}
+
+func (fs *FactoryService) finalizeRuntimeLifecycleMetrics(handle *liveRuntimeHandle, last runtimeMetricsObservation) {
+	if handle == nil || handle.runtime == nil || handle.runtime.factory == nil {
+		return
+	}
+	snapshot, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+	if err == nil {
+		current := metricsObservationFromSnapshot(snapshot)
+		if current.changedFrom(last) {
+			handle.runtime.emitRuntimeStateMetrics(snapshot)
+		}
+		outcome, reason := runtimeStopOutcome(snapshot, handle.result(), false)
+		handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
+		return
+	}
+	outcome, reason := runtimeStopOutcome(nil, handle.result(), false)
+	handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
+}
+
+func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liveRuntimeHandle) {
+	if handle == nil || handle.runtime == nil || handle.runtime.factory == nil {
+		return
+	}
+	ticker := time.NewTicker(runtimeMetricsObserverPollInterval)
+	defer ticker.Stop()
+	var last runtimeMetricsObservation
+	for {
+		snapshot, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+		if err == nil {
+			current := metricsObservationFromSnapshot(snapshot)
+			if current.changedFrom(last) {
+				handle.runtime.emitRuntimeStateMetrics(snapshot)
+				last = current
+			}
+		}
+		select {
+		case <-handle.runDone:
+			fs.finalizeRuntimeLifecycleMetrics(handle, last)
+			return
+		case <-ctx.Done():
+			if handle.completed() {
+				fs.finalizeRuntimeLifecycleMetrics(handle, last)
+			} else {
+				outcome, reason := runtimeStopOutcome(nil, nil, true)
+				handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
+			}
+			return
+		case <-ticker.C:
+		}
+	}
 }
