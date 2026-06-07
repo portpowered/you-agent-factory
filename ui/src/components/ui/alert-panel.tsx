@@ -35,7 +35,7 @@ const ALERT_PANEL_TONE_CLASS: Record<AlertPanelTone, string> = {
 const ALERT_PANEL_VARIANT_CLASS: Record<AlertPanelVariant, string> = {
   default: "grid gap-2",
   empty:
-    "grid min-h-60 items-start gap-1.5 rounded-2xl border-dashed p-5 [&_h3]:m-0",
+    "grid items-start gap-1.5 rounded-2xl border-dashed p-5 [&_h3]:m-0",
 };
 const ALERT_PANEL_COMPACT_CLASS: Record<AlertPanelVariant, string> = {
   default: "",

@@ -16,7 +16,7 @@ import type { getHeaderControlsMessages } from "../messages/header-controls";
 const SESSION_TAB_ITEM_CLASS =
   "group relative flex h-full min-h-0 min-w-0 flex-1 basis-0 items-stretch self-stretch overflow-hidden transition-[opacity,colors,box-shadow]";
 const SESSION_TAB_BUTTON_CLASS =
-  "min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+  "min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_CLOSE_BUTTON_CLASS =
   "shrink-0 px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_ACTIVE_CLASS = cn(
@@ -149,7 +149,7 @@ export function SessionTabButton({
           <span className="truncate text-sm font-semibold">{label}</span>
         </span>
         <span
-          className="block truncate text-[11px] text-on-surface-subtle"
+          className="block min-w-0 max-w-full truncate text-[11px] text-on-surface-subtle"
           title={session.folderPath}
         >
           {secondaryPath}

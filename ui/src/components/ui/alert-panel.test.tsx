@@ -20,8 +20,8 @@ describe("AlertPanel", () => {
 
     const panel = screen.getByText("No preview available");
 
-    expect(panel.className).toContain("min-h-60");
     expect(panel.className).toContain("border-dashed");
+    expect(panel.className).not.toContain("min-h-60");
   });
 
   it("supports compact empty notices", () => {
