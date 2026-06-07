@@ -119,6 +119,9 @@ func TestLayoutSaveOutcomes_PrefersPruneOutcomeForDuplicateCodeAndPath(t *testin
 			t.Fatalf("geometry target message = %q, want prune rejection wording", target.Message)
 		}
 	}
+	if len(cfg.Layout.Groups) != 0 {
+		t.Fatalf("groups after geometry rejection = %#v, want []", cfg.Layout.Groups)
+	}
 }
 
 func TestValidateLayout_InvalidGeometryIdentifiesAffectedLayoutObject(t *testing.T) {
@@ -242,5 +245,20 @@ func TestPruneLayout_RejectsInvalidViewportGeometry(t *testing.T) {
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
 	if cfg.Layout.Viewport != nil {
 		t.Fatalf("viewport = %#v, want nil after rejection", cfg.Layout.Viewport)
+	}
+}
+
+func TestPruneLayout_RejectsInvalidGroupBoundsGeometry(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Groups[0].Bounds.Width = math.NaN()
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result := factoryvalidation.PruneLayout(cfg, topology)
+
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+	if len(cfg.Layout.Groups) != 0 {
+		t.Fatalf("groups after geometry rejection = %#v, want []", cfg.Layout.Groups)
 	}
 }

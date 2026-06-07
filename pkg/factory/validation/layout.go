@@ -264,8 +264,9 @@ func PruneLayout(cfg *interfaces.FactoryConfig, topology interfaces.PendingFacto
 	targets = append(targets, edgeTargets...)
 	layout.Edges = prunedEdges
 
-	groupTargets := pruneLayoutGroups(layout, topology)
+	prunedGroups, groupTargets := pruneLayoutGroups(layout.Groups, topology)
 	targets = append(targets, groupTargets...)
+	layout.Groups = prunedGroups
 
 	if layout.Viewport != nil {
 		if viewportTargets := pruneLayoutViewport(layout); len(viewportTargets) > 0 {
@@ -381,14 +382,17 @@ func pruneLayoutEdges(
 	return pruned, targets
 }
 
-func pruneLayoutGroups(layout *interfaces.FactoryLayoutConfig, topology interfaces.PendingFactoryGraphTopology) []Target {
-	if layout == nil || len(layout.Groups) == 0 {
-		return nil
+func pruneLayoutGroups(
+	groups []interfaces.FactoryLayoutGroupConfig,
+	topology interfaces.PendingFactoryGraphTopology,
+) ([]interfaces.FactoryLayoutGroupConfig, []Target) {
+	if len(groups) == 0 {
+		return nil, nil
 	}
 
+	pruned := make([]interfaces.FactoryLayoutGroupConfig, 0, len(groups))
 	var targets []Target
-	for index := range layout.Groups {
-		group := &layout.Groups[index]
+	for index, group := range groups {
 		path := fmt.Sprintf("factory.layout.groups[%d]", index)
 		groupID := group.ID
 		if groupID == "" {
@@ -423,8 +427,9 @@ func pruneLayoutGroups(layout *interfaces.FactoryLayoutConfig, topology interfac
 			prunedNodeIDs = append(prunedNodeIDs, nodeID)
 		}
 		group.NodeIDs = prunedNodeIDs
+		pruned = append(pruned, group)
 	}
-	return targets
+	return pruned, targets
 }
 
 func pruneLayoutViewport(layout *interfaces.FactoryLayoutConfig) []Target {
