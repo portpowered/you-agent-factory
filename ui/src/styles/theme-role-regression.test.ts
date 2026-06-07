@@ -52,6 +52,17 @@ function relativeLuminance([r, g, b]: readonly [
   return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
 }
 
+function contrastRatio(
+  foreground: readonly [number, number, number],
+  background: readonly [number, number, number],
+): number {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 describe("theme role migration regression (US-010)", () => {
   beforeAll(async () => {
     const source = readFileSync(stylesSourcePath, "utf8");
@@ -93,6 +104,33 @@ describe("theme role migration regression (US-010)", () => {
     expect(surfaceLuminance - backgroundLuminance).toBeGreaterThan(0.01);
     expect(background).toBe("#050b10");
     expect(surface).toBe("#181f2b");
+  });
+
+  it.each(
+    COLOR_PALETTE_IDS,
+  )("resolves readable primary on-accent ink for palette %s", (paletteId) => {
+    applyDocumentColorPalette(paletteId);
+
+    const primary = readCssVariable("--color-af-foundation-accent");
+    const accentInk = readCssVariable("--color-af-foundation-accent-ink");
+    const canvas = readCssVariable("--color-af-foundation-canvas");
+
+    expect(primary).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(accentInk).toMatch(/^#[0-9a-f]{6}$/i);
+    expect(accentInk.toLowerCase()).not.toBe(primary.toLowerCase());
+
+    const contrast = contrastRatio(
+      parseHexColor(accentInk),
+      parseHexColor(primary),
+    );
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+
+    if (paletteId === "factory-light") {
+      expect(accentInk.toLowerCase()).not.toBe(canvas.toLowerCase());
+      expect(relativeLuminance(parseHexColor(accentInk))).toBeLessThan(
+        relativeLuminance(parseHexColor(primary)),
+      );
+    }
   });
 
   it("keeps yellow primary accent across palette switches", () => {
