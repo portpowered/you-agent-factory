@@ -1,6 +1,11 @@
 import type { DashboardWorkstationNode } from "../../../../../api/dashboard/types";
 import { WorkstationType } from "../../../../../api/generated/openapi";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
+import {
+  workstationBehaviorSemanticKind,
+  workstationGraphPresentation,
+} from "../../../../flowchart/lib/workstation-graph-presentation";
+import { STANDARD_WORKSTATION_KIND } from "../../../../flowchart/lib/workstation-icon-metadata";
 import type { WorkstationDetailCardProps } from "../../lib/keys/detail-card-types";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { resolveWorkerBackedWorkstationSummaryRunnerValue } from "./workstation-runner-field";
@@ -74,6 +79,33 @@ export function resolveWorkstationSummaryTypeValue(
   }
 
   return messages.localizeWorkstationType(state.initialValues.workstationType);
+}
+
+export function resolveWorkstationSummaryPresentation(
+  editableConfigurationState:
+    | WorkstationDetailCardProps["editableConfigurationState"]
+    | undefined,
+  selectedNode: DashboardWorkstationNode,
+  locale?: string | null,
+) {
+  const behavior =
+    editableConfigurationState?.status === "ready"
+      ? editableConfigurationState.draft.behavior
+      : undefined;
+  const presentation = workstationGraphPresentation(
+    {
+      ...selectedNode,
+      workstation_kind:
+        behavior !== undefined
+          ? workstationBehaviorSemanticKind(behavior)
+          : (selectedNode.workstation_kind ?? STANDARD_WORKSTATION_KIND),
+    },
+    locale,
+  );
+
+  return presentation.semanticKind === STANDARD_WORKSTATION_KIND
+    ? null
+    : presentation;
 }
 
 export function resolveWorkstationSummaryRunnerValue(

@@ -631,6 +631,12 @@ Poll GitHub and emit one canonical batch payload on stdout per run.
 
 ### Hosted Linear Poller Example
 
+Before starting service mode, resolve the Linear API key for
+`auth.secretRef: secrets/linear-api-key`. Either set
+`INFINITE_YOU_SECRET_SECRETS_LINEAR_API_KEY` or create
+`secrets/linear-api-key` beside `factory.json`. See `you docs workers` for the
+full hosted-worker secret contract.
+
 `workers/linear-poller/AGENTS.md`:
 
 ```yaml
@@ -641,11 +647,13 @@ auth:
   secretRef: secrets/linear-api-key
 linear:
   pollInterval: 2m
-  teams: ["ENG"]
-  states: ["unstarted", "started"]
+  teamIds: ["team-a"]
+  stateIds: ["state-b"]
   mapping:
     workType: task
     state: init
+  claim:
+    assigneeField: assignee.email
 ---
 
 Repository-owned Linear poller.
@@ -663,6 +671,9 @@ Bound workstation:
 }
 ```
 
+Keep hosted Linear config on the worker. The workstation only selects
+`behavior: "POLLER"`, names the worker, and routes submitted work.
+
 V1 non-goals for poller authoring:
 
 - Raw factory event emission from pollers.
@@ -675,7 +686,8 @@ Use mock workers when you want to verify routing, rejection loops, failure
 paths, and script side effects without making live provider calls.
 
 Run `you docs mock-workers` for the full JSON contract, selection fields,
-`runType` values, and examples. For this review-loop walkthrough, start with:
+`runType` values, `unmatchedDispatchPolicy`, and script or mixed-mode examples.
+For this review-loop walkthrough, start with:
 
 ```bash
 you run --dir ./factory --with-mock-workers
@@ -688,8 +700,10 @@ you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
 ```
 
 Reusable inputs live under [`docs/examples/`](../examples/README.md), including
-[`docs/examples/mock-workers.json`](../examples/mock-workers.json) and
-[`docs/examples/startup-work.json`](../examples/startup-work.json). The
+[`docs/examples/mock-workers.json`](../examples/mock-workers.json),
+[`docs/examples/mock-workers-script.json`](../examples/mock-workers-script.json),
+[`docs/examples/mock-workers-mixed.json`](../examples/mock-workers-mixed.json),
+and [`docs/examples/startup-work.json`](../examples/startup-work.json). The
 companion [`docs/examples/README.md`](../examples/README.md) shows how to combine
 startup work, mock-worker config, and record/replay commands with the checked-in
 [`examples/write-code-review`](../../examples/write-code-review/factory.json)

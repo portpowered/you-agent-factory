@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   applyEditableWorkerDraft,
+  areEditableWorkerDraftsEqual,
   type EditableWorkerDraft,
   editableWorkerDraftFromValues,
   resolveEditableWorkerValues,
@@ -207,6 +208,12 @@ function createEditableWorkerDraftHandlers(
     onArgsTextChange: (value: string) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, argsText: value }));
     },
+    onAuthSecretRefChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        authSecretRef: value,
+      }));
+    },
     onBodyChange: (value: string) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, body: value }));
     },
@@ -219,6 +226,42 @@ function createEditableWorkerDraftHandlers(
       updateDraft(setSessionState, (draft) => ({
         ...draft,
         executorProvider: value,
+      }));
+    },
+    onLinearClaimAssigneeFieldChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearClaimAssigneeField: value,
+      }));
+    },
+    onLinearMappingStateChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearMappingState: value,
+      }));
+    },
+    onLinearMappingWorkTypeChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearMappingWorkType: value,
+      }));
+    },
+    onLinearPollIntervalChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearPollInterval: value,
+      }));
+    },
+    onLinearStateIdsTextChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearStateIdsText: value,
+      }));
+    },
+    onLinearTeamIdsTextChange: (value: string) => {
+      updateDraft(setSessionState, (draft) => ({
+        ...draft,
+        linearTeamIdsText: value,
       }));
     },
     onModelChange: (value: string) => {
@@ -284,28 +327,6 @@ function updateDraft(
           draft: updater(currentState.draft),
         }
       : currentState,
-  );
-}
-
-function areEditableWorkerDraftsEqual(
-  left: EditableWorkerDraft,
-  right: EditableWorkerDraft,
-): boolean {
-  return (
-    left.argsText === right.argsText &&
-    left.body === right.body &&
-    left.command === right.command &&
-    left.executorProvider === right.executorProvider &&
-    left.model === right.model &&
-    left.modelLocality === right.modelLocality &&
-    left.modelProvider === right.modelProvider &&
-    left.name === right.name &&
-    left.provider === right.provider &&
-    left.skipPermissions === right.skipPermissions &&
-    left.stopToken === right.stopToken &&
-    left.timeoutAmount === right.timeoutAmount &&
-    left.timeoutUnit === right.timeoutUnit &&
-    left.type === right.type
   );
 }
 

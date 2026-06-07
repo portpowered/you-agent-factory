@@ -3256,6 +3256,18 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     });
 
     expect(cronButton.getAttribute("title")).toBe("Nightly Cron");
+    expect(cronButton.closest("article")?.className.includes("border-dashed"))
+      .toBe(true);
+
+    const pollerExpectation = workstationKindParityExpectations.find(
+      (expectation) => expectation.nodeID === "linear-poller",
+    );
+    const pollerButton = await screen.findByRole("button", {
+      name: pollerExpectation?.buttonName ?? "Select Linear Poller workstation",
+    });
+
+    expect(pollerButton.closest("article")?.className.includes("border-dotted"))
+      .toBe(true);
 
     fireEvent.click(cronButton);
 

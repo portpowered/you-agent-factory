@@ -7,6 +7,7 @@ import type {
   ZAxisIncompleteHints,
 } from "../../../flowchart/components/current-activity-node-shell";
 import { factoryGraphEditorEdgeHoverClassName } from "../../../flowchart/lib/current-activity-graph-hover";
+import { workstationGraphPresentationFromBehavior } from "../../../flowchart/lib/workstation-graph-presentation";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import type {
   CanonicalFactoryDefinition,
@@ -69,6 +70,10 @@ export type FactoryGraphReactFlowNode = Node<
     workStateType?: FactoryGraphWorkStateType;
     workerStatus?: FactoryGraphWorkerRuntimeStatus;
     workerStatusLabel?: string;
+    workstationSemanticBorderClassName?: string;
+    workstationSemanticIconClassName?: string;
+    workstationSemanticIconKind?: string;
+    workstationSemanticLabel?: string;
     zAxisIncompleteHints?: ZAxisIncompleteHints | null;
   },
   "factoryEntity"
@@ -165,82 +170,16 @@ export function projectFactoryGraphToReactFlow(
 
   const nodes = [...displayTopology.nodes]
     .sort(sortFactoryGraphNodes)
-    .map((node) => {
-      const column = COLUMN_BY_KIND[node.kind];
-      const row = rowCounts.get(column) ?? 0;
-      rowCounts.set(column, row + 1);
-      const workerStatus =
-        node.kind === "worker"
-          ? (input.runtime?.workerStatusByName?.get(node.label) ?? "idle")
-          : undefined;
-      const canEditConnections = input.editor?.canEditConnections ?? false;
-      const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+    .map((node) =>
+      buildFactoryGraphReactFlowNode({
+        displayTopology,
+        input,
+        messages,
         node,
-        input.workstationResolver,
-      );
-      const workStateType =
-        node.kind === "work-state" && node.key.kind === "work-state"
-          ? resolveWorkStateTypeForGraphNode(input.factoryDefinition, node.key)
-          : undefined;
-      const isDefaultWorkType =
-        node.kind === "work-type"
-          ? workTypeHasDefaultHandling(input.factoryDefinition, node.label)
-          : false;
-
-      return {
-        className: nodeClassName(node.id, input),
-        data: {
-          active: input.runtime?.activeNodeIds?.has(node.id) ?? false,
-          activeFlow: input.runtime?.activeNodeIds?.has(node.id) ?? false,
-          activeTool: input.editor?.activeTool ?? null,
-          canEditConnections,
-          connectionAnchors: buildNodeHandles({
-            editor: input.editor,
-            locale: input.locale,
-            node,
-            topology: displayTopology,
-            workstationResolver: input.workstationResolver,
-          }),
-          connectionHint: messages.flowConnectionHint,
-          ...(isDefaultWorkType
-            ? {
-                defaultWorkTypeLabel: messages.defaultWorkTypeLabel,
-                isDefaultWorkType: true,
-              }
-            : {}),
-          draftStatus: draftStatusForNode(node.id, input.editor),
-          focused: input.runtime?.focusedNodeIds?.has(node.id) ?? false,
-          kind: node.kind,
-          kindLabel: messages.kindLabel(node.kind),
-          label: node.label,
-          muted: input.runtime?.mutedNodeIds?.has(node.id) ?? false,
-          pendingLabel: messages.flowPendingLabel,
-          removingLabel: messages.flowRemovingLabel,
-          selectedWorkId: input.runtime?.selectedWorkId ?? null,
-          tokenCount:
-            input.runtime?.placeTokenCountsByNodeId?.get(node.id) ?? null,
-          validationMessage: validationMessages.get(node.id) ?? null,
-          ...(node.kind === "work-state" ? { workStateType } : {}),
-          workerStatus,
-          workerStatusLabel: workerStatus
-            ? messages.workerStatusLabel(workerStatus)
-            : undefined,
-          zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
-            anchorContext,
-            canEditConnections,
-            locale: input.locale,
-            nodeKind: node.kind,
-          }),
-        },
-        draggable: true,
-        id: node.id,
-        position: input.layoutPositionsByNodeId?.get(node.id) ?? {
-          x: column * COLUMN_X,
-          y: row * ROW_Y,
-        },
-        type: "factoryEntity",
-      } satisfies FactoryGraphReactFlowNode;
-    });
+        rowCounts,
+        validationMessages,
+      }),
+    );
   const nodesById = new Map(nodes.map((node) => [node.id, node]));
 
   const projectedEdges = displayTopology.edges.map((topologyEdge) =>
@@ -259,6 +198,117 @@ export function projectFactoryGraphToReactFlow(
       : projectedEdges,
     nodes,
   };
+}
+
+function buildFactoryGraphReactFlowNode(input: {
+  displayTopology: FactoryGraphTopology;
+  input: ProjectFactoryGraphToReactFlowOptions;
+  messages: ReturnType<typeof getFactoryGraphEditorMessages>;
+  node: FactoryGraphNode;
+  rowCounts: Map<number, number>;
+  validationMessages: Map<string, string>;
+}): FactoryGraphReactFlowNode {
+  const column = COLUMN_BY_KIND[input.node.kind];
+  const row = input.rowCounts.get(column) ?? 0;
+  input.rowCounts.set(column, row + 1);
+  const workerStatus =
+    input.node.kind === "worker"
+      ? (input.input.runtime?.workerStatusByName?.get(input.node.label) ??
+        "idle")
+      : undefined;
+  const canEditConnections = input.input.editor?.canEditConnections ?? false;
+  const anchorContext = resolveFactoryGraphConnectionAnchorContext(
+    input.node,
+    input.input.workstationResolver,
+  );
+  const workStateType =
+    input.node.kind === "work-state" && input.node.key.kind === "work-state"
+      ? resolveWorkStateTypeForGraphNode(
+          input.input.factoryDefinition,
+          input.node.key,
+        )
+      : undefined;
+  const isDefaultWorkType =
+    input.node.kind === "work-type"
+      ? workTypeHasDefaultHandling(
+          input.input.factoryDefinition,
+          input.node.label,
+        )
+      : false;
+  const workstationPresentation =
+    input.node.kind === "workstation" &&
+    anchorContext?.workstation?.behavior !== undefined
+      ? workstationGraphPresentationFromBehavior(
+          anchorContext.workstation.behavior,
+          input.input.locale,
+        )
+      : null;
+
+  return {
+    className: nodeClassName(input.node.id, input.input),
+    data: {
+      active: input.input.runtime?.activeNodeIds?.has(input.node.id) ?? false,
+      activeFlow:
+        input.input.runtime?.activeNodeIds?.has(input.node.id) ?? false,
+      activeTool: input.input.editor?.activeTool ?? null,
+      canEditConnections,
+      connectionAnchors: buildNodeHandles({
+        editor: input.input.editor,
+        locale: input.input.locale,
+        node: input.node,
+        topology: input.displayTopology,
+        workstationResolver: input.input.workstationResolver,
+      }),
+      connectionHint: input.messages.flowConnectionHint,
+      ...(isDefaultWorkType
+        ? {
+            defaultWorkTypeLabel: input.messages.defaultWorkTypeLabel,
+            isDefaultWorkType: true,
+          }
+        : {}),
+      draftStatus: draftStatusForNode(input.node.id, input.input.editor),
+      focused: input.input.runtime?.focusedNodeIds?.has(input.node.id) ?? false,
+      kind: input.node.kind,
+      kindLabel: input.messages.kindLabel(input.node.kind),
+      label: input.node.label,
+      muted: input.input.runtime?.mutedNodeIds?.has(input.node.id) ?? false,
+      pendingLabel: input.messages.flowPendingLabel,
+      removingLabel: input.messages.flowRemovingLabel,
+      selectedWorkId: input.input.runtime?.selectedWorkId ?? null,
+      tokenCount:
+        input.input.runtime?.placeTokenCountsByNodeId?.get(input.node.id) ??
+        null,
+      validationMessage: input.validationMessages.get(input.node.id) ?? null,
+      ...(input.node.kind === "work-state" ? { workStateType } : {}),
+      workerStatus,
+      workerStatusLabel: workerStatus
+        ? input.messages.workerStatusLabel(workerStatus)
+        : undefined,
+      ...(workstationPresentation &&
+      workstationPresentation.semanticKind !== "STANDARD"
+        ? {
+            workstationSemanticBorderClassName:
+              workstationPresentation.borderClassName,
+            workstationSemanticIconClassName: workstationPresentation.className,
+            workstationSemanticIconKind: workstationPresentation.iconKind,
+            workstationSemanticLabel: workstationPresentation.label,
+          }
+        : {}),
+      zAxisIncompleteHints: resolveFactoryGraphZAxisIncompleteHints({
+        anchorContext,
+        canEditConnections,
+        locale: input.input.locale,
+        nodeKind: input.node.kind,
+      }),
+    },
+    draggable: true,
+    id: input.node.id,
+    position: input.input.layoutPositionsByNodeId?.get(input.node.id) ?? {
+      x: column * COLUMN_X,
+      y: row * ROW_Y,
+    },
+    type: "factoryEntity",
+  } satisfies FactoryGraphReactFlowNode;
 }
 
 function normalizeProjectionOptions(

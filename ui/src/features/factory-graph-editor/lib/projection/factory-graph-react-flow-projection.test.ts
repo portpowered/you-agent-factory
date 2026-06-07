@@ -823,4 +823,44 @@ describe("factory graph React Flow projection", () => {
       variant: "valid-target",
     });
   });
+
+  it("projects poller workstation behavior into editor semantic icon metadata", () => {
+    const factoryWithPoller = {
+      ...baseFactoryDefinition,
+      workers: [
+        {
+          name: "linear-poller",
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          behavior: "POLLER",
+          id: "linear-poller",
+          name: "linear-poller",
+          outputs: [{ state: "scheduled", workType: "story" }],
+          worker: "linear-poller",
+        },
+      ],
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(factoryWithPoller);
+
+    const projection = projectFactoryGraphToReactFlow({
+      topology,
+      workstationResolver: createFactoryGraphWorkstationResolver(
+        factoryWithPoller.workstations,
+        factoryWithPoller.workers,
+      ),
+    });
+    const pollerNode = projection.nodes.find(
+      (node) => node.id === "workstation:linear-poller",
+    );
+
+    expect(pollerNode?.data).toMatchObject({
+      workstationSemanticBorderClassName: "border-dotted",
+      workstationSemanticIconKind: "poller",
+      workstationSemanticLabel: "Poller workstation",
+    });
+  });
 });

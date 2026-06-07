@@ -52,7 +52,8 @@ what it renders, and where it routes results.
 - Workers define the execution backend and system instructions.
 - Workstations define topology, routing, prompt templates, and per-step
   execution context.
-- The current worker types are `MODEL_WORKER` and `SCRIPT_WORKER`.
+- The current worker types are `MODEL_WORKER`, `SCRIPT_WORKER`, and
+  `HOSTED_WORKER`.
 - `MODEL_WORKER` can declare provider-agnostic `operations`, named input and
   output slots, `modelLocality`, and concrete `model` identity so
   `MODEL_INVOKE` workstations can validate compatibility before dispatch.
@@ -85,9 +86,15 @@ You are a helpful assistant.
 | Put it on the worker | Put it on the workstation |
 |----------------------|---------------------------|
 | `type`, `model`, `modelProvider`, `executorProvider`, `openCodeAgent` | `type`, `worker`, `promptFile`, prompt body, `openCodeAgent` |
-| `command`, `args` | `outputSchema`, `limits.maxExecutionTime`, `limits.maxRetries` |
+| `command`, `args` | `behavior`, `outputs`, `onFailure`, `onContinue`, `onRejection` |
+| `provider`, `auth.secretRef`, `linear.*` for hosted pollers | `outputSchema`, `limits.maxExecutionTime`, `limits.maxRetries` |
 | `resources`, `timeout`, `stopToken`, `skipPermissions` | `stopWords`, `workingDirectory`, `worktree`, `env` |
 | Worker body used as the model system prompt | Prompt template used as the rendered user message |
+
+For hosted Linear pollers, keep `behavior: "POLLER"` and routing on the
+workstation. Keep `auth.secretRef`, `linear.pollInterval`, `linear.teamIds`,
+`linear.stateIds`, `linear.mapping`, and optional `linear.claim` on the bound
+worker. Do not move hosted Linear provider config onto the workstation body.
 
 Use the worker when the setting belongs to the execution backend or shared
 worker identity. Use the workstation when the setting belongs to one workflow
@@ -197,11 +204,97 @@ timeout: 10m
 Runs the Go test suite.
 ```
 
+### `HOSTED_WORKER`
+
+Use a hosted worker when Infinite You should run a built-in provider integration
+instead of a custom script or model backend. V1 hosted workers are poller-only
+and pair with a workstation that uses `behavior: "POLLER"`.
+
+The current built-in hosted provider is `LINEAR`. Hosted workers authenticate
+through `auth.secretRef` only. Do not put inline API keys, OAuth tokens, or
+other credential fields on the worker body.
+
+#### Hosted Linear authentication and secrets
+
+Set `auth.secretRef` to the secret name the runtime should resolve before
+service mode starts polling. The common path is `secrets/linear-api-key`.
+
+At runtime, Infinite You resolves the referenced secret in this order:
+
+1. A non-empty environment variable derived from the secret reference. For
+   `secrets/linear-api-key`, set `INFINITE_YOU_SECRET_SECRETS_LINEAR_API_KEY`.
+2. A file relative to the factory runtime base directory. For
+   `secrets/linear-api-key`, create `secrets/linear-api-key` beside
+   `factory.json` with the Linear API key as the file contents.
+
+Prepare one of those sources before starting service mode. The website and
+split `workers/<name>/AGENTS.md` files store only the secret reference, never
+the raw key value.
+
+#### Hosted Linear poller fields
+
+| Field | Required | What it controls |
+|-------|----------|------------------|
+| `provider` | Yes | Built-in hosted provider. Use `LINEAR` for the Linear poller. |
+| `auth.secretRef` | Yes | Referenced secret name resolved at runtime. |
+| `linear.pollInterval` | No | Go duration between poll cycles, such as `30s` or `2m`. |
+| `linear.teamIds` | No | Linear team identifiers that bound the poll source. |
+| `linear.stateIds` | No | Linear issue-state identifiers that bound the poll source. |
+| `linear.mapping.workType` | Yes | Canonical submitted work type for matched issues. |
+| `linear.mapping.state` | Yes | Canonical submitted work state for matched issues. |
+| `linear.claim.assigneeField` | No | Linear issue field used for optional assignee claim metadata. |
+
+`linear.teamIds` and `linear.stateIds` are optional scope filters. When
+omitted, the hosted Linear poller uses its default source bounds for the
+configured credentials.
+
+#### Hosted Linear poller example
+
+`workers/linear-poller/AGENTS.md`:
+
+```yaml
+---
+type: HOSTED_WORKER
+provider: LINEAR
+auth:
+  secretRef: secrets/linear-api-key
+linear:
+  pollInterval: 2m
+  teamIds: ["team-a"]
+  stateIds: ["state-b"]
+  mapping:
+    workType: task
+    state: init
+  claim:
+    assigneeField: assignee.email
+---
+
+Repository-owned Linear poller.
+```
+
+Bind it from a poller workstation in `factory.json`:
+
+```json
+{
+  "name": "linear-intake",
+  "behavior": "POLLER",
+  "worker": "linear-poller",
+  "outputs": [{ "workType": "task", "state": "init" }],
+  "onFailure": { "workType": "task", "state": "failed" }
+}
+```
+
+Use `you docs workstations` for `behavior: "POLLER"` lifecycle semantics and
+`you docs authoring-factories` for a fuller poller walkthrough.
+
 ## Core Fields
 
 | Field | Applies to | What it controls |
 |-------|------------|------------------|
-| `type` | all workers | `MODEL_WORKER` or `SCRIPT_WORKER` |
+| `type` | all workers | `MODEL_WORKER`, `SCRIPT_WORKER`, or `HOSTED_WORKER` |
+| `provider` | hosted workers | Built-in hosted provider such as `LINEAR` |
+| `auth.secretRef` | hosted workers | Referenced secret name resolved at runtime |
+| `linear` | hosted LINEAR workers | Poll interval, scope filters, mapping, and optional claim config |
 | `model` | model workers | Concrete model identifier such as `gpt-5-codex` |
 | `modelProvider` | model workers | Model-routing provider identity used for provider selection and diagnostics |
 | `executorProvider` | model workers | Execution wrapper or adapter used to run the worker |

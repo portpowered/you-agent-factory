@@ -9,10 +9,17 @@ import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 
 export type EditableWorkerValidationField =
   | "args"
+  | "authSecretRef"
   | "body"
   | "command"
   | "contract"
   | "executorProvider"
+  | "linearClaimAssigneeField"
+  | "linearMappingState"
+  | "linearMappingWorkType"
+  | "linearPollInterval"
+  | "linearStateIds"
+  | "linearTeamIds"
   | "model"
   | "modelLocality"
   | "modelProvider"
@@ -37,8 +44,11 @@ export function validateEditableWorkerDraft(
   messages: Pick<
     WorkerDetailMessages,
     | "editableConfigurationArgsInvalid"
+    | "editableConfigurationAuthSecretRefRequired"
     | "editableConfigurationBodyRequired"
     | "editableConfigurationCommandRequired"
+    | "editableConfigurationLinearMappingStateRequired"
+    | "editableConfigurationLinearMappingWorkTypeRequired"
     | "editableConfigurationModelProviderRequired"
     | "editableConfigurationNameDuplicate"
     | "editableConfigurationNameRequired"
@@ -80,6 +90,21 @@ export function validateEditableWorkerDraft(
 
   if (draft.type === "HOSTED_WORKER" && !draft.provider) {
     validationErrors.provider = messages.editableConfigurationProviderRequired;
+  }
+
+  if (draft.type === "HOSTED_WORKER" && draft.provider === "LINEAR") {
+    if (draft.authSecretRef.trim().length === 0) {
+      validationErrors.authSecretRef =
+        messages.editableConfigurationAuthSecretRefRequired;
+    }
+    if (draft.linearMappingWorkType.trim().length === 0) {
+      validationErrors.linearMappingWorkType =
+        messages.editableConfigurationLinearMappingWorkTypeRequired;
+    }
+    if (draft.linearMappingState.trim().length === 0) {
+      validationErrors.linearMappingState =
+        messages.editableConfigurationLinearMappingStateRequired;
+    }
   }
 
   if (draft.type === "SCRIPT_WORKER" && draft.argsText.includes("\0")) {
@@ -200,6 +225,16 @@ function resolveEditableWorkerContractField(
     return null;
   }
 
+  const fieldPathMatch = error.message.match(/factory\.workers\[\d+\]\.([^\s]+)/);
+  if (fieldPathMatch) {
+    const fieldFromPath = resolveEditableWorkerValidationFieldFromPath(
+      fieldPathMatch[1],
+    );
+    if (fieldFromPath) {
+      return fieldFromPath;
+    }
+  }
+
   const fieldMatch = error.message.match(
     /factory\.workers\[\d+\]\.([a-zA-Z]+)/,
   );
@@ -207,16 +242,38 @@ function resolveEditableWorkerContractField(
     return null;
   }
 
-  const fieldName = fieldMatch[1];
-  switch (fieldName) {
+  return resolveEditableWorkerValidationFieldFromPath(fieldMatch[1]);
+}
+
+function resolveEditableWorkerValidationFieldFromPath(
+  fieldPath: string,
+): EditableWorkerValidationField | null {
+  switch (fieldPath) {
     case "args":
       return "args";
+    case "auth.secretRef":
+      return "authSecretRef";
+    case "auth.clientId":
+    case "auth.clientSecret":
+      return "authSecretRef";
     case "body":
       return "body";
     case "command":
       return "command";
     case "executorProvider":
       return "executorProvider";
+    case "linear.claim.assigneeField":
+      return "linearClaimAssigneeField";
+    case "linear.mapping.state":
+      return "linearMappingState";
+    case "linear.mapping.workType":
+      return "linearMappingWorkType";
+    case "linear.pollInterval":
+      return "linearPollInterval";
+    case "linear.stateIds":
+      return "linearStateIds";
+    case "linear.teamIds":
+      return "linearTeamIds";
     case "model":
       return "model";
     case "modelLocality":

@@ -3,10 +3,28 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
+  getCurrentFactoryDocument,
+  type CurrentFactoryDocument,
+} from "../../../api/current-factory-definition";
+import {
   activateImportedFactoryForSession,
   type ImportFactoryValue,
   SessionFactoryAPIError,
 } from "../../../api/session-factory";
+import {
+  currentFactoryDefinitionQueryKey,
+  currentFactoryDocumentQueryKey,
+} from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+
+vi.mock("../../../api/current-factory-definition", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../api/current-factory-definition")
+  >("../../../api/current-factory-definition");
+  return {
+    ...actual,
+    getCurrentFactoryDocument: vi.fn(actual.getCurrentFactoryDocument),
+  };
+});
 
 vi.mock("../../../api/session-factory", async () => {
   const actual = await vi.importActual<
@@ -77,10 +95,82 @@ const canonicalFactory: ImportFactoryValue = {
 const mockedActivateImportedFactoryForSession = vi.mocked(
   activateImportedFactoryForSession,
 );
+const mockedGetCurrentFactoryDocument = vi.mocked(getCurrentFactoryDocument);
 
 describe("useFactoryImportActivation", () => {
   beforeEach(() => {
     mockedActivateImportedFactoryForSession.mockClear();
+    mockedGetCurrentFactoryDocument.mockReset();
+  });
+
+  it("syncs the current-factory query cache from readback after activation", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: {
+          retry: false,
+        },
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+    const staleDocument: CurrentFactoryDocument = {
+      name: "alpha",
+      version: {
+        logical: "4",
+        physical: "2026-05-31T10:00:00Z",
+      },
+      workers: [],
+      workstations: [],
+      workTypes: [],
+    };
+    const readbackDocument: CurrentFactoryDocument = {
+      ...staleDocument,
+      name: "Imported Factory Name-2",
+      version: {
+        logical: "5",
+        physical: "2026-05-31T10:01:00Z",
+      },
+    };
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey("session-2"),
+      staleDocument,
+    );
+    mockedActivateImportedFactoryForSession.mockResolvedValue({
+      ...canonicalFactory,
+      name: "Imported Factory Name-2",
+    });
+    mockedGetCurrentFactoryDocument.mockResolvedValue(readbackDocument);
+
+    const { result } = renderHook(
+      () => useFactoryImportActivation({ sessionID: "session-2" }),
+      { wrapper: createQueryClientWrapper(queryClient) },
+    );
+
+    await act(async () => {
+      await result.current.activateImport(
+        createFactoryImportConfirmInput({
+          factory: canonicalFactory,
+          previewImageSrc: "blob:factory-roundtrip-preview",
+          revokePreviewImageSrc: vi.fn(),
+          schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(mockedGetCurrentFactoryDocument).toHaveBeenCalledWith({
+        sessionID: "session-2",
+      });
+    });
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey("session-2")),
+    ).toEqual(readbackDocument);
+    expect(
+      queryClient.getQueryData(currentFactoryDefinitionQueryKey("session-2")),
+    ).toEqual(readbackDocument);
+    expect(result.current.activationState).toEqual({ status: "idle" });
   });
 
   it("uses session-scoped activation by default", async () => {
@@ -429,12 +519,8 @@ describe("useFactoryImportActivation", () => {
   });
 });
 
-function createQueryClientWrapper(): ({
-  children,
-}: {
-  children: ReactNode;
-}) => ReactNode {
-  const queryClient = new QueryClient({
+function createQueryClientWrapper(
+  queryClient = new QueryClient({
     defaultOptions: {
       mutations: {
         retry: false,
@@ -444,8 +530,12 @@ function createQueryClientWrapper(): ({
         retry: false,
       },
     },
-  });
-
+  }),
+): ({
+  children,
+}: {
+  children: ReactNode;
+}) => ReactNode {
   return function QueryClientWrapper({
     children,
   }: {

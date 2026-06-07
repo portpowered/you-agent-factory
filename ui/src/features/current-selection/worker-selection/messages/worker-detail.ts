@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: feature-local locale catalogs keep required language coverage in one typed asset set.
 import {
   type LocalizedMessages,
   resolveLocalizedMessages,
@@ -17,6 +18,9 @@ type WorkerDetailCatalogMessages = Omit<
 const workerDetailMessagesByLocale = {
   en: {
     argsFieldLabel: "Args",
+    authSecretRefFieldHelp:
+      "Reference name for the Linear API secret in your environment or secrets file (for example secrets/linear-api-key). The website never stores or displays the secret value.",
+    authSecretRefFieldLabel: "Secret reference",
     bodyFieldLabel: "Body",
     collapseAction: "Collapse",
     commandFieldLabel: "Command",
@@ -36,6 +40,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationHeading: "Worker configuration",
     editableConfigurationArgsInvalid:
       "Each script argument must be a single non-empty line.",
+    editableConfigurationAuthSecretRefRequired:
+      "Enter a secret reference before saving this hosted Linear worker.",
     editableConfigurationBodyRequired:
       "Enter script body instructions before saving this worker.",
     editableConfigurationCommandRequired:
@@ -82,6 +88,30 @@ const workerDetailMessagesByLocale = {
       "Resolve the highlighted fields before saving this worker.",
     executorProviderLabel: "Executor provider",
     expandAction: "Expand",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "Enter a claim assignee field before saving this hosted Linear worker.",
+    editableConfigurationLinearMappingStateRequired:
+      "Enter a mapping state before saving this hosted Linear worker.",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "Enter a mapping work type before saving this hosted Linear worker.",
+    linearClaimAssigneeFieldFieldHelp:
+      "Optional. Linear field path used when claiming issues (for example assignee.email). Required when claim is already configured on this worker.",
+    linearClaimAssigneeFieldLabel: "Claim assignee field",
+    linearMappingStateFieldHelp:
+      "Initial work state assigned to submissions created from polled Linear issues.",
+    linearMappingStateFieldLabel: "Mapping state",
+    linearMappingWorkTypeFieldHelp:
+      "Work type assigned to submissions created from polled Linear issues.",
+    linearMappingWorkTypeFieldLabel: "Mapping work type",
+    linearPollIntervalFieldHelp:
+      "Optional. How often the poller checks Linear for new issues (for example 30s or 5m).",
+    linearPollIntervalFieldLabel: "Poll interval",
+    linearStateIdsFieldHelp:
+      "Optional. One Linear workflow state ID per line to filter polled issues.",
+    linearStateIdsFieldLabel: "State IDs",
+    linearTeamIdsFieldHelp:
+      "Optional. One Linear team ID per line to limit polling scope.",
+    linearTeamIdsFieldLabel: "Team IDs",
     modelFieldHelp: "Blank uses the provider default model.",
     modelLabel: "Model",
     modelLocalityLabel: "Model locality",
@@ -111,6 +141,9 @@ const workerDetailMessagesByLocale = {
   },
   ja: {
     argsFieldLabel: "引数",
+    authSecretRefFieldHelp:
+      "環境またはシークレットファイル内の LINEAR API シークレット参照名です（例: secrets/linear-api-key）。ウェブサイトはシークレット値を保存または表示しません。",
+    authSecretRefFieldLabel: "シークレット参照",
     bodyFieldLabel: "本文",
     collapseAction: "折りたたむ",
     commandFieldLabel: "コマンド",
@@ -129,6 +162,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationHeading: "ワーカー設定",
     editableConfigurationArgsInvalid:
       "各スクリプト引数は空でない 1 行である必要があります。",
+    editableConfigurationAuthSecretRefRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にシークレット参照を入力してください。",
     editableConfigurationBodyRequired:
       "このワーカーを保存する前にスクリプト本文を入力してください。",
     editableConfigurationCommandRequired:
@@ -174,6 +209,30 @@ const workerDetailMessagesByLocale = {
       "このワーカーを保存する前にハイライトされた項目を修正してください。",
     executorProviderLabel: "実行プロバイダー",
     expandAction: "展開",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にクレーム担当者フィールドを入力してください。",
+    editableConfigurationLinearMappingStateRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にマッピング状態を入力してください。",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "このホスト型 LINEAR ワーカーを保存する前にマッピング作業種別を入力してください。",
+    linearClaimAssigneeFieldFieldHelp:
+      "任意。課題をクレームするときに使う LINEAR フィールドパスです（例: assignee.email）。このワーカーにクレームが既に設定されている場合は必須です。",
+    linearClaimAssigneeFieldLabel: "クレーム担当者フィールド",
+    linearMappingStateFieldHelp:
+      "ポーリングした LINEAR 課題から作成する submission に割り当てる初期作業状態です。",
+    linearMappingStateFieldLabel: "マッピング状態",
+    linearMappingWorkTypeFieldHelp:
+      "ポーリングした LINEAR 課題から作成する submission に割り当てる作業種別です。",
+    linearMappingWorkTypeFieldLabel: "マッピング作業種別",
+    linearPollIntervalFieldHelp:
+      "任意。ポーラーが LINEAR の新規課題を確認する間隔です（例: 30s または 5m）。",
+    linearPollIntervalFieldLabel: "ポーリング間隔",
+    linearStateIdsFieldHelp:
+      "任意。ポーリング対象を絞り込む LINEAR ワークフロー状態 ID を 1 行に 1 つ入力します。",
+    linearStateIdsFieldLabel: "状態 ID",
+    linearTeamIdsFieldHelp:
+      "任意。ポーリング範囲を限定する LINEAR チーム ID を 1 行に 1 つ入力します。",
+    linearTeamIdsFieldLabel: "チーム ID",
     modelFieldHelp:
       "任意です。空のままにするとプロバイダーの既定モデル識別子が使われます。",
     modelLabel: "モデル",
@@ -204,6 +263,9 @@ const workerDetailMessagesByLocale = {
   },
   ko: {
     argsFieldLabel: "인수",
+    authSecretRefFieldHelp:
+      "환경 또는 시크릿 파일에 있는 LINEAR API 시크릿 참조 이름입니다(예: secrets/linear-api-key). 웹사이트는 시크릿 값을 저장하거나 표시하지 않습니다.",
+    authSecretRefFieldLabel: "시크릿 참조",
     bodyFieldLabel: "본문",
     collapseAction: "접기",
     commandFieldLabel: "명령",
@@ -220,6 +282,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationHeading: "워커 구성",
     editableConfigurationArgsInvalid:
       "각 스크립트 인수는 비어 있지 않은 한 줄이어야 합니다.",
+    editableConfigurationAuthSecretRefRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 시크릿 참조를 입력하세요.",
     editableConfigurationBodyRequired:
       "이 워커를 저장하기 전에 스크립트 본문을 입력하세요.",
     editableConfigurationCommandRequired:
@@ -266,6 +330,30 @@ const workerDetailMessagesByLocale = {
       "이 워커를 저장하기 전에 강조된 필드를 해결하세요.",
     executorProviderLabel: "실행자 제공자",
     expandAction: "펼치기",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 클레임 담당자 필드를 입력하세요.",
+    editableConfigurationLinearMappingStateRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 매핑 상태를 입력하세요.",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "이 호스티드 LINEAR 워커를 저장하기 전에 매핑 작업 유형을 입력하세요.",
+    linearClaimAssigneeFieldFieldHelp:
+      "선택 사항. 이슈를 클레임할 때 사용하는 LINEAR 필드 경로입니다(예: assignee.email). 이 워커에 클레임이 이미 구성되어 있으면 필수입니다.",
+    linearClaimAssigneeFieldLabel: "클레임 담당자 필드",
+    linearMappingStateFieldHelp:
+      "폴링한 LINEAR 이슈에서 생성되는 submission에 할당할 초기 작업 상태입니다.",
+    linearMappingStateFieldLabel: "매핑 상태",
+    linearMappingWorkTypeFieldHelp:
+      "폴링한 LINEAR 이슈에서 생성되는 submission에 할당할 작업 유형입니다.",
+    linearMappingWorkTypeFieldLabel: "매핑 작업 유형",
+    linearPollIntervalFieldHelp:
+      "선택 사항. 폴러가 LINEAR의 새 이슈를 확인하는 간격입니다(예: 30s 또는 5m).",
+    linearPollIntervalFieldLabel: "폴링 간격",
+    linearStateIdsFieldHelp:
+      "선택 사항. 폴링 대상을 필터링할 LINEAR 워크플로 상태 ID를 한 줄에 하나씩 입력합니다.",
+    linearStateIdsFieldLabel: "상태 ID",
+    linearTeamIdsFieldHelp:
+      "선택 사항. 폴링 범위를 제한할 LINEAR 팀 ID를 한 줄에 하나씩 입력합니다.",
+    linearTeamIdsFieldLabel: "팀 ID",
     modelFieldHelp:
       "선택 사항입니다. 비워 두면 제공자 기본 모델 식별자가 사용됩니다.",
     modelLabel: "모델",
@@ -296,6 +384,9 @@ const workerDetailMessagesByLocale = {
   },
   "zh-CN": {
     argsFieldLabel: "参数",
+    authSecretRefFieldHelp:
+      "环境或密钥文件中的 LINEAR API 密钥引用名称（例如 secrets/linear-api-key）。网站不会存储或显示密钥值。",
+    authSecretRefFieldLabel: "密钥引用",
     bodyFieldLabel: "正文",
     collapseAction: "收起",
     commandFieldLabel: "命令",
@@ -309,6 +400,8 @@ const workerDetailMessagesByLocale = {
     editableConfigurationExpandActionLabel: "展开 worker 配置编辑器",
     editableConfigurationHeading: "Worker 配置",
     editableConfigurationArgsInvalid: "每个脚本参数必须是非空的一行。",
+    editableConfigurationAuthSecretRefRequired:
+      "保存此托管 LINEAR worker 前请输入密钥引用。",
     editableConfigurationBodyRequired: "保存此 worker 前请输入脚本正文。",
     editableConfigurationCommandRequired: "保存此 worker 前请输入命令。",
     editableConfigurationContractInvalidPrefix: "Worker 配置无效。",
@@ -348,6 +441,29 @@ const workerDetailMessagesByLocale = {
     editableConfigurationValidationStatus: "保存此 worker 前请修正高亮字段。",
     executorProviderLabel: "执行器 provider",
     expandAction: "展开",
+    editableConfigurationLinearClaimAssigneeFieldRequired:
+      "保存此托管 LINEAR worker 前请输入认领 assignee 字段。",
+    editableConfigurationLinearMappingStateRequired:
+      "保存此托管 LINEAR worker 前请输入映射 state。",
+    editableConfigurationLinearMappingWorkTypeRequired:
+      "保存此托管 LINEAR worker 前请输入映射 work type。",
+    linearClaimAssigneeFieldFieldHelp:
+      "可选。认领 issue 时使用的 LINEAR 字段路径（例如 assignee.email）。若此 worker 已配置 claim，则必填。",
+    linearClaimAssigneeFieldLabel: "认领 assignee 字段",
+    linearMappingStateFieldHelp:
+      "从轮询的 LINEAR issue 创建的 submission 所分配的初始 work state。",
+    linearMappingStateFieldLabel: "映射 state",
+    linearMappingWorkTypeFieldHelp:
+      "从轮询的 LINEAR issue 创建的 submission 所分配的 work type。",
+    linearMappingWorkTypeFieldLabel: "映射 work type",
+    linearPollIntervalFieldHelp:
+      "可选。轮询器检查 LINEAR 新 issue 的频率（例如 30s 或 5m）。",
+    linearPollIntervalFieldLabel: "轮询间隔",
+    linearStateIdsFieldHelp:
+      "可选。每行一个 LINEAR 工作流 state ID，用于过滤轮询范围。",
+    linearStateIdsFieldLabel: "State ID",
+    linearTeamIdsFieldHelp: "可选。每行一个 LINEAR team ID，用于限制轮询范围。",
+    linearTeamIdsFieldLabel: "Team ID",
     modelFieldHelp: "可选。留空将使用 provider 默认模型标识符。",
     modelLabel: "模型",
     modelLocalityLabel: "模型位置",
