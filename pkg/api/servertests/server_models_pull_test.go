@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"context"
@@ -24,7 +24,7 @@ func TestPullModel_ReturnsManagedRuntimeSourceFetchFailureOutcome(t *testing.T) 
 			Cause: apisurface.ErrManagedRuntimeSourceFetchFailed,
 		},
 	}
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
 	rec := httptest.NewRecorder()
@@ -53,7 +53,7 @@ func TestPullModel_ReturnsManagedRuntimeTimeoutOutcome(t *testing.T) {
 			Cause: context.DeadlineExceeded,
 		},
 	}
-	srv := newTestServer(mf)
+	srv := newAPITestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/models/OMNIVOICE_Q4_K_M/pull", nil)
 	rec := httptest.NewRecorder()
