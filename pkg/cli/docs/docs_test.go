@@ -571,17 +571,27 @@ func TestMarkdown_MockWorkersReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"# Mock Workers",
 		"mockWorkers",
+		"unmatchedDispatchPolicy",
+		"passthrough",
 		"you run --dir <factory> --with-mock-workers",
 		"you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json",
+		"docs/examples/mock-workers-script.json",
+		"docs/examples/mock-workers-mixed.json",
 		"runType",
 		"accept",
 		"reject",
 		"script",
 		"scriptConfig",
 		"rejectConfig",
+		"workingDirectory",
+		"timeout",
 		"default accepted",
 		"docs/examples/mock-workers.json",
 		"docs/examples/startup-work.json",
+		"## Reviewer Verification",
+		"you docs mock-workers",
+		"Do not rely on a live real-agent passthrough run for signoff",
+		"automated service and runner tests",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(mock-workers) missing %q:\n%s", want, got)
