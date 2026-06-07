@@ -14,10 +14,6 @@ import {
   type WorkPayloadSnapshot,
 } from "./workPayloadLineage";
 
-export function workRef(item: FactoryWorkItem): DashboardWorkItemRef {
-  return workItemRef(item);
-}
-
 export function workItemRef(item: FactoryWorkItem): DashboardWorkItemRef {
   const currentChainingTraceID =
     item.current_chaining_trace_id ?? item.trace_id;

@@ -65,7 +65,7 @@ import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
 import type { ReplayWorldState } from "./types";
-import { workRef } from "./workItemRef";
+import { workItemRef } from "./workItemRef";
 
 function seedResourceOccupancy(state: ReplayWorldState): void {
   seedResourceOccupancyBase(state, addToken, resourceTokenID);
@@ -281,7 +281,7 @@ function applyRequest(
       publicWorkItems.length === 0,
     traceIDs: uniqueSorted(publicWorkItems.map((item) => item.trace_id ?? "")),
     transitionID: dashboardTransitionID(event.payload.transitionId),
-    workItems: publicWorkItems.map(workRef),
+    workItems: publicWorkItems.map(workItemRef),
     workstationName: resolveWorkstationName(
       state.topology,
       event.payload.transitionId,

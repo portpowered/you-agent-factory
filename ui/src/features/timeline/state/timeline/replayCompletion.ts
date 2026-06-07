@@ -32,7 +32,7 @@ import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
 } from "./systemTime";
 import type { ReplayWorldState, WorldCompletion, WorldDispatch } from "./types";
-import { workRef } from "./workItemRef";
+import { workItemRef } from "./workItemRef";
 
 export function latestWorkstationAttempt(
   attempts: Record<string, DashboardInferenceAttempt> | undefined,
@@ -140,7 +140,7 @@ export function responseCompletion(
     .map((item) => {
       state.workItemsByID[item.id] = item;
       addTraceWork(state, item);
-      return workRef(item);
+      return workItemRef(item);
     });
   const terminalWork = terminalWorkFromItems(
     state,
@@ -150,7 +150,7 @@ export function responseCompletion(
   const latestAttempt = latestWorkstationAttempt(
     state.inferenceAttemptsByDispatchID[dispatchID],
   );
-  const terminalRefs = terminalWork ? [workRef(terminalWork.work_item)] : [];
+  const terminalRefs = terminalWork ? [workItemRef(terminalWork.work_item)] : [];
   const workItemsByID = new Map(
     [...(active?.workItems ?? []), ...outputRefs, ...terminalRefs].map(
       (item) => [item.work_id, item],
@@ -222,7 +222,7 @@ export function recordFailedCompletion(
     completion.outputItems.length > 0
       ? completion.outputItems
       : completion.terminalWork !== undefined
-        ? [workRef(completion.terminalWork.work_item)]
+        ? [workItemRef(completion.terminalWork.work_item)]
         : completion.workItems;
 
   for (const item of workItems) {
@@ -238,7 +238,7 @@ export function recordFailedCompletion(
       failure_message: completion.failureMessage,
       failure_reason: completion.failureReason,
       transition_id: completion.transitionID,
-      work_item: workRef(existing),
+      work_item: workItemRef(existing),
       workstation_name: completion.workstationName,
     };
   }
