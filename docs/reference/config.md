@@ -390,6 +390,101 @@ you run --factory ./factory.json "Fix the lint issues"
 `--factory` cannot be combined with `--dir`. Use `--dir` for the traditional
 factory-directory layout and inbox workflows.
 
+### Clean invocation contract for `you run --factory`
+
+One-shot batch `you run --factory` invocations enter a clean invocation mode
+when they submit prompt or work input and are not `--continuously`. This mode
+is intended for shell pipelines and other result-oriented automation.
+
+Operator-oriented runs keep the existing startup behavior:
+
+- `you` with no args
+- `you run --continuously`
+- `you run --dir ...` without factory prompt submission
+
+#### Input source rules
+
+Clean invocation accepts exactly one primary input source per invocation:
+
+- a trailing positional prompt
+- stdin via `-`
+- piped non-TTY stdin
+- `--work <path>` for a canonical batch file
+
+Do not combine multiple payload sources in the same invocation. If stdin and a
+non-empty positional prompt are both present, the command exits non-zero before
+runtime startup and writes a stable stderr error with code
+`RUN_INVOCATION_AMBIGUOUS_INPUT` naming the conflicting sources.
+
+Example ambiguity failure:
+
+```bash
+printf 'from stdin' | you run --factory ./factory.json "from arg"
+```
+
+Text stderr:
+
+```text
+RUN_INVOCATION_AMBIGUOUS_INPUT: conflicting input sources: positional prompt, stdin
+```
+
+JSON stderr with global `--json`:
+
+```json
+{"code":"RUN_INVOCATION_AMBIGUOUS_INPUT","message":"conflicting input sources: positional prompt, stdin"}
+```
+
+#### Success stdout contract
+
+On success, stdout carries only the primary result from the sole work type that
+declares `handlingBehavior: ["DEFAULT"]`.
+
+- Default text mode writes the result body only.
+- Global `--json` writes exactly one JSON object to stdout.
+- Clean invocation never adds startup banners, dashboard URLs, runtime-log
+  paths, simple-dashboard snapshots, or recording-path notices to stdout.
+
+Text success example:
+
+```bash
+you run --factory ./factory.json "Summarize the changelog" > result.txt
+```
+
+JSON success example:
+
+```bash
+you --json run --factory ./factory.json "Summarize the changelog"
+```
+
+```json
+{"output":"Summary text","workId":"work-123","workTypeName":"task","traceId":"trace-123","sessionId":"~default"}
+```
+
+Stdin-only example:
+
+```bash
+printf 'Summarize stdin input' | you run --factory ./factory.json
+```
+
+#### Failure stderr contract
+
+When a clean invocation fails, is cancelled, or times out, it exits non-zero,
+emits no success payload on stdout, and writes the failure contract to stderr.
+
+Stable error codes include:
+
+- `RUN_INVOCATION_FAILED` for runtime or work failures
+- `RUN_INVOCATION_CANCELLED` for SIGINT or SIGTERM cancellation
+- `RUN_INVOCATION_TIMEOUT` when the invocation deadline is exceeded
+- `RUN_INVOCATION_AMBIGUOUS_INPUT` when payload sources conflict before startup
+
+Without `--json`, stderr is a single concise text line beginning with the stable
+error code. With global `--json`, stderr is a single parseable JSON object with
+at least `code` and `message`.
+
+Default replay recording still follows the configured recording behavior; clean
+invocation only changes what reaches stdout and stderr.
+
 Canonical guides: `you docs mock-workers` and
 `you docs record-replay`. For an end-to-end authoring walkthrough,
 see `you docs authoring-factories`.
