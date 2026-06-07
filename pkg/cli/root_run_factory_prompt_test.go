@@ -619,6 +619,38 @@ func TestRunCommand_FactoryContinuousPromptKeepsOperatorOutputMode(t *testing.T)
 	}
 }
 
+func TestRunCommand_FactoryPromptRejectsEmptyPositionalWithStableCode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, ""})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected explicit empty positional rejection")
+	}
+	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start for explicit empty factory positional input")
+	}
+}
+
 func TestRunCommand_FactoryPromptRejectsWhitespaceOnlyPositionalWithStableCode(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

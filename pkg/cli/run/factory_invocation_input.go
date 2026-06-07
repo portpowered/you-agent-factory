@@ -47,18 +47,18 @@ type FactoryInvocationInput struct {
 // ResolveFactoryInvocationInput resolves the one-shot invocation payload from
 // positional prompt args, explicit "-" stdin, or piped non-TTY stdin.
 func ResolveFactoryInvocationInput(cfg FactoryInvocationInputConfig) (FactoryInvocationInput, error) {
-	positionalPrompt, explicitStdin := splitInvocationPromptArgs(cfg.PromptArgs)
+	positionalPrompt, explicitStdin, hasPositional := splitInvocationPromptArgs(cfg.PromptArgs)
 	stdinPayload, hasStdin, err := resolveInvocationStdin(cfg, explicitStdin)
 	if err != nil {
 		return FactoryInvocationInput{}, err
 	}
 
-	if positionalPrompt == "" && !hasStdin {
+	if !hasPositional && !hasStdin {
 		return FactoryInvocationInput{}, nil
 	}
 
 	sources := invocations.TextInputSources{}
-	if positionalPrompt != "" {
+	if hasPositional {
 		sources.PositionalText = &positionalPrompt
 	}
 	if hasStdin {
@@ -68,9 +68,6 @@ func ResolveFactoryInvocationInput(cfg FactoryInvocationInputConfig) (FactoryInv
 	resolved, err := invocations.ResolveTextInput(sources)
 	if err != nil {
 		return FactoryInvocationInput{}, factoryInvocationInputError(err)
-	}
-	if resolved.Text == "" {
-		return FactoryInvocationInput{}, nil
 	}
 
 	switch resolved.Source {
@@ -83,16 +80,17 @@ func ResolveFactoryInvocationInput(cfg FactoryInvocationInputConfig) (FactoryInv
 	}
 }
 
-func splitInvocationPromptArgs(args []string) (prompt string, explicitStdin bool) {
+func splitInvocationPromptArgs(args []string) (prompt string, explicitStdin bool, hasPositional bool) {
 	positional := make([]string, 0, len(args))
 	for _, arg := range args {
 		if strings.TrimSpace(arg) == "-" {
 			explicitStdin = true
 			continue
 		}
+		hasPositional = true
 		positional = append(positional, arg)
 	}
-	return strings.Join(positional, " "), explicitStdin
+	return strings.Join(positional, " "), explicitStdin, hasPositional
 }
 
 func resolveInvocationStdin(cfg FactoryInvocationInputConfig, explicitStdin bool) (string, bool, error) {

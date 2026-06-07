@@ -948,9 +948,6 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if workChanged {
 		cfg.CleanInvocationInputSource = runcli.InvocationInputSourceWorkFile
 	}
-	if len(promptArgs) > 0 && input.Payload == "" {
-		return fmt.Errorf("prompt is required for you run --factory")
-	}
 	if input.Payload == "" {
 		return nil
 	}
