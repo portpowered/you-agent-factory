@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
   applyEditableWorkerDraft,
+  areEditableWorkerDraftsEqual,
   type EditableWorkerDraft,
   editableWorkerDraftFromValues,
   resolveEditableWorkerValues,
@@ -213,7 +214,9 @@ function createEditableWorkerDraftHandlers(
     onCommandChange: (value: string) => {
       updateDraft(setSessionState, (draft) => ({ ...draft, command: value }));
     },
-    onExecutorProviderChange: (value: EditableWorkerDraft["executorProvider"]) => {
+    onExecutorProviderChange: (
+      value: EditableWorkerDraft["executorProvider"],
+    ) => {
       updateDraft(setSessionState, (draft) => ({
         ...draft,
         executorProvider: value,
@@ -282,28 +285,6 @@ function updateDraft(
           draft: updater(currentState.draft),
         }
       : currentState,
-  );
-}
-
-function areEditableWorkerDraftsEqual(
-  left: EditableWorkerDraft,
-  right: EditableWorkerDraft,
-): boolean {
-  return (
-    left.argsText === right.argsText &&
-    left.body === right.body &&
-    left.command === right.command &&
-    left.executorProvider === right.executorProvider &&
-    left.model === right.model &&
-    left.modelLocality === right.modelLocality &&
-    left.modelProvider === right.modelProvider &&
-    left.name === right.name &&
-    left.provider === right.provider &&
-    left.skipPermissions === right.skipPermissions &&
-    left.stopToken === right.stopToken &&
-    left.timeoutAmount === right.timeoutAmount &&
-    left.timeoutUnit === right.timeoutUnit &&
-    left.type === right.type
   );
 }
 

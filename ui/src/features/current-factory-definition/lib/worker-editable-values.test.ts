@@ -1,11 +1,13 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
+  areEditableWorkerDraftsEqual,
+  EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
   editableWorkerDraftFromValues,
   parseWorkerArgsText,
   resolveEditableWorkerValues,
 } from "./worker-editable-values";
 
-describe("resolveEditableWorkerValues", () => {
+describe("resolveEditableWorkerValues for model workers", () => {
   it("joins the selected worker with referencing workstation names", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
@@ -26,6 +28,7 @@ describe("resolveEditableWorkerValues", () => {
 
     expect(resolveEditableWorkerValues(factory, "reviewer")).toEqual({
       args: [],
+      ...EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
       body: null,
       command: null,
       executorProvider: null,
@@ -122,6 +125,130 @@ describe("resolveEditableWorkerValues", () => {
     };
 
     expect(resolveEditableWorkerValues(factory, "missing-worker")).toBeNull();
+  });
+});
+
+describe("resolveEditableWorkerValues for hosted Linear workers", () => {
+  it("reads hosted Linear poller config with stable defaults for omitted optional values", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear-api-key" },
+          linear: {
+            claim: { assigneeField: "assignee.email" },
+            mapping: { state: "queued", workType: "story" },
+            pollInterval: "30s",
+            stateIds: ["state-b"],
+            teamIds: ["team-a"],
+          },
+          name: "linear-poller",
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const values = resolveEditableWorkerValues(factory, "linear-poller");
+    expect(values).toEqual({
+      args: [],
+      authSecretRef: "secrets/linear-api-key",
+      body: null,
+      command: null,
+      executorProvider: null,
+      linearClaimAssigneeField: "assignee.email",
+      linearMappingState: "queued",
+      linearMappingWorkType: "story",
+      linearPollInterval: "30s",
+      linearStateIds: ["state-b"],
+      linearTeamIds: ["team-a"],
+      model: null,
+      modelLocality: null,
+      modelProvider: null,
+      provider: "LINEAR",
+      skipPermissions: null,
+      stopToken: null,
+      timeout: null,
+      type: "HOSTED_WORKER",
+      workerName: "linear-poller",
+      workstationNames: [],
+    });
+
+    if (!values) {
+      throw new Error("expected linear-poller values");
+    }
+    expect(editableWorkerDraftFromValues(values)).toMatchObject({
+      authSecretRef: "secrets/linear-api-key",
+      linearClaimAssigneeField: "assignee.email",
+      linearMappingState: "queued",
+      linearMappingWorkType: "story",
+      linearPollInterval: "30s",
+      linearStateIdsText: "state-b",
+      linearTeamIdsText: "team-a",
+      provider: "LINEAR",
+      type: "HOSTED_WORKER",
+    });
+  });
+});
+
+describe("areEditableWorkerDraftsEqual", () => {
+  it("treats hosted Linear field changes as dirty", () => {
+    const base = editableWorkerDraftFromValues({
+      args: [],
+      authSecretRef: "secrets/linear-api-key",
+      body: null,
+      command: null,
+      executorProvider: null,
+      linearClaimAssigneeField: null,
+      linearMappingState: "queued",
+      linearMappingWorkType: "story",
+      linearPollInterval: "30s",
+      linearStateIds: ["state-b"],
+      linearTeamIds: ["team-a"],
+      model: null,
+      modelLocality: null,
+      modelProvider: null,
+      provider: "LINEAR",
+      skipPermissions: null,
+      stopToken: null,
+      timeout: null,
+      type: "HOSTED_WORKER",
+      workerName: "linear-poller",
+      workstationNames: [],
+    });
+
+    expect(
+      areEditableWorkerDraftsEqual(base, {
+        ...base,
+        authSecretRef: "secrets/other-key",
+      }),
+    ).toBe(false);
+    expect(
+      areEditableWorkerDraftsEqual(base, {
+        ...base,
+        linearPollInterval: "1m",
+      }),
+    ).toBe(false);
+    expect(
+      areEditableWorkerDraftsEqual(base, {
+        ...base,
+        linearTeamIdsText: "team-c",
+      }),
+    ).toBe(false);
+    expect(
+      areEditableWorkerDraftsEqual(base, {
+        ...base,
+        linearMappingWorkType: "task",
+      }),
+    ).toBe(false);
+    expect(
+      areEditableWorkerDraftsEqual(base, {
+        ...base,
+        linearClaimAssigneeField: "assignee.id",
+      }),
+    ).toBe(false);
+    expect(areEditableWorkerDraftsEqual(base, base)).toBe(true);
   });
 });
 

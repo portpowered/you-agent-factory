@@ -1,8 +1,33 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
   applyEditableWorkerDraft,
+  EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
+  EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
   editableWorkerDraftFromValues,
 } from "./worker-editable-values";
+
+function buildDraft(
+  overrides: Partial<ReturnType<typeof editableWorkerDraftFromValues>> = {},
+) {
+  return {
+    argsText: "",
+    body: "",
+    command: "",
+    executorProvider: null,
+    model: "",
+    modelLocality: null,
+    modelProvider: null,
+    name: "worker",
+    provider: null,
+    skipPermissions: false,
+    stopToken: "",
+    timeoutAmount: "",
+    timeoutUnit: "m" as const,
+    type: "MODEL_WORKER" as const,
+    ...EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
+    ...overrides,
+  };
+}
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: applyEditableWorkerDraft coverage keeps model, script, and hosted regressions together.
 describe("applyEditableWorkerDraft", () => {
@@ -42,22 +67,18 @@ describe("applyEditableWorkerDraft", () => {
       workTypes: [{ name: "story", states: [] }],
     };
 
-    const updatedFactory = applyEditableWorkerDraft(factory, "reviewer", {
-      argsText: "",
-      body: "",
-      command: "",
-      executorProvider: null,
-      model: "gpt-5.9",
-      modelLocality: "CLOUD",
-      modelProvider: "CODEX",
-      name: "reviewer",
-      provider: null,
-      skipPermissions: false,
-      stopToken: "STOP",
-      timeoutAmount: "",
-      timeoutUnit: "m",
-      type: "MODEL_WORKER",
-    });
+    const updatedFactory = applyEditableWorkerDraft(
+      factory,
+      "reviewer",
+      buildDraft({
+        model: "gpt-5.9",
+        modelLocality: "CLOUD",
+        modelProvider: "CODEX",
+        name: "reviewer",
+        stopToken: "STOP",
+        type: "MODEL_WORKER",
+      }),
+    );
 
     expect(updatedFactory).toMatchObject({
       metadata: {
@@ -117,6 +138,7 @@ describe("applyEditableWorkerDraft", () => {
       "reviewer",
       editableWorkerDraftFromValues({
         args: ["--verbose"],
+        ...EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
         body: "Run the script worker body.",
         command: "node",
         executorProvider: null,
@@ -144,7 +166,7 @@ describe("applyEditableWorkerDraft", () => {
     expect(updatedFactory?.workers?.[0]).not.toHaveProperty("modelProvider");
   });
 
-  it("applies hosted worker provider without exposing workstation-owned fields", () => {
+  it("applies hosted Linear poller config and preserves unrelated worker-owned fields", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
       workers: [
@@ -152,37 +174,87 @@ describe("applyEditableWorkerDraft", () => {
           auth: { secretRef: "linear-token" },
           linear: { pollInterval: "30s" },
           name: "linear-sync",
+          resources: [{ capacity: 1, name: "linear-slot" }],
           type: "HOSTED_WORKER",
         },
       ],
       workTypes: [],
     };
 
-    const updatedFactory = applyEditableWorkerDraft(factory, "linear-sync", {
-      argsText: "",
-      body: "",
-      command: "",
-      executorProvider: null,
-      model: "",
-      modelLocality: null,
-      modelProvider: null,
-      name: "linear-sync",
-      provider: "LINEAR",
-      skipPermissions: false,
-      stopToken: "",
-      timeoutAmount: "1",
-      timeoutUnit: "h",
-      type: "HOSTED_WORKER",
-    });
+    const updatedFactory = applyEditableWorkerDraft(
+      factory,
+      "linear-sync",
+      buildDraft({
+        authSecretRef: "secrets/linear-api-key",
+        linearClaimAssigneeField: "assignee.email",
+        linearMappingState: "queued",
+        linearMappingWorkType: "story",
+        linearPollInterval: "45s",
+        linearStateIdsText: "state-b",
+        linearTeamIdsText: "team-a",
+        name: "linear-sync",
+        provider: "LINEAR",
+        timeoutAmount: "1",
+        timeoutUnit: "h",
+        type: "HOSTED_WORKER",
+      }),
+    );
 
     expect(updatedFactory?.workers?.[0]).toEqual({
-      auth: { secretRef: "linear-token" },
-      linear: { pollInterval: "30s" },
+      auth: { secretRef: "secrets/linear-api-key" },
+      linear: {
+        claim: { assigneeField: "assignee.email" },
+        mapping: { state: "queued", workType: "story" },
+        pollInterval: "45s",
+        stateIds: ["state-b"],
+        teamIds: ["team-a"],
+      },
       name: "linear-sync",
       provider: "LINEAR",
+      resources: [{ capacity: 1, name: "linear-slot" }],
       timeout: "1h",
       type: "HOSTED_WORKER",
     });
+  });
+
+  it("clears stale hosted Linear config when the worker is no longer a hosted Linear worker", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear-api-key" },
+          linear: {
+            mapping: { state: "queued", workType: "story" },
+            pollInterval: "30s",
+          },
+          name: "linear-sync",
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkerDraft(
+      factory,
+      "linear-sync",
+      buildDraft({
+        argsText: "--verbose",
+        command: "node",
+        name: "linear-sync",
+        type: "SCRIPT_WORKER",
+      }),
+    );
+
+    expect(updatedFactory?.workers?.[0]).toEqual({
+      args: ["--verbose"],
+      command: "node",
+      name: "linear-sync",
+      type: "SCRIPT_WORKER",
+    });
+    expect(updatedFactory?.workers?.[0]).not.toHaveProperty("auth");
+    expect(updatedFactory?.workers?.[0]).not.toHaveProperty("linear");
+    expect(updatedFactory?.workers?.[0]).not.toHaveProperty("provider");
   });
 
   it("renames the selected worker and rewrites referencing workstation assignments", () => {
@@ -214,6 +286,7 @@ describe("applyEditableWorkerDraft", () => {
       "reviewer",
       editableWorkerDraftFromValues({
         args: [],
+        ...EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
         body: null,
         command: null,
         executorProvider: null,
@@ -237,22 +310,16 @@ describe("applyEditableWorkerDraft", () => {
       { id: "run", name: "Run", worker: "runner" },
     ]);
 
-    const renamedFactory = applyEditableWorkerDraft(factory, "reviewer", {
-      ...editableWorkerDraftFromValues({
-        args: [],
-        body: null,
-        command: null,
-        executorProvider: null,
+    const renamedFactory = applyEditableWorkerDraft(
+      factory,
+      "reviewer",
+      buildDraft({
         model: "gpt-5.5",
-        modelLocality: null,
         modelProvider: "CURSOR",
-        provider: null,
+        name: "senior-reviewer",
         type: "MODEL_WORKER",
-        workerName: "reviewer",
-        workstationNames: ["Review", "Plan"],
       }),
-      name: "senior-reviewer",
-    });
+    );
 
     expect(renamedFactory?.workers?.[0]).toMatchObject({
       name: "senior-reviewer",

@@ -1,5 +1,6 @@
 export interface WorkerDetailMessages {
   argsFieldLabel: string;
+  authSecretRefFieldLabel: string;
   bodyFieldLabel: string;
   collapseAction: string;
   commandFieldLabel: string;
@@ -42,6 +43,12 @@ export interface WorkerDetailMessages {
   editableConfigurationValidationStatus: string;
   executorProviderLabel: string;
   expandAction: string;
+  linearClaimAssigneeFieldLabel: string;
+  linearMappingStateFieldLabel: string;
+  linearMappingWorkTypeFieldLabel: string;
+  linearPollIntervalFieldLabel: string;
+  linearStateIdsFieldLabel: string;
+  linearTeamIdsFieldLabel: string;
   modelFieldHelp: string;
   modelLabel: string;
   modelLocalityLabel: string;

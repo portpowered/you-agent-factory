@@ -40,9 +40,16 @@ export type EditableWorkerSaveValidationErrors = {
 
 export type EditableWorkerOverwriteField =
   | "args"
+  | "authSecretRef"
   | "body"
   | "command"
   | "executorProvider"
+  | "linearClaimAssigneeField"
+  | "linearMappingState"
+  | "linearMappingWorkType"
+  | "linearPollInterval"
+  | "linearStateIds"
+  | "linearTeamIds"
   | "model"
   | "modelLocality"
   | "modelProvider"
