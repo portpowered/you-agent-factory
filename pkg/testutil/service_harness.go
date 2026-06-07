@@ -556,15 +556,6 @@ func cloneEngineStateSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.Mar
 	return &cloned
 }
 
-func (h *ServiceTestHarness) storeLatestMarking(snapshot *petri.MarkingSnapshot) {
-	if h == nil || snapshot == nil {
-		return
-	}
-	h.markingMu.Lock()
-	defer h.markingMu.Unlock()
-	h.latestMarking = cloneMarkingSnapshot(snapshot)
-}
-
 func (h *ServiceTestHarness) latestMarkingSnapshot() *petri.MarkingSnapshot {
 	if h == nil {
 		return nil
