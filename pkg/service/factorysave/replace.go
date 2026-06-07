@@ -35,8 +35,36 @@ func (s *Service) saveReplaceCurrentForSession(
 		return factoryapi.Factory{}, err
 	}
 
+	saved, err := s.replaceCurrentFactoryLayoutLocked(
+		ctx,
+		sessionID,
+		session,
+		current,
+		request,
+		sessionRootDir,
+		targetDir,
+		activateFactoryDir,
+		sanitized,
+	)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return saved, nil
+}
+
+func (s *Service) replaceCurrentFactoryLayoutLocked(
+	ctx context.Context,
+	sessionID string,
+	session *factorysessions.LiveSession,
+	current factoryapi.Factory,
+	request factoryapi.Factory,
+	sessionRootDir string,
+	targetDir string,
+	activateFactoryDir string,
+	sanitized factoryapi.Factory,
+) (factoryapi.Factory, error) {
 	var saved factoryapi.Factory
-	err = s.host.WithActivationLock(func() error {
+	err := s.host.WithActivationLock(func() error {
 		if err := s.host.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 			return err
 		}

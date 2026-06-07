@@ -629,38 +629,69 @@ func namedFactoryPayloadWithPortableLayout(t *testing.T, project string) []byte 
 func assertLoadedPortableLayoutConfig(t *testing.T, cfg *interfaces.FactoryConfig, wantNodeID string) {
 	t.Helper()
 
+	layout := requirePortableLayoutFixture(t, cfg)
+	assertPortableLayoutFixtureNode(t, layout, wantNodeID)
+	assertPortableLayoutFixtureEdge(t, layout)
+	assertPortableLayoutFixtureGroup(t, layout, wantNodeID)
+	assertPortableLayoutFixtureViewportPreferences(t, layout)
+}
+
+func requirePortableLayoutFixture(t *testing.T, cfg *interfaces.FactoryConfig) *interfaces.FactoryLayoutConfig {
+	t.Helper()
+
 	if cfg == nil || cfg.Layout == nil {
 		t.Fatalf("expected portable layout on loaded factory config, got %#v", cfg)
 	}
 	if cfg.Layout.SchemaVersion != 1 {
 		t.Fatalf("layout schemaVersion = %d, want 1", cfg.Layout.SchemaVersion)
 	}
-	if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != wantNodeID {
-		t.Fatalf("layout nodes = %#v, want %s", cfg.Layout.Nodes, wantNodeID)
+	return cfg.Layout
+}
+
+func assertPortableLayoutFixtureNode(t *testing.T, layout *interfaces.FactoryLayoutConfig, wantNodeID string) {
+	t.Helper()
+
+	if len(layout.Nodes) != 1 || layout.Nodes[0].ID != wantNodeID {
+		t.Fatalf("layout nodes = %#v, want %s", layout.Nodes, wantNodeID)
 	}
-	if cfg.Layout.Nodes[0].Position.X != 128 || cfg.Layout.Nodes[0].Position.Y != 256 {
-		t.Fatalf("layout node position = %#v, want x=128 y=256", cfg.Layout.Nodes[0].Position)
+	if layout.Nodes[0].Position.X != 128 || layout.Nodes[0].Position.Y != 256 {
+		t.Fatalf("layout node position = %#v, want x=128 y=256", layout.Nodes[0].Position)
 	}
-	if len(cfg.Layout.Edges) != 1 || cfg.Layout.Edges[0].ID == "" {
-		t.Fatalf("layout edges = %#v, want one edge", cfg.Layout.Edges)
+}
+
+func assertPortableLayoutFixtureEdge(t *testing.T, layout *interfaces.FactoryLayoutConfig) {
+	t.Helper()
+
+	if len(layout.Edges) != 1 || layout.Edges[0].ID == "" {
+		t.Fatalf("layout edges = %#v, want one edge", layout.Edges)
 	}
-	if len(cfg.Layout.Edges[0].Waypoints) != 1 || cfg.Layout.Edges[0].Waypoints[0].X != 180 {
-		t.Fatalf("layout edge waypoints = %#v, want one waypoint at x=180", cfg.Layout.Edges[0].Waypoints)
+	if len(layout.Edges[0].Waypoints) != 1 || layout.Edges[0].Waypoints[0].X != 180 {
+		t.Fatalf("layout edge waypoints = %#v, want one waypoint at x=180", layout.Edges[0].Waypoints)
 	}
-	if cfg.Layout.Edges[0].LabelPosition == nil || cfg.Layout.Edges[0].LabelPosition.X != 200 {
-		t.Fatalf("layout edge labelPosition = %#v, want x=200", cfg.Layout.Edges[0].LabelPosition)
+	if layout.Edges[0].LabelPosition == nil || layout.Edges[0].LabelPosition.X != 200 {
+		t.Fatalf("layout edge labelPosition = %#v, want x=200", layout.Edges[0].LabelPosition)
 	}
-	if len(cfg.Layout.Groups) != 1 || cfg.Layout.Groups[0].ID != "group-1" {
-		t.Fatalf("layout groups = %#v, want group-1", cfg.Layout.Groups)
+}
+
+func assertPortableLayoutFixtureGroup(t *testing.T, layout *interfaces.FactoryLayoutConfig, wantNodeID string) {
+	t.Helper()
+
+	if len(layout.Groups) != 1 || layout.Groups[0].ID != "group-1" {
+		t.Fatalf("layout groups = %#v, want group-1", layout.Groups)
 	}
-	if len(cfg.Layout.Groups[0].NodeIDs) != 1 || cfg.Layout.Groups[0].NodeIDs[0] != wantNodeID {
-		t.Fatalf("layout group nodeIds = %#v, want %s", cfg.Layout.Groups[0].NodeIDs, wantNodeID)
+	if len(layout.Groups[0].NodeIDs) != 1 || layout.Groups[0].NodeIDs[0] != wantNodeID {
+		t.Fatalf("layout group nodeIds = %#v, want %s", layout.Groups[0].NodeIDs, wantNodeID)
 	}
-	if cfg.Layout.Viewport == nil || math.Abs(cfg.Layout.Viewport.Zoom-0.9) > 1e-6 {
-		t.Fatalf("layout viewport = %#v, want zoom 0.9", cfg.Layout.Viewport)
+}
+
+func assertPortableLayoutFixtureViewportPreferences(t *testing.T, layout *interfaces.FactoryLayoutConfig) {
+	t.Helper()
+
+	if layout.Viewport == nil || math.Abs(layout.Viewport.Zoom-0.9) > 1e-6 {
+		t.Fatalf("layout viewport = %#v, want zoom 0.9", layout.Viewport)
 	}
-	if cfg.Layout.Preferences == nil || cfg.Layout.Preferences.Direction != "RIGHT" {
-		t.Fatalf("layout preferences = %#v, want RIGHT direction", cfg.Layout.Preferences)
+	if layout.Preferences == nil || layout.Preferences.Direction != "RIGHT" {
+		t.Fatalf("layout preferences = %#v, want RIGHT direction", layout.Preferences)
 	}
 }
 
