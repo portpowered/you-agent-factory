@@ -42,6 +42,9 @@ type RunConfig struct {
 	Continuously bool
 	WorkFile     string
 	Dir          string
+	// NamedFactoryName is the canonical persisted named factory requested via
+	// you run --named. The CLI resolves it into Dir before service startup.
+	NamedFactoryName string
 	// FactoryConfigPath is the factory.json file path from you run --factory.
 	// The service uses Dir as the resolved factory root directory.
 	FactoryConfigPath string

@@ -23,6 +23,7 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -727,6 +728,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
+			"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root; environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
 		Example: "  # Start the out-of-the-box continuous factory.\n" +
@@ -735,6 +737,8 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
 			"  # Run an existing factory once in explicit batch mode.\n" +
 			"  " + cliBinaryName + " run --dir factory\n\n" +
+			"  # Run a persisted named factory from any working directory.\n" +
+			"  " + cliBinaryName + " run --named @you/tts\n\n" +
 			"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
 			"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"",
 		PreRunE: rejectDeprecatedPortFlag,
@@ -762,6 +766,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().BoolVar(&cfg.Continuously, "continuously", false, "keep the factory alive while idle until cancelled")
 	cmd.Flags().StringVar(&cfg.WorkFile, "work", "", "path to initial FACTORY_REQUEST_BATCH JSON file to submit")
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
+	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories")
 	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs")
 	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
 		interfaces.RunnerIDCodex,
@@ -855,6 +860,16 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error {
 	factoryChanged := cmd.Flags().Changed("factory")
 	dirChanged := cmd.Flags().Changed("dir")
+	namedChanged := cmd.Flags().Changed("named")
+	if namedChanged {
+		switch {
+		case factoryChanged:
+			return fmt.Errorf("--named cannot be used with --factory")
+		case dirChanged:
+			return fmt.Errorf("--named cannot be used with --dir")
+		}
+		return resolveRunNamedFactorySelection(cfg)
+	}
 	if factoryChanged && dirChanged {
 		return fmt.Errorf("--factory cannot be used with --dir")
 	}
@@ -867,6 +882,27 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 		return err
 	}
 	cfg.Dir = factoryRoot
+	return nil
+}
+
+func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("resolve current working directory for --named: %w", err)
+	}
+	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(cwd)
+	if err != nil {
+		return fmt.Errorf("resolve project named-factory root: %w", err)
+	}
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		return fmt.Errorf("resolve global named-factory root: %w", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, cfg.NamedFactoryName)
+	if err != nil {
+		return err
+	}
+	cfg.Dir = resolution.FactoryDir
 	return nil
 }
 

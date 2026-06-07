@@ -202,6 +202,94 @@ func TestFactoryPromptRun_RealCLIAmbiguousPromptAndStdinFailsBeforeRuntimeStartu
 	}
 }
 
+func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirectory(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI named-factory run smoke")
+	}
+
+	homeDir := t.TempDir()
+
+	sourceDir := support.ScaffoldFactory(t, factoryPromptRunSmokeConfig())
+	loaded, err := factoryconfig.LoadRuntimeConfig(sourceDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(source): %v", err)
+	}
+	canonical, err := factoryconfig.MarshalCanonicalFactoryConfig(loaded.FactoryConfig())
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	namedFactoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, "alpha", canonical)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+
+	prompt := fmt.Sprintf("functional-smoke-named-factory-%d", time.Now().UnixNano())
+	testutil.WriteSeedRequest(t, namedFactoryDir, interfaces.SubmitRequest{
+		WorkID:     "named-factory-smoke-work",
+		WorkTypeID: defaultPromptRunWorkTypeName,
+		TraceID:    "named-factory-smoke-trace",
+		Payload:    []byte(prompt),
+	})
+
+	port, err := reserveLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	binaryPath := buildYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	unrelatedWorkingDir := t.TempDir()
+	cmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"run",
+		"--named", "alpha",
+		"--with-mock-workers",
+		"--no-record",
+		"--server", baseURL,
+		"--continuously",
+		"--quiet",
+		mockWorkersPath,
+	)
+	cmd.Dir = unrelatedWorkingDir
+	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start you run --named: %v", err)
+	}
+
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
+
+	item, err := waitForFactoryPromptWorkComplete(ctx, baseURL, defaultPromptRunWorkTypeName, prompt, 20*time.Second)
+	if err != nil {
+		if waitErr := <-waitCh; waitErr != nil {
+			t.Fatalf("you run --named: %v\nstdout:\n%s\nstderr:\n%s", waitErr, stdout.String(), stderr.String())
+		}
+		t.Fatalf("wait for completed named-factory work: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if stringPointerValue(item.WorkTypeName) != defaultPromptRunWorkTypeName {
+		t.Fatalf("work type = %q, want %q", stringPointerValue(item.WorkTypeName), defaultPromptRunWorkTypeName)
+	}
+	if !factoryPromptRunWorkContentIncludes(item, prompt) {
+		t.Fatalf("work content = %#v, want prompt text %q", item.Content, prompt)
+	}
+
+	cancel()
+	_ = <-waitCh
+}
+
 const defaultPromptRunWorkTypeName = "prompt-task"
 
 func factoryPromptRunSmokeConfig() map[string]any {
