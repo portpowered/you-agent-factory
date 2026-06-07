@@ -60,10 +60,12 @@ access tokens, full model input text, full successful response bodies,
 sensitive generated content, or full command stdout or stderr unless an
 existing explicit failure policy already permits a bounded preview.
 
-CLI verbose diagnostics are separate from service runtime logs controlled by
-`you run --runtime-log-*`. Runtime logs are structured service-owned logs;
-command diagnostics explain the CLI invocation and transport or filesystem work
-around that invocation.
+CLI verbose diagnostics are separate from service runtime logs and runtime
+metrics controlled by `you run --runtime-log-*` and
+`you run --runtime-metrics-*`. Runtime logs are structured service-owned
+diagnostic logs. Runtime metrics are a separate structured operational JSONL
+channel. Command diagnostics explain the CLI invocation and transport or
+filesystem work around that invocation.
 
 ## Canonical Concept Owners
 

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -137,9 +138,12 @@ func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
 	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
 		return stubFactoryService{
 			runtimeLogDiagnostics: service.RuntimeLogDiagnostics{
-				Path:         "/tmp/runtime-logs/2026-05/2026-05-29/044503-runtime.log",
-				RootDir:      "/tmp/runtime-logs",
-				StartTimeUTC: startedAt,
+				Path:                "/tmp/runtime-logs/2026-05/2026-05-29/044503-runtime.log",
+				RootDir:             "/tmp/runtime-logs",
+				StartTimeUTC:        startedAt,
+				MetricsPath:         "/tmp/runtime-metrics/2026/05/29/044503-session-runtime.log",
+				MetricsRootDir:      "/tmp/runtime-metrics",
+				MetricsStartTimeUTC: startedAt,
 			},
 			run: func(context.Context) error {
 				return nil
@@ -170,6 +174,12 @@ func TestRun_StartupOutputReportsRuntimeLogPathAndUTCStartTime(t *testing.T) {
 	}
 	if !strings.Contains(output, "Runtime log start (UTC): 2026-05-29 04:45:03 UTC") {
 		t.Fatalf("startup output = %q, want UTC runtime log start", output)
+	}
+	if !strings.Contains(output, "Runtime metrics: /tmp/runtime-metrics/2026/05/29/044503-session-runtime.log") {
+		t.Fatalf("startup output = %q, want runtime metrics path", output)
+	}
+	if !strings.Contains(output, "Runtime metrics start (UTC): 2026-05-29 04:45:03 UTC") {
+		t.Fatalf("startup output = %q, want UTC runtime metrics start", output)
 	}
 	if strings.Contains(output, "0001-01-01") {
 		t.Fatalf("startup output = %q, must not expose Go zero-time output", output)
@@ -287,6 +297,8 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 		AutoPort:                   true,
 		DisableDefaultRecording:    true,
 		RuntimeLogDir:              "logs/runtime",
+		RuntimeMetricsDir:          "logs/metrics",
+		RuntimeMetricsConfig:       logging.RuntimeMetricsConfig{MaxSize: 19, MaxBackups: 8, MaxAge: 17, Compress: true},
 		MockWorkersEnabled:         true,
 		SuppressDashboardRendering: true,
 		Verbose:                    true,
@@ -310,6 +322,9 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 		"mockWorkers=true",
 		"recording=disabled",
 		`runtimeLogDir="logs/runtime"`,
+		"runtimeLogRoll=size_mb=0 backups=0 age_days=0 compress=false",
+		`runtimeMetricsDir="logs/metrics"`,
+		"runtimeMetricsRoll=size_mb=19 backups=8 age_days=17 compress=true",
 		"dashboardPort=",
 		"requestedDashboardPort=",
 		"autoPort=fallback",

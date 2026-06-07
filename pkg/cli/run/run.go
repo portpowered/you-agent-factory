@@ -68,6 +68,12 @@ type RunConfig struct {
 	RuntimeLogDir string
 	// RuntimeLogConfig controls service-owned structured runtime log rotation.
 	RuntimeLogConfig logging.RuntimeLogConfig
+	// RuntimeMetricsDir overrides the service-owned structured runtime metrics
+	// root. Empty uses the service default under the user's home directory.
+	RuntimeMetricsDir string
+	// RuntimeMetricsConfig controls service-owned structured runtime metrics
+	// rolling behavior.
+	RuntimeMetricsConfig logging.RuntimeMetricsConfig
 	// MockWorkersEnabled enables deterministic mock-worker execution. When
 	// true and MockWorkersConfigPath is empty, the runtime uses the default
 	// accept behavior for all worker dispatches.
@@ -455,22 +461,24 @@ func buildRunServiceConfig(
 		apiServerReady = dashboardReady
 	}
 	svcCfg := &service.FactoryServiceConfig{
-		Dir:               cfg.Dir,
-		RunnerID:          cfg.RunnerID,
-		ExecutionBaseDir:  cfg.ExecutionBaseDir,
-		RuntimeMode:       runtimeModeForRun(cfg),
-		Port:              cfg.Port,
-		Logger:            logger,
-		Verbose:           cfg.Verbose,
-		WorkFile:          cfg.WorkFile,
-		RecordPath:        cfg.RecordPath,
-		ReplayPath:        cfg.ReplayPath,
-		RuntimeLogDir:     cfg.RuntimeLogDir,
-		RuntimeLogConfig:  cfg.RuntimeLogConfig,
-		WorkflowID:        cfg.Workflow,
-		MockWorkersConfig: mockWorkersConfig,
-		APIServerStarter:  runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
-		APIServerReady:    apiServerReady,
+		Dir:                  cfg.Dir,
+		RunnerID:             cfg.RunnerID,
+		ExecutionBaseDir:     cfg.ExecutionBaseDir,
+		RuntimeMode:          runtimeModeForRun(cfg),
+		Port:                 cfg.Port,
+		Logger:               logger,
+		Verbose:              cfg.Verbose,
+		WorkFile:             cfg.WorkFile,
+		RecordPath:           cfg.RecordPath,
+		ReplayPath:           cfg.ReplayPath,
+		RuntimeLogDir:        cfg.RuntimeLogDir,
+		RuntimeLogConfig:     cfg.RuntimeLogConfig,
+		RuntimeMetricsDir:    cfg.RuntimeMetricsDir,
+		RuntimeMetricsConfig: cfg.RuntimeMetricsConfig,
+		WorkflowID:           cfg.Workflow,
+		MockWorkersConfig:    mockWorkersConfig,
+		APIServerStarter:     runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
+		APIServerReady:       apiServerReady,
 	}
 	if !cfg.SuppressDashboardRendering {
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard
@@ -614,7 +622,7 @@ func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPa
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q runnerOverride=%t mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
+		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q runnerOverride=%t mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
 		resolvedFactoryDir,
 		cfg.Dir,
 		runtimeModeForRun(cfg),
@@ -624,6 +632,9 @@ func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPa
 		cfg.MockWorkersConfigPath,
 		recordingDiagnostics(recordPath, cfg.ReplayPath),
 		runtimeLogDirLabel(cfg.RuntimeLogDir),
+		rollingPolicyDiagnostics(cfg.RuntimeLogConfig.MaxSize, cfg.RuntimeLogConfig.MaxBackups, cfg.RuntimeLogConfig.MaxAge, cfg.RuntimeLogConfig.Compress),
+		runtimeMetricsDirLabel(cfg.RuntimeMetricsDir),
+		rollingPolicyDiagnostics(cfg.RuntimeMetricsConfig.MaxSize, cfg.RuntimeMetricsConfig.MaxBackups, cfg.RuntimeMetricsConfig.MaxAge, cfg.RuntimeMetricsConfig.Compress),
 		cfg.Port,
 		requestedPort,
 		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
@@ -650,6 +661,17 @@ func runtimeLogDirLabel(dir string) string {
 		return "default"
 	}
 	return dir
+}
+
+func runtimeMetricsDirLabel(dir string) string {
+	if strings.TrimSpace(dir) == "" {
+		return "default"
+	}
+	return dir
+}
+
+func rollingPolicyDiagnostics(maxSize, maxBackups, maxAge int, compress bool) string {
+	return fmt.Sprintf("size_mb=%d backups=%d age_days=%d compress=%t", maxSize, maxBackups, maxAge, compress)
 }
 
 func recordingDiagnostics(recordPath resolvedRunRecordPath, replayPath string) string {
@@ -751,6 +773,10 @@ func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics
 	if strings.TrimSpace(runtimeLog.Path) != "" {
 		fmt.Fprintf(cfg.StartupOutput, "Runtime log: %s\n", runtimeLog.Path)
 		fmt.Fprintf(cfg.StartupOutput, "Runtime log start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.StartTimeUTC))
+	}
+	if strings.TrimSpace(runtimeLog.MetricsPath) != "" {
+		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics: %s\n", runtimeLog.MetricsPath)
+		fmt.Fprintf(cfg.StartupOutput, "Runtime metrics start (UTC): %s\n", timedisplay.Timestamp(runtimeLog.MetricsStartTimeUTC))
 	}
 	if cfg.Port <= 0 {
 		fmt.Fprintln(cfg.StartupOutput, "Dashboard server disabled")
