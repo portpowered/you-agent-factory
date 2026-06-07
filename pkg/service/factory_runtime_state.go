@@ -926,6 +926,11 @@ func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntime
 			errs = append(errs, err)
 		}
 	}
+	if runtimeBundle.metricsSink != nil {
+		if err := runtimeBundle.metricsSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
 	return errors.Join(errs...)
 }
 

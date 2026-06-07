@@ -27,7 +27,6 @@ export {
   draftWorkstationFactoryDocument,
   type MockEditableFactoryGraphHooks,
   type MockGraphEditorDraftState,
-  mockEditableFactoryGraph,
   wireMockEditableFactoryGraph,
   workerDenseFactoryDefinitionDocument,
 } from "./graph-editor-harness";

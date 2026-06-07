@@ -1,10 +1,14 @@
+// backendsizecheck:ignore-file service runtime build wiring keeps log, metrics, worker, and recorder assembly co-located until dedicated bundle seams split.
+// pkgmaintcheck:ignore-file-lines service runtime build wiring keeps log, metrics, worker, and recorder assembly co-located until dedicated bundle seams split.
 package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,8 +26,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -31,6 +37,7 @@ import (
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	cursorprovider "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	"go.uber.org/zap"
 )
 
@@ -74,6 +81,43 @@ type serviceCoordinatorPolicy struct {
 	providerOverride              workers.Provider
 	providerCommandRunnerOverride workers.CommandRunner
 	commandRunnerOverride         workers.CommandRunner
+}
+
+const (
+	runtimeMetricLifecycleStarted     = "runtime.lifecycle.started"
+	runtimeMetricLifecycleStopped     = "runtime.lifecycle.stopped"
+	runtimeMetricStateActive          = "runtime.state.active"
+	runtimeMetricStateIdle            = "runtime.state.idle"
+	runtimeMetricStatePaused          = "runtime.state.paused"
+	runtimeMetricStateFailed          = "runtime.state.failed"
+	runtimeMetricQueueInFlight        = "runtime.queue.in_flight"
+	runtimeMetricQueueSubmissionCount = "queue.submission_count"
+	runtimeMetricDispatchStarted      = "dispatch.started"
+	runtimeMetricDispatchComplete     = "dispatch.completed"
+	runtimeMetricDispatchDuration     = "dispatch.duration"
+	runtimeMetricDispatchRetries      = "dispatch.retry_count"
+	runtimeMetricDispatchCost         = "dispatch.cost"
+	runtimeMetricProviderRequest      = "provider.requested"
+	runtimeMetricProviderComplete     = "provider.completed"
+	runtimeMetricProviderFailed       = "provider.failed"
+	runtimeMetricProviderDuration     = "provider.duration"
+	runtimeMetricProviderInputTok     = "provider.input_tokens"
+	runtimeMetricProviderOutputTok    = "provider.output_tokens"
+	runtimeMetricProviderCost         = "provider.cost"
+	runtimeMetricScriptStarted        = "script.started"
+	runtimeMetricScriptComplete       = "script.completed"
+	runtimeMetricScriptDuration       = "script.duration"
+	runtimeMetricScriptTimedOut       = "script.timed_out"
+	runtimeMetricScriptFailed         = "script.failed"
+)
+
+const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
+
+type runtimeMetricsObservation struct {
+	runtimeStatus interfaces.RuntimeStatus
+	factoryState  interfaces.FactoryState
+	inFlightCount int
+	initialized   bool
 }
 
 func (fs *FactoryService) coordinatorPolicy() serviceCoordinatorPolicy {
@@ -160,9 +204,12 @@ func resolveFactoryServiceRoot(cfg *FactoryServiceConfig) (string, *zap.Logger, 
 // RuntimeLogDiagnostics describes the active runtime log selected during
 // service construction.
 type RuntimeLogDiagnostics struct {
-	Path         string
-	RootDir      string
-	StartTimeUTC time.Time
+	Path                string
+	RootDir             string
+	StartTimeUTC        time.Time
+	MetricsPath         string
+	MetricsRootDir      string
+	MetricsStartTimeUTC time.Time
 }
 
 // RuntimeLogDiagnostics returns the selected runtime log metadata for startup
@@ -173,10 +220,34 @@ func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
 		return RuntimeLogDiagnostics{}
 	}
 	return RuntimeLogDiagnostics{
-		Path:         bundle.logSink.Path(),
-		RootDir:      bundle.logSink.RootDir(),
-		StartTimeUTC: bundle.logSink.StartTimeUTC(),
+		Path:                bundle.logSink.Path(),
+		RootDir:             bundle.logSink.RootDir(),
+		StartTimeUTC:        bundle.logSink.StartTimeUTC(),
+		MetricsPath:         runtimeMetricsPath(bundle.metricsSink),
+		MetricsRootDir:      runtimeMetricsRootDir(bundle.metricsSink),
+		MetricsStartTimeUTC: runtimeMetricsStartTime(bundle.metricsSink),
 	}
+}
+
+func runtimeMetricsPath(sink *logging.RuntimeMetricsSink) string {
+	if sink == nil {
+		return ""
+	}
+	return sink.Path()
+}
+
+func runtimeMetricsRootDir(sink *logging.RuntimeMetricsSink) string {
+	if sink == nil {
+		return ""
+	}
+	return sink.RootDir()
+}
+
+func runtimeMetricsStartTime(sink *logging.RuntimeMetricsSink) time.Time {
+	if sink == nil {
+		return time.Time{}
+	}
+	return sink.StartTimeUTC()
 }
 
 func runtimeLogStartTimeString(value time.Time) string {
@@ -244,24 +315,34 @@ func buildRuntimeBundle(
 	ctx context.Context,
 	input runtimeBundleBuildInput,
 ) (*factoryRuntimeBundle, error) {
+	sessionID := strings.TrimSpace(input.sessionID)
+	if sessionID == "" {
+		sessionID = defaultFactorySessionID
+	}
 	logSink, runtimeInstanceID, err := buildRuntimeLogSink(input.cfg, input.baseLogger, input.runtimeInstanceID)
 	if err != nil {
 		return nil, err
 	}
+	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
+	metricsSink, err := buildRuntimeMetricsSink(input.cfg, sessionID, runtimeInstanceID, input.folderPath, input.dir)
+	if err != nil {
+		logger.Warn(
+			"runtime metrics sink unavailable; continuing without metrics",
+			zap.Error(err),
+			zap.String("runtime_instance_id", runtimeInstanceID),
+			zap.String("runtime_metrics_root_dir", strings.TrimSpace(input.cfg.RuntimeMetricsDir)),
+		)
+		metricsSink = nil
+	}
 	bundleBuilt := false
 	defer func() {
-		if !bundleBuilt && logSink != nil {
-			_ = logSink.Close()
+		if !bundleBuilt {
+			_ = closeRuntimeBundleSinks(logSink, metricsSink)
 		}
 	}()
 	if input.cfg != nil && runtimeInstanceID != "" {
 		input.cfg.RuntimeInstanceID = runtimeInstanceID
 	}
-	sessionID := strings.TrimSpace(input.sessionID)
-	if sessionID == "" {
-		sessionID = defaultFactorySessionID
-	}
-	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
 
 	mapper := factoryconfig.ConfigMapper{}
 	net, err := mapper.Map(ctx, input.loadedFactoryCfg.FactoryConfig())
@@ -283,7 +364,7 @@ func buildRuntimeBundle(
 	}
 
 	bundleBuilt = true
-	return assembleRuntimeBundle(input, logger, logSink, net, eventHistory, localModels, workerOpts)
+	return assembleRuntimeBundle(input, logger, logSink, metricsSink, net, eventHistory, localModels, workerOpts)
 }
 
 func loadRuntimeBundleWorkerOptions(
@@ -322,6 +403,7 @@ func assembleRuntimeBundle(
 	input runtimeBundleBuildInput,
 	logger *zap.Logger,
 	logSink *logging.RuntimeLogSink,
+	metricsSink *logging.RuntimeMetricsSink,
 	net *state.Net,
 	eventHistory *factoryevents.FactoryEventHistory,
 	localModels localModelDomain,
@@ -340,6 +422,21 @@ func assembleRuntimeBundle(
 		return nil, err
 	}
 
+	bundle := &factoryRuntimeBundle{
+		dir:            input.dir,
+		folderPath:     input.folderPath,
+		eventHistory:   eventHistory,
+		net:            net,
+		runtimeCfg:     input.loadedFactoryCfg,
+		modelResources: localModels.resources,
+		modelAssets:    localModels.assets,
+		localModels:    localModels.manager,
+		logger:         logger,
+		logSink:        logSink,
+		metricsSink:    metricsSink,
+		recording:      recording,
+		recordPath:     input.recordPath,
+	}
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
 		factory.WithRuntimeMode(input.cfg.RuntimeMode),
@@ -348,6 +445,9 @@ func assembleRuntimeBundle(
 		factory.WithWorkflowContext(runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID)),
 		factory.WithClock(input.clock),
 		factory.WithFactoryEventHistory(eventHistory),
+		factory.WithSubmissionRecorder(bundle.recordSubmissionMetric),
+		factory.WithDispatchRecorder(bundle.recordDispatchMetric),
+		factory.WithCompletionRecorder(bundle.recordCompletionMetrics),
 	}
 	if input.recordPath != "" {
 		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
@@ -369,22 +469,9 @@ func assembleRuntimeBundle(
 		return nil, err
 	}
 
-	return &factoryRuntimeBundle{
-		dir:            input.dir,
-		folderPath:     input.folderPath,
-		eventHistory:   eventHistory,
-		factory:        activeFactory,
-		listener:       listener,
-		net:            net,
-		runtimeCfg:     input.loadedFactoryCfg,
-		modelResources: localModels.resources,
-		modelAssets:    localModels.assets,
-		localModels:    localModels.manager,
-		logger:         logger,
-		logSink:        logSink,
-		recording:      recording,
-		recordPath:     input.recordPath,
-	}, nil
+	bundle.factory = activeFactory
+	bundle.listener = listener
+	return bundle, nil
 }
 
 func buildRuntimeLogSink(
@@ -406,6 +493,244 @@ func buildRuntimeLogSink(
 		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
 	}
 	return logSink, runtimeInstanceID, nil
+}
+
+func buildRuntimeMetricsSink(
+	cfg *FactoryServiceConfig,
+	sessionID string,
+	runtimeInstanceID string,
+	folderPath string,
+	factoryDir string,
+) (*logging.RuntimeMetricsSink, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("factory service config is required to build runtime metrics sink")
+	}
+	metricsSink, err := logging.BuildRuntimeMetricsSink(
+		sessionID,
+		runtimeInstanceID,
+		folderPath,
+		factoryDir,
+		cfg.RuntimeMetricsDir,
+		cfg.RuntimeMetricsConfig,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build runtime metrics sink: %w", err)
+	}
+	return metricsSink, nil
+}
+
+func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+	var errs []error
+	if logSink != nil {
+		if err := logSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if metricsSink != nil {
+		if err := metricsSink.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (r *factoryRuntimeBundle) recordSubmissionMetric(record interfaces.FactorySubmissionRecord) {
+	fields := metrics.Fields{
+		WorkID:  strings.TrimSpace(record.Request.WorkID),
+		TraceID: strings.TrimSpace(record.Request.TraceID),
+	}
+	r.emitMetricCounter(runtimeMetricQueueSubmissionCount, 1, fields)
+}
+
+func (r *factoryRuntimeBundle) recordDispatchMetric(record interfaces.FactoryDispatchRecord) {
+	fields := runtimeDispatchMetricFields(record.Dispatch)
+	r.dispatchMetricFields.Store(record.DispatchID, fields)
+	r.emitMetricCounter(runtimeMetricDispatchStarted, 1, fields)
+	r.emitWorkerBoundaryStartMetrics(fields)
+}
+
+func (r *factoryRuntimeBundle) recordCompletionMetrics(record interfaces.FactoryCompletionRecord) {
+	fields, _ := r.dispatchMetricFields.LoadAndDelete(record.DispatchID)
+	metricFields, _ := fields.(metrics.Fields)
+	if metricFields.DispatchID == "" {
+		metricFields.DispatchID = record.DispatchID
+	}
+	metricFields.Outcome = string(record.Result.Outcome)
+	r.emitMetricCounter(runtimeMetricDispatchComplete, 1, metricFields)
+	r.emitMetricSample(runtimeMetricDispatchDuration, float64(record.Result.Metrics.Duration.Milliseconds()), "ms", metricFields)
+	r.emitMetricSample(runtimeMetricDispatchRetries, float64(record.Result.Metrics.RetryCount), "", metricFields)
+	if record.Result.Metrics.Cost > 0 {
+		r.emitMetricSample(runtimeMetricDispatchCost, record.Result.Metrics.Cost, "usd", metricFields)
+	}
+	r.emitWorkerBoundaryCompletionMetrics(record.Result, metricFields)
+}
+
+func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Fields {
+	fields := metrics.Fields{
+		DispatchID:  dispatch.DispatchID,
+		TraceID:     strings.TrimSpace(dispatch.Execution.TraceID),
+		Workstation: strings.TrimSpace(dispatch.WorkstationName),
+		WorkerType:  strings.TrimSpace(dispatch.WorkerType),
+	}
+	if len(dispatch.Execution.WorkIDs) > 0 {
+		fields.WorkID = strings.TrimSpace(dispatch.Execution.WorkIDs[0])
+	}
+	return fields
+}
+
+func (r *factoryRuntimeBundle) emitWorkerBoundaryStartMetrics(fields metrics.Fields) {
+	workerDef, ok := r.runtimeWorkerDefinition(fields.WorkerType)
+	if !ok || workerDef == nil {
+		return
+	}
+	switch workerDef.Type {
+	case interfaces.WorkerTypeModel:
+		providerFields := fields
+		providerFields.Provider = normalizedRuntimeMetricProvider(workerDef.ModelProvider)
+		r.emitMetricCounter(runtimeMetricProviderRequest, 1, providerFields)
+	case interfaces.WorkerTypeScript:
+		r.emitMetricCounter(runtimeMetricScriptStarted, 1, fields)
+	}
+}
+
+func (r *factoryRuntimeBundle) emitWorkerBoundaryCompletionMetrics(result interfaces.WorkResult, fields metrics.Fields) {
+	workerDef, ok := r.runtimeWorkerDefinition(fields.WorkerType)
+	if !ok || workerDef == nil {
+		return
+	}
+	switch workerDef.Type {
+	case interfaces.WorkerTypeModel:
+		r.emitProviderCompletionMetrics(result, fields, workerDef)
+	case interfaces.WorkerTypeScript:
+		r.emitScriptCompletionMetrics(result, fields)
+	}
+}
+
+func (r *factoryRuntimeBundle) emitProviderCompletionMetrics(
+	result interfaces.WorkResult,
+	fields metrics.Fields,
+	workerDef *interfaces.WorkerConfig,
+) {
+	providerFields := fields
+	providerFields.Provider = normalizedRuntimeMetricProvider(providerMetricProvider(result.Diagnostics, workerDef))
+	r.emitMetricCounter(runtimeMetricProviderComplete, 1, providerFields)
+	if result.Outcome == interfaces.OutcomeFailed {
+		providerFields.Reason = providerMetricFailureReason(result)
+		r.emitMetricCounter(runtimeMetricProviderFailed, 1, providerFields)
+	}
+	if durationMS, ok := providerMetricDurationMilliseconds(result.Diagnostics); ok {
+		r.emitMetricSample(runtimeMetricProviderDuration, durationMS, "ms", providerFields)
+	}
+	if inputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, cursorprovider.ResponseMetadataInputTokens); ok {
+		r.emitMetricSample(runtimeMetricProviderInputTok, inputTokens, "tokens", providerFields)
+	}
+	if outputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, cursorprovider.ResponseMetadataOutputTokens); ok {
+		r.emitMetricSample(runtimeMetricProviderOutputTok, outputTokens, "tokens", providerFields)
+	}
+	if result.Metrics.Cost > 0 {
+		r.emitMetricSample(runtimeMetricProviderCost, result.Metrics.Cost, "usd", providerFields)
+	}
+}
+
+func (r *factoryRuntimeBundle) emitScriptCompletionMetrics(result interfaces.WorkResult, fields metrics.Fields) {
+	scriptFields := fields
+	if timedOut := scriptMetricTimedOut(result); timedOut {
+		scriptFields.Reason = "timeout"
+	}
+	if result.Outcome == interfaces.OutcomeFailed && scriptFields.Reason == "" {
+		scriptFields.Reason = scriptMetricFailureReason(result)
+	}
+	r.emitMetricCounter(runtimeMetricScriptComplete, 1, scriptFields)
+	if durationMS, ok := scriptMetricDurationMilliseconds(result); ok {
+		r.emitMetricSample(runtimeMetricScriptDuration, durationMS, "ms", scriptFields)
+	}
+	if scriptMetricTimedOut(result) {
+		r.emitMetricCounter(runtimeMetricScriptTimedOut, 1, scriptFields)
+		return
+	}
+	if result.Outcome == interfaces.OutcomeFailed {
+		r.emitMetricCounter(runtimeMetricScriptFailed, 1, scriptFields)
+	}
+}
+
+func (r *factoryRuntimeBundle) runtimeWorkerDefinition(workerName string) (*interfaces.WorkerConfig, bool) {
+	if r == nil || r.runtimeCfg == nil || strings.TrimSpace(workerName) == "" {
+		return nil, false
+	}
+	return r.runtimeCfg.Worker(strings.TrimSpace(workerName))
+}
+
+func normalizedRuntimeMetricProvider(provider string) string {
+	return interfaces.CanonicalProviderSessionProvider(strings.TrimSpace(provider))
+}
+
+func providerMetricProvider(diagnostics *interfaces.WorkDiagnostics, workerDef *interfaces.WorkerConfig) string {
+	if diagnostics != nil && diagnostics.Provider != nil && strings.TrimSpace(diagnostics.Provider.Provider) != "" {
+		return diagnostics.Provider.Provider
+	}
+	if workerDef != nil {
+		return workerDef.ModelProvider
+	}
+	return ""
+}
+
+func providerMetricFailureReason(result interfaces.WorkResult) string {
+	if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
+		return string(result.FailureMetadata.Type)
+	}
+	return strings.TrimSpace(string(result.Outcome))
+}
+
+func providerMetricDurationMilliseconds(diagnostics *interfaces.WorkDiagnostics) (float64, bool) {
+	if durationMS, ok := providerMetricMetadataFloat(diagnostics, cursorprovider.ResponseMetadataDurationAPIMS); ok {
+		return durationMS, true
+	}
+	return providerMetricMetadataFloat(diagnostics, cursorprovider.ResponseMetadataDurationMS)
+}
+
+func providerMetricMetadataFloat(diagnostics *interfaces.WorkDiagnostics, key string) (float64, bool) {
+	if diagnostics == nil || diagnostics.Provider == nil || diagnostics.Provider.ResponseMetadata == nil {
+		return 0, false
+	}
+	value := strings.TrimSpace(diagnostics.Provider.ResponseMetadata[key])
+	if value == "" {
+		return 0, false
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, false
+	}
+	return parsed, true
+}
+
+func scriptMetricTimedOut(result interfaces.WorkResult) bool {
+	if result.FailureMetadata != nil && result.FailureMetadata.Type == interfaces.WorkFailureTypeTimeout {
+		return true
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Command == nil {
+		return false
+	}
+	return result.Diagnostics.Command.TimedOut
+}
+
+func scriptMetricFailureReason(result interfaces.WorkResult) string {
+	if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
+		return string(result.FailureMetadata.Type)
+	}
+	if result.Diagnostics != nil && result.Diagnostics.Command != nil && result.Diagnostics.Command.ExitCode != 0 {
+		return "exit_code"
+	}
+	return strings.TrimSpace(string(result.Outcome))
+}
+
+func scriptMetricDurationMilliseconds(result interfaces.WorkResult) (float64, bool) {
+	if result.Diagnostics != nil && result.Diagnostics.Command != nil && result.Diagnostics.Command.Duration > 0 {
+		return float64(result.Diagnostics.Command.Duration.Milliseconds()), true
+	}
+	if result.Metrics.Duration <= 0 {
+		return 0, false
+	}
+	return float64(result.Metrics.Duration.Milliseconds()), true
 }
 
 // localModelDomain wires pkg/localmodels runtime dependencies constructed at
@@ -836,6 +1161,8 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 		RuntimeInstanceID:                       cfg.RuntimeInstanceID,
 		RuntimeLogDir:                           cfg.RuntimeLogDir,
 		RuntimeLogConfig:                        cfg.RuntimeLogConfig,
+		RuntimeMetricsDir:                       cfg.RuntimeMetricsDir,
+		RuntimeMetricsConfig:                    cfg.RuntimeMetricsConfig,
 		RecordPath:                              cfg.RecordPath,
 		WorkflowID:                              cfg.WorkflowID,
 		MockWorkersConfig:                       cfg.MockWorkersConfig,
@@ -893,4 +1220,197 @@ func asRuntimeBundle(bundle any) *factoryRuntimeBundle {
 		return nil
 	}
 	return bundle.(*factoryRuntimeBundle)
+}
+
+func (r *factoryRuntimeBundle) metricsEmitter() metrics.MetricsEmitter {
+	if r == nil {
+		return metrics.NoopEmitter{}
+	}
+	return metrics.EnsureEmitter(r.metricsSink)
+}
+
+func (r *factoryRuntimeBundle) emitMetricCounter(name string, value float64, fields metrics.Fields) {
+	if r == nil {
+		return
+	}
+	if err := r.metricsEmitter().Counter(context.Background(), name, value, fields); err != nil {
+		r.runtimeLogger().Warn("runtime metrics counter emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
+}
+
+func (r *factoryRuntimeBundle) emitMetricGauge(name string, value float64, fields metrics.Fields) {
+	if r == nil {
+		return
+	}
+	if err := r.metricsEmitter().Gauge(context.Background(), name, value, fields); err != nil {
+		r.runtimeLogger().Warn("runtime metrics gauge emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
+}
+
+func (r *factoryRuntimeBundle) emitMetricSample(name string, value float64, unit string, fields metrics.Fields) {
+	if r == nil {
+		return
+	}
+	if err := r.metricsEmitter().Sample(context.Background(), name, value, unit, fields); err != nil {
+		r.runtimeLogger().Warn("runtime metrics sample emission failed", zap.String("metric_name", name), zap.Error(err))
+	}
+}
+
+func (r *factoryRuntimeBundle) emitRuntimeLifecycleStart() {
+	if r == nil {
+		return
+	}
+	r.emitMetricCounter(runtimeMetricLifecycleStarted, 1, metrics.Fields{})
+}
+
+func (r *factoryRuntimeBundle) emitRuntimeLifecycleStop(outcome string, reason string) {
+	if r == nil {
+		return
+	}
+	r.emitMetricCounter(runtimeMetricLifecycleStopped, 1, metrics.Fields{
+		Outcome: outcome,
+		Reason:  strings.TrimSpace(reason),
+	})
+}
+
+func (r *factoryRuntimeBundle) emitRuntimeStateMetrics(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
+	if r == nil || snapshot == nil {
+		return
+	}
+	r.emitMetricGauge(runtimeMetricStateActive, boolMetricValue(snapshot.RuntimeStatus == interfaces.RuntimeStatusActive), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricStateIdle, boolMetricValue(snapshot.RuntimeStatus == interfaces.RuntimeStatusIdle), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricStatePaused, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStatePaused)), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricStateFailed, boolMetricValue(snapshot.FactoryState == string(interfaces.FactoryStateFailed)), metrics.Fields{})
+	r.emitMetricGauge(runtimeMetricQueueInFlight, float64(snapshot.InFlightCount), metrics.Fields{})
+}
+
+func boolMetricValue(active bool) float64 {
+	if active {
+		return 1
+	}
+	return 0
+}
+
+func (fs *FactoryService) defaultSessionClosedDuringStartup() bool {
+	if fs == nil || runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService {
+		return false
+	}
+	return fs.sessionByID(defaultFactorySessionID) == nil
+}
+
+func (fs *FactoryService) handleDefaultRuntimeStartFailure(
+	ctx context.Context,
+	currentRuntime *liveRuntimeHandle,
+	startErr error,
+) error {
+	if fs.defaultSessionClosedDuringStartup() {
+		fs.clearRunState()
+		_ = fs.stopLiveRuntime(currentRuntime)
+		return nil
+	}
+	fs.clearRunState()
+	fs.unregisterLiveSession(defaultFactorySessionID)
+	stopErr := fs.stopLiveRuntime(currentRuntime)
+	if isCanceledServiceStartup(ctx, startErr) {
+		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+			return stopErr
+		}
+		return nil
+	}
+	if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
+	}
+	return fmt.Errorf("start runtime: %w", startErr)
+}
+
+func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], err error, forcedCancel bool) (string, string) {
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return "canceled", ""
+		}
+		return "failed", err.Error()
+	}
+	if snapshot != nil && snapshot.FactoryState == string(interfaces.FactoryStateFailed) {
+		return "failed", ""
+	}
+	if snapshot != nil && snapshot.RuntimeStatus == interfaces.RuntimeStatusFinished {
+		return "completed", ""
+	}
+	if forcedCancel {
+		return "canceled", ""
+	}
+	return "completed", ""
+}
+
+func metricsObservationFromSnapshot(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) runtimeMetricsObservation {
+	observation := runtimeMetricsObservation{initialized: snapshot != nil}
+	if snapshot == nil {
+		return observation
+	}
+	observation.runtimeStatus = snapshot.RuntimeStatus
+	observation.factoryState = interfaces.FactoryState(snapshot.FactoryState)
+	observation.inFlightCount = snapshot.InFlightCount
+	return observation
+}
+
+func (o runtimeMetricsObservation) changedFrom(previous runtimeMetricsObservation) bool {
+	if !previous.initialized {
+		return o.initialized
+	}
+	if !o.initialized {
+		return false
+	}
+	return o.runtimeStatus != previous.runtimeStatus ||
+		o.factoryState != previous.factoryState ||
+		o.inFlightCount != previous.inFlightCount
+}
+
+func (fs *FactoryService) finalizeRuntimeLifecycleMetrics(handle *liveRuntimeHandle, last runtimeMetricsObservation) {
+	if handle == nil || handle.runtime == nil || handle.runtime.factory == nil {
+		return
+	}
+	handle.lifecycleMetricsOnce.Do(func() {
+		snapshot, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+		if err == nil {
+			current := metricsObservationFromSnapshot(snapshot)
+			if current.changedFrom(last) {
+				handle.runtime.emitRuntimeStateMetrics(snapshot)
+			}
+			outcome, reason := runtimeStopOutcome(snapshot, handle.result(), false)
+			handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
+			return
+		}
+		outcome, reason := runtimeStopOutcome(nil, handle.result(), false)
+		handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
+	})
+}
+
+func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liveRuntimeHandle) {
+	if handle == nil || handle.runtime == nil || handle.runtime.factory == nil {
+		return
+	}
+	ticker := time.NewTicker(runtimeMetricsObserverPollInterval)
+	defer ticker.Stop()
+	var last runtimeMetricsObservation
+	for {
+		snapshot, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+		if err == nil {
+			current := metricsObservationFromSnapshot(snapshot)
+			if current.changedFrom(last) {
+				handle.runtime.emitRuntimeStateMetrics(snapshot)
+				last = current
+			}
+		}
+		select {
+		case <-handle.runDone:
+			fs.finalizeRuntimeLifecycleMetrics(handle, last)
+			return
+		case <-ctx.Done():
+			// Temporary sidecar shutdown (for example during session runtime replacement)
+			// must not block on runDone or emit lifecycle stop metrics; stopLiveRuntime
+			// finalizes lifecycle telemetry after the runtime actually exits.
+			return
+		case <-ticker.C:
+		}
+	}
 }
