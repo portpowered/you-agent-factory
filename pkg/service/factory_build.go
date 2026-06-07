@@ -1401,13 +1401,11 @@ func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liv
 		}
 		select {
 		case <-handle.runDone:
-			fs.finalizeRuntimeLifecycleMetrics(handle, last)
 			return
 		case <-ctx.Done():
-			// Sidecar ctx is derived from the runtime run ctx, so cancellation can race
-			// natural completion. Always wait for the terminal runtime result first.
-			<-handle.runDone
-			fs.finalizeRuntimeLifecycleMetrics(handle, last)
+			// Temporary sidecar shutdown (for example during session runtime replacement)
+			// must not block on runDone or emit lifecycle stop metrics; stopLiveRuntime
+			// finalizes lifecycle telemetry after the runtime actually exits.
 			return
 		case <-ticker.C:
 		}

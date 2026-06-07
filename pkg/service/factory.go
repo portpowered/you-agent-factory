@@ -883,6 +883,7 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 		handle.runCancel()
 	}
 	runErr := handle.wait()
+	fs.finalizeRuntimeLifecycleMetrics(handle, runtimeMetricsObservation{})
 	fs.stopLiveRuntimeSidecars(handle)
 	return errors.Join(runErr, fs.finalizeRuntimeArtifacts(handle.runtime))
 }
