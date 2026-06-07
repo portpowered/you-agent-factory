@@ -56,6 +56,15 @@ function snapshotFixture(): DashboardSnapshot & {
           type: "PARENT_CHILD",
         },
       ],
+      "work-grandchild-story": [
+        {
+          source_work_id: "work-child-story",
+          sourceWorkName: "Child Story",
+          targetWorkId: "work-grandchild-story",
+          targetWorkName: "Grandchild Story",
+          type: "PARENT_CHILD",
+        },
+      ],
     },
     runtime: {
       active_executions_by_dispatch_id: {
@@ -93,6 +102,13 @@ function snapshotFixture(): DashboardSnapshot & {
               work_id: "work-child-story",
               work_type_id: "task",
             },
+            {
+              display_name: "Grandchild Story",
+              state: "queued",
+              trace_id: "trace-grandchild-story",
+              work_id: "work-grandchild-story",
+              work_type_id: "task",
+            },
           ],
           workstation_node_id: "transition-story",
         },
@@ -116,7 +132,7 @@ function snapshotFixture(): DashboardSnapshot & {
 }
 
 describe("buildSelectedWorkRelationshipGraph", () => {
-  it("builds a typed first-degree graph around the selected work item", () => {
+  it("builds the full connected relationship graph around the selected work item", () => {
     const graph = buildSelectedWorkRelationshipGraph({
       selectedWorkItem,
       snapshot: snapshotFixture(),
@@ -138,13 +154,54 @@ describe("buildSelectedWorkRelationshipGraph", () => {
       "Blocked Story",
       "Child Story",
       "Dependency Story",
+      "Grandchild Story",
       "Parent Story",
+    ]);
+    expect(graph.relations).toEqual([
+      {
+        required_state: "ready",
+        source_work_id: "work-active-story",
+        source_work_name: "Active Story",
+        target_work_id: "work-dependency-story",
+        target_work_name: "Dependency Story",
+        type: "DEPENDS_ON",
+      },
+      {
+        source_work_id: "work-active-story",
+        source_work_name: "Active Story",
+        target_work_id: "work-parent-story",
+        target_work_name: "Parent Story",
+        type: "PARENT_CHILD",
+      },
+      {
+        required_state: "approved",
+        source_work_id: "work-blocked-story",
+        source_work_name: "Blocked Story",
+        target_work_id: "work-active-story",
+        target_work_name: "Active Story",
+        type: "DEPENDS_ON",
+      },
+      {
+        source_work_id: "work-child-story",
+        source_work_name: "Child Story",
+        target_work_id: "work-active-story",
+        target_work_name: "Active Story",
+        type: "PARENT_CHILD",
+      },
+      {
+        source_work_id: "work-child-story",
+        source_work_name: "Child Story",
+        target_work_id: "work-grandchild-story",
+        target_work_name: "Grandchild Story",
+        type: "PARENT_CHILD",
+      },
     ]);
     expect(graph.edges).toEqual([
       {
-        relationship: "CHILD",
-        sourceWorkID: "work-active-story",
-        targetWorkID: "work-child-story",
+        relationship: "DEPENDS_ON",
+        requiredState: "approved",
+        sourceWorkID: "work-blocked-story",
+        targetWorkID: "work-active-story",
       },
       {
         relationship: "DEPENDS_ON",
@@ -154,14 +211,18 @@ describe("buildSelectedWorkRelationshipGraph", () => {
       },
       {
         relationship: "PARENT",
-        sourceWorkID: "work-active-story",
-        targetWorkID: "work-parent-story",
+        sourceWorkID: "work-child-story",
+        targetWorkID: "work-active-story",
       },
       {
-        relationship: "REQUIRED_BY",
-        requiredState: "approved",
+        relationship: "PARENT",
+        sourceWorkID: "work-child-story",
+        targetWorkID: "work-grandchild-story",
+      },
+      {
+        relationship: "PARENT",
         sourceWorkID: "work-active-story",
-        targetWorkID: "work-blocked-story",
+        targetWorkID: "work-parent-story",
       },
     ]);
   });
@@ -177,6 +238,7 @@ describe("buildSelectedWorkRelationshipGraph", () => {
 
     expect(graph).toMatchObject({
       edges: [],
+      relations: [],
       relatedWork: [],
       selectedWork: {
         label: "Active Story",

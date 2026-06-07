@@ -12,7 +12,12 @@ const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
 export function currentActivityGraphNodeHoverClassName(
   state: CurrentActivityGraphNodeHoverState,
 ): string | undefined {
-  if (state.muted || state.selected || state.validationError || state.activeFlow) {
+  if (
+    state.muted ||
+    state.selected ||
+    state.validationError ||
+    state.activeFlow
+  ) {
     return undefined;
   }
 

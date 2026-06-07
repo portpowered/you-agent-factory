@@ -310,7 +310,10 @@ function indexFactoryGraphEntities(
   }
 
   const workTypeIdsByName = new Map<string, string>();
-  const workStateIdsByWorkTypeName = new Map<string, ReadonlyMap<string, string>>();
+  const workStateIdsByWorkTypeName = new Map<
+    string,
+    ReadonlyMap<string, string>
+  >();
   for (const workType of factoryDefinition.workTypes ?? []) {
     if (workType.id?.trim()) {
       workTypeIdsByName.set(workType.name, workType.id);

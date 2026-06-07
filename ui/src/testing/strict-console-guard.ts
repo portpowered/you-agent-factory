@@ -69,7 +69,12 @@ function assertAllowlistEntryIsNarrow(entry: ConsoleAllowlistEntry): void {
   }
 
   const source = entry.match.source;
-  if (source === ".*" || source === ".+" || source === "^.*$" || source === "^.+$") {
+  if (
+    source === ".*" ||
+    source === ".+" ||
+    source === "^.*$" ||
+    source === "^.+$"
+  ) {
     throw new Error(
       `Console allowlist entry "${entry.name}" uses a broad wildcard RegExp; use a narrow pattern instead.`,
     );
@@ -175,9 +180,7 @@ export function assertStrictConsoleClean(): void {
 
   const details = formatViolations(state.violations);
   state.violations.length = 0;
-  throw new Error(
-    `Unexpected console output in guarded test:\n${details}`,
-  );
+  throw new Error(`Unexpected console output in guarded test:\n${details}`);
 }
 
 /** Opt-in Vitest hook pair for a describe block or file-local suite. */

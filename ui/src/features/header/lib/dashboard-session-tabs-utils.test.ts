@@ -5,7 +5,9 @@ import {
   classifyFactorySessionFolderValidationError,
   factorySessionTargetOptionValue,
   folderValidationStatusMessage,
+  moveSessionTabOrder,
   normalizeFactorySessionsError,
+  orderFactorySessions,
   selectedFactorySessionTarget,
   sessionCloseLabel,
   sessionPanelID,
@@ -45,6 +47,7 @@ const targets = [
   },
 ] as const;
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: keeps the utility contract coverage together in one focused spec block.
 describe("dashboard session tabs utils", () => {
   it("builds session labels and DOM ids from the best available session metadata", () => {
     expect(sessionTabLabel(namedSession)).toBe("Review Factory");
@@ -76,6 +79,38 @@ describe("dashboard session tabs utils", () => {
         28,
       ),
     ).toHaveLength(28);
+  });
+
+  it("projects persisted session-tab order and moves dragged tabs by insertion index", () => {
+    const alphaSession = {
+      ...namedSession,
+      id: "alpha",
+      target: { kind: "named", name: "alpha" },
+    } as const;
+    const betaSession = {
+      ...namedSession,
+      id: "beta",
+      target: { kind: "named", name: "beta" },
+    } as const;
+    const gammaSession = {
+      ...namedSession,
+      id: "gamma",
+      target: { kind: "named", name: "gamma" },
+    } as const;
+
+    expect(
+      orderFactorySessions(
+        [alphaSession, betaSession, gammaSession],
+        ["gamma", "alpha"],
+      ).map((session) => session.id),
+    ).toEqual(["gamma", "alpha", "beta"]);
+
+    expect(moveSessionTabOrder(["alpha", "beta", "gamma"], "alpha", 2)).toEqual(
+      ["beta", "alpha", "gamma"],
+    );
+    expect(moveSessionTabOrder(["alpha", "beta", "gamma"], "gamma", 0)).toEqual(
+      ["gamma", "alpha", "beta"],
+    );
   });
 
   it("maps validation states and API errors to the visible folder-validation messages", () => {

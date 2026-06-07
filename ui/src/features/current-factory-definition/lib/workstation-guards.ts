@@ -193,11 +193,7 @@ type VisitCountWorkstationReferenceGuard = {
 
 export function rewriteVisitCountWorkstationReference<
   T extends VisitCountWorkstationReferenceGuard,
->(
-  guard: T,
-  previousWorkstationName: string,
-  nextWorkstationName: string,
-): T {
+>(guard: T, previousWorkstationName: string, nextWorkstationName: string): T {
   if (
     guard.type !== "VISIT_COUNT" ||
     guard.workstation !== previousWorkstationName
@@ -252,7 +248,9 @@ export function rewriteWorkstationVisitCountReferences<
       nextWorkstationName,
     );
 
-    if (!guards.every((guard, index) => guard === workstation.guards?.[index])) {
+    if (
+      !guards.every((guard, index) => guard === workstation.guards?.[index])
+    ) {
       nextWorkstation = {
         ...nextWorkstation,
         guards,

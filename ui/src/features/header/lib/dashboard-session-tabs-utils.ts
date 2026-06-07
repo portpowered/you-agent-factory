@@ -25,15 +25,17 @@ export type FolderValidationErrorReason =
   | "unknown";
 
 export function sessionTabLabel(session: FactorySessionSummary): string {
-  const namedTarget =
-    session.target.kind === "named" ? session.target.name : "";
-  return (
-    normalizeSessionLabelPart(namedTarget) ||
-    normalizeSessionLabelPart(basename(session.factoryDir)) ||
-    normalizeSessionLabelPart(basename(session.folderPath)) ||
-    normalizeSessionLabelPart(session.project) ||
-    "factory"
-  );
+  const targetName = normalizeSessionLabelPart(session.target.name);
+  if (targetName.length > 0) {
+    return targetName;
+  }
+
+  const folderName = basename(session.folderPath);
+  if (folderName.length > 0) {
+    return folderName;
+  }
+
+  return "unnamed";
 }
 
 export function sessionTabSecondaryPath(
@@ -86,6 +88,53 @@ export function sessionPanelID(
   sessionID: string,
 ): string {
   return `${sessionTabsID}-panel-${sessionDOMIDFragment(sessionID)}`;
+}
+
+export function orderFactorySessions(
+  sessions: FactorySessionSummary[],
+  orderedSessionIDs: string[],
+): FactorySessionSummary[] {
+  const sessionByID = new Map(sessions.map((session) => [session.id, session]));
+  const orderedSessions: FactorySessionSummary[] = [];
+
+  for (const sessionID of orderedSessionIDs) {
+    const session = sessionByID.get(sessionID);
+    if (!session) {
+      continue;
+    }
+    orderedSessions.push(session);
+    sessionByID.delete(sessionID);
+  }
+
+  for (const session of sessions) {
+    if (sessionByID.has(session.id)) {
+      orderedSessions.push(session);
+    }
+  }
+
+  return orderedSessions;
+}
+
+export function moveSessionTabOrder(
+  orderedSessionIDs: string[],
+  draggedSessionID: string,
+  targetIndex: number,
+): string[] {
+  const currentIndex = orderedSessionIDs.indexOf(draggedSessionID);
+  if (currentIndex === -1) {
+    return orderedSessionIDs;
+  }
+
+  const clampedIndex = Math.max(
+    0,
+    Math.min(targetIndex, orderedSessionIDs.length),
+  );
+  const nextOrder = [...orderedSessionIDs];
+  nextOrder.splice(currentIndex, 1);
+  const insertionIndex =
+    currentIndex < clampedIndex ? clampedIndex - 1 : clampedIndex;
+  nextOrder.splice(insertionIndex, 0, draggedSessionID);
+  return nextOrder;
 }
 
 export function normalizeFactorySessionsError(

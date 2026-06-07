@@ -97,11 +97,15 @@ function resourceFamilyNodeIds(nodeIds: string[], resourceName: string) {
 
 describe("current activity graph editor handles", () => {
   it("projects work-state state_category on factory graph layout place nodes", async () => {
-    const factory = factoryFromDashboardTopology(mediumBranchingDashboardTopology);
-    const graphLayout = await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const factory = factoryFromDashboardTopology(
+      mediumBranchingDashboardTopology,
+    );
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
     const initNode = graphLayout.nodes.find(
       (node) =>
-        node.nodeKind === "state_position" && node.place.place_id === "story:init",
+        node.nodeKind === "state_position" &&
+        node.place.place_id === "story:init",
     );
     const blockedNode = graphLayout.nodes.find(
       (node) =>

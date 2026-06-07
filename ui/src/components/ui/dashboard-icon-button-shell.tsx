@@ -26,8 +26,7 @@ export const DashboardIconButtonShell = forwardRef<
   { className, tone = "outline", ...props },
   ref,
 ) {
-  const buttonTone =
-    tone === "dangerGhost" ? "ghost" : tone;
+  const buttonTone = tone === "dangerGhost" ? "ghost" : tone;
   const toneClassName =
     tone === "dangerGhost"
       ? DASHBOARD_ICON_BUTTON_SHELL_TONE_CLASS.dangerGhost

@@ -176,7 +176,9 @@ export const DispatchHistoryStandardActions = {
         name: "Select work item Active Story",
       }),
     ).toHaveAttribute("aria-pressed", "true");
-    await expect(workstationCard.className).toContain("bg-surface-container-low");
+    await expect(workstationCard.className).toContain(
+      "bg-surface-container-low",
+    );
     await expect(operatorMoveCard.className).toContain(
       "bg-surface-container-low",
     );

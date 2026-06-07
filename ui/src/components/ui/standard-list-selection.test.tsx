@@ -104,9 +104,9 @@ describe("StandardListSelectionItem", () => {
       </StandardListSelectionItem>,
     );
 
-    expect(screen.getByRole("button", { name: "Custom row" }).className).not.toContain(
-      "af-dashboard-body-text",
-    );
+    expect(
+      screen.getByRole("button", { name: "Custom row" }).className,
+    ).not.toContain("af-dashboard-body-text");
   });
 
   it("uses neutral selected surfaces without accent fill when selected", () => {

@@ -17,10 +17,7 @@ export function DetailMetric({
           {value}
         </DashboardText>
       ) : (
-        <DashboardText
-          as="div"
-          className="mt-1 [overflow-wrap:anywhere]"
-        >
+        <DashboardText as="div" className="mt-1 [overflow-wrap:anywhere]">
           {value}
         </DashboardText>
       )}
