@@ -24,6 +24,23 @@ concurrency behavior of `resources` pools and resource requirements.
 - Use canonical camelCase `resources`; older resource aliases are
   compatibility-only inputs.
 
+## Managed Runtime Dependencies
+
+Packaged factories and customer-authored factories declare local managed runtime
+dependencies the same way:
+
+1. Declare one top-level `MODEL` resource with the stable managed runtime
+   identity in `model`, plus `backend` and `loadPolicy`.
+2. Reference that resource from any `MODEL_WORKER` with `modelLocality: LOCAL`
+   through `workers[].resources[]`.
+3. Keep the worker `model` value aligned with the managed runtime identity on
+   the top-level `MODEL` resource.
+
+Use `you models list`, `you models inspect`, and `you models pull` to inspect
+readiness for the same managed runtime identity. Factory validation rejects
+unsupported identities, invalid backend or load-policy combinations, and LOCAL
+workers that do not reference a matching `MODEL` resource.
+
 ## Typed Model Resources
 
 Use typed resources when model-backed execution needs more than a generic
@@ -64,7 +81,12 @@ capacity pool:
 
 Typed metadata rules:
 
-- `MODEL` resources require `model`, `backend`, and `loadPolicy`.
+- `MODEL` resources require `model` (managed runtime identity), `backend`, and
+  `loadPolicy`.
+- `MODEL` resources must use a supported managed runtime identity and the backend
+  required for that identity.
+- LOCAL `MODEL_WORKER` entries must reference a top-level `MODEL` resource whose
+  `model` value matches the worker `model` identity.
 - `PROVIDER_QUOTA` resources require `provider` and `model`.
 - `INVOCATION_SLOT` resources should carry the provider or model identity that
   the scheduler is supposed to throttle.

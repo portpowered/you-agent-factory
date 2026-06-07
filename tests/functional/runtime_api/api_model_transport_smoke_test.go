@@ -50,10 +50,22 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	if models.Results[0].Name != "OMNIVOICE_Q4_K_M" || models.Results[0].ProviderLocality != factoryapi.WorkerModelLocalityCloud {
 		t.Fatalf("GET /models first result = %#v, want OMNIVOICE cloud model", models.Results[0])
 	}
+	if models.Results[0].ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", models.Results[0].ManagedRuntime.Identity)
+	}
+	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("GET /models managed readiness = %s, want READY", models.Results[0].ManagedRuntime.ReadinessState)
+	}
+	if models.Results[0].ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE {
+		t.Fatalf("GET /models managed lifecycle = %s, want NOT_APPLICABLE", models.Results[0].ManagedRuntime.LifecycleState)
+	}
 
 	model := getGeneratedJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
 	if model.Name != "OMNIVOICE_Q4_K_M" || len(model.Capabilities) != 1 || model.Capabilities[0].Worker != "tts-worker" {
 		t.Fatalf("GET /models/OMNIVOICE_Q4_K_M = %#v, want one tts-worker capability", model)
+	}
+	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("GET /models/{name} managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
 	}
 
 	response := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{

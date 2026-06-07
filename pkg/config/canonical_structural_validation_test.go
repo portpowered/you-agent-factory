@@ -222,3 +222,30 @@ func assertCanonicalTargetSubject(t *testing.T, cfg *interfaces.FactoryConfig, w
 	}
 	t.Fatalf("expected canonical subject %#v, got targets %#v", want, factoryvalidation.Validate(cfg).Targets)
 }
+func TestCanonicalStructuralFindings_RejectsUnsupportedManagedRuntimeIdentity(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Resources = []interfaces.ResourceConfig{{
+		Name:       "unknown-cache",
+		Type:       interfaces.ResourceTypeModel,
+		Capacity:   1,
+		Model:      "UNKNOWN_RUNTIME",
+		Backend:    "LLAMACPP",
+		LoadPolicy: "ON_DEMAND",
+	}}
+
+	findings := CanonicalStructuralFindings(cfg)
+	assertFindingExists(t, findings, factoryvalidation.CodeManagedRuntimeUnsupportedIdentity)
+}
+
+func TestCanonicalStructuralFindings_RejectsLocalWorkerWithoutModelResource(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:          "voice-local",
+		Type:          interfaces.WorkerTypeModel,
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelLocality: interfaces.ModelLocalityLocal,
+	}}
+
+	findings := CanonicalStructuralFindings(cfg)
+	assertFindingExists(t, findings, factoryvalidation.CodeManagedRuntimeWorkerMissingDep)
+}

@@ -24,18 +24,53 @@ func TestRenderList_WritesDiscoveredModelsTable(t *testing.T) {
 			ProviderLocality: factoryapi.WorkerModelLocalityLocal,
 			Status:           factoryapi.ModelStatusREADY,
 			LoadState:        factoryapi.UNLOADED,
-			Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
-			Modalities:       []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
-			Resources:        []factoryapi.ModelResourceSummary{{Name: "voice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
+			ManagedRuntime: factoryapi.ManagedRuntime{
+				Identity:       "OMNIVOICE_Q4_K_M",
+				ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+				Locality:       factoryapi.WorkerModelLocalityLocal,
+			},
+			Operations: []factoryapi.ModelOperation{{Name: "TTS"}},
+			Modalities: []factoryapi.ModelOperationContentType{factoryapi.ModelOperationContentTypeAudio, factoryapi.ModelOperationContentTypeText},
+			Resources:  []factoryapi.ModelResourceSummary{{Name: "voice-cache", Type: factoryapi.ResourceTypeModel, Capacity: 1}},
 		}},
 	}, &out)
 	if err != nil {
 		t.Fatalf("RenderList: %v", err)
 	}
 	got := out.String()
-	for _, want := range []string{"NAME", "OMNIVOICE_Q4_K_M", "LOCAL", "READY", "UNLOADED", "TTS", "AUDIO,TEXT"} {
+	for _, want := range []string{"NAME", "READINESS", "LIFECYCLE", "OMNIVOICE_Q4_K_M", "LOCAL", "READY", "INSTALLED", "TTS", "AUDIO,TEXT"} {
 		if !bytes.Contains([]byte(got), []byte(want)) {
 			t.Fatalf("rendered table missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderModel_WritesManagedRuntimeInspectFields(t *testing.T) {
+	diagnostics := factoryapi.StringMap{
+		"readinessState": "MISSING",
+		"missingAssets":  "weights.bin",
+	}
+	var out bytes.Buffer
+	err := RenderModel(factoryapi.ModelDetail{
+		Name: "SECOND_RUNTIME",
+		ManagedRuntime: factoryapi.ManagedRuntime{
+			Identity:       "SECOND_RUNTIME",
+			ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			Locality:       factoryapi.WorkerModelLocalityLocal,
+			Diagnostics:    &diagnostics,
+		},
+		ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+		Operations:       []factoryapi.ModelOperation{{Name: "EMBED"}},
+	}, &out)
+	if err != nil {
+		t.Fatalf("RenderModel: %v", err)
+	}
+	got := out.String()
+	for _, want := range []string{"Readiness:\tMISSING", "Lifecycle:\tNOT_INSTALLED", "missingAssets=weights.bin"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("rendered inspect output missing %q:\n%s", want, got)
 		}
 	}
 }
@@ -201,6 +236,35 @@ func TestInvoke_AudioUnreachableUsesEndpointMessage(t *testing.T) {
 	}
 }
 
+func TestPull_ClassifiedFailureReturnsManagedRuntimeOutcome(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"","cachePath":"","revision":"","downloadedFiles":[],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"SOURCE_FETCH_FAILED","readinessState":"FAILED"}}`)
+	}))
+	defer server.Close()
+
+	var out bytes.Buffer
+	err := Pull(PullConfig{
+		ModelName: "OMNIVOICE_Q4_K_M",
+		Server:    strings.TrimSuffix(server.URL, "/"),
+		JSON:      true,
+		Output:    &out,
+	})
+	if err == nil {
+		t.Fatal("expected classified pull failure error")
+	}
+	if !strings.Contains(err.Error(), "SOURCE_FETCH_FAILED") {
+		t.Fatalf("error = %q, want classified pull outcome", err.Error())
+	}
+	var response factoryapi.ModelPullResponse
+	if decodeErr := json.Unmarshal(out.Bytes(), &response); decodeErr != nil {
+		t.Fatalf("json output is invalid: %v\n%s", decodeErr, out.String())
+	}
+	if response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeSOURCEFETCHFAILED {
+		t.Fatalf("pull outcome = %s, want SOURCE_FETCH_FAILED", response.ManagedRuntimePull.PullOutcome)
+	}
+}
+
 func TestPull_JSONWritesPullMetadataResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/models/OMNIVOICE_Q4_K_M/pull" {
@@ -275,11 +339,11 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		switch r.URL.Path {
 		case "/models/OMNIVOICE_Q4_K_M":
 			inspectRequests.Add(1)
-			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
+			_, _ = io.WriteString(w, `{"name":"OMNIVOICE_Q4_K_M","managedRuntime":{"identity":"OMNIVOICE_Q4_K_M","readinessState":"READY","lifecycleState":"NOT_INSTALLED","locality":"LOCAL","supportedOperations":[{"name":"TTS"}],"diagnostics":{}},"providerLocality":"LOCAL","status":"READY","loadState":"UNLOADED","operations":[{"name":"TTS"}],"modalities":["TEXT"],"resources":[],"capabilities":[],"diagnostics":{}}`)
 		case "/models/OMNIVOICE_Q4_K_M/invocations":
 			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","worker":"tts-worker","operation":"TTS","providerLocality":"LOCAL","content":[{"type":"AUDIO","file":"artifacts/sensitive-generated-output.wav"}],"bindings":[]}`)
 		case "/models/OMNIVOICE_Q4_K_M/pull":
-			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}]}`)
+			_, _ = io.WriteString(w, `{"modelName":"OMNIVOICE_Q4_K_M","providerLocality":"LOCAL","outcome":"PULLED","cachePath":"/tmp/models/ghp_successResponseToken1234567890/rev1","revision":"rev1","downloadedFiles":[{"path":"omnivoice-base-Q4_K_M.gguf","bytes":407}],"managedRuntimePull":{"identity":"OMNIVOICE_Q4_K_M","pullOutcome":"INSTALLED_SUCCESSFULLY","readinessState":"READY"}}`)
 		default:
 			t.Fatalf("unexpected path %q", r.URL.Path)
 		}
@@ -302,12 +366,13 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 	assertDiagnosticsContains(t, diag, []string{
 		"models inspect request",
 		"modelName=\"OMNIVOICE_Q4_K_M\"",
-		"status=READY",
+		"readiness=READY",
 		"models invoke request",
 		"operation=\"TTS\"",
 		"worker=tts-worker",
 		"models pull request",
-		"outcome=PULLED",
+		"pullOutcome=INSTALLED_SUCCESSFULLY",
+		"readiness=READY",
 		"downloadedFiles=1",
 	})
 	for _, forbidden := range []string{"secret direct input", "sensitive-generated-output.wav", "ghp_successResponseToken1234567890"} {

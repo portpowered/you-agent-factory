@@ -1,5 +1,9 @@
 type: string
-description: Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+description: >
+  Compatibility readiness projection for one managed runtime. Prefer
+  `managedRuntime.readinessState` for the canonical managed-runtime vocabulary.
+  `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed
+  readiness `MISSING` for local runtimes that still require install or setup.
 enum:
   - READY
   - UNAVAILABLE

@@ -51,20 +51,6 @@ type APIServerStarter func(ctx context.Context, runtime apisurface.APISurface, p
 
 type secretResolver = hostedworkers.SecretResolver
 
-// InvocationMetric records one emitted invocation counter together with its
-// low-cardinality dimensions.
-type InvocationMetric struct {
-	Name   string
-	Labels map[string]string
-}
-
-// InvocationMetricsRecorder receives invocation counter emissions from CLI and
-// session-runtime boundaries. Implementations should treat each call as a
-// single counter increment.
-type InvocationMetricsRecorder interface {
-	RecordInvocationMetric(InvocationMetric)
-}
-
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
 var ErrFactoryActivationRequiresIdle = apisurface.ErrFactoryActivationRequiresIdle
@@ -266,6 +252,9 @@ type FactoryServiceConfig struct {
 	// InvocationMetricsRecorder, when non-nil, receives invocation boundary
 	// counter emissions without including full prompt or result bodies.
 	InvocationMetricsRecorder InvocationMetricsRecorder
+	// ModelPullMetricsRecorder, when non-nil, receives managed-runtime pull
+	// counter emissions without including cache paths or downloaded file bodies.
+	ModelPullMetricsRecorder ModelPullMetricsRecorder
 	// APIServerReady, when non-nil, is closed by the API starter once the
 	// service-mode HTTP surface is reachable. Service-mode startup work waits
 	// for this signal so external clients can observe the startup window before
