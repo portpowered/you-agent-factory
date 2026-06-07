@@ -392,10 +392,11 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 	writeWorkstationAgentsMD(t, dir, "run-script")
 
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               dir,
-		RuntimeMode:       interfaces.RuntimeModeService,
-		RuntimeMetricsDir: metricsDir,
-		Logger:            zap.NewNop(),
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		RuntimeMetricsDir:                       metricsDir,
+		Logger:                                  zap.NewNop(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
 		ExtraOptions: []factory.FactoryOption{
 			factory.WithWorkerExecutor("model-worker", providerMetricsWorkerExecutor{}),
 			factory.WithWorkerExecutor("script-worker", scriptMetricsWorkerExecutor{}),
