@@ -81,6 +81,24 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	recorder.assertContainsMetric(t, "invocation.result_type", map[string]string{"input_source": "positional_text", "result_type": "text"})
 }
 
+func TestSessionInvocationAPI_RejectsWhitespaceOnlyText(t *testing.T) {
+	dir := scaffoldInvocationFactory(t, nil)
+	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+	})
+
+	response := postInvocationExpectStatus(
+		t,
+		server.URL(),
+		textInvocationRequest(t, "   ", nil),
+		http.StatusBadRequest,
+	)
+	if string(response.Code) != "INVOCATION_INPUT_EMPTY" {
+		t.Fatalf("invocation error code = %q, want INVOCATION_INPUT_EMPTY", response.Code)
+	}
+}
+
 func TestSessionInvocationAPI_UnresolvedPrimaryResultReturnsFailedStatus(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, map[string]any{
 		"invocationReturn": map[string]any{
@@ -243,6 +261,38 @@ func textInvocationRequest(t *testing.T, text string, timeoutMillis *int64) fact
 		Content:       factoryapi.WorkContent{part},
 		TimeoutMillis: timeoutMillis,
 	}
+}
+
+func postInvocationExpectStatus(
+	t *testing.T,
+	serverURL string,
+	request factoryapi.InvocationRequest,
+	wantStatus int,
+) factoryapi.ErrorResponse {
+	t.Helper()
+
+	body, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal invocation request: %v", err)
+	}
+	response, err := http.Post(
+		strings.TrimSuffix(serverURL, "/")+"/factory-sessions/"+factorysessions.DefaultSessionID+"/invocations",
+		"application/json",
+		bytes.NewReader(body),
+	)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/~default/invocations: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != wantStatus {
+		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want %d", response.StatusCode, wantStatus)
+	}
+
+	var decoded factoryapi.ErrorResponse
+	if err := json.NewDecoder(response.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode invocation error response: %v", err)
+	}
+	return decoded
 }
 
 func postInvocation(t *testing.T, serverURL string, request factoryapi.InvocationRequest) factoryapi.InvocationResponse {

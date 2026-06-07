@@ -78,7 +78,7 @@ func ResolveTextInput(sources TextInputSources) (ResolvedInput, error) {
 	}
 
 	if sources.StdinText != nil {
-		if *sources.StdinText == "" {
+		if isLogicallyEmptyText(*sources.StdinText) {
 			return ResolvedInput{}, &InputError{
 				Code:    InputErrorCodeEmpty,
 				Message: "invocation stdin input is empty",
@@ -89,6 +89,13 @@ func ResolveTextInput(sources TextInputSources) (ResolvedInput, error) {
 	}
 
 	if sources.PositionalText != nil {
+		if isLogicallyEmptyText(*sources.PositionalText) {
+			return ResolvedInput{}, &InputError{
+				Code:    InputErrorCodeEmpty,
+				Message: "invocation input is empty",
+				Source:  InputSourcePositionalText,
+			}
+		}
 		return resolvedTextInput(InputSourcePositionalText, *sources.PositionalText), nil
 	}
 
@@ -107,6 +114,49 @@ func suppliedTextSources(sources TextInputSources) []InputSourceLabel {
 		selected = append(selected, InputSourceStdinText)
 	}
 	return selected
+}
+
+func isLogicallyEmptyText(text string) bool {
+	return strings.TrimSpace(text) == ""
+}
+
+// TextContentValidationError reports API invocation content that is not valid
+// text-first input.
+type TextContentValidationError struct {
+	Message string
+}
+
+func (e *TextContentValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.Message
+}
+
+// ResolveAPITextInputContent applies canonical text-first invocation rules to
+// API text content parts joined with newlines.
+func ResolveAPITextInputContent(parts []interfaces.WorkContentPart) (ResolvedInput, error) {
+	if len(parts) == 0 {
+		return ResolvedInput{}, &InputError{
+			Code:    InputErrorCodeEmpty,
+			Message: "invocation input is empty",
+		}
+	}
+
+	textParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
+			return ResolvedInput{}, &TextContentValidationError{
+				Message: "content must contain only text parts when sourceKind is text",
+			}
+		}
+		textParts = append(textParts, part.Text)
+	}
+
+	text := strings.Join(textParts, "\n")
+	return ResolveTextInput(TextInputSources{
+		PositionalText: &text,
+	})
 }
 
 func resolvedTextInput(source InputSourceLabel, text string) ResolvedInput {

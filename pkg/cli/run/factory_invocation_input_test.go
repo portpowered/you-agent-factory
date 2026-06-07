@@ -107,6 +107,19 @@ func TestResolveFactoryInvocationInput_StdinPreservesSurroundingWhitespace(t *te
 	}
 }
 
+func TestResolveFactoryInvocationInput_RejectsWhitespaceOnlyPositional(t *testing.T) {
+	_, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		PromptArgs: []string{"   "},
+		StdinIsTTY: func() bool { return true },
+	})
+	if err == nil {
+		t.Fatal("expected whitespace-only positional rejection")
+	}
+	if !strings.Contains(err.Error(), string(invocations.InputErrorCodeEmpty)) {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
+	}
+}
+
 func TestResolveFactoryInvocationInput_ExplicitEmptyStdinUsesStableEmptyCode(t *testing.T) {
 	_, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
 		PromptArgs: []string{"-"},

@@ -34,6 +34,9 @@ primary-result behavior.
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
   transport-specific empty-stdin errors.
+- `pkg/invocations/input.go` owns logical empty-text detection via
+  `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
+  CLI and API adapters must not duplicate whitespace-only rejection.
 - `pkg/cli/root.go` owns the customer-facing `you run --factory` help text for
   invocation input-source rules and the canonical pointers into packaged docs.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and

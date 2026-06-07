@@ -61,6 +61,46 @@ func TestResolveTextInput_RejectsEmptySelectedStdin(t *testing.T) {
 
 	_, err := ResolveTextInput(TextInputSources{StdinText: &stdin})
 
+	assertInputEmptyError(t, err, InputSourceStdinText)
+}
+
+func TestResolveTextInput_RejectsWhitespaceOnlyPositional(t *testing.T) {
+	text := "   "
+
+	_, err := ResolveTextInput(TextInputSources{PositionalText: &text})
+
+	assertInputEmptyError(t, err, InputSourcePositionalText)
+}
+
+func TestResolveTextInput_RejectsWhitespaceOnlyStdin(t *testing.T) {
+	stdin := "  \n\t  "
+
+	_, err := ResolveTextInput(TextInputSources{StdinText: &stdin})
+
+	assertInputEmptyError(t, err, InputSourceStdinText)
+}
+
+func TestResolveAPITextInputContent_RejectsWhitespaceOnlyText(t *testing.T) {
+	_, err := ResolveAPITextInputContent([]interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "   ",
+	}})
+
+	assertInputEmptyError(t, err, InputSourcePositionalText)
+}
+
+func TestResolveAPITextInputContent_RejectsWhitespaceOnlyJoinedParts(t *testing.T) {
+	_, err := ResolveAPITextInputContent([]interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "  "},
+		{Type: interfaces.WorkContentPartTypeText, Text: "\t"},
+	})
+
+	assertInputEmptyError(t, err, InputSourcePositionalText)
+}
+
+func assertInputEmptyError(t *testing.T, err error, wantSource InputSourceLabel) {
+	t.Helper()
+
 	var inputErr *InputError
 	if !errors.As(err, &inputErr) {
 		t.Fatalf("error = %v, want InputError", err)
@@ -68,8 +108,8 @@ func TestResolveTextInput_RejectsEmptySelectedStdin(t *testing.T) {
 	if inputErr.Code != InputErrorCodeEmpty {
 		t.Fatalf("code = %q, want %q", inputErr.Code, InputErrorCodeEmpty)
 	}
-	if inputErr.Source != InputSourceStdinText {
-		t.Fatalf("source = %q, want %q", inputErr.Source, InputSourceStdinText)
+	if inputErr.Source != wantSource {
+		t.Fatalf("source = %q, want %q", inputErr.Source, wantSource)
 	}
 }
 

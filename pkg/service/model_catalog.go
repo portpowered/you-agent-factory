@@ -307,33 +307,17 @@ func resolveSessionInvocationInput(request factoryapi.InvocationRequest) (invoca
 	}
 
 	content := workcontent.PartsFromGenerated(&request.Content)
-	if len(content) == 0 {
-		return invocations.ResolvedInput{}, &invocations.InputError{
-			Code:    invocations.InputErrorCodeEmpty,
-			Message: "invocation input is empty",
-		}
-	}
-
-	textParts := make([]string, 0, len(content))
-	for _, part := range content {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
+	resolved, err := invocations.ResolveAPITextInputContent(content)
+	if err != nil {
+		var validationErr *invocations.TextContentValidationError
+		if errors.As(err, &validationErr) {
 			return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
-				Message: "content must contain only text parts when sourceKind is text",
+				Message: validationErr.Message,
 			}
 		}
-		textParts = append(textParts, part.Text)
+		return invocations.ResolvedInput{}, err
 	}
-
-	text := strings.Join(textParts, "\n")
-	if strings.TrimSpace(text) == "" {
-		return invocations.ResolvedInput{}, &invocations.InputError{
-			Code:    invocations.InputErrorCodeEmpty,
-			Message: "invocation input is empty",
-		}
-	}
-	return invocations.ResolveTextInput(invocations.TextInputSources{
-		PositionalText: &text,
-	})
+	return resolved, nil
 }
 
 func (fs *FactoryService) waitForSessionInvocationResult(

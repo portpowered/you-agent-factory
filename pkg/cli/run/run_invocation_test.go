@@ -67,6 +67,25 @@ func TestResolveFactoryInvocationRequest_StdinText(t *testing.T) {
 	}
 }
 
+func TestResolveFactoryInvocationRequest_RejectsWhitespaceOnlyPositional(t *testing.T) {
+	text := "   "
+
+	_, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+	})
+	if !invocationMode {
+		t.Fatal("expected invocation mode for whitespace-only positional text")
+	}
+	if err == nil {
+		t.Fatal("expected whitespace-only positional rejection")
+	}
+	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
+	}
+}
+
 func TestResolveFactoryInvocationRequest_RejectsConflictingSources(t *testing.T) {
 	text := "from args"
 
