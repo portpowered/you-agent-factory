@@ -61,15 +61,28 @@ const messages = {
     "Select a worker before saving this workstation.",
   editableConfigurationWorkerUnavailable:
     "The selected worker is not available in the current factory definition.",
+  editableConfigurationModelInvokeOperationInvalid:
+    "Operation names must be uppercase letters, digits, or underscores.",
+  editableConfigurationModelInvokeOperationMissing:
+    "The selected operation is not declared on the chosen model worker.",
+  editableConfigurationModelInvokeOperationRequired:
+    "Select an operation before saving this workstation.",
+  editableConfigurationModelInvokeWorkerOptionsEmpty:
+    "No model workers with compatible operations are available in the current factory definition.",
 } as const;
 
 const modelWorkstationValues = {
   behavior: "STANDARD" as const,
   behaviorOptions: ["STANDARD", "POLLER"] as const,
+  cron: null,
   effectiveRunnerName: "gemini",
   factoryRunnerName: "codex",
   guards: [],
   inputs: [],
+  modelInvokeWorkerOptions: [],
+  modelOperationsByWorkerName: {},
+  operation: "",
+  operationBindings: [],
   prompt: "Review prompt",
   resolvedRunnerSelection: {
     runnerId: "gemini",
@@ -94,9 +107,12 @@ const modelWorkstationValues = {
 
 const baseDraft: EditableWorkstationDraft = {
   behavior: "STANDARD",
+  cron: null,
   guards: [],
   inputs: [],
   name: "Review",
+  operation: "",
+  operationBindings: [],
   prompt: "",
   runnerName: "gemini",
   workerName: "",
@@ -212,6 +228,41 @@ describe("validateEditableWorkstationDraft logical move", () => {
       messages.editableConfigurationVisitCountWorkstationRequired,
     );
     expect(hasEditableWorkstationValidationErrors(errors)).toBe(true);
+  });
+});
+
+describe("validateEditableWorkstationDraft model invoke", () => {
+  const modelInvokeValues = {
+    ...modelWorkstationValues,
+    modelInvokeWorkerOptions: ["tts-worker"],
+    modelOperationsByWorkerName: {
+      "tts-worker": [
+        {
+          name: "TTS",
+          inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+          outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+        },
+      ],
+    },
+    workstationType: "MODEL_INVOKE" as const,
+  };
+
+  it("requires operation but not prompt for MODEL_INVOKE drafts", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...baseDraft,
+        workerName: "tts-worker",
+        prompt: "",
+      },
+      modelInvokeValues,
+      { status: "idle" },
+      messages,
+    );
+
+    expect(errors.operation).toBe(
+      messages.editableConfigurationModelInvokeOperationRequired,
+    );
+    expect(errors.prompt).toBeUndefined();
   });
 });
 

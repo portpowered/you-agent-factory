@@ -49,6 +49,12 @@ describe("resolveEditableWorkstationValues", () => {
       cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {
+        reviewer: [],
+      },
+      operation: "",
+      operationBindings: [],
       prompt: "Review the latest story changes before approval.",
       resolvedRunnerSelection: {
         runnerId: "codex",
@@ -70,6 +76,62 @@ describe("resolveEditableWorkstationValues", () => {
       workstationName: "Review",
       workstationOptions: ["Review"],
       workstationType: "MODEL_WORKSTATION",
+    });
+  });
+
+  it("resolves model invoke workstation operation and bindings from the factory", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "tts-factory",
+      workers: [
+        {
+          name: "tts-worker",
+          type: "MODEL_WORKER",
+          operations: [
+            {
+              name: "TTS",
+              inputs: [
+                { name: "text", contentTypes: ["TEXT"], required: true },
+              ],
+              outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+            },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          name: "speak-story",
+          type: "MODEL_INVOKE",
+          worker: "tts-worker",
+          operation: "TTS",
+          operationBindings: [
+            {
+              slot: "text",
+              selector: { label: "utterance", type: "TEXT" },
+            },
+          ],
+          inputs: [{ state: "init", workType: "story" }],
+          outputs: [{ state: "complete", workType: "story" }],
+        },
+      ],
+      workTypes: [],
+    };
+
+    expect(
+      resolveEditableWorkstationValues(factory, {
+        ...selectedNode,
+        transition_id: "speak-story",
+        workstation_name: "speak-story",
+      }),
+    ).toMatchObject({
+      modelInvokeWorkerOptions: ["tts-worker"],
+      operation: "TTS",
+      operationBindings: [
+        {
+          slot: "text",
+          selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+        },
+      ],
+      workstationType: "MODEL_INVOKE",
     });
   });
 
@@ -180,6 +242,10 @@ describe("resolveEditableWorkstationValues", () => {
       cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {},
+      operation: "",
+      operationBindings: [],
       prompt: "Review the latest story changes before approval.",
       resolvedRunnerSelection: {
         runnerId: "codex",
@@ -350,6 +416,12 @@ describe("resolveEditableWorkstationValues", () => {
       cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {
+        processor: [],
+      },
+      operation: "",
+      operationBindings: [],
       prompt: "Review work",
       resolvedRunnerSelection: {
         runnerId: "codex",
@@ -1421,6 +1493,10 @@ describe("editable workstation cron draft", () => {
       },
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {},
+      operation: "",
+      operationBindings: [],
       prompt: null,
       resolvedRunnerSelection: { runnerId: "codex", source: "default" },
       runnerName: null,
@@ -1661,6 +1737,10 @@ describe("editable workstation name draft", () => {
       cron: null,
       effectiveRunnerName: "codex",
       factoryRunnerName: null,
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {},
+      operation: "",
+      operationBindings: [],
       prompt: "Review work",
       resolvedRunnerSelection: { runnerId: "codex", source: "default" },
       runnerName: null,

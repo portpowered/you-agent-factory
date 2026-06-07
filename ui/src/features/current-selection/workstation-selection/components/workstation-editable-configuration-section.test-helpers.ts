@@ -35,9 +35,35 @@ export function buildEditableConfigurationSectionReadyState(
         maxVisits: number;
       }>;
       name?: string;
+      operation?: string;
+      operationBindings?: Array<{
+        slot: string;
+        selector: {
+          label: string;
+          role: string;
+          slot: string;
+          type: string;
+        };
+      }>;
       prompt?: string;
       runnerName?: string;
+      workerName?: string;
     };
+    operationOptionsState:
+      | {
+          operations: Array<{
+            name: string;
+            inputs?: Array<{
+              name: string;
+              contentTypes: string[];
+              required?: boolean;
+            }>;
+            outputs?: Array<{ name: string; contentTypes: string[] }>;
+          }>;
+          options: string[];
+          status: "ready";
+        }
+      | { message: string; status: "empty" | "error" };
     hasValidationErrors: boolean;
     initialValues: Partial<{
       sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
@@ -52,7 +78,7 @@ export function buildEditableConfigurationSectionReadyState(
     overwriteFieldNames: Array<
       "name" | "worker" | "prompt" | "behavior" | "runner"
     >;
-    workstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
+    workstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE";
   }>,
 ): EditableConfigurationSectionReadyState {
   const behavior = overrides?.draft?.behavior ?? ("STANDARD" as const);
@@ -75,9 +101,16 @@ export function buildEditableConfigurationSectionReadyState(
       guards: overrides?.draft?.guards ?? [],
       inputs: [],
       name: overrides?.draft?.name ?? "Review",
+      operation: overrides?.draft?.operation ?? "TTS",
+      operationBindings: overrides?.draft?.operationBindings ?? [
+        {
+          slot: "text",
+          selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+        },
+      ],
       prompt: overrides?.draft?.prompt ?? "Review prompt",
       runnerName: overrides?.draft?.runnerName ?? ("gemini" as const),
-      workerName: "reviewer",
+      workerName: overrides?.draft?.workerName ?? "reviewer",
     },
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
     initialValues: {
@@ -88,6 +121,25 @@ export function buildEditableConfigurationSectionReadyState(
       factoryRunnerName: "codex",
       guards: [],
       inputs: [],
+      modelInvokeWorkerOptions: ["tts-worker"],
+      modelOperationsByWorkerName: {
+        "tts-worker": [
+          {
+            name: "TTS",
+            inputs: [
+              { name: "text", contentTypes: ["TEXT"], required: true },
+            ],
+            outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+          },
+        ],
+      },
+      operation: "TTS",
+      operationBindings: [
+        {
+          slot: "text",
+          selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+        },
+      ],
       prompt: "Review prompt",
       resolvedRunnerSelection: {
         runnerId: "gemini",
@@ -122,6 +174,8 @@ export function buildEditableConfigurationSectionReadyState(
     onGuardsChange: vi.fn(),
     onInputsChange: vi.fn(),
     onNameChange: vi.fn(),
+    onOperationBindingsChange: vi.fn(),
+    onOperationChange: vi.fn(),
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onRunnerChange: vi.fn(),
@@ -140,6 +194,17 @@ export function buildEditableConfigurationSectionReadyState(
     },
     status: "ready" as const,
     validationErrors: overrides?.validationErrors ?? {},
+    operationOptionsState: overrides?.operationOptionsState ?? {
+      operations: [
+        {
+          name: "TTS",
+          inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+          outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+        },
+      ],
+      options: ["TTS"],
+      status: "ready" as const,
+    },
     workerOptionsState: overrides?.workerOptionsState ?? {
       options: ["reviewer", "planner"],
       status: "ready" as const,

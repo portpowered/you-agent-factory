@@ -4,6 +4,10 @@ import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
+  isModelInvokeWorkstationType,
+  workstationUsesPromptOrientedEditing,
+} from "../../../current-factory-definition/lib/workstation-model-invoke";
+import {
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
@@ -48,14 +52,18 @@ export function useEditableWorkstationConfigurationState(
       selectedNode,
       selection,
     );
+  const usesPromptOrientedEditing =
+    selectedEditableValues != null &&
+    workstationUsesPromptOrientedEditing(selectedEditableValues.workstationType);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedEditableValues?.workstationName,
-    isNodeSelection && selectedEditableValues != null,
+    isNodeSelection && selectedEditableValues != null && usesPromptOrientedEditing,
   );
   const shouldValidatePrompt =
     isNodeSelection &&
     sessionState != null &&
     selectedEditableValues != null &&
+    !isModelInvokeWorkstationType(selectedEditableValues.workstationType) &&
     workstationRequiresWorkerAssignment({
       type: selectedEditableValues.workstationType,
     }) &&

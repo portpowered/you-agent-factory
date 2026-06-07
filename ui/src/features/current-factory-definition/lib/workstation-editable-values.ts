@@ -22,6 +22,17 @@ import {
   rewriteWorkstationVisitCountReferences,
 } from "./workstation-guards";
 import {
+  buildCanonicalModelInvokeBindingsFromDraft,
+  isModelInvokeWorkstationType,
+  resolveCompatibleModelWorkerNames,
+  resolveEditableModelInvokeBindings,
+  resolveModelOperationByName,
+  resolveModelOperationsByWorkerName,
+  resolveModelWorkerOperations,
+  syncEditableModelInvokeBindingsForOperation,
+} from "./workstation-model-invoke";
+import type { EditableModelInvokeBindingDraft } from "./workstation-model-invoke";
+import {
   type EditableWorkstationType,
   resolveEditableWorkstationType,
 } from "./workstation-type";
@@ -63,6 +74,12 @@ export interface EditableWorkstationValues {
   cron: EditableWorkstationCronDraft | null;
   effectiveRunnerName: RunnerID;
   factoryRunnerName: RunnerID | null;
+  modelInvokeWorkerOptions: string[];
+  modelOperationsByWorkerName: ReturnType<
+    typeof resolveModelOperationsByWorkerName
+  >;
+  operation: string;
+  operationBindings: EditableModelInvokeBindingDraft[];
   prompt: string | null;
   resolvedRunnerSelection: ResolvedRunnerSelection;
   runnerName: RunnerID | null;
@@ -87,6 +104,8 @@ export interface EditableWorkstationDraft {
   guards: CanonicalWorkstationGuard[];
   inputs: EditableWorkstationInputDraft[];
   name: string;
+  operation: string;
+  operationBindings: EditableModelInvokeBindingDraft[];
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
@@ -105,6 +124,7 @@ export function resolveEditableWorkstationValues(
   }
 
   const { workstation } = workstationResolution;
+  const workstationType = resolveEditableWorkstationType(workstation);
   const behavior = resolveEditableWorkstationBehavior(workstation);
   const workerModelProvider = resolveWorkerModelProvider(
     factory,
@@ -115,6 +135,7 @@ export function resolveEditableWorkstationValues(
     factory.runner,
     workerModelProvider,
   );
+  const modelOperationsByWorkerName = resolveModelOperationsByWorkerName(factory);
 
   return {
     behavior,
@@ -123,6 +144,18 @@ export function resolveEditableWorkstationValues(
       behavior === "CRON" ? resolveEditableWorkstationCron(workstation) : null,
     effectiveRunnerName: resolvedRunnerSelection.runnerId,
     factoryRunnerName: factory.runner ?? null,
+    modelInvokeWorkerOptions: resolveCompatibleModelWorkerNames(factory),
+    modelOperationsByWorkerName,
+    operation: workstation.operation ?? "",
+    operationBindings: isModelInvokeWorkstationType(workstationType)
+      ? syncEditableModelInvokeBindingsForOperation(
+          resolveModelOperationByName(
+            resolveModelWorkerOperations(factory, workstation.worker),
+            workstation.operation ?? "",
+          ),
+          resolveEditableModelInvokeBindings(workstation.operationBindings),
+        )
+      : [],
     prompt: workstation.body ?? null,
     resolvedRunnerSelection,
     runnerName: workstation.runner ?? null,
@@ -143,7 +176,7 @@ export function resolveEditableWorkstationValues(
     inputs: resolveEditableWorkstationInputs(workstation),
     workstationName: workstation.name,
     workstationOptions: resolveFactoryWorkstationNameOptions(factory),
-    workstationType: resolveEditableWorkstationType(workstation),
+    workstationType,
   };
 }
 
@@ -160,6 +193,11 @@ export function editableWorkstationDraftFromValues(
       workType: input.workType,
     })),
     name: values.workstationName,
+    operation: values.operation ?? "",
+    operationBindings: (values.operationBindings ?? []).map((binding) => ({
+      slot: binding.slot,
+      selector: { ...binding.selector },
+    })),
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
@@ -201,6 +239,25 @@ export function applyEditableWorkstationDraft(
     return null;
   }
 
+  const workstationType = resolveEditableWorkstationType(workstation);
+  const nextWorkstation = isModelInvokeWorkstationType(workstationType)
+    ? buildModelInvokeWorkstationFromDraft(workstation, draft, trimmedName)
+    : buildPromptOrientedWorkstationFromDraft(workstation, draft, trimmedName);
+
+  return applyWorkstationNameChangeToFactory(
+    factory,
+    workstationIndex,
+    trimmedName,
+    previousWorkstationName,
+    () => nextWorkstation,
+  );
+}
+
+function buildPromptOrientedWorkstationFromDraft(
+  workstation: CanonicalWorkstation,
+  draft: EditableWorkstationDraft,
+  trimmedName: string,
+): CanonicalWorkstation {
   const {
     behavior: existingBehavior,
     cron: _existingCron,
@@ -209,7 +266,8 @@ export function applyEditableWorkstationDraft(
     runner: _existingRunner,
     ...workstationWithoutCronRunner
   } = workstation;
-  const nextWorkstation = {
+
+  return {
     ...workstationWithoutCronRunner,
     body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
@@ -225,14 +283,28 @@ export function applyEditableWorkstationDraft(
       ? { cron: buildCanonicalWorkstationCronFromDraft(draft.cron) }
       : {}),
   };
+}
 
-  return applyWorkstationNameChangeToFactory(
-    factory,
-    workstationIndex,
-    trimmedName,
-    previousWorkstationName,
-    () => nextWorkstation,
+function buildModelInvokeWorkstationFromDraft(
+  workstation: CanonicalWorkstation,
+  draft: EditableWorkstationDraft,
+  trimmedName: string,
+): CanonicalWorkstation {
+  const trimmedOperation = draft.operation.trim();
+  const operationBindings = buildCanonicalModelInvokeBindingsFromDraft(
+    draft.operationBindings,
   );
+
+  return {
+    ...workstation,
+    inputs: applyEditableWorkstationInputs(draft.inputs),
+    name: trimmedName,
+    type: "MODEL_INVOKE",
+    worker: draft.workerName,
+    ...(trimmedOperation.length > 0 ? { operation: trimmedOperation } : {}),
+    ...(operationBindings.length > 0 ? { operationBindings } : {}),
+    ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
+  };
 }
 
 function applyWorkstationNameChangeToFactory(

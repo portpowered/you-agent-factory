@@ -14,6 +14,7 @@ import {
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import type { WorkstationLevelGuard } from "../../../current-factory-definition/lib/workstation-guards";
+import { isModelInvokeWorkstationType } from "../../../current-factory-definition/lib/workstation-model-invoke";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
@@ -34,6 +35,7 @@ import type {
 } from "../lib/detail-card-types";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
+import { EditableConfigurationModelInvokeFields } from "./workstation-model-invoke-fields";
 import { EditableConfigurationCronFields } from "./workstation-cron-fields";
 import { EditableConfigurationWorkstationGuardsField } from "./workstation-guards-field";
 import { EditableConfigurationWorkstationInputGuardsField } from "./workstation-input-guards-field";
@@ -120,6 +122,9 @@ function EditableConfigurationReadyForm({
   const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
     type: state.initialValues.workstationType,
   });
+  const isModelInvoke = isModelInvokeWorkstationType(
+    state.initialValues.workstationType,
+  );
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
@@ -154,7 +159,14 @@ function EditableConfigurationReadyForm({
           />
         }
       />
-      {requiresWorkerAssignment ? (
+      {isModelInvoke ? (
+        <EditableConfigurationModelInvokeFields
+          messages={messages}
+          state={renderState}
+          validationErrors={validationErrors}
+        />
+      ) : null}
+      {requiresWorkerAssignment && !isModelInvoke ? (
         <CurrentSelectionFormFields>
           <EditableConfigurationField
             fieldId="editable-workstation-worker"

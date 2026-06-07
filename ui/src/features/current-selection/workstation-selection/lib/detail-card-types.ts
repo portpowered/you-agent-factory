@@ -13,11 +13,13 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
+import type { components } from "../../../../api/generated/openapi";
 import type { EditableWorkstationBehavior } from "../../../current-factory-definition/lib/workstation-behavior";
 import type {
   EditableWorkstationDraft,
   EditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type { EditableModelInvokeBindingDraft } from "../../../current-factory-definition/lib/workstation-model-invoke";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { RunnerID } from "../editing/runner-metadata";
@@ -49,6 +51,8 @@ export type EditableWorkstationValidationErrors = {
   cronSchedule?: string;
   cronTriggerAtStart?: string;
   name?: string;
+  operation?: string;
+  operationBindings?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
@@ -61,6 +65,8 @@ export type EditableWorkstationSaveValidationErrors = {
   cronSchedule?: string;
   cronTriggerAtStart?: string;
   name?: string;
+  operation?: string;
+  operationBindings?: string;
   prompt?: string;
   runnerName?: string;
   workerName?: string;
@@ -98,12 +104,23 @@ export type EditableWorkstationOverwriteField =
   | "cronSchedule"
   | "cronTriggerAtStart"
   | "name"
+  | "operation"
+  | "operationBindings"
   | "prompt"
   | "runner"
   | "worker";
 
 export type EditableWorkstationWorkerOptionsState =
   | { status: "ready"; options: string[] }
+  | { message: string; status: "empty" }
+  | { message: string; status: "error" };
+
+export type EditableWorkstationOperationOptionsState =
+  | {
+      operations: components["schemas"]["ModelOperation"][];
+      options: string[];
+      status: "ready";
+    }
   | { message: string; status: "empty" }
   | { message: string; status: "error" };
 
@@ -129,12 +146,17 @@ export type EditableWorkstationConfigurationState =
       onCronScheduleChange: (value: string) => void;
       onCronTriggerAtStartChange: (value: boolean) => void;
       onNameChange: (value: string) => void;
+      onOperationBindingsChange: (
+        bindings: EditableModelInvokeBindingDraft[],
+      ) => void;
+      onOperationChange: (value: string) => void;
       onPromptChange: (value: string) => void;
       onResetToLatest: () => void;
       onGuardsChange: (guards: EditableWorkstationDraft["guards"]) => void;
       onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => void;
       onRunnerChange: (value: RunnerID | null) => void;
       onWorkerChange: (value: string) => void;
+      operationOptionsState: EditableWorkstationOperationOptionsState;
       workstationOptionsState: EditableWorkstationWorkstationOptionsState;
       overwriteFieldNames: EditableWorkstationOverwriteField[];
       pendingFactoryDefinition: CanonicalFactoryDefinition | null;

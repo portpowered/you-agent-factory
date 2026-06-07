@@ -5,6 +5,10 @@ import {
   workstationBehaviorRequiresPrompt,
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
+  isModelInvokeWorkstationType,
+  type EditableModelInvokeBindingDraft,
+} from "../../../current-factory-definition/lib/workstation-model-invoke";
+import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
   type EditableWorkstationValues,
@@ -16,7 +20,12 @@ import {
   resolveDraftForBehaviorChange,
   updateEditableWorkstationCronDraft,
 } from "../editing/editable-workstation-cron-draft-mutators";
+import {
+  resolveModelInvokeDraftForOperationChange,
+  resolveModelInvokeDraftForWorkerChange,
+} from "../editing/editable-workstation-model-invoke-mutators";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
+import { resolveModelInvokeOperationOptionsState } from "../lib/editable-workstation-model-invoke-options";
 import type { RunnerID } from "../editing/runner-metadata";
 import type {
   EditableWorkstationPromptHelpState,
@@ -128,7 +137,27 @@ function createEditableWorkstationDraftHandlers(
       updateDraft((draft) => ({ ...draft, runnerName: value }));
     },
     onWorkerChange: (value: string) => {
-      updateDraft((draft) => ({ ...draft, workerName: value }));
+      updateDraft((draft) =>
+        isModelInvokeWorkstationType(selectedEditableValues.workstationType)
+          ? resolveModelInvokeDraftForWorkerChange(
+              draft,
+              value,
+              selectedEditableValues,
+            )
+          : { ...draft, workerName: value },
+      );
+    },
+    onOperationChange: (value: string) => {
+      updateDraft((draft) =>
+        resolveModelInvokeDraftForOperationChange(
+          draft,
+          value,
+          selectedEditableValues,
+        ),
+      );
+    },
+    onOperationBindingsChange: (bindings: EditableModelInvokeBindingDraft[]) => {
+      updateDraft((draft) => ({ ...draft, operationBindings: bindings }));
     },
   };
 }
@@ -166,6 +195,7 @@ export function buildReadyEditableWorkstationConfigurationState({
     resolvedValidationErrors,
   );
   const promptValidationBlocksPendingFactory =
+    !isModelInvokeWorkstationType(selectedEditableValues.workstationType) &&
     workstationRequiresWorkerAssignment({
       type: selectedEditableValues.workstationType,
     }) &&
@@ -233,6 +263,11 @@ export function buildReadyEditableWorkstationConfigurationState({
     status: "ready" as const,
     validationErrors: resolvedValidationErrors,
     workerOptionsState: resolveWorkerOptionsState(
+      sessionState.draft,
+      selectedEditableValues,
+      messages,
+    ),
+    operationOptionsState: resolveModelInvokeOperationOptionsState(
       sessionState.draft,
       selectedEditableValues,
       messages,
