@@ -136,7 +136,6 @@ function buildReadyEditableWorkerConfigurationState({
   const messages = getWorkerDetailMessages();
   const validationErrors = mergeEditableWorkerContractValidationErrors(
     validateEditableWorkerDraft(sessionState.draft, messages, {
-      linearClaimPresent: selectedEditableValues.linearClaimPresent,
       originalWorkerName: workerName,
       workerNames: (editableDefinition.workers ?? []).map(
         (worker) => worker.name,

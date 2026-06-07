@@ -35,7 +35,6 @@ export type EditableWorkerValidationErrors = Partial<
 >;
 
 export interface ValidateEditableWorkerDraftContext {
-  linearClaimPresent?: boolean;
   originalWorkerName: string;
   workerNames: string[];
 }
@@ -48,7 +47,6 @@ export function validateEditableWorkerDraft(
     | "editableConfigurationAuthSecretRefRequired"
     | "editableConfigurationBodyRequired"
     | "editableConfigurationCommandRequired"
-    | "editableConfigurationLinearClaimAssigneeFieldRequired"
     | "editableConfigurationLinearMappingStateRequired"
     | "editableConfigurationLinearMappingWorkTypeRequired"
     | "editableConfigurationModelProviderRequired"
@@ -106,13 +104,6 @@ export function validateEditableWorkerDraft(
     if (draft.linearMappingState.trim().length === 0) {
       validationErrors.linearMappingState =
         messages.editableConfigurationLinearMappingStateRequired;
-    }
-    if (
-      context?.linearClaimPresent &&
-      draft.linearClaimAssigneeField.trim().length === 0
-    ) {
-      validationErrors.linearClaimAssigneeField =
-        messages.editableConfigurationLinearClaimAssigneeFieldRequired;
     }
   }
 

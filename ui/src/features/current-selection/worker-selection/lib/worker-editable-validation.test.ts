@@ -182,7 +182,7 @@ describe("validateEditableWorkerDraft", () => {
     ).toEqual({});
   });
 
-  it("rejects blank claim assignee field when claim config is present", () => {
+  it("allows clearing claim assignee field to remove existing linear.claim config", () => {
     expect(
       validateEditableWorkerDraft(
         buildDraft({
@@ -196,12 +196,9 @@ describe("validateEditableWorkerDraft", () => {
           type: "HOSTED_WORKER",
         }),
         messages,
-        { ...validationContext, linearClaimPresent: true },
+        validationContext,
       ),
-    ).toEqual({
-      linearClaimAssigneeField:
-        messages.editableConfigurationLinearClaimAssigneeFieldRequired,
-    });
+    ).toEqual({});
   });
 });
 

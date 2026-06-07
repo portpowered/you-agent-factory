@@ -217,6 +217,47 @@ describe("applyEditableWorkerDraft", () => {
     });
   });
 
+  it("removes linear.claim when the claim assignee field is cleared", () => {
+    const factory: CanonicalFactoryDefinition = {
+      name: "Current Factory",
+      workers: [
+        {
+          auth: { secretRef: "secrets/linear-api-key" },
+          linear: {
+            claim: { assigneeField: "assignee.email" },
+            mapping: { state: "queued", workType: "story" },
+            pollInterval: "30s",
+          },
+          name: "linear-sync",
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        },
+      ],
+      workTypes: [],
+    };
+
+    const updatedFactory = applyEditableWorkerDraft(
+      factory,
+      "linear-sync",
+      buildDraft({
+        authSecretRef: "secrets/linear-api-key",
+        linearClaimAssigneeField: "",
+        linearMappingState: "queued",
+        linearMappingWorkType: "story",
+        linearPollInterval: "30s",
+        name: "linear-sync",
+        provider: "LINEAR",
+        type: "HOSTED_WORKER",
+      }),
+    );
+
+    expect(updatedFactory?.workers?.[0]?.linear).toEqual({
+      mapping: { state: "queued", workType: "story" },
+      pollInterval: "30s",
+    });
+    expect(updatedFactory?.workers?.[0]?.linear).not.toHaveProperty("claim");
+  });
+
   it("clears stale hosted Linear config when the worker is no longer a hosted Linear worker", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",

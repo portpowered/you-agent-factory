@@ -748,6 +748,73 @@ describe("useEditableWorkerConfigurationState", () => {
     });
   });
 
+  it("allows save when clearing an existing hosted Linear claim assignee field", () => {
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        workers: [
+          {
+            auth: { secretRef: "secrets/linear-api-key" },
+            linear: {
+              claim: { assigneeField: "assignee.email" },
+              mapping: { state: "queued", workType: "story" },
+              pollInterval: "30s",
+            },
+            name: "linear-poller",
+            provider: "LINEAR",
+            type: "HOSTED_WORKER",
+          },
+        ],
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+
+    const { result } = renderHook(() =>
+      useEditableWorkerConfigurationState(
+        { kind: "worker", workerName: "linear-poller" },
+        "linear-poller",
+      ),
+    );
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable worker state");
+      }
+      result.current.onLinearClaimAssigneeFieldChange("");
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      canSave: true,
+      hasValidationErrors: false,
+      isDirty: true,
+      draft: {
+        linearClaimAssigneeField: "",
+      },
+      pendingFactoryDefinition: {
+        workers: [
+          {
+            auth: { secretRef: "secrets/linear-api-key" },
+            linear: {
+              mapping: { state: "queued", workType: "story" },
+              pollInterval: "30s",
+            },
+            name: "linear-poller",
+            provider: "LINEAR",
+            type: "HOSTED_WORKER",
+          },
+        ],
+      },
+    });
+    expect(
+      result.current?.status === "ready"
+        ? result.current.pendingFactoryDefinition?.workers?.[0]?.linear
+        : null,
+    ).not.toHaveProperty("claim");
+  });
+
   it("blocks save when hosted Linear poller fields are incomplete", () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: buildFactoryDocument({
