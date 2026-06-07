@@ -514,6 +514,27 @@ func TestFactoryService_StopLiveRuntime_EmitsCompletedLifecycleMetricThroughShut
 	}, "completed stop through shutdown path")
 }
 
+func TestFactoryService_StopLiveRuntime_EmitsCanceledLifecycleMetricThroughShutdownPath(t *testing.T) {
+	svc, handle, metricsPath := startRuntimeMetricsShutdownTestHandle(t, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		RuntimeStatus: interfaces.RuntimeStatusActive,
+		FactoryState:  string(interfaces.FactoryStateRunning),
+	})
+
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		handle.setRunResult(nil)
+	}()
+
+	if err := svc.stopLiveRuntime(handle); err != nil {
+		t.Fatalf("stopLiveRuntime: %v", err)
+	}
+
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStopped, 1) &&
+			metricRecordString(record, "outcome") == "canceled"
+	}, "canceled stop through shutdown path")
+}
+
 func TestFactoryService_StopLiveRuntime_EmitsFailedLifecycleMetricThroughShutdownPath(t *testing.T) {
 	svc, handle, metricsPath := startRuntimeMetricsShutdownTestHandle(t, &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		RuntimeStatus: interfaces.RuntimeStatusFinished,

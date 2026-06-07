@@ -28,8 +28,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -84,31 +84,31 @@ type serviceCoordinatorPolicy struct {
 }
 
 const (
-	runtimeMetricLifecycleStarted  = "runtime.lifecycle.started"
-	runtimeMetricLifecycleStopped  = "runtime.lifecycle.stopped"
-	runtimeMetricStateActive       = "runtime.state.active"
-	runtimeMetricStateIdle         = "runtime.state.idle"
-	runtimeMetricStatePaused       = "runtime.state.paused"
-	runtimeMetricStateFailed       = "runtime.state.failed"
+	runtimeMetricLifecycleStarted     = "runtime.lifecycle.started"
+	runtimeMetricLifecycleStopped     = "runtime.lifecycle.stopped"
+	runtimeMetricStateActive          = "runtime.state.active"
+	runtimeMetricStateIdle            = "runtime.state.idle"
+	runtimeMetricStatePaused          = "runtime.state.paused"
+	runtimeMetricStateFailed          = "runtime.state.failed"
 	runtimeMetricQueueInFlight        = "runtime.queue.in_flight"
 	runtimeMetricQueueSubmissionCount = "queue.submission_count"
-	runtimeMetricDispatchStarted   = "dispatch.started"
-	runtimeMetricDispatchComplete  = "dispatch.completed"
-	runtimeMetricDispatchDuration  = "dispatch.duration"
-	runtimeMetricDispatchRetries   = "dispatch.retry_count"
-	runtimeMetricDispatchCost      = "dispatch.cost"
-	runtimeMetricProviderRequest   = "provider.requested"
-	runtimeMetricProviderComplete  = "provider.completed"
-	runtimeMetricProviderFailed    = "provider.failed"
-	runtimeMetricProviderDuration  = "provider.duration"
-	runtimeMetricProviderInputTok  = "provider.input_tokens"
-	runtimeMetricProviderOutputTok = "provider.output_tokens"
-	runtimeMetricProviderCost      = "provider.cost"
-	runtimeMetricScriptStarted     = "script.started"
-	runtimeMetricScriptComplete    = "script.completed"
-	runtimeMetricScriptDuration    = "script.duration"
-	runtimeMetricScriptTimedOut    = "script.timed_out"
-	runtimeMetricScriptFailed      = "script.failed"
+	runtimeMetricDispatchStarted      = "dispatch.started"
+	runtimeMetricDispatchComplete     = "dispatch.completed"
+	runtimeMetricDispatchDuration     = "dispatch.duration"
+	runtimeMetricDispatchRetries      = "dispatch.retry_count"
+	runtimeMetricDispatchCost         = "dispatch.cost"
+	runtimeMetricProviderRequest      = "provider.requested"
+	runtimeMetricProviderComplete     = "provider.completed"
+	runtimeMetricProviderFailed       = "provider.failed"
+	runtimeMetricProviderDuration     = "provider.duration"
+	runtimeMetricProviderInputTok     = "provider.input_tokens"
+	runtimeMetricProviderOutputTok    = "provider.output_tokens"
+	runtimeMetricProviderCost         = "provider.cost"
+	runtimeMetricScriptStarted        = "script.started"
+	runtimeMetricScriptComplete       = "script.completed"
+	runtimeMetricScriptDuration       = "script.duration"
+	runtimeMetricScriptTimedOut       = "script.timed_out"
+	runtimeMetricScriptFailed         = "script.failed"
 )
 
 const runtimeMetricsObserverPollInterval = 5 * time.Millisecond
@@ -1291,6 +1291,19 @@ func boolMetricValue(active bool) float64 {
 	return 0
 }
 
+func (h *liveRuntimeHandle) markStopCanceled() {
+	if h != nil {
+		h.stopCanceled.Store(true)
+	}
+}
+
+func (h *liveRuntimeHandle) isStopCanceled() bool {
+	if h == nil {
+		return false
+	}
+	return h.stopCanceled.Load()
+}
+
 func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], err error, canceled bool) (string, string) {
 	if canceled {
 		return "canceled", ""
@@ -1340,11 +1353,11 @@ func (fs *FactoryService) finalizeRuntimeLifecycleMetrics(handle *liveRuntimeHan
 		if current.changedFrom(last) {
 			handle.runtime.emitRuntimeStateMetrics(snapshot)
 		}
-		outcome, reason := runtimeStopOutcome(snapshot, handle.result(), false)
+		outcome, reason := runtimeStopOutcome(snapshot, handle.result(), handle.isStopCanceled())
 		handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
 		return
 	}
-	outcome, reason := runtimeStopOutcome(nil, handle.result(), false)
+	outcome, reason := runtimeStopOutcome(nil, handle.result(), handle.isStopCanceled())
 	handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
 }
 
