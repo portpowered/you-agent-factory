@@ -1,76 +1,54 @@
 import type { DashboardInferenceAttempt } from "../../../../api/dashboard/types";
+import { surfacePanelVariants } from "../../../../components/ui";
+import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
 import {
-  ExpandablePanelTrigger,
-  surfacePanelVariants,
-} from "../../../../components/ui";
-import {
-  useCurrentSelectionDetailMessages,
   useCurrentSelectionOperationalEnumMessages,
 } from "../../base/components/current-selection-locale";
 import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../base/public";
+import {
+  InferenceAttemptProviderSessionPreview,
+} from "./inference-attempt-provider-session";
 
 export interface InferenceAttemptSummaryHeaderProps {
   attempt: DashboardInferenceAttempt;
-  expanded: boolean;
-  headingId: string;
-  onToggle: () => void;
-  panelId: string;
+  onSelectProviderSession?: (session: LoadableProviderSessionRef) => void;
+  selectedProviderSessionKey?: string | null;
   timingSummary?: string;
 }
 
 export function InferenceAttemptSummaryHeader({
   attempt,
-  expanded,
-  headingId,
-  onToggle,
-  panelId,
+  onSelectProviderSession,
+  selectedProviderSessionKey,
   timingSummary,
 }: InferenceAttemptSummaryHeaderProps) {
-  const detailMessages = useCurrentSelectionDetailMessages();
   const enumMessages = useCurrentSelectionOperationalEnumMessages();
 
   return (
     <div
       className={surfacePanelVariants({
-        className:
-          "flex items-center justify-between gap-3 px-3 py-2 [&_h4]:m-0",
+        className: "grid gap-3 px-3 py-2",
         radius: "lg",
       })}
     >
-      <div className="grid min-w-0 gap-1">
-        <div className="flex items-start justify-between gap-3">
-          <strong id={headingId}>
-            {detailMessages.attemptTitle(attempt.attempt)}
-          </strong>
-          <CurrentSelectionExecutionPill>
-            {attempt.outcome
-              ? enumMessages.localizeOutcome(attempt.outcome)
-              : enumMessages.localizeOutcome("PENDING")}
-          </CurrentSelectionExecutionPill>
-        </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <CurrentSelectionExecutionPill>
+          {attempt.outcome
+            ? enumMessages.localizeOutcome(attempt.outcome)
+            : enumMessages.localizeOutcome("PENDING")}
+        </CurrentSelectionExecutionPill>
         {timingSummary ? (
           <CurrentSelectionSupportingText tone="status">
             {timingSummary}
           </CurrentSelectionSupportingText>
         ) : null}
       </div>
-      <ExpandablePanelTrigger
-        aria-label={
-          expanded
-            ? detailMessages.collapseAttemptAction(attempt.attempt)
-            : detailMessages.expandAttemptAction(attempt.attempt)
-        }
-        controlsID={panelId}
-        expanded={expanded}
-        onClick={onToggle}
-        type="button"
-        variant="section"
-      >
-        {expanded
-          ? detailMessages.collapseAttemptAction(attempt.attempt)
-          : detailMessages.expandAttemptAction(attempt.attempt)}
-      </ExpandablePanelTrigger>
+      <InferenceAttemptProviderSessionPreview
+        attempt={attempt}
+        onSelectProviderSession={onSelectProviderSession}
+        selectedProviderSessionKey={selectedProviderSessionKey}
+      />
     </div>
   );
 }

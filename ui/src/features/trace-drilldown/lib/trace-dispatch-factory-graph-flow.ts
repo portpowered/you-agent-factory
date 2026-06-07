@@ -1,5 +1,6 @@
 import { type Node, Position } from "@xyflow/react";
 
+import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { DashboardTraceDispatch } from "../../../api/dashboard/types";
 import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import {
@@ -7,12 +8,14 @@ import {
   type FactoryGraphReactFlowNode,
   projectFactoryGraphToReactFlow,
 } from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
+import type { WorkstationNodeData } from "../../graphs/public";
+import { STANDARD_WORKSTATION_KIND } from "../../flowchart/lib/workstation-icon-metadata";
 import {
   projectTraceDispatchesToFactoryGraph,
   type TraceDispatchNodeOverlay,
 } from "./trace-dispatch-factory-graph";
 
-export type TraceDispatchFlowNodeData = FactoryGraphReactFlowNode["data"] &
+export type TraceDispatchFlowNodeData = WorkstationNodeData &
   TraceDispatchNodeOverlay & {
     factoryNodeId: string;
     locale?: string;
@@ -20,7 +23,7 @@ export type TraceDispatchFlowNodeData = FactoryGraphReactFlowNode["data"] &
 
 export type TraceDispatchFlowNode = Node<
   TraceDispatchFlowNodeData,
-  "factoryEntity"
+  "workstation"
 >;
 
 export interface TraceDispatchFactoryGraphFlow {
@@ -55,15 +58,27 @@ export function buildTraceDispatchFactoryGraphFlow(
     nodes.push({
       ...node,
       data: {
-        ...node.data,
         ...overlay,
+        active: false,
+        activeFlow: false,
+        executions: [],
         factoryNodeId: node.id,
+        handles: node.data.connectionAnchors.map((handle) => ({
+          ...handle,
+          hidden: true,
+        })),
+        kind: "workstation",
         locale,
+        muted: false,
+        now: 0,
+        selectedWorkID: null,
+        selectedWorkstation: false,
+        workstation: traceDispatchWorkstationNode(overlay),
       },
       id: dispatchId,
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
-      type: "factoryEntity",
+      type: "workstation",
     });
   }
 
@@ -78,5 +93,16 @@ export function buildTraceDispatchFactoryGraphFlow(
     edges,
     nodes,
     topology: traceProjection.topology,
+  };
+}
+
+function traceDispatchWorkstationNode(
+  overlay: TraceDispatchNodeOverlay,
+): DashboardWorkstationNode {
+  return {
+    node_id: overlay.dispatchId,
+    transition_id: overlay.displayLabel,
+    workstation_kind: STANDARD_WORKSTATION_KIND,
+    workstation_name: overlay.displayLabel,
   };
 }

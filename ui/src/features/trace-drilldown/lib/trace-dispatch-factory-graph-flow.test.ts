@@ -36,7 +36,7 @@ function buildDispatch(
 }
 
 describe("buildTraceDispatchFactoryGraphFlow", () => {
-  it("projects dispatch history into factory entity nodes and editor edges", () => {
+  it("projects dispatch history into shared workstation nodes and editor edges", () => {
     const editorMessages = getFactoryGraphEditorMessages();
     const flow = buildTraceDispatchFactoryGraphFlow([
       buildDispatch("dispatch-plan", {
@@ -52,12 +52,24 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
       flow.nodes.find((node) => node.id === "dispatch-plan"),
     ).toMatchObject({
       id: "dispatch-plan",
-      type: "factoryEntity",
+      type: "workstation",
       data: {
+        active: false,
         dispatchId: "dispatch-plan",
         displayLabel: "dispatch-plan",
         kind: "workstation",
-        kindLabel: editorMessages.kindLabel("workstation"),
+        handles: expect.arrayContaining([
+          expect.objectContaining({
+            hidden: true,
+            id: "workstation-input-target",
+          }),
+        ]),
+        workstation: {
+          node_id: "dispatch-plan",
+          transition_id: "dispatch-plan",
+          workstation_kind: "STANDARD",
+          workstation_name: "dispatch-plan",
+        },
       },
     });
     expect(flow.edges).toEqual(
@@ -84,15 +96,15 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
     expect(flow.nodes[0]?.data.locale).toBe("zh");
   });
 
-  it("registers only factory graph React Flow node types", () => {
+  it("registers only shared workstation graph React Flow node types", () => {
     const flow = buildTraceDispatchFactoryGraphFlow([
       buildDispatch("dispatch-plan"),
     ]);
 
     expect(Object.keys(TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES)).toEqual([
-      "factoryEntity",
+      "workstation",
     ]);
-    expect(flow.nodes.every((node) => node.type === "factoryEntity")).toBe(
+    expect(flow.nodes.every((node) => node.type === "workstation")).toBe(
       true,
     );
     expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(

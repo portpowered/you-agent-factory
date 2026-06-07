@@ -8,7 +8,7 @@ import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-
 import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "./trace-dispatch-factory-graph-node";
 import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "./trace-relation-factory-graph-node";
 
-const DispatchNode = TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES.factoryEntity;
+const DispatchNode = TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES.workstation;
 const RelationNode = TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES.factoryEntity;
 
 function dispatchNodeProps(
@@ -20,9 +20,37 @@ function dispatchNodeProps(
     id: data.dispatchId,
     isConnectable: false,
     selected: false,
-    type: "factoryEntity",
+    type: "workstation",
     zIndex: 0,
   };
+}
+
+function dispatchNodeData(
+  overrides: Partial<TraceDispatchFlowNode["data"]> = {},
+): TraceDispatchFlowNode["data"] {
+  return {
+    active: false,
+    activeFlow: false,
+    dispatchId: "dispatch",
+    displayLabel: "dispatch",
+    executions: [],
+    handles: [],
+    inputSummary: "None",
+    kind: "workstation",
+    locale: "en",
+    muted: false,
+    now: 0,
+    outputSummary: "None",
+    selectedWorkID: null,
+    selectedWorkstation: false,
+    workstation: {
+      node_id: "dispatch",
+      transition_id: "dispatch",
+      workstation_kind: "STANDARD",
+      workstation_name: "dispatch",
+    },
+    ...overrides,
+  } as never;
 }
 
 function relationNodeProps(
@@ -47,32 +75,37 @@ describe("Trace dispatch factory graph node", () => {
   it("renders factory-style workstation identity without dispatch metadata", () => {
     render(
       <DispatchNode
-        {...dispatchNodeProps({
-          connectionAnchors: [],
+        {...dispatchNodeProps(dispatchNodeData({
           dispatchId: "dispatch-pending",
           displayLabel: "dispatch-pending",
+          executions: [],
           factoryNodeId: "workstation:dispatch-pending",
+          handles: [],
           inputSummary: "None",
           kind: "workstation",
-          kindLabel: "Workstation",
           locale: "en",
+          muted: false,
+          now: 0,
           outputSummary: "None",
-          workstationName: "dispatch-pending",
-        })}
+          selectedWorkID: null,
+          selectedWorkstation: false,
+          workstation: {
+            node_id: "dispatch-pending",
+            transition_id: "dispatch-pending",
+            workstation_kind: "STANDARD",
+            workstation_name: "dispatch-pending",
+          },
+        }))}
       />,
     );
 
-    expect(screen.getByText("Workstation")).toBeTruthy();
-    expect(screen.queryByText("Observed")).toBeNull();
-    expect(screen.queryByText(/^In:/)).toBeNull();
-    expect(screen.queryByText(/^Out:/)).toBeNull();
+    expect(screen.queryByText("Workstation")).toBeNull();
     const node = screen.getByText("dispatch-pending").closest("article");
     if (!node) {
       throw new Error("Expected dispatch node shell to render.");
     }
-    expect(node.className).toContain("border-primary");
-    expect(node.className).toContain("bg-primary-container");
-    expect(node.className).toContain("shadow-none");
+    expect(node.className).toContain("af-current-activity-node-surface-neutral");
+    expect(node.className).toContain("border-info-border");
     expect(node.className).not.toContain("shadow-af-card");
     expect(node.className).not.toContain("shadow-af-panel");
   });
@@ -80,19 +113,28 @@ describe("Trace dispatch factory graph node", () => {
   it("keeps the factory workstation surface for failure outcomes", () => {
     render(
       <DispatchNode
-        {...dispatchNodeProps({
-          connectionAnchors: [],
+        {...dispatchNodeProps(dispatchNodeData({
           dispatchId: "dispatch-failed",
           displayLabel: "dispatch-failed",
+          executions: [],
           factoryNodeId: "workstation:dispatch-failed",
+          handles: [],
           inputSummary: "None",
           kind: "workstation",
-          kindLabel: "Workstation",
           locale: "en",
+          muted: false,
+          now: 0,
           outcome: "FAILED",
           outputSummary: "None",
-          workstationName: "dispatch-failed",
-        })}
+          selectedWorkID: null,
+          selectedWorkstation: false,
+          workstation: {
+            node_id: "dispatch-failed",
+            transition_id: "dispatch-failed",
+            workstation_kind: "STANDARD",
+            workstation_name: "dispatch-failed",
+          },
+        }))}
       />,
     );
 
@@ -100,9 +142,8 @@ describe("Trace dispatch factory graph node", () => {
     if (!node) {
       throw new Error("Expected dispatch node shell to render.");
     }
-    expect(node.className).toContain("border-primary");
-    expect(node.className).toContain("bg-primary-container");
-    expect(node.className).toContain("shadow-none");
+    expect(node.className).toContain("af-current-activity-node-surface-neutral");
+    expect(node.className).toContain("border-info-border");
     expect(node.className).not.toContain("shadow-af-card");
     expect(node.className).not.toContain("shadow-af-panel");
   });

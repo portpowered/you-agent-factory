@@ -101,6 +101,12 @@ function FactoryGraphEditorNodeView({
   data,
   selected,
 }: NodeProps<FactoryGraphEditorNode>) {
+  if (data.kind === "worker") {
+    return (
+      <FactoryGraphEditorWorkerNodeView data={data} selected={selected} />
+    );
+  }
+
   const surfaceClassName =
     data.kind === "work-state"
       ? workStatePhaseSurfaceClassName(data.workStateType)
@@ -151,15 +157,6 @@ function FactoryGraphEditorNodeView({
               {data.kindLabel}
             </ActivityGraphNodeBadge>
           </div>
-          {data.kind === "worker" && data.workerStatus ? (
-            <ActivityGraphNodeBadge
-              className="shrink-0"
-              tone={workerStatusTone(data.workerStatus)}
-              weight="label"
-            >
-              {data.workerStatusLabel}
-            </ActivityGraphNodeBadge>
-          ) : null}
           {data.kind === "work-type" && data.isDefaultWorkType ? (
             <ActivityGraphNodeBadge
               className="shrink-0"
@@ -207,6 +204,78 @@ function FactoryGraphEditorNodeView({
           <p className="m-0 text-[0.65rem] leading-5 text-on-surface-subtle">
             {data.connectionHint}
           </p>
+        ) : null}
+      </div>
+    </ActivityGraphNodeShell>
+  );
+}
+
+function FactoryGraphEditorWorkerNodeView({
+  data,
+  selected,
+}: {
+  data: FactoryGraphEditorNode["data"];
+  selected: boolean;
+}) {
+  return (
+    <ActivityGraphNodeShell
+      className={cn(
+        "min-w-0 w-full justify-center overflow-hidden text-left shadow-none",
+        KIND_CLASS.worker,
+        currentActivityGraphNodeHoverClassName({
+          activeFlow: data.activeFlow,
+          muted: data.muted,
+          selected: selected || data.focused,
+          validationError: data.validationMessage !== null,
+        }),
+        data.draftStatus === "addition" && "ring-2 ring-af-warning-border",
+        data.draftStatus === "removal" &&
+          cn(
+            activityGraphNodeSurfaceClassName("danger"),
+            "ring-2 ring-af-danger-border",
+          ),
+      )}
+      handles={data.connectionAnchors}
+      nodeType="worker"
+      zAxisIncompleteHints={data.zAxisIncompleteHints}
+    >
+      <div className="flex min-w-0 items-center justify-between gap-2 overflow-hidden">
+        <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+          <span
+            className="flex shrink-0 items-center"
+            data-factory-entity-semantic-icon
+            title={data.kindLabel}
+          >
+            <GraphSemanticIcon
+              className="h-3.5 w-3.5 text-info"
+              kind="active-work"
+              label={data.kindLabel}
+            />
+          </span>
+          <div className="grid min-w-0 gap-px overflow-hidden">
+            <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-on-tertiary-container">
+              {data.kindLabel}
+            </span>
+            <p
+              className={cn(
+                "m-0 min-w-0 truncate",
+                activityGraphNodeTitleClassName("font-mono text-[0.8rem]"),
+              )}
+              data-factory-entity-title
+              title={data.label}
+            >
+              {data.label}
+            </p>
+          </div>
+        </div>
+        {data.workerStatus ? (
+          <ActivityGraphNodeBadge
+            className="shrink-0"
+            tone={workerStatusTone(data.workerStatus)}
+            weight="label"
+          >
+            {data.workerStatusLabel}
+          </ActivityGraphNodeBadge>
         ) : null}
       </div>
     </ActivityGraphNodeShell>
