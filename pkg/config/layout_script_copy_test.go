@@ -241,13 +241,51 @@ Execute {{ (index .Inputs 0).WorkID }}.
 	if cfg.ResourceManifest == nil {
 		t.Fatal("expected flatten to include bundled files")
 	}
-	if len(cfg.ResourceManifest.BundledFiles) != 3 {
-		t.Fatalf("expected 3 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
+	if len(cfg.ResourceManifest.BundledFiles) != 2 {
+		t.Fatalf("expected 2 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
 	}
 
+	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
+	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
+}
+
+func TestFlattenFactoryConfig_IncludesExplicitMakefileWhenDeclared(t *testing.T) {
+	projectDir := t.TempDir()
+	factoryDir := filepath.Join(projectDir, portableFactoryDirName)
+
+	writePortableBundledTestFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-files-test",
+  "supportingFiles":{
+    "bundledFiles":[
+      {"type":"ROOT_HELPER","targetPath":"Makefile","content":{}}
+    ]
+  },
+  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "resources": [],
+  "workers": [{"name":"executor"}],
+  "workstations": [{
+    "name":"execute-story",
+    "worker":"executor",
+    "inputs":[{"workType":"task","state":"init"}],
+    "outputs":[{"workType":"task","state":"complete"}],
+    "onFailure":[{"workType":"task","state":"failed"}]
+  }]
+}`)
+	writePortableBundledTestFile(t, filepath.Join(projectDir, "Makefile"), "test:\n\tgo test ./...\n")
+
+	flattened, err := FlattenFactoryConfig(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(flattened)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) != 1 {
+		t.Fatalf("expected one explicit bundled file, got %#v", cfg.ResourceManifest)
+	}
 	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
-	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
-	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
 }
 
 func TestFlattenFactoryConfig_CheckedInFactoryBundlesOverviewDoc(t *testing.T) {

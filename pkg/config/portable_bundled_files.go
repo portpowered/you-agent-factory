@@ -17,8 +17,6 @@ const portableFactoryDirName = "factory"
 
 var portableBundledDirectoryNames = []string{"scripts", "docs"}
 
-var portableBundledRootHelperFiles = []string{"Makefile"}
-
 var portableBundledFactoryRootHelperFiles = []string{"portable-dependencies.json"}
 
 const portableBundledInputRoot = "factory/inputs/"
@@ -36,6 +34,11 @@ func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.Facto
 	if err != nil {
 		return err
 	}
+	rehydrated, err := rehydrateExplicitPortableRootHelpersFromManifest(factoryDir, cfg, includeInlineContent)
+	if err != nil {
+		return err
+	}
+	collected = append(collected, rehydrated...)
 	if len(collected) == 0 {
 		return nil
 	}
@@ -99,18 +102,6 @@ func collectSupportedPortableBundledFiles(factoryDir string, includeInlineConten
 		bundledFiles = append(bundledFiles, collected...)
 	}
 
-	for _, helperName := range portableBundledRootHelperFiles {
-		bundledFile, ok, err := collectPortableBundledRootHelperFileFromCandidates([]string{
-			filepath.Join(layout.factoryDir, helperName),
-			filepath.Join(layout.projectRoot, helperName),
-		}, helperName)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			bundledFiles = append(bundledFiles, bundledFile)
-		}
-	}
 	for _, helperName := range portableBundledFactoryRootHelperFiles {
 		targetPath := filepath.ToSlash(filepath.Join(layout.factoryPrefix, helperName))
 		bundledFile, ok, err := collectPortableBundledRootHelperFile(filepath.Join(layout.factoryDir, helperName), targetPath)
@@ -126,6 +117,31 @@ func collectSupportedPortableBundledFiles(factoryDir string, includeInlineConten
 		return bundledFiles[i].TargetPath < bundledFiles[j].TargetPath
 	})
 	return bundledFiles, nil
+}
+
+func rehydrateExplicitPortableRootHelpersFromManifest(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool) ([]interfaces.BundledFileConfig, error) {
+	if cfg == nil || cfg.ResourceManifest == nil || !includeInlineContent {
+		return nil, nil
+	}
+
+	rehydrated := make([]interfaces.BundledFileConfig, 0)
+	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
+		if bundledFile.Type != interfaces.BundledFileTypeRootHelper {
+			continue
+		}
+		sourcePath, ok := supportedPortableBundledSourcePath(factoryDir, bundledFile)
+		if !ok {
+			continue
+		}
+		collected, ok, err := collectPortableBundledRootHelperFile(sourcePath, bundledFile.TargetPath)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			rehydrated = append(rehydrated, collected)
+		}
+	}
+	return rehydrated, nil
 }
 
 func supportedPortableBundledSourcePath(factoryDir string, bundledFile interfaces.BundledFileConfig) (string, bool) {
@@ -277,19 +293,6 @@ func collectPortableBundledRootHelperFile(sourcePath, targetPath string) (interf
 			Inline:   string(content),
 		},
 	}, true, nil
-}
-
-func collectPortableBundledRootHelperFileFromCandidates(sourcePaths []string, targetPath string) (interfaces.BundledFileConfig, bool, error) {
-	for _, sourcePath := range sourcePaths {
-		bundledFile, ok, err := collectPortableBundledRootHelperFile(sourcePath, targetPath)
-		if err != nil {
-			return interfaces.BundledFileConfig{}, false, err
-		}
-		if ok {
-			return bundledFile, true, nil
-		}
-	}
-	return interfaces.BundledFileConfig{}, false, nil
 }
 
 func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfig) []interfaces.BundledFileConfig {

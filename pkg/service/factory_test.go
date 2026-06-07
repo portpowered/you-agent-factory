@@ -2067,13 +2067,12 @@ func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesF
 	if current.SupportingFiles == nil {
 		t.Fatal("expected current factory to include supportingFiles")
 	}
-	if current.SupportingFiles.BundledFiles == nil || len(*current.SupportingFiles.BundledFiles) != 3 {
-		t.Fatalf("expected 3 bundled files, got %#v", current.SupportingFiles.BundledFiles)
+	if current.SupportingFiles.BundledFiles == nil || len(*current.SupportingFiles.BundledFiles) != 2 {
+		t.Fatalf("expected 2 bundled files, got %#v", current.SupportingFiles.BundledFiles)
 	}
 	bundledFiles := *current.SupportingFiles.BundledFiles
-	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeROOTHELPER, "Makefile", "test:\n\tgo test ./...\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
-	assertServiceBundledFactoryEntry(t, bundledFiles[2], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
 }
 
 func TestFactoryService_GetCurrentFactory_InlinesPortableFilesAndStarterInputs(t *testing.T) {
@@ -2120,7 +2119,6 @@ func TestFactoryService_GetCurrentFactory_InlinesPortableFilesAndStarterInputs(t
 		fileType factoryapi.BundledFileType
 		inline   string
 	}{
-		"Makefile":                               {fileType: factoryapi.BundledFileTypeROOTHELPER, inline: "test:\n\tgo test ./...\n"},
 		"factory/docs/README.md":                 {fileType: factoryapi.BundledFileTypeDOC, inline: "# Portable factory\n"},
 		"factory/inputs/task/default/starter.md": {fileType: factoryapi.BundledFileTypeINPUT, inline: "fresh starter\n"},
 		"factory/scripts/execute-story.ps1":      {fileType: factoryapi.BundledFileTypeSCRIPT, inline: servicePortableBundledScriptBody},
