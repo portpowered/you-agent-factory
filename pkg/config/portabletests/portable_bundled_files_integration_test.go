@@ -446,20 +446,6 @@ func assertPortableBundledPersistedThinManifestWithoutMakefile(t *testing.T, pat
 	assertPortableBundledLoadedThinManifestWithoutMakefile(t, cfg)
 }
 
-func assertPortableBundledPersistedThinManifestFile(t *testing.T, path string) {
-	t.Helper()
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", path, err)
-	}
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(data)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON(%s): %v", path, err)
-	}
-	assertPortableBundledLoadedThinManifest(t, cfg)
-}
-
 func TestExpandPortableBundledFiles_RejectsUnsafeTargetWithoutEscapedWrite(t *testing.T) {
 	tests := []struct {
 		name            string

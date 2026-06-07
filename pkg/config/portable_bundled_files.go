@@ -187,7 +187,6 @@ func supportedPortableBundledRootHelperPath(factoryDir, targetPath string) (stri
 }
 
 type portableBundledLayout struct {
-	projectRoot   string
 	factoryDir    string
 	factoryPrefix string
 }
@@ -196,7 +195,6 @@ func portableBundledLayoutForFactoryDir(factoryDir string) (portableBundledLayou
 	cleanFactoryDir := filepath.Clean(factoryDir)
 	if filepath.Base(cleanFactoryDir) == portableFactoryDirName {
 		return portableBundledLayout{
-			projectRoot:   filepath.Dir(cleanFactoryDir),
 			factoryDir:    cleanFactoryDir,
 			factoryPrefix: portableFactoryDirName,
 		}, true
@@ -212,7 +210,6 @@ func portableBundledLayoutForFactoryDir(factoryDir string) (portableBundledLayou
 	}
 
 	return portableBundledLayout{
-		projectRoot:   filepath.Dir(cleanFactoryDir),
 		factoryDir:    cleanFactoryDir,
 		factoryPrefix: portableFactoryDirName,
 	}, true
