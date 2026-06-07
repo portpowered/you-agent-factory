@@ -616,6 +616,9 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 	}
 	if serviceMode {
 		if err := fs.startLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
+			if fs.defaultSessionClosedDuringStartup() {
+				return nil, nil
+			}
 			fs.clearRunState()
 			fs.unregisterLiveSession(defaultFactorySessionID)
 			_ = fs.stopLiveRuntime(currentRuntime)
@@ -623,26 +626,6 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 		}
 	}
 	return currentRuntime, nil
-}
-
-func (fs *FactoryService) handleDefaultRuntimeStartFailure(
-	ctx context.Context,
-	currentRuntime *liveRuntimeHandle,
-	startErr error,
-) error {
-	fs.clearRunState()
-	fs.unregisterLiveSession(defaultFactorySessionID)
-	stopErr := fs.stopLiveRuntime(currentRuntime)
-	if isCanceledServiceStartup(ctx, startErr) {
-		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-			return stopErr
-		}
-		return nil
-	}
-	if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
-	}
-	return fmt.Errorf("start runtime: %w", startErr)
 }
 
 func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
@@ -985,6 +968,10 @@ func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
 		case <-handle.runDone:
 		}
 		if fs.currentLiveRuntime() != handle {
+			continue
+		}
+		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
+			fs.sessions != nil && fs.sessions.Count() == 0 {
 			continue
 		}
 		return handle.result()

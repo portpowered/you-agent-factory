@@ -1291,6 +1291,38 @@ func boolMetricValue(active bool) float64 {
 	return 0
 }
 
+func (fs *FactoryService) defaultSessionClosedDuringStartup() bool {
+	if fs == nil || runtimeModeOrDefault(fs.cfg.RuntimeMode) != interfaces.RuntimeModeService {
+		return false
+	}
+	return fs.sessionByID(defaultFactorySessionID) == nil
+}
+
+func (fs *FactoryService) handleDefaultRuntimeStartFailure(
+	ctx context.Context,
+	currentRuntime *liveRuntimeHandle,
+	startErr error,
+) error {
+	if fs.defaultSessionClosedDuringStartup() {
+		fs.clearRunState()
+		_ = fs.stopLiveRuntime(currentRuntime)
+		return nil
+	}
+	fs.clearRunState()
+	fs.unregisterLiveSession(defaultFactorySessionID)
+	stopErr := fs.stopLiveRuntime(currentRuntime)
+	if isCanceledServiceStartup(ctx, startErr) {
+		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+			return stopErr
+		}
+		return nil
+	}
+	if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
+		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
+	}
+	return fmt.Errorf("start runtime: %w", startErr)
+}
+
 func runtimeStopOutcome(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], err error, forcedCancel bool) (string, string) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -1372,12 +1404,10 @@ func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liv
 			fs.finalizeRuntimeLifecycleMetrics(handle, last)
 			return
 		case <-ctx.Done():
-			if handle.completed() {
-				fs.finalizeRuntimeLifecycleMetrics(handle, last)
-			} else {
-				outcome, reason := runtimeStopOutcome(nil, nil, true)
-				handle.runtime.emitRuntimeLifecycleStop(outcome, reason)
-			}
+			// Sidecar ctx is derived from the runtime run ctx, so cancellation can race
+			// natural completion. Always wait for the terminal runtime result first.
+			<-handle.runDone
+			fs.finalizeRuntimeLifecycleMetrics(handle, last)
 			return
 		case <-ticker.C:
 		}
