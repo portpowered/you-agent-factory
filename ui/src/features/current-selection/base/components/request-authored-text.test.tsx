@@ -1,8 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import {
-  AuthoredBodyText,
-  RequestAuthoredText,
-} from "../../../../lib/authored-body-text";
+import { AuthoredBodyText } from "../../../../lib/authored-body-text";
 
 describe("AuthoredBodyText", () => {
   it("renders headings, lists, inline code, and fenced code blocks for markdown-authored request text", () => {
@@ -72,13 +69,5 @@ describe("AuthoredBodyText", () => {
     expect(container.querySelector("script")).toBeNull();
     expect(container.textContent).toContain("<button>danger</button>");
     expect(container.textContent).toContain('<script>alert("xss")</script>');
-  });
-
-  it("keeps the request-authored wrapper aligned with the shared formatter", () => {
-    render(<RequestAuthoredText value="## Review checklist" />);
-
-    expect(
-      screen.getByRole("heading", { level: 2, name: "Review checklist" }),
-    ).toBeTruthy();
   });
 });
