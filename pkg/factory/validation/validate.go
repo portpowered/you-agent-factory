@@ -23,6 +23,7 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 	targets = append(targets, invalidPlaceReferenceTargets(cfg)...)
 	targets = append(targets, conflictingWorkstationOutputTargets(cfg)...)
 	targets = append(targets, missingOutcomeRouteTargets(cfg)...)
+	targets = append(targets, ManagedRuntimeDependencyTargets(cfg)...)
 	return Result{Targets: targets}
 }
 

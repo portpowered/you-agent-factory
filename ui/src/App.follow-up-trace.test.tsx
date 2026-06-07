@@ -4,9 +4,9 @@ import "./testing/app-shell-workflow-activity-stub";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { DashboardTrace } from "./api/dashboard";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
-  activeSnapshot,
   nonPromptTemplateFetchPaths,
   registerAppDashboardTestLifecycle,
   renderApp,
@@ -170,7 +170,7 @@ describe("App follow-up trace flows", () => {
 
   it("resolves trace drill-down from selected-tick events without fetching current trace state", async () => {
     const { fetchMock } = renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: {
         [activeWorkID]: traceSnapshot,
       },

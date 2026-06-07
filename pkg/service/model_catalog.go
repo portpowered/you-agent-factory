@@ -30,6 +30,26 @@ import (
 	"go.uber.org/zap"
 )
 
+// InvocationMetric records one emitted invocation counter together with its
+// low-cardinality dimensions.
+type InvocationMetric struct {
+	Name   string
+	Labels map[string]string
+}
+
+// InvocationMetricsRecorder receives invocation counter emissions from CLI and
+// session-runtime boundaries. Implementations should treat each call as a
+// single counter increment.
+type InvocationMetricsRecorder interface {
+	RecordInvocationMetric(InvocationMetric)
+}
+
+// ModelPullMetricsRecorder receives managed-runtime pull counter emissions.
+// Implementations should treat each call as a single counter increment.
+type ModelPullMetricsRecorder interface {
+	RecordModelPullMetric(InvocationMetric)
+}
+
 // ModelService owns direct model catalog, pull, and invocation operations.
 // FactoryService keeps these methods only as a phase-one compatibility facade.
 type ModelService interface {
@@ -44,6 +64,8 @@ type modelServiceDependencies struct {
 	modelAssetPuller        func() modelAssetPuller
 	modelInvocationExecutor func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error)
 	factoryRunnerID         func() string
+	logger                  *zap.Logger
+	modelPullMetrics        func() ModelPullMetricsRecorder
 }
 
 type runtimeModelService struct {
@@ -66,6 +88,8 @@ func newFactoryModelService(fs *FactoryService) ModelService {
 		modelAssetPuller:        fs.modelAssetPuller,
 		modelInvocationExecutor: fs.modelInvocationExecutor,
 		factoryRunnerID:         fs.factoryRunnerID,
+		logger:                  fs.logger,
+		modelPullMetrics:        fs.modelPullMetricsRecorder,
 	})
 }
 
@@ -122,16 +146,31 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 
 func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
 	_ = ctx
-	return localmodels.ListModels(s.currentRuntimeConfig())
+	return localmodels.ListModelsWithOptions(s.currentRuntimeConfig(), s.catalogOptions())
 }
 
 func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 	_ = ctx
-	return localmodels.GetModel(s.currentRuntimeConfig(), modelName)
+	return localmodels.GetModelWithOptions(s.currentRuntimeConfig(), modelName, s.catalogOptions())
+}
+
+func (s *runtimeModelService) catalogOptions() localmodels.CatalogOptions {
+	return localmodels.CatalogOptions{
+		RuntimeCacheInspector: s.modelAssetPuller(),
+		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+	}
 }
 
 func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
-	return localmodels.PullModel(s.modelAssetPuller(), ctx, s.currentRuntimeConfig(), modelName)
+	started := time.Now()
+	puller := s.modelAssetPuller()
+	opts := localmodels.PullOptions{
+		RuntimeCacheInspector: puller,
+		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+	}
+	result, err := localmodels.PullModelWithOptions(puller, ctx, s.currentRuntimeConfig(), modelName, opts)
+	s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
+	return result, err
 }
 
 func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
@@ -148,7 +187,13 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
+	managed, readinessErr := localmodels.EnsureManagedRuntimeReadyForInvocation(runtimeCfg, workerDef.Model, s.catalogOptions())
+	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
+	if readinessErr != nil {
+		return apisurface.ModelInvocationResult{}, readinessErr
+	}
 	if err := s.modelAssetPuller().EnsureModelAvailable(ctx, runtimeCfg, workerDef); err != nil {
+		s.recordManagedRuntimeInvocationFailure(modelName, managed, err)
 		return apisurface.ModelInvocationResult{}, err
 	}
 

@@ -52,6 +52,11 @@ func TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio(t *test
 	if pull.ModelName != "OMNIVOICE_Q4_K_M" || pull.CachePath == "" || pull.Revision == "" || len(pull.DownloadedFiles) == 0 {
 		t.Fatalf("asset pull failure: response = %#v, want model identity, cache path, revision, and files", pull)
 	}
+	if pull.ManagedRuntimePull.Identity != "OMNIVOICE_Q4_K_M" ||
+		pull.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
+		pull.ManagedRuntimePull.PullOutcome == "" {
+		t.Fatalf("asset pull failure: managed runtime pull = %#v, want ready managed pull metadata", pull.ManagedRuntimePull)
+	}
 	t.Logf("asset pull diagnostics: model=%s revision=%s cachePath=%s files=%d", pull.ModelName, pull.Revision, pull.CachePath, len(pull.DownloadedFiles))
 
 	jsonInvocation := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
@@ -211,18 +216,6 @@ func realLocalInferenceDirectBindings() *[]factoryapi.WorkstationOperationBindin
 	}}
 }
 
-func mustGeneratedFunctionalTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
-	t.Helper()
-	part := factoryapi.WorkContentPart{}
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeTextUpper,
-		Text: text,
-	}); err != nil {
-		t.Fatalf("encode generated text part: %v", err)
-	}
-	return part
-}
-
 func postAudioInvocation(t *testing.T, endpoint string, request factoryapi.ModelInvocationRequest) ([]byte, string) {
 	t.Helper()
 	body, err := json.Marshal(request)
@@ -245,32 +238,6 @@ func postAudioInvocation(t *testing.T, endpoint string, request factoryapi.Model
 	return audio, resp.Header.Get("Content-Type")
 }
 
-func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
-	t.Helper()
-	var body io.Reader
-	if request != nil {
-		encoded, err := json.Marshal(request)
-		if err != nil {
-			t.Fatalf("%s: marshal request: %v", failurePrefix, err)
-		}
-		body = bytes.NewReader(encoded)
-	}
-	resp, err := http.Post(endpoint, "application/json", body)
-	if err != nil {
-		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(resp.Body)
-		t.Fatalf("%s: POST %s status = %d, want 200: %s", failurePrefix, endpoint, resp.StatusCode, string(payload))
-	}
-	var out T
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
-	}
-	return out
-}
-
 func assertWAVFile(t *testing.T, path string, failurePrefix string) {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -288,16 +255,6 @@ func assertWAVBytes(t *testing.T, data []byte, failurePrefix string) {
 	if !bytes.Equal(data[:4], []byte("RIFF")) || !bytes.Equal(data[8:12], []byte("WAVE")) {
 		t.Fatalf("%s: audio header = %q/%q, want RIFF/WAVE", failurePrefix, string(data[:4]), string(data[8:12]))
 	}
-}
-
-func generatedAudioPath(audio factoryapi.WorkAudioContentPart) string {
-	if audio.File != nil && strings.TrimSpace(string(*audio.File)) != "" {
-		return string(*audio.File)
-	}
-	if strings.TrimSpace(string(audio.Url)) != "" {
-		return strings.TrimPrefix(string(audio.Url), "file://")
-	}
-	return ""
 }
 
 func findGeneratedWorkByTraceIDAndPlace(t *testing.T, works []factoryapi.Work, traceID string, placeID string) factoryapi.Work {

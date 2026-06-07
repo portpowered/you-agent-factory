@@ -11,7 +11,6 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -26,7 +25,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
 
@@ -373,31 +371,6 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 		return nil
 	}
 	return &summaries
-}
-
-func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
-	if success != nil {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
-	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
-	}
-	return nil
-}
-
-func modelEventErrorClass(err error) string {
-	if errors.Is(err, apisurface.ErrModelNotAvailable) {
-		return "MODEL_NOT_AVAILABLE"
-	}
-	var providerErr *workerprovider.ProviderError
-	if errors.As(err, &providerErr) && providerErr.Type != "" {
-		return string(providerErr.Type)
-	}
-	if err == nil {
-		return ""
-	}
-	return "MODEL_EXECUTION_FAILED"
 }
 
 func modelEventOutputContent(raw string) *factoryapi.WorkContent {
