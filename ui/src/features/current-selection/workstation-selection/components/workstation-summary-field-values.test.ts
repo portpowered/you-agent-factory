@@ -14,9 +14,13 @@ const readyEditableConfigurationState = {
     behavior: "STANDARD" as const,
     guards: [],
     inputs: [],
+    name: "Review",
+    operation: "",
+    operationBindings: [],
     prompt: "Review",
     runnerName: null,
     workerName: "reviewer",
+    workstationType: "MODEL_WORKSTATION" as const,
   },
   hasValidationErrors: false,
   initialValues: {
@@ -41,6 +45,11 @@ const readyEditableConfigurationState = {
     workstationName: "Review",
     workstationOptions: ["Review"],
     workstationType: "MODEL_WORKSTATION" as const,
+    workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+    modelInvokeWorkerOptions: [],
+    modelOperationsByWorkerName: {},
+    operation: "",
+    operationBindings: [],
     guards: [],
     inputs: [],
   },
@@ -78,9 +87,14 @@ const logicalMoveWorkstationNode = {
 
 const logicalMoveEditableConfigurationState = {
   ...readyEditableConfigurationState,
+  draft: {
+    ...readyEditableConfigurationState.draft,
+    workstationType: "LOGICAL_MOVE" as const,
+  },
   initialValues: {
     ...readyEditableConfigurationState.initialValues,
     workstationType: "LOGICAL_MOVE" as const,
+    workstationTypeOptions: ["LOGICAL_MOVE"],
   },
 };
 
