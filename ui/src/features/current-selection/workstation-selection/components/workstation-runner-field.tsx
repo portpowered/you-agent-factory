@@ -1,4 +1,4 @@
-import { DashboardText, NativeSelect } from "../../../../components/ui";
+import { DashboardText, OptionalEnumSelect } from "../../../../components/ui";
 import { resolveRunnerSelection } from "../../../current-factory-definition/lib/runner-selection";
 import {
   getRunnerDisplayName,
@@ -38,28 +38,27 @@ export function EditableConfigurationRunnerField({
 
   return (
     <div className="grid gap-2">
-      <NativeSelect
+      <OptionalEnumSelect
         aria-describedby={
           state.validationErrors.runnerName
             ? "editable-workstation-runner-error"
             : undefined
         }
         aria-invalid={state.validationErrors.runnerName ? "true" : undefined}
+        aria-label={messages.runnerFieldLabel}
+        emptyOptionLabel={inheritedRunnerLabel}
         id="editable-workstation-runner"
-        onChange={(event) =>
+        onValueChange={(nextValue) =>
           state.onRunnerChange(
-            event.target.value === "" ? null : (event.target.value as RunnerID),
+            nextValue === null ? null : (nextValue as RunnerID),
           )
         }
-        value={state.draft.runnerName ?? ""}
-      >
-        <option value="">{inheritedRunnerLabel}</option>
-        {state.initialValues.runnerOptions.map((runnerID) => (
-          <option key={runnerID} value={runnerID}>
-            {getRunnerDisplayName(runnerID) ?? runnerID}
-          </option>
-        ))}
-      </NativeSelect>
+        options={state.initialValues.runnerOptions.map((runnerID) => ({
+          label: getRunnerDisplayName(runnerID) ?? runnerID,
+          value: runnerID,
+        }))}
+        value={state.draft.runnerName}
+      />
       <DashboardText
         className="m-0 text-on-surface-subtle"
         variant="supporting"

@@ -1,5 +1,10 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
+
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 
 import {
   CurrentFactoryDefinitionError,
@@ -87,7 +92,10 @@ vi.mock(
 );
 
 describe("CurrentSelectionWidget workstation save flow", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
   beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
     resetSelectionHistoryStore();
     saveCurrentFactoryMutation.mockReset();
     vi.mocked(toast.success).mockClear();
@@ -117,6 +125,9 @@ describe("CurrentSelectionWidget workstation save flow", () => {
   });
 
   afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
     resetSelectionHistoryStore();
   });
 
@@ -391,12 +402,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
       ),
     );
 
+    const user = userEvent.setup();
+
     renderWorkstationSelection();
     expandDetailCardWorkstationConfiguration();
 
-    fireEvent.change(screen.getByLabelText("Worker"), {
-      target: { value: "planner" },
-    });
+    await selectLabeledComboboxOption(user, "Worker", "planner");
     clickWorkstationSave();
 
     await expectWorkstationSaveFailedToast(
@@ -413,12 +424,12 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
+    const user = userEvent.setup();
+
     renderWorkstationSelection();
     expandDetailCardWorkstationConfiguration();
 
-    fireEvent.change(screen.getByLabelText("Worker"), {
-      target: { value: "planner" },
-    });
+    await selectLabeledComboboxOption(user, "Worker", "planner");
     clickWorkstationSave();
 
     await waitFor(() => {
@@ -451,15 +462,15 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
     saveCurrentFactoryMutation.mockResolvedValue(savedFactory);
 
+    const user = userEvent.setup();
+
     renderWorkstationSelection("zh-CN");
     expandDetailCardWorkstationConfiguration("展开可编辑配置", "配置");
 
-    fireEvent.change(screen.getByLabelText("类型"), {
-      target: { value: "REPEATER" },
-    });
-    expect(
-      screen.getByRole("option", { name: "重复器" }).getAttribute("value"),
-    ).toBe("REPEATER");
+    await selectLabeledComboboxOption(user, "类型", "重复器");
+    expect(screen.getByRole("combobox", { name: "类型" })).toHaveTextContent(
+      "重复器",
+    );
 
     fireEvent.click(
       screen.getAllByRole("button", { name: "保存更改" }).at(-1) ??
@@ -482,7 +493,8 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     });
   });
 
-  it("warns in the configuration when newer server values would be overwritten", () => {
+  it("warns in the configuration when newer server values would be overwritten", async () => {
+    const user = userEvent.setup();
     const refreshedFactory = buildDetailCardEditableFactoryDocument({
       prompt: "Server changed prompt",
       workerName: "planner",
@@ -507,9 +519,7 @@ describe("CurrentSelectionWidget workstation save flow", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Keep my local prompt change." },
     });
-    fireEvent.change(screen.getByLabelText("Worker"), {
-      target: { value: "reviewer" },
-    });
+    await selectLabeledComboboxOption(user, "Worker", "reviewer");
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildDetailCardFactoryDocumentQueryResult(refreshedFactory),

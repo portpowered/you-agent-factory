@@ -1,5 +1,10 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import {
   buildDashboardInferenceAttemptFixture,
@@ -153,7 +158,10 @@ function buildSelectedWorkItemFixture() {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: widget integration tests cover each selection kind in one suite.
 describe("CurrentSelectionWidget", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+
   beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
     resetSelectionHistoryStore();
     vi.stubGlobal("fetch", vi.fn());
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
@@ -199,6 +207,9 @@ describe("CurrentSelectionWidget", () => {
   });
 
   afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
     resetSelectionHistoryStore();
     vi.unstubAllGlobals();
   });
@@ -820,7 +831,8 @@ describe("CurrentSelectionWidget", () => {
     expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 
-  it("initializes editable worker inputs from the canonical factory definition", () => {
+  it("initializes editable worker inputs from the canonical factory definition", async () => {
+    const user = userEvent.setup();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
       buildEditableDefinitionResult(buildEditableFactoryDefinition()),
     );
@@ -837,19 +849,17 @@ describe("CurrentSelectionWidget", () => {
     );
 
     expect(
-      (screen.getByLabelText("Model provider") as HTMLSelectElement).value,
-    ).toBe("CURSOR");
+      screen.getByRole("combobox", { name: "Model provider" }),
+    ).toHaveTextContent("Cursor");
     expect((screen.getByLabelText("Model") as HTMLInputElement).value).toBe(
       "gpt-5.5",
     );
 
-    fireEvent.change(screen.getByLabelText("Model provider"), {
-      target: { value: "CODEX" },
-    });
+    await selectLabeledComboboxOption(user, "Model provider", "Codex");
 
     expect(
-      (screen.getByLabelText("Model provider") as HTMLSelectElement).value,
-    ).toBe("CODEX");
+      screen.getByRole("combobox", { name: "Model provider" }),
+    ).toHaveTextContent("Codex");
   });
 
   it("enables editable workstation loading after a workstation becomes selected", () => {
@@ -899,7 +909,7 @@ describe("CurrentSelectionWidget", () => {
 
     expandEditableConfiguration();
 
-    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+    expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
       "reviewer",
     );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
@@ -907,7 +917,8 @@ describe("CurrentSelectionWidget", () => {
     );
   });
 
-  it("initializes editable workstation inputs from the canonical factory definition and allows worker edits", () => {
+  it("initializes editable workstation inputs from the canonical factory definition and allows worker edits", async () => {
+    const user = userEvent.setup();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
@@ -935,18 +946,16 @@ describe("CurrentSelectionWidget", () => {
 
     expandEditableConfiguration();
 
-    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+    expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
       "reviewer",
     );
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Review the latest story changes before approval.",
     );
 
-    fireEvent.change(screen.getByLabelText("Worker"), {
-      target: { value: "planner" },
-    });
+    await selectLabeledComboboxOption(user, "Worker", "planner");
 
-    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+    expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
       "planner",
     );
   });
@@ -1006,7 +1015,7 @@ describe("CurrentSelectionWidget", () => {
     expect((screen.getByLabelText("Prompt") as HTMLTextAreaElement).value).toBe(
       "Keep my local edit.",
     );
-    expect((screen.getByLabelText("Worker") as HTMLSelectElement).value).toBe(
+    expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
       "reviewer",
     );
     expect(

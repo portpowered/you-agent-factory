@@ -5,10 +5,11 @@ import {
   DashboardActionButton,
   DashboardLabel,
   DashboardText,
+  EnumSelect,
   FormDescription,
   FormError,
   Input,
-  NativeSelect,
+  ResetEnumSelect,
   SurfacePanel,
 } from "../../../../components/ui";
 import {
@@ -80,33 +81,26 @@ export function EditableConfigurationWorkstationGuardsField({
         <DashboardLabel as="label" htmlFor={addGuardFieldId}>
           {messages.workstationGuardsAddLabel}
         </DashboardLabel>
-        <NativeSelect
+        <ResetEnumSelect
+          aria-label={messages.workstationGuardsAddLabel}
           id={addGuardFieldId}
-          onChange={(event) => {
-            const nextType = event.target.value as WorkstationLevelGuardType;
-            if (!nextType) {
-              return;
-            }
+          onValueChange={(nextType) => {
             onGuardsChange([
               ...guards,
               createDefaultWorkstationGuard(
-                nextType,
+                nextType as WorkstationLevelGuardType,
                 workstationOptionsState.status === "ready"
                   ? workstationOptionsState.options
                   : [],
               ),
             ]);
-            event.target.value = "";
           }}
-          value=""
-        >
-          <option value="">{messages.workstationGuardsAddPlaceholder}</option>
-          {WORKSTATION_LEVEL_GUARD_TYPES.map((guardType) => (
-            <option key={guardType} value={guardType}>
-              {messages.localizeWorkstationGuardType(guardType)}
-            </option>
-          ))}
-        </NativeSelect>
+          options={WORKSTATION_LEVEL_GUARD_TYPES.map((guardType) => ({
+            label: messages.localizeWorkstationGuardType(guardType),
+            value: guardType,
+          }))}
+          placeholder={messages.workstationGuardsAddPlaceholder}
+        />
       </div>
     </CurrentSelectionFormField>
   );
@@ -219,22 +213,23 @@ function VisitCountGuardFields({
           </FormDescription>
         ) : null}
         {workstationOptionsState.status === "ready" ? (
-          <NativeSelect
+          <EnumSelect
+            aria-label={messages.visitCountGuardWorkstationFieldLabel}
             id={workstationFieldId}
-            onChange={(event) => {
+            onValueChange={(nextValue) => {
               onChange({
                 ...guard,
-                workstation: event.target.value,
+                workstation: nextValue,
               });
             }}
-            value={guard.workstation ?? ""}
-          >
-            {workstationOptionsState.options.map((workstationName) => (
-              <option key={workstationName} value={workstationName}>
-                {workstationName}
-              </option>
-            ))}
-          </NativeSelect>
+            options={workstationOptionsState.options.map((workstationName) => ({
+              label: workstationName,
+              value: workstationName,
+            }))}
+            value={
+              guard.workstation ?? workstationOptionsState.options[0] ?? ""
+            }
+          />
         ) : null}
         {resolveWorkstationGuardFieldError(
           fieldErrors,

@@ -7,7 +7,7 @@ import {
   DashboardText,
   FormWarning,
   Input,
-  NativeSelect,
+  OptionalEnumSelect,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
@@ -192,7 +192,7 @@ function ResourceEditableConfigurationReadyForm({
           errorMessage={validationErrors.type}
           fieldId="editable-resource-type"
           input={
-            <NativeSelect
+            <OptionalEnumSelect
               aria-describedby={
                 validationErrors.type
                   ? "editable-resource-type-error"
@@ -200,24 +200,19 @@ function ResourceEditableConfigurationReadyForm({
               }
               aria-invalid={validationErrors.type ? "true" : undefined}
               aria-label={messages.typeFieldLabel}
+              emptyOptionLabel={messages.notConfiguredValue}
               id="editable-resource-type"
-              onChange={(event) => {
-                const nextValue = event.target.value;
+              onValueChange={(nextValue) =>
                 state.onTypeChange(
-                  nextValue.length > 0
-                    ? (nextValue as NonNullable<typeof state.draft.type>)
-                    : null,
-                );
-              }}
-              value={state.draft.type ?? ""}
-            >
-              <option value="">{messages.notConfiguredValue}</option>
-              {EDITABLE_RESOURCE_TYPES.map((resourceType) => (
-                <option key={resourceType} value={resourceType}>
-                  {messages.localizeResourceType(resourceType)}
-                </option>
-              ))}
-            </NativeSelect>
+                  nextValue as NonNullable<typeof state.draft.type> | null,
+                )
+              }
+              options={EDITABLE_RESOURCE_TYPES.map((resourceType) => ({
+                label: messages.localizeResourceType(resourceType),
+                value: resourceType,
+              }))}
+              value={state.draft.type}
+            />
           }
           label={messages.typeFieldLabel}
           supportingContent={

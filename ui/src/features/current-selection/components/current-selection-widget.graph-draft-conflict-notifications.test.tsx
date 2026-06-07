@@ -1,10 +1,12 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: graph-draft conflict notification regressions share one mocked save/notify harness.
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { settleCurrentSelectionEffects } from "../../../testing/current-selection-test-utils";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { useStrictConsoleGuard } from "../../../testing/strict-console-guard";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
@@ -226,7 +228,10 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
     ],
   });
 
+  let restoreBrowserShims: (() => void) | undefined;
+
   beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
     resetSelectionHistoryStore();
     resetGraphDraftBridge();
     saveCurrentFactoryMutation.mockReset();
@@ -252,6 +257,9 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
   });
 
   afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
     resetSelectionHistoryStore();
     resetGraphDraftBridge();
   });
@@ -277,9 +285,7 @@ describe("CurrentSelectionWidget graph draft conflict warning boundaries", () =>
       await renderWorkstationSelection();
       const user = userEvent.setup();
       expandDetailCardWorkstationConfiguration();
-      fireEvent.change(screen.getByLabelText("Worker"), {
-        target: { value: "planner" },
-      });
+      await selectLabeledComboboxOption(user, "Worker", "planner");
       await settleCurrentSelectionEffects();
       await user.click(workstationFooterSaveButton());
       await settleCurrentSelectionEffects();

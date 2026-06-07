@@ -6,10 +6,10 @@ import {
   AlertPanelText,
   DashboardLabel,
   DashboardText,
+  EnumSelect,
   FormDescription,
   FormError,
   Input,
-  NativeSelect,
   surfacePanelVariants,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
@@ -357,23 +357,22 @@ function EditableConfigurationWorkerInput({
   }
 
   return (
-    <NativeSelect
+    <EnumSelect
       aria-describedby={
         state.validationErrors.workerName
           ? "editable-workstation-worker-error"
           : undefined
       }
       aria-invalid={state.validationErrors.workerName ? "true" : undefined}
+      aria-label={messages.workerFieldLabel}
       id="editable-workstation-worker"
-      onChange={(event) => state.onWorkerChange(event.target.value)}
+      onValueChange={state.onWorkerChange}
+      options={state.workerOptionsState.options.map((workerName) => ({
+        label: valueOrFallback(workerName, messages.notConfiguredValue),
+        value: workerName,
+      }))}
       value={state.draft.workerName}
-    >
-      {state.workerOptionsState.options.map((workerName) => (
-        <option key={workerName} value={workerName}>
-          {valueOrFallback(workerName, messages.notConfiguredValue)}
-        </option>
-      ))}
-    </NativeSelect>
+    />
   );
 }
 
@@ -388,27 +387,24 @@ function EditableConfigurationBehaviorInput({
   >;
 }) {
   return (
-    <NativeSelect
+    <EnumSelect
       aria-describedby={
         state.validationErrors.behavior
           ? "editable-workstation-kind-error"
           : undefined
       }
       aria-invalid={state.validationErrors.behavior ? "true" : undefined}
+      aria-label={messages.kindLabel}
       id="editable-workstation-kind"
-      onChange={(event) =>
-        state.onBehaviorChange(
-          event.target.value as typeof state.draft.behavior,
-        )
+      onValueChange={(nextValue) =>
+        state.onBehaviorChange(nextValue as typeof state.draft.behavior)
       }
+      options={state.initialValues.behaviorOptions.map((behavior) => ({
+        label: messages.localizeWorkstationBehavior(behavior),
+        value: behavior,
+      }))}
       value={state.draft.behavior}
-    >
-      {state.initialValues.behaviorOptions.map((behavior) => (
-        <option key={behavior} value={behavior}>
-          {messages.localizeWorkstationBehavior(behavior)}
-        </option>
-      ))}
-    </NativeSelect>
+    />
   );
 }
 
