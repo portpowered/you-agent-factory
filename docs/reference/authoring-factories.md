@@ -631,6 +631,12 @@ Poll GitHub and emit one canonical batch payload on stdout per run.
 
 ### Hosted Linear Poller Example
 
+Before starting service mode, resolve the Linear API key for
+`auth.secretRef: secrets/linear-api-key`. Either set
+`INFINITE_YOU_SECRET_SECRETS_LINEAR_API_KEY` or create
+`secrets/linear-api-key` beside `factory.json`. See `you docs workers` for the
+full hosted-worker secret contract.
+
 `workers/linear-poller/AGENTS.md`:
 
 ```yaml
@@ -641,11 +647,13 @@ auth:
   secretRef: secrets/linear-api-key
 linear:
   pollInterval: 2m
-  teams: ["ENG"]
-  states: ["unstarted", "started"]
+  teamIds: ["team-a"]
+  stateIds: ["state-b"]
   mapping:
     workType: task
     state: init
+  claim:
+    assigneeField: assignee.email
 ---
 
 Repository-owned Linear poller.
@@ -662,6 +670,9 @@ Bound workstation:
   "onFailure": { "workType": "task", "state": "failed" }
 }
 ```
+
+Keep hosted Linear config on the worker. The workstation only selects
+`behavior: "POLLER"`, names the worker, and routes submitted work.
 
 V1 non-goals for poller authoring:
 
