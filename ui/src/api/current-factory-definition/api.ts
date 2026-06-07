@@ -23,6 +23,10 @@ export type CurrentFactoryVersion =
 /** Dashboard editor and replace-current import activation use session PUT with this mode only. */
 export const CURRENT_FACTORY_EDITOR_SAVE_MODE =
   "REPLACE_CURRENT" satisfies FactorySaveMode;
+
+/** Create-new-named import activation persists and activates through this mode. */
+export const IMPORT_CREATE_NAMED_SAVE_MODE =
+  "UPSERT_NAMED_AND_ACTIVATE" satisfies FactorySaveMode;
 type FactoryValidationTarget = components["schemas"]["FactoryValidationTarget"];
 
 export type CurrentFactoryDocument = SessionFactoryDocument;
@@ -62,7 +66,7 @@ export interface SaveCurrentFactoryInput {
 
 export interface SaveFactoryForSessionInput {
   baseVersion?: CurrentFactoryVersion;
-  /** When set for REPLACE_CURRENT, overrides a stale editable payload name before PUT. */
+  /** When set, overrides a stale editable payload name before PUT for supported save modes. */
   canonicalFactoryName?: string;
   factoryDefinition: CanonicalFactoryDefinition;
   includeVersion?: boolean;
@@ -132,7 +136,7 @@ export async function saveFactoryForSessionDocument(
     return await saveSessionFactory(
       {
         baseVersion: input.baseVersion,
-        factory: applyReplaceCurrentCanonicalFactoryName(
+        factory: applyCanonicalFactoryNameForSave(
           input.factoryDefinition,
           input.mode,
           input.canonicalFactoryName,
@@ -150,15 +154,15 @@ export async function saveFactoryForSessionDocument(
   }
 }
 
-function applyReplaceCurrentCanonicalFactoryName(
+function applyCanonicalFactoryNameForSave(
   factoryDefinition: CanonicalFactoryDefinition,
   mode: FactorySaveMode,
   canonicalFactoryName: string | undefined,
 ): CanonicalFactoryDefinition {
   if (
-    mode !== CURRENT_FACTORY_EDITOR_SAVE_MODE ||
     canonicalFactoryName === undefined ||
-    factoryDefinition.name === canonicalFactoryName
+    factoryDefinition.name === canonicalFactoryName ||
+    !supportsCanonicalFactoryNameForSaveMode(mode)
   ) {
     return factoryDefinition;
   }
@@ -167,6 +171,15 @@ function applyReplaceCurrentCanonicalFactoryName(
     ...factoryDefinition,
     name: canonicalFactoryName,
   };
+}
+
+function supportsCanonicalFactoryNameForSaveMode(
+  mode: FactorySaveMode,
+): boolean {
+  return (
+    mode === CURRENT_FACTORY_EDITOR_SAVE_MODE ||
+    mode === IMPORT_CREATE_NAMED_SAVE_MODE
+  );
 }
 
 function resolveSessionID(sessionID: string | null | undefined): string {

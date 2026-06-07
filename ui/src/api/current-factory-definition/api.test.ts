@@ -1144,6 +1144,64 @@ describe("getCurrentFactoryDefinition", () => {
     );
   });
 
+  it("applies canonicalFactoryName on UPSERT_NAMED_AND_ACTIVATE saves when the imported payload name drifted", async () => {
+    const fetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          name: "Imported Factory Name-2",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+          version: {
+            logical: "2",
+            physical: "2026-05-18T14:42:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+
+    await saveFactoryForSessionDocument(
+      {
+        canonicalFactoryName: "Imported Factory Name-2",
+        factoryDefinition: {
+          name: "Imported Factory Name",
+          workers: [],
+          workstations: [],
+          workTypes: [],
+        },
+        includeVersion: false,
+        mode: "UPSERT_NAMED_AND_ACTIVATE",
+      },
+      {
+        fetch,
+        sessionID: "session-2",
+      },
+    );
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/factory-sessions/session-2/factory",
+      expect.objectContaining({
+        body: JSON.stringify({
+          mode: "UPSERT_NAMED_AND_ACTIVATE",
+          factory: {
+            name: "Imported Factory Name-2",
+            workers: [],
+            workstations: [],
+            workTypes: [],
+          },
+        }),
+        method: "PUT",
+      }),
+    );
+  });
+
   it("delegates saveFactoryForSessionDocument to session-factory with explicit save mode", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(
