@@ -789,6 +789,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	if err := resolveRunFactoryPrompt(cmd, &cfg, promptArgs); err != nil {
 		return err
 	}
+	cleanInvocation := shouldUseCleanRunInvocation(cmd, cfg)
 
 	logger, err := logging.BuildLogger(verbose, debug)
 	if err != nil {
@@ -796,7 +797,11 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	}
 	cfg.Logger = logger
 	cfg.Verbose = verbose || debug
-	cfg.StartupOutput = cmd.OutOrStdout()
+	cfg.CleanInvocation = cleanInvocation
+	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation
+	if !cleanInvocation {
+		cfg.StartupOutput = cmd.OutOrStdout()
+	}
 	cfg.Diagnostics = cmd.ErrOrStderr()
 
 	ctx, cancel := context.WithCancel(cmd.Context())
@@ -815,6 +820,12 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	}()
 
 	return runCLI(ctx, cfg)
+}
+
+func shouldUseCleanRunInvocation(cmd *cobra.Command, cfg runcli.RunConfig) bool {
+	return cmd.Flags().Changed("factory") &&
+		strings.TrimSpace(cfg.WorkFile) != "" &&
+		!cfg.Continuously
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {

@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -41,7 +41,7 @@ type RunConfig struct {
 	// FactoryConfigPath is the factory.json file path from you run --factory.
 	// The service uses Dir as the resolved factory root directory.
 	FactoryConfigPath string
-	RunnerID     string
+	RunnerID          string
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths. Empty defaults to the caller's current working
 	// directory for CLI-style runs.
@@ -73,6 +73,9 @@ type RunConfig struct {
 	// SuppressDashboardRendering disables the simple stdout dashboard while
 	// preserving the normal service-layer run path.
 	SuppressDashboardRendering bool
+	// CleanInvocation suppresses operator-facing stdout chatter for one-shot
+	// result-oriented invocations. It does not disable replay recording.
+	CleanInvocation bool
 	// OpenDashboard attempts to open the embedded dashboard URL in a browser.
 	OpenDashboard bool
 	// StartupOutput receives human-facing startup messages. Nil suppresses
@@ -279,6 +282,7 @@ func (r *reservedAPIServerListener) CloseIfUnused() error {
 // FactoryService. The CLI is a thin wrapper — all orchestration logic
 // (file watcher, dashboard, API server, engine) lives in the service layer.
 func Run(ctx context.Context, cfg RunConfig) error {
+	cfg = normalizeRunInvocationMode(cfg)
 	logger := cfg.Logger
 	if logger == nil {
 		logger = zap.NewNop()
@@ -344,6 +348,16 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	err = factorySvc.Run(ctx)
 	reportRecordingPathOnShutdown(cfg.StartupOutput, recordPath)
 	return err
+}
+
+func normalizeRunInvocationMode(cfg RunConfig) RunConfig {
+	if !cfg.CleanInvocation {
+		return cfg
+	}
+	cfg.SuppressDashboardRendering = true
+	cfg.StartupOutput = nil
+	cfg.OpenDashboard = false
+	return cfg
 }
 
 func resolveRecordPathForRun(cfg RunConfig) (resolvedRunRecordPath, error) {

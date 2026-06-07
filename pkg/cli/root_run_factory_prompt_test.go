@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"os"
@@ -275,6 +276,120 @@ func TestRunCommand_FactoryStdinPromptSubmitsDefaultWorkTypeWorkFile(t *testing.
 	}
 }
 
+func TestRunCommand_FactoryPromptSelectsCleanInvocationMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		if cfg.StartupOutput != nil {
+			io.WriteString(cfg.StartupOutput, "Factory initiated: unexpected\n")
+			io.WriteString(cfg.StartupOutput, "Dashboard URL: unexpected\n")
+			io.WriteString(cfg.StartupOutput, "Recording saved: unexpected\n")
+		}
+		return nil
+	}
+
+	var stdout bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix the lint issues"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute clean factory prompt run: %v", err)
+	}
+	if got.WorkFile == "" {
+		t.Fatal("expected generated work file for factory prompt run")
+	}
+	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
+	if !got.CleanInvocation {
+		t.Fatal("expected factory prompt batch run to select clean invocation mode")
+	}
+	if !got.SuppressDashboardRendering {
+		t.Fatal("expected clean invocation mode to suppress dashboard rendering")
+	}
+	if got.StartupOutput != nil {
+		t.Fatalf("startup output = %#v, want nil for clean invocation mode", got.StartupOutput)
+	}
+	assertRunStdoutFreeOfOperatorChatter(t, stdout.String())
+}
+
+func TestRunCommand_FactoryWorkFileSelectsCleanInvocationMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+	workPath := filepath.Join(dir, "work.json")
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "--work", workPath})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute clean factory work-file run: %v", err)
+	}
+	if !got.CleanInvocation {
+		t.Fatal("expected factory work-file batch run to select clean invocation mode")
+	}
+	if !got.SuppressDashboardRendering {
+		t.Fatal("expected clean invocation mode to suppress dashboard rendering")
+	}
+	if got.StartupOutput != nil {
+		t.Fatalf("startup output = %#v, want nil for clean invocation mode", got.StartupOutput)
+	}
+}
+
+func TestRunCommand_FactoryContinuousPromptKeepsOperatorOutputMode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "--continuously", "Fix the lint issues"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute continuous factory prompt run: %v", err)
+	}
+	if got.CleanInvocation {
+		t.Fatal("continuous factory run should keep operator output mode")
+	}
+	if got.SuppressDashboardRendering {
+		t.Fatal("continuous factory run should not implicitly suppress dashboard rendering")
+	}
+	if got.StartupOutput == nil {
+		t.Fatal("continuous factory run should keep startup output configured")
+	}
+}
+
 func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -304,6 +419,23 @@ func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 	}
 	if runCalled {
 		t.Fatal("run should not start for empty factory prompt")
+	}
+}
+
+func assertRunStdoutFreeOfOperatorChatter(t *testing.T, stdout string) {
+	t.Helper()
+
+	for _, forbidden := range []string{
+		"Factory initiated",
+		"Dashboard URL",
+		"Runtime log",
+		"Opening dashboard",
+		"Factory:",
+		"Recording saved",
+	} {
+		if strings.Contains(stdout, forbidden) {
+			t.Fatalf("stdout = %q, want no %q chatter", stdout, forbidden)
+		}
 	}
 }
 

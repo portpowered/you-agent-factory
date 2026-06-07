@@ -60,6 +60,41 @@ func TestRun_SuppressDashboardRendering_SkipsSimpleDashboardOutput(t *testing.T)
 	}
 }
 
+func TestRun_CleanInvocationKeepsOperatorChatterOffStdout(t *testing.T) {
+	originalDefaultRecordPath := defaultLiveRunRecordPath
+	defer func() {
+		defaultLiveRunRecordPath = originalDefaultRecordPath
+	}()
+
+	dir, workFile := writeDashboardRunFixture(t)
+	recordPath := filepath.Join(t.TempDir(), "factory-session-__factory_session_id__-clean.json")
+	defaultLiveRunRecordPath = func() (string, error) {
+		return recordPath, nil
+	}
+
+	var startupOut bytes.Buffer
+	output, err := runWithCapturedStdout(t, RunConfig{
+		Dir:                dir,
+		Port:               0,
+		WorkFile:           workFile,
+		MockWorkersEnabled: true,
+		CleanInvocation:    true,
+		StartupOutput:      &startupOut,
+		Logger:             zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	assertNoOperatorChatter(t, output)
+	if startupOut.Len() != 0 {
+		t.Fatalf("startup output = %q, want clean invocation to suppress operator chatter", startupOut.String())
+	}
+	if _, err := os.Stat(resolveDefaultSessionRecordPath(recordPath)); err != nil {
+		t.Fatalf("default recording was not written: %v", err)
+	}
+}
+
 func TestRun_ContinuouslyUsesServiceModeUntilCanceled(t *testing.T) {
 	originalBuilder := buildFactoryService
 	defer func() {
@@ -139,6 +174,23 @@ func TestRun_OOTBIntegrationSmokeBootstrapsProcessesDefaultTaskAndReportsDashboa
 	assertContinuousRunStillActive(t, errCh)
 	assertOOTBSmokeStartupOutput(t, out.String(), dir, port)
 	stopOOTBSmokeRun(t, cancel, errCh)
+}
+
+func assertNoOperatorChatter(t *testing.T, output string) {
+	t.Helper()
+
+	for _, forbidden := range []string{
+		"Factory initiated",
+		"Dashboard URL",
+		"Runtime log",
+		"Opening dashboard",
+		"Factory:",
+		"Recording saved",
+	} {
+		if strings.Contains(output, forbidden) {
+			t.Fatalf("output = %q, want no %q chatter", output, forbidden)
+		}
+	}
 }
 
 func installOOTBSmokeBootstrap(taskPath string) {
