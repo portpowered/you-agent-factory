@@ -1,7 +1,7 @@
 import {
   DashboardLabel,
   DashboardText,
-  Select,
+  NativeSelect,
   SurfacePanel,
 } from "../../../components/ui";
 import {
@@ -93,7 +93,7 @@ export function FailureTrendCard({
           <DashboardLabel as="label" htmlFor={rangeSelectId}>
             {messages.rangeLabel}
           </DashboardLabel>
-          <Select
+          <NativeSelect
             aria-label={messages.rangeLabel}
             className="rounded-lg border-primary py-2"
             id={rangeSelectId}
@@ -105,7 +105,7 @@ export function FailureTrendCard({
                 {messages.rangeOptionLabel(option.id, option.id)}
               </option>
             ))}
-          </Select>
+          </NativeSelect>
         </div>
       </div>
 

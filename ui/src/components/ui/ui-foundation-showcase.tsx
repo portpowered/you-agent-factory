@@ -25,6 +25,11 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
   Select,
+  SelectContent,
+  SelectField,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Skeleton,
   Table,
   TableBody,
@@ -118,18 +123,21 @@ export function UIFoundationShowcase({
           />
         </div>
 
-        <div className="grid gap-2">
-          <label
-            className="text-xs font-bold uppercase tracking-[0.08em] text-af-text-subtle"
-            htmlFor={workTypeID}
-          >
-            {messages.workTypeLabel}
-          </label>
-          <Select defaultValue="story" id={workTypeID}>
-            <option value="story">{messages.workTypeStoryOption}</option>
-            <option value="task">{messages.workTypeTaskOption}</option>
+        <SelectField inputId={workTypeID} label={messages.workTypeLabel}>
+          <Select defaultValue="story">
+            <SelectTrigger id={workTypeID}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="story">
+                {messages.workTypeStoryOption}
+              </SelectItem>
+              <SelectItem value="task">
+                {messages.workTypeTaskOption}
+              </SelectItem>
+            </SelectContent>
           </Select>
-        </div>
+        </SelectField>
 
         <div className="grid gap-2 md:col-span-2">
           <label

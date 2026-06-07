@@ -6,7 +6,7 @@ import {
   FormDescription,
   FormError,
   Input,
-  Select,
+  NativeSelect,
   SurfacePanel,
 } from "../../../../components/ui";
 import type { EditableWorkstationInputDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
@@ -127,7 +127,7 @@ function WorkstationInputSlotGuardRow({
           <DashboardLabel as="label" htmlFor={guardTypeFieldId}>
             {messages.workstationInputGuardTypeFieldLabel}
           </DashboardLabel>
-          <Select
+          <NativeSelect
             id={guardTypeFieldId}
             onChange={(event) => {
               const nextType = event.target.value as InputGuardType | "";
@@ -151,7 +151,7 @@ function WorkstationInputSlotGuardRow({
                 {messages.localizeInputGuardType(guardType)}
               </option>
             ))}
-          </Select>
+          </NativeSelect>
           {resolveFieldError(fieldErrors, slotIndex, "type") ? (
             <GuardFieldError
               message={resolveFieldError(fieldErrors, slotIndex, "type") ?? ""}
@@ -222,7 +222,7 @@ function PeerInputGuardFields({
           {messages.workstationInputGuardPeersEmpty}
         </FormDescription>
       ) : (
-        <Select
+        <NativeSelect
           id={matchInputFieldId}
           onChange={(event) => {
             onChange({
@@ -237,7 +237,7 @@ function PeerInputGuardFields({
               {workType}
             </option>
           ))}
-        </Select>
+        </NativeSelect>
       )}
       {resolveFieldError(fieldErrors, slotIndex, "matchInput") ? (
         <GuardFieldError
@@ -284,7 +284,7 @@ function ParentInputGuardFields({
             {messages.workstationInputGuardPeersEmpty}
           </FormDescription>
         ) : (
-          <Select
+          <NativeSelect
             id={parentInputFieldId}
             onChange={(event) => {
               onChange({
@@ -299,7 +299,7 @@ function ParentInputGuardFields({
                 {workType}
               </option>
             ))}
-          </Select>
+          </NativeSelect>
         )}
         {resolveFieldError(fieldErrors, slotIndex, "parentInput") ? (
           <GuardFieldError

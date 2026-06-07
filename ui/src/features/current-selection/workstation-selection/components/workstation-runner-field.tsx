@@ -1,4 +1,4 @@
-import { DashboardText, Select } from "../../../../components/ui";
+import { DashboardText, NativeSelect } from "../../../../components/ui";
 import { resolveRunnerSelection } from "../../../current-factory-definition/lib/runner-selection";
 import {
   getRunnerDisplayName,
@@ -38,7 +38,7 @@ export function EditableConfigurationRunnerField({
 
   return (
     <div className="grid gap-2">
-      <Select
+      <NativeSelect
         aria-describedby={
           state.validationErrors.runnerName
             ? "editable-workstation-runner-error"
@@ -59,7 +59,7 @@ export function EditableConfigurationRunnerField({
             {getRunnerDisplayName(runnerID) ?? runnerID}
           </option>
         ))}
-      </Select>
+      </NativeSelect>
       <DashboardText
         className="m-0 text-on-surface-subtle"
         variant="supporting"

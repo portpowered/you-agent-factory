@@ -7,7 +7,7 @@ import {
   DashboardText,
   FormWarning,
   Input,
-  Select,
+  NativeSelect,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
@@ -192,7 +192,7 @@ function ResourceEditableConfigurationReadyForm({
           errorMessage={validationErrors.type}
           fieldId="editable-resource-type"
           input={
-            <Select
+            <NativeSelect
               aria-describedby={
                 validationErrors.type
                   ? "editable-resource-type-error"
@@ -217,7 +217,7 @@ function ResourceEditableConfigurationReadyForm({
                   {messages.localizeResourceType(resourceType)}
                 </option>
               ))}
-            </Select>
+            </NativeSelect>
           }
           label={messages.typeFieldLabel}
           supportingContent={

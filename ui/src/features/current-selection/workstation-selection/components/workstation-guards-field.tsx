@@ -8,7 +8,7 @@ import {
   FormDescription,
   FormError,
   Input,
-  Select,
+  NativeSelect,
   SurfacePanel,
 } from "../../../../components/ui";
 import {
@@ -80,7 +80,7 @@ export function EditableConfigurationWorkstationGuardsField({
         <DashboardLabel as="label" htmlFor={addGuardFieldId}>
           {messages.workstationGuardsAddLabel}
         </DashboardLabel>
-        <Select
+        <NativeSelect
           id={addGuardFieldId}
           onChange={(event) => {
             const nextType = event.target.value as WorkstationLevelGuardType;
@@ -106,7 +106,7 @@ export function EditableConfigurationWorkstationGuardsField({
               {messages.localizeWorkstationGuardType(guardType)}
             </option>
           ))}
-        </Select>
+        </NativeSelect>
       </div>
     </CurrentSelectionFormField>
   );
@@ -219,7 +219,7 @@ function VisitCountGuardFields({
           </FormDescription>
         ) : null}
         {workstationOptionsState.status === "ready" ? (
-          <Select
+          <NativeSelect
             id={workstationFieldId}
             onChange={(event) => {
               onChange({
@@ -234,7 +234,7 @@ function VisitCountGuardFields({
                 {workstationName}
               </option>
             ))}
-          </Select>
+          </NativeSelect>
         ) : null}
         {resolveWorkstationGuardFieldError(
           fieldErrors,

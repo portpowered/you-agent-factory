@@ -11,7 +11,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Select,
+  NativeSelect,
 } from "../../../components/ui";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";
@@ -265,7 +265,7 @@ function SubmitWorkHeaderControls({
         <label className="sr-only" htmlFor={workTypeID}>
           {messages.workTypeLabel}
         </label>
-        <Select
+        <NativeSelect
           aria-describedby={
             validationErrors?.workTypeName ? workTypeErrorID : undefined
           }
@@ -282,7 +282,7 @@ function SubmitWorkHeaderControls({
               {submitWorkTypeName}
             </option>
           ))}
-        </Select>
+        </NativeSelect>
         {validationErrors?.workTypeName ? (
           <p className="sr-only" id={workTypeErrorID}>
             {validationErrors.workTypeName}

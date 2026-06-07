@@ -10,7 +10,7 @@ import {
   FormField,
   FormLabel,
   Input,
-  Select,
+  NativeSelect,
   Textarea,
 } from "../../../components/ui";
 
@@ -137,7 +137,7 @@ export function FactoryGraphEditorSelectField({
       inputId={inputId}
       label={label}
     >
-      <Select
+      <NativeSelect
         aria-label={label}
         className={FACTORY_GRAPH_ADD_INPUT_CLASS}
         id={inputId}
@@ -151,7 +151,7 @@ export function FactoryGraphEditorSelectField({
             {option.label}
           </option>
         ))}
-      </Select>
+      </NativeSelect>
     </FactoryGraphEditorAddField>
   );
 }

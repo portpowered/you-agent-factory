@@ -9,7 +9,7 @@ import {
   FormDescription,
   FormError,
   Input,
-  Select,
+  NativeSelect,
   surfacePanelVariants,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
@@ -357,7 +357,7 @@ function EditableConfigurationWorkerInput({
   }
 
   return (
-    <Select
+    <NativeSelect
       aria-describedby={
         state.validationErrors.workerName
           ? "editable-workstation-worker-error"
@@ -373,7 +373,7 @@ function EditableConfigurationWorkerInput({
           {valueOrFallback(workerName, messages.notConfiguredValue)}
         </option>
       ))}
-    </Select>
+    </NativeSelect>
   );
 }
 
@@ -388,7 +388,7 @@ function EditableConfigurationBehaviorInput({
   >;
 }) {
   return (
-    <Select
+    <NativeSelect
       aria-describedby={
         state.validationErrors.behavior
           ? "editable-workstation-kind-error"
@@ -408,7 +408,7 @@ function EditableConfigurationBehaviorInput({
           {messages.localizeWorkstationBehavior(behavior)}
         </option>
       ))}
-    </Select>
+    </NativeSelect>
   );
 }
 

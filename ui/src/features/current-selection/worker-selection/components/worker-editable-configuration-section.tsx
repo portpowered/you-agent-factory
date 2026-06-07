@@ -9,7 +9,7 @@ import {
   DashboardText,
   FormWarning,
   Input,
-  Select,
+  NativeSelect,
   Textarea,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
@@ -158,7 +158,7 @@ function WorkerEditableConfigurationReadyForm({
           errorMessage={validationErrors.type}
           fieldId="editable-worker-type"
           input={
-            <Select
+            <NativeSelect
               aria-describedby={
                 validationErrors.type ? "editable-worker-type-error" : undefined
               }
@@ -177,7 +177,7 @@ function WorkerEditableConfigurationReadyForm({
                   {messages.localizeWorkerType(workerType)}
                 </option>
               ))}
-            </Select>
+            </NativeSelect>
           }
           label={messages.typeFieldLabel}
           supportingContent={
@@ -247,7 +247,7 @@ function WorkerEditableConfigurationTimeoutField({
             type="number"
             value={isConfigured ? (state.draft.timeoutAmount ?? "") : ""}
           />
-          <Select
+          <NativeSelect
             aria-describedby={
               validationErrors.timeout
                 ? `${amountFieldId}-error`
@@ -269,7 +269,7 @@ function WorkerEditableConfigurationTimeoutField({
                 {messages.localizeTimeoutUnit(unit)}
               </option>
             ))}
-          </Select>
+          </NativeSelect>
         </div>
       }
       label={messages.timeoutFieldLabel}
@@ -832,7 +832,7 @@ function WorkerOptionalEnumSelect<T extends string>({
   value: T | null;
 }) {
   return (
-    <Select
+    <NativeSelect
       aria-describedby={ariaDescribedBy}
       aria-invalid={ariaInvalid ? "true" : undefined}
       aria-label={label}
@@ -849,7 +849,7 @@ function WorkerOptionalEnumSelect<T extends string>({
           {renderLabel(option)}
         </option>
       ))}
-    </Select>
+    </NativeSelect>
   );
 }
 

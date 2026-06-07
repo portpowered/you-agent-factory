@@ -1,6 +1,6 @@
 import type { ChangeEvent, ReactElement } from "react";
 
-import { Select } from "../../../components/ui";
+import { NativeSelect } from "../../../components/ui";
 import type {
   DashboardWidgetPickerAvailability,
   DashboardWidgetPickerWidgetType,
@@ -34,7 +34,7 @@ export function InlineAddWidgetSelector({
   value,
 }: InlineAddWidgetSelectorProps): ReactElement {
   return (
-    <Select
+    <NativeSelect
       aria-label={actionLabel}
       disabled={disabled}
       onChange={onChange}
@@ -58,6 +58,6 @@ export function InlineAddWidgetSelector({
           </option>
         );
       })}
-    </Select>
+    </NativeSelect>
   );
 }
