@@ -1,6 +1,7 @@
 import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import { buildFactoryGraphSaveSummary } from "./factory-graph-editor-save-summary";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: groups save-summary copy cases for topology, layout, mixed, and preferences paths.
 describe("buildFactoryGraphSaveSummary", () => {
   it("summarizes created, deleted, and changed graph items for topology-only saves", () => {
     const draft = createEmptyFactoryGraphDraft();

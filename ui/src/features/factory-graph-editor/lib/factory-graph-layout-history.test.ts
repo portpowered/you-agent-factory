@@ -4,6 +4,7 @@ import {
   applyFactoryLayoutCommand,
   createMoveFactoryLayoutNodeCommand,
   createUpdateFactoryLayoutViewportCommand,
+  type FactoryLayoutCommand,
 } from "./factory-graph-layout-commands";
 import {
   canRedoFactoryLayoutHistory,
@@ -16,15 +17,25 @@ import {
 } from "./factory-graph-layout-history";
 import { createDefaultFactoryLayout } from "./factory-graph-layout-operations";
 
+function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
+  expect(command).not.toBeNull();
+  if (!command) {
+    throw new Error("Expected layout command to be created.");
+  }
+  return command;
+}
+
 describe("factory graph layout history", () => {
   it("pushes commands and supports undo and redo", () => {
     let layout = createDefaultFactoryLayout();
     let history = createFactoryLayoutHistoryState();
-    const moveCommand = createMoveFactoryLayoutNodeCommand({
-      layout,
-      nodeId: "worker:writer",
-      to: { x: 40, y: 80 },
-    })!;
+    const moveCommand = requireCommand(
+      createMoveFactoryLayoutNodeCommand({
+        layout,
+        nodeId: "worker:writer",
+        to: { x: 40, y: 80 },
+      }),
+    );
 
     history = pushFactoryLayoutHistoryCommand(history, moveCommand);
     layout = applyFactoryLayoutCommand(layout, moveCommand);
@@ -49,15 +60,19 @@ describe("factory graph layout history", () => {
 
   it("prunes history entries that target deleted graph ids", () => {
     const layout = createDefaultFactoryLayout();
-    const moveCommand = createMoveFactoryLayoutNodeCommand({
-      layout,
-      nodeId: "worker:writer",
-      to: { x: 40, y: 80 },
-    })!;
-    const viewportCommand = createUpdateFactoryLayoutViewportCommand({
-      layout,
-      to: { x: 10, y: 20, zoom: 1 },
-    })!;
+    const moveCommand = requireCommand(
+      createMoveFactoryLayoutNodeCommand({
+        layout,
+        nodeId: "worker:writer",
+        to: { x: 40, y: 80 },
+      }),
+    );
+    const viewportCommand = requireCommand(
+      createUpdateFactoryLayoutViewportCommand({
+        layout,
+        to: { x: 10, y: 20, zoom: 1 },
+      }),
+    );
     const history = pushFactoryLayoutHistoryCommand(
       pushFactoryLayoutHistoryCommand(createFactoryLayoutHistoryState(), moveCommand),
       viewportCommand,

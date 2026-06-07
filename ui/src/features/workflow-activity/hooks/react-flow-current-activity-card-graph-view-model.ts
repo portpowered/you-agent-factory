@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: composes activity graph layout, projection, and editor viewport wiring.
 import {
   applyNodeChanges,
   type FitViewOptions,
@@ -332,6 +333,7 @@ function useInitialFitViewOptions(graphLayout: GraphLayout) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes activity graph nodes, edges, and canonical viewport projection.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
@@ -462,8 +464,12 @@ export function useCurrentActivityGraphViewModel({
     visibleGraphEdges,
   });
   const initialFitViewOptions = useInitialFitViewOptions(graphLayout);
+  const canonicalLayoutViewport = editor.editorMode
+    ? editor.layoutDraftState?.layout.viewport
+    : factoryLayoutFromDefinition(displayFactoryDefinition).viewport;
 
   return {
+    canonicalLayoutViewport,
     edges,
     graphKey,
     handleNodesChange,

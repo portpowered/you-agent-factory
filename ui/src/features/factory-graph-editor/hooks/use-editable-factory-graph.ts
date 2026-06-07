@@ -27,6 +27,7 @@ import type {
   UseEditableFactoryGraphOptions,
 } from "./use-editable-factory-graph-types";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes draft, layout, projection, and save controllers for the editor.
 export function useEditableFactoryGraph(
   options: UseEditableFactoryGraphOptions & {
     hasPreferenceChanges?: boolean;
@@ -253,6 +254,7 @@ function useEditableFactoryGraphMutationActions({
       applyDraftOperation,
       baseFactoryDefinition,
       draftState.draft,
+      draftState.graph.nodes,
       layoutDraftState,
       locale,
     ],

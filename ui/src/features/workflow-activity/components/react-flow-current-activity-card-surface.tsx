@@ -192,6 +192,7 @@ export function CurrentActivityGraphSurface({
         }
         headingID={headingID}
         imports={imports}
+        canonicalLayoutViewport={graph.canonicalLayoutViewport}
         initialFitViewKey={graph.initialFitViewKey}
         initialFitViewOptions={graph.initialFitViewOptions}
         isSavingDraft={editor.saveEditableDefinition.isPending}

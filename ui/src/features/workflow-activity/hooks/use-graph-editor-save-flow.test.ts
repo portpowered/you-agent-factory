@@ -183,6 +183,7 @@ function resetSaveFlowFixture() {
   fixtureState.topologyDirty = false;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: groups layout-only, topology-only, mixed, and preferences save-flow cases.
 describe("useGraphEditorSaveFlow", () => {
   beforeEach(resetSaveFlowFixture);
 

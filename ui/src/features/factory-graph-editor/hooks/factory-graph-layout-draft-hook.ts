@@ -67,6 +67,7 @@ interface UseFactoryGraphLayoutDraftStateOptions {
   factoryDocumentScopeKey?: string | null;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates layout draft session state with typed undo history.
 export function useFactoryGraphLayoutDraftState(
   options: UseFactoryGraphLayoutDraftStateOptions,
 ): FactoryGraphLayoutDraftDerivedState {

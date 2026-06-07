@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: composes React Flow canvas wiring with editor toolbar overlays.
 import {
   type Connection,
   type Edge,
@@ -35,7 +36,9 @@ import {
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
+import { useCanonicalLayoutViewportSync } from "../lib/use-canonical-layout-viewport-sync";
 import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
+import type { FactoryLayoutViewport } from "../../factory-graph-editor/lib/factory-graph-layout-operations";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
@@ -248,6 +251,7 @@ export function CurrentActivityGraphViewport({
   hasPendingChanges,
   headingID,
   imports,
+  canonicalLayoutViewport,
   initialFitViewKey,
   initialFitViewOptions,
   isSavingDraft = false,
@@ -298,6 +302,7 @@ export function CurrentActivityGraphViewport({
   hasPendingChanges: boolean;
   headingID: string;
   imports: CurrentActivityImportController;
+  canonicalLayoutViewport?: FactoryLayoutViewport | null;
   initialFitViewKey: string;
   initialFitViewOptions: FitViewOptions;
   isSavingDraft?: boolean;
@@ -346,6 +351,13 @@ export function CurrentActivityGraphViewport({
   });
   const graphViewport =
     useMeasuredCurrentActivityGraphViewport(flowContainerRef);
+  const shouldFitView = canonicalLayoutViewport == null;
+  useCanonicalLayoutViewportSync({
+    canonicalLayoutViewport,
+    fitViewOptions: initialFitViewOptions,
+    flowInstanceRef,
+    viewportResetKey: initialFitViewKey,
+  });
   const handleConnect = useCallback(
     (connection: Connection) => {
       onConnect?.({
@@ -436,7 +448,8 @@ export function CurrentActivityGraphViewport({
               }}
               edges={edges}
               edgeTypes={edgeTypes}
-              fitView
+              defaultViewport={canonicalLayoutViewport ?? undefined}
+              fitView={shouldFitView}
               fitViewOptions={initialFitViewOptions}
               key={initialFitViewKey}
               isValidConnection={isValidConnection}
