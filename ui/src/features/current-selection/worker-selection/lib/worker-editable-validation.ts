@@ -225,7 +225,9 @@ function resolveEditableWorkerContractField(
     return null;
   }
 
-  const fieldPathMatch = error.message.match(/factory\.workers\[\d+\]\.([^\s]+)/);
+  const fieldPathMatch = error.message.match(
+    /factory\.workers\[\d+\]\.([^\s]+)/,
+  );
   if (fieldPathMatch) {
     const fieldFromPath = resolveEditableWorkerValidationFieldFromPath(
       fieldPathMatch[1],

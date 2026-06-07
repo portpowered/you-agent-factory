@@ -1,8 +1,5 @@
 import type { DashboardWorkItemRef } from "../../../../../api/dashboard/types";
-import {
-  DashboardText,
-  surfacePanelVariants,
-} from "../../../../../components/ui";
+import { surfacePanelVariants } from "../../../../../components/ui";
 import { formatWorkItemLabel } from "../../../../../components/ui/formatters";
 import { WorkContentReadOnlyList } from "../../../../work-content/public";
 import { useCurrentSelectionDetailMessages } from "../../../base/components/presentation/current-selection-locale";

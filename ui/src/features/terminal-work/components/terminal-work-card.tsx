@@ -2,8 +2,6 @@ import type { ReactNode } from "react";
 
 import {
   DashboardActionButton,
-  StandardListSelection,
-  StandardListSelectionItem,
   surfacePanelVariants,
 } from "../../../components/ui";
 import { DetailCopy } from "../../../components/ui/widget-frame";

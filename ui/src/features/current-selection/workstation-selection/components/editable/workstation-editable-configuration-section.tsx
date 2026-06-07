@@ -13,8 +13,10 @@ import {
   surfacePanelVariants,
 } from "../../../../../components/ui";
 import { formatList } from "../../../../../components/ui/formatters";
+import { cn } from "../../../../../lib/cn";
 import type { WorkstationLevelGuard } from "../../../../current-factory-definition/lib/workstation-guards";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
+import { GraphSemanticIcon } from "../../../../flowchart/components/graph-semantic-icon";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../../base/components/save/detail-card-factory-save-feedback";
 import {
@@ -33,13 +35,8 @@ import type {
   WorkstationSummaryProps,
 } from "../../lib/keys/detail-card-types";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
-import { GraphSemanticIcon } from "../../../../flowchart/components/graph-semantic-icon";
-import { cn } from "../../../../../lib/cn";
-import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
-import { EditableConfigurationCronFields } from "./workstation-cron-fields";
 import { EditableConfigurationWorkstationGuardsField } from "../fields/workstation-guards-field";
 import { EditableConfigurationWorkstationInputGuardsField } from "../fields/workstation-input-guards-field";
-import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 import { EditableConfigurationRunnerField } from "../fields/workstation-runner-field";
 import {
   resolveWorkstationSummaryKindValue,
@@ -48,6 +45,9 @@ import {
   resolveWorkstationSummaryRunnerValue,
   resolveWorkstationSummaryTypeValue,
 } from "../fields/workstation-summary-field-values";
+import { EditableConfigurationServerChangedHint } from "./editable-configuration-server-changed-hint";
+import { EditableConfigurationCronFields } from "./workstation-cron-fields";
+import { EditableConfigurationPromptInput } from "./workstation-prompt-field";
 
 export function EditableConfigurationSection({
   messages,

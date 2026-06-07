@@ -4,7 +4,6 @@ import { cn } from "../../lib/cn";
 import {
   DASHBOARD_BODY_TEXT_CLASS,
   DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
   DASHBOARD_WIDGET_SUBTITLE_CLASS,
 } from "./dashboard-typography";
 

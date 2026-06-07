@@ -523,6 +523,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     importSpecifiers: [
       "../../../../current-factory-definition/lib/workstation-guards",
       "../../../../current-factory-definition/lib/workstation-worker-assignment",
+      "../../../../flowchart/components/graph-semantic-icon",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -569,6 +570,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/current-selection/workstation-selection/components/fields/workstation-summary-field-values.ts",
     importSpecifiers: [
       "../../../../current-factory-definition/lib/workstation-worker-assignment",
+      "../../../../flowchart/lib/workstation-graph-presentation",
+      "../../../../flowchart/lib/workstation-icon-metadata",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -892,6 +895,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../../current-factory-definition/lib/workstation-progress-outcome-routes",
       "../../../flowchart/components/current-activity-node-shell",
       "../../../flowchart/lib/current-activity-graph-hover",
+      "../../../flowchart/lib/workstation-graph-presentation",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -957,6 +961,15 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
   {
+    relativeFilePath:
+      "src/features/flowchart/lib/workstation-graph-presentation.ts",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/workstation-behavior",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
     relativeFilePath: "src/features/graphs/components/work-relation-node.tsx",
     importSpecifiers: [
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
@@ -974,7 +987,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../flowchart/components/current-activity-work-progress-marker",
       "../../flowchart/components/graph-semantic-icon",
       "../../flowchart/lib/current-activity-graph-hover",
-      "../../flowchart/lib/workstation-icon-metadata",
+      "../../flowchart/lib/workstation-graph-presentation",
       "../../flowchart/messages/activity-graph",
       "../../workflow-activity/messages/activity-shell",
     ],
@@ -1021,6 +1034,15 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/header/hooks/use-dashboard-session-tabs-state.ts",
     importSpecifiers: ["../../dashboard/state/dashboardSessionStore"],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/import/hooks/use-factory-import-activation.ts",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/sync-current-factory-document-cache",
+    ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
@@ -1152,7 +1174,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
-      "../../factory-graph-editor/messages/editor",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",

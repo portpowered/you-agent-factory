@@ -1,15 +1,15 @@
 import {
-  CRON_WORKSTATION_KIND,
-  POLLER_WORKSTATION_KIND,
-  REPEATER_WORKSTATION_KIND,
-  STANDARD_WORKSTATION_KIND,
-} from "./workstation-icon-metadata";
-import {
   workstationBehaviorSemanticKind,
   workstationGraphBorderClassName,
   workstationGraphPresentation,
   workstationGraphPresentationFromBehavior,
 } from "./workstation-graph-presentation";
+import {
+  CRON_WORKSTATION_KIND,
+  POLLER_WORKSTATION_KIND,
+  REPEATER_WORKSTATION_KIND,
+  STANDARD_WORKSTATION_KIND,
+} from "./workstation-icon-metadata";
 
 describe("workstationGraphPresentation", () => {
   it("derives poller presentation from canonical workstation kind without UI-only flags", () => {
@@ -41,9 +41,9 @@ describe("workstationGraphPresentation", () => {
     expect(workstationBehaviorSemanticKind("STANDARD")).toBe(
       STANDARD_WORKSTATION_KIND,
     );
-    expect(
-      workstationGraphPresentationFromBehavior("POLLER").iconKind,
-    ).toBe("poller");
+    expect(workstationGraphPresentationFromBehavior("POLLER").iconKind).toBe(
+      "poller",
+    );
   });
 
   it("publishes distinct border treatments for supported workstation behaviors", () => {

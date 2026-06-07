@@ -1,11 +1,6 @@
 import type { HTMLAttributes, ReactNode } from "react";
 
-import {
-  DASHBOARD_BODY_TEXT_CLASS,
-  DASHBOARD_SECTION_HEADING_CLASS,
-  DASHBOARD_SUPPORTING_LABELS_CLASS,
-  DASHBOARD_WIDGET_SUBTITLE_CLASS,
-} from "../../../../components/ui/dashboard-typography";
+import { DASHBOARD_SUPPORTING_LABELS_CLASS } from "../../../../components/ui/dashboard-typography";
 import { cn } from "../../../../lib/cn";
 import { AgentBentoCard } from "../agent-bento";
 

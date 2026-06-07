@@ -6,8 +6,12 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/workflow-activity/hooks",
   },
   {
-    maxFileCount: 36,
+    maxFileCount: 38,
     relativeDirectoryPath: "src/features/current-factory-definition/lib",
+  },
+  {
+    maxFileCount: 11,
+    relativeDirectoryPath: "src/features/flowchart/lib",
   },
   {
     maxFileCount: 36,

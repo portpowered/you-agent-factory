@@ -3,8 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
-  getCurrentFactoryDocument,
   type CurrentFactoryDocument,
+  getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import {
   activateImportedFactoryForSession,
@@ -531,11 +531,7 @@ function createQueryClientWrapper(
       },
     },
   }),
-): ({
-  children,
-}: {
-  children: ReactNode;
-}) => ReactNode {
+): ({ children }: { children: ReactNode }) => ReactNode {
   return function QueryClientWrapper({
     children,
   }: {

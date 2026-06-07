@@ -1,12 +1,5 @@
 import { useCallback, useState } from "react";
-
-import { DashboardActionRow } from "../../../components/ui";
-import { cn } from "../../../lib/cn";
-import {
-  FactoryGraphEditorModeToggle,
-  FactoryGraphEditorStatus,
-  type FactoryGraphEditorTool,
-} from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
@@ -16,7 +9,6 @@ import {
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
 } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 
 export function useFactoryGraphAddEntityController({

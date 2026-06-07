@@ -11,10 +11,7 @@ export function syncCurrentFactoryDocumentCache(
   sessionID: string | null | undefined,
   document: CurrentFactoryDocument,
 ): void {
-  queryClient.setQueryData(
-    currentFactoryDocumentQueryKey(sessionID),
-    document,
-  );
+  queryClient.setQueryData(currentFactoryDocumentQueryKey(sessionID), document);
   queryClient.setQueryData(
     currentFactoryDefinitionQueryKey(sessionID),
     document,

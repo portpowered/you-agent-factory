@@ -1,6 +1,4 @@
 import { type ReactNode, useId } from "react";
-
-import { surfacePanelVariants } from "../../../../../components/ui";
 import { cn } from "../../../../../lib/cn";
 import { StandardExpandableSection } from "../../../../standard-card-components/public";
 

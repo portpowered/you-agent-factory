@@ -520,4 +520,3 @@ describe("current-factory-definition api", () => {
     });
   });
 });
-
