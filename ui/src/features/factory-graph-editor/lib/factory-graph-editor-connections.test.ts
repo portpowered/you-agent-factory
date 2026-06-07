@@ -1,6 +1,6 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: existing factory-graph connection coverage stayed intact during feature-root migration.
 
-import { buildEditorHandles } from "../../workflow-activity/lib/react-flow-current-activity-card-editor-handles";
+import { buildSemanticGraphHandles } from "../../workflow-activity/lib/react-flow-current-activity-card-editor-handles";
 import type {
   FactoryGraphDraft,
   FactoryGraphTopology,
@@ -425,13 +425,13 @@ describe("factory graph editor connections", () => {
         },
       },
     ]);
-    const withoutStopWordsHandles = buildEditorHandles({
+    const withoutStopWordsHandles = buildSemanticGraphHandles({
       connectionAnchorContext: standardProcessorWithoutStopWords,
       nodeId: "workstation:draft",
       nodeKind: "workstation",
       validationProjection,
     });
-    const withStopWordsHandles = buildEditorHandles({
+    const withStopWordsHandles = buildSemanticGraphHandles({
       connectionAnchorContext: standardProcessorWithStopWords,
       nodeId: "workstation:draft",
       nodeKind: "workstation",
