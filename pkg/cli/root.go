@@ -798,8 +798,11 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cfg.Logger = logger
 	cfg.Verbose = verbose || debug
 	cfg.CleanInvocation = cleanInvocation
+	cfg.JSON = globals.json
 	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation
-	if !cleanInvocation {
+	if cleanInvocation {
+		cfg.Output = cmd.OutOrStdout()
+	} else {
 		cfg.StartupOutput = cmd.OutOrStdout()
 	}
 	cfg.Diagnostics = cmd.ErrOrStderr()

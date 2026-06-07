@@ -300,7 +300,7 @@ func TestRunCommand_FactoryPromptSelectsCleanInvocationMode(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(&stdout)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix the lint issues"})
+	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute clean factory prompt run: %v", err)
@@ -317,6 +317,12 @@ func TestRunCommand_FactoryPromptSelectsCleanInvocationMode(t *testing.T) {
 	}
 	if got.StartupOutput != nil {
 		t.Fatalf("startup output = %#v, want nil for clean invocation mode", got.StartupOutput)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to clean run config")
+	}
+	if got.Output == nil {
+		t.Fatal("expected clean run config to receive stdout writer")
 	}
 	assertRunStdoutFreeOfOperatorChatter(t, stdout.String())
 }

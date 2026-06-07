@@ -86,12 +86,71 @@ func TestRun_CleanInvocationKeepsOperatorChatterOffStdout(t *testing.T) {
 		t.Fatalf("Run: %v", err)
 	}
 
+	if output != "mock worker accepted" {
+		t.Fatalf("stdout = %q, want primary clean invocation output", output)
+	}
 	assertNoOperatorChatter(t, output)
 	if startupOut.Len() != 0 {
 		t.Fatalf("startup output = %q, want clean invocation to suppress operator chatter", startupOut.String())
 	}
 	if _, err := os.Stat(resolveDefaultSessionRecordPath(recordPath)); err != nil {
 		t.Fatalf("default recording was not written: %v", err)
+	}
+}
+
+func TestRun_CleanInvocationEmitsPrimaryTextOutputRepeatedly(t *testing.T) {
+	for i := 0; i < 2; i++ {
+		dir, workFile := writeDashboardRunFixture(t)
+
+		output, err := runWithCapturedStdout(t, RunConfig{
+			Dir:                     dir,
+			Port:                    0,
+			WorkFile:                workFile,
+			MockWorkersEnabled:      true,
+			CleanInvocation:         true,
+			DisableDefaultRecording: true,
+			Logger:                  zap.NewNop(),
+		})
+		if err != nil {
+			t.Fatalf("Run iteration %d: %v", i, err)
+		}
+		if output != "mock worker accepted" {
+			t.Fatalf("iteration %d stdout = %q, want primary clean invocation output", i, output)
+		}
+		assertNoOperatorChatter(t, output)
+	}
+}
+
+func TestRun_CleanInvocationJSONEmitsSinglePrimaryResultObject(t *testing.T) {
+	dir, workFile := writeDashboardRunFixture(t)
+
+	output, err := runWithCapturedStdout(t, RunConfig{
+		Dir:                     dir,
+		Port:                    0,
+		WorkFile:                workFile,
+		MockWorkersEnabled:      true,
+		CleanInvocation:         true,
+		JSON:                    true,
+		DisableDefaultRecording: true,
+		Logger:                  zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	assertNoOperatorChatter(t, output)
+
+	var got cleanInvocationSuccess
+	if err := json.Unmarshal([]byte(output), &got); err != nil {
+		t.Fatalf("stdout is not one JSON object: %v\n%s", err, output)
+	}
+	if got.Output != "mock worker accepted" {
+		t.Fatalf("output = %q, want primary clean invocation output", got.Output)
+	}
+	if got.WorkID != "dashboard-render-test-work" ||
+		got.WorkTypeName != "task" ||
+		got.TraceID != "dashboard-render-test-trace" ||
+		got.SessionID != defaultFactorySessionID {
+		t.Fatalf("json result = %#v", got)
 	}
 }
 
