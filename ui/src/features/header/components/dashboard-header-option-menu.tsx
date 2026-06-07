@@ -51,7 +51,7 @@ export function DashboardHeaderOptionMenuItem({
       )}
       onClick={onClick}
       role="menuitemradio"
-      tone={isSelected ? "secondary" : "ghost"}
+      tone="ghost"
       type="button"
     >
       {children}
