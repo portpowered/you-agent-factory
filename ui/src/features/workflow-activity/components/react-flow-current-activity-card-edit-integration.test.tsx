@@ -331,7 +331,12 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       expectedNodeNames: ["worker:analyst"],
       fields: [
         { label: "Identifier", value: "analyst" },
-        { label: "Model provider", role: "combobox" as const, value: "CURSOR" },
+        {
+          label: "Worker type",
+          role: "combobox" as const,
+          value: "SCRIPT_WORKER",
+        },
+        { label: "Command", value: "./analyze.sh" },
       ],
       menuAction: "Worker",
     },

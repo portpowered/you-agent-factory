@@ -9,6 +9,14 @@ import {
 import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
+const modelWorkerAddOperations = [
+  {
+    name: "REVIEW",
+    inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+    outputs: [{ name: "result", contentTypes: ["TEXT"] }],
+  },
+] as const;
+
 const sharedWorkType = {
   name: "story",
   states: [
@@ -142,7 +150,7 @@ describe("useEditableFactoryGraph document plane scope isolation", () => {
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
-        operations: [],
+        operations: modelWorkerAddOperations,
         workerType: "MODEL_WORKER",
       });
     });
@@ -209,7 +217,7 @@ describe("useEditableFactoryGraph document plane scope isolation", () => {
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
-        operations: [],
+        operations: modelWorkerAddOperations,
         workerType: "MODEL_WORKER",
       });
     });
@@ -279,7 +287,7 @@ describe("useEditableFactoryGraph document plane persist", () => {
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
-        operations: [],
+        operations: modelWorkerAddOperations,
         workerType: "MODEL_WORKER",
       });
     });

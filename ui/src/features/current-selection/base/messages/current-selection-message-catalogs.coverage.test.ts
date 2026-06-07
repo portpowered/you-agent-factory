@@ -252,54 +252,11 @@ const invokeEditableConfigurationControls = (
   }
 };
 
-const invokeWorkstationDetail = (
+const invokeWorkstationDetailSecondaryFormatters = (
   key: string,
   formatter: (...args: never[]) => unknown,
-) => {
-  switch (key satisfies keyof WorkstationDetailMessages) {
-    case "editableConfigurationOverwriteWarning":
-    case "editableConfigurationSaveConflictConfirmationDescription":
-    case "runnerInheritanceFactoryLabel":
-      return [formatter("prompt" as never)];
-    case "editableConfigurationNameDuplicate":
-      return [formatter("duplicate-workstation" as never)];
-    case "editableConfigurationSaveSuccess":
-      return [formatter("Review" as never)];
-    case "editableConfigurationSharedWorkerScopeHint":
-      return [formatter("Worker A" as never, "Review, Implement" as never)];
-    case "localizeWorkstationBehavior":
-      return [
-        formatter("STANDARD" as never),
-        formatter("POLLER" as never),
-        formatter("FUTURE_BEHAVIOR" as never),
-      ];
-    case "localizeProviderSessionKind":
-      return [
-        formatter("session_id" as never),
-        formatter("path" as never),
-        formatter("future-kind" as never),
-      ];
-    case "localizeWorkstationKind":
-      return [
-        formatter("STANDARD" as never),
-        formatter("POLLER" as never),
-        formatter("future-kind" as never),
-      ];
-    case "localizeWorkstationType":
-      return [
-        formatter("MODEL_WORKSTATION" as never),
-        formatter("MODEL_INVOKE" as never),
-        formatter("LOGICAL_MOVE" as never),
-        formatter("FUTURE_TYPE" as never),
-      ];
-    case "editableConfigurationModelInvokeBindingDuplicate":
-    case "editableConfigurationModelInvokeBindingRequired":
-      return [formatter("prompt" as never)];
-    case "modelInvokeBindingSlotHeading":
-      return [
-        formatter("prompt" as never, "required" as never),
-        formatter("voice" as never, "optional" as never),
-      ];
+): unknown[] | null => {
+  switch (key) {
     case "localizeRunnerSelectionSource":
       return [
         formatter("factory" as never),
@@ -357,6 +314,67 @@ const invokeWorkstationDetail = (
     case "selectProviderSessionLabel":
     case "selectRequestLabel":
       return [formatter("Review Story" as never, "dispatch-review" as never)];
+    default:
+      return null;
+  }
+};
+
+const invokeWorkstationDetail = (
+  key: string,
+  formatter: (...args: never[]) => unknown,
+) => {
+  const secondaryResult = invokeWorkstationDetailSecondaryFormatters(
+    key,
+    formatter,
+  );
+  if (secondaryResult) {
+    return secondaryResult;
+  }
+
+  switch (key satisfies keyof WorkstationDetailMessages) {
+    case "editableConfigurationOverwriteWarning":
+    case "editableConfigurationSaveConflictConfirmationDescription":
+    case "runnerInheritanceFactoryLabel":
+      return [formatter("prompt" as never)];
+    case "editableConfigurationNameDuplicate":
+      return [formatter("duplicate-workstation" as never)];
+    case "editableConfigurationSaveSuccess":
+      return [formatter("Review" as never)];
+    case "editableConfigurationSharedWorkerScopeHint":
+      return [formatter("Worker A" as never, "Review, Implement" as never)];
+    case "localizeWorkstationBehavior":
+      return [
+        formatter("STANDARD" as never),
+        formatter("POLLER" as never),
+        formatter("FUTURE_BEHAVIOR" as never),
+      ];
+    case "localizeProviderSessionKind":
+      return [
+        formatter("session_id" as never),
+        formatter("path" as never),
+        formatter("future-kind" as never),
+      ];
+    case "localizeWorkstationKind":
+      return [
+        formatter("STANDARD" as never),
+        formatter("POLLER" as never),
+        formatter("future-kind" as never),
+      ];
+    case "localizeWorkstationType":
+      return [
+        formatter("MODEL_WORKSTATION" as never),
+        formatter("MODEL_INVOKE" as never),
+        formatter("LOGICAL_MOVE" as never),
+        formatter("FUTURE_TYPE" as never),
+      ];
+    case "editableConfigurationModelInvokeBindingDuplicate":
+    case "editableConfigurationModelInvokeBindingRequired":
+      return [formatter("prompt" as never)];
+    case "modelInvokeBindingSlotHeading":
+      return [
+        formatter("prompt" as never, "required" as never),
+        formatter("voice" as never, "optional" as never),
+      ];
     default:
       throw new Error(`Unhandled workstation-detail formatter ${key}`);
   }
