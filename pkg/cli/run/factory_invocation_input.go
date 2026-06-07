@@ -92,7 +92,7 @@ func splitInvocationPromptArgs(args []string) (prompt string, explicitStdin bool
 		}
 		positional = append(positional, arg)
 	}
-	return strings.TrimSpace(strings.Join(positional, " ")), explicitStdin
+	return strings.Join(positional, " "), explicitStdin
 }
 
 func resolveInvocationStdin(cfg FactoryInvocationInputConfig, explicitStdin bool) (string, bool, error) {
@@ -108,10 +108,10 @@ func resolveInvocationStdin(cfg FactoryInvocationInputConfig, explicitStdin bool
 	if err != nil {
 		return "", false, fmt.Errorf("read invocation stdin: %w", err)
 	}
-	payload := strings.TrimSpace(string(data))
+	payload := string(data)
 	if payload == "" {
 		if explicitStdin {
-			return "", false, fmt.Errorf("stdin input is empty")
+			return "", true, nil
 		}
 		return "", false, nil
 	}
@@ -138,9 +138,6 @@ func factoryInvocationInputError(err error) error {
 	case invocations.InputErrorCodeSourceConflict:
 		return ambiguousInvocationInputError(inputErr)
 	case invocations.InputErrorCodeEmpty:
-		if inputErr.Source == invocations.InputSourceStdinText {
-			return fmt.Errorf("stdin input is empty")
-		}
 		return &InvocationError{
 			Code:    string(inputErr.Code),
 			Message: inputErr.Message,

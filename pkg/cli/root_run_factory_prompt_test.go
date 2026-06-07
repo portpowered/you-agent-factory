@@ -495,8 +495,8 @@ func TestRunCommand_FactoryStdinPromptCarriesInvocationText(t *testing.T) {
 	if got.InvocationStdinText == nil {
 		t.Fatal("expected invocation stdin text for factory prompt run")
 	}
-	if gotText := *got.InvocationStdinText; gotText != "Fix the stdin path" {
-		t.Fatalf("invocation stdin text = %q, want stdin prompt text", gotText)
+	if gotText := *got.InvocationStdinText; gotText != "Fix the stdin path\n" {
+		t.Fatalf("invocation stdin text = %q, want raw stdin prompt text", gotText)
 	}
 }
 
@@ -619,7 +619,7 @@ func TestRunCommand_FactoryContinuousPromptKeepsOperatorOutputMode(t *testing.T)
 	}
 }
 
-func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
+func TestRunCommand_FactoryPromptRejectsEmptyStdinWithStableCode(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -635,19 +635,20 @@ func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 	}
 
 	root := NewRootCommand()
+	root.SetIn(strings.NewReader(""))
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "   "})
+	root.SetArgs([]string{"run", "--factory", factoryPath, "-"})
 
 	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected empty prompt rejection")
+		t.Fatal("expected empty stdin rejection")
 	}
-	if !strings.Contains(err.Error(), "prompt is required") {
-		t.Fatalf("error = %q, want prompt requirement", err.Error())
+	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
+		t.Fatalf("error = %q, want stable empty stdin code", err.Error())
 	}
 	if runCalled {
-		t.Fatal("run should not start for empty factory prompt")
+		t.Fatal("run should not start for empty factory stdin")
 	}
 }
 
