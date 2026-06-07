@@ -4,7 +4,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
-import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
+import type { SelectedWorkOperationHistoryItem } from "../../hooks/helpers/selected-work-operation-history";
 
 export type { SelectedWorkOperationHistoryItem };
 

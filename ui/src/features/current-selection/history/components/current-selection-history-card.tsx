@@ -1,7 +1,7 @@
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 import { surfacePanelVariants } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
-import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
+import { CurrentSelectionExecutionPill } from "../../base/components/presentation/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../base/public";
 
 export interface CurrentSelectionHistoryCardProps

@@ -1,14 +1,14 @@
 export {
   ExecutionDetailsSection,
   InferenceAttemptsSection,
-} from "../components/execution-details";
-export { InferenceAttemptCard } from "../components/inference-attempt";
-export { InferenceAttemptDetail } from "../components/inference-attempt-detail";
-export { InferenceAttemptTextSection } from "../components/inference-attempt-text-section";
-export { TerminalWorkSummaryCard } from "../components/terminal-work-summary-detail";
-export { WorkItemDetailCard } from "../components/work-item-card";
-export { WorkItemPayloadList } from "../components/work-item-payload-details";
-export { WorkRelationshipsSection } from "../components/work-item-relationship-graph";
+} from "../components/execution/execution-details";
+export { InferenceAttemptCard } from "../components/inference-attempt/inference-attempt";
+export { InferenceAttemptDetail } from "../components/inference-attempt/inference-attempt-detail";
+export { InferenceAttemptTextSection } from "../components/inference-attempt/inference-attempt-text-section";
+export { TerminalWorkSummaryCard } from "../components/execution/terminal-work-summary-detail";
+export { WorkItemDetailCard } from "../components/work-item/work-item-card";
+export { WorkItemPayloadList } from "../components/work-item/work-item-payload-details";
+export { WorkRelationshipsSection } from "../components/work-item/work-item-relationship-graph";
 export type {
   ExecutionDetailsSectionProps,
   InferenceAttemptCardProps,

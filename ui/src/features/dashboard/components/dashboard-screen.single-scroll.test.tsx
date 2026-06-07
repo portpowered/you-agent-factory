@@ -107,7 +107,7 @@ vi.mock("../../bento/hooks/useDashboardNow", () => ({
   useDashboardNow: () => 0,
 }));
 
-vi.mock("../../current-selection/hooks/useCurrentSelectionDetails", () => ({
+vi.mock("../../current-selection/hooks/core/useCurrentSelectionDetails", () => ({
   useCurrentSelectionDetails: () => ({
     selectedWorkExecutionDetails: null,
     selectedWorkRelationshipGraph: { status: "empty" as const },

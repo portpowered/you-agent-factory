@@ -1,0 +1,23 @@
+import { forwardRef, type HTMLAttributes } from "react";
+
+import { DashboardDescriptionList } from "../../../../../components/ui";
+import { cn } from "../../../../../lib/cn";
+
+export interface CurrentSelectionDescriptionListProps
+  extends HTMLAttributes<HTMLDListElement> {}
+
+export const CurrentSelectionDescriptionList = forwardRef<
+  HTMLDListElement,
+  CurrentSelectionDescriptionListProps
+>(function CurrentSelectionDescriptionList({ className, ...props }, ref) {
+  return (
+    <DashboardDescriptionList
+      className={cn(
+        "[&_div]:grid-cols-[8.5rem_minmax(0,1fr)]",
+        className,
+      )}
+      ref={ref}
+      {...props}
+    />
+  );
+});

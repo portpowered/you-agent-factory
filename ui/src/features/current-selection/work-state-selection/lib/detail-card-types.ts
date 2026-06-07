@@ -12,7 +12,7 @@ import type {
   EditableWorkStateValues,
 } from "../../../current-factory-definition/lib/work-state-editable-values";
 import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
-import type { CurrentSelectionDetailMessages } from "../../base/messages/current-selection-detail";
+import type { CurrentSelectionDetailMessages } from "../../base/messages/shell/current-selection-detail";
 import type { StatePositionWorkItem } from "../../base/state/selection-types";
 import type { EditableWorkStateValidationErrors } from "./work-state-editable-validation";
 

@@ -1,10 +1,10 @@
-// Temporary cross-feature boundary debt inventory.
-// Remove each entry in the same change that routes reuse through a target feature public/ boundary.
+// Temporary cross-feature internal-import debt inventory.
+// Remove each entry in the same change that routes reuse through public/ boundaries.
 export const allowlistedCrossFeatureBoundaryViolations = [
   {
     importSpecifiers: [
-          "../../current-selection/hooks/useCurrentSelection",
-          "../../current-selection/hooks/useCurrentSelectionDetails",
+          "../../current-selection/hooks/core/useCurrentSelection",
+          "../../current-selection/hooks/core/useCurrentSelectionDetails",
           "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",
           "../../dashboard-add-card/components/inline-add-widget-card",
           "../../provider-session-detail/messages/provider-session-widget",
@@ -24,8 +24,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../current-selection/hooks/useCurrentSelection",
-          "../../current-selection/hooks/useCurrentSelectionDetails",
+          "../../current-selection/hooks/core/useCurrentSelection",
+          "../../current-selection/hooks/core/useCurrentSelectionDetails",
           "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",
           "../../dashboard-add-card/components/inline-add-widget-card",
           "../../submit-work/components/submit-work-card",
@@ -39,7 +39,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../current-selection/hooks/useCurrentSelectionDetails",
+          "../../current-selection/hooks/core/useCurrentSelectionDetails",
           "../../current-selection/work-selection/hooks/useSelectedProviderSessionState",
           "../../dashboard/session/dashboard-session-provider",
           "../../import/lib/factory-import-save-choice",
@@ -53,7 +53,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../current-selection/hooks/useCurrentSelection",
+          "../../current-selection/hooks/core/useCurrentSelection",
           "../../timeline/state/factoryTimelineStore"
     ],
     reason:
@@ -111,19 +111,19 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/hooks/useFactoryDocumentSave"
+          "../../../../current-factory-definition/hooks/useFactoryDocumentSave"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/base/components/detail-card-save-test-helpers.ts",
+    relativeFilePath: "src/features/current-selection/base/components/detail-card/detail-card-save-test-helpers.ts",
   },
   {
     importSpecifiers: [
-          "../../../provider-session-detail/lib/provider-session-ref"
+          "../../../../provider-session-detail/lib/provider-session-ref"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/base/components/detail-card-types.ts",
+    relativeFilePath: "src/features/current-selection/base/components/detail-card/detail-card-types.ts",
   },
   {
     importSpecifiers: [
@@ -152,11 +152,11 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../../notifications/lib/save-notification-delivery-policy"
+          "../../../../notifications/lib/save-notification-delivery-policy"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/base/messages/current-selection-save-toast.ts",
+    relativeFilePath: "src/features/current-selection/base/messages/shell/current-selection-save-toast.ts",
   },
   {
     importSpecifiers: [
@@ -184,19 +184,11 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../workflow-activity/state/factory-graph-topology-editor-bridge"
+          "../../../workflow-activity/state/factory-graph-topology-editor-bridge"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/components/current-selection-widget-save-notifications.tsx",
-  },
-  {
-    importSpecifiers: [
-          "../../provider-session-detail/lib/provider-session-ref"
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/components/current-selection-widget.tsx",
+    relativeFilePath: "src/features/current-selection/components/widget/current-selection-widget-save-notifications.tsx",
   },
   {
     importSpecifiers: [
@@ -204,15 +196,23 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-attempt-sections.tsx",
+    relativeFilePath: "src/features/current-selection/components/widget/current-selection-widget.tsx",
   },
   {
     importSpecifiers: [
-          "../../../provider-session-detail/lib/provider-session-ref"
+          "../../../../provider-session-detail/lib/provider-session-ref"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-history-card.tsx",
+    relativeFilePath: "src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-attempt-sections.tsx",
+  },
+  {
+    importSpecifiers: [
+          "../../../../provider-session-detail/lib/provider-session-ref"
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+    relativeFilePath: "src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-history-card.tsx",
   },
   {
     importSpecifiers: [
@@ -224,28 +224,28 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../terminal-work/lib/types"
+          "../../../terminal-work/lib/types"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/hooks/useCurrentSelection.actions.ts",
+    relativeFilePath: "src/features/current-selection/hooks/core/useCurrentSelection.actions.ts",
   },
   {
     importSpecifiers: [
-          "../../terminal-work/lib/types"
+          "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+          "../../../terminal-work/lib/types"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/hooks/useCurrentSelection.selection-helpers.ts",
+    relativeFilePath: "src/features/current-selection/hooks/core/useCurrentSelection.ts",
   },
   {
     importSpecifiers: [
-          "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-          "../../terminal-work/lib/types"
+          "../../../terminal-work/lib/types"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/hooks/useCurrentSelection.ts",
+    relativeFilePath: "src/features/current-selection/hooks/helpers/useCurrentSelection.selection-helpers.ts",
   },
   {
     importSpecifiers: [
@@ -298,11 +298,11 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../../provider-session-detail/lib/provider-session-ref"
+          "../../../../provider-session-detail/lib/provider-session-ref"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/work-selection/components/inference-attempt-provider-session.tsx",
+    relativeFilePath: "src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-provider-session.tsx",
   },
   {
     importSpecifiers: [
@@ -474,53 +474,53 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../../provider-session-detail/lib/provider-session-ref"
+          "../../../../current-factory-definition/lib/workstation-guards",
+          "../../../../current-factory-definition/lib/workstation-worker-assignment"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/components/provider-session-attempts.tsx",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/editable/workstation-editable-configuration-section.tsx",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/workstation-guards",
-          "../../../current-factory-definition/lib/workstation-worker-assignment"
+          "../../../../provider-session-detail/lib/provider-session-ref"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-editable-configuration-section.tsx",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/fields/provider-session-attempts.tsx",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/workstation-guards"
+          "../../../../current-factory-definition/lib/workstation-guards"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-guards-field.tsx",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/fields/workstation-guards-field.tsx",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/workstation-editable-values",
-          "../../../current-factory-definition/lib/workstation-guards"
+          "../../../../current-factory-definition/lib/workstation-editable-values",
+          "../../../../current-factory-definition/lib/workstation-guards"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-input-guards-field.tsx",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/fields/workstation-input-guards-field.tsx",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/runner-selection"
+          "../../../../current-factory-definition/lib/runner-selection"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-runner-field.tsx",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/fields/workstation-runner-field.tsx",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/workstation-worker-assignment"
+          "../../../../current-factory-definition/lib/workstation-worker-assignment"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/components/workstation-summary-field-values.ts",
+    relativeFilePath: "src/features/current-selection/workstation-selection/components/fields/workstation-summary-field-values.ts",
   },
   {
     importSpecifiers: [
@@ -591,41 +591,41 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/workstation-behavior",
-          "../../../current-factory-definition/lib/workstation-editable-values",
-          "../../../provider-session-detail/lib/provider-session-ref"
+          "../../../../current-factory-definition/lib/workstation-behavior",
+          "../../../../current-factory-definition/lib/workstation-editable-values",
+          "../../../../provider-session-detail/lib/provider-session-ref"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/lib/detail-card-types.ts",
+    relativeFilePath: "src/features/current-selection/workstation-selection/lib/keys/detail-card-types.ts",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/editable-workstation-cron-validation",
-          "../../../current-factory-definition/lib/workstation-behavior",
-          "../../../current-factory-definition/lib/workstation-editable-values",
-          "../../../current-factory-definition/lib/workstation-worker-assignment"
+          "../../../../current-factory-definition/lib/workstation-guards"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/lib/editable-workstation-configuration-validation.ts",
+    relativeFilePath: "src/features/current-selection/workstation-selection/lib/keys/workstation-guard-row-keys.ts",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/workstation-editable-values",
-          "../../../current-factory-definition/lib/workstation-guards"
+          "../../../../current-factory-definition/lib/editable-workstation-cron-validation",
+          "../../../../current-factory-definition/lib/workstation-behavior",
+          "../../../../current-factory-definition/lib/workstation-editable-values",
+          "../../../../current-factory-definition/lib/workstation-worker-assignment"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/lib/workstation-editable-validation.ts",
+    relativeFilePath: "src/features/current-selection/workstation-selection/lib/validation/editable-workstation-configuration-validation.ts",
   },
   {
     importSpecifiers: [
-          "../../../current-factory-definition/lib/workstation-guards"
+          "../../../../current-factory-definition/lib/workstation-editable-values",
+          "../../../../current-factory-definition/lib/workstation-guards"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/current-selection/workstation-selection/lib/workstation-guard-row-keys.ts",
+    relativeFilePath: "src/features/current-selection/workstation-selection/lib/validation/workstation-editable-validation.ts",
   },
   {
     importSpecifiers: [
@@ -664,6 +664,22 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
+          "../../../timeline/state/factoryTimelineStore"
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+    relativeFilePath: "src/features/dashboard/hooks/event-stream/useFactoryEventStream.fixtures.ts",
+  },
+  {
+    importSpecifiers: [
+          "../../../timeline/state/factoryTimelineDebug"
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+    relativeFilePath: "src/features/dashboard/hooks/event-stream/useFactoryEventStream.ts",
+  },
+  {
+    importSpecifiers: [
           "../../timeline/state/factoryTimelineStore"
     ],
     reason:
@@ -695,22 +711,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
     relativeFilePath: "src/features/dashboard/hooks/useDashboardWorldView.ts",
-  },
-  {
-    importSpecifiers: [
-          "../../../timeline/state/factoryTimelineStore"
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/dashboard/hooks/event-stream/useFactoryEventStream.fixtures.ts",
-  },
-  {
-    importSpecifiers: [
-          "../../../timeline/state/factoryTimelineDebug"
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/dashboard/hooks/event-stream/useFactoryEventStream.ts",
   },
   {
     importSpecifiers: [
@@ -779,14 +779,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../../timeline/state/timeline/systemTime"
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/factory-graph-editor/lib/operations/factory-graph-customer-display.ts",
-  },
-  {
-    importSpecifiers: [
           "../../../current-factory-definition/lib/workstation-worker-assignment"
     ],
     reason:
@@ -825,6 +817,14 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
+          "../../../timeline/state/timeline/systemTime"
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+    relativeFilePath: "src/features/factory-graph-editor/lib/operations/factory-graph-customer-display.ts",
+  },
+  {
+    importSpecifiers: [
           "../../../current-factory-definition/lib/work-type-default-handling",
           "../../../current-factory-definition/lib/workstation-progress-outcome-routes",
           "../../../flowchart/components/current-activity-node-shell",
@@ -833,15 +833,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
     relativeFilePath: "src/features/factory-graph-editor/lib/projection/factory-graph-react-flow-projection.ts",
-  },
-  {
-    importSpecifiers: [
-          "../../../flowchart/components/current-activity-node-chrome",
-          "../../../flowchart/components/graph-semantic-icon"
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-    relativeFilePath: "src/features/factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling.ts",
   },
   {
     importSpecifiers: [
@@ -858,6 +849,15 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
     relativeFilePath: "src/features/factory-graph-editor/lib/projection/factory-validation-graph-projection.ts",
+  },
+  {
+    importSpecifiers: [
+          "../../../flowchart/components/current-activity-node-chrome",
+          "../../../flowchart/components/graph-semantic-icon"
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+    relativeFilePath: "src/features/factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling.ts",
   },
   {
     importSpecifiers: [
@@ -1261,8 +1261,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
           "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
           "../../factory-graph-editor/hooks/validation/use-factory-validation",
           "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
-          "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
-          "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary"
+          "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
+          "../../factory-graph-editor/lib/editor/factory-graph-editor-additions"
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -1347,9 +1347,9 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     importSpecifiers: [
-          "../../factory-graph-editor/lib/operations/factory-graph-customer-display",
           "../../factory-graph-editor/lib/draft/factory-graph-draft-graph",
           "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+          "../../factory-graph-editor/lib/operations/factory-graph-customer-display",
           "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility",
           "../../factory-graph-editor/messages/editor",
           "../../flowchart/lib/layered-layout",
@@ -1455,5 +1455,5 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
     relativeFilePath: "src/features/workflow-activity/lib/react-flow-current-activity-card-validation.ts",
-  },
+  }
 ];

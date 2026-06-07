@@ -1,4 +1,4 @@
-import { getCurrentSelectionGraphDraftConflictMessages } from "../messages/current-selection-graph-draft-conflict";
+import { getCurrentSelectionGraphDraftConflictMessages } from "../messages/operational/current-selection-graph-draft-conflict";
 
 export const CURRENT_SELECTION_GRAPH_DRAFT_CONFLICT_WARNING_KEY =
   "graph-draft-conflict-warning";

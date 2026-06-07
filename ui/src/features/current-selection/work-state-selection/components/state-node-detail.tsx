@@ -10,15 +10,15 @@ import {
 } from "../../../../components/ui/formatters";
 import { formatDashboardPlaceLabel } from "../../../../components/ui/place-labels";
 import { DetailCopy } from "../../../../components/ui/widget-frame";
-import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
+import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
 import {
   useCurrentSelectionDetailMessages,
   useCurrentSelectionLocale,
-} from "../../base/components/current-selection-locale";
+} from "../../base/components/presentation/current-selection-locale";
 import {
   emptyStatePlaceMessage,
   isTerminalOrFailedPlace,
-} from "../../base/components/detail-card-shared";
+} from "../../base/components/detail-card/detail-card-shared";
 import {
   CurrentSelectionBodyLayout,
   CurrentSelectionExpandableSection,
