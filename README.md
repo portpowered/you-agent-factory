@@ -63,6 +63,23 @@ you init --executor claude --dir my-factory
 you docs workstation
 ```
 
+## Features
+
+infinite-you is a factory runtime: you define how work moves between workstations, and the `you` CLI plus dashboard schedule concurrent agent runs against that flow.
+
+- **Concurrent agent execution** — Run many agents at once across workstations; the dashboard shows live routing, session status, and factory flow state.
+- **Workflow customization** — Model processes as config (`factory.json`, workstation routes, `AGENTS.md`) instead of a fixed pipeline; adapt write/review loops, cron triggers, git worktrees, or other patterns to your repo.
+- **Review loops** — Route completed work to reviewer workstations and re-queue failed items; shipped factories such as Ralph and writer-reviewer demonstrate iterative plan/code/review cycles.
+- **Batch submission** — Submit single items from the CLI (`you submit`) or drive larger inputs through batch work types and dashboard submission.
+- **Example factories** — Load starter and advanced factories from [`examples/factories/`](./examples/factories/) in the dashboard, or scaffold your own with `you init`.
+
+Deeper product documentation:
+
+- [Authoring factories](./docs/reference/authoring-factories.md) — factory topology, workstations, workers, and customization workflow
+- [CLI reference topics](./docs/reference/README.md) — `you docs <topic>` for config, work, sessions, workstations, and related guides
+- [Architecture overview](./docs/architecture/architecture.md) and [data model](./docs/architecture/data-model.md) — how factories, work, and runtime state fit together
+- [Runnable examples](./examples/) — example factory directories and mock-worker inputs under `docs/examples/`
+
 ## Factory CLI
 
 With the service running, ask the live API which factory is currently active:
@@ -198,6 +215,10 @@ Drag the images from the examples/factories directory into the web interface's f
   </tr>
 </table>
 
-### References
+## References
 
-- [Analysis on current projects](docs/comparatives/comparing-systems.md)
+- [Comparing orchestration systems](./docs/comparatives/comparing-systems.md) — background on how infinite-you relates to nearby agent and workflow tools
+- [Authoring factories](./docs/reference/authoring-factories.md) — primary guide for defining and running factories
+- [CLI reference index](./docs/reference/README.md) — packaged `you docs` topics and links to customer-facing guides
+- [Architecture](./docs/architecture/architecture.md) and [data model](./docs/architecture/data-model.md) — factory execution model and persisted state
+- [The zen of flow](./docs/reference/the-zen-of-flow.md) — design notes on work routing and factory composition
