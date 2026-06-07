@@ -88,3 +88,59 @@ it("treats whitespace-only workstation worker names as unassigned", () => {
     expect.arrayContaining([expect.stringMatching(/^worker-assignment:/)]),
   );
 });
+
+it("uses explicit entity ids for canonical graph node and edge ids", () => {
+  const topology = buildFactoryGraphTopologyFromDefinition({
+    name: "stable-ids",
+    resources: [{ capacity: 1, id: "resource-slot", name: "slot" }],
+    workers: [
+      {
+        id: "worker-reviewer",
+        name: "reviewer",
+        resources: [{ name: "slot" }],
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [
+      {
+        id: "work-type-story",
+        name: "story",
+        states: [
+          { id: "state-queued", name: "queued", type: "INITIAL" },
+          { id: "state-done", name: "done", type: "TERMINAL" },
+        ],
+      },
+    ],
+    workstations: [
+      {
+        id: "workstation-review",
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "review",
+        outputs: [{ state: "done", workType: "story" }],
+        resources: [{ name: "slot" }],
+        type: "MODEL_WORKSTATION",
+        worker: "reviewer",
+      },
+    ],
+  });
+
+  expect(topology.nodes.map((node) => node.id)).toEqual(
+    expect.arrayContaining([
+      "resource:resource-slot",
+      "worker:worker-reviewer",
+      "work-type:work-type-story",
+      "work-state:work-type-story:state-queued",
+      "work-state:work-type-story:state-done",
+      "workstation:workstation-review",
+    ]),
+  );
+  expect(topology.edges.map((edge) => edge.id)).toEqual(
+    expect.arrayContaining([
+      "worker-resource:resource:resource-slot->worker:worker-reviewer",
+      "worker-assignment:worker:worker-reviewer->workstation:workstation-review",
+      "workstation-resource:resource:resource-slot->workstation:workstation-review",
+      "workstation-input:work-state:work-type-story:state-queued->workstation:workstation-review",
+      "workstation-output:workstation:workstation-review->work-state:work-type-story:state-done",
+    ]),
+  );
+});

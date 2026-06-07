@@ -243,7 +243,7 @@ func TestValidate_RejectsDuplicateWorkStateIDsWithinWorkType(t *testing.T) {
 		t,
 		result.Targets,
 		factoryvalidation.SubjectTypeWorkState,
-		"story:state-ready",
+		"work-type-story:state-ready",
 		`duplicate work state id "state-ready" on work type "story"`,
 		[]string{"factory.workTypes[0].states[0].id", "factory.workTypes[0].states[1].id"},
 	)
@@ -304,6 +304,27 @@ func TestWorkTypeHandlingBehaviorTargets_RejectsMultipleDefaultWorkTypes(t *test
 
 	targets := factoryvalidation.WorkTypeHandlingBehaviorTargets(cfg, factoryvalidation.WorkTypeHandlingBehaviorOptions{})
 	validationassert.HasDomainTargetCode(t, targets, factoryvalidation.CodeWorkTypeHandlingBehaviorUniqueDefault)
+}
+
+func TestValidate_UsesExplicitSubjectIDsForGraphValidationTargets(t *testing.T) {
+	t.Parallel()
+
+	cfg := stableIDValidationConfig(func(cfg *interfaces.FactoryConfig) {
+		cfg.WorkTypes[0].States = cfg.WorkTypes[0].States[:1]
+		cfg.Workstations[0].OnFailure = nil
+	})
+
+	result := factoryvalidation.Validate(cfg)
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
+		Type:     factoryvalidation.SubjectTypeWorkstation,
+		ID:       "workstation-execute-story",
+		Location: factoryvalidation.SubjectLocationOnFailure,
+	})
+	validationassert.HasDomainTargetSubject(t, result.Targets, factoryvalidation.Subject{
+		Type:     factoryvalidation.SubjectTypeWorkType,
+		ID:       "work-type-story",
+		Location: factoryvalidation.SubjectLocationStates,
+	})
 }
 
 func stableIDValidationConfig(mutate func(*interfaces.FactoryConfig)) *interfaces.FactoryConfig {

@@ -47,13 +47,16 @@ export type FactoryGraphEdgeKind =
   | "work-type-state";
 
 export interface FactoryGraphNodeReference {
+  id?: string;
   kind: Exclude<FactoryGraphNodeKind, "work-state">;
   name: string;
 }
 
 export interface FactoryGraphWorkStateReference {
   kind: "work-state";
+  stateId?: string;
   stateName: string;
+  workTypeId?: string;
   workTypeName: string;
 }
 
@@ -265,19 +268,72 @@ export function appendUniqueEdgeChange(
 export function nodeKeyId(key: FactoryGraphNodeKey): string {
   switch (key.kind) {
     case "resource":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return `resource:${key.name}`;
+      return factoryGraphNodeIdForSubject("resource", key.id, key.name);
     case "worker":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return `worker:${key.name}`;
+      return factoryGraphNodeIdForSubject("worker", key.id, key.name);
     case "work-state":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return `work-state:${key.workTypeName}:${key.stateName}`;
+      return [
+        "work-state",
+        factoryGraphEntityIdentifier(key.workTypeId, key.workTypeName),
+        factoryGraphEntityIdentifier(key.stateId, key.stateName),
+      ].join(":");
     case "work-type":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return `work-type:${key.name}`;
+      return factoryGraphNodeIdForSubject("work-type", key.id, key.name);
     case "workstation":
-      // hardcoded-ui-copy-exception: non-product-diagnostic
-      return `workstation:${key.name}`;
+      return factoryGraphNodeIdForSubject("workstation", key.id, key.name);
   }
+}
+
+function factoryGraphEntityIdentifier(
+  explicitId: string | undefined,
+  fallbackName: string,
+): string {
+  const normalizedId = explicitId?.trim();
+  return normalizedId && normalizedId.length > 0 ? normalizedId : fallbackName;
+}
+
+function factoryGraphNodeIdForSubject(
+  kind: Exclude<FactoryGraphNodeKind, "work-state">,
+  explicitId: string | undefined,
+  fallbackName: string,
+): string {
+  return `${kind}:${factoryGraphEntityIdentifier(explicitId, fallbackName)}`;
+}
+
+function parseFactoryGraphNodeSubjectId(
+  nodeId: string,
+  prefix: string,
+): string | null {
+  if (!nodeId.startsWith(prefix)) {
+    return null;
+  }
+
+  const subjectId = nodeId.slice(prefix.length);
+  return subjectId.length > 0 ? subjectId : null;
+}
+
+export function parseFactoryGraphWorkstationNodeId(
+  nodeId: string,
+): string | null {
+  return parseFactoryGraphNodeSubjectId(nodeId, "workstation:");
+}
+
+export function parseFactoryGraphWorkTypeNodeId(nodeId: string): string | null {
+  return parseFactoryGraphNodeSubjectId(nodeId, "work-type:");
+}
+
+export function parseFactoryGraphWorkStateNodeId(
+  nodeId: string,
+): string | null {
+  const subjectId = parseFactoryGraphNodeSubjectId(nodeId, "work-state:");
+  if (!subjectId) {
+    return null;
+  }
+
+  const separatorIndex = subjectId.indexOf(":");
+  if (separatorIndex <= 0 || separatorIndex >= subjectId.length - 1) {
+    return null;
+  }
+
+  return subjectId;
 }
