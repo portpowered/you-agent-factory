@@ -67,6 +67,39 @@ func TestPreparePersistedFactoryPayload_PrunesStaleLayoutAndRecordsOutcomes(t *t
 	}
 }
 
+func TestPreparePersistedFactoryPayload_IncludesUnsupportedSchemaVersionInLayoutOutcomes(t *testing.T) {
+	t.Parallel()
+
+	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	if err != nil {
+		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
+	}
+	factory.Layout = &factoryapi.FactoryLayout{
+		SchemaVersion: 99,
+		Nodes: &[]factoryapi.FactoryLayoutNode{{
+			Id:       "workstation:process",
+			Position: factoryapi.FactoryLayoutPoint{X: 10, Y: 20},
+			Size:     &factoryapi.FactoryLayoutSize{Width: 100, Height: 80},
+		}},
+		Viewport: &factoryapi.FactoryLayoutViewport{Zoom: 1},
+	}
+
+	prepared, err := preparePersistedFactoryPayload("alpha", factory, factoryapi.HybridLogicalTimestamp{
+		Logical:  apitypes.Int64String(2),
+		Physical: time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("preparePersistedFactoryPayload: %v", err)
+	}
+	validationassert.HasDomainTargetCode(t, prepared.LayoutOutcomes, factoryvalidation.CodeLayoutUnsupportedSchemaVersion)
+	if prepared.Config == nil || prepared.Config.Layout == nil {
+		t.Fatal("expected layout preserved on prepared config")
+	}
+	if prepared.Config.Layout.SchemaVersion != 99 {
+		t.Fatalf("layout schemaVersion = %d, want 99 preserved on save", prepared.Config.Layout.SchemaVersion)
+	}
+}
+
 func TestPrepareFactoryLayoutPayload_PrunesStaleLayoutOnNamedFactoryPersistPath(t *testing.T) {
 	t.Parallel()
 

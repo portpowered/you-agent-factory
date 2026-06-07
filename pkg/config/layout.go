@@ -542,7 +542,8 @@ func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFacto
 	if err != nil {
 		return nil, err
 	}
-	layoutOutcomes := factoryvalidation.PruneLayout(cfg, interfaces.BuildPendingFactoryGraphTopology(cfg))
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	layoutOutcomes := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
 	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("%w: normalize authored factory %q config: %w", ErrInvalidNamedFactory, segment, err)

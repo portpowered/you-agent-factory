@@ -2,6 +2,7 @@ package layouttests
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -85,6 +86,38 @@ func TestValidateLayout_UnsupportedSchemaVersionIsRecoverableWarning(t *testing.
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnsupportedSchemaVersion)
 	if result.Targets[0].Severity != factoryvalidation.SeverityWarning {
 		t.Fatalf("schemaVersion target severity = %q, want warning", result.Targets[0].Severity)
+	}
+}
+
+func TestLayoutSaveOutcomes_IncludesUnsupportedSchemaVersionAfterPrune(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.SchemaVersion = 99
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
+
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnsupportedSchemaVersion)
+}
+
+func TestLayoutSaveOutcomes_PrefersPruneOutcomeForDuplicateCodeAndPath(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Groups[0].Bounds.Width = math.NaN()
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
+
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+	for _, target := range result.Targets {
+		if target.Code != factoryvalidation.CodeLayoutInvalidGeometry {
+			continue
+		}
+		if !strings.Contains(target.Message, "rejected during save") {
+			t.Fatalf("geometry target message = %q, want prune rejection wording", target.Message)
+		}
 	}
 }
 
