@@ -189,6 +189,8 @@ function buildReadyEditableConfigurationState(overrides?: {
         })
       : null;
 
+  const workstationType = overrides?.workstationType ?? "MODEL_WORKSTATION";
+
   return {
     draft: {
       behavior,
@@ -196,10 +198,13 @@ function buildReadyEditableConfigurationState(overrides?: {
       guards: [],
       inputs: [],
       name: overrides?.initialValuesWorkstationName ?? "Review",
+      operation: "",
+      operationBindings: [],
       prompt:
         overrides?.prompt ?? "Review the latest story changes before approval.",
       runnerName: "gemini",
       workerName: overrides?.workerName ?? "reviewer",
+      workstationType,
     },
     hasValidationErrors: Boolean(
       overrides?.validationErrors?.prompt ||
@@ -241,7 +246,15 @@ function buildReadyEditableConfigurationState(overrides?: {
       },
       workstationName: overrides?.initialValuesWorkstationName ?? "Review",
       workstationOptions: ["Plan", "Review"],
-      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
+      workstationType,
+      workstationTypeOptions:
+        workstationType === "LOGICAL_MOVE"
+          ? ["LOGICAL_MOVE"]
+          : ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {},
+      operation: "",
+      operationBindings: [],
       guards: [],
       inputs: [],
     },

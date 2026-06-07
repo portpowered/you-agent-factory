@@ -3,9 +3,6 @@ import type { components } from "../../../api/generated/openapi";
 import { WorkstationType } from "../../../api/generated/openapi";
 import type { EditableWorkstationType } from "./workstation-type";
 
-type CanonicalWorker = NonNullable<
-  CanonicalFactoryDefinition["workers"]
->[number];
 type ModelOperation = components["schemas"]["ModelOperation"];
 type ModelOperationSlot = components["schemas"]["ModelOperationSlot"];
 type WorkstationOperationBinding =
@@ -329,19 +326,4 @@ export function resolveModelOperationByName(
   }
 
   return operations.find((operation) => operation.name === trimmed);
-}
-
-export function workerDeclaresModelOperation(
-  worker: CanonicalWorker | undefined,
-  operationName: string,
-): boolean {
-  if (!worker || worker.type !== "MODEL_WORKER") {
-    return false;
-  }
-
-  return (worker.operations ?? []).some(
-    (operation) =>
-      operation.name === operationName.trim() &&
-      modelOperationHasCompatibleSlots(operation),
-  );
 }
