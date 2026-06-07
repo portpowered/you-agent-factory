@@ -78,31 +78,34 @@ type managedLocalModelManager = localmodels.Manager
 // factoryRuntimeBundle is the single runtime wiring struct produced by
 // buildRuntimeBundle and referenced from liveRuntimeHandle.
 type factoryRuntimeBundle struct {
-	dir            string
-	folderPath     string
-	eventHistory   *factoryevents.FactoryEventHistory
-	factory        factory.Factory
-	listener       *ingest.FileWatcher
-	net            *state.Net
-	runtimeCfg     *factoryconfig.LoadedFactoryConfig
-	modelResources *localModelResourceLimiter
-	modelAssets    modelAssetPuller
-	localModels    *managedLocalModelManager
-	logger         *zap.Logger
-	logSink        *logging.RuntimeLogSink
-	recording      *replay.Recorder
-	recordPath     string
+	dir                  string
+	folderPath           string
+	eventHistory         *factoryevents.FactoryEventHistory
+	factory              factory.Factory
+	listener             *ingest.FileWatcher
+	net                  *state.Net
+	runtimeCfg           *factoryconfig.LoadedFactoryConfig
+	modelResources       *localModelResourceLimiter
+	modelAssets          modelAssetPuller
+	localModels          *managedLocalModelManager
+	logger               *zap.Logger
+	logSink              *logging.RuntimeLogSink
+	metricsSink          *logging.RuntimeMetricsSink
+	recording            *replay.Recorder
+	recordPath           string
+	dispatchMetricFields sync.Map
 }
 
 type liveRuntimeHandle struct {
-	runtime       *factoryRuntimeBundle
-	runCancel     context.CancelFunc
-	runDone       chan struct{}
-	sidecarCancel context.CancelFunc
-	sidecars      sync.WaitGroup
-	runErrMu      sync.RWMutex
-	runErr        error
-	sidecarMu     sync.Mutex
+	runtime              *factoryRuntimeBundle
+	runCancel            context.CancelFunc
+	runDone              chan struct{}
+	sidecarCancel        context.CancelFunc
+	sidecars             sync.WaitGroup
+	runErrMu             sync.RWMutex
+	runErr               error
+	sidecarMu            sync.Mutex
+	lifecycleMetricsOnce sync.Once
 }
 
 type serviceRunState struct {
@@ -208,6 +211,13 @@ type FactoryServiceConfig struct {
 	// RuntimeLogConfig controls bounded runtime file logging behavior.
 	// Zero values use defaults that match the package rolling policy.
 	RuntimeLogConfig logging.RuntimeLogConfig
+	// RuntimeMetricsDir optionally overrides the default
+	// ~/.you-agent-factory/metrics directory. Tests use this to keep
+	// file-backed metrics isolated.
+	RuntimeMetricsDir string
+	// RuntimeMetricsConfig controls bounded runtime metrics file behavior.
+	// Zero values use defaults that match the runtime log rolling policy.
+	RuntimeMetricsConfig logging.RuntimeMetricsConfig
 	// WorkFile is an optional path to a FACTORY_REQUEST_BATCH JSON file
 	// containing initial work to submit when the factory starts.
 	WorkFile string
@@ -446,9 +456,9 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 		if currentRuntime != nil {
 			return
 		}
-		if bundle := fs.startupRuntimeBundle(); bundle != nil && bundle.logSink != nil {
-			if err := bundle.logSink.Close(); err != nil {
-				fs.logger.Warn("runtime log close failed", zap.Error(err))
+		if bundle := fs.startupRuntimeBundle(); bundle != nil {
+			if err := closeRuntimeBundleSinks(bundle.logSink, bundle.metricsSink); err != nil {
+				fs.logger.Warn("runtime artifact close failed", zap.Error(err))
 			}
 		}
 	}()
@@ -607,6 +617,9 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 	}
 	if serviceMode {
 		if err := fs.startLiveRuntimeSidecars(runCtx, currentRuntime); err != nil {
+			if fs.defaultSessionClosedDuringStartup() {
+				return nil, nil
+			}
 			fs.clearRunState()
 			fs.unregisterLiveSession(defaultFactorySessionID)
 			_ = fs.stopLiveRuntime(currentRuntime)
@@ -614,26 +627,6 @@ func (c *runtimeFactoryCoordinator) startDefaultRuntime(
 		}
 	}
 	return currentRuntime, nil
-}
-
-func (fs *FactoryService) handleDefaultRuntimeStartFailure(
-	ctx context.Context,
-	currentRuntime *liveRuntimeHandle,
-	startErr error,
-) error {
-	fs.clearRunState()
-	fs.unregisterLiveSession(defaultFactorySessionID)
-	stopErr := fs.stopLiveRuntime(currentRuntime)
-	if isCanceledServiceStartup(ctx, startErr) {
-		if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-			return stopErr
-		}
-		return nil
-	}
-	if stopErr != nil && !errors.Is(stopErr, context.Canceled) {
-		return errors.Join(fmt.Errorf("start runtime: %w", startErr), stopErr)
-	}
-	return fmt.Errorf("start runtime: %w", startErr)
 }
 
 func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars *sync.WaitGroup) {
@@ -775,8 +768,13 @@ func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *f
 			return handle
 		}
 	}
+	runtimeBundle.emitRuntimeLifecycleStart()
 	go func() {
-		handle.setRunResult(runtimeBundle.factory.Run(runCtx))
+		err := runtimeBundle.factory.Run(runCtx)
+		if err == nil && runCtx.Err() != nil {
+			err = context.Canceled
+		}
+		handle.setRunResult(err)
 	}()
 	return handle
 }
@@ -799,6 +797,11 @@ func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context
 
 	sidecarCtx, sidecarCancel := context.WithCancel(ctx)
 	handle.sidecarCancel = sidecarCancel
+	handle.sidecars.Add(1)
+	go func() {
+		defer handle.sidecars.Done()
+		fs.observeRuntimeMetrics(sidecarCtx, handle)
+	}()
 	if handle.runtime.listener != nil {
 		handle.sidecars.Add(1)
 		go func() {
@@ -877,11 +880,13 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 	if handle == nil {
 		return nil
 	}
-	fs.stopLiveRuntimeSidecars(handle)
-	if handle.runCancel != nil {
+	if handle.runCancel != nil && !handle.completed() {
 		handle.runCancel()
 	}
-	return errors.Join(handle.wait(), fs.finalizeRuntimeArtifacts(handle.runtime))
+	runErr := handle.wait()
+	fs.finalizeRuntimeLifecycleMetrics(handle, runtimeMetricsObservation{})
+	fs.stopLiveRuntimeSidecars(handle)
+	return errors.Join(runErr, fs.finalizeRuntimeArtifacts(handle.runtime))
 }
 
 func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
@@ -965,6 +970,10 @@ func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
 		case <-handle.runDone:
 		}
 		if fs.currentLiveRuntime() != handle {
+			continue
+		}
+		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
+			fs.sessions != nil && fs.sessions.Count() == 0 {
 			continue
 		}
 		return handle.result()

@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -130,6 +131,447 @@ func TestBuildFactoryService_ServiceModeAcceptsLateSubmissionAfterIdleStartup(t 
 	cancel()
 	<-errCh
 	t.Fatal("late-submitted service work did not reach task:complete before timeout")
+}
+
+func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureLifecycleAndStateTransitions(t *testing.T) {
+	dir := t.TempDir()
+	metricsDir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	releaseProvider := make(chan struct{})
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		RuntimeMetricsDir: metricsDir,
+		ProviderOverride:  &blockingInferenceProvider{releaseCh: releaseProvider, content: "ok"},
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
+	session := svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("default session runtime metrics sink is unavailable")
+	}
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStarted, 1)
+	}, "runtime start")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricStateIdle, 1)
+	}, "idle state")
+
+	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		WorkTypeID: "task",
+		TraceID:    "trace-runtime-metrics-active",
+		Payload:    json.RawMessage(`{"title":"runtime metrics active"}`),
+	}})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricQueueSubmissionCount, 1) &&
+			metricRecordString(record, "trace_id") == "trace-runtime-metrics-active"
+	}, "submission count")
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusActive, time.Second, "service runtime active work")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricStateActive, 1)
+	}, "active state")
+
+	close(releaseProvider)
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle after work")
+	if err := svc.Pause(context.Background()); err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	waitForSessionFactoryState(t, svc, defaultFactorySessionID, interfaces.FactoryStatePaused, time.Second, "service runtime paused")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricStatePaused, 1)
+	}, "paused state")
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service runtime shutdown")
+	}
+
+	records := waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleStopped, 1) &&
+			metricRecordString(record, "outcome") == "canceled"
+	}, "canceled stop")
+	if len(records) == 0 {
+		t.Fatal("runtime metrics records should not be empty")
+	}
+}
+
+// portos:func-length-exception owner=agent-factory reason=dispatch-metrics-observable-fixture review=2026-07-18 removal=split-runtime-metrics-submission-cases-before-next-dispatch-metrics-change
+// pkgmaintcheck:ignore-function-lines this dispatch-metrics runtime test keeps accepted, rejected, and failed observable assertions together on one service seam.
+func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t *testing.T) {
+	dir := t.TempDir()
+	metricsDir := t.TempDir()
+	cfg := minimalFactoryConfig()
+	cfg["workTypes"] = []map[string]any{{
+		"name": "task",
+		"states": []map[string]string{
+			{"name": "init", "type": "INITIAL"},
+			{"name": "complete", "type": "TERMINAL"},
+			{"name": "rejected", "type": "REJECTED"},
+			{"name": "failed", "type": "FAILED"},
+		},
+	}}
+	cfg["workstations"] = []map[string]any{{
+		"name":        "process",
+		"worker":      "worker-a",
+		"inputs":      []map[string]string{{"workType": "task", "state": "init"}},
+		"outputs":     []map[string]string{{"workType": "task", "state": "complete"}},
+		"onRejection": []map[string]string{{"workType": "task", "state": "rejected"}},
+		"onFailure":   []map[string]string{{"workType": "task", "state": "failed"}},
+	}}
+	writeFactoryJSON(t, dir, cfg)
+	writeWorkerAgentsMD(t, dir, "worker-a")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		RuntimeMetricsDir: metricsDir,
+		Logger:            zap.NewNop(),
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithWorkerExecutor("worker-a", dispatchMetricsWorkerExecutor{}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- svc.Run(runCtx) }()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
+	session := svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("default session runtime metrics sink is unavailable")
+	}
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	submissions := []struct {
+		workID   string
+		traceID  string
+		placeID  string
+		outcome  string
+		duration float64
+		retries  float64
+		cost     float64
+	}{
+		{workID: "work-dispatch-accepted", traceID: "trace-dispatch-accepted", placeID: "task:complete", outcome: string(interfaces.OutcomeAccepted), duration: 250, retries: 2, cost: 1.25},
+		{workID: "work-dispatch-rejected", traceID: "trace-dispatch-rejected", placeID: "task:rejected", outcome: string(interfaces.OutcomeRejected), duration: 125, retries: 1},
+		{workID: "work-dispatch-failed", traceID: "trace-dispatch-failed", placeID: "task:failed", outcome: string(interfaces.OutcomeFailed), duration: 500, retries: 3},
+	}
+
+	for _, submission := range submissions {
+		err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+			WorkID:     submission.workID,
+			Name:       submission.workID,
+			WorkTypeID: "task",
+			TraceID:    submission.traceID,
+			Payload:    []byte(`{"title":"` + submission.workID + `"}`),
+		}})
+		if err != nil {
+			t.Fatalf("SubmitWorkRequest(%s): %v", submission.workID, err)
+		}
+		waitForTokenInPlaceByWorkID(t, svc, submission.placeID, submission.workID, time.Second)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesWork(record, runtimeMetricDispatchStarted, submission.workID, submission.traceID, "")
+		}, "dispatch start "+submission.workID)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesWork(record, runtimeMetricDispatchComplete, submission.workID, submission.traceID, submission.outcome)
+		}, "dispatch completion "+submission.workID)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesValue(record, runtimeMetricDispatchDuration, submission.workID, submission.outcome, submission.duration, "ms")
+		}, "dispatch duration "+submission.workID)
+		waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+			return runtimeMetricMatchesValue(record, runtimeMetricDispatchRetries, submission.workID, submission.outcome, submission.retries, "")
+		}, "dispatch retries "+submission.workID)
+		if submission.cost > 0 {
+			waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+				return runtimeMetricMatchesValue(record, runtimeMetricDispatchCost, submission.workID, submission.outcome, submission.cost, "usd")
+			}, "dispatch cost "+submission.workID)
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service runtime shutdown")
+	}
+}
+
+// portos:func-length-exception owner=agent-factory reason=provider-and-script-metrics-observable-fixture review=2026-07-18 removal=split-provider-and-script-runtime-metrics-cases-before-next-boundary-metrics-change
+// pkgmaintcheck:ignore-function-lines this runtime metrics test keeps provider and script observable assertions on one service seam.
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime metrics test keeps provider and script observable assertions on one service seam.
+func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDiagnostics(t *testing.T) {
+	dir := t.TempDir()
+	metricsDir := t.TempDir()
+	writeFactoryJSON(t, dir, map[string]any{
+		"name": "runtime-metrics-provider-script",
+		"workTypes": []map[string]any{
+			{
+				"name": "model-task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+			{
+				"name": "script-task",
+				"states": []map[string]string{
+					{"name": "init", "type": "INITIAL"},
+					{"name": "complete", "type": "TERMINAL"},
+					{"name": "failed", "type": "FAILED"},
+				},
+			},
+		},
+		"workers": []map[string]any{
+			{
+				"name":          "model-worker",
+				"type":          interfaces.WorkerTypeModel,
+				"modelProvider": "CODEX",
+				"model":         "gpt-5-codex",
+				"body":          "Process model work.",
+			},
+			{
+				"name":    "script-worker",
+				"type":    interfaces.WorkerTypeScript,
+				"command": "echo",
+				"args":    []string{"ignored"},
+				"body":    "Run script work.",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":      "review",
+				"worker":    "model-worker",
+				"inputs":    []map[string]string{{"workType": "model-task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "model-task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "model-task", "state": "failed"}},
+			},
+			{
+				"name":      "run-script",
+				"worker":    "script-worker",
+				"inputs":    []map[string]string{{"workType": "script-task", "state": "init"}},
+				"outputs":   []map[string]string{{"workType": "script-task", "state": "complete"}},
+				"onFailure": []map[string]string{{"workType": "script-task", "state": "failed"}},
+			},
+		},
+	})
+	writeWorkstationAgentsMD(t, dir, "review")
+	writeWorkstationAgentsMD(t, dir, "run-script")
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		RuntimeMetricsDir:                       metricsDir,
+		Logger:                                  zap.NewNop(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithWorkerExecutor("model-worker", providerMetricsWorkerExecutor{}),
+			factory.WithWorkerExecutor("script-worker", scriptMetricsWorkerExecutor{}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- svc.Run(runCtx) }()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup")
+	session := svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("default session runtime metrics sink is unavailable")
+	}
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+
+	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		WorkID:     "work-provider-metrics",
+		Name:       "work-provider-metrics",
+		WorkTypeID: "model-task",
+		TraceID:    "trace-provider-metrics",
+		Payload:    []byte(`{"title":"provider metrics"}`),
+	}})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest(provider): %v", err)
+	}
+	waitForTokenInPlaceByWorkID(t, svc, "model-task:complete", "work-provider-metrics", time.Second)
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesProvider(record, runtimeMetricProviderRequest, "work-provider-metrics", string(interfaces.ModelProviderCodex), "")
+	}, "provider request")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesProvider(record, runtimeMetricProviderComplete, "work-provider-metrics", string(interfaces.ModelProviderCodex), string(interfaces.OutcomeAccepted))
+	}, "provider completion")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesProviderValue(record, runtimeMetricProviderDuration, "work-provider-metrics", float64(240), "ms")
+	}, "provider duration")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesProviderValue(record, runtimeMetricProviderInputTok, "work-provider-metrics", float64(13), "tokens")
+	}, "provider input tokens")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesProviderValue(record, runtimeMetricProviderOutputTok, "work-provider-metrics", float64(7), "tokens")
+	}, "provider output tokens")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesProviderValue(record, runtimeMetricProviderCost, "work-provider-metrics", 2.75, "usd")
+	}, "provider cost")
+
+	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		WorkID:     "work-provider-failed",
+		Name:       "work-provider-failed",
+		WorkTypeID: "model-task",
+		TraceID:    "trace-provider-failed",
+		Payload:    []byte(`{"title":"provider failure"}`),
+	}})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest(provider failure): %v", err)
+	}
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesProvider(record, runtimeMetricProviderFailed, "work-provider-failed", string(interfaces.ModelProviderCodex), string(interfaces.OutcomeFailed)) &&
+			metricRecordString(record, "reason") == string(interfaces.WorkFailureTypeInternalServerError)
+	}, "provider failure")
+
+	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		WorkID:     "work-script-metrics",
+		Name:       "work-script-metrics",
+		WorkTypeID: "script-task",
+		TraceID:    "trace-script-metrics",
+		Payload:    []byte(`{"title":"script metrics"}`),
+	}})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest(script): %v", err)
+	}
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesWork(record, runtimeMetricScriptStarted, "work-script-metrics", "trace-script-metrics", "")
+	}, "script start")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesWork(record, runtimeMetricScriptComplete, "work-script-metrics", "trace-script-metrics", string(interfaces.OutcomeFailed)) &&
+			metricRecordString(record, "reason") == "timeout"
+	}, "script completion")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesValue(record, runtimeMetricScriptDuration, "work-script-metrics", string(interfaces.OutcomeFailed), float64(875), "ms")
+	}, "script duration")
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesValue(record, runtimeMetricScriptTimedOut, "work-script-metrics", string(interfaces.OutcomeFailed), 1, "")
+	}, "script timeout")
+
+	records := waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricMatchesValue(record, runtimeMetricScriptTimedOut, "work-script-metrics", string(interfaces.OutcomeFailed), 1, "")
+	}, "all provider and script metrics")
+	for _, record := range records {
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			t.Fatalf("Marshal(metric record): %v", err)
+		}
+		text := string(encoded)
+		if strings.Contains(text, "provider stdout secret") || strings.Contains(text, "provider stderr secret") ||
+			strings.Contains(text, "script stdout secret") || strings.Contains(text, "script stderr secret") {
+			t.Fatalf("metrics record leaked command output: %s", text)
+		}
+	}
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service runtime shutdown")
+	}
+}
+
+func TestBuildFactoryService_ServiceModeContinuesWhenRuntimeMetricsSinkUnavailable(t *testing.T) {
+	dir := t.TempDir()
+	writeFactoryJSON(t, dir, minimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	metricsRootFile := filepath.Join(t.TempDir(), "metrics-root-file")
+	if err := os.WriteFile(metricsRootFile, []byte("not-a-directory"), 0o644); err != nil {
+		t.Fatalf("write metrics root file: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               dir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		RuntimeMetricsDir: metricsRootFile,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- svc.Run(runCtx) }()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "service runtime idle startup without metrics sink")
+	session := svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+		t.Fatal("default session runtime is unavailable")
+	}
+	if liveSessionHandle(session).runtime.metricsSink != nil {
+		t.Fatal("runtime metrics sink should be nil when metrics root is unavailable")
+	}
+	logPath := liveSessionHandle(session).runtime.logSink.Path()
+	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		WorkID:     "work-no-metrics-sink",
+		Name:       "work-no-metrics-sink",
+		WorkTypeID: "task",
+		TraceID:    "trace-no-metrics-sink",
+		Payload:    []byte(`{"title":"continue without metrics sink"}`),
+	}})
+	if err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	waitForTokenInPlaceByWorkID(t, svc, "task:complete", "work-no-metrics-sink", time.Second)
+
+	cancel()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("Run after cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for service runtime shutdown")
+	}
+
+	assertRuntimeLogContainsMetricsSinkWarning(t, logPath)
 }
 
 func TestBuildFactoryService_BatchModeRejectsLateSubmissionAfterTermination(t *testing.T) {
@@ -1624,4 +2066,163 @@ func snapshotHasCompletedTaskToken(snap *interfaces.EngineStateSnapshot[petri.Ma
 		return token.PlaceID == "task:complete"
 	}
 	return false
+}
+
+type dispatchMetricsWorkerExecutor struct{}
+
+func (dispatchMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	result := interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		Output:       "done",
+		Metrics:      interfaces.WorkMetrics{Duration: 250 * time.Millisecond, RetryCount: 2, Cost: 1.25},
+	}
+	if len(dispatch.Execution.WorkIDs) == 0 {
+		return result, nil
+	}
+	switch dispatch.Execution.WorkIDs[0] {
+	case "work-dispatch-rejected":
+		result.Outcome = interfaces.OutcomeRejected
+		result.Feedback = "needs changes"
+		result.Metrics = interfaces.WorkMetrics{Duration: 125 * time.Millisecond, RetryCount: 1}
+	case "work-dispatch-failed":
+		result.Outcome = interfaces.OutcomeFailed
+		result.Error = "worker crashed"
+		result.Metrics = interfaces.WorkMetrics{Duration: 500 * time.Millisecond, RetryCount: 3}
+	}
+	return result, nil
+}
+
+func runtimeMetricMatchesWork(record map[string]any, metricName, workID, traceID, outcome string) bool {
+	if strings.TrimSpace(metricRecordString(record, "metric_name")) != metricName ||
+		metricRecordString(record, "work_id") != workID {
+		return false
+	}
+	if traceID != "" && metricRecordString(record, "trace_id") != traceID {
+		return false
+	}
+	if outcome == "" {
+		return true
+	}
+	return metricRecordString(record, "outcome") == outcome
+}
+
+func runtimeMetricMatchesValue(record map[string]any, metricName, workID, outcome string, value float64, unit string) bool {
+	if !runtimeMetricMatchesWork(record, metricName, workID, "", outcome) {
+		return false
+	}
+	got, ok := record["value"].(float64)
+	return ok && got == value && metricRecordString(record, "unit") == unit
+}
+
+type providerMetricsWorkerExecutor struct{}
+
+func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	if len(dispatch.Execution.WorkIDs) > 0 && dispatch.Execution.WorkIDs[0] == "work-provider-failed" {
+		return interfaces.WorkResult{
+			DispatchID:   dispatch.DispatchID,
+			TransitionID: dispatch.TransitionID,
+			Outcome:      interfaces.OutcomeFailed,
+			Error:        "provider 500",
+			FailureMetadata: &interfaces.WorkFailureMetadata{
+				Family: interfaces.WorkFailureFamilyRetryable,
+				Type:   interfaces.WorkFailureTypeInternalServerError,
+			},
+			Diagnostics: &interfaces.WorkDiagnostics{
+				Provider: &interfaces.ProviderDiagnostic{
+					Provider: string(interfaces.ModelProviderCodex),
+					Model:    "gpt-5-codex",
+					ResponseMetadata: map[string]string{
+						"duration_api_ms": "125",
+					},
+				},
+				Command: &interfaces.CommandDiagnostic{
+					Stdout: "provider stdout secret",
+					Stderr: "provider stderr secret",
+				},
+			},
+		}, nil
+	}
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		Output:       "provider done",
+		Metrics:      interfaces.WorkMetrics{Duration: 300 * time.Millisecond, Cost: 2.75},
+		Diagnostics: &interfaces.WorkDiagnostics{
+			Provider: &interfaces.ProviderDiagnostic{
+				Provider: string(interfaces.ModelProviderCodex),
+				Model:    "gpt-5-codex",
+				ResponseMetadata: map[string]string{
+					"duration_api_ms": "240",
+					"input_tokens":    "13",
+					"output_tokens":   "7",
+				},
+			},
+			Command: &interfaces.CommandDiagnostic{
+				Stdout: "provider stdout secret",
+				Stderr: "provider stderr secret",
+			},
+		},
+	}, nil
+}
+
+type scriptMetricsWorkerExecutor struct{}
+
+func (scriptMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeFailed,
+		Error:        "script timed out",
+		Metrics:      interfaces.WorkMetrics{Duration: 900 * time.Millisecond},
+		FailureMetadata: &interfaces.WorkFailureMetadata{
+			Family: interfaces.WorkFailureFamilyRetryable,
+			Type:   interfaces.WorkFailureTypeTimeout,
+		},
+		Diagnostics: &interfaces.WorkDiagnostics{
+			Command: &interfaces.CommandDiagnostic{
+				Duration: 875 * time.Millisecond,
+				TimedOut: true,
+				Stdout:   "script stdout secret",
+				Stderr:   "script stderr secret",
+			},
+		},
+	}, nil
+}
+
+func runtimeMetricMatchesProvider(record map[string]any, metricName, workID, provider, outcome string) bool {
+	if !runtimeMetricMatchesWork(record, metricName, workID, "", outcome) {
+		return false
+	}
+	return metricRecordString(record, "provider") == provider
+}
+
+func runtimeMetricMatchesProviderValue(record map[string]any, metricName, workID string, value float64, unit string) bool {
+	if !runtimeMetricMatchesProvider(record, metricName, workID, string(interfaces.ModelProviderCodex), string(interfaces.OutcomeAccepted)) {
+		return false
+	}
+	got, ok := record["value"].(float64)
+	return ok && got == value && metricRecordString(record, "unit") == unit
+}
+
+func assertRuntimeLogContainsMetricsSinkWarning(t *testing.T, logPath string) {
+	t.Helper()
+
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read runtime log %q: %v", logPath, err)
+	}
+	records := parseRuntimeLogRecords(t, string(data))
+	for _, record := range records {
+		if strings.TrimSpace(metricRecordString(record, "msg")) != "runtime metrics sink unavailable; continuing without metrics" {
+			continue
+		}
+		if !strings.Contains(strings.TrimSpace(metricRecordString(record, "error")), "build runtime metrics sink") {
+			t.Fatalf("runtime metrics warning error = %q, want wrapped sink build failure", metricRecordString(record, "error"))
+		}
+		return
+	}
+	t.Fatalf("runtime log did not contain degraded metrics warning:\n%s", string(data))
 }
