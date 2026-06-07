@@ -413,7 +413,7 @@ describe("current activity graph editor handles", () => {
     expect(renderedNodeIds).toEqual(
       expect.arrayContaining([
         systemTimeGraphNodeId("work-type", "story"),
-        systemTimeGraphNodeId("workstation", "Route story"),
+        systemTimeGraphNodeId("workstation", "route-story", "Route story"),
       ]),
     );
     expect(

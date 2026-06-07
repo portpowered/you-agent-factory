@@ -168,7 +168,7 @@ describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
         systemTimeGraphNodeId("work-state", "story", "new"),
         systemTimeGraphNodeId("work-state", "story", "reviewing"),
         systemTimeGraphNodeId("work-state", "story", "done"),
-        systemTimeGraphNodeId("workstation", "Route story"),
+        systemTimeGraphNodeId("workstation", "route-story", "Route story"),
       ]),
     );
     expect(nodeIds(filtered)).not.toEqual(
@@ -188,7 +188,7 @@ describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
         systemTimeGraphNodeId("work-state", "story", "new"),
         systemTimeGraphNodeId("work-state", "story", "reviewing"),
         systemTimeGraphNodeId("work-state", "story", "done"),
-        systemTimeGraphNodeId("workstation", "Route story"),
+        systemTimeGraphNodeId("workstation", "route-story", "Route story"),
       ]),
     );
     expect(
@@ -198,7 +198,9 @@ describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
     ).toBe(false);
     expect(
       edgeIds(filtered).some((edgeId) =>
-        edgeId.includes(systemTimeGraphNodeId("workstation", "Route story")),
+        edgeId.includes(
+          systemTimeGraphNodeId("workstation", "route-story", "Route story"),
+        ),
       ),
     ).toBe(true);
   });
@@ -214,7 +216,7 @@ describe("filterFactoryGraphTopologyForCustomerDisplay", () => {
         systemTimeGraphNodeId("work-type", "story"),
         systemTimeGraphNodeId("work-state", "story", "new"),
         systemTimeGraphNodeId("work-state", "story", "done"),
-        systemTimeGraphNodeId("workstation", "Review"),
+        systemTimeGraphNodeId("workstation", "review", "Review"),
       ]),
     );
     expect(

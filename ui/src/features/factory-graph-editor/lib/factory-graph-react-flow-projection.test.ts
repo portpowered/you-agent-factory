@@ -459,7 +459,7 @@ describe("factory graph React Flow projection", () => {
     expect(projectedNodeIds).toEqual(
       expect.arrayContaining([
         systemTimeGraphNodeId("work-type", "story"),
-        systemTimeGraphNodeId("workstation", "Route story"),
+        systemTimeGraphNodeId("workstation", "route-story", "Route story"),
       ]),
     );
     expect(

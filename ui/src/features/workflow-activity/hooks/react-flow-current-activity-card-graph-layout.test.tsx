@@ -114,14 +114,14 @@ describe("useCurrentActivityGraphLayout", () => {
       "work-state:story:queued",
       "work-type:story",
       "worker:writer",
-      "workstation:Draft",
+      "workstation:draft",
     ]);
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toEqual([
-      "worker-assignment:worker:writer->workstation:Draft",
+      "worker-assignment:worker:writer->workstation:draft",
       "worker-resource:resource:gpu->worker:writer",
-      "workstation-input:work-state:story:queued->workstation:Draft",
-      "workstation-output:workstation:Draft->work-state:story:done",
-      "workstation-resource:resource:gpu->workstation:Draft",
+      "workstation-input:work-state:story:queued->workstation:draft",
+      "workstation-output:workstation:draft->work-state:story:done",
+      "workstation-resource:resource:gpu->workstation:draft",
     ]);
   });
 
@@ -191,11 +191,11 @@ describe("useCurrentActivityGraphLayout", () => {
     });
 
     expect(result.current.nodes.map((node) => node.nodeId).sort()).toContain(
-      "workstation:Document Only",
+      "workstation:document-only",
     );
     expect(
       result.current.nodes.map((node) => node.nodeId).sort(),
-    ).not.toContain("workstation:Snapshot Only");
+    ).not.toContain("workstation:snapshot-only");
   });
 
   it("keeps an empty layout when factory override is null even if the snapshot factory is present", async () => {
@@ -376,10 +376,10 @@ describe("useCurrentActivityGraphLayout legacy routes", () => {
     });
 
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
-      "workstation-on-continue:workstation:Draft->work-state:story:retry",
+      "workstation-on-continue:workstation:draft->work-state:story:retry",
     );
     expect(result.current.edges.map((edge) => edge.edgeId).sort()).toContain(
-      "workstation-on-failure:workstation:Draft->work-state:story:failed",
+      "workstation-on-failure:workstation:draft->work-state:story:failed",
     );
   });
 });
