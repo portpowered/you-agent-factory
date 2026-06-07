@@ -53,6 +53,10 @@ func ResolveFactoryInvocationInput(cfg FactoryInvocationInputConfig) (FactoryInv
 		return FactoryInvocationInput{}, err
 	}
 
+	if positionalPrompt == "" && !hasStdin {
+		return FactoryInvocationInput{}, nil
+	}
+
 	sources := invocations.TextInputSources{}
 	if positionalPrompt != "" {
 		sources.PositionalText = &positionalPrompt

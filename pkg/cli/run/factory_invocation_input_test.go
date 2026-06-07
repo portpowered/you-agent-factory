@@ -9,6 +9,20 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func TestResolveFactoryInvocationInput_NoInputReturnsEmptyWithoutError(t *testing.T) {
+	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
+		StdinIsTTY: func() bool {
+			return true
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveFactoryInvocationInput: %v", err)
+	}
+	if got.Payload != "" || got.Source != "" {
+		t.Fatalf("input = %#v, want empty invocation input", got)
+	}
+}
+
 func TestResolveFactoryInvocationInput_PositionalOnly(t *testing.T) {
 	got, err := ResolveFactoryInvocationInput(FactoryInvocationInputConfig{
 		PromptArgs: []string{"Fix", "the", "lint", "issues"},
