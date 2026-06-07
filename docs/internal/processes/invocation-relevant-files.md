@@ -59,9 +59,10 @@ primary-result behavior.
 - `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
-- `pkg/service/model_catalog.go` and `pkg/service/model_catalog_packaged_tts.go`
-  own packaged TTS loading/completion/failure logs and metrics while waiting for
-  session invocation primary results.
+- `pkg/service/model_catalog.go`, `pkg/service/model_catalog_invocation_wait.go`,
+  and `pkg/service/model_catalog_packaged_tts.go` own the session invocation wait
+  loop, packaged TTS loading/completion/failure logs, and packaged-factory metrics
+  while polling for primary results.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged TTS
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata
