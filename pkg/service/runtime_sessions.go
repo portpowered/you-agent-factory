@@ -555,8 +555,9 @@ func (fs *FactoryService) initNewFactoryAndOpenSession(
 		return nil, discoverErr
 	}
 
+	nestedFactoryDir := filepath.Join(resolvedFolder, interfaces.FactoryDir)
 	if err := initcmd.Init(initcmd.InitConfig{
-		Dir:         resolvedFolder,
+		Dir:         nestedFactoryDir,
 		Diagnostics: io.Discard,
 	}); err != nil {
 		return nil, factorysessions.NewValidationError(
