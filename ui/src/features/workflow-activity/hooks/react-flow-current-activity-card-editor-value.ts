@@ -34,8 +34,15 @@ export function buildCurrentActivityGraphEditorValue(args: {
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   moveLayoutNode: (nodeId: string, position: { x: number; y: number }) => void;
+  moveLayoutNodesByDelta: (
+    nodeIds: readonly string[],
+    delta: { x: number; y: number },
+    resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
+  ) => void;
+  redoLayout: () => void;
   resetLayout: () => void;
   resetPreferences: () => void;
+  undoLayout: () => void;
   updateLayoutViewport: (viewport: {
     x: number;
     y: number;
@@ -108,8 +115,11 @@ export function buildCurrentActivityGraphEditorValue(args: {
     draftState: args.draftState,
     layoutDraftState: args.layoutDraftState,
     moveLayoutNode: args.moveLayoutNode,
+    moveLayoutNodesByDelta: args.moveLayoutNodesByDelta,
+    redoLayout: args.redoLayout,
     resetLayout: args.resetLayout,
     resetPreferences: args.resetPreferences,
+    undoLayout: args.undoLayout,
     updateLayoutViewport: args.updateLayoutViewport,
     editableDefinitionQuery: args.editableDefinitionQuery,
     editorUnavailableClassifierWorkstationName:

@@ -83,12 +83,13 @@ export function useEditableFactoryGraph(
   const mutationActions = useEditableFactoryGraphMutationActions({
     baseFactoryDefinition,
     draftState,
+    layoutDraftState,
     locale: options.locale,
     setBlockedOperation,
   });
   const discard = useCallback(() => {
     draftState.resetDraft();
-    layoutDraftState.resetLayout();
+    layoutDraftState.resetLayout({ recordHistory: false });
     setBlockedOperation(null);
     saveController.resetSaveState();
   }, [draftState, layoutDraftState, saveController]);
@@ -115,9 +116,12 @@ export function useEditableFactoryGraph(
       discard,
       disconnectEdge: mutationActions.disconnectEdge,
       moveLayoutNode: layoutDraftState.moveNode,
+      moveLayoutNodesByDelta: layoutDraftState.moveNodesByDelta,
       removeNode: mutationActions.removeNode,
       resetLayout: layoutDraftState.resetLayout,
+      redoLayout: layoutDraftState.redoLayout,
       save: saveController.save,
+      undoLayout: layoutDraftState.undoLayout,
       updateLayoutViewport: layoutDraftState.updateViewport,
       updateNodeField: mutationActions.updateNodeField,
     },
@@ -126,6 +130,8 @@ export function useEditableFactoryGraph(
     graphState,
     layoutDraftState,
     pendingState: {
+      canRedoLayout: layoutDraftState.canRedoLayout,
+      canUndoLayout: layoutDraftState.canUndoLayout,
       dirtyState,
       hasChanges: hasPortableDocumentChanges,
       hasLayoutChanges: dirtyState.layoutDirty,
@@ -177,11 +183,13 @@ function useEditableFactoryGraphState({
 function useEditableFactoryGraphMutationActions({
   baseFactoryDefinition,
   draftState,
+  layoutDraftState,
   locale,
   setBlockedOperation,
 }: {
   baseFactoryDefinition: CanonicalFactoryDefinition | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   locale?: string | null;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
@@ -219,8 +227,8 @@ function useEditableFactoryGraphMutationActions({
     [applyDraftOperation, baseFactoryDefinition, draftState.draft, locale],
   );
   const removeNode = useCallback(
-    (nodeId: string) =>
-      applyDraftOperation(() =>
+    (nodeId: string) => {
+      const result = applyDraftOperation(() =>
         baseFactoryDefinition
           ? removeFactoryGraphNode({
               baseFactoryDefinition,
@@ -231,8 +239,23 @@ function useEditableFactoryGraphMutationActions({
           : missingFactoryResult(
               "Load the current factory before removing graph nodes.",
             ),
-      ),
-    [applyDraftOperation, baseFactoryDefinition, draftState.draft, locale],
+      );
+      if (result.ok) {
+        layoutDraftState.pruneLayoutHistoryForNodeIds(
+          draftState.graph.nodes
+            .filter((node) => node.id !== nodeId)
+            .map((node) => node.id),
+        );
+      }
+      return result;
+    },
+    [
+      applyDraftOperation,
+      baseFactoryDefinition,
+      draftState.draft,
+      layoutDraftState,
+      locale,
+    ],
   );
   const connectNodes = useConnectNodesAction({
     applyDraftOperation,

@@ -58,8 +58,18 @@ export interface EditableFactoryGraphViewModel {
       nodeId: string,
       position: { x: number; y: number },
     ) => void;
-    resetLayout: () => void;
+    moveLayoutNodesByDelta: (
+      nodeIds: readonly string[],
+      delta: { x: number; y: number },
+      resolvedPositionsByNodeId: ReadonlyMap<
+        string,
+        { x: number; y: number }
+      >,
+    ) => void;
+    resetLayout: (options?: { recordHistory?: boolean }) => void;
+    redoLayout: () => void;
     save: () => Promise<boolean>;
+    undoLayout: () => void;
     updateLayoutViewport: (viewport: {
       x: number;
       y: number;
@@ -74,6 +84,8 @@ export interface EditableFactoryGraphViewModel {
   graphState: FactoryGraphState | null;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   pendingState: {
+    canRedoLayout: boolean;
+    canUndoLayout: boolean;
     dirtyState: {
       layoutDirty: boolean;
       preferencesDirty: boolean;

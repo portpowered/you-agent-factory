@@ -169,7 +169,9 @@ export function CurrentActivityGraphSurface({
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}
         canInteractWithEditor={editor.canInteractWithEditor}
+        canRedoLayout={editor.layoutDraftState?.canRedoLayout ?? false}
         canSaveDraft={editor.canSaveDraft}
+        canUndoLayout={editor.layoutDraftState?.canUndoLayout ?? false}
         editorUnavailableClassifierWorkstationName={
           editor.editorUnavailableClassifierWorkstationName
         }
@@ -213,6 +215,10 @@ export function CurrentActivityGraphSurface({
         openAddMenu={editor.addMenuOpen}
         saveDisabledReason={editor.saveBlockedReason}
         moveLayoutNode={editor.moveLayoutNode}
+        moveLayoutNodesByDelta={editor.moveLayoutNodesByDelta}
+        onRedoLayout={editor.redoLayout}
+        onResetLayout={editor.resetLayout}
+        onUndoLayout={editor.undoLayout}
         updateLayoutViewport={editor.updateLayoutViewport}
         setStoredNodePosition={graph.setStoredNodePosition}
       />

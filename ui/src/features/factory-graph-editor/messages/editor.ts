@@ -131,6 +131,12 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
   toolbarDeleteLabel: string;
+  toolbarRedoDescription: string;
+  toolbarRedoLabel: string;
+  toolbarResetLayoutDescription: string;
+  toolbarResetLayoutLabel: string;
+  toolbarUndoDescription: string;
+  toolbarUndoLabel: string;
   toolbarHideShowDescription: string;
   toolbarHideShowLabel: string;
   toolbarHideShowMenuAriaLabel: string;
@@ -617,6 +623,13 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove",
       toolbarDeleteLabel: "Delete",
+      toolbarRedoDescription: "Redo the last undone layout change",
+      toolbarRedoLabel: "Redo",
+      toolbarResetLayoutDescription:
+        "Reset node positions to the saved shared layout baseline",
+      toolbarResetLayoutLabel: "Reset layout",
+      toolbarUndoDescription: "Undo the last layout change",
+      toolbarUndoLabel: "Undo",
       toolbarHideShowDescription: "Show",
       toolbarHideShowLabel: "Show or hide",
       toolbarHideShowMenuAriaLabel: "Factory graph node class visibility menu",
@@ -1056,6 +1069,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从图中删除节点或边",
       toolbarDeleteLabel: "删除",
+      toolbarRedoDescription: "重做上一条已撤销的布局更改",
+      toolbarRedoLabel: "重做",
+      toolbarResetLayoutDescription: "将节点位置重置为已保存的共享布局基线",
+      toolbarResetLayoutLabel: "重置布局",
+      toolbarUndoDescription: "撤销上一条布局更改",
+      toolbarUndoLabel: "撤销",
       toolbarHideShowDescription: "在图上显示或隐藏节点类别",
       toolbarHideShowLabel: "显示或隐藏",
       toolbarHideShowMenuAriaLabel: "工厂图节点类别可见性菜单",

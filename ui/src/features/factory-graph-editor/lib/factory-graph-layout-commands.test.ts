@@ -1,0 +1,140 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  applyFactoryLayoutCommand,
+  createMoveFactoryLayoutNodeCommand,
+  createMoveFactoryLayoutNodesCommand,
+  createResetFactoryLayoutCommand,
+  createUpdateFactoryLayoutViewportCommand,
+  factoryLayoutCommandReferencesDeletedNodeIds,
+  invertFactoryLayoutCommand,
+} from "./factory-graph-layout-commands";
+import {
+  createDefaultFactoryLayout,
+  factoryLayoutNodePosition,
+  moveFactoryLayoutNode,
+} from "./factory-graph-layout-operations";
+
+describe("factory graph layout commands", () => {
+  it("creates and inverts single-node movement without whole-document snapshots", () => {
+    const layout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
+      x: 40,
+      y: 80,
+    });
+    const command = createMoveFactoryLayoutNodeCommand({
+      layout,
+      nodeId: "worker:writer",
+      to: { x: 120, y: 160 },
+    });
+
+    expect(command).toEqual({
+      type: "move-node",
+      nodeId: "worker:writer",
+      from: { kind: "present", position: { x: 40, y: 80 } },
+      to: { kind: "present", position: { x: 120, y: 160 } },
+    });
+
+    const nextLayout = applyFactoryLayoutCommand(layout, command!);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command!),
+    );
+
+    expect(factoryLayoutNodePosition(undoneLayout, "worker:writer")).toEqual({
+      x: 40,
+      y: 80,
+    });
+  });
+
+  it("restores auto-layout fallback when undoing the first saved move", () => {
+    const layout = createDefaultFactoryLayout();
+    const command = createMoveFactoryLayoutNodeCommand({
+      layout,
+      nodeId: "worker:writer",
+      to: { x: 120, y: 160 },
+    });
+
+    const nextLayout = applyFactoryLayoutCommand(layout, command!);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command!),
+    );
+
+    expect(factoryLayoutNodePosition(undoneLayout, "worker:writer")).toBeUndefined();
+  });
+
+  it("creates and inverts multi-node movement commands", () => {
+    const layout = createDefaultFactoryLayout();
+    const command = createMoveFactoryLayoutNodesCommand({
+      layout,
+      moves: [
+        { nodeId: "worker:writer", to: { x: 10, y: 20 } },
+        { nodeId: "workstation:draft", to: { x: 30, y: 40 } },
+      ],
+    });
+
+    expect(command?.type).toBe("move-nodes");
+
+    const nextLayout = applyFactoryLayoutCommand(layout, command!);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command!),
+    );
+
+    expect(factoryLayoutNodePosition(undoneLayout, "worker:writer")).toBeUndefined();
+    expect(factoryLayoutNodePosition(undoneLayout, "workstation:draft")).toBeUndefined();
+  });
+
+  it("creates and inverts viewport updates", () => {
+    const layout = createDefaultFactoryLayout();
+    const command = createUpdateFactoryLayoutViewportCommand({
+      layout,
+      to: { x: 120, y: 80, zoom: 1.25 },
+    });
+
+    const nextLayout = applyFactoryLayoutCommand(layout, command!);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command!),
+    );
+
+    expect(nextLayout.viewport).toEqual({ x: 120, y: 80, zoom: 1.25 });
+    expect(undoneLayout.viewport).toBeUndefined();
+  });
+
+  it("creates and inverts reset layout commands", () => {
+    const fromLayout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
+      x: 40,
+      y: 80,
+    });
+    const toLayout = createDefaultFactoryLayout();
+    const command = createResetFactoryLayoutCommand({ fromLayout, toLayout });
+
+    const nextLayout = applyFactoryLayoutCommand(fromLayout, command!);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command!),
+    );
+
+    expect(factoryLayoutNodePosition(nextLayout, "worker:writer")).toBeUndefined();
+    expect(factoryLayoutNodePosition(undoneLayout, "worker:writer")).toEqual({
+      x: 40,
+      y: 80,
+    });
+  });
+
+  it("flags commands that reference deleted graph ids", () => {
+    const command = createMoveFactoryLayoutNodeCommand({
+      layout: createDefaultFactoryLayout(),
+      nodeId: "worker:writer",
+      to: { x: 10, y: 20 },
+    });
+
+    expect(
+      factoryLayoutCommandReferencesDeletedNodeIds(command!, new Set(["worker:writer"])),
+    ).toBe(false);
+    expect(
+      factoryLayoutCommandReferencesDeletedNodeIds(command!, new Set(["workstation:draft"])),
+    ).toBe(true);
+  });
+});

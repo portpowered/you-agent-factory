@@ -2,10 +2,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CurrentFactoryDocument } from "../lib/factory-graph-draft-types";
 import {
+  createMoveFactoryLayoutNodeCommand,
+  createMoveFactoryLayoutNodesCommand,
+  createResetFactoryLayoutCommand,
+  createUpdateFactoryLayoutViewportCommand,
+  type FactoryLayoutCommand,
+} from "../lib/factory-graph-layout-commands";
+import {
+  canRedoFactoryLayoutHistory,
+  canUndoFactoryLayoutHistory,
+  clearFactoryLayoutHistoryState,
+  type FactoryLayoutHistoryState,
+  pruneFactoryLayoutHistoryForNodeIds,
+  pushFactoryLayoutHistoryCommand,
+  redoFactoryLayoutHistory,
+  undoFactoryLayoutHistory,
+} from "../lib/factory-graph-layout-history";
+import {
   type FactoryLayout,
   type FactoryLayoutPoint,
   type FactoryLayoutViewport,
   factoryLayoutFromDefinition,
+  factoryLayoutNodePosition,
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
@@ -15,6 +33,8 @@ import {
 export interface FactoryGraphLayoutDraftDerivedState {
   adoptSavedLayout: (layout: FactoryLayout) => void;
   baseLayout: FactoryLayout;
+  canRedoLayout: boolean;
+  canUndoLayout: boolean;
   hasChanges: boolean;
   layout: FactoryLayout;
   layoutDirty: boolean;
@@ -24,14 +44,22 @@ export interface FactoryGraphLayoutDraftDerivedState {
     delta: FactoryLayoutPoint,
     resolvedPositionsByNodeId: ReadonlyMap<string, FactoryLayoutPoint>,
   ) => void;
+  pruneLayoutHistoryForNodeIds: (nodeIds: readonly string[]) => void;
+  redoLayout: () => void;
   replaceLayout: (layout: FactoryLayout) => void;
-  resetLayout: () => void;
+  resetLayout: (options?: { recordHistory?: boolean }) => void;
+  undoLayout: () => void;
   updateViewport: (viewport: FactoryLayoutViewport) => void;
 }
 
 interface FactoryGraphLayoutSessionState {
   baseLayout: FactoryLayout;
   layout: FactoryLayout;
+}
+
+interface LayoutDraftStoreState {
+  history: FactoryLayoutHistoryState;
+  sessionState: FactoryGraphLayoutSessionState | null;
 }
 
 interface UseFactoryGraphLayoutDraftStateOptions {
@@ -45,11 +73,48 @@ export function useFactoryGraphLayoutDraftState(
   const currentFactoryDocument = options.currentFactoryDocument;
   const factoryDocumentScopeKey = options.factoryDocumentScopeKey ?? null;
   const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
-  const [sessionState, setSessionState] =
-    useState<FactoryGraphLayoutSessionState | null>(null);
+  const isApplyingHistoryRef = useRef(false);
+  const [store, setStore] = useState<LayoutDraftStoreState>(() => ({
+    history: clearFactoryLayoutHistoryState(),
+    sessionState: null,
+  }));
   const documentBaseLayout = useMemo(
     () => factoryLayoutFromDefinition(currentFactoryDocument),
     [currentFactoryDocument],
+  );
+
+  const commitLayoutUpdate = useCallback(
+    (
+      updater: (input: {
+        currentLayout: FactoryLayout;
+        currentState: FactoryGraphLayoutSessionState | null;
+      }) => {
+        command: FactoryLayoutCommand | null;
+        layout: FactoryLayout;
+      },
+    ) => {
+      setStore((currentStore) => {
+        const currentState = currentStore.sessionState;
+        const currentLayout = currentState?.layout ?? documentBaseLayout;
+        const { command, layout } = updater({
+          currentLayout,
+          currentState,
+        });
+        const history =
+          command && !isApplyingHistoryRef.current
+            ? pushFactoryLayoutHistoryCommand(currentStore.history, command)
+            : currentStore.history;
+
+        return {
+          history,
+          sessionState: {
+            baseLayout: currentState?.baseLayout ?? documentBaseLayout,
+            layout,
+          },
+        };
+      });
+    },
+    [documentBaseLayout],
   );
 
   useEffect(() => {
@@ -59,105 +124,220 @@ export function useFactoryGraphLayoutDraftState(
     lastFactoryDocumentScopeKeyRef.current = factoryDocumentScopeKey;
 
     if (scopeChanged || !currentFactoryDocument) {
-      setSessionState(
-        currentFactoryDocument
+      setStore({
+        history: clearFactoryLayoutHistoryState(),
+        sessionState: currentFactoryDocument
           ? createLayoutSessionState(documentBaseLayout)
           : null,
-      );
+      });
       return;
     }
 
-    setSessionState((currentState) => {
-      if (!currentState) {
-        return createLayoutSessionState(documentBaseLayout);
+    setStore((currentStore) => {
+      if (!currentStore.sessionState) {
+        return {
+          history: clearFactoryLayoutHistoryState(),
+          sessionState: createLayoutSessionState(documentBaseLayout),
+        };
       }
 
       if (
-        hasFactoryLayoutChanges(currentState.baseLayout, currentState.layout)
+        hasFactoryLayoutChanges(
+          currentStore.sessionState.baseLayout,
+          currentStore.sessionState.layout,
+        )
       ) {
-        return currentState;
+        return currentStore;
       }
 
-      return createLayoutSessionState(documentBaseLayout);
+      return {
+        history: clearFactoryLayoutHistoryState(),
+        sessionState: createLayoutSessionState(documentBaseLayout),
+      };
     });
   }, [currentFactoryDocument, documentBaseLayout, factoryDocumentScopeKey]);
 
-  const baseLayout = sessionState?.baseLayout ?? documentBaseLayout;
-  const layout = sessionState?.layout ?? documentBaseLayout;
+  const baseLayout = store.sessionState?.baseLayout ?? documentBaseLayout;
+  const layout = store.sessionState?.layout ?? documentBaseLayout;
   const replaceLayout = useCallback((nextLayout: FactoryLayout) => {
-    setSessionState((currentState) => ({
-      baseLayout: currentState?.baseLayout ?? createDefaultLayoutState(),
-      layout: structuredClone(nextLayout),
+    setStore((currentStore) => ({
+      history: clearFactoryLayoutHistoryState(),
+      sessionState: {
+        baseLayout: currentStore.sessionState?.baseLayout ?? createDefaultLayoutState(),
+        layout: structuredClone(nextLayout),
+      },
     }));
   }, []);
-  const resetLayout = useCallback(() => {
-    setSessionState(createLayoutSessionState(documentBaseLayout));
-  }, [documentBaseLayout]);
+  const resetLayout = useCallback(
+    (options?: { recordHistory?: boolean }) => {
+      const nextLayout = structuredClone(documentBaseLayout);
+      if (options?.recordHistory === false) {
+        setStore((currentStore) => ({
+          history: clearFactoryLayoutHistoryState(),
+          sessionState: {
+            baseLayout: currentStore.sessionState?.baseLayout ?? documentBaseLayout,
+            layout: nextLayout,
+          },
+        }));
+        return;
+      }
+
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createResetFactoryLayoutCommand({
+          fromLayout: currentLayout,
+          toLayout: nextLayout,
+        }),
+        layout: nextLayout,
+      }));
+    },
+    [commitLayoutUpdate, documentBaseLayout],
+  );
   const adoptSavedLayout = useCallback((savedLayout: FactoryLayout) => {
-    setSessionState(createLayoutSessionState(savedLayout));
+    setStore({
+      history: clearFactoryLayoutHistoryState(),
+      sessionState: createLayoutSessionState(savedLayout),
+    });
   }, []);
-  const moveNode = useCallback((nodeId: string, position: FactoryLayoutPoint) => {
-    setSessionState((currentState) => {
-      const currentLayout = currentState?.layout ?? documentBaseLayout;
-      const nextLayout = moveFactoryLayoutNode(
-        currentLayout,
-        nodeId,
-        position,
-      );
-
-      return {
-        baseLayout: currentState?.baseLayout ?? documentBaseLayout,
-        layout: nextLayout,
-      };
-    });
-  }, [documentBaseLayout]);
-  const updateViewport = useCallback((viewport: FactoryLayoutViewport) => {
-    setSessionState((currentState) => {
-      const currentLayout = currentState?.layout ?? documentBaseLayout;
-      const nextLayout = updateFactoryLayoutViewport(currentLayout, viewport);
-
-      return {
-        baseLayout: currentState?.baseLayout ?? documentBaseLayout,
-        layout: nextLayout,
-      };
-    });
-  }, [documentBaseLayout]);
+  const moveNode = useCallback(
+    (nodeId: string, position: FactoryLayoutPoint) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createMoveFactoryLayoutNodeCommand({
+          layout: currentLayout,
+          nodeId,
+          to: position,
+        }),
+        layout: moveFactoryLayoutNode(currentLayout, nodeId, position),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
+  const updateViewport = useCallback(
+    (viewport: FactoryLayoutViewport) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createUpdateFactoryLayoutViewportCommand({
+          layout: currentLayout,
+          to: viewport,
+        }),
+        layout: updateFactoryLayoutViewport(currentLayout, viewport),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
   const moveNodesByDelta = useCallback(
     (
       nodeIds: readonly string[],
       delta: FactoryLayoutPoint,
       resolvedPositionsByNodeId: ReadonlyMap<string, FactoryLayoutPoint>,
     ) => {
-      setSessionState((currentState) => {
-        const currentLayout = currentState?.layout ?? documentBaseLayout;
-        const nextLayout = moveFactoryLayoutNodesByDelta(
-          currentLayout,
-          nodeIds,
-          delta,
-          resolvedPositionsByNodeId,
-        );
+      commitLayoutUpdate(({ currentLayout }) => {
+        const moves = nodeIds
+          .map((nodeId) => {
+            const fromPosition =
+              factoryLayoutNodePosition(currentLayout, nodeId) ??
+              resolvedPositionsByNodeId.get(nodeId);
+            if (!fromPosition) {
+              return null;
+            }
+
+            return {
+              nodeId,
+              to: {
+                x: fromPosition.x + delta.x,
+                y: fromPosition.y + delta.y,
+              },
+            };
+          })
+          .filter((move): move is NonNullable<typeof move> => move !== null);
 
         return {
-          baseLayout: currentState?.baseLayout ?? documentBaseLayout,
-          layout: nextLayout,
+          command: createMoveFactoryLayoutNodesCommand({
+            layout: currentLayout,
+            moves,
+          }),
+          layout: moveFactoryLayoutNodesByDelta(
+            currentLayout,
+            nodeIds,
+            delta,
+            resolvedPositionsByNodeId,
+          ),
         };
       });
     },
-    [documentBaseLayout],
+    [commitLayoutUpdate],
   );
+  const undoLayout = useCallback(() => {
+    isApplyingHistoryRef.current = true;
+    try {
+      setStore((currentStore) => {
+        const currentLayout =
+          currentStore.sessionState?.layout ?? documentBaseLayout;
+        const result = undoFactoryLayoutHistory(
+          currentStore.history,
+          currentLayout,
+        );
+        return {
+          history: result.history,
+          sessionState: {
+            baseLayout:
+              currentStore.sessionState?.baseLayout ?? documentBaseLayout,
+            layout: result.layout,
+          },
+        };
+      });
+    } finally {
+      isApplyingHistoryRef.current = false;
+    }
+  }, [documentBaseLayout]);
+  const redoLayout = useCallback(() => {
+    isApplyingHistoryRef.current = true;
+    try {
+      setStore((currentStore) => {
+        const currentLayout =
+          currentStore.sessionState?.layout ?? documentBaseLayout;
+        const result = redoFactoryLayoutHistory(
+          currentStore.history,
+          currentLayout,
+        );
+        return {
+          history: result.history,
+          sessionState: {
+            baseLayout:
+              currentStore.sessionState?.baseLayout ?? documentBaseLayout,
+            layout: result.layout,
+          },
+        };
+      });
+    } finally {
+      isApplyingHistoryRef.current = false;
+    }
+  }, [documentBaseLayout]);
+  const pruneLayoutHistoryForNodeIds = useCallback((nodeIds: readonly string[]) => {
+    setStore((currentStore) => ({
+      ...currentStore,
+      history: pruneFactoryLayoutHistoryForNodeIds(
+        currentStore.history,
+        new Set(nodeIds),
+      ),
+    }));
+  }, []);
 
   const layoutDirty = hasFactoryLayoutChanges(baseLayout, layout);
 
   return {
     adoptSavedLayout,
     baseLayout,
+    canRedoLayout: canRedoFactoryLayoutHistory(store.history),
+    canUndoLayout: canUndoFactoryLayoutHistory(store.history),
     hasChanges: layoutDirty,
     layout,
     layoutDirty,
     moveNode,
     moveNodesByDelta,
+    pruneLayoutHistoryForNodeIds,
+    redoLayout,
     replaceLayout,
     resetLayout,
+    undoLayout,
     updateViewport,
   };
 }

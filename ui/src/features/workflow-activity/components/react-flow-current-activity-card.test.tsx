@@ -1478,7 +1478,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     ).toBeNull();
   });
 
-  it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
+  it("renders editor visibility preset controls in embedded editor mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1504,9 +1504,9 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       ).toBeTruthy();
     });
 
-    expect(screen.queryByRole("button", { name: "Infrastructure" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Workflow" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "All" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Infrastructure" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Workflow" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
   });
 
   it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {

@@ -11,7 +11,7 @@ import {
   type ReactFlowInstance,
   type XYPosition,
 } from "@xyflow/react";
-import { type MutableRefObject, useCallback } from "react";
+import { type MutableRefObject, useCallback, useRef, type KeyboardEvent } from "react";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -27,6 +27,11 @@ import {
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import {
+  isFactoryGraphEditorRedoKeyboardEvent,
+  isFactoryGraphEditorUndoKeyboardEvent,
+  shouldHandleFactoryGraphEditorKeyboardShortcut,
+} from "../../factory-graph-editor/lib/factory-graph-layout-keyboard-shortcuts";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
@@ -46,7 +51,9 @@ function CurrentActivityGraphEditorChrome(props: {
   activeTool: "add" | "connect" | "delete" | null;
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteractWithEditor: boolean;
+  canRedoLayout?: boolean;
   canSaveDraft: boolean;
+  canUndoLayout?: boolean;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
   handleDiscardPendingChanges: () => void;
@@ -61,8 +68,11 @@ function CurrentActivityGraphEditorChrome(props: {
   onAddMenuOpenChange?: (open: boolean) => void;
   onClearPreferences: () => void;
   onHideShowMenuOpenChange: (open: boolean) => void;
+  onRedoLayout?: () => void;
+  onResetLayout?: () => void;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
+  onUndoLayout?: () => void;
   openAddMenu?: boolean;
   preferencesDirty: boolean;
   saveDisabledReason?: string;
@@ -81,7 +91,9 @@ function CurrentActivityGraphEditorChrome(props: {
       addMenuActions={props.addMenuActions}
       canDiscard={props.hasPendingChanges}
       canInteract={props.canInteractWithEditor}
+      canRedoLayout={props.canRedoLayout}
       canSave={props.canSaveDraft}
+      canUndoLayout={props.canUndoLayout}
       editModeToggle={{
         disabled: !props.editorMode && editorUnavailableReason !== undefined,
         editorMode: props.editorMode,
@@ -100,9 +112,12 @@ function CurrentActivityGraphEditorChrome(props: {
       onClearPreferences={props.onClearPreferences}
       onDiscard={props.handleDiscardPendingChanges}
       onHideShowMenuOpenChange={props.onHideShowMenuOpenChange}
+      onRedoLayout={props.onRedoLayout}
+      onResetLayout={props.onResetLayout}
       onSave={props.handleSaveDraft}
       onSelectTool={props.onSelectTool}
       onToggleHiddenNodeClass={props.onToggleHiddenNodeClass}
+      onUndoLayout={props.onUndoLayout}
       openAddMenu={props.openAddMenu}
       preferencesDirty={props.preferencesDirty}
       saveDisabledReason={props.saveDisabledReason}
@@ -213,7 +228,9 @@ export function CurrentActivityGraphViewport({
   activeTool,
   addMenuActions,
   canInteractWithEditor,
+  canRedoLayout = false,
   canSaveDraft,
+  canUndoLayout = false,
   editorUnavailableClassifierWorkstationName,
   handleDiscardPendingChanges,
   handleEditorModeToggle,
@@ -241,7 +258,10 @@ export function CurrentActivityGraphViewport({
   onAddAction,
   onAddMenuOpenChange,
   onHideShowMenuOpenChange,
+  onRedoLayout,
+  onResetLayout,
   onToggleHiddenNodeClass,
+  onUndoLayout,
   onConnect,
   onEditorEdgeClick,
   onEditorNodeClick,
@@ -249,6 +269,7 @@ export function CurrentActivityGraphViewport({
   openAddMenu,
   saveDisabledReason,
   moveLayoutNode,
+  moveLayoutNodesByDelta,
   updateLayoutViewport,
   setStoredNodePosition,
   flowContainerRef,
@@ -257,7 +278,9 @@ export function CurrentActivityGraphViewport({
   activeTool: "add" | "connect" | "delete" | null;
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteractWithEditor: boolean;
+  canRedoLayout?: boolean;
   canSaveDraft: boolean;
+  canUndoLayout?: boolean;
   editorUnavailableClassifierWorkstationName?: string;
   handleDiscardPendingChanges: () => void;
   handleEditorModeToggle: () => void;
@@ -285,7 +308,10 @@ export function CurrentActivityGraphViewport({
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
   onHideShowMenuOpenChange: (open: boolean) => void;
+  onRedoLayout?: () => void;
+  onResetLayout?: () => void;
   onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
+  onUndoLayout?: () => void;
   onConnect?: (connection: Connection) => void;
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
@@ -293,6 +319,11 @@ export function CurrentActivityGraphViewport({
   openAddMenu?: boolean;
   saveDisabledReason?: string;
   moveLayoutNode?: (nodeId: string, position: XYPosition) => void;
+  moveLayoutNodesByDelta?: (
+    nodeIds: readonly string[],
+    delta: XYPosition,
+    resolvedPositionsByNodeId: ReadonlyMap<string, XYPosition>,
+  ) => void;
   updateLayoutViewport?: (viewport: { x: number; y: number; zoom: number }) => void;
   setStoredNodePosition: (
     graphKey: string,
@@ -303,6 +334,11 @@ export function CurrentActivityGraphViewport({
   flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
 }) {
   const editorMessages = getFactoryGraphEditorMessages(locale);
+  const dragSessionRef = useRef<{
+    draggedNodeId: string;
+    factoryGraphNodeIds: readonly string[];
+    startPositionsByNodeId: Map<string, XYPosition>;
+  } | null>(null);
   const isValidConnection = buildCurrentActivityIsValidConnection({
     activeTool,
     editorMode,
@@ -323,6 +359,25 @@ export function CurrentActivityGraphViewport({
       });
     },
     [nodes, onConnect],
+  );
+  const handleEditorCanvasKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLElement>) => {
+      if (!editorMode || !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)) {
+        return;
+      }
+
+      if (isFactoryGraphEditorUndoKeyboardEvent(event) && canUndoLayout) {
+        event.preventDefault();
+        onUndoLayout?.();
+        return;
+      }
+
+      if (isFactoryGraphEditorRedoKeyboardEvent(event) && canRedoLayout) {
+        event.preventDefault();
+        onRedoLayout?.();
+      }
+    },
+    [canRedoLayout, canUndoLayout, editorMode, onRedoLayout, onUndoLayout],
   );
 
   return (
@@ -354,7 +409,10 @@ export function CurrentActivityGraphViewport({
           imports.dropState,
         )}
         data-current-activity-flow
+        data-factory-graph-editor-canvas={editorMode ? "true" : undefined}
+        onKeyDown={handleEditorCanvasKeyDown}
         ref={flowContainerRef}
+        tabIndex={editorMode ? 0 : undefined}
         style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
         onDragEnter={imports.onDragEnter}
         onDragLeave={imports.onDragLeave}
@@ -415,11 +473,62 @@ export function CurrentActivityGraphViewport({
                   updateLayoutViewport(viewport);
                 }
               }}
+              onNodeDragStart={(_, node) => {
+                if (!editorMode) {
+                  return;
+                }
+
+                const selectedNodes = nodes.filter((entry) => entry.selected);
+                const draggedNodes =
+                  selectedNodes.length > 1 ? selectedNodes : [node];
+                const startPositionsByNodeId = new Map<string, XYPosition>();
+                const factoryGraphNodeIds: string[] = [];
+
+                for (const draggedNode of draggedNodes) {
+                  const factoryGraphNodeId = factoryGraphNodeIdForRenderedNode(
+                    nodes,
+                    draggedNode.id,
+                  );
+                  factoryGraphNodeIds.push(factoryGraphNodeId);
+                  startPositionsByNodeId.set(
+                    factoryGraphNodeId,
+                    draggedNode.position,
+                  );
+                }
+
+                dragSessionRef.current = {
+                  draggedNodeId: node.id,
+                  factoryGraphNodeIds,
+                  startPositionsByNodeId,
+                };
+              }}
               onNodeDragStop={(_, node) => {
                 const factoryGraphNodeId = (
                   node.data as { factoryGraphNodeId?: string } | undefined
                 )?.factoryGraphNodeId;
                 if (editorMode && moveLayoutNode && factoryGraphNodeId) {
+                  const dragSession = dragSessionRef.current;
+                  dragSessionRef.current = null;
+                  if (
+                    dragSession &&
+                    dragSession.factoryGraphNodeIds.length > 1 &&
+                    moveLayoutNodesByDelta
+                  ) {
+                    const startPosition =
+                      dragSession.startPositionsByNodeId.get(factoryGraphNodeId);
+                    if (startPosition) {
+                      moveLayoutNodesByDelta(
+                        dragSession.factoryGraphNodeIds,
+                        {
+                          x: node.position.x - startPosition.x,
+                          y: node.position.y - startPosition.y,
+                        },
+                        dragSession.startPositionsByNodeId,
+                      );
+                      return;
+                    }
+                  }
+
                   moveLayoutNode(factoryGraphNodeId, node.position);
                   return;
                 }
@@ -450,7 +559,9 @@ export function CurrentActivityGraphViewport({
           activeTool={activeTool}
           addMenuActions={addMenuActions}
           canInteractWithEditor={canInteractWithEditor}
+          canRedoLayout={canRedoLayout}
           canSaveDraft={canSaveDraft}
+          canUndoLayout={canUndoLayout}
           editorUnavailableClassifierWorkstationName={
             editorUnavailableClassifierWorkstationName
           }
@@ -467,8 +578,11 @@ export function CurrentActivityGraphViewport({
           onAddMenuOpenChange={onAddMenuOpenChange}
           onClearPreferences={onClearPreferences}
           onHideShowMenuOpenChange={onHideShowMenuOpenChange}
+          onRedoLayout={onRedoLayout}
+          onResetLayout={onResetLayout}
           onSelectTool={onSelectTool}
           onToggleHiddenNodeClass={onToggleHiddenNodeClass}
+          onUndoLayout={onUndoLayout}
           openAddMenu={openAddMenu}
           preferencesDirty={preferencesDirty}
           saveDisabledReason={saveDisabledReason}

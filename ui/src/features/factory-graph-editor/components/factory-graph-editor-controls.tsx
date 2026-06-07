@@ -58,8 +58,10 @@ export function FactoryGraphEditorToolbar({
   activeTool,
   addMenuActions = [],
   canInteract,
+  canRedoLayout = false,
   canSave = false,
   canDiscard = true,
+  canUndoLayout = false,
   editModeToggle,
   hasPendingChanges = false,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
@@ -72,8 +74,11 @@ export function FactoryGraphEditorToolbar({
   onAddMenuOpenChange,
   onClearPreferences,
   onHideShowMenuOpenChange,
+  onRedoLayout,
+  onResetLayout,
   onSave,
   onToggleHiddenNodeClass,
+  onUndoLayout,
   preferencesDirty = false,
   saveDisabledReason,
   visible,
@@ -83,8 +88,10 @@ export function FactoryGraphEditorToolbar({
   activeTool: FactoryGraphEditorTool;
   addMenuActions?: FactoryGraphEditorMenuAction[];
   canInteract: boolean;
+  canRedoLayout?: boolean;
   canSave?: boolean;
   canDiscard?: boolean;
+  canUndoLayout?: boolean;
   editModeToggle?: {
     disabled?: boolean;
     editorMode: boolean;
@@ -103,8 +110,11 @@ export function FactoryGraphEditorToolbar({
   onAddMenuOpenChange?: (open: boolean) => void;
   onClearPreferences?: () => void;
   onHideShowMenuOpenChange?: (open: boolean) => void;
+  onRedoLayout?: () => void;
+  onResetLayout?: () => void;
   onSave?: () => void;
   onToggleHiddenNodeClass?: (kind: FactoryGraphNodeKind) => void;
+  onUndoLayout?: () => void;
   preferencesDirty?: boolean;
   saveDisabledReason?: string;
   visible: boolean;
@@ -176,6 +186,33 @@ export function FactoryGraphEditorToolbar({
               onSelectTool(activeTool === "connect" ? null : "connect")
             }
             tone={activeTool === "connect" ? "secondary" : "outline"}
+          />
+          <FactoryGraphEditorToolbarButton
+            active={false}
+            description={messages.toolbarUndoDescription}
+            disabled={!canInteract || !canUndoLayout}
+            icon={<UndoIcon />}
+            label={messages.toolbarUndoLabel}
+            onClick={() => onUndoLayout?.()}
+            tone="outline"
+          />
+          <FactoryGraphEditorToolbarButton
+            active={false}
+            description={messages.toolbarRedoDescription}
+            disabled={!canInteract || !canRedoLayout}
+            icon={<RedoIcon />}
+            label={messages.toolbarRedoLabel}
+            onClick={() => onRedoLayout?.()}
+            tone="outline"
+          />
+          <FactoryGraphEditorToolbarButton
+            active={false}
+            description={messages.toolbarResetLayoutDescription}
+            disabled={!canInteract}
+            icon={<ResetLayoutIcon />}
+            label={messages.toolbarResetLayoutLabel}
+            onClick={() => onResetLayout?.()}
+            tone="outline"
           />
           {hasPendingChanges ? (
             <DashboardActionRow
@@ -415,6 +452,65 @@ function TrashIcon() {
       <path d="M8 7v11a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V7" />
       <path d="M10 11v5" />
       <path d="M14 11v5" />
+    </svg>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M9 7H5v4" />
+      <path d="M5 11c1.5-3 4.5-5 8-5 5 0 8 4 8 8" />
+    </svg>
+  );
+}
+
+function RedoIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M15 7h4v4" />
+      <path d="M19 11c-1.5-3-4.5-5-8-5-5 0-8 4-8 8" />
+    </svg>
+  );
+}
+
+function ResetLayoutIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="M4 7h16" />
+      <path d="M7 7v10" />
+      <path d="M12 7v10" />
+      <path d="M17 7v10" />
     </svg>
   );
 }

@@ -319,6 +319,8 @@ function createMockLayoutDraftState() {
       state.layoutDirty = false;
     }),
     baseLayout,
+    canRedoLayout: false,
+    canUndoLayout: false,
     hasChanges: false,
     layout: structuredClone(baseLayout),
     layoutDirty: false,
@@ -328,12 +330,15 @@ function createMockLayoutDraftState() {
       state.layoutDirty = true;
     }),
     moveNodesByDelta: vi.fn(),
+    pruneLayoutHistoryForNodeIds: vi.fn(),
+    redoLayout: vi.fn(),
     replaceLayout: vi.fn(),
     resetLayout: vi.fn(() => {
       state.layout = structuredClone(state.baseLayout);
       state.hasChanges = false;
       state.layoutDirty = false;
     }),
+    undoLayout: vi.fn(),
     updateViewport: vi.fn(),
   };
 
@@ -422,7 +427,10 @@ function createMockEditableFactoryGraphActions(
       return result;
     },
     moveLayoutNode: layoutDraftState.moveNode,
+    moveLayoutNodesByDelta: layoutDraftState.moveNodesByDelta,
     resetLayout: layoutDraftState.resetLayout,
+    redoLayout: layoutDraftState.redoLayout,
+    undoLayout: layoutDraftState.undoLayout,
     save: async () => {
       const hasPendingEdits =
         draftState.hasChanges || layoutDraftState.hasChanges;
@@ -495,6 +503,8 @@ export function createMockEditableFactoryGraph(
     graphState: null,
     layoutDraftState,
     pendingState: {
+      canRedoLayout: layoutDraftState.canRedoLayout,
+      canUndoLayout: layoutDraftState.canUndoLayout,
       dirtyState: {
         layoutDirty: layoutDraftState.layoutDirty,
         preferencesDirty: false,

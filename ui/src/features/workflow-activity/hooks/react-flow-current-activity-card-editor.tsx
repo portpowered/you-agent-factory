@@ -142,8 +142,11 @@ export function useCurrentActivityGraphEditor(
     dirtyStateSummary: editableGraph.pendingState.dirtyState,
     layoutDraftState: editableGraph.layoutDraftState,
     moveLayoutNode: editableGraph.actions.moveLayoutNode,
+    moveLayoutNodesByDelta: editableGraph.actions.moveLayoutNodesByDelta,
     resetLayout: editableGraph.actions.resetLayout,
+    redoLayout: editableGraph.actions.redoLayout,
     resetPreferences,
+    undoLayout: editableGraph.actions.undoLayout,
     updateLayoutViewport: editableGraph.actions.updateLayoutViewport,
     editableDefinitionQuery: currentFactoryQuery,
     editorUnavailableClassifierWorkstationName:
