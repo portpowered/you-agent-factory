@@ -27,6 +27,10 @@ const (
 	submitWorkFileNameMetadataKey = "fileName"
 )
 
+func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, _ *http.Request, _ factoryapi.SessionID) {
+	s.writeError(w, http.StatusInternalServerError, "factory invocation API is not implemented", "INTERNAL_ERROR")
+}
+
 func submitWorkContent(req factoryapi.SubmitWorkRequest) ([]interfaces.WorkContentPart, error) {
 	if req.Items == nil {
 		return workcontent.PartsFromGenerated(req.Content), nil
