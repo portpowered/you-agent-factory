@@ -20,7 +20,7 @@ const PALETTE_FIXTURES = [
       "--color-af-foundation-ink": "#F7F2E8",
       "--color-af-foundation-overlay": "#FFFFFF",
       "--color-af-foundation-success-ink": "#A7F0C4",
-      "--color-af-foundation-surface": "#091117",
+      "--color-af-foundation-surface": "#181F2B",
     },
   },
   {
@@ -105,11 +105,11 @@ describe("buildWorkstationPromptTheme", () => {
 
     expect(theme.base).toBe("vs-dark");
     expect(theme.colors).toMatchObject({
-      "editor.background": "#091117",
+      "editor.background": "#181F2B",
       "editor.foreground": "#F7F2E8",
       "editorCursor.foreground": "#F5C76F",
       "editorSuggestWidget.foreground": "#F7F2E8",
-      "editorWidget.background": "#091117",
+      "editorWidget.background": "#181F2B",
     });
     expect(theme.rules).toEqual(
       expect.arrayContaining([
@@ -141,7 +141,7 @@ describe("buildWorkstationPromptTheme", () => {
       "editorCursor.foreground": "#F5C76F",
       "editorWidget.background": "#FFFFFF",
     });
-    expect(theme.colors["editor.background"]).not.toBe("#091117");
+    expect(theme.colors["editor.background"]).not.toBe("#181F2B");
     expect(findRuleForeground(theme, "delimiter.template")).toBe("#C9972E");
     expect(findRuleForeground(theme, "keyword.template")).toBe("#2F8FAD");
     expect(findRuleForeground(theme, "string.template")).toBe("#1F6F49");

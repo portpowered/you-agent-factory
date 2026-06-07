@@ -29,6 +29,29 @@ function readCssVariable(name: string): string {
     .trim();
 }
 
+function parseHexColor(hex: string): readonly [number, number, number] {
+  const normalized = hex.trim().replace("#", "");
+  if (normalized.length !== 6) {
+    throw new Error(`expected 6-digit hex, got ${hex}`);
+  }
+  const value = Number.parseInt(normalized, 16);
+  return [(value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff] as const;
+}
+
+function relativeLuminance([r, g, b]: readonly [
+  number,
+  number,
+  number,
+]): number {
+  const [rs, gs, bs] = [r, g, b].map((channel) => {
+    const scaled = channel / 255;
+    return scaled <= 0.03928
+      ? scaled / 12.92
+      : ((scaled + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
 describe("theme role migration regression (US-010)", () => {
   beforeAll(async () => {
     const source = readFileSync(stylesSourcePath, "utf8");
@@ -56,6 +79,20 @@ describe("theme role migration regression (US-010)", () => {
     const background = readCssVariable("--color-af-foundation-background");
     expect(background).toMatch(/^#[0-9a-f]{6}$/i);
     expect(background.toLowerCase()).not.toBe("");
+  });
+
+  it("separates factory-dark page background from shared surface roles", () => {
+    applyDocumentColorPalette("factory-dark");
+
+    const background = readCssVariable("--color-af-foundation-background");
+    const surface = readCssVariable("--color-af-foundation-surface");
+    const backgroundLuminance = relativeLuminance(parseHexColor(background));
+    const surfaceLuminance = relativeLuminance(parseHexColor(surface));
+
+    expect(backgroundLuminance).toBeLessThan(surfaceLuminance);
+    expect(surfaceLuminance - backgroundLuminance).toBeGreaterThan(0.01);
+    expect(background).toBe("#050b10");
+    expect(surface).toBe("#181f2b");
   });
 
   it("keeps yellow primary accent across palette switches", () => {

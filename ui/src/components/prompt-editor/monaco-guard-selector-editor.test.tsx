@@ -6,7 +6,7 @@ import { MonacoGuardSelectorEditor } from "./monaco-guard-selector-editor";
 import { WORKSTATION_GUARD_SELECTOR_THEME_ID } from "./monaco-guard-selector-setup";
 
 const guardSelectorPaletteSequence = [
-  { ink: "#F7F2E8", palette: "factory-dark", surface: "#091117" },
+  { ink: "#F7F2E8", palette: "factory-dark", surface: "#181f2b" },
   { ink: "#091117", palette: "factory-light", surface: "#F7F2E8" },
   { ink: "#E6E0E9", palette: "material-baseline", surface: "#1D1B20" },
   { ink: "#E6EDF3", palette: "slate", surface: "#161B22" },

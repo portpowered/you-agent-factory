@@ -12,7 +12,7 @@ const FALLBACK_THEME_TOKENS = {
   ink: "#F7F2E8",
   overlay: "#FFFFFF",
   successText: "#A7F0C4",
-  surface: "#091117",
+  surface: "#181f2b",
 } as const;
 
 type RGBColor = {
