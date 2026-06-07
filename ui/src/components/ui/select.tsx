@@ -55,6 +55,7 @@ const SELECT_VIEWPORT_POPPER_CLASS =
 export function SelectContent({
   children,
   className,
+  onCloseAutoFocus,
   position = "popper",
   ...props
 }: SelectContentProps) {
@@ -68,6 +69,10 @@ export function SelectContent({
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className,
         )}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onCloseAutoFocus?.(event);
+        }}
         position={position}
         {...props}
       >
