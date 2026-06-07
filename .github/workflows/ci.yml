@@ -208,6 +208,10 @@ jobs:
         timeout-minutes: 10
         run: make pkg-file-count
 
+      - name: Run README structure verification
+        timeout-minutes: 10
+        run: make readme-check
+
       - name: Run backend deadcode verification
         timeout-minutes: 10
         run: make deadcode
