@@ -39,7 +39,7 @@ export const CurrentSelectionSelectableButton = forwardRef<
     <SelectableCardButton
       className={cn(
         variantClassName,
-        selected && "border-primary bg-primary-container text-on-surface",
+        selected && "border-primary bg-primary-container text-on-primary",
         className,
       )}
       onClick={onClick}

@@ -49,6 +49,7 @@ describe("DashboardHeaderOptionMenuItem", () => {
 
     expect(selected.getAttribute("aria-checked")).toBe("true");
     expect(selected.className).toContain("bg-primary-container");
+    expect(selected.className).toContain("text-on-primary");
     expect(unselected.getAttribute("aria-checked")).toBe("false");
     expect(unselected.className).toContain("text-on-surface-variant");
   });

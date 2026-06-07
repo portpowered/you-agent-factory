@@ -2393,14 +2393,14 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     });
     expect(selectedWorkButton).toBeTruthy();
     expect(selectedWorkButton.textContent).toContain("Active Story");
-    expect(selectedWorkButton.className).toContain("text-on-surface");
+    expect(selectedWorkButton.className).toContain("text-on-primary");
     expect(within(dispatchCard).getByText("Trace IDs")).toBeTruthy();
     const selectedTraceButton = within(dispatchCard).getByRole("button", {
       name: "trace-active-story (selected)",
     });
     expect(selectedTraceButton).toBeTruthy();
     expect(selectedTraceButton.getAttribute("aria-pressed")).toBe("true");
-    expect(selectedTraceButton.className).toContain("text-on-surface");
+    expect(selectedTraceButton.className).toContain("text-on-primary");
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {

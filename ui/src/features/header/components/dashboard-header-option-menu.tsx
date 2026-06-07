@@ -46,7 +46,7 @@ export function DashboardHeaderOptionMenuItem({
         "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
         "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
         isSelected
-          ? "border-primary bg-primary-container text-on-surface"
+          ? "border-primary bg-primary-container text-on-primary"
           : "text-on-surface-variant",
       )}
       onClick={onClick}
