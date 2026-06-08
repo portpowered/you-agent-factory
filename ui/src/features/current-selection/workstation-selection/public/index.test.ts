@@ -44,6 +44,10 @@ describe("workstation-selection/public", () => {
     expect(workstationSelectionPublic).not.toHaveProperty("RunnerID");
   });
 
+  it("does not export ApiRunnerID as a secondary import surface", () => {
+    expect(workstationSelectionPublic).not.toHaveProperty("ApiRunnerID");
+  });
+
   it("does not export shared Monaco prompt editor setup helpers", () => {
     expect(workstationSelectionPublic).not.toHaveProperty("MonacoPromptEditor");
     expect(workstationSelectionPublic).not.toHaveProperty(
