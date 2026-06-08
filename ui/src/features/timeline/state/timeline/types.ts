@@ -3,6 +3,7 @@ import type {
   DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
   DashboardRuntime,
+  DashboardSessionBracket,
   DashboardSnapshot,
   DashboardTrace,
   DashboardTraceMutation,
@@ -165,11 +166,50 @@ export interface TimelineWorldViewBase {
   workRequestsByID: Record<string, TimelineWorkRequestPayload>;
 }
 
+export interface ReplayJavaScriptCheckpointRef {
+  id: string;
+  label?: string;
+  summary?: string;
+}
+
+export interface ReplayJavaScriptDispatch {
+  artifact_ids?: string[];
+  dispatch_kind?: string;
+  id: string;
+  label?: string;
+  phase?: string;
+  status: string;
+}
+
+export interface ReplaySessionArtifact {
+  content_type?: string;
+  id: string;
+  kind?: string;
+  label?: string;
+  visibility?: string;
+}
+
+export interface ReplayJavaScriptRuntime {
+  checkpoints: ReplayJavaScriptCheckpointRef[];
+  child_dispatch_counts: {
+    completed: number;
+    queued: number;
+    running: number;
+  };
+  dispatches: ReplayJavaScriptDispatch[];
+  phase?: string;
+  phases: string[];
+  script_status?: string;
+}
+
 export interface ReplayWorldState extends TimelineWorldViewBase {
   factory?: FactoryDefinition;
   factory_state: string;
+  javascriptRuntime?: ReplayJavaScriptRuntime;
   payloadLineage: WorkPayloadLineageProjection;
   runtime: DashboardRuntime;
+  sessionArtifacts: ReplaySessionArtifact[];
+  sessionBracket?: DashboardSessionBracket;
   tick_count: number;
   topology: ProjectedInitialStructure;
   uptime_seconds: number;

@@ -309,6 +309,24 @@ For steady operator loops (check running → submit → verify), prefer `you` or
 `you run --continuously`. See `you docs agents` for the full operator loop and
 pre-submit checklist.
 
+## Event stream lifecycle and reconnect
+
+API, CLI, dashboard, and future MCP tools observe the same canonical
+`FactoryEvent` stream for one live session.
+
+| Surface | How lifecycle is observed |
+|---------|---------------------------|
+| API | `GET /events` and `GET /factory-sessions/{session_id}/events` stream canonical lifecycle variants; reconnect with `after_event_id` or `after_sequence`. |
+| CLI | `you session show` prints lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API. |
+| Dashboard | Replays lifecycle events into the timeline projection and shows reconnecting/stale, partial, and terminal states in the session lifecycle banner. |
+| MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
+
+Lifecycle brackets use `SESSION_STARTED`, `SESSION_RESULT_UPDATED`, and
+`SESSION_COMPLETED`. Orchestrator progress, dispatch queue/interruption/reconciliation,
+and `ARTIFACT_CREATED` events remain on the same stream so reconnect replay can rebuild
+phase, dispatch counts, artifact refs, and terminal outcomes without waiting for only
+`SESSION_COMPLETED`.
+
 ## Related Topics
 
 - `you docs orchestrators` — Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases

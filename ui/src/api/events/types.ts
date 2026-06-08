@@ -25,6 +25,7 @@ export const FACTORY_EVENT_TYPES = {
   dispatchQueued: "DISPATCH_QUEUED",
   dispatchInterrupted: "DISPATCH_INTERRUPTED",
   dispatchReconciled: "DISPATCH_RECONCILED",
+  artifactCreated: "ARTIFACT_CREATED",
 } as const satisfies Record<string, FactoryEventType>;
 
 type FactorySchemas = components["schemas"];

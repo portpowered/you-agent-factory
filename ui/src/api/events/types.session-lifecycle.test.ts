@@ -34,6 +34,7 @@ describe("factory session lifecycle event types", () => {
     };
 
     expect(started.type).toBe("SESSION_STARTED");
+    expect(FACTORY_EVENT_TYPES.artifactCreated).toBe("ARTIFACT_CREATED");
     expect(started.context.sessionId).toBe("session-alpha");
     expect(started.context.sessionSequence).toBe(0);
     expect(started.context.orchestratorKind).toBe("JAVASCRIPT");
