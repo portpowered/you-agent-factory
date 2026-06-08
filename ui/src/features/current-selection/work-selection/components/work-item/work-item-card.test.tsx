@@ -724,7 +724,7 @@ describe("WorkItemDetailCard summary", () => {
     expect(within(activeCard).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(activeCard).getByText("Current dispatch").className,
-    ).toContain("text-on-primary");
+    ).toContain("text-on-secondary-container");
     expect(activeCard.className).toContain("border-outline-variant");
     expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
     expect(historicalCard.className).not.toContain("border-outline-variant");
