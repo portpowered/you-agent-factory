@@ -1,10 +1,4 @@
-import {
-  type ChangeEvent,
-  type ReactElement,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type ReactElement, useEffect, useMemo, useState } from "react";
 import type { DashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { getInlineAddWidgetMessages } from "../../bento/messages/inline-add-widget";
 import { getInlineWidgetPickerOptions } from "../../bento/messages/inline-widget-picker";
@@ -61,8 +55,8 @@ export function InlineAddWidgetCard({
     selectedAvailability?.enabled,
   ]);
 
-  function handleWidgetSelection(event: ChangeEvent<HTMLSelectElement>) {
-    setSelectedWidgetType(event.target.value);
+  function handleWidgetSelection(nextWidgetType: string) {
+    setSelectedWidgetType(nextWidgetType);
   }
 
   function handleAddWidget() {
@@ -80,7 +74,7 @@ export function InlineAddWidgetCard({
           actionLabel={messages.actionLabel}
           availabilityByType={availabilityByType}
           disabled={!hasEnabledWidgets}
-          onChange={handleWidgetSelection}
+          onValueChange={handleWidgetSelection}
           options={options}
           unavailableLabel={messages.actionUnavailableLabel}
           value={selectedWidgetType}

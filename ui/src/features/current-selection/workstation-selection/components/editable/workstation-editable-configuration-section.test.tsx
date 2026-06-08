@@ -1,7 +1,10 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import { expectNoInlineSaveOutcomesIn } from "../../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
@@ -12,6 +15,18 @@ import {
 } from "./workstation-editable-configuration-section.test-helpers";
 
 const messages = editableConfigurationSectionMessages;
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 describe("EditableConfigurationSection async states", () => {
   it("wraps expanded configuration in one shared section shell", () => {
@@ -119,7 +134,9 @@ describe("EditableConfigurationSection worker options", () => {
     );
 
     expandEditableConfigurationSection();
-    expect(screen.getByLabelText("Worker")).toHaveValue("reviewer");
+    expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
+      "reviewer",
+    );
   });
 });
 
@@ -300,11 +317,13 @@ describe("EditableConfigurationSection model workstation fields", () => {
 
     expandEditableConfigurationSection();
 
-    expect(screen.getByLabelText("Kind")).toHaveValue("STANDARD");
+    expect(screen.getByRole("combobox", { name: "Kind" })).toHaveTextContent(
+      "Standard",
+    );
     expect(screen.getByLabelText("Runner")).toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toHaveValue("Review prompt");
 
-    await user.selectOptions(screen.getByLabelText("Kind"), "REPEATER");
+    await selectLabeledComboboxOption(user, "Kind", "Repeater");
     expect(onBehaviorChange).toHaveBeenCalledWith("REPEATER");
   });
 

@@ -1,5 +1,10 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { expectNoInlineSaveOutcomesIn } from "../../base/components/detail-card/current-selection-save-toast-test-helpers";
@@ -11,6 +16,18 @@ import { WorkerDetailCard } from "./worker-detail-card";
 import { EditableWorkerConfigurationHeaderActions } from "./worker-save-controls";
 
 const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -230,7 +247,8 @@ describe("WorkerDetailCard", () => {
     expect(screen.queryByText("Plan")).toBeNull();
   });
 
-  it("renders editable worker fields for model workers", () => {
+  it("renders editable worker fields for model workers", async () => {
+    const user = userEvent.setup();
     const onModelProviderChange = vi.fn();
     const editableConfigurationState: EditableWorkerConfigurationState = {
       canSave: false,
@@ -305,12 +323,8 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Model provider"), {
-      target: { value: "CODEX" },
-    });
-    fireEvent.change(screen.getByLabelText("Model locality"), {
-      target: { value: "LOCAL" },
-    });
+    await selectLabeledComboboxOption(user, "Model provider", "Codex");
+    await selectLabeledComboboxOption(user, "Model locality", "Local");
 
     expect(onModelProviderChange).toHaveBeenCalledWith("CODEX");
     expect(

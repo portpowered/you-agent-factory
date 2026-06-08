@@ -1,4 +1,4 @@
-import { expect, userEvent, within } from "storybook/test";
+import { expect, screen, userEvent, within } from "storybook/test";
 
 import type { DashboardWorkstationRequest } from "../api/dashboard";
 import { dashboardWorkstationRequestFixtures } from "../components/dashboard/fixtures";
@@ -99,7 +99,7 @@ export async function submitWorkCardControls(
   requestField: HTMLTextAreaElement;
   scope: ReturnType<typeof within>;
   submitButton: HTMLButtonElement;
-  workTypeField: HTMLSelectElement;
+  workTypeField: HTMLElement;
 }> {
   const canvas = within(canvasElement);
   const dashboardGrid = await canvas.findByRole("region", {
@@ -128,12 +128,17 @@ export async function fillSubmitWorkCard(
   requestField: HTMLTextAreaElement;
   scope: ReturnType<typeof within>;
   submitButton: HTMLButtonElement;
-  workTypeField: HTMLSelectElement;
+  workTypeField: HTMLElement;
 }> {
   const { requestField, requestNameField, scope, submitButton, workTypeField } =
     await submitWorkCardControls(canvasElement);
 
-  await userEvent.selectOptions(workTypeField, "story");
+  await userEvent.click(workTypeField);
+  await userEvent.click(
+    within(await screen.findByRole("listbox")).getByRole("option", {
+      name: "story",
+    }),
+  );
   await userEvent.clear(requestNameField);
   await userEvent.type(requestNameField, requestName);
   await userEvent.clear(requestField);

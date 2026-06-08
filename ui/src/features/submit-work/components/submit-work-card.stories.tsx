@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { expect, fireEvent, userEvent, within } from "storybook/test";
 
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { selectComboboxOption } from "../../../testing/select-test-helpers";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import { SubmitWorkCard } from "./submit-work-card";
 import { SubmitWorkCardImageChooseFileVerification } from "./submit-work-card-image-choose-file-verification";
@@ -97,7 +98,7 @@ export const Configured = {
     const submitButton = scope.getByRole("button", { name: "Submit work" });
 
     await expect(submitButton).toBeDisabled();
-    await userEvent.selectOptions(workType, "story");
+    await selectComboboxOption(userEvent, workType, "story");
     await userEvent.type(requestName, "Driver review");
     await userEvent.type(
       requestText,
@@ -169,7 +170,7 @@ export const FailureRetry = {
 
     await expect(
       scope.getByRole("combobox", { name: "Work type" }),
-    ).toHaveValue("story");
+    ).toHaveTextContent("story");
     await expect(
       scope.getByRole("textbox", { name: "Request name" }),
     ).toHaveValue("Retry dashboard request");

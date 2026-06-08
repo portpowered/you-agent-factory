@@ -1,6 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 
 import type { CanonicalFactoryDefinition } from "../../../../api/factory-definition/api";
 import {
@@ -12,6 +14,18 @@ import { getWorkerDetailMessages } from "../messages/worker-detail";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
 
 const messages = getWorkerDetailMessages();
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 function buildReadyWorkerEditableConfigurationState(
   workstationNames: string[],

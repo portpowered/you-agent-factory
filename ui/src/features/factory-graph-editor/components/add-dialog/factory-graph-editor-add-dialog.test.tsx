@@ -1,11 +1,34 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { ModelOperationContentType } from "../../../../api/generated/openapi";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+
+vi.mock("../../../../components/ui/dialog", () =>
+  import("../../../../testing/mock-dashboard-dialog"),
+);
+
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import { createEmptyEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { createEmptyFactoryGraphAddModelOperationDraft } from "../../lib/factory-graph-add-model-operation-draft";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../../lib/editor/factory-graph-editor-additions";
 import { editableWorkstationBehaviorOptions } from "../../lib/editor/factory-graph-editor-additions";
 import { FactoryGraphEditorAddEntityDialog } from "./factory-graph-editor-add-dialog";
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 const currentFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -95,7 +118,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it("renders model worker fields and emits onChange payloads", () => {
+  it("renders model worker fields and emits onChange payloads", async () => {
+    const user = userEvent.setup();
     const workerChange = vi.fn();
     renderDialog({
       draft: {
@@ -122,9 +146,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(screen.queryByRole("textbox", { name: "Command" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "Args" })).toBeNull();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Model provider" }), {
-      target: { value: "CURSOR" },
-    });
+    await selectLabeledComboboxOption(user, "Model provider", "Cursor");
     fireEvent.change(screen.getByRole("textbox", { name: "Model" }), {
       target: { value: "gpt-5.5" },
     });
@@ -157,7 +179,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     ).toBeTruthy();
   });
 
-  it("toggles script worker fields and clears deselected values", () => {
+  it("toggles script worker fields and clears deselected values", async () => {
+    const user = userEvent.setup();
     const workerChange = vi.fn();
     const { rerender } = renderDialog({
       draft: {
@@ -176,9 +199,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       onChange: workerChange,
     });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Worker type" }), {
-      target: { value: "SCRIPT_WORKER" },
-    });
+    await selectLabeledComboboxOption(user, "Worker type", "Script worker");
 
     expect(workerChange).toHaveBeenCalledWith({
       argsText: "",
@@ -247,9 +268,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       workerType: "SCRIPT_WORKER",
     });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Worker type" }), {
-      target: { value: "MODEL_WORKER" },
-    });
+    await selectLabeledComboboxOption(user, "Worker type", "Model worker");
 
     expect(workerChange).toHaveBeenCalledWith({
       argsText: "",
@@ -404,7 +423,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     ).toBeTruthy();
   });
 
-  it("edits work-state selects from the current factory definition", () => {
+  it("edits work-state selects from the current factory definition", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     renderDialog({
       draft: {
@@ -419,12 +439,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       onChange,
     });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Work type" }), {
-      target: { value: "story" },
-    });
-    fireEvent.change(screen.getByRole("combobox", { name: "State type" }), {
-      target: { value: "TERMINAL" },
-    });
+    await selectLabeledComboboxOption(user, "Work type", "story");
+    await selectLabeledComboboxOption(user, "State type", "TERMINAL");
 
     expect(onChange).toHaveBeenNthCalledWith(1, {
       kind: "work-state",
@@ -472,10 +488,13 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     expect(
       screen.getByText("Enter a cron schedule before adding this workstation."),
     ).toBeTruthy();
-    expect(screen.getByRole("option", { name: "Cron" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Kind" })).toHaveTextContent(
+      "Cron",
+    );
   });
 
-  it("hides worker and prompt fields for LOGICAL_MOVE workstations", () => {
+  it("hides worker and prompt fields for LOGICAL_MOVE workstations", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     renderDialog({
       draft: {
@@ -491,23 +510,18 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
 
     expect(
-      (
-        screen.getByRole("combobox", {
-          name: "Workstation type",
-        }) as HTMLSelectElement
-      ).value,
-    ).toBe("LOGICAL_MOVE");
+      screen.getByRole("combobox", { name: "Workstation type" }),
+    ).toHaveTextContent("Logical move");
     expect(
       screen.queryByRole("combobox", { name: "Assigned worker" }),
     ).toBeNull();
     expect(screen.queryByLabelText("Prompt body")).toBeNull();
     expect(screen.getByRole("textbox", { name: "Cron schedule" })).toBeTruthy();
 
-    fireEvent.change(
-      screen.getByRole("combobox", { name: "Workstation type" }),
-      {
-        target: { value: "MODEL_WORKSTATION" },
-      },
+    await selectLabeledComboboxOption(
+      user,
+      "Workstation type",
+      "Model workstation",
     );
 
     expect(onChange).toHaveBeenCalledWith({
@@ -521,7 +535,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
   });
 
-  it("clears worker and prompt when switching to LOGICAL_MOVE", () => {
+  it("clears worker and prompt when switching to LOGICAL_MOVE", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     renderDialog({
       draft: {
@@ -536,12 +551,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       onChange,
     });
 
-    fireEvent.change(
-      screen.getByRole("combobox", { name: "Workstation type" }),
-      {
-        target: { value: "LOGICAL_MOVE" },
-      },
-    );
+    await selectLabeledComboboxOption(user, "Workstation type", "Logical move");
 
     expect(onChange).toHaveBeenCalledWith({
       behavior: "STANDARD",
@@ -641,7 +651,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
   });
 
-  it("initializes cron draft when switching behavior to CRON", () => {
+  it("initializes cron draft when switching behavior to CRON", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     renderDialog({
       draft: {
@@ -656,9 +667,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       onChange,
     });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
-      target: { value: "CRON" },
-    });
+    await selectLabeledComboboxOption(user, "Kind", "Cron");
 
     expect(onChange).toHaveBeenCalledWith({
       behavior: "CRON",
@@ -671,7 +680,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     });
   });
 
-  it("edits workstation worker assignment and prompt body", () => {
+  it("edits workstation worker assignment and prompt body", async () => {
+    const user = userEvent.setup();
     const onChange = vi.fn();
     const onClose = vi.fn();
     renderDialog({
@@ -691,15 +701,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       onClose,
     });
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
-      target: { value: "POLLER" },
-    });
-    fireEvent.change(
-      screen.getByRole("combobox", { name: "Assigned worker" }),
-      {
-        target: { value: "writer" },
-      },
-    );
+    await selectLabeledComboboxOption(user, "Kind", "Poller");
+    await selectLabeledComboboxOption(user, "Assigned worker", "writer");
     const promptBodyInput = getAddDialogPromptBodyInput();
     fireEvent.change(promptBodyInput, {
       target: { value: "Review the draft." },

@@ -1,6 +1,7 @@
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
+import { selectComboboxOption } from "../../../testing/select-test-helpers";
 import { DEFAULT_DASHBOARD_LAYOUT } from "../../bento/hooks/dashboardLayoutSchema";
 import { getDashboardWidgetPickerAvailability } from "../../bento/lib/dashboard-widget-picker";
 import { InlineAddWidgetCard } from "./inline-add-widget-card";
@@ -35,7 +36,7 @@ export const ResponsiveSelectorFlow = {
     await expect(
       canvas.getByRole("heading", { name: "Add widget" }),
     ).toBeVisible();
-    await expect(selector).toHaveValue("work-totals");
+    await expect(selector).toHaveTextContent("Work totals");
     const header = card.querySelector("header");
     expect(header?.getAttribute("data-bento-drag-handle")).toBe("true");
     expect(header?.className).toContain("cursor-grab");
@@ -46,7 +47,7 @@ export const ResponsiveSelectorFlow = {
       canvas.getByRole("button", { name: "Add widget: Work totals" }),
     ).toBeVisible();
 
-    await userEvent.selectOptions(selector, "terminal-work");
+    await selectComboboxOption(userEvent, selector, "Terminal work");
 
     await expect(
       canvas.getByRole("button", { name: "Add widget: Terminal work" }),

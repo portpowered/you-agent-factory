@@ -52,6 +52,36 @@ export async function fillWorkstationPromptBody(scope, text) {
     await scope.page().keyboard.type(text);
   }
 }
+
+/** Select a Radix/shadcn combobox option by visible option label. */
+export async function selectComboboxOption(combobox, optionName) {
+  const page = combobox.page();
+  await combobox.click();
+  await page.getByRole("option", { name: optionName, exact: true }).click();
+}
+
+/** Open a labeled combobox within scope and choose an option by visible label. */
+export async function selectLabeledComboboxOption(scope, label, optionName) {
+  await selectComboboxOption(
+    scope.getByRole("combobox", { name: label }),
+    optionName,
+  );
+}
+
+const modelProviderOptionLabels = {
+  CLAUDE: "Claude",
+  CODEX: "Codex",
+  CURSOR: "Cursor",
+  GEMINI: "Gemini",
+  KIRO: "Kiro",
+  OPENCODE: "OpenCode",
+};
+
+/** Map editable model-provider enum values to combobox option labels. */
+export function modelProviderOptionLabel(value) {
+  return modelProviderOptionLabels[value] ?? value;
+}
+
 const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
 let browserArtifactSequence = 0;
 let sharedBrowserPorts = null;
