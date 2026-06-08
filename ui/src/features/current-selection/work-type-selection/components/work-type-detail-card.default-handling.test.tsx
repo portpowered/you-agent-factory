@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useEditableWorkTypeConfigurationState } from "../hooks/use-editable-work-type-configuration-state";
@@ -71,6 +72,13 @@ function WorkTypeDetailCardHarness({ workTypeName }: { workTypeName: string }) {
   );
 }
 
+function expectStyledDefaultHandlingCheckbox(checkbox: HTMLElement) {
+  expect(checkbox.className).toContain("sr-only");
+  const indicator = checkbox.nextElementSibling;
+  expect(indicator?.className).toContain("peer-checked:bg-primary");
+  expect(indicator?.querySelector("svg")).toBeTruthy();
+}
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: default-handling coverage keeps factory reload and save-error cases together.
 describe("WorkTypeDetailCard default handling", () => {
   beforeEach(() => {
@@ -81,6 +89,52 @@ describe("WorkTypeDetailCard default handling", () => {
       isPending: false,
       status: "success",
     } as never);
+  });
+
+  it("renders the shared styled checkbox for the default handling control", () => {
+    render(<WorkTypeDetailCardHarness workTypeName="story" />);
+
+    const panel = screen.getByRole("article", { name: "Current selection" });
+    const defaultCheckbox = within(panel).getByRole("checkbox", {
+      name: "Mark as default work type",
+    });
+
+    expectStyledDefaultHandlingCheckbox(defaultCheckbox);
+    expect(defaultCheckbox.checked).toBe(false);
+  });
+
+  it("toggles default handling behavior from label clicks and Space while focused", async () => {
+    const user = userEvent.setup();
+
+    render(<WorkTypeDetailCardHarness workTypeName="story" />);
+
+    const panel = screen.getByRole("article", { name: "Current selection" });
+    const defaultCheckbox = within(panel).getByRole("checkbox", {
+      name: "Mark as default work type",
+    });
+
+    await user.click(within(panel).getByText("Mark as default work type"));
+
+    expect(defaultCheckbox.checked).toBe(true);
+    expect(within(panel).getByRole("status").textContent).toBe(
+      "Default work type",
+    );
+    expect(
+      within(panel).queryByText(
+        "Default work type supplies prompt text for simplified factory runs.",
+      ),
+    ).toBeNull();
+
+    defaultCheckbox.focus();
+    await user.keyboard(" ");
+
+    expect(defaultCheckbox.checked).toBe(false);
+    expect(within(panel).queryByRole("status")).toBeNull();
+    expect(
+      within(panel).getByText(
+        "Default work type supplies prompt text for simplified factory runs.",
+      ),
+    ).toBeTruthy();
   });
 
   it("shows default status and a checked control when the factory marks the work type default", () => {

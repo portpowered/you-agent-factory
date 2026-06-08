@@ -163,6 +163,14 @@ describe("runStorybookCI", () => {
       "run",
       "storybook:responsive-check",
     ]);
+    expect(runCommand).toHaveBeenNthCalledWith(3, [
+      "run",
+      "storybook:choose-file-check",
+    ]);
+    expect(runCommand).toHaveBeenNthCalledWith(4, [
+      "run",
+      "storybook:checkbox-consistency-check",
+    ]);
     expect(stop).toHaveBeenCalledWith(server);
   });
 
