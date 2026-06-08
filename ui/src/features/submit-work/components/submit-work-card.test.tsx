@@ -1,8 +1,17 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { selectComboboxOption } from "../../../testing/select-test-helpers";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 
@@ -118,6 +127,139 @@ describe("SubmitWorkCard request name field", () => {
     expect(requestName).not.toHaveAttribute("aria-describedby");
     expect(
       screen.queryByText(messages.validationMessages.requestRequired),
+    ).toBeNull();
+  });
+});
+
+describe("SubmitWorkCard work type selector", () => {
+  let restoreBrowserShims: (() => void) | undefined;
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+    user = userEvent.setup();
+  });
+
+  afterEach(() => {
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("communicates that the work type is required before submission", () => {
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        workTypeName: "",
+      },
+    });
+
+    expect(
+      screen.getByRole("combobox", {
+        name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+      }),
+    ).toHaveAttribute("aria-required", "true");
+  });
+
+  it("marks the work type selector invalid with accessible field feedback on submit", () => {
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        requestName: "Driver review",
+        workTypeName: "",
+      },
+      validationErrors: {
+        workTypeName: messages.validationMessages.workTypeRequired,
+      },
+    });
+
+    const workType = screen.getByRole("combobox", {
+      name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+    });
+    const error = screen.getByText(messages.validationMessages.workTypeRequired);
+
+    expect(workType).toHaveAttribute("aria-invalid", "true");
+    expect(workType).toHaveAttribute("aria-describedby", error.id);
+    expect(error).toHaveAttribute("role", "alert");
+    expect(
+      screen.queryByText(messages.validationMessages.bothMissing),
+    ).toBeNull();
+  });
+
+  it("opens the work type selector with keyboard interaction", async () => {
+    const onWorkTypeNameChange = vi.fn();
+
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        workTypeName: "",
+      },
+      onWorkTypeNameChange,
+    });
+
+    const workType = screen.getByRole("combobox", {
+      name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+    });
+
+    workType.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("listbox");
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(onWorkTypeNameChange).toHaveBeenCalledWith("story");
+  });
+
+  it("clears work type invalid styling when a valid option is selected", async () => {
+    const onWorkTypeNameChange = vi.fn();
+    const { rerender } = renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        requestName: "Driver review",
+        workTypeName: "",
+      },
+      onWorkTypeNameChange,
+      validationErrors: {
+        workTypeName: messages.validationMessages.workTypeRequired,
+      },
+    });
+
+    const workType = screen.getByRole("combobox", {
+      name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+    });
+
+    await selectComboboxOption(user, workType, "story");
+    expect(onWorkTypeNameChange).toHaveBeenCalledWith("story");
+
+    rerender(
+      <SubmitWorkCard
+        draft={{
+          ...defaultDraft,
+          requestName: "Driver review",
+          workTypeName: "story",
+        }}
+        onAddItem={() => {}}
+        onItemTextChange={() => {}}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={onWorkTypeNameChange}
+        status={{
+          kind: "guidance",
+          message: messages.statusMessages.ready,
+        }}
+        submitWorkTypeNames={["story", "task"]}
+      />,
+    );
+
+    const correctedWorkType = screen.getByRole("combobox", {
+      name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+    });
+
+    expect(correctedWorkType).not.toHaveAttribute("aria-invalid");
+    expect(correctedWorkType).not.toHaveAttribute("aria-describedby");
+    expect(
+      screen.queryByText(messages.validationMessages.workTypeRequired),
     ).toBeNull();
   });
 });

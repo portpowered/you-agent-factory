@@ -92,7 +92,7 @@ export const Configured = {
         "Send a new request to the current factory from the dashboard.",
       ),
     ).toBeNull();
-    const workType = scope.getByRole("combobox", { name: "Work type" });
+    const workType = scope.getByRole("combobox", { name: /Work type/ });
     const requestName = scope.getByRole("textbox", { name: "Request name" });
     const requestText = scope.getByRole("textbox", { name: "Text item 1" });
     const submitButton = scope.getByRole("button", { name: "Submit work" });
@@ -118,7 +118,7 @@ export const Unconfigured = {
     const scope = within(card);
 
     await expect(
-      scope.getByRole("combobox", { name: "Work type" }),
+      scope.getByRole("combobox", { name: /Work type/ }),
     ).toBeDisabled();
     await expect(
       scope.getByRole("textbox", { name: "Request name" }),
@@ -169,7 +169,7 @@ export const FailureRetry = {
     const scope = within(card);
 
     await expect(
-      scope.getByRole("combobox", { name: "Work type" }),
+      scope.getByRole("combobox", { name: /Work type/ }),
     ).toHaveTextContent("story");
     await expect(
       scope.getByRole("textbox", { name: "Request name" }),
@@ -195,7 +195,7 @@ export const LocalizedZhCN = {
     const scope = within(card);
 
     await expect(
-      scope.getByRole("combobox", { name: "工作类型" }),
+      scope.getByRole("combobox", { name: /工作类型/ }),
     ).toBeVisible();
     await expect(
       scope.getByRole("textbox", { name: "请求名称" }),

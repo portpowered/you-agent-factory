@@ -30,7 +30,7 @@ let restoreBrowserShims: (() => void) | undefined;
 let user: ReturnType<typeof userEvent.setup>;
 
 async function selectWorkType(
-  label: string | RegExp = "Work type",
+  label: string | RegExp = /Work type/,
   optionName = "story",
 ) {
   await selectLabeledComboboxOption(user, label, optionName);
@@ -70,7 +70,7 @@ describe("SubmitWorkWidget form behavior", () => {
       ),
     ).toBeNull();
     expect(
-      within(card).getByRole("combobox", { name: "Work type" }),
+      within(card).getByRole("combobox", { name: /Work type/ }),
     ).toBeTruthy();
     expect(
       within(card).getByRole("textbox", { name: /Request name/ }),
@@ -160,7 +160,7 @@ describe("SubmitWorkWidget form behavior", () => {
       />,
     );
 
-    const workType = screen.getByRole("combobox", { name: "Work type" });
+    const workType = screen.getByRole("combobox", { name: /Work type/ });
     const addInput = screen.getByRole("button", { name: "Add input" });
     const remove = screen.getByRole("button", {
       name: "Remove Submit work widget from dashboard",
@@ -258,9 +258,12 @@ describe("SubmitWorkWidget form behavior", () => {
         "Choose a work type and enter a request name before submitting.",
       ),
     ).toBeNull();
+    const workType = screen.getByRole("combobox", { name: /Work type/ });
+
     expect(
       screen.getByText("Choose a work type before submitting."),
-    ).toBeTruthy();
+    ).toHaveAttribute("role", "alert");
+    expect(workType.getAttribute("aria-invalid")).toBe("true");
     expect(
       screen.getByText("Enter a request name before submitting."),
     ).toHaveAttribute("role", "alert");
@@ -998,7 +1001,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       />,
     );
 
-    await selectWorkType("工作类型");
+    await selectWorkType(/工作类型/);
     fireEvent.change(screen.getByRole("textbox", { name: /请求名称/ }), {
       target: { value: "中文请求" },
     });
@@ -1206,7 +1209,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: /Request name/,
@@ -1293,7 +1296,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
 
     await selectWorkType();
@@ -1307,7 +1310,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
+    expect(screen.getByRole("combobox", { name: /Work type/ })).toHaveTextContent(
       "Select a work type",
     );
   });
@@ -1488,7 +1491,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: /Request name/,
@@ -1571,7 +1574,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: /Request name/,
@@ -1621,7 +1624,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     renderSubmitWorkWidget(<SubmitWorkWidget submitWorkTypes={[]} />);
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: /Request name/,
@@ -1653,7 +1656,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     const card = screen.getByRole("article", { name: "提交工作" });
 
     expect(
-      within(card).getByRole("combobox", { name: "工作类型" }),
+      within(card).getByRole("combobox", { name: /工作类型/ }),
     ).toBeTruthy();
     expect(
       within(card).getByRole("textbox", { name: /请求名称/ }),

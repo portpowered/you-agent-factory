@@ -271,13 +271,14 @@ function SubmitWorkHeaderControls({
     <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
       <div className="grid min-w-36 gap-1">
         <label className="sr-only" htmlFor={workTypeID}>
-          {messages.workTypeLabel}
+          {messages.workTypeLabel} ({messages.workTypeRequiredAffordance})
         </label>
         <OptionalEnumSelect
           aria-describedby={
             validationErrors?.workTypeName ? workTypeErrorID : undefined
           }
           aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
+          aria-required="true"
           className="min-h-9 py-2 text-xs"
           disabled={controlsDisabled}
           emptyOptionLabel={messages.selectWorkTypePlaceholder}
@@ -290,9 +291,9 @@ function SubmitWorkHeaderControls({
           value={workTypeName || null}
         />
         {validationErrors?.workTypeName ? (
-          <p className="sr-only" id={workTypeErrorID}>
+          <FormError id={workTypeErrorID}>
             {validationErrors.workTypeName}
-          </p>
+          </FormError>
         ) : null}
       </div>
       <AddSubmissionItemMenu

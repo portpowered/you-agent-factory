@@ -114,7 +114,8 @@ export function buildStatus({
   if (
     showValidation &&
     hasValidationErrors(validationErrors) &&
-    !validationErrors.requestName
+    !validationErrors.requestName &&
+    !validationErrors.workTypeName
   ) {
     return {
       kind: "validation-error",

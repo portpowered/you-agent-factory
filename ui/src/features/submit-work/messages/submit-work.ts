@@ -31,6 +31,7 @@ export interface SubmitWorkMessages {
   submittingAction: string;
   textItemTypeLabel: string;
   workTypeLabel: string;
+  workTypeRequiredAffordance: string;
   statusMessages: {
     emptyGuidance: string;
     errorFallback: string;
@@ -103,6 +104,7 @@ const submitWorkMessagesByLocale = {
     submittingAction: "Submitting...",
     textItemTypeLabel: "Text",
     workTypeLabel: "Work type",
+    workTypeRequiredAffordance: "required",
     statusMessages: {
       emptyGuidance: "Choose a work type and enter a request name to continue.",
       errorFallback: "We couldn't submit your request. Try again in a moment.",
@@ -165,6 +167,7 @@ const submitWorkMessagesByLocale = {
     submittingAction: "正在提交...",
     textItemTypeLabel: "文本",
     workTypeLabel: "工作类型",
+    workTypeRequiredAffordance: "必填",
     statusMessages: {
       emptyGuidance: "先选择工作类型并填写请求名称，然后即可继续。",
       errorFallback: "无法提交你的请求。请稍后再试。",

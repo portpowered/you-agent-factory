@@ -95,7 +95,7 @@ describe("buildStatus", () => {
     });
   });
 
-  it("still surfaces detached validation for non-request-name field issues", () => {
+  it("keeps missing work type feedback field-scoped after a submit attempt", () => {
     const draft = {
       ...createDefaultDraft(),
       requestName: "Driver review",
@@ -112,8 +112,40 @@ describe("buildStatus", () => {
         submitWorkTypeNames: ["story"],
       }),
     ).toEqual({
+      kind: "guidance",
+      message: messages.statusMessages.ready,
+    });
+  });
+
+  it("still surfaces detached validation for submission item issues", () => {
+    const draft: SubmitWorkDraft = {
+      items: [
+        {
+          fileName: "ui.png",
+          id: "submission-item-1",
+          mediaType: "image/png",
+          stagedFileRef: "staged://submit-work/ui.png",
+          stagingStatus: "idle",
+          type: "image",
+        },
+      ],
+      requestName: "Driver review",
+      workTypeName: "story",
+    };
+
+    expect(
+      buildStatus({
+        draft,
+        error: null,
+        isSubmitting: false,
+        isSuccess: false,
+        messages,
+        showValidation: true,
+        submitWorkTypeNames: ["story"],
+      }),
+    ).toEqual({
       kind: "validation-error",
-      message: messages.validationMessages.workTypeRequired,
+      message: messages.validationMessages.fileItemNeedsStaging,
     });
   });
 });
