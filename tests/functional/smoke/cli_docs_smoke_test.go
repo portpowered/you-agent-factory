@@ -91,7 +91,7 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 	}
 
 	index := executeDocsSmokeCommand(t, workingDir, "docs")
-	for _, want := range []string{"# Docs", "`agents` - Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router", "`authoring-factories` - Practical factory authoring workflow", "`config` - factory.json topology, work types, states, workers, workstations, resources, and portability", "`mock-workers` - Mock-worker runs", "`record-replay` - Record and replay run modes", "`guards` - Workstation, input, and factory guards", "`relationships` - Batch DEPENDS_ON", "`work` - Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts", "`sessions` - Live factory sessions: session list, factory query, status API, dashboard URL, and run modes", "`packaged-tts` - Packaged @you/tts invocation", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs agents`", "`you docs authoring-factories`", "`you docs config`", "`you docs mock-workers`", "`you docs record-replay`", "`you docs guards`", "`you docs relationships`", "`you docs work`", "`you docs sessions`", "`you docs packaged-tts`", "`you docs batch-inputs`", "`you docs workstations`"} {
+	for _, want := range []string{"# Docs", "`agents` - Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router", "`authoring-factories` - Practical factory authoring workflow", "`config` - factory.json topology, work types, states, workers, workstations, resources, and portability", "`mock-workers` - Mock-worker runs", "`record-replay` - Record and replay run modes", "`guards` - Workstation, input, and factory guards", "`relationships` - Batch DEPENDS_ON", "`work` - Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts", "`sessions` - Live factory sessions: session list, session show, factory query, status API, dashboard URL, and run modes", "`packaged-tts` - Packaged @you/tts invocation", "`batch-inputs` - Batch input files", "`workstations` - Workstation kinds", "`you docs agents`", "`you docs authoring-factories`", "`you docs config`", "`you docs mock-workers`", "`you docs record-replay`", "`you docs guards`", "`you docs relationships`", "`you docs work`", "`you docs sessions`", "`you docs packaged-tts`", "`you docs batch-inputs`", "`you docs workstations`"} {
 		if !strings.Contains(index, want) {
 			t.Fatalf("docs index missing %q:\n%s", want, index)
 		}
@@ -113,7 +113,7 @@ func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree
 		if err == nil {
 			t.Fatal("expected unsupported docs topic to fail")
 		}
-		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
+		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
 			t.Fatalf("unexpected unsupported topic error %q", got)
 		}
 	})

@@ -233,4 +233,3 @@ func samplePetriFactorySession() factoryapi.FactorySession {
 		},
 	}
 }
-
