@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+required:
+  - marking
+  - enabledTransitions
+properties:
+  marking:
+    type: array
+    items:
+      $ref: './TokenResponse.yaml'
+    description: Current Petri marking tokens for the session runtime.
+  enabledTransitions:
+    type: array
+    items:
+      $ref: './FactorySessionPetriEnabledTransition.yaml'
+    description: Transitions currently enabled in the Petri marking.

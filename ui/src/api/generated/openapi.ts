@@ -359,7 +359,11 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /**
+     * Get one live factory session
+     * @description Returns the canonical factory session projection for one live session, including orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections.
+     */
+    get: operations["getFactorySession"];
     put?: never;
     post?: never;
     /**
@@ -918,6 +922,124 @@ export interface components {
       factoryDir: string;
       project: string;
       isDefault: boolean;
+      runtime?: components["schemas"]["FactorySessionRuntime"];
+    };
+    FactorySession: {
+      id: string;
+      target: components["schemas"]["FactorySessionTargetRef"];
+      folderPath: string;
+      factoryDir: string;
+      project: string;
+      isDefault: boolean;
+      runtime: components["schemas"]["FactorySessionRuntime"];
+    };
+    FactorySessionRuntime: {
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT. */
+      dialect?: string;
+      /** @description Authored JavaScript workflow source reference when applicable. */
+      sourceRef?: string;
+      /** @description Stable hash of the authored JavaScript workflow source. */
+      sourceHash?: string;
+      /** @description Stable hash of the effective orchestrator policy. */
+      policyHash?: string;
+      status: components["schemas"]["FactorySessionStatus"];
+      progress: components["schemas"]["FactorySessionProgress"];
+      budgets?: components["schemas"]["FactorySessionBudgets"];
+      usage: components["schemas"]["FactorySessionUsage"];
+      lifecycle: components["schemas"]["FactorySessionLifecycle"];
+      petri?: components["schemas"]["FactorySessionPetriProjection"];
+      javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
+    };
+    /**
+     * @description Canonical lifecycle status for one live factory session runtime.
+     * @enum {string}
+     */
+    FactorySessionStatus: FactorySessionStatus;
+    FactorySessionProgress: {
+      /** @description Factory lifecycle state from the aggregate engine snapshot. */
+      factoryState: string;
+      categories: components["schemas"]["StatusCategories"];
+      /** @description Number of dispatches currently in flight for the session. */
+      inFlightCount: number;
+      /** @description Number of customer-visible work tokens in the current marking. */
+      totalTokens: number;
+    };
+    /** @description Effective orchestrator policy budgets projected for one factory session. */
+    FactorySessionBudgets: {
+      /** @description Maximum concurrent child-agent dispatches allowed by the effective JavaScript policy. */
+      maxAgents?: number;
+    };
+    FactorySessionUsage: {
+      /** @description Resource availability and consumption for the session runtime. */
+      resources: components["schemas"]["ResourceUsage"][];
+    };
+    FactorySessionLifecycle: {
+      /**
+       * Format: date-time
+       * @description When the live session runtime started.
+       */
+      startedAt: string;
+      /**
+       * Format: date-time
+       * @description When the session projection was last refreshed.
+       */
+      updatedAt: string;
+      /**
+       * Format: date-time
+       * @description When the session runtime reached a terminal finished state.
+       */
+      finishedAt?: string;
+    };
+    FactorySessionPetriProjection: {
+      /** @description Current Petri marking tokens for the session runtime. */
+      marking: components["schemas"]["TokenResponse"][];
+      /** @description Transitions currently enabled in the Petri marking. */
+      enabledTransitions: components["schemas"]["FactorySessionPetriEnabledTransition"][];
+    };
+    FactorySessionPetriEnabledTransition: {
+      /** @description Enabled Petri transition identifier. */
+      transitionId: string;
+      /** @description Worker type bound to the enabled transition. */
+      workerType: string;
+    };
+    FactorySessionJavaScriptProjection: {
+      /** @description Current JavaScript workflow phase name. */
+      phase?: string;
+      /** @description Ordered phase names visible in the session runtime. */
+      phases: string[];
+      /** @description Stable digest of the effective workflow arguments. */
+      argsDigest?: string;
+      /** @description Checkpoint refs and summaries without raw VM checkpoint bodies. */
+      checkpoints?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
+      scriptStatus: components["schemas"]["FactorySessionJavaScriptScriptStatus"];
+      childDispatchCounts: components["schemas"]["FactorySessionJavaScriptChildDispatchCounts"];
+    };
+    FactorySessionJavaScriptCheckpointRef: {
+      /** @description Stable checkpoint identifier referenced by the session runtime. */
+      id: string;
+      /** @description Customer-visible checkpoint label. */
+      label?: string;
+      /**
+       * Format: date-time
+       * @description When the checkpoint was recorded.
+       */
+      timestamp?: string;
+      /** @description Short customer-visible checkpoint summary without raw VM state. */
+      summary?: string;
+    };
+    /**
+     * @description JavaScript workflow script runtime status for one factory session.
+     * @enum {string}
+     */
+    FactorySessionJavaScriptScriptStatus: FactorySessionJavaScriptScriptStatus;
+    FactorySessionJavaScriptChildDispatchCounts: {
+      /** @description Child dispatches waiting to start. */
+      queued: number;
+      /** @description Child dispatches currently executing. */
+      running: number;
+      /** @description Child dispatches that have completed. */
+      completed: number;
     };
     ListFactorySessionsResponse: {
       sessions: components["schemas"]["FactorySessionSummary"][];
@@ -3406,6 +3528,31 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  getFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Canonical factory session projection for the targeted live session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySession"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   closeFactorySession: {
     parameters: {
       query?: never;
@@ -3728,6 +3875,30 @@ export const FactorySessionTargetRefKind = {
 } as const;
 export type FactorySessionTargetRefKind =
   (typeof FactorySessionTargetRefKind)[keyof typeof FactorySessionTargetRefKind];
+export const FactorySessionStatus = {
+  // The session runtime is actively processing work.
+  ACTIVE: "ACTIVE",
+  // The session runtime is available but not currently processing work.
+  IDLE: "IDLE",
+  // The session runtime has reached a terminal finished state.
+  FINISHED: "FINISHED",
+} as const;
+export type FactorySessionStatus =
+  (typeof FactorySessionStatus)[keyof typeof FactorySessionStatus];
+export const FactorySessionJavaScriptScriptStatus = {
+  // The script runtime is loaded but not executing.
+  IDLE: "IDLE",
+  // The script runtime is actively executing workflow logic.
+  RUNNING: "RUNNING",
+  // The script runtime is paused and not scheduling new work.
+  PAUSED: "PAUSED",
+  // The script runtime finished successfully.
+  FINISHED: "FINISHED",
+  // The script runtime failed and is not scheduling new work.
+  FAILED: "FAILED",
+} as const;
+export type FactorySessionJavaScriptScriptStatus =
+  (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",

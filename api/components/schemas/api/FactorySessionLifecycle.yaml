@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - startedAt
+  - updatedAt
+properties:
+  startedAt:
+    type: string
+    format: date-time
+    description: When the live session runtime started.
+  updatedAt:
+    type: string
+    format: date-time
+    description: When the session projection was last refreshed.
+  finishedAt:
+    type: string
+    format: date-time
+    description: When the session runtime reached a terminal finished state.

@@ -35,6 +35,7 @@ type FactorySaveAPI interface {
 // SessionAPI is the factory-session inventory and lifecycle seam.
 type SessionAPI interface {
 	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
+	GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error)
 	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	CloseFactorySession(ctx context.Context, sessionID string) error
 }

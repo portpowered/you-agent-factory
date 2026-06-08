@@ -520,6 +520,25 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySession
+      summary: Get one live factory session
+      description: Returns the canonical factory session projection for one live session, including orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Canonical factory session projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       tags:
         - Factory
@@ -879,6 +898,32 @@ components:
       $ref: './components/schemas/api/FactorySessionTarget.yaml'
     FactorySessionSummary:
       $ref: './components/schemas/api/FactorySessionSummary.yaml'
+    FactorySession:
+      $ref: './components/schemas/api/FactorySession.yaml'
+    FactorySessionRuntime:
+      $ref: './components/schemas/api/FactorySessionRuntime.yaml'
+    FactorySessionStatus:
+      $ref: './components/schemas/api/FactorySessionStatus.yaml'
+    FactorySessionProgress:
+      $ref: './components/schemas/api/FactorySessionProgress.yaml'
+    FactorySessionBudgets:
+      $ref: './components/schemas/api/FactorySessionBudgets.yaml'
+    FactorySessionUsage:
+      $ref: './components/schemas/api/FactorySessionUsage.yaml'
+    FactorySessionLifecycle:
+      $ref: './components/schemas/api/FactorySessionLifecycle.yaml'
+    FactorySessionPetriProjection:
+      $ref: './components/schemas/api/FactorySessionPetriProjection.yaml'
+    FactorySessionPetriEnabledTransition:
+      $ref: './components/schemas/api/FactorySessionPetriEnabledTransition.yaml'
+    FactorySessionJavaScriptProjection:
+      $ref: './components/schemas/api/FactorySessionJavaScriptProjection.yaml'
+    FactorySessionJavaScriptCheckpointRef:
+      $ref: './components/schemas/api/FactorySessionJavaScriptCheckpointRef.yaml'
+    FactorySessionJavaScriptScriptStatus:
+      $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
+    FactorySessionJavaScriptChildDispatchCounts:
+      $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
     ListFactorySessionsResponse:
       $ref: './components/schemas/api/ListFactorySessionsResponse.yaml'
     OpenFactorySessionRequest:

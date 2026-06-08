@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+required:
+  - phases
+  - childDispatchCounts
+  - scriptStatus
+properties:
+  phase:
+    type: string
+    description: Current JavaScript workflow phase name.
+  phases:
+    type: array
+    items:
+      type: string
+    description: Ordered phase names visible in the session runtime.
+  argsDigest:
+    type: string
+    description: Stable digest of the effective workflow arguments.
+  checkpoints:
+    type: array
+    items:
+      $ref: './FactorySessionJavaScriptCheckpointRef.yaml'
+    description: Checkpoint refs and summaries without raw VM checkpoint bodies.
+  scriptStatus:
+    $ref: './FactorySessionJavaScriptScriptStatus.yaml'
+  childDispatchCounts:
+    $ref: './FactorySessionJavaScriptChildDispatchCounts.yaml'

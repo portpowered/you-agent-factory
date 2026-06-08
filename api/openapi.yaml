@@ -508,6 +508,25 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySession
+      summary: Get one live factory session
+      description: Returns the canonical factory session projection for one live session, including orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Canonical factory session projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       tags:
         - Factory
@@ -2094,6 +2113,256 @@ components:
           type: string
         isDefault:
           type: boolean
+        runtime:
+          $ref: '#/components/schemas/FactorySessionRuntime'
+    FactorySession:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - target
+        - folderPath
+        - factoryDir
+        - project
+        - isDefault
+        - runtime
+      properties:
+        id:
+          type: string
+        target:
+          $ref: '#/components/schemas/FactorySessionTargetRef'
+        folderPath:
+          type: string
+        factoryDir:
+          type: string
+        project:
+          type: string
+        isDefault:
+          type: boolean
+        runtime:
+          $ref: '#/components/schemas/FactorySessionRuntime'
+    FactorySessionRuntime:
+      type: object
+      additionalProperties: false
+      required:
+        - orchestratorKind
+        - status
+        - progress
+        - usage
+        - lifecycle
+      properties:
+        orchestratorKind:
+          $ref: '#/components/schemas/FactoryOrchestratorKind'
+        dialect:
+          type: string
+          description: JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
+        sourceRef:
+          type: string
+          description: Authored JavaScript workflow source reference when applicable.
+        sourceHash:
+          type: string
+          description: Stable hash of the authored JavaScript workflow source.
+        policyHash:
+          type: string
+          description: Stable hash of the effective orchestrator policy.
+        status:
+          $ref: '#/components/schemas/FactorySessionStatus'
+        progress:
+          $ref: '#/components/schemas/FactorySessionProgress'
+        budgets:
+          $ref: '#/components/schemas/FactorySessionBudgets'
+        usage:
+          $ref: '#/components/schemas/FactorySessionUsage'
+        lifecycle:
+          $ref: '#/components/schemas/FactorySessionLifecycle'
+        petri:
+          $ref: '#/components/schemas/FactorySessionPetriProjection'
+        javascript:
+          $ref: '#/components/schemas/FactorySessionJavaScriptProjection'
+    FactorySessionStatus:
+      type: string
+      description: Canonical lifecycle status for one live factory session runtime.
+      enum:
+        - ACTIVE
+        - IDLE
+        - FINISHED
+      x-enum-descriptions:
+        - The session runtime is actively processing work.
+        - The session runtime is available but not currently processing work.
+        - The session runtime has reached a terminal finished state.
+    FactorySessionProgress:
+      type: object
+      additionalProperties: false
+      required:
+        - factoryState
+        - categories
+        - inFlightCount
+        - totalTokens
+      properties:
+        factoryState:
+          type: string
+          description: Factory lifecycle state from the aggregate engine snapshot.
+        categories:
+          $ref: '#/components/schemas/StatusCategories'
+        inFlightCount:
+          type: integer
+          minimum: 0
+          description: Number of dispatches currently in flight for the session.
+        totalTokens:
+          type: integer
+          minimum: 0
+          description: Number of customer-visible work tokens in the current marking.
+    FactorySessionBudgets:
+      type: object
+      additionalProperties: false
+      description: Effective orchestrator policy budgets projected for one factory session.
+      properties:
+        maxAgents:
+          type: integer
+          minimum: 0
+          description: Maximum concurrent child-agent dispatches allowed by the effective JavaScript policy.
+    FactorySessionUsage:
+      type: object
+      additionalProperties: false
+      required:
+        - resources
+      properties:
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceUsage'
+          description: Resource availability and consumption for the session runtime.
+    FactorySessionLifecycle:
+      type: object
+      additionalProperties: false
+      required:
+        - startedAt
+        - updatedAt
+      properties:
+        startedAt:
+          type: string
+          format: date-time
+          description: When the live session runtime started.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the session projection was last refreshed.
+        finishedAt:
+          type: string
+          format: date-time
+          description: When the session runtime reached a terminal finished state.
+    FactorySessionPetriProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - marking
+        - enabledTransitions
+      properties:
+        marking:
+          type: array
+          items:
+            $ref: '#/components/schemas/TokenResponse'
+          description: Current Petri marking tokens for the session runtime.
+        enabledTransitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionPetriEnabledTransition'
+          description: Transitions currently enabled in the Petri marking.
+    FactorySessionPetriEnabledTransition:
+      type: object
+      additionalProperties: false
+      required:
+        - transitionId
+        - workerType
+      properties:
+        transitionId:
+          type: string
+          description: Enabled Petri transition identifier.
+        workerType:
+          type: string
+          description: Worker type bound to the enabled transition.
+    FactorySessionJavaScriptProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - phases
+        - childDispatchCounts
+        - scriptStatus
+      properties:
+        phase:
+          type: string
+          description: Current JavaScript workflow phase name.
+        phases:
+          type: array
+          items:
+            type: string
+          description: Ordered phase names visible in the session runtime.
+        argsDigest:
+          type: string
+          description: Stable digest of the effective workflow arguments.
+        checkpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionJavaScriptCheckpointRef'
+          description: Checkpoint refs and summaries without raw VM checkpoint bodies.
+        scriptStatus:
+          $ref: '#/components/schemas/FactorySessionJavaScriptScriptStatus'
+        childDispatchCounts:
+          $ref: '#/components/schemas/FactorySessionJavaScriptChildDispatchCounts'
+    FactorySessionJavaScriptCheckpointRef:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Stable checkpoint identifier referenced by the session runtime.
+        label:
+          type: string
+          description: Customer-visible checkpoint label.
+        timestamp:
+          type: string
+          format: date-time
+          description: When the checkpoint was recorded.
+        summary:
+          type: string
+          description: Short customer-visible checkpoint summary without raw VM state.
+    FactorySessionJavaScriptScriptStatus:
+      type: string
+      description: JavaScript workflow script runtime status for one factory session.
+      enum:
+        - IDLE
+        - RUNNING
+        - PAUSED
+        - FINISHED
+        - FAILED
+      x-enum-descriptions:
+        - The script runtime is loaded but not executing.
+        - The script runtime is actively executing workflow logic.
+        - The script runtime is paused and not scheduling new work.
+        - The script runtime finished successfully.
+        - The script runtime failed and is not scheduling new work.
+    FactorySessionJavaScriptChildDispatchCounts:
+      type: object
+      additionalProperties: false
+      required:
+        - queued
+        - running
+        - completed
+      properties:
+        queued:
+          type: integer
+          minimum: 0
+          description: Child dispatches waiting to start.
+        running:
+          type: integer
+          minimum: 0
+          description: Child dispatches currently executing.
+        completed:
+          type: integer
+          minimum: 0
+          description: Child dispatches that have completed.
     ListFactorySessionsResponse:
       type: object
       additionalProperties: false

@@ -57,6 +57,8 @@ type MockFactory struct {
 	SessionFactories         map[string]*MockFactory
 	FactorySessions          factoryapi.ListFactorySessionsResponse
 	ListFactorySessionsErr   error
+	FactorySession           factoryapi.FactorySession
+	GetFactorySessionErr     error
 	OpenFactorySessionResult factoryapi.OpenFactorySessionResponse
 	OpenFactorySessionErr    error
 	OpenedFactorySessions    []factoryapi.OpenFactorySessionRequest
@@ -322,6 +324,13 @@ func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFac
 		return factoryapi.ListFactorySessionsResponse{}, m.ListFactorySessionsErr
 	}
 	return m.FactorySessions, nil
+}
+
+func (m *MockFactory) GetFactorySession(_ context.Context, _ string) (factoryapi.FactorySession, error) {
+	if m.GetFactorySessionErr != nil {
+		return factoryapi.FactorySession{}, m.GetFactorySessionErr
+	}
+	return m.FactorySession, nil
 }
 
 func (m *MockFactory) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {

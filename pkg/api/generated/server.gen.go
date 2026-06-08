@@ -98,6 +98,22 @@ const (
 	FactorySaveModeUpsertNamedAndActivate FactorySaveMode = "UPSERT_NAMED_AND_ACTIVATE"
 )
 
+// Defines values for FactorySessionJavaScriptScriptStatus.
+const (
+	FactorySessionJavaScriptScriptStatusFAILED   FactorySessionJavaScriptScriptStatus = "FAILED"
+	FactorySessionJavaScriptScriptStatusFINISHED FactorySessionJavaScriptScriptStatus = "FINISHED"
+	FactorySessionJavaScriptScriptStatusIDLE     FactorySessionJavaScriptScriptStatus = "IDLE"
+	FactorySessionJavaScriptScriptStatusPAUSED   FactorySessionJavaScriptScriptStatus = "PAUSED"
+	FactorySessionJavaScriptScriptStatusRUNNING  FactorySessionJavaScriptScriptStatus = "RUNNING"
+)
+
+// Defines values for FactorySessionStatus.
+const (
+	FactorySessionStatusACTIVE   FactorySessionStatus = "ACTIVE"
+	FactorySessionStatusFINISHED FactorySessionStatus = "FINISHED"
+	FactorySessionStatusIDLE     FactorySessionStatus = "IDLE"
+)
+
 // Defines values for FactorySessionTargetRefKind.
 const (
 	FactorySessionTargetRefKindDefault FactorySessionTargetRefKind = "default"
@@ -995,6 +1011,148 @@ type FactoryOrchestratorPetriConfig = map[string]interface{}
 // FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
 type FactorySaveMode string
 
+// FactorySession defines model for FactorySession.
+type FactorySession struct {
+	FactoryDir string                  `json:"factoryDir"`
+	FolderPath string                  `json:"folderPath"`
+	Id         string                  `json:"id"`
+	IsDefault  bool                    `json:"isDefault"`
+	Project    string                  `json:"project"`
+	Runtime    FactorySessionRuntime   `json:"runtime"`
+	Target     FactorySessionTargetRef `json:"target"`
+}
+
+// FactorySessionBudgets Effective orchestrator policy budgets projected for one factory session.
+type FactorySessionBudgets struct {
+	// MaxAgents Maximum concurrent child-agent dispatches allowed by the effective JavaScript policy.
+	MaxAgents *int `json:"maxAgents,omitempty"`
+}
+
+// FactorySessionJavaScriptCheckpointRef defines model for FactorySessionJavaScriptCheckpointRef.
+type FactorySessionJavaScriptCheckpointRef struct {
+	// Id Stable checkpoint identifier referenced by the session runtime.
+	Id string `json:"id"`
+
+	// Label Customer-visible checkpoint label.
+	Label *string `json:"label,omitempty"`
+
+	// Summary Short customer-visible checkpoint summary without raw VM state.
+	Summary *string `json:"summary,omitempty"`
+
+	// Timestamp When the checkpoint was recorded.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+}
+
+// FactorySessionJavaScriptChildDispatchCounts defines model for FactorySessionJavaScriptChildDispatchCounts.
+type FactorySessionJavaScriptChildDispatchCounts struct {
+	// Completed Child dispatches that have completed.
+	Completed int `json:"completed"`
+
+	// Queued Child dispatches waiting to start.
+	Queued int `json:"queued"`
+
+	// Running Child dispatches currently executing.
+	Running int `json:"running"`
+}
+
+// FactorySessionJavaScriptProjection defines model for FactorySessionJavaScriptProjection.
+type FactorySessionJavaScriptProjection struct {
+	// ArgsDigest Stable digest of the effective workflow arguments.
+	ArgsDigest *string `json:"argsDigest,omitempty"`
+
+	// Checkpoints Checkpoint refs and summaries without raw VM checkpoint bodies.
+	Checkpoints         *[]FactorySessionJavaScriptCheckpointRef    `json:"checkpoints,omitempty"`
+	ChildDispatchCounts FactorySessionJavaScriptChildDispatchCounts `json:"childDispatchCounts"`
+
+	// Phase Current JavaScript workflow phase name.
+	Phase *string `json:"phase,omitempty"`
+
+	// Phases Ordered phase names visible in the session runtime.
+	Phases []string `json:"phases"`
+
+	// ScriptStatus JavaScript workflow script runtime status for one factory session.
+	ScriptStatus FactorySessionJavaScriptScriptStatus `json:"scriptStatus"`
+}
+
+// FactorySessionJavaScriptScriptStatus JavaScript workflow script runtime status for one factory session.
+type FactorySessionJavaScriptScriptStatus string
+
+// FactorySessionLifecycle defines model for FactorySessionLifecycle.
+type FactorySessionLifecycle struct {
+	// FinishedAt When the session runtime reached a terminal finished state.
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+
+	// StartedAt When the live session runtime started.
+	StartedAt time.Time `json:"startedAt"`
+
+	// UpdatedAt When the session projection was last refreshed.
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// FactorySessionPetriEnabledTransition defines model for FactorySessionPetriEnabledTransition.
+type FactorySessionPetriEnabledTransition struct {
+	// TransitionId Enabled Petri transition identifier.
+	TransitionId string `json:"transitionId"`
+
+	// WorkerType Worker type bound to the enabled transition.
+	WorkerType string `json:"workerType"`
+}
+
+// FactorySessionPetriProjection defines model for FactorySessionPetriProjection.
+type FactorySessionPetriProjection struct {
+	// EnabledTransitions Transitions currently enabled in the Petri marking.
+	EnabledTransitions []FactorySessionPetriEnabledTransition `json:"enabledTransitions"`
+
+	// Marking Current Petri marking tokens for the session runtime.
+	Marking []TokenResponse `json:"marking"`
+}
+
+// FactorySessionProgress defines model for FactorySessionProgress.
+type FactorySessionProgress struct {
+	Categories StatusCategories `json:"categories"`
+
+	// FactoryState Factory lifecycle state from the aggregate engine snapshot.
+	FactoryState string `json:"factoryState"`
+
+	// InFlightCount Number of dispatches currently in flight for the session.
+	InFlightCount int `json:"inFlightCount"`
+
+	// TotalTokens Number of customer-visible work tokens in the current marking.
+	TotalTokens int `json:"totalTokens"`
+}
+
+// FactorySessionRuntime defines model for FactorySessionRuntime.
+type FactorySessionRuntime struct {
+	// Budgets Effective orchestrator policy budgets projected for one factory session.
+	Budgets *FactorySessionBudgets `json:"budgets,omitempty"`
+
+	// Dialect JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
+	Dialect    *string                             `json:"dialect,omitempty"`
+	Javascript *FactorySessionJavaScriptProjection `json:"javascript,omitempty"`
+	Lifecycle  FactorySessionLifecycle             `json:"lifecycle"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind        `json:"orchestratorKind"`
+	Petri            *FactorySessionPetriProjection `json:"petri,omitempty"`
+
+	// PolicyHash Stable hash of the effective orchestrator policy.
+	PolicyHash *string                `json:"policyHash,omitempty"`
+	Progress   FactorySessionProgress `json:"progress"`
+
+	// SourceHash Stable hash of the authored JavaScript workflow source.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// SourceRef Authored JavaScript workflow source reference when applicable.
+	SourceRef *string `json:"sourceRef,omitempty"`
+
+	// Status Canonical lifecycle status for one live factory session runtime.
+	Status FactorySessionStatus `json:"status"`
+	Usage  FactorySessionUsage  `json:"usage"`
+}
+
+// FactorySessionStatus Canonical lifecycle status for one live factory session runtime.
+type FactorySessionStatus string
+
 // FactorySessionSummary defines model for FactorySessionSummary.
 type FactorySessionSummary struct {
 	FactoryDir string                  `json:"factoryDir"`
@@ -1002,6 +1160,7 @@ type FactorySessionSummary struct {
 	Id         string                  `json:"id"`
 	IsDefault  bool                    `json:"isDefault"`
 	Project    string                  `json:"project"`
+	Runtime    *FactorySessionRuntime  `json:"runtime,omitempty"`
 	Target     FactorySessionTargetRef `json:"target"`
 }
 
@@ -1022,6 +1181,12 @@ type FactorySessionTargetRef struct {
 
 // FactorySessionTargetRefKind defines model for FactorySessionTargetRef.Kind.
 type FactorySessionTargetRefKind string
+
+// FactorySessionUsage defines model for FactorySessionUsage.
+type FactorySessionUsage struct {
+	// Resources Resource availability and consumption for the session runtime.
+	Resources []ResourceUsage `json:"resources"`
+}
 
 // FactoryState Lifecycle state of the running factory.
 type FactoryState string
@@ -4143,6 +4308,9 @@ type ServerInterface interface {
 	// Close one live factory session
 	// (DELETE /factory-sessions/{session_id})
 	CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionId string)
+	// Get one live factory session
+	// (GET /factory-sessions/{session_id})
+	GetFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Stream factory events for one session
 	// (GET /factory-sessions/{session_id}/events)
 	GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -4272,6 +4440,31 @@ func (siw *ServerInterfaceWrapper) CloseFactorySession(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CloseFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySession(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5019,6 +5212,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.OpenFactorySession).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.CloseFactorySession).Methods("DELETE")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.GetFactorySession).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/events", wrapper.GetEventsBySessionId).Methods("GET")
 
