@@ -3,8 +3,8 @@ import { useMemo } from "react";
 
 import {
   type FactorySession,
+  type FactorySessionLiveResult,
   type FactorySessionPartialResult,
-  type FactorySessionResult,
   type FactorySessionsAPIError,
   getFactorySession,
   getFactorySessionPartialResult,
@@ -18,7 +18,7 @@ export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
 
 export interface FactorySessionDetailData {
   partialResult?: FactorySessionPartialResult;
-  result?: FactorySessionResult;
+  result?: FactorySessionLiveResult;
   session: FactorySession;
 }
 

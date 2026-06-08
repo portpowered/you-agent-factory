@@ -612,13 +612,41 @@ paths:
       tags:
         - Factory
       operationId: getFactorySessionResult
-      summary: Get one factory session result
-      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+      summary: Get one live factory session result
+      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths. Durable workflow execution results use GET /factory-sessions/{session_id}/results instead.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Terminal session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLiveResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/results:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionResults
+      summary: Get durable factory session results
+      description: >-
+        Returns final or partial durable workflow outputs for one factory session.
+        Supports mode=FINAL|PARTIAL and includeArtifacts=true|false without requiring
+        clients to scrape event streams or logs. Non-ready, unavailable, and
+        failed-with-partial states return typed FactorySessionResult bodies with
+        session identity, current session status, and actionable failure or
+        availability details when known.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/FactorySessionResultMode'
+        - $ref: '#/components/parameters/FactorySessionResultIncludeArtifacts'
+      responses:
+        '200':
+          description: Durable session result retrieval response.
           content:
             application/json:
               schema:
@@ -899,6 +927,10 @@ components:
       $ref: './components/parameters/WorkOrTokenID.yaml'
     FactorySessionListScope:
       $ref: './components/parameters/FactorySessionListScope.yaml'
+    FactorySessionResultMode:
+      $ref: './components/parameters/FactorySessionResultMode.yaml'
+    FactorySessionResultIncludeArtifacts:
+      $ref: './components/parameters/FactorySessionResultIncludeArtifacts.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'
@@ -1065,8 +1097,14 @@ components:
       $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
     FactorySessionJavaScriptChildDispatchCounts:
       $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    FactorySessionLiveResult:
+      $ref: './components/schemas/api/FactorySessionLiveResult.yaml'
     FactorySessionResult:
       $ref: './components/schemas/api/FactorySessionResult.yaml'
+    FactorySessionResultMode:
+      $ref: './components/schemas/api/FactorySessionResultMode.yaml'
+    FactorySessionResultAvailabilityDetail:
+      $ref: './components/schemas/api/FactorySessionResultAvailabilityDetail.yaml'
     FactorySessionPartialResult:
       $ref: './components/schemas/api/FactorySessionPartialResult.yaml'
     FactoryDispatch:

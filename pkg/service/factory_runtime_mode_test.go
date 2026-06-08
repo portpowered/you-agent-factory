@@ -1532,9 +1532,9 @@ func (s *stubFactoryCoordinator) GetFactorySession(_ context.Context, sessionID 
 	return s.getSessionResult, nil
 }
 
-func (s *stubFactoryCoordinator) GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionResult, error) {
+func (s *stubFactoryCoordinator) GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error) {
 	s.calls = append(s.calls, "get-session-result")
-	return factoryapi.FactorySessionResult{}, nil
+	return factoryapi.FactorySessionLiveResult{}, nil
 }
 
 func (s *stubFactoryCoordinator) GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error) {

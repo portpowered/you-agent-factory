@@ -132,6 +132,12 @@ func (s *Server) GetFactorySessionResult(w http.ResponseWriter, r *http.Request,
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetFactorySessionResultsParams) {
+	_ = sessionID
+	_ = params
+	s.writeError(w, http.StatusNotImplemented, "durable factory session result retrieval is not implemented", "INTERNAL_ERROR")
+}
+
 func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {

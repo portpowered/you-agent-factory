@@ -400,10 +400,30 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get one factory session result
-     * @description Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+     * Get one live factory session result
+     * @description Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths. Durable workflow execution results use GET /factory-sessions/{session_id}/results instead.
      */
     get: operations["getFactorySessionResult"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/results": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get durable factory session results
+     * @description Returns final or partial durable workflow outputs for one factory session. Supports mode=FINAL|PARTIAL and includeArtifacts=true|false without requiring clients to scrape event streams or logs. Non-ready, unavailable, and failed-with-partial states return typed FactorySessionResult bodies with session identity, current session status, and actionable failure or availability details when known.
+     */
+    get: operations["getFactorySessionResults"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1127,7 +1147,7 @@ export interface components {
       /** @description Child dispatches that have completed. */
       completed: number;
     };
-    FactorySessionResult: {
+    FactorySessionLiveResult: {
       /** @description Live factory session identifier for this result read. */
       sessionId: string;
       status: components["schemas"]["FactorySessionStatus"];
@@ -1135,6 +1155,41 @@ export interface components {
       resultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
       /** @description Checkpoint refs associated with the terminal session result. */
       checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
+    };
+    /** @description Durable factory-session result retrieval response for final or partial workflow outputs. Non-ready, unavailable, and failed-with-partial states return typed bodies with session identity, current session status, and actionable failure or availability details when known. */
+    FactorySessionResult: {
+      /** @description Stable durable factory-session identifier. */
+      sessionId: string;
+      resultStatus: components["schemas"]["FactorySessionResultStatus"];
+      /** @description Current durable session lifecycle status when known. */
+      sessionStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /** @description Result retrieval mode echoed from the request. */
+      mode?: components["schemas"]["FactorySessionResultMode"];
+      /** @description Whether artifact metadata was included in this response. */
+      includeArtifacts?: boolean;
+      /** @description Primary workflow output when resultStatus is PARTIAL or FINAL. */
+      primaryResult?: components["schemas"]["WorkContent"];
+      /** @description Artifact identifiers for materialized outputs when bodies are omitted or includeArtifacts is false. */
+      artifactIds?: string[];
+      /** @description Artifact refs for large or non-text outputs when includeArtifacts is true. */
+      artifactRefs?: components["schemas"]["FactoryArtifactRef"][];
+      /** @description Failure details when resultStatus is FAILED_WITH_PARTIAL. */
+      failure?: components["schemas"]["FactorySessionDurableFailureDetail"];
+      /** @description Availability details when resultStatus is NOT_READY or UNAVAILABLE. */
+      availability?: components["schemas"]["FactorySessionResultAvailabilityDetail"];
+    };
+    /**
+     * @description Durable session result retrieval mode.
+     * @enum {string}
+     */
+    FactorySessionResultMode: FactorySessionResultMode;
+    FactorySessionResultAvailabilityDetail: {
+      /** @description Stable availability reason code when the result is not ready or unavailable. */
+      reason?: string;
+      /** @description Customer-visible availability message when known. */
+      message?: string;
+      /** @description Whether polling or a later retry may return a ready result. */
+      retryable?: boolean;
     };
     FactorySessionPartialResult: {
       /** @description Live factory session identifier for this partial-result read. */
@@ -3600,6 +3655,10 @@ export interface components {
     WorkOrTokenID: string;
     /** @description Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing. */
     FactorySessionListScope: components["schemas"]["FactorySessionListScope"];
+    /** @description Optional durable result retrieval mode. Defaults to FINAL for terminal outputs. PARTIAL returns the latest partial workflow output when available. */
+    FactorySessionResultMode: components["schemas"]["FactorySessionResultMode"];
+    /** @description When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only. */
+    FactorySessionResultIncludeArtifacts: boolean;
   };
   requestBodies: never;
   headers: never;
@@ -4205,6 +4264,36 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
+          "application/json": components["schemas"]["FactorySessionLiveResult"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySessionResults: {
+    parameters: {
+      query?: {
+        /** @description Optional durable result retrieval mode. Defaults to FINAL for terminal outputs. PARTIAL returns the latest partial workflow output when available. */
+        mode?: components["parameters"]["FactorySessionResultMode"];
+        /** @description When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only. */
+        includeArtifacts?: components["parameters"]["FactorySessionResultIncludeArtifacts"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Durable session result retrieval response. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
           "application/json": components["schemas"]["FactorySessionResult"];
         };
       };
@@ -4610,6 +4699,12 @@ export const FactorySessionJavaScriptScriptStatus = {
 } as const;
 export type FactorySessionJavaScriptScriptStatus =
   (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
+export const FactorySessionResultMode = {
+  FactorySessionResultModeFinal: "FINAL",
+  FactorySessionResultModePartial: "PARTIAL",
+} as const;
+export type FactorySessionResultMode =
+  (typeof FactorySessionResultMode)[keyof typeof FactorySessionResultMode];
 export const FactoryDispatchKind = {
   // Petri transition dispatch owned by the factory engine.
   FactoryDispatchKindPETRITRANSITION: "PETRI_TRANSITION",

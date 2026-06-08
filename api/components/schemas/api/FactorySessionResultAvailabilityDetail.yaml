@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+properties:
+  reason:
+    type: string
+    description: Stable availability reason code when the result is not ready or unavailable.
+  message:
+    type: string
+    description: Customer-visible availability message when known.
+  retryable:
+    type: boolean
+    description: Whether polling or a later retry may return a ready result.

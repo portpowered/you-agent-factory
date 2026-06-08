@@ -568,13 +568,35 @@ paths:
       tags:
         - Factory
       operationId: getFactorySessionResult
-      summary: Get one factory session result
-      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+      summary: Get one live factory session result
+      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths. Durable workflow execution results use GET /factory-sessions/{session_id}/results instead.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
           description: Terminal session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLiveResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/results:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionResults
+      summary: Get durable factory session results
+      description: Returns final or partial durable workflow outputs for one factory session. Supports mode=FINAL|PARTIAL and includeArtifacts=true|false without requiring clients to scrape event streams or logs. Non-ready, unavailable, and failed-with-partial states return typed FactorySessionResult bodies with session identity, current session status, and actionable failure or availability details when known.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/FactorySessionResultMode'
+        - $ref: '#/components/parameters/FactorySessionResultIncludeArtifacts'
+      responses:
+        '200':
+          description: Durable session result retrieval response.
           content:
             application/json:
               schema:
@@ -896,6 +918,21 @@ components:
       description: Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing.
       schema:
         $ref: '#/components/schemas/FactorySessionListScope'
+    FactorySessionResultMode:
+      name: mode
+      in: query
+      required: false
+      description: Optional durable result retrieval mode. Defaults to FINAL for terminal outputs. PARTIAL returns the latest partial workflow output when available.
+      schema:
+        $ref: '#/components/schemas/FactorySessionResultMode'
+    FactorySessionResultIncludeArtifacts:
+      name: includeArtifacts
+      in: query
+      required: false
+      description: When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only.
+      schema:
+        type: boolean
+        default: false
   responses:
     BadRequest:
       description: Request payload or parameter was invalid.
@@ -2494,7 +2531,7 @@ components:
           type: integer
           minimum: 0
           description: Child dispatches that have completed.
-    FactorySessionResult:
+    FactorySessionLiveResult:
       type: object
       additionalProperties: false
       required:
@@ -2514,6 +2551,69 @@ components:
           items:
             $ref: '#/components/schemas/FactorySessionJavaScriptCheckpointRef'
           description: Checkpoint refs associated with the terminal session result.
+    FactorySessionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - resultStatus
+      description: Durable factory-session result retrieval response for final or partial workflow outputs. Non-ready, unavailable, and failed-with-partial states return typed bodies with session identity, current session status, and actionable failure or availability details when known.
+      properties:
+        sessionId:
+          type: string
+          description: Stable durable factory-session identifier.
+        resultStatus:
+          $ref: '#/components/schemas/FactorySessionResultStatus'
+        sessionStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Current durable session lifecycle status when known.
+        mode:
+          $ref: '#/components/schemas/FactorySessionResultMode'
+          description: Result retrieval mode echoed from the request.
+        includeArtifacts:
+          type: boolean
+          description: Whether artifact metadata was included in this response.
+        primaryResult:
+          $ref: '#/components/schemas/WorkContent'
+          description: Primary workflow output when resultStatus is PARTIAL or FINAL.
+        artifactIds:
+          type: array
+          items:
+            type: string
+          description: Artifact identifiers for materialized outputs when bodies are omitted or includeArtifacts is false.
+        artifactRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryArtifactRef'
+          description: Artifact refs for large or non-text outputs when includeArtifacts is true.
+        failure:
+          $ref: '#/components/schemas/FactorySessionDurableFailureDetail'
+          description: Failure details when resultStatus is FAILED_WITH_PARTIAL.
+        availability:
+          $ref: '#/components/schemas/FactorySessionResultAvailabilityDetail'
+          description: Availability details when resultStatus is NOT_READY or UNAVAILABLE.
+    FactorySessionResultMode:
+      type: string
+      description: Durable session result retrieval mode.
+      enum:
+        - FINAL
+        - PARTIAL
+      x-enum-varnames:
+        - FactorySessionResultModeFinal
+        - FactorySessionResultModePartial
+    FactorySessionResultAvailabilityDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          description: Stable availability reason code when the result is not ready or unavailable.
+        message:
+          type: string
+          description: Customer-visible availability message when known.
+        retryable:
+          type: boolean
+          description: Whether polling or a later retry may return a ready result.
     FactorySessionPartialResult:
       type: object
       additionalProperties: false

@@ -198,9 +198,9 @@ func ProjectSessionResult(
 	sessionID string,
 	ctx ProjectionContext,
 	store *JavaScriptCheckpointStore,
-) factoryapi.FactorySessionResult {
+) factoryapi.FactorySessionLiveResult {
 	runtime := ProjectRuntime(ctx)
-	result := factoryapi.FactorySessionResult{
+	result := factoryapi.FactorySessionLiveResult{
 		SessionId: sessionID,
 		Status:    runtime.Status,
 	}

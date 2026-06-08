@@ -23,6 +23,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertInvocationSurfaceSchemas(t, schemas, paths)
 	assertDurableExecutionSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionReadSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionResultSurfaceSchemas(t, schemas, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
@@ -588,6 +589,47 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	resultSummary := schemaObject(t, schemas, "FactorySessionDurableResultSummary")
 	assertRequiredFields(t, resultSummary, "resultStatus")
 	assertPropertyRef(t, schemaProperties(t, resultSummary, "FactorySessionDurableResultSummary"), "resultStatus", "#/components/schemas/FactorySessionResultStatus")
+}
+
+func assertDurableSessionResultSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	liveResultOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/result", "get")
+	assertResponseSchemaRef(t, liveResultOperation, "200", "#/components/schemas/FactorySessionLiveResult")
+
+	resultsOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/results", "get")
+	if got, _ := resultsOperation["operationId"].(string); got != "getFactorySessionResults" {
+		t.Fatalf("paths./factory-sessions/{session_id}/results.get.operationId = %q, want getFactorySessionResults", got)
+	}
+	assertResponseSchemaRef(t, resultsOperation, "200", "#/components/schemas/FactorySessionResult")
+	assertResponseRef(t, resultsOperation, "404", "#/components/responses/NotFound")
+	parameters, ok := resultsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions/{session_id}/results.get.parameters is missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/FactorySessionResultMode")
+	assertParameterRef(t, parameters, "#/components/parameters/FactorySessionResultIncludeArtifacts")
+
+	resultSchema := schemaObject(t, schemas, "FactorySessionResult")
+	assertRequiredFields(t, resultSchema, "sessionId", "resultStatus")
+	resultProperties := schemaProperties(t, resultSchema, "FactorySessionResult")
+	assertPropertyRef(t, resultProperties, "resultStatus", "#/components/schemas/FactorySessionResultStatus")
+	assertPropertyRef(t, resultProperties, "sessionStatus", "#/components/schemas/FactorySessionDurableLifecycleStatus")
+	assertPropertyRef(t, resultProperties, "mode", "#/components/schemas/FactorySessionResultMode")
+	assertPropertyRef(t, resultProperties, "primaryResult", "#/components/schemas/WorkContent")
+	assertArrayItemRef(t, resultProperties, "artifactRefs", "#/components/schemas/FactoryArtifactRef")
+	assertPropertyRef(t, resultProperties, "failure", "#/components/schemas/FactorySessionDurableFailureDetail")
+	assertPropertyRef(t, resultProperties, "availability", "#/components/schemas/FactorySessionResultAvailabilityDetail")
+	assertSchemaPropertiesPresent(t, resultProperties, "FactorySessionResult",
+		"sessionId", "resultStatus", "sessionStatus", "mode", "includeArtifacts",
+		"primaryResult", "artifactIds", "artifactRefs", "failure", "availability")
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionResultMode"), "FactorySessionResultMode", []string{"FINAL", "PARTIAL"})
+
+	liveResultSchema := schemaObject(t, schemas, "FactorySessionLiveResult")
+	assertRequiredFields(t, liveResultSchema, "sessionId", "status")
+	liveResultProperties := schemaProperties(t, liveResultSchema, "FactorySessionLiveResult")
+	assertPropertyRef(t, liveResultProperties, "status", "#/components/schemas/FactorySessionStatus")
+	assertPropertyRef(t, liveResultProperties, "resultArtifactRef", "#/components/schemas/FactoryArtifactRef")
 }
 
 func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {

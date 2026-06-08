@@ -64,7 +64,7 @@ function FactorySessionRuntimeSections({
 }: {
   data: {
     partialResult?: components["schemas"]["FactorySessionPartialResult"];
-    result?: components["schemas"]["FactorySessionResult"];
+    result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
   };
   locale?: string;
@@ -108,7 +108,7 @@ function JavaScriptSessionProjection({
   javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
   locale?: string;
   partialResult?: components["schemas"]["FactorySessionPartialResult"];
-  result?: components["schemas"]["FactorySessionResult"];
+  result?: components["schemas"]["FactorySessionLiveResult"];
 }) {
   const messages = getFactorySessionDetailMessages(locale);
 

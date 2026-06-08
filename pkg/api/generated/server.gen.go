@@ -197,6 +197,12 @@ const (
 	FactorySessionListScopePersisted FactorySessionListScope = "PERSISTED"
 )
 
+// Defines values for FactorySessionResultMode.
+const (
+	FactorySessionResultModeFinal   FactorySessionResultMode = "FINAL"
+	FactorySessionResultModePartial FactorySessionResultMode = "PARTIAL"
+)
+
 // Defines values for FactorySessionResultStatus.
 const (
 	FactorySessionResultStatusFailedWithPartial FactorySessionResultStatus = "FAILED_WITH_PARTIAL"
@@ -1682,6 +1688,19 @@ type FactorySessionLifecycle struct {
 // FactorySessionListScope Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
 type FactorySessionListScope string
 
+// FactorySessionLiveResult defines model for FactorySessionLiveResult.
+type FactorySessionLiveResult struct {
+	// CheckpointRefs Checkpoint refs associated with the terminal session result.
+	CheckpointRefs    *[]FactorySessionJavaScriptCheckpointRef `json:"checkpointRefs,omitempty"`
+	ResultArtifactRef *FactoryArtifactRef                      `json:"resultArtifactRef,omitempty"`
+
+	// SessionId Live factory session identifier for this result read.
+	SessionId string `json:"sessionId"`
+
+	// Status Canonical lifecycle status for one live factory session runtime.
+	Status FactorySessionStatus `json:"status"`
+}
+
 // FactorySessionPartialResult defines model for FactorySessionPartialResult.
 type FactorySessionPartialResult struct {
 	// CheckpointRefs Checkpoint refs associated with the current partial result.
@@ -1747,18 +1766,49 @@ type FactorySessionResolvedSourceIdentity struct {
 	SourceRef *string `json:"sourceRef,omitempty"`
 }
 
-// FactorySessionResult defines model for FactorySessionResult.
+// FactorySessionResult Durable factory-session result retrieval response for final or partial workflow outputs. Non-ready, unavailable, and failed-with-partial states return typed bodies with session identity, current session status, and actionable failure or availability details when known.
 type FactorySessionResult struct {
-	// CheckpointRefs Checkpoint refs associated with the terminal session result.
-	CheckpointRefs    *[]FactorySessionJavaScriptCheckpointRef `json:"checkpointRefs,omitempty"`
-	ResultArtifactRef *FactoryArtifactRef                      `json:"resultArtifactRef,omitempty"`
+	// ArtifactIds Artifact identifiers for materialized outputs when bodies are omitted or includeArtifacts is false.
+	ArtifactIds *[]string `json:"artifactIds,omitempty"`
 
-	// SessionId Live factory session identifier for this result read.
+	// ArtifactRefs Artifact refs for large or non-text outputs when includeArtifacts is true.
+	ArtifactRefs *[]FactoryArtifactRef                   `json:"artifactRefs,omitempty"`
+	Availability *FactorySessionResultAvailabilityDetail `json:"availability,omitempty"`
+	Failure      *FactorySessionDurableFailureDetail     `json:"failure,omitempty"`
+
+	// IncludeArtifacts Whether artifact metadata was included in this response.
+	IncludeArtifacts *bool `json:"includeArtifacts,omitempty"`
+
+	// Mode Durable session result retrieval mode.
+	Mode *FactorySessionResultMode `json:"mode,omitempty"`
+
+	// PrimaryResult Ordered canonical content parts for one work item.
+	PrimaryResult *WorkContent `json:"primaryResult,omitempty"`
+
+	// ResultStatus Customer-visible durable session result availability for session read models and result retrieval endpoints.
+	ResultStatus FactorySessionResultStatus `json:"resultStatus"`
+
+	// SessionId Stable durable factory-session identifier.
 	SessionId string `json:"sessionId"`
 
-	// Status Canonical lifecycle status for one live factory session runtime.
-	Status FactorySessionStatus `json:"status"`
+	// SessionStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	SessionStatus *FactorySessionDurableLifecycleStatus `json:"sessionStatus,omitempty"`
 }
+
+// FactorySessionResultAvailabilityDetail defines model for FactorySessionResultAvailabilityDetail.
+type FactorySessionResultAvailabilityDetail struct {
+	// Message Customer-visible availability message when known.
+	Message *string `json:"message,omitempty"`
+
+	// Reason Stable availability reason code when the result is not ready or unavailable.
+	Reason *string `json:"reason,omitempty"`
+
+	// Retryable Whether polling or a later retry may return a ready result.
+	Retryable *bool `json:"retryable,omitempty"`
+}
+
+// FactorySessionResultMode Durable session result retrieval mode.
+type FactorySessionResultMode string
 
 // FactorySessionResultStatus Customer-visible durable session result availability for session read models and result retrieval endpoints.
 type FactorySessionResultStatus string
@@ -1831,7 +1881,9 @@ type FactorySessionSyncExecutionResponse struct {
 
 	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
 	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
-	Result         *FactorySessionResult                `json:"result,omitempty"`
+
+	// Result Durable factory-session result retrieval response for final or partial workflow outputs. Non-ready, unavailable, and failed-with-partial states return typed bodies with session identity, current session status, and actionable failure or availability details when known.
+	Result *FactorySessionResult `json:"result,omitempty"`
 
 	// SessionCanceledByTimeout True only when timedOut is true and the request explicitly set wait.cancelOnTimeout to true.
 	SessionCanceledByTimeout *bool `json:"sessionCanceledByTimeout,omitempty"`
@@ -4187,6 +4239,9 @@ type WorkstationOperationBindingSelector struct {
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string
 
+// FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
+type FactorySessionResultIncludeArtifacts = bool
+
 // MaxResults defines model for MaxResults.
 type MaxResults = int
 
@@ -4251,6 +4306,15 @@ type SaveCurrentFactoryConflict = ErrorResponse
 type ListFactorySessionsParams struct {
 	// Scope Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing.
 	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// GetFactorySessionResultsParams defines parameters for GetFactorySessionResults.
+type GetFactorySessionResultsParams struct {
+	// Mode Optional durable result retrieval mode. Defaults to FINAL for terminal outputs. PARTIAL returns the latest partial workflow output when available.
+	Mode *FactorySessionResultMode `form:"mode,omitempty" json:"mode,omitempty"`
+
+	// IncludeArtifacts When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only.
+	IncludeArtifacts *FactorySessionResultIncludeArtifacts `form:"includeArtifacts,omitempty" json:"includeArtifacts,omitempty"`
 }
 
 // ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
@@ -5289,9 +5353,12 @@ type ServerInterface interface {
 	// Get one factory session partial result
 	// (GET /factory-sessions/{session_id}/partial-result)
 	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Get one factory session result
+	// Get one live factory session result
 	// (GET /factory-sessions/{session_id}/result)
 	GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get durable factory session results
+	// (GET /factory-sessions/{session_id}/results)
+	GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionResultsParams)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -5687,6 +5754,50 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionResult(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactorySessionResult(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionResults operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionResults(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFactorySessionResultsParams
+
+	// ------------- Optional query parameter "mode" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "mode", r.URL.Query(), &params.Mode)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "mode", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "includeArtifacts" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "includeArtifacts", r.URL.Query(), &params.IncludeArtifacts)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "includeArtifacts", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionResults(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6288,6 +6399,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/partial-result", wrapper.GetFactorySessionPartialResult).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/result", wrapper.GetFactorySessionResult).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/results", wrapper.GetFactorySessionResults).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
 
