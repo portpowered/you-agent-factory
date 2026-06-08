@@ -35,35 +35,57 @@ func buildFactoryWorldJavaScriptProjection(state interfaces.FactoryWorldState) *
 		return nil
 	}
 	projection := &interfaces.FactoryWorldJavaScriptProjection{}
-	if state.JavaScriptRuntime != nil {
-		projection.Phase = state.JavaScriptRuntime.Phase
-		projection.Phases = append([]string(nil), state.JavaScriptRuntime.Phases...)
-		projection.ArgsDigest = state.JavaScriptRuntime.ArgsDigest
-		projection.ScriptStatus = state.JavaScriptRuntime.ScriptStatus
-		projection.ChildDispatchCounts = interfaces.FactoryWorldJavaScriptChildDispatchCounts{
-			Queued:    state.JavaScriptRuntime.QueuedDispatches,
-			Running:   state.JavaScriptRuntime.RunningDispatches,
-			Completed: state.JavaScriptRuntime.CompletedDispatches,
-		}
-		if len(state.JavaScriptRuntime.Checkpoints) > 0 {
-			projection.Checkpoints = append([]interfaces.FactorySessionJavaScriptCheckpointRef(nil), state.JavaScriptRuntime.Checkpoints...)
-		}
-		if len(state.JavaScriptRuntime.Artifacts) > 0 {
-			projection.Artifacts = append([]interfaces.FactorySessionArtifactState(nil), state.JavaScriptRuntime.Artifacts...)
-		}
+	populateJavaScriptProjectionFromRuntime(projection, state.JavaScriptRuntime)
+	mergeStandaloneJavaScriptProjectionData(projection, state)
+	if isEmptyJavaScriptProjection(projection) {
+		return nil
 	}
+	return projection
+}
+
+func populateJavaScriptProjectionFromRuntime(
+	projection *interfaces.FactoryWorldJavaScriptProjection,
+	runtime *interfaces.FactorySessionJavaScriptRuntimeState,
+) {
+	if runtime == nil {
+		return
+	}
+	projection.Phase = runtime.Phase
+	projection.Phases = append([]string(nil), runtime.Phases...)
+	projection.ArgsDigest = runtime.ArgsDigest
+	projection.ScriptStatus = runtime.ScriptStatus
+	projection.ChildDispatchCounts = interfaces.FactoryWorldJavaScriptChildDispatchCounts{
+		Queued:    runtime.QueuedDispatches,
+		Running:   runtime.RunningDispatches,
+		Completed: runtime.CompletedDispatches,
+	}
+	if len(runtime.Checkpoints) > 0 {
+		projection.Checkpoints = append([]interfaces.FactorySessionJavaScriptCheckpointRef(nil), runtime.Checkpoints...)
+	}
+	if len(runtime.Artifacts) > 0 {
+		projection.Artifacts = append([]interfaces.FactorySessionArtifactState(nil), runtime.Artifacts...)
+	}
+}
+
+func mergeStandaloneJavaScriptProjectionData(
+	projection *interfaces.FactoryWorldJavaScriptProjection,
+	state interfaces.FactoryWorldState,
+) {
 	if len(projection.Checkpoints) == 0 && len(state.JavaScriptCheckpoints) > 0 {
 		projection.Checkpoints = append([]interfaces.FactorySessionJavaScriptCheckpointRef(nil), state.JavaScriptCheckpoints...)
 	}
 	if len(projection.Artifacts) == 0 && len(state.Artifacts) > 0 {
 		projection.Artifacts = append([]interfaces.FactorySessionArtifactState(nil), state.Artifacts...)
 	}
-	if projection.Phase == "" && len(projection.Phases) == 0 && len(projection.Checkpoints) == 0 &&
-		projection.ScriptStatus == "" && projection.ChildDispatchCounts == (interfaces.FactoryWorldJavaScriptChildDispatchCounts{}) &&
-		len(projection.Artifacts) == 0 {
-		return nil
-	}
-	return projection
+}
+
+func isEmptyJavaScriptProjection(projection *interfaces.FactoryWorldJavaScriptProjection) bool {
+	return projection.Phase == "" &&
+		len(projection.Phases) == 0 &&
+		len(projection.Checkpoints) == 0 &&
+		projection.ScriptStatus == "" &&
+		projection.ChildDispatchCounts == (interfaces.FactoryWorldJavaScriptChildDispatchCounts{}) &&
+		len(projection.Artifacts) == 0
 }
 
 func buildFactoryWorldActiveExecutions(state interfaces.FactoryWorldState, activeIDs []string) map[string]interfaces.FactoryWorldActiveExecution {

@@ -7,6 +7,19 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
+	switch event.Type {
+	case factoryapi.FactoryEventTypeJavaScriptCheckpointRef:
+		return true, r.applyJavaScriptCheckpointRefEvent(event)
+	case factoryapi.FactoryEventTypeJavaScriptPhaseChange:
+		return true, r.applyJavaScriptPhaseChangeEvent(event)
+	case factoryapi.FactoryEventTypeArtifactCreated:
+		return true, r.applyArtifactCreatedEvent(event)
+	default:
+		return false, nil
+	}
+}
+
 func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event factoryapi.FactoryEvent) error {
 	payload, err := event.Payload.AsJavaScriptCheckpointRefEventPayload()
 	if err != nil {
@@ -102,38 +115,48 @@ func projectArtifactCreatedPayload(payload factoryapi.ArtifactCreatedEventPayloa
 	if artifact.SizeBytes != nil {
 		state.SizeBytes = *artifact.SizeBytes
 	}
-	if artifact.RedactionCounts != nil {
-		counts := make(map[string]int)
-		if artifact.RedactionCounts.Secrets != nil {
-			counts["secrets"] = int(*artifact.RedactionCounts.Secrets)
-		}
-		if artifact.RedactionCounts.Paths != nil {
-			counts["paths"] = int(*artifact.RedactionCounts.Paths)
-		}
-		if artifact.RedactionCounts.Tokens != nil {
-			counts["tokens"] = int(*artifact.RedactionCounts.Tokens)
-		}
-		if len(counts) > 0 {
-			state.RedactionCounts = counts
-		}
+	if counts := artifactRedactionCountsFromAPI(artifact.RedactionCounts); len(counts) > 0 {
+		state.RedactionCounts = counts
 	}
-	if artifact.CaptureMetadata != nil {
-		metadata := make(map[string]string)
-		if artifact.CaptureMetadata.CapturedAt != nil {
-			metadata["capturedAt"] = artifact.CaptureMetadata.CapturedAt.UTC().Format(time.RFC3339)
-		}
-		if artifact.CaptureMetadata.SourceDispatchId != nil {
-			metadata["sourceDispatchId"] = *artifact.CaptureMetadata.SourceDispatchId
-		}
-		if artifact.CaptureMetadata.MimeType != nil {
-			metadata["mimeType"] = *artifact.CaptureMetadata.MimeType
-		}
-		if len(metadata) > 0 {
-			state.CaptureMetadata = metadata
-		}
+	if metadata := artifactCaptureMetadataFromAPI(artifact.CaptureMetadata); len(metadata) > 0 {
+		state.CaptureMetadata = metadata
 	}
 	if payload.CapturedAt != nil {
 		state.CapturedAt = payload.CapturedAt.UTC()
 	}
 	return state
+}
+
+func artifactRedactionCountsFromAPI(counts *factoryapi.FactoryArtifactRedactionCounts) map[string]int {
+	if counts == nil {
+		return nil
+	}
+	redactions := make(map[string]int)
+	if counts.Secrets != nil {
+		redactions["secrets"] = int(*counts.Secrets)
+	}
+	if counts.Paths != nil {
+		redactions["paths"] = int(*counts.Paths)
+	}
+	if counts.Tokens != nil {
+		redactions["tokens"] = int(*counts.Tokens)
+	}
+	return redactions
+}
+
+func artifactCaptureMetadataFromAPI(metadata *factoryapi.FactoryArtifactCaptureMetadata) map[string]string {
+	if metadata == nil {
+		return nil
+	}
+	capture := make(map[string]string)
+	if metadata.CapturedAt != nil {
+		capture["capturedAt"] = metadata.CapturedAt.UTC().Format(time.RFC3339)
+	}
+	if metadata.SourceDispatchId != nil {
+		capture["sourceDispatchId"] = *metadata.SourceDispatchId
+	}
+	if metadata.MimeType != nil {
+		capture["mimeType"] = *metadata.MimeType
+	}
+	return capture
 }

@@ -197,6 +197,13 @@ func renderJavaScriptSessionProjection(output io.Writer, javascript *factoryapi.
 	if _, err := fmt.Fprintln(output, "Dynamic workflow:\tJavaScript factory session"); err != nil {
 		return err
 	}
+	if err := writeJavaScriptPhaseFields(output, javascript); err != nil {
+		return err
+	}
+	return writeJavaScriptCheckpointRefs(output, javascript.Checkpoints)
+}
+
+func writeJavaScriptPhaseFields(output io.Writer, javascript *factoryapi.FactorySessionJavaScriptProjection) error {
 	if javascript.Phase != nil {
 		if _, err := fmt.Fprintf(output, "Phase:\t%s\n", strings.TrimSpace(*javascript.Phase)); err != nil {
 			return err
@@ -215,27 +222,30 @@ func renderJavaScriptSessionProjection(output io.Writer, javascript *factoryapi.
 	if _, err := fmt.Fprintf(output, "Script status:\t%s\n", javascript.ScriptStatus); err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		output,
 		"Child dispatches:\tqueued=%d running=%d completed=%d\n",
 		javascript.ChildDispatchCounts.Queued,
 		javascript.ChildDispatchCounts.Running,
 		javascript.ChildDispatchCounts.Completed,
-	); err != nil {
-		return err
+	)
+	return err
+}
+
+func writeJavaScriptCheckpointRefs(output io.Writer, checkpoints *[]factoryapi.FactorySessionJavaScriptCheckpointRef) error {
+	if checkpoints == nil {
+		return nil
 	}
-	if javascript.Checkpoints != nil {
-		for _, checkpoint := range *javascript.Checkpoints {
-			label := checkpoint.Id
-			if checkpoint.Label != nil && strings.TrimSpace(*checkpoint.Label) != "" {
-				label = fmt.Sprintf("%s (%s)", checkpoint.Id, strings.TrimSpace(*checkpoint.Label))
-			}
-			if checkpoint.Summary != nil && strings.TrimSpace(*checkpoint.Summary) != "" {
-				label = fmt.Sprintf("%s — %s", label, strings.TrimSpace(*checkpoint.Summary))
-			}
-			if _, err := fmt.Fprintf(output, "Checkpoint ref:\t%s\n", label); err != nil {
-				return err
-			}
+	for _, checkpoint := range *checkpoints {
+		label := checkpoint.Id
+		if checkpoint.Label != nil && strings.TrimSpace(*checkpoint.Label) != "" {
+			label = fmt.Sprintf("%s (%s)", checkpoint.Id, strings.TrimSpace(*checkpoint.Label))
+		}
+		if checkpoint.Summary != nil && strings.TrimSpace(*checkpoint.Summary) != "" {
+			label = fmt.Sprintf("%s — %s", label, strings.TrimSpace(*checkpoint.Summary))
+		}
+		if _, err := fmt.Fprintf(output, "Checkpoint ref:\t%s\n", label); err != nil {
+			return err
 		}
 	}
 	return nil

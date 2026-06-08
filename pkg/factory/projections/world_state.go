@@ -116,12 +116,9 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		return r.applyWorkStateChangeEvent(event)
 	case factoryapi.FactoryEventTypeRunResponse:
 		return nil
-	case factoryapi.FactoryEventTypeJavaScriptCheckpointRef:
-		return r.applyJavaScriptCheckpointRefEvent(event)
-	case factoryapi.FactoryEventTypeJavaScriptPhaseChange:
-		return r.applyJavaScriptPhaseChangeEvent(event)
-	case factoryapi.FactoryEventTypeArtifactCreated:
-		return r.applyArtifactCreatedEvent(event)
+	}
+	if handled, err := r.applyOrchestratorLifecycleEvent(event); handled {
+		return err
 	}
 	return nil
 }

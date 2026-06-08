@@ -55,6 +55,18 @@ func TestReconstructFactoryWorldState_JavaScriptFixtureReconstructsPhaseCheckpoi
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
+	assertJavaScriptWorldReplay(t, worldState)
+}
+
+func assertJavaScriptWorldReplay(t *testing.T, worldState interfaces.FactoryWorldState) {
+	t.Helper()
+	assertJavaScriptWorldStateReplay(t, worldState)
+	view := BuildFactoryWorldView(worldState)
+	assertJavaScriptWorldViewReplay(t, view)
+}
+
+func assertJavaScriptWorldStateReplay(t *testing.T, worldState interfaces.FactoryWorldState) {
+	t.Helper()
 	if len(worldState.WorkStateChangesByWorkID) != 0 {
 		t.Fatalf("work state changes = %#v, want none for JavaScript replay", worldState.WorkStateChangesByWorkID)
 	}
@@ -74,8 +86,10 @@ func TestReconstructFactoryWorldState_JavaScriptFixtureReconstructsPhaseCheckpoi
 	if len(worldState.JavaScriptCheckpoints) != 1 || len(worldState.Artifacts) != 1 {
 		t.Fatalf("checkpoints=%d artifacts=%d, want one each", len(worldState.JavaScriptCheckpoints), len(worldState.Artifacts))
 	}
+}
 
-	view := BuildFactoryWorldView(worldState)
+func assertJavaScriptWorldViewReplay(t *testing.T, view interfaces.FactoryWorldView) {
+	t.Helper()
 	if view.Runtime.JavaScript == nil {
 		t.Fatal("javascript projection = nil, want orchestrator runtime projection")
 	}

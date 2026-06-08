@@ -114,6 +114,23 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 		},
 		Now: now,
 	})
+	assertJavaScriptWorkflowSessionProjection(t, runtime)
+	if runtime.Budgets == nil || runtime.Budgets.MaxAgents == nil || *runtime.Budgets.MaxAgents != 3 {
+		t.Fatalf("budgets = %#v, want maxAgents=3", runtime.Budgets)
+	}
+}
+
+func assertJavaScriptWorkflowSessionProjection(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
+	t.Helper()
+	assertJavaScriptSessionIdentity(t, runtime)
+	if runtime.Javascript == nil {
+		t.Fatal("javascript projection is nil")
+	}
+	assertJavaScriptSessionRuntimeFields(t, runtime.Javascript)
+}
+
+func assertJavaScriptSessionIdentity(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
+	t.Helper()
 	if runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("orchestrator kind = %q, want JAVASCRIPT", runtime.OrchestratorKind)
 	}
@@ -129,25 +146,23 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 	if runtime.Petri != nil {
 		t.Fatalf("petri projection = %#v, want nil for JavaScript session", runtime.Petri)
 	}
-	if runtime.Javascript == nil {
-		t.Fatal("javascript projection is nil")
+}
+
+func assertJavaScriptSessionRuntimeFields(t *testing.T, javascript *factoryapi.FactorySessionJavaScriptProjection) {
+	t.Helper()
+	if javascript.Phase == nil || *javascript.Phase != "review" {
+		t.Fatalf("phase = %#v, want review", javascript.Phase)
 	}
-	if runtime.Javascript.Phase == nil || *runtime.Javascript.Phase != "review" {
-		t.Fatalf("phase = %#v, want review", runtime.Javascript.Phase)
+	if javascript.ArgsDigest == nil || *javascript.ArgsDigest != "sha256:args-digest" {
+		t.Fatalf("args digest = %#v", javascript.ArgsDigest)
 	}
-	if runtime.Javascript.ArgsDigest == nil || *runtime.Javascript.ArgsDigest != "sha256:args-digest" {
-		t.Fatalf("args digest = %#v", runtime.Javascript.ArgsDigest)
+	if javascript.Checkpoints == nil || len(*javascript.Checkpoints) != 1 {
+		t.Fatalf("checkpoints = %#v, want one checkpoint ref", javascript.Checkpoints)
 	}
-	if runtime.Javascript.Checkpoints == nil || len(*runtime.Javascript.Checkpoints) != 1 {
-		t.Fatalf("checkpoints = %#v, want one checkpoint ref", runtime.Javascript.Checkpoints)
+	if javascript.ScriptStatus != factoryapi.FactorySessionJavaScriptScriptStatusRUNNING {
+		t.Fatalf("script status = %q, want RUNNING", javascript.ScriptStatus)
 	}
-	if runtime.Javascript.ScriptStatus != factoryapi.FactorySessionJavaScriptScriptStatusRUNNING {
-		t.Fatalf("script status = %q, want RUNNING", runtime.Javascript.ScriptStatus)
-	}
-	if runtime.Javascript.ChildDispatchCounts.Queued != 1 || runtime.Javascript.ChildDispatchCounts.Running != 2 || runtime.Javascript.ChildDispatchCounts.Completed != 4 {
-		t.Fatalf("child dispatch counts = %#v", runtime.Javascript.ChildDispatchCounts)
-	}
-	if runtime.Budgets == nil || runtime.Budgets.MaxAgents == nil || *runtime.Budgets.MaxAgents != 3 {
-		t.Fatalf("budgets = %#v, want maxAgents=3", runtime.Budgets)
+	if javascript.ChildDispatchCounts.Queued != 1 || javascript.ChildDispatchCounts.Running != 2 || javascript.ChildDispatchCounts.Completed != 4 {
+		t.Fatalf("child dispatch counts = %#v", javascript.ChildDispatchCounts)
 	}
 }

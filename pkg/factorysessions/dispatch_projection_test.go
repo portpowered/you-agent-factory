@@ -121,10 +121,21 @@ func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *tes
 		},
 		Now: now,
 	})
-	if runtime.Dispatches == nil || len(*runtime.Dispatches) != 1 {
-		t.Fatalf("dispatches = %#v, want one JavaScript child-agent dispatch", runtime.Dispatches)
+	assertJavaScriptChildAgentDispatchProjection(t, runtime)
+}
+
+func assertJavaScriptChildAgentDispatchProjection(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
+	t.Helper()
+	assertJavaScriptChildAgentDispatch(t, runtime.Dispatches)
+	assertJavaScriptChildResultArtifact(t, runtime.Artifacts)
+}
+
+func assertJavaScriptChildAgentDispatch(t *testing.T, dispatches *[]factoryapi.FactoryDispatch) {
+	t.Helper()
+	if dispatches == nil || len(*dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one JavaScript child-agent dispatch", dispatches)
 	}
-	dispatch := (*runtime.Dispatches)[0]
+	dispatch := (*dispatches)[0]
 	if dispatch.DispatchKind != factoryapi.FactoryDispatchKindJAVASCRIPTAGENT {
 		t.Fatalf("dispatch kind = %q, want JAVASCRIPT_AGENT", dispatch.DispatchKind)
 	}
@@ -134,10 +145,14 @@ func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *tes
 	if dispatch.Javascript == nil || dispatch.Javascript.TaskKind != factoryapi.FactoryDispatchJavaScriptTaskKindAGENT {
 		t.Fatalf("javascript projection = %#v, want AGENT task kind", dispatch.Javascript)
 	}
-	if runtime.Artifacts == nil || len(*runtime.Artifacts) != 1 {
-		t.Fatalf("artifacts = %#v, want one child result artifact", runtime.Artifacts)
+}
+
+func assertJavaScriptChildResultArtifact(t *testing.T, artifacts *[]factoryapi.FactoryArtifact) {
+	t.Helper()
+	if artifacts == nil || len(*artifacts) != 1 {
+		t.Fatalf("artifacts = %#v, want one child result artifact", artifacts)
 	}
-	artifact := (*runtime.Artifacts)[0]
+	artifact := (*artifacts)[0]
 	if artifact.Kind != factoryapi.FactoryArtifactKindCHILDRESULT {
 		t.Fatalf("artifact kind = %q, want CHILD_RESULT", artifact.Kind)
 	}
