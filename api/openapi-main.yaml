@@ -754,6 +754,247 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/approve:
+    post:
+      tags:
+        - Factory
+      operationId: approveFactorySession
+      summary: Approve one durable factory session
+      description: >-
+        Approves requested orchestrator policy for one durable factory session
+        in AWAITING_APPROVAL state. Returns the updated session or a typed
+        lifecycle-control outcome for no-op, invalid-state, terminal-session, or
+        conflict cases. Approval responses include the effective policy hash and
+        approval preview identity when available.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionApproveRequest'
+      responses:
+        '200':
+          description: Approval applied immediately or the session already satisfied the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Approval control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/pause:
+    post:
+      tags:
+        - Factory
+      operationId: pauseFactorySession
+      summary: Pause one durable factory session
+      description: >-
+        Pauses one durable factory session while preserving inspectable partial
+        results, dispatches, and artifacts. Returns the updated session or a
+        typed lifecycle-control outcome for no-op, invalid-state,
+        terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Pause applied immediately or the session was already paused.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Pause control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/resume:
+    post:
+      tags:
+        - Factory
+      operationId: resumeFactorySession
+      summary: Resume one durable factory session
+      description: >-
+        Resumes one paused durable factory session while preserving inspectable
+        partial results, dispatches, and artifacts. Returns the updated session
+        or a typed lifecycle-control outcome for no-op, invalid-state,
+        terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Resume applied immediately or the session was already running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Resume control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/cancel:
+    post:
+      tags:
+        - Factory
+      operationId: cancelFactorySession
+      summary: Cancel one durable factory session
+      description: >-
+        Requests graceful cancellation for one durable factory session while
+        preserving inspectable partial results, dispatches, and artifacts.
+        Returns the updated session or a typed lifecycle-control outcome for
+        no-op, invalid-state, terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Cancel applied immediately or the session was already canceled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Cancel control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/terminate:
+    post:
+      tags:
+        - Factory
+      operationId: terminateFactorySession
+      summary: Terminate one durable factory session
+      description: >-
+        Forcefully terminates one durable factory session while preserving
+        inspectable partial results, dispatches, and artifacts. Returns the
+        updated session or a typed lifecycle-control outcome for no-op,
+        invalid-state, terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Termination applied immediately or the session was already terminal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Terminate control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/retry-dispatch:
+    post:
+      tags:
+        - Factory
+      operationId: retryFactorySessionDispatch
+      summary: Retry one durable factory session dispatch
+      description: >-
+        Retries one failed or interrupted dispatch within the targeted durable
+        factory session. The response links the retry to the session and dispatch
+        state and preserves inspectable partial results, dispatches, and
+        artifacts after the control operation.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionRetryDispatchRequest'
+      responses:
+        '200':
+          description: Retry dispatch applied immediately or produced a typed no-op outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Retry-dispatch control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/partial-result:
     get:
       tags:
@@ -1053,6 +1294,8 @@ components:
       $ref: './components/responses/MoveWorkConflict.yaml'
     ExecutionRequestIdConflict:
       $ref: './components/responses/ExecutionRequestIdConflict.yaml'
+    FactorySessionLifecycleControlConflict:
+      $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
   schemas:
@@ -1310,6 +1553,20 @@ components:
       $ref: './components/schemas/api/FactorySessionSyncExecutionOutcome.yaml'
     FactorySessionSyncExecutionResponse:
       $ref: './components/schemas/api/FactorySessionSyncExecutionResponse.yaml'
+    FactorySessionLifecycleControlKind:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlKind.yaml'
+    FactorySessionLifecycleControlOutcome:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlOutcome.yaml'
+    FactorySessionLifecycleControlLinks:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlLinks.yaml'
+    FactorySessionLifecycleControlRequest:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlRequest.yaml'
+    FactorySessionApproveRequest:
+      $ref: './components/schemas/api/FactorySessionApproveRequest.yaml'
+    FactorySessionRetryDispatchRequest:
+      $ref: './components/schemas/api/FactorySessionRetryDispatchRequest.yaml'
+    FactorySessionLifecycleControlResponse:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlResponse.yaml'
     LoadableProviderSessionRef:
       $ref: './components/schemas/api/LoadableProviderSessionRef.yaml'
     LoadableProviderSessionProvider:

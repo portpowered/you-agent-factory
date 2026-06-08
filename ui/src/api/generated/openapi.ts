@@ -512,6 +512,126 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/approve": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Approve one durable factory session
+     * @description Approves requested orchestrator policy for one durable factory session in AWAITING_APPROVAL state. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases. Approval responses include the effective policy hash and approval preview identity when available.
+     */
+    post: operations["approveFactorySession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/pause": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Pause one durable factory session
+     * @description Pauses one durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     */
+    post: operations["pauseFactorySession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resume one durable factory session
+     * @description Resumes one paused durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     */
+    post: operations["resumeFactorySession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel one durable factory session
+     * @description Requests graceful cancellation for one durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     */
+    post: operations["cancelFactorySession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/terminate": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Terminate one durable factory session
+     * @description Forcefully terminates one durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     */
+    post: operations["terminateFactorySession"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/retry-dispatch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry one durable factory session dispatch
+     * @description Retries one failed or interrupted dispatch within the targeted durable factory session. The response links the retry to the session and dispatch state and preserves inspectable partial results, dispatches, and artifacts after the control operation.
+     */
+    post: operations["retryFactorySessionDispatch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/partial-result": {
     parameters: {
       query?: never;
@@ -1900,6 +2020,90 @@ export interface components {
       timedOut?: boolean;
       /** @description True only when timedOut is true and the request explicitly set wait.cancelOnTimeout to true. */
       sessionCanceledByTimeout?: boolean;
+    };
+    /**
+     * @description Durable factory-session lifecycle control operation requested by the client.
+     * @enum {string}
+     */
+    FactorySessionLifecycleControlKind: FactorySessionLifecycleControlKind;
+    /**
+     * @description Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
+     * @enum {string}
+     */
+    FactorySessionLifecycleControlOutcome: FactorySessionLifecycleControlOutcome;
+    /** @description Relative links for inspecting durable session state after lifecycle controls. Partial results, dispatches, and artifacts remain inspectable after pause, resume, cancel, and terminate operations. */
+    FactorySessionLifecycleControlLinks: {
+      /** @description Relative URL for GET /factory-sessions/{session_id}. */
+      session?: string;
+      /** @description Relative URL for GET /factory-sessions/{session_id}/results. */
+      results?: string;
+      /** @description Relative URL for GET /factory-sessions/{session_id}/dispatches. */
+      dispatches?: string;
+      /** @description Relative URL for GET /factory-sessions/{session_id}/artifacts. */
+      artifacts?: string;
+      /** @description Relative URL for GET /factory-sessions/{session_id}/events. */
+      events?: string;
+      /** @description Relative URL for polling durable session status. */
+      status?: string;
+    };
+    /** @description Optional metadata shared by durable session lifecycle control requests. */
+    FactorySessionLifecycleControlRequest: {
+      /** @description Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation. */
+      requestId?: string;
+      /** @description Optional operator-provided reason for audit and diagnostics. */
+      reason?: string;
+    };
+    /** @description Approval request for one durable factory session awaiting policy approval. */
+    FactorySessionApproveRequest: {
+      /** @description Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation. */
+      requestId?: string;
+      /** @description Optional operator-provided reason for audit and diagnostics. */
+      reason?: string;
+      /** @description Optional approval preview identity when the caller reviewed a server-side approval preview before submitting approval. */
+      approvalPreviewId?: string;
+      /** @description Optional approved policy payload when the caller explicitly approves a policy object distinct from the originally requested policy. */
+      approvedPolicy?: components["schemas"]["FactorySessionRequestedPolicy"];
+    };
+    /** @description Retry request for one durable factory-session dispatch. */
+    FactorySessionRetryDispatchRequest: {
+      /** @description Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation. */
+      requestId?: string;
+      /** @description Optional operator-provided reason for audit and diagnostics. */
+      reason?: string;
+      /** @description Stable dispatch identifier to retry within the targeted session. */
+      dispatchId: string;
+      /**
+       * @description When true, request a new retry attempt even if the dispatch already has a successful or in-flight retry.
+       * @default false
+       */
+      forceNewAttempt: boolean;
+      /**
+       * @description When true, reset the dispatch attempt counter before retrying. Runtimes may ignore this when policy forbids attempt resets.
+       * @default false
+       */
+      resetAttemptCount: boolean;
+    };
+    FactorySessionLifecycleControlResponse: {
+      /** @description Stable durable factory-session identifier. */
+      sessionId: string;
+      operation: components["schemas"]["FactorySessionLifecycleControlKind"];
+      outcome: components["schemas"]["FactorySessionLifecycleControlOutcome"];
+      /** @description Current durable session lifecycle status after evaluating the control request. */
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /** @description Updated durable session read model when immediately available. */
+      session?: components["schemas"]["FactorySessionDurableReadModel"];
+      /** @description Stable hash of the effective approved orchestrator policy after approval or other policy-affecting controls. */
+      effectivePolicyHash?: string;
+      /** @description Approval preview identity associated with the approved policy when available. */
+      approvalPreviewId?: string;
+      /** @description Target dispatch identifier for retry-dispatch controls. */
+      dispatchId?: string;
+      /** @description Identifier of the dispatch created or selected by a retry-dispatch control when the runtime materializes a distinct retry dispatch. */
+      retryDispatchId?: string;
+      /** @description Optional human-readable detail explaining NO_OP or rejected outcomes. */
+      detail?: string;
+      /** @description Inspection links for session, results, dispatches, and artifacts. */
+      links?: components["schemas"]["FactorySessionLifecycleControlLinks"];
     };
     LoadableProviderSessionRef: {
       provider: components["schemas"]["LoadableProviderSessionProvider"];
@@ -3821,6 +4025,17 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description Lifecycle control request conflicts with current session state, another in-flight control, or a previously applied control requestId. */
+    FactorySessionLifecycleControlConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json":
+          | components["schemas"]["FactorySessionLifecycleControlResponse"]
+          | components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Server failed while reading or building runtime state. */
     InternalError: {
       headers: {
@@ -4608,6 +4823,246 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  approveFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionApproveRequest"];
+      };
+    };
+    responses: {
+      /** @description Approval applied immediately or the session already satisfied the request. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Approval control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  pauseFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionLifecycleControlRequest"];
+      };
+    };
+    responses: {
+      /** @description Pause applied immediately or the session was already paused. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Pause control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  resumeFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionLifecycleControlRequest"];
+      };
+    };
+    responses: {
+      /** @description Resume applied immediately or the session was already running. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Resume control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  cancelFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionLifecycleControlRequest"];
+      };
+    };
+    responses: {
+      /** @description Cancel applied immediately or the session was already canceled. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Cancel control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  terminateFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionLifecycleControlRequest"];
+      };
+    };
+    responses: {
+      /** @description Termination applied immediately or the session was already terminal. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Terminate control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  retryFactorySessionDispatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionRetryDispatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Retry dispatch applied immediately or produced a typed no-op outcome. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Retry-dispatch control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   getFactorySessionPartialResult: {
     parameters: {
       query?: never;
@@ -4969,6 +5424,9 @@ export const ErrorResponseCode = {
   MOVE_WORK_REQUEST_ALREADY_APPLIED: "MOVE_WORK_REQUEST_ALREADY_APPLIED",
   // Durable execution requestId was reused with materially different inputs.
   EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
+  // Lifecycle control requestId was already applied with different control inputs.
+  FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
+    "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
   // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
   // The server failed while handling an otherwise valid request.
@@ -5157,6 +5615,36 @@ export const FactorySessionSyncExecutionOutcome = {
 } as const;
 export type FactorySessionSyncExecutionOutcome =
   (typeof FactorySessionSyncExecutionOutcome)[keyof typeof FactorySessionSyncExecutionOutcome];
+export const FactorySessionLifecycleControlKind = {
+  // Approve requested orchestrator policy so execution can proceed.
+  FactorySessionLifecycleControlKindApprove: "APPROVE",
+  // Pause active durable session scheduling while preserving inspectable state.
+  FactorySessionLifecycleControlKindPause: "PAUSE",
+  // Resume a paused durable session.
+  FactorySessionLifecycleControlKindResume: "RESUME",
+  // Request graceful cancellation while preserving partial results and artifacts.
+  FactorySessionLifecycleControlKindCancel: "CANCEL",
+  // Forcefully terminate a durable session while preserving inspectable state.
+  FactorySessionLifecycleControlKindTerminate: "TERMINATE",
+  // Retry one failed or interrupted dispatch within the targeted session.
+  FactorySessionLifecycleControlKindRetryDispatch: "RETRY_DISPATCH",
+} as const;
+export type FactorySessionLifecycleControlKind =
+  (typeof FactorySessionLifecycleControlKind)[keyof typeof FactorySessionLifecycleControlKind];
+export const FactorySessionLifecycleControlOutcome = {
+  // Control request was accepted and may complete asynchronously.
+  FactorySessionLifecycleControlOutcomeAccepted: "ACCEPTED",
+  // Session already satisfies the requested control; no state change was applied.
+  FactorySessionLifecycleControlOutcomeNoOp: "NO_OP",
+  // Current session state does not allow the requested control.
+  FactorySessionLifecycleControlOutcomeInvalidState: "INVALID_STATE",
+  // Session is terminal and cannot accept the requested control.
+  FactorySessionLifecycleControlOutcomeTerminalSession: "TERMINAL_SESSION",
+  // Control request conflicts with current session state or another in-flight control.
+  FactorySessionLifecycleControlOutcomeConflict: "CONFLICT",
+} as const;
+export type FactorySessionLifecycleControlOutcome =
+  (typeof FactorySessionLifecycleControlOutcome)[keyof typeof FactorySessionLifecycleControlOutcome];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",

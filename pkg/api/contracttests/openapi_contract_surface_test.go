@@ -25,6 +25,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertDurableSessionReadSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionResultSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionDispatchArtifactSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionLifecycleControlSurfaceSchemas(t, schemas, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
@@ -726,6 +727,71 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 		"auditMode", "redactionCounts", "captureMetadata", "content", "contentRef")
 }
 
+func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	lifecycleRoutes := []struct {
+		path          string
+		operationID   string
+		requestSchema string
+		requiredBody  bool
+	}{
+		{"/factory-sessions/{session_id}/approve", "approveFactorySession", "#/components/schemas/FactorySessionApproveRequest", false},
+		{"/factory-sessions/{session_id}/pause", "pauseFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
+		{"/factory-sessions/{session_id}/resume", "resumeFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
+		{"/factory-sessions/{session_id}/cancel", "cancelFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
+		{"/factory-sessions/{session_id}/terminate", "terminateFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
+		{"/factory-sessions/{session_id}/retry-dispatch", "retryFactorySessionDispatch", "#/components/schemas/FactorySessionRetryDispatchRequest", true},
+	}
+	for _, route := range lifecycleRoutes {
+		operation := pathOperation(t, paths, route.path, "post")
+		if got, _ := operation["operationId"].(string); got != route.operationID {
+			t.Fatalf("paths.%s.post.operationId = %q, want %s", route.path, got, route.operationID)
+		}
+		if route.requiredBody {
+			assertRequestSchemaRef(t, operation, route.requestSchema)
+		}
+		assertResponseSchemaRef(t, operation, "200", "#/components/schemas/FactorySessionLifecycleControlResponse")
+		assertResponseSchemaRef(t, operation, "202", "#/components/schemas/FactorySessionLifecycleControlResponse")
+		assertResponseRef(t, operation, "404", "#/components/responses/NotFound")
+		assertResponseRef(t, operation, "409", "#/components/responses/FactorySessionLifecycleControlConflict")
+	}
+
+	retryOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/retry-dispatch", "post")
+	assertRequestSchemaRef(t, retryOperation, "#/components/schemas/FactorySessionRetryDispatchRequest")
+	retryRequestSchema := schemaObject(t, schemas, "FactorySessionRetryDispatchRequest")
+	assertRequiredFields(t, retryRequestSchema, "dispatchId")
+
+	controlResponseSchema := schemaObject(t, schemas, "FactorySessionLifecycleControlResponse")
+	assertRequiredFields(t, controlResponseSchema, "sessionId", "operation", "outcome", "status")
+	controlResponseProperties := schemaProperties(t, controlResponseSchema, "FactorySessionLifecycleControlResponse")
+	assertPropertyRef(t, controlResponseProperties, "operation", "#/components/schemas/FactorySessionLifecycleControlKind")
+	assertPropertyRef(t, controlResponseProperties, "outcome", "#/components/schemas/FactorySessionLifecycleControlOutcome")
+	assertPropertyRef(t, controlResponseProperties, "status", "#/components/schemas/FactorySessionDurableLifecycleStatus")
+	assertPropertyRef(t, controlResponseProperties, "session", "#/components/schemas/FactorySessionDurableReadModel")
+	assertPropertyRef(t, controlResponseProperties, "links", "#/components/schemas/FactorySessionLifecycleControlLinks")
+	assertSchemaPropertiesPresent(t, controlResponseProperties, "FactorySessionLifecycleControlResponse",
+		"sessionId", "operation", "outcome", "status", "session", "effectivePolicyHash",
+		"approvalPreviewId", "dispatchId", "retryDispatchId", "detail", "links")
+
+	approveRequestSchema := schemaObject(t, schemas, "FactorySessionApproveRequest")
+	approveRequestProperties := schemaProperties(t, approveRequestSchema, "FactorySessionApproveRequest")
+	assertSchemaPropertiesPresent(t, approveRequestProperties, "FactorySessionApproveRequest",
+		"requestId", "reason", "approvalPreviewId", "approvedPolicy")
+
+	controlLinksSchema := schemaObject(t, schemas, "FactorySessionLifecycleControlLinks")
+	controlLinksProperties := schemaProperties(t, controlLinksSchema, "FactorySessionLifecycleControlLinks")
+	assertSchemaPropertiesPresent(t, controlLinksProperties, "FactorySessionLifecycleControlLinks",
+		"session", "results", "dispatches", "artifacts", "events", "status")
+
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionLifecycleControlKind"), "FactorySessionLifecycleControlKind", []string{
+		"APPROVE", "PAUSE", "RESUME", "CANCEL", "TERMINATE", "RETRY_DISPATCH",
+	})
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionLifecycleControlOutcome"), "FactorySessionLifecycleControlOutcome", []string{
+		"ACCEPTED", "NO_OP", "INVALID_STATE", "TERMINAL_SESSION", "CONFLICT",
+	})
+}
+
 func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
 	t.Helper()
 
@@ -954,7 +1020,7 @@ func assertErrorSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	if !ok {
 		t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing")
 	}
-	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "NOT_FOUND", "INTERNAL_ERROR"} {
+	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
 		if !containsString(codeEnum, code) {
 			t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing %q", code)
 		}

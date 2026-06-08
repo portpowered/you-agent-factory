@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+description: >-
+  Relative links for inspecting durable session state after lifecycle controls.
+  Partial results, dispatches, and artifacts remain inspectable after pause,
+  resume, cancel, and terminate operations.
+properties:
+  session:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}.
+  results:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}/results.
+  dispatches:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}/dispatches.
+  artifacts:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}/artifacts.
+  events:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}/events.
+  status:
+    type: string
+    description: Relative URL for polling durable session status.

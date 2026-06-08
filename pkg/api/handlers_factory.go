@@ -178,6 +178,36 @@ func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.R
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session approval is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session pause is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session resume is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session cancel is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session terminate is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session retry-dispatch is not implemented", "INTERNAL_ERROR")
+}
+
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
 	s.writeError(w, http.StatusNotImplemented, "durable factory session execution is not implemented", "INTERNAL_ERROR")
 }

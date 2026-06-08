@@ -37,16 +37,17 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	BADREQUEST                    ErrorResponseCode = "BAD_REQUEST"
-	EXECUTIONREQUESTIDCONFLICT    ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
-	FACTORYALREADYEXISTS          ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	FACTORYNOTIDLE                ErrorResponseCode = "FACTORY_NOT_IDLE"
-	INTERNALERROR                 ErrorResponseCode = "INTERNAL_ERROR"
-	INVALIDFACTORY                ErrorResponseCode = "INVALID_FACTORY"
-	INVALIDFACTORYNAME            ErrorResponseCode = "INVALID_FACTORY_NAME"
-	MOVEWORKREQUESTALREADYAPPLIED ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-	NOTFOUND                      ErrorResponseCode = "NOT_FOUND"
-	STALEFACTORYVERSION           ErrorResponseCode = "STALE_FACTORY_VERSION"
+	BADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
+	EXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	FACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	FACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
+	FACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	INTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
+	INVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
+	INVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	MOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	NOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	STALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryArtifactAuditMode.
@@ -193,6 +194,25 @@ const (
 	FactorySessionJavaScriptScriptStatusIDLE     FactorySessionJavaScriptScriptStatus = "IDLE"
 	FactorySessionJavaScriptScriptStatusPAUSED   FactorySessionJavaScriptScriptStatus = "PAUSED"
 	FactorySessionJavaScriptScriptStatusRUNNING  FactorySessionJavaScriptScriptStatus = "RUNNING"
+)
+
+// Defines values for FactorySessionLifecycleControlKind.
+const (
+	FactorySessionLifecycleControlKindApprove       FactorySessionLifecycleControlKind = "APPROVE"
+	FactorySessionLifecycleControlKindCancel        FactorySessionLifecycleControlKind = "CANCEL"
+	FactorySessionLifecycleControlKindPause         FactorySessionLifecycleControlKind = "PAUSE"
+	FactorySessionLifecycleControlKindResume        FactorySessionLifecycleControlKind = "RESUME"
+	FactorySessionLifecycleControlKindRetryDispatch FactorySessionLifecycleControlKind = "RETRY_DISPATCH"
+	FactorySessionLifecycleControlKindTerminate     FactorySessionLifecycleControlKind = "TERMINATE"
+)
+
+// Defines values for FactorySessionLifecycleControlOutcome.
+const (
+	FactorySessionLifecycleControlOutcomeAccepted        FactorySessionLifecycleControlOutcome = "ACCEPTED"
+	FactorySessionLifecycleControlOutcomeConflict        FactorySessionLifecycleControlOutcome = "CONFLICT"
+	FactorySessionLifecycleControlOutcomeInvalidState    FactorySessionLifecycleControlOutcome = "INVALID_STATE"
+	FactorySessionLifecycleControlOutcomeNoOp            FactorySessionLifecycleControlOutcome = "NO_OP"
+	FactorySessionLifecycleControlOutcomeTerminalSession FactorySessionLifecycleControlOutcome = "TERMINAL_SESSION"
 )
 
 // Defines values for FactorySessionListScope.
@@ -1339,6 +1359,21 @@ type FactorySession struct {
 	Target     FactorySessionTargetRef `json:"target"`
 }
 
+// FactorySessionApproveRequest Approval request for one durable factory session awaiting policy approval.
+type FactorySessionApproveRequest struct {
+	// ApprovalPreviewId Optional approval preview identity when the caller reviewed a server-side approval preview before submitting approval.
+	ApprovalPreviewId *string `json:"approvalPreviewId,omitempty"`
+
+	// ApprovedPolicy Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload.
+	ApprovedPolicy *FactorySessionRequestedPolicy `json:"approvedPolicy,omitempty"`
+
+	// Reason Optional operator-provided reason for audit and diagnostics.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestId Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation.
+	RequestId *string `json:"requestId,omitempty"`
+}
+
 // FactorySessionArtifactDetail Durable factory-session artifact detail with metadata and either inlined content or a safe retrieval ref according to visibility and payload size.
 type FactorySessionArtifactDetail struct {
 	// AuditMode Audit mode applied when one factory artifact was captured.
@@ -1825,6 +1860,78 @@ type FactorySessionLifecycle struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// FactorySessionLifecycleControlKind Durable factory-session lifecycle control operation requested by the client.
+type FactorySessionLifecycleControlKind string
+
+// FactorySessionLifecycleControlLinks Relative links for inspecting durable session state after lifecycle controls. Partial results, dispatches, and artifacts remain inspectable after pause, resume, cancel, and terminate operations.
+type FactorySessionLifecycleControlLinks struct {
+	// Artifacts Relative URL for GET /factory-sessions/{session_id}/artifacts.
+	Artifacts *string `json:"artifacts,omitempty"`
+
+	// Dispatches Relative URL for GET /factory-sessions/{session_id}/dispatches.
+	Dispatches *string `json:"dispatches,omitempty"`
+
+	// Events Relative URL for GET /factory-sessions/{session_id}/events.
+	Events *string `json:"events,omitempty"`
+
+	// Results Relative URL for GET /factory-sessions/{session_id}/results.
+	Results *string `json:"results,omitempty"`
+
+	// Session Relative URL for GET /factory-sessions/{session_id}.
+	Session *string `json:"session,omitempty"`
+
+	// Status Relative URL for polling durable session status.
+	Status *string `json:"status,omitempty"`
+}
+
+// FactorySessionLifecycleControlOutcome Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
+type FactorySessionLifecycleControlOutcome string
+
+// FactorySessionLifecycleControlRequest Optional metadata shared by durable session lifecycle control requests.
+type FactorySessionLifecycleControlRequest struct {
+	// Reason Optional operator-provided reason for audit and diagnostics.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestId Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation.
+	RequestId *string `json:"requestId,omitempty"`
+}
+
+// FactorySessionLifecycleControlResponse defines model for FactorySessionLifecycleControlResponse.
+type FactorySessionLifecycleControlResponse struct {
+	// ApprovalPreviewId Approval preview identity associated with the approved policy when available.
+	ApprovalPreviewId *string `json:"approvalPreviewId,omitempty"`
+
+	// Detail Optional human-readable detail explaining NO_OP or rejected outcomes.
+	Detail *string `json:"detail,omitempty"`
+
+	// DispatchId Target dispatch identifier for retry-dispatch controls.
+	DispatchId *string `json:"dispatchId,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy after approval or other policy-affecting controls.
+	EffectivePolicyHash *string `json:"effectivePolicyHash,omitempty"`
+
+	// Links Relative links for inspecting durable session state after lifecycle controls. Partial results, dispatches, and artifacts remain inspectable after pause, resume, cancel, and terminate operations.
+	Links *FactorySessionLifecycleControlLinks `json:"links,omitempty"`
+
+	// Operation Durable factory-session lifecycle control operation requested by the client.
+	Operation FactorySessionLifecycleControlKind `json:"operation"`
+
+	// Outcome Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
+	Outcome FactorySessionLifecycleControlOutcome `json:"outcome"`
+
+	// RetryDispatchId Identifier of the dispatch created or selected by a retry-dispatch control when the runtime materializes a distinct retry dispatch.
+	RetryDispatchId *string `json:"retryDispatchId,omitempty"`
+
+	// Session Durable factory-session inspection read model. Exposes public source refs and hashes without raw workflow source, unrestricted host paths, or diagnostic artifacts.
+	Session *FactorySessionDurableReadModel `json:"session,omitempty"`
+
+	// SessionId Stable durable factory-session identifier.
+	SessionId string `json:"sessionId"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+}
+
 // FactorySessionListScope Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
 type FactorySessionListScope string
 
@@ -1952,6 +2059,24 @@ type FactorySessionResultMode string
 
 // FactorySessionResultStatus Customer-visible durable session result availability for session read models and result retrieval endpoints.
 type FactorySessionResultStatus string
+
+// FactorySessionRetryDispatchRequest Retry request for one durable factory-session dispatch.
+type FactorySessionRetryDispatchRequest struct {
+	// DispatchId Stable dispatch identifier to retry within the targeted session.
+	DispatchId string `json:"dispatchId"`
+
+	// ForceNewAttempt When true, request a new retry attempt even if the dispatch already has a successful or in-flight retry.
+	ForceNewAttempt *bool `json:"forceNewAttempt,omitempty"`
+
+	// Reason Optional operator-provided reason for audit and diagnostics.
+	Reason *string `json:"reason,omitempty"`
+
+	// RequestId Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation.
+	RequestId *string `json:"requestId,omitempty"`
+
+	// ResetAttemptCount When true, reset the dispatch attempt counter before retrying. Runtimes may ignore this when policy forbids attempt resets.
+	ResetAttemptCount *bool `json:"resetAttemptCount,omitempty"`
+}
 
 // FactorySessionRuntime defines model for FactorySessionRuntime.
 type FactorySessionRuntime struct {
@@ -4451,6 +4576,11 @@ type CurrentFactoryNotFound = ErrorResponse
 // ExecutionRequestIdConflict defines model for ExecutionRequestIdConflict.
 type ExecutionRequestIdConflict = ErrorResponse
 
+// FactorySessionLifecycleControlConflict defines model for FactorySessionLifecycleControlConflict.
+type FactorySessionLifecycleControlConflict struct {
+	union json.RawMessage
+}
+
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
@@ -4532,6 +4662,12 @@ type StartDurableFactorySessionAsyncJSONRequestBody = FactorySessionExecutionReq
 // StartDurableFactorySessionSyncJSONRequestBody defines body for StartDurableFactorySessionSync for application/json ContentType.
 type StartDurableFactorySessionSyncJSONRequestBody = FactorySessionExecutionRequest
 
+// ApproveFactorySessionJSONRequestBody defines body for ApproveFactorySession for application/json ContentType.
+type ApproveFactorySessionJSONRequestBody = FactorySessionApproveRequest
+
+// CancelFactorySessionJSONRequestBody defines body for CancelFactorySession for application/json ContentType.
+type CancelFactorySessionJSONRequestBody = FactorySessionLifecycleControlRequest
+
 // SaveCurrentFactoryBySessionIdJSONRequestBody defines body for SaveCurrentFactoryBySessionId for application/json ContentType.
 type SaveCurrentFactoryBySessionIdJSONRequestBody = SaveFactoryForSessionRequest
 
@@ -4540,6 +4676,18 @@ type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody =
 
 // InvokeFactorySessionBySessionIdJSONRequestBody defines body for InvokeFactorySessionBySessionId for application/json ContentType.
 type InvokeFactorySessionBySessionIdJSONRequestBody = InvocationRequest
+
+// PauseFactorySessionJSONRequestBody defines body for PauseFactorySession for application/json ContentType.
+type PauseFactorySessionJSONRequestBody = FactorySessionLifecycleControlRequest
+
+// ResumeFactorySessionJSONRequestBody defines body for ResumeFactorySession for application/json ContentType.
+type ResumeFactorySessionJSONRequestBody = FactorySessionLifecycleControlRequest
+
+// RetryFactorySessionDispatchJSONRequestBody defines body for RetryFactorySessionDispatch for application/json ContentType.
+type RetryFactorySessionDispatchJSONRequestBody = FactorySessionRetryDispatchRequest
+
+// TerminateFactorySessionJSONRequestBody defines body for TerminateFactorySession for application/json ContentType.
+type TerminateFactorySessionJSONRequestBody = FactorySessionLifecycleControlRequest
 
 // SubmitWorkBySessionIdJSONRequestBody defines body for SubmitWorkBySessionId for application/json ContentType.
 type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
@@ -5473,6 +5621,68 @@ func (t *WorkContentPart) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsFactorySessionLifecycleControlResponse returns the union data inside the FactorySessionLifecycleControlConflict as a FactorySessionLifecycleControlResponse
+func (t FactorySessionLifecycleControlConflict) AsFactorySessionLifecycleControlResponse() (FactorySessionLifecycleControlResponse, error) {
+	var body FactorySessionLifecycleControlResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactorySessionLifecycleControlResponse overwrites any union data inside the FactorySessionLifecycleControlConflict as the provided FactorySessionLifecycleControlResponse
+func (t *FactorySessionLifecycleControlConflict) FromFactorySessionLifecycleControlResponse(v FactorySessionLifecycleControlResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactorySessionLifecycleControlResponse performs a merge with any union data inside the FactorySessionLifecycleControlConflict, using the provided FactorySessionLifecycleControlResponse
+func (t *FactorySessionLifecycleControlConflict) MergeFactorySessionLifecycleControlResponse(v FactorySessionLifecycleControlResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsErrorResponse returns the union data inside the FactorySessionLifecycleControlConflict as a ErrorResponse
+func (t FactorySessionLifecycleControlConflict) AsErrorResponse() (ErrorResponse, error) {
+	var body ErrorResponse
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromErrorResponse overwrites any union data inside the FactorySessionLifecycleControlConflict as the provided ErrorResponse
+func (t *FactorySessionLifecycleControlConflict) FromErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeErrorResponse performs a merge with any union data inside the FactorySessionLifecycleControlConflict, using the provided ErrorResponse
+func (t *FactorySessionLifecycleControlConflict) MergeErrorResponse(v ErrorResponse) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactorySessionLifecycleControlConflict) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Stream factory events
@@ -5496,12 +5706,18 @@ type ServerInterface interface {
 	// Get one factory session
 	// (GET /factory-sessions/{session_id})
 	GetFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Approve one durable factory session
+	// (POST /factory-sessions/{session_id}/approve)
+	ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// List durable factory session artifacts
 	// (GET /factory-sessions/{session_id}/artifacts)
 	ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get one durable factory session artifact
 	// (GET /factory-sessions/{session_id}/artifacts/{artifact_id})
 	GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionId SessionID, artifactId ArtifactID)
+	// Cancel one durable factory session
+	// (POST /factory-sessions/{session_id}/cancel)
+	CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// List durable factory session dispatches
 	// (GET /factory-sessions/{session_id}/dispatches)
 	ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -5529,15 +5745,27 @@ type ServerInterface interface {
 	// Get one factory session partial result
 	// (GET /factory-sessions/{session_id}/partial-result)
 	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Pause one durable factory session
+	// (POST /factory-sessions/{session_id}/pause)
+	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get one live factory session result
 	// (GET /factory-sessions/{session_id}/result)
 	GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get durable factory session results
 	// (GET /factory-sessions/{session_id}/results)
 	GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionResultsParams)
+	// Resume one durable factory session
+	// (POST /factory-sessions/{session_id}/resume)
+	ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Retry one durable factory session dispatch
+	// (POST /factory-sessions/{session_id}/retry-dispatch)
+	RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Terminate one durable factory session
+	// (POST /factory-sessions/{session_id}/terminate)
+	TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// List work for one session
 	// (GET /factory-sessions/{session_id}/work)
 	ListWorkBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params ListWorkBySessionIdParams)
@@ -5721,6 +5949,31 @@ func (siw *ServerInterfaceWrapper) GetFactorySession(w http.ResponseWriter, r *h
 	handler.ServeHTTP(w, r)
 }
 
+// ApproveFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) ApproveFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListFactorySessionArtifacts operation middleware
 func (siw *ServerInterfaceWrapper) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request) {
 
@@ -5771,6 +6024,31 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionArtifact(w http.ResponseWrit
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactorySessionArtifact(w, r, sessionId, artifactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) CancelFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelFactorySession(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6032,6 +6310,31 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionPartialResult(w http.Respons
 	handler.ServeHTTP(w, r)
 }
 
+// PauseFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) PauseFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PauseFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetFactorySessionResult operation middleware
 func (siw *ServerInterfaceWrapper) GetFactorySessionResult(w http.ResponseWriter, r *http.Request) {
 
@@ -6101,6 +6404,56 @@ func (siw *ServerInterfaceWrapper) GetFactorySessionResults(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// ResumeFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) ResumeFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResumeFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetryFactorySessionDispatch operation middleware
+func (siw *ServerInterfaceWrapper) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetryFactorySessionDispatch(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetStatusBySessionId operation middleware
 func (siw *ServerInterfaceWrapper) GetStatusBySessionId(w http.ResponseWriter, r *http.Request) {
 
@@ -6117,6 +6470,31 @@ func (siw *ServerInterfaceWrapper) GetStatusBySessionId(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetStatusBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TerminateFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) TerminateFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TerminateFactorySession(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6678,9 +7056,13 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.GetFactorySession).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/approve", wrapper.ApproveFactorySession).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/artifacts", wrapper.ListFactorySessionArtifacts).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/artifacts/{artifact_id}", wrapper.GetFactorySessionArtifact).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/cancel", wrapper.CancelFactorySession).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/dispatches", wrapper.ListFactorySessionDispatches).Methods("GET")
 
@@ -6700,11 +7082,19 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/partial-result", wrapper.GetFactorySessionPartialResult).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/pause", wrapper.PauseFactorySession).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/result", wrapper.GetFactorySessionResult).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/results", wrapper.GetFactorySessionResults).Methods("GET")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/resume", wrapper.ResumeFactorySession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/retry-dispatch", wrapper.RetryFactorySessionDispatch).Methods("POST")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/terminate", wrapper.TerminateFactorySession).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/work", wrapper.ListWorkBySessionId).Methods("GET")
 

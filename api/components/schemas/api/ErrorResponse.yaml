@@ -21,6 +21,7 @@ properties:
       - STALE_FACTORY_VERSION
       - MOVE_WORK_REQUEST_ALREADY_APPLIED
       - EXECUTION_REQUEST_ID_CONFLICT
+      - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
       - NOT_FOUND
       - INTERNAL_ERROR
     x-enum-descriptions:
@@ -32,6 +33,7 @@ properties:
       - Submitted editable factory definition was based on an older version than the current definition.
       - Operator move requestId was already applied for this session.
       - Durable execution requestId was reused with materially different inputs.
+      - Lifecycle control requestId was already applied with different control inputs.
       - The requested resource does not exist.
       - The server failed while handling an otherwise valid request.
   targets:

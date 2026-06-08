@@ -1,0 +1,23 @@
+type: string
+description: Durable factory-session lifecycle control operation requested by the client.
+enum:
+  - APPROVE
+  - PAUSE
+  - RESUME
+  - CANCEL
+  - TERMINATE
+  - RETRY_DISPATCH
+x-enum-varnames:
+  - FactorySessionLifecycleControlKindApprove
+  - FactorySessionLifecycleControlKindPause
+  - FactorySessionLifecycleControlKindResume
+  - FactorySessionLifecycleControlKindCancel
+  - FactorySessionLifecycleControlKindTerminate
+  - FactorySessionLifecycleControlKindRetryDispatch
+x-enum-descriptions:
+  - Approve requested orchestrator policy so execution can proceed.
+  - Pause active durable session scheduling while preserving inspectable state.
+  - Resume a paused durable session.
+  - Request graceful cancellation while preserving partial results and artifacts.
+  - Forcefully terminate a durable session while preserving inspectable state.
+  - Retry one failed or interrupted dispatch within the targeted session.
