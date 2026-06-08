@@ -1,4 +1,3 @@
-import type { components } from "../../../api/generated/openapi";
 import { DashboardText, SurfacePanel } from "../../../components/ui";
 import {
   AuthoredBodyText,
@@ -6,9 +5,7 @@ import {
 } from "../../../lib/authored-body-text";
 import { cn } from "../../../lib/cn";
 import { describeWorkContentPart } from "../lib/describe-work-content-part";
-
-export type WorkContent = components["schemas"]["WorkContent"];
-export type WorkContentPart = components["schemas"]["WorkContentPart"];
+import type { WorkContent, WorkContentPart } from "../lib/work-content-types";
 
 export function WorkContentPartList({
   content,
