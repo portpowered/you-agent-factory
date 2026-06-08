@@ -85,6 +85,12 @@ export interface FactoryGraphEditorMessages {
   draftActionsSaving: string;
   draftActionsTitle: string;
   edgeAriaLabel: (label: string, source: string, target: string) => string;
+  edgeWaypointAddLabel: string;
+  edgeWaypointHandleLabel: (index: number) => string;
+  edgeWaypointKindLabel: string;
+  edgeWaypointSelectedLabel: string;
+  edgeWaypointSourceLabel: string;
+  edgeWaypointTargetLabel: string;
   edgeKindLabel: (
     kind:
       | "worker-assignment"
@@ -648,6 +654,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsTitle: "Pending graph changes",
       edgeAriaLabel: (label, source, target) =>
         `${label} from ${source} to ${target}`,
+      edgeWaypointAddLabel: "Add waypoint",
+      edgeWaypointHandleLabel: (index) => `Move edge waypoint ${index + 1}`,
+      edgeWaypointKindLabel: "Kind",
+      edgeWaypointSelectedLabel: "Selected edge route",
+      edgeWaypointSourceLabel: "Source",
+      edgeWaypointTargetLabel: "Target",
       edgeKindLabel: describeEnglishEdgeKind,
       flowConnectionHint: "Use labeled anchors for compatible connections.",
       flowPendingLabel: "Pending",
@@ -1034,6 +1046,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsTitle: "待处理图更改",
       edgeAriaLabel: (label, source, target) =>
         `${label}：从 ${source} 到 ${target}`,
+      edgeWaypointAddLabel: "添加路径点",
+      edgeWaypointHandleLabel: (index) => `移动边路径点 ${index + 1}`,
+      edgeWaypointKindLabel: "类型",
+      edgeWaypointSelectedLabel: "已选边路由",
+      edgeWaypointSourceLabel: "来源",
+      edgeWaypointTargetLabel: "目标",
       edgeKindLabel: (kind) => {
         switch (kind) {
           case "worker-assignment":

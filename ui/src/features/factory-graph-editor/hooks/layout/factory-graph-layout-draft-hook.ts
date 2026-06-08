@@ -2,9 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CurrentFactoryDocument } from "../../lib/draft/factory-graph-draft-types";
 import {
+  addFactoryLayoutEdgeWaypoint,
+  factoryLayoutEdgeWaypoints,
+  moveFactoryLayoutEdgeWaypoint,
+} from "../../lib/layout/factory-graph-layout-edge-waypoints";
+import {
   createMoveFactoryLayoutNodeCommand,
   createMoveFactoryLayoutNodesCommand,
   createResetFactoryLayoutCommand,
+  createUpdateFactoryLayoutEdgeWaypointsCommand,
   createUpdateFactoryLayoutViewportCommand,
   type FactoryLayoutCommand,
 } from "../../lib/layout/history/factory-graph-layout-commands";
@@ -38,6 +44,16 @@ export interface FactoryGraphLayoutDraftDerivedState {
   hasChanges: boolean;
   layout: FactoryLayout;
   layoutDirty: boolean;
+  addEdgeWaypoint: (
+    edgeId: string,
+    position: FactoryLayoutPoint,
+    insertIndex?: number,
+  ) => void;
+  moveEdgeWaypoint: (
+    edgeId: string,
+    waypointIndex: number,
+    position: FactoryLayoutPoint,
+  ) => void;
   moveNode: (nodeId: string, position: FactoryLayoutPoint) => void;
   moveNodesByDelta: (
     nodeIds: readonly string[],
@@ -199,6 +215,59 @@ export function useFactoryGraphLayoutDraftState(
       sessionState: createLayoutSessionState(savedLayout),
     });
   }, []);
+  const commitEdgeWaypointUpdate = useCallback(
+    (
+      edgeId: string,
+      updater: (layout: FactoryLayout) => FactoryLayout,
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = updater(currentLayout);
+        return {
+          command: createUpdateFactoryLayoutEdgeWaypointsCommand({
+            edgeId,
+            layout: currentLayout,
+            to: factoryLayoutEdgeWaypoints(nextLayout, edgeId) ?? null,
+          }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const addEdgeWaypoint = useCallback(
+    (
+      edgeId: string,
+      position: FactoryLayoutPoint,
+      insertIndex?: number,
+    ) => {
+      commitEdgeWaypointUpdate(edgeId, (currentLayout) =>
+        addFactoryLayoutEdgeWaypoint(
+          currentLayout,
+          edgeId,
+          position,
+          insertIndex,
+        ),
+      );
+    },
+    [commitEdgeWaypointUpdate],
+  );
+  const moveEdgeWaypoint = useCallback(
+    (
+      edgeId: string,
+      waypointIndex: number,
+      position: FactoryLayoutPoint,
+    ) => {
+      commitEdgeWaypointUpdate(edgeId, (currentLayout) =>
+        moveFactoryLayoutEdgeWaypoint(
+          currentLayout,
+          edgeId,
+          waypointIndex,
+          position,
+        ),
+      );
+    },
+    [commitEdgeWaypointUpdate],
+  );
   const moveNode = useCallback(
     (nodeId: string, position: FactoryLayoutPoint) => {
       commitLayoutUpdate(({ currentLayout }) => ({
@@ -330,8 +399,10 @@ export function useFactoryGraphLayoutDraftState(
     canRedoLayout: canRedoFactoryLayoutHistory(store.history),
     canUndoLayout: canUndoFactoryLayoutHistory(store.history),
     hasChanges: layoutDirty,
+    addEdgeWaypoint,
     layout,
     layoutDirty,
+    moveEdgeWaypoint,
     moveNode,
     moveNodesByDelta,
     pruneLayoutHistoryForNodeIds,

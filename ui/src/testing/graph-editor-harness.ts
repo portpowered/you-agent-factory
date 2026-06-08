@@ -21,6 +21,10 @@ import {
   type FactoryGraphDraftDerivedState,
 } from "../features/factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
+  addFactoryLayoutEdgeWaypoint,
+  moveFactoryLayoutEdgeWaypoint,
+} from "../features/factory-graph-editor/lib/layout/factory-graph-layout-edge-waypoints";
+import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-operations";
@@ -319,6 +323,38 @@ function createMockLayoutDraftState() {
     hasChanges: false,
     layout: structuredClone(baseLayout),
     layoutDirty: false,
+    addEdgeWaypoint: vi.fn(
+      (
+        edgeId: string,
+        position: { x: number; y: number },
+        insertIndex?: number,
+      ) => {
+        state.layout = addFactoryLayoutEdgeWaypoint(
+          state.layout,
+          edgeId,
+          position,
+          insertIndex,
+        );
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+    moveEdgeWaypoint: vi.fn(
+      (
+        edgeId: string,
+        waypointIndex: number,
+        position: { x: number; y: number },
+      ) => {
+        state.layout = moveFactoryLayoutEdgeWaypoint(
+          state.layout,
+          edgeId,
+          waypointIndex,
+          position,
+        );
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
     moveNode: vi.fn((nodeId: string, position: { x: number; y: number }) => {
       state.layout = moveFactoryLayoutNode(state.layout, nodeId, position);
       state.hasChanges = true;
@@ -421,6 +457,8 @@ function createMockEditableFactoryGraphActions(
       }
       return result;
     },
+    addEdgeWaypoint: layoutDraftState.addEdgeWaypoint,
+    moveEdgeWaypoint: layoutDraftState.moveEdgeWaypoint,
     moveLayoutNode: layoutDraftState.moveNode,
     moveLayoutNodesByDelta: layoutDraftState.moveNodesByDelta,
     resetLayout: layoutDraftState.resetLayout,

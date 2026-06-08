@@ -116,6 +116,8 @@ export function useEditableFactoryGraph(
       connectNodes: mutationActions.connectNodes,
       discard,
       disconnectEdge: mutationActions.disconnectEdge,
+      addEdgeWaypoint: layoutDraftState.addEdgeWaypoint,
+      moveEdgeWaypoint: layoutDraftState.moveEdgeWaypoint,
       moveLayoutNode: layoutDraftState.moveNode,
       moveLayoutNodesByDelta: layoutDraftState.moveNodesByDelta,
       removeNode: mutationActions.removeNode,
