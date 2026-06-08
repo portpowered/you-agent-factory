@@ -6,6 +6,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
 	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
 )
 
@@ -260,6 +261,43 @@ func javascriptOrchestratorConfigTargets(cfg *interfaces.FactoryConfig) []Target
 		}
 	}
 	targets = append(targets, javascriptWorkflowConfigAndInlineTargets(jsCfg)...)
+	targets = append(targets, javascriptWorkflowPolicyTargets(jsCfg)...)
+	return targets
+}
+
+func javascriptWorkflowPolicyTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig) []Target {
+	if jsCfg == nil {
+		return nil
+	}
+	resolution := workflowpolicy.ResolveFromFactoryDefault(jsCfg.DefaultPolicy)
+	return workflowPolicyIssuesToTargets(resolution.Issues)
+}
+
+func workflowPolicyIssuesToTargets(issues []workflowpolicy.Issue) []Target {
+	if len(issues) == 0 {
+		return nil
+	}
+	targets := make([]Target, 0, len(issues))
+	for _, issue := range issues {
+		targetPath := "javascript.defaultPolicy"
+		switch {
+		case issue.Path == "orchestrator.javascript.defaultPolicy":
+			targetPath = "javascript.defaultPolicy"
+		case strings.HasPrefix(issue.Path, "policy."):
+			targetPath = "javascript.defaultPolicy." + strings.TrimPrefix(issue.Path, "policy.")
+		}
+		targets = append(targets, Target{
+			Code:     issue.Code,
+			Severity: SeverityError,
+			Message:  issue.Message,
+			Path:     fmt.Sprintf("%s.orchestrator.%s", validationRoot, targetPath),
+			Subject: Subject{
+				Type:     SubjectTypeFactory,
+				ID:       "factory",
+				Location: SubjectLocationDefinition,
+			},
+		})
+	}
 	return targets
 }
 
