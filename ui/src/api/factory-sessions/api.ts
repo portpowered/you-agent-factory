@@ -11,8 +11,6 @@ export type FactorySessionSummary =
 export type FactorySession = components["schemas"]["FactorySession"];
 export type FactorySessionLiveResult =
   components["schemas"]["FactorySessionLiveResult"];
-export type FactorySessionResult =
-  components["schemas"]["FactorySessionResult"];
 export type FactorySessionPartialResult =
   components["schemas"]["FactorySessionPartialResult"];
 export type FactorySessionTarget =
