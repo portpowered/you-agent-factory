@@ -8,8 +8,10 @@ import type { useCurrentSelectionDetails } from "../../current-selection/hooks/c
 import { CurrentSelectionWidget } from "../../current-selection/public";
 import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
-import { FactorySessionWidget } from "../../factory-session-detail/public";
-import { getFactorySessionWidgetMessages } from "../../factory-session-detail/messages/factory-session-widget";
+import {
+  FactorySessionWidget,
+  getFactorySessionWidgetMessages,
+} from "../../factory-session-detail/public";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
