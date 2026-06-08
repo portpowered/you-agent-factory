@@ -8,7 +8,7 @@ import {
   Select,
 } from "../../../../components/ui";
 import { FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES } from "../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
-import { updateEditableModelInvokeBindingDraft } from "../editing/editable-workstation-model-invoke-mutators";
+import { updateEditableModelInvokeBindingDraft } from "../editing/model-invoke/editable-workstation-model-invoke-mutators";
 import type { WorkstationDetailCardProps } from "../lib/keys/detail-card-types";
 import { resolveModelInvokeBindingInputSlots } from "../lib/editable-workstation-model-invoke-options";
 import type { getWorkstationDetailMessages } from "../messages/workstation-detail";

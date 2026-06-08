@@ -1,5 +1,5 @@
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { WorkstationType } from "../../../api/generated/openapi";
+import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
+import { WorkstationType } from "../../../../api/generated/openapi";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]

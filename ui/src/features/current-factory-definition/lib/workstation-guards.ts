@@ -3,7 +3,7 @@ import type {
   EditableWorkstationDraft,
   EditableWorkstationInputDraft,
 } from "./workstation-editable-values";
-import { editableModelInvokeBindingsEqual } from "./workstation-model-invoke";
+import { editableModelInvokeBindingsEqual } from "./workstation/workstation-model-invoke";
 
 type WorkstationGuard = EditableWorkstationDraft["guards"][number];
 type InputGuardBase = EditableWorkstationInputDraft["guards"][number];

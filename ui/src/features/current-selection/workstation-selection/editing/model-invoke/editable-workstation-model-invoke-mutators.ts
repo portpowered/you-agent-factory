@@ -1,10 +1,10 @@
-import type { EditableWorkstationDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
-import type { EditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type { EditableWorkstationDraft } from "../../../../current-factory-definition/lib/workstation-editable-values";
+import type { EditableWorkstationValues } from "../../../../current-factory-definition/lib/workstation-editable-values";
 import {
   resolveModelOperationByName,
   syncEditableModelInvokeBindingsForOperation,
   type EditableModelInvokeBindingDraft,
-} from "../../../current-factory-definition/lib/workstation-model-invoke";
+} from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 
 function resolveOperationsForWorker(
   selectedEditableValues: EditableWorkstationValues,

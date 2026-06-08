@@ -30,13 +30,13 @@ import {
   resolveModelOperationsByWorkerName,
   resolveModelWorkerOperations,
   syncEditableModelInvokeBindingsForOperation,
-} from "./workstation-model-invoke";
-import type { EditableModelInvokeBindingDraft } from "./workstation-model-invoke";
+} from "./workstation/workstation-model-invoke";
+import type { EditableModelInvokeBindingDraft } from "./workstation/workstation-model-invoke";
 import {
   type EditableWorkstationType,
   resolveEditableWorkstationType,
   resolveEditableWorkstationTypeOptions,
-} from "./workstation-type";
+} from "./workstation/workstation-type";
 import {
   applyEditableWorkstationInputs,
   resolveCanonicalWorkstation,
@@ -47,7 +47,7 @@ import {
   resolveWorkerModelProvider,
   resolveWorkerOptions,
   resolveWorkerTypeByName,
-} from "./workstation-editable-resolution";
+} from "./workstation/workstation-editable-resolution";
 import { workstationRequiresWorkerAssignment } from "./workstation-worker-assignment";
 
 type CanonicalWorkstation = NonNullable<

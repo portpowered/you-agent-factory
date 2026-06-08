@@ -1,6 +1,6 @@
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import type { components } from "../../../api/generated/openapi";
-import { WorkstationType } from "../../../api/generated/openapi";
+import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
+import type { components } from "../../../../api/generated/openapi";
+import { WorkstationType } from "../../../../api/generated/openapi";
 import type { EditableWorkstationType } from "./workstation-type";
 
 type ModelOperation = components["schemas"]["ModelOperation"];

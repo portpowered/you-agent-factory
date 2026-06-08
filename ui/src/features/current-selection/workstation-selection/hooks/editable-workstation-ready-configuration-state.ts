@@ -7,7 +7,7 @@ import {
 import {
   isModelInvokeWorkstationType,
   type EditableModelInvokeBindingDraft,
-} from "../../../current-factory-definition/lib/workstation-model-invoke";
+} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import {
   applyEditableWorkstationDraft,
   type EditableWorkstationDraft,
@@ -23,12 +23,12 @@ import {
 import {
   resolveModelInvokeDraftForOperationChange,
   resolveModelInvokeDraftForWorkerChange,
-} from "../editing/editable-workstation-model-invoke-mutators";
-import { resolveDraftForWorkstationTypeChange } from "../editing/editable-workstation-type-mutators";
+} from "../editing/model-invoke/editable-workstation-model-invoke-mutators";
+import { resolveDraftForWorkstationTypeChange } from "../editing/type/editable-workstation-type-mutators";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import { resolveModelInvokeOperationOptionsState } from "../lib/editable-workstation-model-invoke-options";
 import type { RunnerID } from "../editing/runner-metadata";
-import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation-type";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import type {
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,

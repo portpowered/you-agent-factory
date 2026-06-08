@@ -19,7 +19,7 @@ import type {
   EditableWorkstationDraft,
   EditableWorkstationValues,
 } from "../../../../current-factory-definition/lib/workstation-editable-values";
-import type { EditableModelInvokeBindingDraft } from "../../../../current-factory-definition/lib/workstation-model-invoke";
+import type { EditableModelInvokeBindingDraft } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { LoadableProviderSessionRef } from "../../../../provider-session-detail/lib/provider-session-ref";
 import type { DetailCardSaveState } from "../../../base/hooks/detail-card-save-types";
 import type { RunnerID } from "../../editing/runner-metadata";

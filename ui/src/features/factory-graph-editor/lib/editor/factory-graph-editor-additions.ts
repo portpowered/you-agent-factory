@@ -22,7 +22,7 @@ import {
 import {
   DEFAULT_WORKSTATION_TYPE,
   type EditableWorkstationType,
-} from "../../../current-factory-definition/lib/workstation-type";
+} from "../../../current-factory-definition/lib/workstation/workstation-type";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import type { FactoryGraphEditorMenuAction } from "../../components/controls/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";

@@ -15,9 +15,9 @@ import {
 import { formatList } from "../../../../../components/ui/formatters";
 import { cn } from "../../../../../lib/cn";
 import type { WorkstationLevelGuard } from "../../../../current-factory-definition/lib/workstation-guards";
-import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation-model-invoke";
-import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation-type";
-import { supportsEditableWorkstationTypeConversion } from "../../../../current-factory-definition/lib/workstation-type";
+import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
+import { supportsEditableWorkstationTypeConversion } from "../../../../current-factory-definition/lib/workstation/workstation-type";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import { GraphSemanticIcon } from "../../../../flowchart/components/graph-semantic-icon";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";

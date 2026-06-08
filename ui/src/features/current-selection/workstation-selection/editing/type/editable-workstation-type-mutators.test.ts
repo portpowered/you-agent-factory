@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type {
   EditableWorkstationDraft,
   EditableWorkstationValues,
-} from "../../../current-factory-definition/lib/workstation-editable-values";
+} from "../../../../current-factory-definition/lib/workstation-editable-values";
 import { resolveDraftForWorkstationTypeChange } from "./editable-workstation-type-mutators";
 
 const baseDraft: EditableWorkstationDraft = {

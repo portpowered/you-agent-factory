@@ -6,7 +6,7 @@ import { workstationBehaviorRequiresPrompt } from "../../../current-factory-defi
 import {
   isModelInvokeWorkstationType,
   workstationUsesPromptOrientedEditing,
-} from "../../../current-factory-definition/lib/workstation-model-invoke";
+} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import {
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,

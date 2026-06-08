@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
 import {
   buildCanonicalModelInvokeBindingsFromDraft,
   editableModelInvokeBindingsEqual,

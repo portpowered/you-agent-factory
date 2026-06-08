@@ -11,7 +11,7 @@ import {
   isModelInvokeWorkstationType,
   resolveModelOperationByName,
   validateEditableModelInvokeBindings,
-} from "../../../../current-factory-definition/lib/workstation-model-invoke";
+} from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import { isValidUppercaseModelOperationName } from "../../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import {

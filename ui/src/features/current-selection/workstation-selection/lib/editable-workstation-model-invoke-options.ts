@@ -3,7 +3,7 @@ import type { resolveEditableWorkstationValues } from "../../../current-factory-
 import {
   resolveModelOperationByName,
   resolveModelOperationInputSlots,
-} from "../../../current-factory-definition/lib/workstation-model-invoke";
+} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationOperationOptionsState } from "./keys/detail-card-types";
 
 export function resolveModelInvokeOperationOptionsState(

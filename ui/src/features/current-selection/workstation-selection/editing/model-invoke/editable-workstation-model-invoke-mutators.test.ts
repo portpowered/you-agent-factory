@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { EditableWorkstationDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
+import type { EditableWorkstationDraft } from "../../../../current-factory-definition/lib/workstation-editable-values";
 import {
   resolveModelInvokeDraftForOperationChange,
   resolveModelInvokeDraftForWorkerChange,
