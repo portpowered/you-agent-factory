@@ -6,6 +6,8 @@ import { flowMidpointBetweenNodes } from "../../components/flow/factory-graph-ed
 import { describeFactoryGraphLayoutEdgeId } from "../../lib/layout/factory-graph-layout-edge-labels";
 import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import type { FactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
+import { decorateProjectedEdgesWithWaypoints } from "../../lib/projection/factory-graph-react-flow-edge-waypoint-projection";
+import type { FactoryGraphReactFlowEdge } from "../../lib/projection/factory-graph-react-flow-projection";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
 function canEditFactoryGraphEdgeWaypoints(input: {
@@ -37,30 +39,6 @@ function resolveEdgeNodePositions(
     source: sourceNode.position,
     target: targetNode.position,
   };
-}
-
-function decorateEditorEdgesWithWaypoints(input: {
-  edges: Edge[];
-  editorMode: boolean;
-  layout: FactoryLayout;
-  selectedWaypointEdgeId: string | null;
-}): Edge[] {
-  if (!input.editorMode) {
-    return input.edges;
-  }
-
-  return input.edges.map((edge) => {
-    const waypoints = factoryLayoutEdgeWaypoints(input.layout, edge.id);
-    return {
-      ...edge,
-      data: {
-        ...(edge.data ?? {}),
-        waypoints,
-      },
-      selected: edge.id === input.selectedWaypointEdgeId,
-      type: "factoryEditorEdge",
-    };
-  });
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates edge selection, layout mutation, and editor edge decoration.
@@ -211,8 +189,8 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
 
   const decorateEditorEdges = useCallback(
     (edges: Edge[]) =>
-      decorateEditorEdgesWithWaypoints({
-        edges,
+      decorateProjectedEdgesWithWaypoints({
+        edges: edges as FactoryGraphReactFlowEdge[],
         editorMode: input.editorMode,
         layout: input.layout,
         selectedWaypointEdgeId,

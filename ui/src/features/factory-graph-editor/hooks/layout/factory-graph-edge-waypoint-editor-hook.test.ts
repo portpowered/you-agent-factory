@@ -30,7 +30,7 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
         removeEdgeWaypoint,
         nodes: [
           {
-            id: "workstation:review",
+            id: "workstation:draft",
             data: {},
             position: { x: 0, y: 0 },
             type: "factoryEntity",
