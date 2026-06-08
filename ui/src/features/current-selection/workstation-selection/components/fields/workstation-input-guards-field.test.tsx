@@ -2,8 +2,8 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { selectComboboxOption } from "../../../../testing/select-test-helpers";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { EditableConfigurationWorkstationInputGuardsField } from "./workstation-input-guards-field";

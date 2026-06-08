@@ -3,8 +3,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import { expectNoInlineSaveOutcomesIn } from "../../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import { EditableConfigurationSection } from "./workstation-editable-configuration-section";

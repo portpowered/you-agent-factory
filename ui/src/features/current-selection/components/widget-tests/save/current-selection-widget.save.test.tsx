@@ -3,8 +3,8 @@ import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import {
   CurrentFactoryDefinitionError,

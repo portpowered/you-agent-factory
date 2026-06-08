@@ -193,9 +193,6 @@ describe("SubmitWorkWidget form behavior", () => {
       />,
     );
 
-    const workType = screen.getByRole("combobox", {
-      name: "Work type",
-    });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Request name",
     });

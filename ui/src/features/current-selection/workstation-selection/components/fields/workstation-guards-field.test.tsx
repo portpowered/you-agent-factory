@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
 import { afterEach, beforeEach } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import { buildWorkstationGuardSelectorCompletionItems } from "../../../../../components/prompt-editor";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";

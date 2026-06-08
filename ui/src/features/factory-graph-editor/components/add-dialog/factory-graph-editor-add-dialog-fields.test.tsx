@@ -3,13 +3,13 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 
 import {
   FactoryGraphEditorSelectField,
   FactoryGraphEditorTextField,
-} from "../add-dialog/factory-graph-editor-add-dialog-fields";
+} from "./factory-graph-editor-add-dialog-fields";
 
 let restoreBrowserShims: (() => void) | undefined;
 

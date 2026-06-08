@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach } from "vitest";
 
-import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
-import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import {
   semanticWorkflowDashboardSnapshot,
