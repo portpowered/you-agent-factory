@@ -35,6 +35,7 @@ import {
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
+import { preserveExistingBundledFilesWhenAbsent } from "../../../api/factory-definition";
 import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
 import {
   groupActiveExecutionsByWorkstationNodeID,
@@ -208,11 +209,13 @@ function observeModeFactoryDefinition(
     return snapshot.factory;
   }
 
-  return resolveObserveModeFactoryDefinition({
+  const resolvedFactory = resolveObserveModeFactoryDefinition({
     document,
     snapshotFactory: snapshot.factory,
     timelineMode,
   });
+
+  return preserveExistingBundledFilesWhenAbsent(resolvedFactory, document);
 }
 
 function editorModeFactoryDefinition(

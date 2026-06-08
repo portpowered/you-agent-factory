@@ -1375,6 +1375,42 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     ).toBeNull();
   });
 
+  it("renders bundled docs as observe-mode graph nodes from the saved factory document", async () => {
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    refreshFactoryFromTopology(snapshot);
+    const savedDocument = {
+      ...currentFactoryDocumentFromSnapshot(snapshot),
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "# Planning" },
+            targetPath: "factory/docs/planning.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+
+    renderCurrentActivity({
+      currentFactoryDocument: savedDocument,
+      snapshot,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select overview.md doc" }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.getByRole("button", { name: "Select planning.md doc" }),
+    ).toBeTruthy();
+  });
+
   it("renders saved document workstations in observe mode when the document plane diverges from the snapshot", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
     wireMockEditableFactoryGraph(

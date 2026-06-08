@@ -4,7 +4,10 @@ import type { CurrentFactoryDocument } from "../../../api/current-factory-defini
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
-import { normalizeFactoryDefinition } from "../../../api/factory-definition";
+import {
+  normalizeFactoryDefinition,
+  preserveExistingBundledFilesWhenAbsent,
+} from "../../../api/factory-definition";
 import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
@@ -73,12 +76,22 @@ export function syncCurrentFactoryDefinition(
   }
   try {
     const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
+    const existingDefinition = queryClient.getQueryData<CanonicalFactoryDefinition>(
+      currentFactoryDefinitionQueryKey(sessionID),
+    );
+    const existingDocument = queryClient.getQueryData<CurrentFactoryDocument>(
+      currentFactoryDocumentQueryKey(sessionID),
+    );
+    const factoryWithBundledFiles = preserveExistingBundledFilesWhenAbsent(
+      normalizedFactory,
+      existingDocument ?? existingDefinition,
+    );
     queryClient.setQueryData(
       currentFactoryDefinitionQueryKey(sessionID),
-      normalizedFactory,
+      factoryWithBundledFiles,
     );
     const document =
-      toCurrentFactoryDocumentFromNormalizedFactory(normalizedFactory);
+      toCurrentFactoryDocumentFromNormalizedFactory(factoryWithBundledFiles);
     if (document) {
       queryClient.setQueryData(
         currentFactoryDocumentQueryKey(sessionID),
