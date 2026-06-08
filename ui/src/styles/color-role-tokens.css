@@ -41,7 +41,7 @@
 
   /* --- Primary accent (yellow brand) --- */
   --color-primary: var(--color-af-foundation-accent);
-  --color-on-primary: var(--color-af-foundation-canvas);
+  --color-on-primary: var(--color-af-foundation-accent-ink);
   --color-primary-container: rgb(
     from var(--color-af-foundation-accent) r g b /
     0.18

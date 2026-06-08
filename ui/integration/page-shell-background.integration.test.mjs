@@ -54,7 +54,7 @@ describe.sequential("page-shell background browser integration", () => {
         expect(
           shell.backgroundImage === "none" || shell.backgroundImage === "",
         ).toBe(true);
-        expect(shell.backgroundColor).toBe("rgb(10, 17, 23)");
+        expect(shell.backgroundColor).toBe("rgb(5, 11, 16)");
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,
