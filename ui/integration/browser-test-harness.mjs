@@ -52,6 +52,82 @@ export async function fillWorkstationPromptBody(scope, text) {
     await scope.page().keyboard.type(text);
   }
 }
+
+/** Select a Radix/shadcn combobox option by visible option label. */
+export async function selectComboboxOption(combobox, optionName) {
+  const page = combobox.page();
+  await combobox.click();
+  await page.getByRole("option", { name: optionName, exact: true }).click();
+}
+
+/** Open a labeled combobox within scope and choose an option by visible label. */
+export async function selectLabeledComboboxOption(scope, label, optionName) {
+  await selectComboboxOption(
+    scope.getByRole("combobox", { name: label }),
+    optionName,
+  );
+}
+
+/** Fill the default model-worker operation contract in the add-worker dialog. */
+export async function fillModelWorkerAddOperationDraft(
+  scope,
+  {
+    inputSlotName = "text",
+    operationName = "TTS",
+    outputSlotName = "audio",
+  } = {},
+) {
+  const addOperationButton = scope.getByRole("button", {
+    name: "Add operation",
+  });
+  await addOperationButton.scrollIntoViewIfNeeded();
+  await addOperationButton.click();
+
+  const operationNameField = scope.locator(
+    "#factory-graph-add-model-operation-name-0",
+  );
+  await operationNameField.scrollIntoViewIfNeeded();
+  await operationNameField.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  await operationNameField.fill(operationName);
+
+  const inputSlotNameField = scope.locator(
+    "#factory-graph-add-model-operation-input-slot-name-0",
+  );
+  await inputSlotNameField.scrollIntoViewIfNeeded();
+  await inputSlotNameField.fill(inputSlotName);
+  await scope
+    .locator("#factory-graph-add-model-operation-input-slot-0-content-type-TEXT")
+    .check();
+
+  const outputSlotNameField = scope.locator(
+    "#factory-graph-add-model-operation-output-slot-name-0",
+  );
+  await outputSlotNameField.scrollIntoViewIfNeeded();
+  await outputSlotNameField.fill(outputSlotName);
+  await scope
+    .locator(
+      "#factory-graph-add-model-operation-output-slot-0-content-type-AUDIO",
+    )
+    .check();
+}
+
+const modelProviderOptionLabels = {
+  CLAUDE: "Claude",
+  CODEX: "Codex",
+  CURSOR: "Cursor",
+  GEMINI: "Gemini",
+  KIRO: "Kiro",
+  OPENCODE: "OpenCode",
+};
+
+/** Map editable model-provider enum values to combobox option labels. */
+export function modelProviderOptionLabel(value) {
+  return modelProviderOptionLabels[value] ?? value;
+}
+
 const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
 let browserArtifactSequence = 0;
 let sharedBrowserPorts = null;

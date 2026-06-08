@@ -8,7 +8,9 @@ import {
   type FactoryGraphOperationResult,
 } from "../lib/operations/factory-graph-operations";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
+import { factoryLayoutFromDefinition } from "../lib/layout/factory-graph-layout-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 
 const FACTORY_GRAPH_SAVE_FALLBACK_ERROR = "Factory graph save failed.";
 
@@ -16,22 +18,26 @@ export function useEditableFactoryGraphSaveController({
   activeWorkCount,
   draftState,
   factoryDocumentScopeKey,
+  layoutDraftState,
   locale,
   setBlockedOperation,
 }: {
   activeWorkCount: number;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   factoryDocumentScopeKey: string | null;
+  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   locale?: string | null;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
 }) {
+  const hasPendingEdits =
+    draftState.hasChanges || layoutDraftState.hasChanges;
   const messages = getFactoryGraphEditorMessages(locale);
   const scopedDocumentSave = useScopedFactoryDocumentSave({
     fallbackErrorMessage:
       messages.noticeSaveFailedTitle ?? FACTORY_GRAPH_SAVE_FALLBACK_ERROR,
-    isDirty: draftState.hasChanges,
+    isDirty: hasPendingEdits,
     scopeKey: factoryDocumentScopeKey,
   });
   const isStale = isFactoryGraphDraftStale(draftState);
@@ -49,7 +55,7 @@ export function useEditableFactoryGraphSaveController({
   const isSaving = isFactoryDocumentSaveSubmitting(documentSave);
   const canSave =
     factoryDocumentScopeKey !== null &&
-    draftState.hasChanges &&
+    hasPendingEdits &&
     draftState.pendingFactoryDefinition !== null &&
     draftState.validationErrors.length === 0 &&
     draftState.latestDocument !== null &&
@@ -66,6 +72,7 @@ export function useEditableFactoryGraphSaveController({
     confirmSave: scopedDocumentSave.confirmSave,
     draftState,
     factoryDocumentScopeKey,
+    layoutDraftState,
     locale,
     setBlockedOperation,
   });
@@ -94,6 +101,7 @@ function useSaveEditableFactoryGraph({
   confirmSave,
   draftState,
   factoryDocumentScopeKey,
+  layoutDraftState,
   locale,
   setBlockedOperation,
 }: {
@@ -101,6 +109,7 @@ function useSaveEditableFactoryGraph({
   confirmSave: ReturnType<typeof useScopedFactoryDocumentSave>["confirmSave"];
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   factoryDocumentScopeKey: string | null;
+  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   locale?: string | null;
   setBlockedOperation: (
     result: FactoryGraphOperationResult<never> | null,
@@ -118,6 +127,7 @@ function useSaveEditableFactoryGraph({
     const saveInput = applyFactoryGraphPendingEdits({
       baseFactoryDefinition: draftState.latestDocument,
       draft: draftState.draft,
+      pendingLayout: layoutDraftState.layout,
       locale,
     });
     if (!saveInput.ok) {
@@ -132,6 +142,9 @@ function useSaveEditableFactoryGraph({
       previousFactory: draftState.latestDocument,
       onSaved: () => {
         draftState.replaceDraft(createEmptyFactoryGraphDraft());
+        layoutDraftState.adoptSavedLayout(
+          factoryLayoutFromDefinition(saveInput.value),
+        );
         setBlockedOperation(null);
         didSave = true;
       },
@@ -143,6 +156,7 @@ function useSaveEditableFactoryGraph({
     confirmSave,
     draftState,
     factoryDocumentScopeKey,
+    layoutDraftState,
     locale,
     setBlockedOperation,
   ]);

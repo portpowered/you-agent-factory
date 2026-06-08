@@ -1,5 +1,7 @@
 import { expect, within } from "storybook/test";
 
+import { COLOR_PALETTE_IDS } from "../../theme/color-palette";
+import { applyDocumentColorPalette } from "../../theme/app-color-palette";
 import { ColorRoleAccentContrastShowcase } from "./color-role-accent-contrast";
 
 export default {
@@ -31,5 +33,24 @@ export const Default = {
     await expect(
       canvas.getByLabelText("Legacy vibrant accent references"),
     ).toBeVisible();
+  },
+};
+
+export const PaletteSwitching = {
+  render: () => <ColorRoleAccentContrastShowcase />,
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    for (const paletteId of COLOR_PALETTE_IDS) {
+      applyDocumentColorPalette(paletteId);
+
+      await expect(document.documentElement.dataset.colorPalette).toBe(
+        paletteId,
+      );
+      await expect(canvas.getByText("Role fill")).toBeVisible();
+      await expect(canvas.getByText("Container + on-container ink")).toBeVisible();
+    }
+
+    applyDocumentColorPalette("factory-dark");
   },
 };

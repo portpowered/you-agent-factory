@@ -116,6 +116,13 @@ const hookState = vi.hoisted(() => ({
   unsupportedFromDefinition: undefined as string | undefined,
   documentSave: { status: "idle" as const },
   saveStateIsStale: false,
+  layoutDirty: false,
+  preferencesDirty: false,
+  topologyDirty: false,
+  layoutDraftState: {
+    hasChanges: false,
+    layoutDirty: false,
+  },
 }));
 
 vi.mock(
@@ -136,6 +143,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
   useEditableFactoryGraph: () => ({
     actions: {
       discard: hookState.draftState.resetDraft,
+      resetLayout: vi.fn(),
       save: async () => {
         if (!hookState.draftState.pendingFactoryDefinition) {
           return false;
@@ -147,6 +155,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         hookState.draftState.replaceDraft(createEmptyFactoryGraphDraft());
         return true;
       },
+      updateLayoutViewport: vi.fn(),
     },
     documentSaveControls: {
       beginConfirmation: vi.fn(() => {
@@ -160,6 +169,37 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       }),
     },
     draftState: hookState.draftState,
+    layoutDraftState: hookState.layoutDraftState,
+    pendingState: {
+      dirtyState: {
+        layoutDirty:
+          hookState.layoutDraftState.layoutDirty || hookState.layoutDirty,
+        preferencesDirty: hookState.preferencesDirty,
+        topologyDirty:
+          hookState.draftState.hasChanges || hookState.topologyDirty,
+      },
+      hasChanges:
+        hookState.layoutDraftState.layoutDirty ||
+        hookState.layoutDirty ||
+        hookState.draftState.hasChanges ||
+        hookState.topologyDirty,
+      hasLayoutChanges:
+        hookState.layoutDraftState.layoutDirty || hookState.layoutDirty,
+      hasPortableDocumentChanges:
+        hookState.layoutDraftState.layoutDirty ||
+        hookState.layoutDirty ||
+        hookState.draftState.hasChanges ||
+        hookState.topologyDirty,
+      hasPreferenceChanges: hookState.preferencesDirty,
+      hasTopologyChanges:
+        hookState.draftState.hasChanges || hookState.topologyDirty,
+      layoutDirty:
+        hookState.layoutDraftState.layoutDirty || hookState.layoutDirty,
+      pendingFactoryDefinition: hookState.draftState.pendingFactoryDefinition,
+      preferencesDirty: hookState.preferencesDirty,
+      topologyDirty:
+        hookState.draftState.hasChanges || hookState.topologyDirty,
+    },
     saveMutation: {
       error: hookState.saveEditableDefinition.error,
       isPending: hookState.saveEditableDefinition.isPending,
@@ -167,7 +207,10 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
     },
     saveState: {
       canSave:
-        hookState.draftState.hasChanges &&
+        (hookState.layoutDraftState.layoutDirty ||
+          hookState.layoutDirty ||
+          hookState.draftState.hasChanges ||
+          hookState.topologyDirty) &&
         hookState.draftState.pendingFactoryDefinition !== null &&
         hookState.draftState.latestDocument !== null &&
         hookState.draftState.validationErrors.length === 0 &&

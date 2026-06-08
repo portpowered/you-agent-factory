@@ -8,6 +8,7 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
+import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCardView,
@@ -102,7 +103,26 @@ export function WorkflowActivityBentoCard({
       bodyScroll={false}
       chromeDensity="compact"
       className="h-full max-h-full min-h-0 overflow-hidden"
-      headerAction={headerAction}
+      headerAction={
+        <CurrentActivityGraphHeaderActions
+          key={`graph-editor-header-${editor.editorMode}-${editor.draftState.hasChanges}-${editor.layoutDraftState.layoutDirty}-${editor.dirtyStateSummary.preferencesDirty}`}
+          compact
+          dirtyState={editor.dirtyStateSummary}
+          editorMode={editor.editorMode}
+          editorUnavailableClassifierWorkstationName={
+            editor.editorUnavailableClassifierWorkstationName
+          }
+          hasChanges={editor.draftState.hasChanges}
+          headerActions={headerAction}
+          isDefinitionLoading={
+            editor.editableDefinitionQuery.status === "pending"
+          }
+          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+          locale={locale}
+          onToggle={editor.handleEditorModeToggle}
+          showModeToggle={false}
+        />
+      }
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       title={messages.widgetTitle}
     >

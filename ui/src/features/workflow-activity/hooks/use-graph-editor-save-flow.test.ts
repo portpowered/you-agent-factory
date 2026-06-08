@@ -73,6 +73,9 @@ const fixtureState = vi.hoisted(() => {
       setPendingRemovalEdgeId: vi.fn(),
       setPendingRemovalNodeId: vi.fn(),
     },
+    layoutDirty: false,
+    preferencesDirty: false,
+    topologyDirty: false,
   };
 });
 
@@ -94,10 +97,28 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
     },
     documentSaveControls: fixtureState.documentSaveControls,
     draftState: fixtureState.draftState,
+    pendingState: {
+      dirtyState: {
+        layoutDirty: fixtureState.layoutDirty,
+        preferencesDirty: fixtureState.preferencesDirty,
+        topologyDirty: fixtureState.topologyDirty,
+      },
+      hasChanges:
+        fixtureState.layoutDirty || fixtureState.topologyDirty,
+      hasLayoutChanges: fixtureState.layoutDirty,
+      hasPortableDocumentChanges:
+        fixtureState.layoutDirty || fixtureState.topologyDirty,
+      hasPreferenceChanges: fixtureState.preferencesDirty,
+      hasTopologyChanges: fixtureState.topologyDirty,
+      layoutDirty: fixtureState.layoutDirty,
+      pendingFactoryDefinition: fixtureState.draftState.pendingFactoryDefinition,
+      preferencesDirty: fixtureState.preferencesDirty,
+      topologyDirty: fixtureState.topologyDirty,
+    },
     saveMutation: fixtureState.saveEditableDefinition,
     saveState: {
       canSave:
-        fixtureState.draftState.hasChanges &&
+        (fixtureState.layoutDirty || fixtureState.topologyDirty) &&
         fixtureState.draftState.pendingFactoryDefinition !== null &&
         fixtureState.draftState.latestDocument !== null &&
         !fixtureState.saveStateIsStale,
@@ -159,12 +180,67 @@ function resetSaveFlowFixture() {
   fixtureState.transientControllerReset.setConnectionNotice.mockReset();
   fixtureState.transientControllerReset.setPendingRemovalEdgeId.mockReset();
   fixtureState.transientControllerReset.setPendingRemovalNodeId.mockReset();
+  fixtureState.layoutDirty = false;
+  fixtureState.preferencesDirty = false;
+  fixtureState.topologyDirty = false;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: groups layout-only, topology-only, mixed, and preferences save-flow cases.
 describe("useGraphEditorSaveFlow", () => {
   beforeEach(resetSaveFlowFixture);
 
+  it("describes layout-only saves in the confirmation summary", () => {
+    fixtureState.layoutDirty = true;
+
+    const { result } = renderSaveFlow(0);
+
+    expect(result.current.saveSummary.kind).toBe("layout-only");
+    expect(result.current.saveSummary.confirmActionLabel).toBe("Save layout");
+    expect(result.current.canSaveDraft).toBe(true);
+  });
+
+  it("describes topology-only saves in the confirmation summary", () => {
+    fixtureState.topologyDirty = true;
+    fixtureState.draftState.hasChanges = true;
+    fixtureState.draftState.draft.additions.workers.push({
+      model: "gpt-5-mini",
+      name: "writer",
+      type: "MODEL_WORKER",
+    });
+
+    const { result } = renderSaveFlow(0);
+
+    expect(result.current.saveSummary.kind).toBe("topology-only");
+    expect(result.current.saveSummary.confirmActionLabel).toBe("Save topology");
+  });
+
+  it("describes mixed saves when layout and topology both changed", () => {
+    fixtureState.layoutDirty = true;
+    fixtureState.topologyDirty = true;
+    fixtureState.draftState.hasChanges = true;
+    fixtureState.draftState.draft.additions.workers.push({
+      model: "gpt-5-mini",
+      name: "writer",
+      type: "MODEL_WORKER",
+    });
+
+    const { result } = renderSaveFlow(0);
+
+    expect(result.current.saveSummary.kind).toBe("mixed");
+    expect(result.current.saveSummary.confirmActionLabel).toBe("Save changes");
+  });
+
+  it("describes preferences-only changes without enabling portable saves", () => {
+    fixtureState.preferencesDirty = true;
+
+    const { result } = renderSaveFlow(0);
+
+    expect(result.current.saveSummary.kind).toBe("preferences-only");
+    expect(result.current.canSaveDraft).toBe(false);
+  });
+
   it("blocks saving while active work is in flight", () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
 
     const { result } = renderSaveFlow(2);
@@ -177,6 +253,7 @@ describe("useGraphEditorSaveFlow", () => {
   });
 
   it("blocks saving with stale-draft messaging when the document version drifts", () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     fixtureState.saveStateIsStale = true;
 
@@ -210,6 +287,7 @@ describe("useGraphEditorSaveFlow", () => {
   });
 
   it("discards pending changes without leaving editor mode", () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);
 
@@ -228,6 +306,7 @@ describe("useGraphEditorSaveFlow", () => {
   });
 
   it("clears scoped save feedback when saving fails", async () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     fixtureState.saveEditableDefinition.saveAsync = vi.fn(async () => {
       throw new Error("Save failed");
@@ -247,6 +326,7 @@ describe("useGraphEditorSaveFlow", () => {
   });
 
   it("discards pending changes and leaves editor mode from the leave dialog path", () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);
 
@@ -261,6 +341,7 @@ describe("useGraphEditorSaveFlow", () => {
   });
 
   it("saves and leaves editor mode when asked to save before leaving", async () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     const { result, setActiveTool, setEditorMode } = renderSaveFlow(0);
 
@@ -294,6 +375,7 @@ describe("useGraphEditorSaveFlow saveAttemptRevision", () => {
   });
 
   it("increments when each save starts", async () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     const { result } = renderSaveFlow(0);
 
@@ -302,6 +384,7 @@ describe("useGraphEditorSaveFlow saveAttemptRevision", () => {
     });
     expect(result.current.saveAttemptRevision).toBe(1);
 
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     await act(async () => {
       await result.current.handleSaveBeforeLeavingEditor();
@@ -310,6 +393,7 @@ describe("useGraphEditorSaveFlow saveAttemptRevision", () => {
   });
 
   it("does not increment on rerender alone", () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     const { result, rerender } = renderSaveFlow(0);
 
@@ -321,6 +405,7 @@ describe("useGraphEditorSaveFlow saveAttemptRevision", () => {
   });
 
   it("does not increment when save is blocked", async () => {
+    fixtureState.topologyDirty = true;
     fixtureState.draftState.hasChanges = true;
     const { result } = renderSaveFlow(2);
 

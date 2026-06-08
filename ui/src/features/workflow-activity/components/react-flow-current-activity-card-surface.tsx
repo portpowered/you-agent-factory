@@ -158,6 +158,9 @@ export function CurrentActivityGraphSurface({
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
         graphKey={graph.graphKey}
+        moveLayoutNode={
+          editor.editorMode ? editor.moveLayoutNode : undefined
+        }
         nodes={graph.nodes}
         setStoredNodePosition={graph.setStoredNodePosition}
         storedNodePositions={storedNodePositions}
@@ -166,7 +169,9 @@ export function CurrentActivityGraphSurface({
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}
         canInteractWithEditor={editor.canInteractWithEditor}
+        canRedoLayout={editor.layoutDraftState?.canRedoLayout ?? false}
         canSaveDraft={editor.canSaveDraft}
+        canUndoLayout={editor.layoutDraftState?.canUndoLayout ?? false}
         editorUnavailableClassifierWorkstationName={
           editor.editorUnavailableClassifierWorkstationName
         }
@@ -181,9 +186,13 @@ export function CurrentActivityGraphSurface({
         handleSaveDraft={() => {
           editor.setIsConfirmingSave(true);
         }}
-        hasPendingChanges={editor.draftState.hasChanges}
+        hasPendingChanges={
+          editor.draftState.hasChanges ||
+          (editor.layoutDraftState?.layoutDirty ?? false)
+        }
         headingID={headingID}
         imports={imports}
+        canonicalLayoutViewport={graph.canonicalLayoutViewport}
         initialFitViewKey={graph.initialFitViewKey}
         initialFitViewOptions={graph.initialFitViewOptions}
         isSavingDraft={editor.saveEditableDefinition.isPending}
@@ -194,14 +203,24 @@ export function CurrentActivityGraphSurface({
         onAddMenuOpenChange={editor.setAddMenuOpen}
         hiddenNodeClasses={editor.hiddenNodeClasses}
         hideShowMenuOpen={editor.hideShowMenuOpen}
+        onClearPreferences={editor.resetPreferences}
         onHideShowMenuOpenChange={editor.setHideShowMenuOpen}
+        onSelectVisibilityPreset={editor.setVisibilityPreset}
         onToggleHiddenNodeClass={editor.toggleHiddenNodeClass}
+        preferencesDirty={editor.dirtyStateSummary.preferencesDirty}
+        visibilityPreset={editor.visibilityPreset}
         onConnect={editor.handleEditorConnect}
         onEditorEdgeClick={editor.handleEditorEdgeDelete}
         onEditorNodeClick={editor.handleEditorNodeDelete}
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}
         saveDisabledReason={editor.saveBlockedReason}
+        moveLayoutNode={editor.moveLayoutNode}
+        moveLayoutNodesByDelta={editor.moveLayoutNodesByDelta}
+        onRedoLayout={editor.redoLayout}
+        onResetLayout={editor.resetLayout}
+        onUndoLayout={editor.undoLayout}
+        updateLayoutViewport={editor.updateLayoutViewport}
         setStoredNodePosition={graph.setStoredNodePosition}
       />
     </div>

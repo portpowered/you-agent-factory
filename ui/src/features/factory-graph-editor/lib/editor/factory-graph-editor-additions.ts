@@ -1,10 +1,17 @@
 import { validateEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/editable-workstation-cron-validation";
+import type {
+  FactoryGraphAddModelOperationDraft,
+  FactoryGraphAddModelOperationValidationErrors,
+} from "../factory-graph-add-model-operation-draft";
 import {
   applyFactoryGraphDocAddEntityDraft,
   createFactoryGraphDocAddEntityDraft,
   validateFactoryGraphDocAddEntityDraft,
 } from "../factory-graph-editor-doc-additions";
-import { parseWorkerArgsText } from "../../../current-factory-definition/lib/worker-editable-values";
+import {
+  applyFactoryGraphAddWorkerDraft,
+  validateFactoryGraphAddWorkerDraft,
+} from "../factory-graph-editor-additions.worker";
 import {
   DEFAULT_WORKSTATION_BEHAVIOR,
   type EditableWorkstationBehavior,
@@ -19,7 +26,7 @@ import {
 import {
   DEFAULT_WORKSTATION_TYPE,
   type EditableWorkstationType,
-} from "../../../current-factory-definition/lib/workstation-type";
+} from "../../../current-factory-definition/lib/workstation/workstation-type";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 export { buildFactoryGraphAddEntityMenuActions } from "../factory-graph-editor-add-menu";
 import type {
@@ -31,7 +38,6 @@ import type {
 type CanonicalWorker = NonNullable<
   CanonicalFactoryDefinition["workers"]
 >[number];
-type ModelProvider = NonNullable<CanonicalWorker["modelProvider"]>;
 
 export type FactoryGraphAddWorkerType = Extract<
   CanonicalWorker["type"],
@@ -64,6 +70,7 @@ export type FactoryGraphAddEntityDraft =
       model: string;
       modelProvider: string;
       name: string;
+      operations: FactoryGraphAddModelOperationDraft[];
       workerType: FactoryGraphAddWorkerType;
     }
   | {
@@ -107,7 +114,9 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "workerName",
     string
   >
->;
+> & {
+  modelOperations?: FactoryGraphAddModelOperationValidationErrors;
+};
 
 const FACTORY_GRAPH_ADD_CRON_VALIDATION_MESSAGES = {
   cronExpiryWindowInvalid: (value: string) =>
@@ -146,6 +155,7 @@ export function createFactoryGraphAddEntityDraft(
       model: "",
       modelProvider: "",
       name: "",
+      operations: [],
       workerType: "MODEL_WORKER",
     };
   }
@@ -211,23 +221,7 @@ export function validateFactoryGraphAddEntityDraft(
   }
 
   if (draft.kind === "worker") {
-    if (
-      draft.workerType === "MODEL_WORKER" &&
-      draft.modelProvider.trim().length === 0
-    ) {
-      errors.modelProvider = "Select a model provider for the new worker.";
-    }
-
-    if (
-      draft.workerType === "SCRIPT_WORKER" &&
-      draft.command.trim().length === 0
-    ) {
-      errors.command = "Enter a command for the new script worker.";
-    }
-
-    if (draft.workerType === "SCRIPT_WORKER" && draft.argsText.includes("\0")) {
-      errors.args = "Each script argument must be a single non-empty line.";
-    }
+    Object.assign(errors, validateFactoryGraphAddWorkerDraft(draft));
   }
 
   if (
@@ -310,27 +304,7 @@ export function applyFactoryGraphAddEntityDraft(
   }
 
   if (entityDraft.kind === "worker") {
-    if (entityDraft.workerType === "SCRIPT_WORKER") {
-      const args = parseWorkerArgsText(entityDraft.argsText);
-      nextDraft.additions.workers.push({
-        command: entityDraft.command.trim(),
-        ...(args.length > 0 ? { args } : {}),
-        name: entityDraft.name.trim(),
-        type: "SCRIPT_WORKER",
-      });
-      return nextDraft;
-    }
-
-    const modelProvider = entityDraft.modelProvider.trim() as ModelProvider;
-    nextDraft.additions.workers.push({
-      modelProvider,
-      ...(entityDraft.model.trim().length > 0
-        ? { model: entityDraft.model.trim() }
-        : {}),
-      name: entityDraft.name.trim(),
-      type: "MODEL_WORKER",
-    });
-    return nextDraft;
+    return applyFactoryGraphAddWorkerDraft(nextDraft, entityDraft);
   }
 
   if (entityDraft.kind === "work-type") {

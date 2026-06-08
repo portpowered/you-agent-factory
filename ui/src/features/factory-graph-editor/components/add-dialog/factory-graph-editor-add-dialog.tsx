@@ -20,8 +20,9 @@ import {
   FactoryGraphEditorSelectField,
   FactoryGraphEditorTextareaField,
   FactoryGraphEditorTextField,
-} from "../add-dialog/factory-graph-editor-add-dialog-fields";
-import { FactoryGraphEditorAddWorkstationFields } from "../add-dialog/factory-graph-editor-add-workstation-fields";
+} from "./factory-graph-editor-add-dialog-fields";
+import { FactoryGraphEditorAddWorkerModelOperationsFields } from "../factory-graph-editor-add-worker-model-operations-fields";
+import { FactoryGraphEditorAddWorkstationFields } from "./factory-graph-editor-add-workstation-fields";
 
 export function FactoryGraphEditorAddEntityDialog({
   currentFactoryDefinition,
@@ -209,6 +210,7 @@ function renderEntitySpecificFields({
                 ...draft,
                 argsText: "",
                 command: "",
+                operations: [],
                 workerType,
               });
               return;
@@ -218,6 +220,7 @@ function renderEntitySpecificFields({
               ...draft,
               model: "",
               modelProvider: "",
+              operations: [],
               workerType,
             });
           }}
@@ -263,6 +266,14 @@ function renderEntitySpecificFields({
                 onChange({ ...draft, model: value });
               }}
               value={draft.model}
+            />
+            <FactoryGraphEditorAddWorkerModelOperationsFields
+              errors={errors.modelOperations}
+              locale={locale}
+              onChange={(operations) => {
+                onChange({ ...draft, operations });
+              }}
+              operations={draft.operations}
             />
           </>
         ) : null}

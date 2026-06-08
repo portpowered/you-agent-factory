@@ -125,6 +125,7 @@ describe("factory graph save layout boundary", () => {
       model: "",
       modelProvider: "",
       name: "runner",
+      operations: [],
       workerType: "SCRIPT_WORKER",
     });
     draft = applyFactoryGraphAddEntityDraft(draft, {

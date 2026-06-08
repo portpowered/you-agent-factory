@@ -1,7 +1,11 @@
 import { DashboardStatusPill } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
+import {
+  type FactoryGraphEditorDirtyState,
+  hasAnyFactoryGraphEditorChanges,
+} from "../../lib/editor-runtime/factory-graph-editor-dirty-state";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
-import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
+import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 
 function EditModeIcon() {
   return (
@@ -63,6 +67,7 @@ export function FactoryGraphEditorModeToggle({
 
 export function FactoryGraphEditorStatus({
   className,
+  dirtyState,
   editorMode,
   editorUnavailableReason,
   hasChanges,
@@ -71,6 +76,7 @@ export function FactoryGraphEditorStatus({
   loadErrorMessage,
 }: {
   className?: string;
+  dirtyState?: FactoryGraphEditorDirtyState;
   editorMode: boolean;
   editorUnavailableReason?: string;
   hasChanges: boolean;
@@ -125,14 +131,22 @@ export function FactoryGraphEditorStatus({
     );
   }
 
+  const hasDirtyState = dirtyState
+    ? hasAnyFactoryGraphEditorChanges(dirtyState)
+    : hasChanges;
+
   return (
     <DashboardStatusPill
       aria-live="polite"
       className={className}
       role="status"
-      tone={hasChanges ? "warning" : "active"}
+      tone={hasDirtyState ? "warning" : "active"}
     >
-      {hasChanges ? messages.modeUnsavedChanges : messages.modeActive}
+      {hasDirtyState
+        ? dirtyState
+          ? messages.dirtyStateSummary(dirtyState)
+          : messages.modeUnsavedChanges
+        : messages.modeActive}
     </DashboardStatusPill>
   );
 }

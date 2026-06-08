@@ -46,4 +46,11 @@ export const approvedButtonUsageAllowlist = [
     relativeFilePath:
       "src/features/workflow-activity/components/mutation-dialog.tsx",
   },
+  {
+    rawButtonFingerprints: ['role="menuitemradio"'],
+    rawButtonReason:
+      "Header option menu items need a tone-free button shell so selected primary-container emphasis classes win over DashboardActionButton ghost utilities at runtime.",
+    relativeFilePath:
+      "src/features/header/components/dashboard-header-option-menu.tsx",
+  },
 ];

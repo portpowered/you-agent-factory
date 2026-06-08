@@ -4,7 +4,7 @@ import {
   WorkstationType,
 } from "../../../api/generated/openapi";
 import { resolveEditableWorkstationBehavior } from "./workstation-behavior";
-import { resolveEditableWorkstationType } from "./workstation-type";
+import { resolveEditableWorkstationType } from "./workstation/workstation-type";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]

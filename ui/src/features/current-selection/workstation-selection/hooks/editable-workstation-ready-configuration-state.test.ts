@@ -247,3 +247,163 @@ describe("buildReadyEditableWorkstationConfigurationState workstation options", 
     });
   });
 });
+
+const modelInvokeWorkstationNode: DashboardWorkstationNode = {
+  model: "script",
+  node_id: "speak-node",
+  transition_id: "speak-node",
+  workstation_kind: "MODEL_WORKSTATION",
+  workstation_name: "Speak Story",
+};
+
+const modelInvokeFactory: CurrentFactoryDocument = {
+  name: "Invoke Factory",
+  runner: "codex",
+  version: { logical: "1", physical: "2026-06-01T00:00:00Z" },
+  workers: [
+    {
+      name: "tts-worker",
+      type: "MODEL_WORKER",
+      operations: [
+        {
+          name: "TTS",
+          inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+          outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+        },
+        {
+          name: "STT",
+          inputs: [{ name: "audio", contentTypes: ["AUDIO"], required: true }],
+          outputs: [{ name: "text", contentTypes: ["TEXT"] }],
+        },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      behavior: "STANDARD",
+      body: "Speak the story aloud.",
+      id: "speak-story",
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Speak Story",
+      outputs: [{ state: "done", workType: "story" }],
+      promptFile: "prompts/speak.md",
+      runner: "codex",
+      worker: "tts-worker",
+    },
+  ],
+  workTypes: [],
+};
+
+function buildModelInvokeReadyHarness() {
+  const selectedEditableValues = resolveEditableWorkstationValues(
+    modelInvokeFactory,
+    modelInvokeWorkstationNode,
+  );
+  if (!selectedEditableValues) {
+    throw new Error("expected model invoke workstation editable values");
+  }
+
+  const baseDraft = editableWorkstationDraftFromValues(selectedEditableValues);
+  let sessionState: SessionState = {
+    draft: baseDraft,
+    latestDefinitionDraft: baseDraft,
+    sessionStartDraft: baseDraft,
+  };
+
+  const setSessionState = vi.fn(
+    (updater: (current: SessionState | null) => SessionState | null) => {
+      sessionState = updater(sessionState) ?? sessionState;
+    },
+  );
+
+  const buildReady = (draft = sessionState.draft) => {
+    const resolvedValidationErrors = validateEditableWorkstationDraft(
+      draft,
+      selectedEditableValues,
+      {
+        diagnostics: [],
+        result: { diagnostics: [], valid: true },
+        status: "ready",
+      },
+      messages,
+    );
+
+    return buildReadyEditableWorkstationConfigurationState({
+      editableDefinition: modelInvokeFactory,
+      messages,
+      promptHelpState: { status: "empty", message: "No prompt help." },
+      promptValidationState: {
+        diagnostics: [],
+        result: { diagnostics: [], valid: true },
+        status: "ready",
+      },
+      resolvedValidationErrors,
+      selectedEditableValues,
+      selectedNode: modelInvokeWorkstationNode,
+      sessionState,
+      setSessionState,
+    });
+  };
+
+  return {
+    buildReady,
+    getSessionState: () => sessionState,
+    selectedEditableValues,
+  };
+}
+
+describe("buildReadyEditableWorkstationConfigurationState model invoke handlers", () => {
+  it("converts prompt-oriented drafts into model invoke configuration", () => {
+    const { buildReady, getSessionState } = buildModelInvokeReadyHarness();
+    const readyState = buildReady();
+
+    readyState.onWorkstationTypeChange("MODEL_INVOKE");
+    readyState.onWorkerChange("tts-worker");
+    readyState.onOperationChange("STT");
+    readyState.onOperationBindingsChange([
+      {
+        slot: "audio",
+        configText: "",
+        defaultContentText: "",
+        selector: { label: "clip", role: "", slot: "input.audio", type: "AUDIO" },
+      },
+    ]);
+    readyState.onNameChange("Speak Story Invoke");
+
+    expect(getSessionState().draft).toMatchObject({
+      name: "Speak Story Invoke",
+      operation: "STT",
+      workerName: "tts-worker",
+      workstationType: "MODEL_INVOKE",
+      operationBindings: [
+        expect.objectContaining({
+          slot: "audio",
+          selector: expect.objectContaining({ label: "clip", type: "AUDIO" }),
+        }),
+      ],
+    });
+    expect(buildReady().operationOptionsState).toEqual({
+      operations: expect.any(Array),
+      options: ["TTS", "STT"],
+      status: "ready",
+    });
+  });
+
+  it("keeps prompt-oriented worker changes outside model invoke mode", () => {
+    const { buildReady, getSessionState } = buildModelInvokeReadyHarness();
+    const readyState = buildReady();
+
+    readyState.onWorkerChange("tts-worker");
+    readyState.onPromptChange("Updated prompt body.");
+    readyState.onRunnerChange("reviewer");
+    readyState.onBehaviorChange("STANDARD");
+
+    expect(getSessionState().draft).toMatchObject({
+      behavior: "STANDARD",
+      prompt: "Updated prompt body.",
+      runnerName: "reviewer",
+      workerName: "tts-worker",
+      workstationType: "MODEL_WORKSTATION",
+    });
+  });
+});

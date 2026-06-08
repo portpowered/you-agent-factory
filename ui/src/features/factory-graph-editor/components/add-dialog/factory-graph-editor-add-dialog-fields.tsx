@@ -5,12 +5,13 @@ import {
   MonacoPromptEditor,
 } from "../../../../components/prompt-editor";
 import {
+  EnumSelect,
   FormDescription,
   FormError,
   FormField,
   FormLabel,
   Input,
-  Select,
+  OptionalEnumSelect,
   Textarea,
 } from "../../../../components/ui";
 
@@ -41,8 +42,16 @@ export function FactoryGraphEditorAddField({
     <FormField className="grid gap-2">
       {labelContent}
       {children}
-      {helpText ? <FormDescription>{helpText}</FormDescription> : null}
-      {error ? <FormError>{error}</FormError> : null}
+      {helpText ? (
+        <FormDescription id={inputId ? `${inputId}-help` : undefined}>
+          {helpText}
+        </FormDescription>
+      ) : null}
+      {error ? (
+        <FormError id={inputId ? `${inputId}-error` : undefined}>
+          {error}
+        </FormError>
+      ) : null}
     </FormField>
   );
 }
@@ -120,6 +129,18 @@ export function FactoryGraphEditorTextField({
   );
 }
 
+function buildSelectAriaDescribedBy(
+  inputId: string,
+  helpText?: string,
+  error?: string,
+) {
+  return (
+    [helpText ? `${inputId}-help` : null, error ? `${inputId}-error` : null]
+      .filter(Boolean)
+      .join(" ") || undefined
+  );
+}
+
 export function FactoryGraphEditorSelectField({
   error,
   helpText,
@@ -137,6 +158,16 @@ export function FactoryGraphEditorSelectField({
   options: Array<{ label: string; value: string }>;
   value: string;
 }) {
+  const emptyOption = options.find((option) => option.value === "");
+  const enumOptions = emptyOption
+    ? options.filter((option) => option.value !== "")
+    : options;
+  const ariaProps = {
+    "aria-describedby": buildSelectAriaDescribedBy(inputId, helpText, error),
+    "aria-invalid": error ? ("true" as const) : undefined,
+    "aria-label": label,
+  };
+
   return (
     <FactoryGraphEditorAddField
       error={error}
@@ -144,21 +175,26 @@ export function FactoryGraphEditorSelectField({
       inputId={inputId}
       label={label}
     >
-      <Select
-        aria-label={label}
-        className={FACTORY_GRAPH_ADD_INPUT_CLASS}
-        id={inputId}
-        onChange={(event) => {
-          onChange(event.currentTarget.value);
-        }}
-        value={value}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </Select>
+      {emptyOption ? (
+        <OptionalEnumSelect
+          {...ariaProps}
+          emptyOptionLabel={emptyOption.label}
+          id={inputId}
+          onValueChange={(nextValue) => {
+            onChange(nextValue ?? "");
+          }}
+          options={enumOptions}
+          value={value || null}
+        />
+      ) : (
+        <EnumSelect
+          {...ariaProps}
+          id={inputId}
+          onValueChange={onChange}
+          options={enumOptions}
+          value={value}
+        />
+      )}
     </FactoryGraphEditorAddField>
   );
 }

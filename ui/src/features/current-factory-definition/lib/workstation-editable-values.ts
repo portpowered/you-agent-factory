@@ -22,9 +22,32 @@ import {
   rewriteWorkstationVisitCountReferences,
 } from "./workstation-guards";
 import {
+  buildCanonicalModelInvokeBindingsFromDraft,
+  isModelInvokeWorkstationType,
+  resolveCompatibleModelWorkerNames,
+  resolveEditableModelInvokeBindings,
+  resolveModelOperationByName,
+  resolveModelOperationsByWorkerName,
+  resolveModelWorkerOperations,
+  syncEditableModelInvokeBindingsForOperation,
+} from "./workstation/workstation-model-invoke";
+import type { EditableModelInvokeBindingDraft } from "./workstation/workstation-model-invoke";
+import {
   type EditableWorkstationType,
   resolveEditableWorkstationType,
-} from "./workstation-type";
+  resolveEditableWorkstationTypeOptions,
+} from "./workstation/workstation-type";
+import {
+  applyEditableWorkstationInputs,
+  resolveCanonicalWorkstation,
+  resolveEditableWorkstationGuards,
+  resolveEditableWorkstationInputs,
+  resolveSharedWorkerWorkstationNames,
+  resolveSharedWorkerWorkstationNamesByWorkerName,
+  resolveWorkerModelProvider,
+  resolveWorkerOptions,
+  resolveWorkerTypeByName,
+} from "./workstation/workstation-editable-resolution";
 import { workstationRequiresWorkerAssignment } from "./workstation-worker-assignment";
 
 type CanonicalWorkstation = NonNullable<
@@ -36,9 +59,6 @@ type CanonicalWorker = NonNullable<
 type CanonicalWorkstationCron = NonNullable<CanonicalWorkstation["cron"]>;
 type CanonicalWorkstationGuard = NonNullable<
   CanonicalWorkstation["guards"]
->[number];
-type CanonicalWorkstationInput = NonNullable<
-  CanonicalWorkstation["inputs"]
 >[number];
 
 export type EditableWorkstationCronDraft = Pick<
@@ -63,6 +83,12 @@ export interface EditableWorkstationValues {
   cron: EditableWorkstationCronDraft | null;
   effectiveRunnerName: RunnerID;
   factoryRunnerName: RunnerID | null;
+  modelInvokeWorkerOptions: string[];
+  modelOperationsByWorkerName: ReturnType<
+    typeof resolveModelOperationsByWorkerName
+  >;
+  operation: string;
+  operationBindings: EditableModelInvokeBindingDraft[];
   prompt: string | null;
   resolvedRunnerSelection: ResolvedRunnerSelection;
   runnerName: RunnerID | null;
@@ -79,6 +105,7 @@ export interface EditableWorkstationValues {
   workstationName: string;
   workstationOptions: string[];
   workstationType: EditableWorkstationType;
+  workstationTypeOptions: readonly EditableWorkstationType[];
 }
 
 export interface EditableWorkstationDraft {
@@ -87,9 +114,12 @@ export interface EditableWorkstationDraft {
   guards: CanonicalWorkstationGuard[];
   inputs: EditableWorkstationInputDraft[];
   name: string;
+  operation: string;
+  operationBindings: EditableModelInvokeBindingDraft[];
   prompt: string;
   runnerName: RunnerID | null;
   workerName: string;
+  workstationType: EditableWorkstationType;
 }
 
 export function resolveEditableWorkstationValues(
@@ -105,6 +135,7 @@ export function resolveEditableWorkstationValues(
   }
 
   const { workstation } = workstationResolution;
+  const workstationType = resolveEditableWorkstationType(workstation);
   const behavior = resolveEditableWorkstationBehavior(workstation);
   const workerModelProvider = resolveWorkerModelProvider(
     factory,
@@ -115,6 +146,7 @@ export function resolveEditableWorkstationValues(
     factory.runner,
     workerModelProvider,
   );
+  const modelOperationsByWorkerName = resolveModelOperationsByWorkerName(factory);
 
   return {
     behavior,
@@ -123,6 +155,18 @@ export function resolveEditableWorkstationValues(
       behavior === "CRON" ? resolveEditableWorkstationCron(workstation) : null,
     effectiveRunnerName: resolvedRunnerSelection.runnerId,
     factoryRunnerName: factory.runner ?? null,
+    modelInvokeWorkerOptions: resolveCompatibleModelWorkerNames(factory),
+    modelOperationsByWorkerName,
+    operation: workstation.operation ?? "",
+    operationBindings: isModelInvokeWorkstationType(workstationType)
+      ? syncEditableModelInvokeBindingsForOperation(
+          resolveModelOperationByName(
+            resolveModelWorkerOperations(factory, workstation.worker),
+            workstation.operation ?? "",
+          ),
+          resolveEditableModelInvokeBindings(workstation.operationBindings),
+        )
+      : [],
     prompt: workstation.body ?? null,
     resolvedRunnerSelection,
     runnerName: workstation.runner ?? null,
@@ -143,7 +187,8 @@ export function resolveEditableWorkstationValues(
     inputs: resolveEditableWorkstationInputs(workstation),
     workstationName: workstation.name,
     workstationOptions: resolveFactoryWorkstationNameOptions(factory),
-    workstationType: resolveEditableWorkstationType(workstation),
+    workstationType,
+    workstationTypeOptions: resolveEditableWorkstationTypeOptions(workstationType),
   };
 }
 
@@ -160,9 +205,17 @@ export function editableWorkstationDraftFromValues(
       workType: input.workType,
     })),
     name: values.workstationName,
+    operation: values.operation ?? "",
+    operationBindings: (values.operationBindings ?? []).map((binding) => ({
+      slot: binding.slot,
+      configText: binding.configText,
+      defaultContentText: binding.defaultContentText,
+      selector: { ...binding.selector },
+    })),
     prompt: values.prompt ?? "",
     runnerName: values.runnerName,
     workerName: values.workerName,
+    workstationType: values.workstationType,
   };
 }
 
@@ -183,7 +236,7 @@ export function applyEditableWorkstationDraft(
   const trimmedName = draft.name.trim();
   const previousWorkstationName = workstation.name;
 
-  if (!workstationRequiresWorkerAssignment(workstation)) {
+  if (!workstationRequiresWorkerAssignment({ type: draft.workstationType })) {
     return applyWorkstationNameChangeToFactory(
       factory,
       workstationIndex,
@@ -201,19 +254,41 @@ export function applyEditableWorkstationDraft(
     return null;
   }
 
+  const nextWorkstation = isModelInvokeWorkstationType(draft.workstationType)
+    ? buildModelInvokeWorkstationFromDraft(workstation, draft, trimmedName)
+    : buildPromptOrientedWorkstationFromDraft(workstation, draft, trimmedName);
+
+  return applyWorkstationNameChangeToFactory(
+    factory,
+    workstationIndex,
+    trimmedName,
+    previousWorkstationName,
+    () => nextWorkstation,
+  );
+}
+
+function buildPromptOrientedWorkstationFromDraft(
+  workstation: CanonicalWorkstation,
+  draft: EditableWorkstationDraft,
+  trimmedName: string,
+): CanonicalWorkstation {
   const {
     behavior: existingBehavior,
     cron: _existingCron,
     guards: _existingGuards,
     inputs: _existingInputs,
+    operation: _operation,
+    operationBindings: _operationBindings,
     runner: _existingRunner,
     ...workstationWithoutCronRunner
   } = workstation;
-  const nextWorkstation = {
+
+  return {
     ...workstationWithoutCronRunner,
     body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     name: trimmedName,
+    type: draft.workstationType,
     worker: draft.workerName,
     ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
     ...(draft.runnerName ? { runner: draft.runnerName } : {}),
@@ -225,14 +300,36 @@ export function applyEditableWorkstationDraft(
       ? { cron: buildCanonicalWorkstationCronFromDraft(draft.cron) }
       : {}),
   };
+}
 
-  return applyWorkstationNameChangeToFactory(
-    factory,
-    workstationIndex,
-    trimmedName,
-    previousWorkstationName,
-    () => nextWorkstation,
+function buildModelInvokeWorkstationFromDraft(
+  workstation: CanonicalWorkstation,
+  draft: EditableWorkstationDraft,
+  trimmedName: string,
+): CanonicalWorkstation {
+  const {
+    body: _body,
+    cron: _cron,
+    operation: _existingOperation,
+    operationBindings: _existingBindings,
+    runner: _runner,
+    ...workstationWithoutPromptOrientedFields
+  } = workstation;
+  const trimmedOperation = draft.operation.trim();
+  const operationBindings = buildCanonicalModelInvokeBindingsFromDraft(
+    draft.operationBindings,
   );
+
+  return {
+    ...workstationWithoutPromptOrientedFields,
+    inputs: applyEditableWorkstationInputs(draft.inputs),
+    name: trimmedName,
+    type: "MODEL_INVOKE",
+    worker: draft.workerName,
+    ...(trimmedOperation.length > 0 ? { operation: trimmedOperation } : {}),
+    ...(operationBindings.length > 0 ? { operationBindings } : {}),
+    ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
+  };
 }
 
 function applyWorkstationNameChangeToFactory(
@@ -307,135 +404,4 @@ export function buildCanonicalWorkstationCronFromDraft(
     cron.expiryWindow = expiryWindow;
   }
   return cron;
-}
-
-function resolveCanonicalWorkstation(
-  factory: CanonicalFactoryDefinition,
-  selectedNode: DashboardWorkstationNode,
-): { workstation: CanonicalWorkstation; workstationIndex: number } | null {
-  const workstations = factory.workstations ?? [];
-  const workstationIndex = workstations.findIndex(
-    (workstation) =>
-      workstation.id === selectedNode.transition_id ||
-      workstation.name === selectedNode.transition_id,
-  );
-  if (workstationIndex >= 0) {
-    return {
-      workstation: workstations[workstationIndex],
-      workstationIndex,
-    };
-  }
-
-  const workstationNameIndex = workstations.findIndex(
-    (workstation) => workstation.name === selectedNode.workstation_name,
-  );
-  if (workstationNameIndex >= 0) {
-    return {
-      workstation: workstations[workstationNameIndex],
-      workstationIndex: workstationNameIndex,
-    };
-  }
-
-  return null;
-}
-
-function resolveWorkerModelProvider(
-  factory: CanonicalFactoryDefinition,
-  workerName: string,
-): string | null {
-  const worker = (factory.workers ?? []).find(
-    (entry) => entry.name === workerName,
-  );
-  return worker?.modelProvider ?? null;
-}
-
-function resolveWorkerOptions(factory: CanonicalFactoryDefinition): string[] {
-  return (factory.workers ?? [])
-    .map((worker) => worker.name)
-    .filter((name) => name.length > 0);
-}
-
-function resolveSharedWorkerWorkstationNames(
-  factory: CanonicalFactoryDefinition,
-  selectedWorkstation: CanonicalWorkstation,
-  selectedWorkstationIndex: number,
-): string[] {
-  const selectedWorkerName = selectedWorkstation.worker;
-  if (!selectedWorkerName) {
-    return [];
-  }
-
-  return (factory.workstations ?? [])
-    .filter(
-      (workstation, index) =>
-        index !== selectedWorkstationIndex &&
-        workstation.worker === selectedWorkerName,
-    )
-    .map((workstation) => workstation.name)
-    .filter((name) => name.length > 0);
-}
-
-function resolveSharedWorkerWorkstationNamesByWorkerName(
-  factory: CanonicalFactoryDefinition,
-  selectedWorkstation: CanonicalWorkstation,
-): Record<string, string[]> {
-  const otherWorkstationNamesByWorkerName = new Map<string, string[]>();
-
-  for (const workstation of factory.workstations ?? []) {
-    if (
-      workstation.name === selectedWorkstation.name &&
-      workstation.id === selectedWorkstation.id
-    ) {
-      continue;
-    }
-
-    if (!workstation.worker || workstation.name.length === 0) {
-      continue;
-    }
-
-    const sharedWorkstations =
-      otherWorkstationNamesByWorkerName.get(workstation.worker) ?? [];
-    sharedWorkstations.push(workstation.name);
-    otherWorkstationNamesByWorkerName.set(
-      workstation.worker,
-      sharedWorkstations,
-    );
-  }
-
-  return Object.fromEntries(otherWorkstationNamesByWorkerName);
-}
-
-function resolveWorkerTypeByName(factory: CanonicalFactoryDefinition) {
-  return Object.fromEntries(
-    (factory.workers ?? []).map((worker) => [worker.name, worker.type]),
-  ) as Record<string, CanonicalWorker["type"] | undefined>;
-}
-
-function resolveEditableWorkstationGuards(
-  workstation: CanonicalWorkstation,
-): CanonicalWorkstationGuard[] {
-  return [...(workstation.guards ?? [])];
-}
-
-function resolveEditableWorkstationInputs(
-  workstation: CanonicalWorkstation,
-): EditableWorkstationInputDraft[] {
-  return (workstation.inputs ?? []).map((input) => ({
-    guards: normalizeEditableInputGuards([...(input.guards ?? [])]),
-    state: input.state,
-    workType: input.workType,
-  }));
-}
-
-function applyEditableWorkstationInputs(
-  inputs: EditableWorkstationInputDraft[],
-): CanonicalWorkstationInput[] {
-  return inputs.map((input) => {
-    const guards = normalizeEditableInputGuards(input.guards);
-    return {
-      state: input.state,
-      workType: input.workType,
-      ...(guards.length > 0 ? { guards } : {}),
-    };
-  });
 }

@@ -359,7 +359,7 @@ describe("DashboardHeader", () => {
       screen.getByRole("menuitemradio", {
         name: NATIVE_LANGUAGE_LABELS.en,
       }).className,
-    ).toContain("rounded-lg");
+    ).toContain("rounded-xl");
     expect(
       screen.getByRole("menuitemradio", {
         name: NATIVE_LANGUAGE_LABELS["zh-CN"],

@@ -69,7 +69,7 @@ export function CurrentActivityGraphEditorDialogs({
       />
       <FactoryGraphEditorConfirmationDialog
         cancelLabel={messages.leaveDialogKeepEditing}
-        confirmLabel={messages.saveConfirmAction}
+        confirmLabel={editor.saveSummary.confirmActionLabel}
         description={editor.saveSummary.description}
         isBusy={
           editor.saveEditableDefinition.isPending ||

@@ -7,9 +7,10 @@ import {
   Checkbox,
   DashboardLabel,
   DashboardText,
+  EnumSelect,
   FormWarning,
   Input,
-  Select,
+  OptionalEnumSelect,
   Textarea,
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
@@ -158,26 +159,22 @@ function WorkerEditableConfigurationReadyForm({
           errorMessage={validationErrors.type}
           fieldId="editable-worker-type"
           input={
-            <Select
+            <EnumSelect
               aria-describedby={
                 validationErrors.type ? "editable-worker-type-error" : undefined
               }
               aria-invalid={validationErrors.type ? "true" : undefined}
               aria-label={messages.typeFieldLabel}
               id="editable-worker-type"
-              onChange={(event) =>
-                state.onTypeChange(
-                  event.target.value as typeof state.draft.type,
-                )
+              onValueChange={(nextValue) =>
+                state.onTypeChange(nextValue as typeof state.draft.type)
               }
+              options={EDITABLE_WORKER_TYPES.map((workerType) => ({
+                label: messages.localizeWorkerType(workerType),
+                value: workerType,
+              }))}
               value={state.draft.type}
-            >
-              {EDITABLE_WORKER_TYPES.map((workerType) => (
-                <option key={workerType} value={workerType}>
-                  {messages.localizeWorkerType(workerType)}
-                </option>
-              ))}
-            </Select>
+            />
           }
           label={messages.typeFieldLabel}
           supportingContent={
@@ -247,7 +244,7 @@ function WorkerEditableConfigurationTimeoutField({
             type="number"
             value={isConfigured ? (state.draft.timeoutAmount ?? "") : ""}
           />
-          <Select
+          <EnumSelect
             aria-describedby={
               validationErrors.timeout
                 ? `${amountFieldId}-error`
@@ -257,19 +254,17 @@ function WorkerEditableConfigurationTimeoutField({
             aria-label={messages.timeoutFieldLabel}
             disabled={!isConfigured}
             id={unitFieldId}
-            onChange={(event) =>
+            onValueChange={(nextValue) =>
               state.onTimeoutUnitChange(
-                event.target.value as typeof state.draft.timeoutUnit,
+                nextValue as typeof state.draft.timeoutUnit,
               )
             }
+            options={WORKER_TIMEOUT_UNITS.map((unit) => ({
+              label: messages.localizeTimeoutUnit(unit),
+              value: unit,
+            }))}
             value={state.draft.timeoutUnit}
-          >
-            {WORKER_TIMEOUT_UNITS.map((unit) => (
-              <option key={unit} value={unit}>
-                {messages.localizeTimeoutUnit(unit)}
-              </option>
-            ))}
-          </Select>
+          />
         </div>
       }
       label={messages.timeoutFieldLabel}
@@ -1114,24 +1109,19 @@ function WorkerOptionalEnumSelect<T extends string>({
   value: T | null;
 }) {
   return (
-    <Select
+    <OptionalEnumSelect
       aria-describedby={ariaDescribedBy}
       aria-invalid={ariaInvalid ? "true" : undefined}
       aria-label={label}
+      emptyOptionLabel={notConfiguredLabel}
       id={id}
-      onChange={(event) => {
-        const nextValue = event.target.value;
-        onChange(nextValue.length > 0 ? (nextValue as T) : null);
-      }}
-      value={value ?? ""}
-    >
-      <option value="">{notConfiguredLabel}</option>
-      {options.map((option) => (
-        <option key={option} value={option}>
-          {renderLabel(option)}
-        </option>
-      ))}
-    </Select>
+      onValueChange={(nextValue) => onChange(nextValue as T | null)}
+      options={options.map((option) => ({
+        label: renderLabel(option),
+        value: option,
+      }))}
+      value={value}
+    />
   );
 }
 

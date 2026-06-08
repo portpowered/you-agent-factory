@@ -4,6 +4,10 @@ import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
+  isModelInvokeWorkstationType,
+  workstationUsesPromptOrientedEditing,
+} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import {
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
@@ -48,16 +52,23 @@ export function useEditableWorkstationConfigurationState(
       selectedNode,
       selection,
     );
+  const draftWorkstationType =
+    sessionState?.draft.workstationType ?? selectedEditableValues?.workstationType;
+  const usesPromptOrientedEditing =
+    draftWorkstationType != null &&
+    workstationUsesPromptOrientedEditing(draftWorkstationType);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedEditableValues?.workstationName,
-    isNodeSelection && selectedEditableValues != null,
+    isNodeSelection && selectedEditableValues != null && usesPromptOrientedEditing,
   );
   const shouldValidatePrompt =
     isNodeSelection &&
     sessionState != null &&
     selectedEditableValues != null &&
+    draftWorkstationType != null &&
+    !isModelInvokeWorkstationType(draftWorkstationType) &&
     workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: draftWorkstationType,
     }) &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(

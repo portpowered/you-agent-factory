@@ -2,6 +2,10 @@
 // Remove each entry in the same change that splits the folder below the 10-file limit.
 export const allowlistedOversizedFeatureFolders = [
   {
+    maxFileCount: 12,
+    relativeDirectoryPath: "src/features/factory-graph-editor/lib",
+  },
+  {
     maxFileCount: 39,
     relativeDirectoryPath: "src/features/workflow-activity/hooks",
   },

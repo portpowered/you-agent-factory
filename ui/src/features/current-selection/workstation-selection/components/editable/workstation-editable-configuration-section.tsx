@@ -6,15 +6,18 @@ import {
   AlertPanelText,
   DashboardLabel,
   DashboardText,
+  EnumSelect,
   FormDescription,
   FormError,
   Input,
-  Select,
   surfacePanelVariants,
 } from "../../../../../components/ui";
 import { formatList } from "../../../../../components/ui/formatters";
 import { cn } from "../../../../../lib/cn";
 import type { WorkstationLevelGuard } from "../../../../current-factory-definition/lib/workstation-guards";
+import { isModelInvokeWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import type { EditableWorkstationType } from "../../../../current-factory-definition/lib/workstation/workstation-type";
+import { supportsEditableWorkstationTypeConversion } from "../../../../current-factory-definition/lib/workstation/workstation-type";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import { GraphSemanticIcon } from "../../../../flowchart/components/graph-semantic-icon";
 import { CurrentSelectionExpandableSection } from "../../../base/components/detail/current-selection-expandable-section";
@@ -37,6 +40,7 @@ import type {
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { EditableConfigurationWorkstationGuardsField } from "../fields/workstation-guards-field";
 import { EditableConfigurationWorkstationInputGuardsField } from "../fields/workstation-input-guards-field";
+import { EditableConfigurationModelInvokeFields } from "../workstation-model-invoke-fields";
 import { EditableConfigurationRunnerField } from "../fields/workstation-runner-field";
 import {
   resolveWorkstationSummaryKindValue,
@@ -121,8 +125,12 @@ function EditableConfigurationReadyForm({
     validationErrors,
   };
   const requiresWorkerAssignment = workstationRequiresWorkerAssignment({
-    type: state.initialValues.workstationType,
+    type: state.draft.workstationType,
   });
+  const isModelInvoke = isModelInvokeWorkstationType(state.draft.workstationType);
+  const showWorkstationTypeField =
+    requiresWorkerAssignment &&
+    supportsEditableWorkstationTypeConversion(state.initialValues.workstationType);
 
   return (
     <form className="grid gap-3" onSubmit={(event) => event.preventDefault()}>
@@ -157,7 +165,33 @@ function EditableConfigurationReadyForm({
           />
         }
       />
-      {requiresWorkerAssignment ? (
+      {showWorkstationTypeField ? (
+        <EditableConfigurationField
+          fieldId="editable-workstation-type"
+          input={
+            <EditableConfigurationWorkstationTypeInput
+              messages={messages}
+              state={renderState}
+            />
+          }
+          label={messages.workstationTypeLabel}
+          supportingContent={
+            <EditableConfigurationServerChangedHint
+              fieldName="workstationType"
+              messages={messages}
+              state={state}
+            />
+          }
+        />
+      ) : null}
+      {isModelInvoke ? (
+        <EditableConfigurationModelInvokeFields
+          messages={messages}
+          state={renderState}
+          validationErrors={validationErrors}
+        />
+      ) : null}
+      {requiresWorkerAssignment && !isModelInvoke ? (
         <CurrentSelectionFormFields>
           <EditableConfigurationField
             fieldId="editable-workstation-worker"
@@ -360,23 +394,50 @@ function EditableConfigurationWorkerInput({
   }
 
   return (
-    <Select
+    <EnumSelect
       aria-describedby={
         state.validationErrors.workerName
           ? "editable-workstation-worker-error"
           : undefined
       }
       aria-invalid={state.validationErrors.workerName ? "true" : undefined}
+      aria-label={messages.workerFieldLabel}
       id="editable-workstation-worker"
-      onChange={(event) => state.onWorkerChange(event.target.value)}
+      onValueChange={state.onWorkerChange}
+      options={state.workerOptionsState.options.map((workerName) => ({
+        label: valueOrFallback(workerName, messages.notConfiguredValue),
+        value: workerName,
+      }))}
       value={state.draft.workerName}
-    >
-      {state.workerOptionsState.options.map((workerName) => (
-        <option key={workerName} value={workerName}>
-          {valueOrFallback(workerName, messages.notConfiguredValue)}
-        </option>
-      ))}
-    </Select>
+    />
+  );
+}
+
+function EditableConfigurationWorkstationTypeInput({
+  messages,
+  state,
+}: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
+  state: Extract<
+    NonNullable<WorkstationDetailCardProps["editableConfigurationState"]>,
+    { status: "ready" }
+  >;
+}) {
+  return (
+    <EnumSelect
+      aria-label={messages.workstationTypeLabel}
+      id="editable-workstation-type"
+      onValueChange={(nextValue) =>
+        state.onWorkstationTypeChange(nextValue as EditableWorkstationType)
+      }
+      options={state.initialValues.workstationTypeOptions.map(
+        (workstationType) => ({
+          label: messages.localizeWorkstationType(workstationType),
+          value: workstationType,
+        }),
+      )}
+      value={state.draft.workstationType}
+    />
   );
 }
 
@@ -397,7 +458,7 @@ function EditableConfigurationBehaviorInput({
 
   return (
     <>
-      <Select
+      <EnumSelect
         aria-describedby={
           [
             behaviorHintId,
@@ -409,20 +470,17 @@ function EditableConfigurationBehaviorInput({
             .join(" ") || undefined
         }
         aria-invalid={state.validationErrors.behavior ? "true" : undefined}
+        aria-label={messages.kindLabel}
         id="editable-workstation-kind"
-        onChange={(event) =>
-          state.onBehaviorChange(
-            event.target.value as typeof state.draft.behavior,
-          )
+        onValueChange={(nextValue) =>
+          state.onBehaviorChange(nextValue as typeof state.draft.behavior)
         }
+        options={state.initialValues.behaviorOptions.map((behavior) => ({
+          label: messages.localizeWorkstationBehavior(behavior),
+          value: behavior,
+        }))}
         value={state.draft.behavior}
-      >
-        {state.initialValues.behaviorOptions.map((behavior) => (
-          <option key={behavior} value={behavior}>
-            {messages.localizeWorkstationBehavior(behavior)}
-          </option>
-        ))}
-      </Select>
+      />
       {state.draft.behavior === "POLLER" ? (
         <FormDescription id={behaviorHintId}>
           {messages.editableConfigurationBehaviorPollerHint}

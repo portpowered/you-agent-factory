@@ -724,7 +724,7 @@ describe("WorkItemDetailCard summary", () => {
     expect(within(activeCard).getByText("Current dispatch")).toBeTruthy();
     expect(
       within(activeCard).getByText("Current dispatch").className,
-    ).toContain("text-on-surface");
+    ).toContain("text-on-secondary-container");
     expect(activeCard.className).toContain("border-outline-variant");
     expect(within(historicalCard).queryByText("Current dispatch")).toBeNull();
     expect(historicalCard.className).not.toContain("border-outline-variant");
@@ -2417,7 +2417,8 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     });
     expect(selectedWorkButton).toBeTruthy();
     expect(selectedWorkButton.textContent).toContain("Active Story");
-    expect(selectedWorkButton.className).toContain("text-on-surface");
+    expect(selectedWorkButton.className).toContain("border-outline");
+    expect(selectedWorkButton.className).not.toContain("bg-primary-container");
     const responseDetails = expandDispatchSection(
       dispatchCard,
       "Response details",
@@ -2432,7 +2433,8 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     });
     expect(selectedTraceButton).toBeTruthy();
     expect(selectedTraceButton.getAttribute("aria-pressed")).toBe("true");
-    expect(selectedTraceButton.className).toContain("text-on-surface");
+    expect(selectedTraceButton.className).toContain("border-outline");
+    expect(selectedTraceButton.className).not.toContain("bg-primary-container");
   });
 
   it("renders selected-work script success details from the dispatch-history row", () => {

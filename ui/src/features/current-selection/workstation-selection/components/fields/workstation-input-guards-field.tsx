@@ -3,10 +3,11 @@ import { useId } from "react";
 import {
   DashboardLabel,
   DashboardText,
+  EnumSelect,
   FormDescription,
   FormError,
   Input,
-  Select,
+  OptionalEnumSelect,
   SurfacePanel,
 } from "../../../../../components/ui";
 import type { EditableWorkstationInputDraft } from "../../../../current-factory-definition/lib/workstation-editable-values";
@@ -127,10 +128,11 @@ function WorkstationInputSlotGuardRow({
           <DashboardLabel as="label" htmlFor={guardTypeFieldId}>
             {messages.workstationInputGuardTypeFieldLabel}
           </DashboardLabel>
-          <Select
+          <OptionalEnumSelect
+            aria-label={messages.workstationInputGuardTypeFieldLabel}
+            emptyOptionLabel={messages.workstationInputGuardNoneOption}
             id={guardTypeFieldId}
-            onChange={(event) => {
-              const nextType = event.target.value as InputGuardType | "";
+            onValueChange={(nextType) => {
               if (!nextType) {
                 onChange(setEditableInputSlotGuard(input, null));
                 return;
@@ -139,19 +141,19 @@ function WorkstationInputSlotGuardRow({
               onChange(
                 setEditableInputSlotGuard(
                   input,
-                  createDefaultInputGuard(nextType, peerWorkTypes),
+                  createDefaultInputGuard(
+                    nextType as InputGuardType,
+                    peerWorkTypes,
+                  ),
                 ),
               );
             }}
-            value={guardTypeValue}
-          >
-            <option value="">{messages.workstationInputGuardNoneOption}</option>
-            {INPUT_GUARD_TYPES.map((guardType) => (
-              <option key={guardType} value={guardType}>
-                {messages.localizeInputGuardType(guardType)}
-              </option>
-            ))}
-          </Select>
+            options={INPUT_GUARD_TYPES.map((guardType) => ({
+              label: messages.localizeInputGuardType(guardType),
+              value: guardType,
+            }))}
+            value={guardTypeValue || null}
+          />
           {resolveFieldError(fieldErrors, slotIndex, "type") ? (
             <GuardFieldError
               message={resolveFieldError(fieldErrors, slotIndex, "type") ?? ""}
@@ -222,22 +224,21 @@ function PeerInputGuardFields({
           {messages.workstationInputGuardPeersEmpty}
         </FormDescription>
       ) : (
-        <Select
+        <EnumSelect
+          aria-label={matchInputFieldLabel}
           id={matchInputFieldId}
-          onChange={(event) => {
+          onValueChange={(nextValue) => {
             onChange({
               ...guard,
-              matchInput: event.target.value,
+              matchInput: nextValue,
             });
           }}
-          value={guard.matchInput ?? ""}
-        >
-          {peerWorkTypes.map((workType) => (
-            <option key={workType} value={workType}>
-              {workType}
-            </option>
-          ))}
-        </Select>
+          options={peerWorkTypes.map((workType) => ({
+            label: workType,
+            value: workType,
+          }))}
+          value={guard.matchInput ?? peerWorkTypes[0] ?? ""}
+        />
       )}
       {resolveFieldError(fieldErrors, slotIndex, "matchInput") ? (
         <GuardFieldError
@@ -284,22 +285,21 @@ function ParentInputGuardFields({
             {messages.workstationInputGuardPeersEmpty}
           </FormDescription>
         ) : (
-          <Select
+          <EnumSelect
+            aria-label={messages.inputGuardParentInputFieldLabel}
             id={parentInputFieldId}
-            onChange={(event) => {
+            onValueChange={(nextValue) => {
               onChange({
                 ...guard,
-                parentInput: event.target.value,
+                parentInput: nextValue,
               });
             }}
-            value={guard.parentInput ?? ""}
-          >
-            {peerWorkTypes.map((workType) => (
-              <option key={workType} value={workType}>
-                {workType}
-              </option>
-            ))}
-          </Select>
+            options={peerWorkTypes.map((workType) => ({
+              label: workType,
+              value: workType,
+            }))}
+            value={guard.parentInput ?? peerWorkTypes[0] ?? ""}
+          />
         )}
         {resolveFieldError(fieldErrors, slotIndex, "parentInput") ? (
           <GuardFieldError

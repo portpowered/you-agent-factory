@@ -502,8 +502,14 @@ describe("WorkflowActivityBentoCard header actions", () => {
     const headerScope = within(graphHeader as HTMLElement);
     expect(headerScope.queryAllByRole("status")).toHaveLength(0);
     expect(
-      headerScope.queryByText(editorMessages.modeUnsavedChanges),
-    ).toBeNull();
+      headerScope.getByText(
+        editorMessages.dirtyStateSummary({
+          layoutDirty: false,
+          preferencesDirty: false,
+          topologyDirty: true,
+        }),
+      ),
+    ).toBeTruthy();
 
     const toggle = within(toolbar).getByRole("button", {
       name: editorMessages.modeLeaveEditor,

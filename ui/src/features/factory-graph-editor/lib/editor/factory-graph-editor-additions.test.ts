@@ -6,6 +6,12 @@ import {
   validateFactoryGraphAddEntityDraft,
 } from "../editor/factory-graph-editor-additions";
 
+const minimalModelWorkerOperation = {
+  name: "REVIEW",
+  inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+  outputs: [{ name: "result", contentTypes: ["TEXT"] }],
+};
+
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
   workers: [
@@ -65,6 +71,7 @@ describe("factory graph editor additions", () => {
       model: "",
       modelProvider: "",
       name: "",
+      operations: [],
       workerType: "MODEL_WORKER",
     });
   });
@@ -79,6 +86,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "CURSOR",
           name: "reviewer",
+          operations: [minimalModelWorkerOperation],
           workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
@@ -94,11 +102,15 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "",
           name: "reviewer",
+          operations: [],
           workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
       ),
     ).toEqual({
+      modelOperations: {
+        summary: "Add at least one model-invocation operation.",
+      },
       modelProvider: "Select a model provider for the new worker.",
     });
   });
@@ -113,6 +125,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "",
           name: "runner",
+          operations: [],
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -128,6 +141,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "",
           name: "runner",
+          operations: [],
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -145,6 +159,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "",
           name: "runner",
+          operations: [],
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -162,6 +177,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "CURSOR",
           name: "runner",
+          operations: [],
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -179,6 +195,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "CURSOR",
           name: "writer",
+          operations: [minimalModelWorkerOperation],
           workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
@@ -280,6 +297,7 @@ describe("factory graph editor additions", () => {
         model: "",
         modelProvider: "CURSOR",
         name: "reviewer",
+        operations: [],
         workerType: "MODEL_WORKER",
       },
     );
@@ -300,6 +318,7 @@ describe("factory graph editor additions", () => {
         model: "gpt-5",
         modelProvider: "CODEX",
         name: "writer",
+        operations: [],
         workerType: "MODEL_WORKER",
       },
     );
@@ -323,6 +342,7 @@ describe("factory graph editor additions", () => {
         model: "",
         modelProvider: "",
         name: "runner",
+        operations: [],
         workerType: "SCRIPT_WORKER",
       },
     );
@@ -343,6 +363,7 @@ describe("factory graph editor additions", () => {
         model: "",
         modelProvider: "",
         name: "packager",
+        operations: [],
         workerType: "SCRIPT_WORKER",
       },
     );

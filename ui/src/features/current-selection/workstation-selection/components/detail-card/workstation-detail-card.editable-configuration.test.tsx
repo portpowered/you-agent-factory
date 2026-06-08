@@ -1,5 +1,9 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import {
   semanticWorkflowDashboardSnapshot,
@@ -19,6 +23,18 @@ import { EditableWorkstationConfigurationHeaderActions } from "../editable/works
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 const editableConfigurationCoverageTimeoutMs = 240_000;
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
   if (value == null) {
@@ -192,6 +208,8 @@ function buildReadyEditableConfigurationState(overrides?: {
         })
       : null;
 
+  const workstationType = overrides?.workstationType ?? "MODEL_WORKSTATION";
+
   return {
     draft: {
       behavior,
@@ -199,10 +217,13 @@ function buildReadyEditableConfigurationState(overrides?: {
       guards: [],
       inputs: [],
       name: overrides?.initialValuesWorkstationName ?? "Review",
+      operation: "",
+      operationBindings: [],
       prompt:
         overrides?.prompt ?? "Review the latest story changes before approval.",
       runnerName: "gemini",
       workerName: overrides?.workerName ?? "reviewer",
+      workstationType,
     },
     hasValidationErrors: Boolean(
       overrides?.validationErrors?.prompt ||
@@ -244,7 +265,15 @@ function buildReadyEditableConfigurationState(overrides?: {
       },
       workstationName: overrides?.initialValuesWorkstationName ?? "Review",
       workstationOptions: ["Plan", "Review"],
-      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
+      workstationType,
+      workstationTypeOptions:
+        workstationType === "LOGICAL_MOVE"
+          ? ["LOGICAL_MOVE"]
+          : ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      modelInvokeWorkerOptions: [],
+      modelOperationsByWorkerName: {},
+      operation: "",
+      operationBindings: [],
       guards: [],
       inputs: [],
     },
@@ -580,7 +609,8 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeNull();
   });
 
-  it("renders runner selection and effective-runner help without a capability matrix", () => {
+  it("renders runner selection and effective-runner help without a capability matrix", async () => {
+    const user = userEvent.setup();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const onRunnerChange = vi.fn();
@@ -602,7 +632,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expandEditableConfiguration();
 
     const configuration = editableConfigurationSection();
-    const runnerSelect = screen.getByLabelText("Runner") as HTMLSelectElement;
+    const runnerSelect = screen.getByRole("combobox", { name: "Runner" });
 
     expect(runnerSelect).toBeTruthy();
     expect(
@@ -616,7 +646,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(within(configuration).queryByText("Supported")).toBeNull();
     expect(within(configuration).queryByText("Unsupported")).toBeNull();
 
-    fireEvent.change(runnerSelect, { target: { value: "codex" } });
+    await selectLabeledComboboxOption(user, "Runner", "Codex");
     expect(onRunnerChange).toHaveBeenCalledWith("codex");
 
     rerender(
@@ -891,7 +921,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
   });
 
-  it("renders behavior, worker, and prompt controls in the editable form", () => {
+  it("renders behavior, worker, and prompt controls in the editable form", async () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const onPromptChange = vi.fn();
@@ -928,16 +958,13 @@ describe("WorkstationDetailCard editable configuration", () => {
         "Resolve the highlighted fields before saving this workstation.",
       ),
     ).toBeTruthy();
-    expect(screen.getByLabelText("Worker")).toBeTruthy();
-    expect(screen.getByLabelText("Worker").tagName).toBe("SELECT");
-    expect(screen.getByLabelText("Kind")).toBeTruthy();
-    expect(screen.getByLabelText("Kind").tagName).toBe("SELECT");
+    expect(screen.getByRole("combobox", { name: "Worker" })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Kind" })).toBeTruthy();
     expect(screen.queryByLabelText("Model")).toBeNull();
     expect(screen.queryByLabelText("Template")).toBeNull();
 
-    fireEvent.change(screen.getByLabelText("Worker"), {
-      target: { value: "planner" },
-    });
+    const user = userEvent.setup();
+    await selectLabeledComboboxOption(user, "Worker", "planner");
     fireEvent.change(screen.getByLabelText("Prompt"), {
       target: { value: "Updated prompt" },
     });
@@ -1090,7 +1117,8 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeNull();
   });
 
-  it("localizes behavior options in zh-CN while keeping canonical option values", () => {
+  it("localizes behavior options in zh-CN while keeping canonical option values", async () => {
+    const user = userEvent.setup();
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
 
@@ -1118,18 +1146,15 @@ describe("WorkstationDetailCard editable configuration", () => {
       }),
     );
 
-    const kindSelect = screen.getByLabelText("类型") as HTMLSelectElement;
+    const kindSelect = screen.getByRole("combobox", { name: "类型" });
+    await user.click(kindSelect);
+    const listbox = await screen.findByRole("listbox");
 
     expect(
-      Array.from(kindSelect.options).map((option) => ({
-        label: option.textContent,
-        value: option.value,
-      })),
-    ).toEqual([
-      { label: "标准", value: "STANDARD" },
-      { label: "重复器", value: "REPEATER" },
-      { label: "轮询器", value: "POLLER" },
-    ]);
+      within(listbox)
+        .getAllByRole("option")
+        .map((option) => option.textContent),
+    ).toEqual(["标准", "重复器", "轮询器"]);
   });
 
   it("renders localized workstation type from editable configuration when ready", () => {
