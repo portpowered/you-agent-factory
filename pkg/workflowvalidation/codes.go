@@ -8,4 +8,6 @@ const (
 	CodeInvalidMetadata          = "workflow.source.invalidMetadata"
 	CodeInvalidArgsSchema        = "workflow.source.invalidArgsSchema"
 	CodeSourceUnreadable         = "workflow.source.unreadable"
+	CodeUnsupportedLoader        = "workflow.source.unsupportedLoader"
+	CodeSourceHashMismatch       = "workflow.source.sourceHashMismatch"
 )

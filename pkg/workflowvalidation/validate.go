@@ -22,6 +22,17 @@ type Request struct {
 	AST        *js.AST
 }
 
+// ValidateLoaded checks loaded workflow source and remaps diagnostics to authored line numbers.
+func ValidateLoaded(loaded LoadedSource, req Request) Result {
+	req.Source = loaded.ExecutableSource
+	if strings.TrimSpace(req.SourceRef) == "" {
+		req.SourceRef = loaded.SourceRef
+	}
+	result := Validate(req)
+	result.Issues = remapIssues(result.Issues, loaded.RemapLine)
+	return result
+}
+
 // Validate checks workflow orchestrator config fields and JavaScript source without executing it.
 func Validate(req Request) Result {
 	var issues []Issue

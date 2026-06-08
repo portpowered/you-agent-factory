@@ -283,10 +283,24 @@ func WorkflowSourceTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig
 			Path:    "orchestrator.javascript.sourceRef",
 		})}
 	}
-	fileResult := workflowvalidation.Validate(workflowvalidation.Request{
-		Source:     content,
-		SourceRef:  sourceRef,
+	loaded, loadIssues := workflowvalidation.Load(workflowvalidation.LoadRequest{
+		SourceRef: sourceRef,
+		Content:   content,
+	})
+	if len(loadIssues) > 0 {
+		return workflowSourceIssuesToTargets(loadIssues)
+	}
+	if expectedHash := strings.TrimSpace(jsCfg.SourceHash); expectedHash != "" && expectedHash != loaded.SourceHash {
+		return []Target{workflowSourceTarget(workflowvalidation.Issue{
+			Code:    workflowvalidation.CodeSourceHashMismatch,
+			Message: fmt.Sprintf("orchestrator.javascript.sourceHash %q does not match loaded workflow source hash %q", expectedHash, loaded.SourceHash),
+			Path:    "orchestrator.javascript.sourceHash",
+		})}
+	}
+	fileResult := workflowvalidation.ValidateLoaded(loaded, workflowvalidation.Request{
 		ConfigPath: "orchestrator.javascript.sourceRef",
+		Metadata:   jsCfg.Metadata,
+		ArgsSchema: jsCfg.ArgsSchema,
 	})
 	return workflowSourceIssuesToTargets(fileResult.Issues)
 }
