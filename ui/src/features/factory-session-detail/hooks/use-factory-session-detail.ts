@@ -5,7 +5,7 @@ import {
   type FactorySession,
   type FactorySessionPartialResult,
   type FactorySessionResult,
-  FactorySessionsAPIError,
+  type FactorySessionsAPIError,
   getFactorySession,
   getFactorySessionPartialResult,
   getFactorySessionResult,

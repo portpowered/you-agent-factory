@@ -12,6 +12,7 @@ export interface FactorySessionDetailMessages {
   errorState: string;
   finalResultRefLabel: string;
   loadingState: string;
+  markingEmptyState: string;
   markingHeading: string;
   missingState: string;
   orchestratorKindLabel: string;
@@ -36,6 +37,7 @@ const factorySessionDetailMessagesByLocale = {
     errorState: "The factory session runtime could not be loaded.",
     finalResultRefLabel: "Final result ref",
     loadingState: "Loading factory session runtime…",
+    markingEmptyState: "Petri marking: none",
     markingHeading: "Petri marking",
     missingState: "This factory session is no longer available.",
     orchestratorKindLabel: "Orchestrator kind",
@@ -58,6 +60,7 @@ const factorySessionDetailMessagesByLocale = {
     errorState: "无法加载工厂会话运行时。",
     finalResultRefLabel: "最终结果引用",
     loadingState: "正在加载工厂会话运行时…",
+    markingEmptyState: "Petri 标识：无",
     markingHeading: "Petri 标识",
     missingState: "此工厂会话已不可用。",
     orchestratorKindLabel: "编排器类型",

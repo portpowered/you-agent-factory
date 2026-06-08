@@ -47,6 +47,7 @@ describe("getInlineWidgetPickerOptions", () => {
       "work-totals",
       "work-graph",
       "current-selection",
+      "factory-session",
       "provider-session",
       "terminal-work",
       "work-outcome-chart",

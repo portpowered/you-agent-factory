@@ -181,7 +181,7 @@ function PetriSessionProjection({
   const messages = getFactorySessionDetailMessages(locale);
 
   if (!petri) {
-    return <DetailCopy>{messages.markingHeading}: none</DetailCopy>;
+    return <DetailCopy>{messages.markingEmptyState}</DetailCopy>;
   }
 
   return (
