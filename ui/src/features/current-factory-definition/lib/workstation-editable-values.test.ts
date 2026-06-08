@@ -1974,4 +1974,78 @@ describe("editable workstation name draft", () => {
       ),
     ).toContain("name");
   });
+
+  it("includes model-invoke overwrite fields when the latest definition diverges", () => {
+    const sessionStartDraft = editableWorkstationDraftFromValues({
+      behavior: "STANDARD",
+      behaviorOptions: ["STANDARD"],
+      cron: null,
+      effectiveRunnerName: "codex",
+      factoryRunnerName: null,
+      modelInvokeWorkerOptions: ["tts-worker"],
+      modelOperationsByWorkerName: {
+        "tts-worker": [
+          {
+            name: "TTS",
+            inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+            outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+          },
+        ],
+      },
+      operation: "",
+      operationBindings: [],
+      prompt: "Review work",
+      resolvedRunnerSelection: { runnerId: "codex", source: "default" },
+      runnerName: null,
+      runnerOptions: ["codex"],
+      runnerSelectionSource: "default",
+      sharedWorkerWorkstationNames: [],
+      sharedWorkerWorkstationNamesByWorkerName: {},
+      workerModelProvider: null,
+      workerName: "reviewer",
+      workerOptions: ["reviewer"],
+      workerTypeByName: { reviewer: "MODEL_WORKER" },
+      guards: [],
+      inputs: [{ guards: [], state: "queued", workType: "story" }],
+      workstationName: "Review",
+      workstationOptions: ["Review"],
+      workstationType: "MODEL_WORKSTATION",
+    });
+    const latestDefinitionDraft = {
+      ...sessionStartDraft,
+      operation: "TTS",
+      operationBindings: [
+        {
+          slot: "text",
+          configText: "server",
+          defaultContentText: "",
+          selector: { label: "", role: "", slot: "", type: "" },
+        },
+      ],
+      workerName: "tts-worker",
+      workstationType: "MODEL_INVOKE" as const,
+    };
+    const draft = {
+      ...sessionStartDraft,
+      operation: "",
+      operationBindings: [],
+      workerName: "reviewer",
+      workstationType: "MODEL_WORKSTATION" as const,
+    };
+
+    expect(
+      resolveEditableWorkstationOverwriteFields(
+        sessionStartDraft,
+        draft,
+        latestDefinitionDraft,
+      ),
+    ).toEqual(
+      expect.arrayContaining([
+        "workstationType",
+        "operation",
+        "operationBindings",
+        "worker",
+      ]),
+    );
+  });
 });
