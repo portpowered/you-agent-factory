@@ -335,6 +335,10 @@ export async function runStorybookCI({
       runCommand(["run", "storybook:choose-file-check"]),
       serverExit,
     ]);
+    await Promise.race([
+      runCommand(["run", "storybook:checkbox-consistency-check"]),
+      serverExit,
+    ]);
   } finally {
     shuttingDown = true;
     await stop(server);
