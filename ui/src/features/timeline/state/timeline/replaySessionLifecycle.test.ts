@@ -55,7 +55,9 @@ describe("reconstructWorldState session lifecycle replay", () => {
     });
     expect(state.sessionBracket?.artifact_ids).toEqual(["artifact-final"]);
   });
+});
 
+describe("reconstructWorldState dispatch and artifact replay", () => {
   it("reconstructs orchestrator phase, dispatch lifecycle, and artifact events", () => {
     const events = [
       {
@@ -179,6 +181,45 @@ describe("reconstructWorldState session lifecycle replay", () => {
     ]);
   });
 
+});
+
+describe("reconstructWorldState dispatch lifecycle bootstrap", () => {
+  it("initializes javascript runtime when dispatch events arrive first", () => {
+    const events = [
+      {
+        context: {
+          dispatchId: "dispatch-bootstrap",
+          eventTime: "2026-06-09T12:00:01Z",
+          phaseId: "phase-1",
+          sequence: 1,
+          sessionSequence: 1,
+          tick: 1,
+        },
+        id: "queued-bootstrap",
+        payload: {
+          dispatchKind: "JAVASCRIPT_AGENT",
+          label: "bootstrap dispatch",
+        },
+        type: FACTORY_EVENT_TYPES.dispatchQueued,
+      },
+    ];
+
+    const state = reconstructWorldState(events, 1);
+    expect(state.javascriptRuntime?.dispatches).toEqual([
+      expect.objectContaining({
+        dispatch_kind: "JAVASCRIPT_AGENT",
+        id: "dispatch-bootstrap",
+        label: "bootstrap dispatch",
+        phase: "phase-1",
+        status: "QUEUED",
+      }),
+    ]);
+    expect(state.javascriptRuntime?.child_dispatch_counts).toEqual({
+      completed: 0,
+      queued: 1,
+      running: 0,
+    });
+  });
 });
 
 describe("reconstructWorldState dispatch interruption replay", () => {
