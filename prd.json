@@ -1,0 +1,54 @@
+{
+  "project": "infinite-you",
+  "branchName": "ralph/work-content-openapi-type-consolidation",
+  "description": "Consolidate the duplicate `WorkContent` and `WorkContentPart` OpenAPI aliases in the `work-content` feature into one canonical module, retarget internal imports to that seam, and preserve all existing work-content rendering and description behavior.",
+  "context": {
+    "customerAsk": "Collapse the duplicate `WorkContent` and `WorkContentPart` OpenAPI schema aliases currently re-declared in `ui/src/features/work-content/components/work-content-part-list.tsx`, `ui/src/features/work-content/components/work-content-read-only-list.tsx`, and `ui/src/features/work-content/lib/describe-work-content-part.ts` into one canonical module inside `ui/src/features/work-content/`, update internal imports to use that module, remove redundant component-level type exports unless a public re-export is still intentionally required, keep runtime behavior, rendering, and message copy unchanged, and prove the seam with `make ui-deadcode` plus the relevant existing work-content tests.",
+    "problem": "The `work-content` feature currently repeats identical `components[\"schemas\"][\"WorkContent\"]` and `components[\"schemas\"][\"WorkContentPart\"]` aliases in three separate modules that have no distinct ownership or behavior. That duplication creates multiple apparent type-definition seams inside one feature, makes internal imports less explicit about the canonical source of truth, and adds unnecessary maintenance overhead for reviewers and implementers.",
+    "solution": "Add one feature-owned canonical module for the `WorkContent` and `WorkContentPart` aliases, retarget the existing list and helper modules to import those aliases from that single source, and remove the duplicate alias declarations from component and helper modules unless an intentional public re-export is required. Keep the change behavior-preserving and verify it through the existing work-content rendering and description tests plus `make ui-deadcode`."
+  },
+  "acceptanceCriteria": [
+    "Exactly one canonical feature-owned module under `ui/src/features/work-content/` defines the `WorkContent` and `WorkContentPart` aliases for `components[\"schemas\"][\"WorkContent\"]` and `components[\"schemas\"][\"WorkContentPart\"]`.",
+    "`work-content-part-list`, `work-content-read-only-list`, and `describe-work-content-part` import the canonical aliases instead of re-declaring identical OpenAPI schema aliases locally.",
+    "The `WorkContentPartList` and `WorkContentReadOnlyList` surfaces keep the same loading, unavailable, error, empty, and populated rendering behavior, accessible region labeling, and message copy after the alias consolidation.",
+    "`describeWorkContentPart` keeps the same file, URL, label, content-type, and fallback description behavior after the alias consolidation.",
+    "Redundant component-level and helper-level type exports are removed unless an intentional feature-public re-export is still required, and no unrelated `work-content` type moves or alias renames are introduced.",
+    "The change stays scoped to `ui/src/features/work-content/` and does not rename `ImportFactoryValue`, `CurrentFactoryDocument`, timeline-local `WorkContent` aliases, or `CURRENT_ACTIVITY_NODE_TYPES`.",
+    "Quality gate: `make ui-deadcode`, frontend typecheck, and the relevant existing tests for `work-content-read-only-list` and `describe-work-content-part` pass."
+  ],
+  "userStories": [
+    {
+      "id": "work-content-openapi-type-consolidation-001",
+      "title": "Establish the canonical work-content type seam",
+      "description": "As a frontend maintainer, I want the `work-content` feature to own one canonical module for `WorkContent` and `WorkContentPart` so that internal feature code depends on a single explicit type source instead of repeating identical OpenAPI aliases.",
+      "acceptanceCriteria": [
+        "A canonical module such as `ui/src/features/work-content/lib/work-content-types.ts` exports `WorkContent` and `WorkContentPart` as the feature-owned aliases for the generated OpenAPI schemas.",
+        "`ui/src/features/work-content/components/work-content-part-list.tsx`, `ui/src/features/work-content/components/work-content-read-only-list.tsx`, and `ui/src/features/work-content/lib/describe-work-content-part.ts` import the aliases from the canonical module instead of declaring their own identical aliases.",
+        "Internal feature typing remains explicit and local to `work-content`; the change does not move the aliases outside the feature or introduce new cross-feature type dependencies.",
+        "The canonical module becomes the only definition site for these two aliases inside `ui/src/features/work-content/`.",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "work-content-openapi-type-consolidation-002",
+      "title": "Remove duplicate alias surfaces without changing work-content behavior",
+      "description": "As a reviewer, I want duplicate `work-content` alias declarations removed from component and helper modules so that the feature boundary is easier to maintain while the existing list rendering and part-description behavior remain unchanged.",
+      "acceptanceCriteria": [
+        "Redundant `export type WorkContent` and `export type WorkContentPart` declarations are removed from the component and helper modules unless an intentional public re-export is still required through `ui/src/features/work-content/public/index.ts`.",
+        "`WorkContentPartList` continues to render authored text, formatted JSON, and fallback non-text descriptions exactly as before for unchanged work-content fixtures.",
+        "`WorkContentReadOnlyList` continues to render the same loading, unavailable, error, empty, and populated states with the same accessible region semantics and message copy.",
+        "`describeWorkContentPart` continues to return the same descriptions for file-backed content, file URLs, remote URLs, labels, content types, and part-type-only fallbacks.",
+        "Verification uses the existing behavioral coverage in `ui/src/features/work-content/components/work-content-read-only-list.test.tsx` and `ui/src/features/work-content/lib/describe-work-content-part.test.ts` rather than new file-topology or export-inventory tests.",
+        "The cleanup does not broaden into cross-feature type moves, runtime rendering changes, or unrelated work-content refactors.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
