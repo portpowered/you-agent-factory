@@ -10,7 +10,7 @@ import {
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
-} from "./factory-graph-draft-types";
+} from "./draft/factory-graph-draft-types";
 
 export type FactoryGraphDocAddEntityDraft = {
   fileName: string;

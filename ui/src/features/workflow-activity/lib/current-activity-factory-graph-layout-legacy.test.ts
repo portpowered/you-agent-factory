@@ -1,6 +1,6 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: legacy graph regression fixtures stay grouped around the projection they protect.
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/maintainer-runtime-shaped-factory.fixture";
+import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/fixtures/maintainer-runtime-shaped-factory.fixture";
 import { buildCurrentActivityGraphLayoutFromFactory } from "./current-activity-factory-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {

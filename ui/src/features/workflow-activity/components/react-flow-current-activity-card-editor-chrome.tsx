@@ -1,16 +1,15 @@
 import { useCallback, useState } from "react";
-
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
 import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   createFactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityFieldErrors,
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
-} from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+} from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 
 export function useFactoryGraphAddEntityController({

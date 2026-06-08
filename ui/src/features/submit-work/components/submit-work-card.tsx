@@ -6,13 +6,13 @@ import {
   DashboardIconButtonShell,
   DashboardLabel,
   DashboardText,
-  DashboardWidgetFrame,
   Input,
   Popover,
   PopoverContent,
   PopoverTrigger,
   Select,
 } from "../../../components/ui";
+import { DashboardWidgetFrame } from "../../bento/public";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";
 import { SubmitWorkStatusPanel } from "./submit-work-status-panel";

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 
 interface GraphEditorPendingFactoryBridgeState {
   pendingFactoryDefinition: CanonicalFactoryDefinition | null;

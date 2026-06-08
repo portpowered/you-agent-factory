@@ -8,11 +8,11 @@ import {
   isFactoryBundledDocTargetPath,
 } from "../../workflow-activity/lib/factory-bundled-docs";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildPendingFactoryDefinition } from "./draft/factory-graph-draft-apply";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
-} from "./factory-graph-draft-types";
+} from "./draft/factory-graph-draft-types";
 
 export interface FactoryGraphDocRemovalIntent {
   confirmDescription: string;

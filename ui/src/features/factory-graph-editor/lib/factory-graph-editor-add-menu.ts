@@ -1,6 +1,6 @@
-import type { FactoryGraphEditorMenuAction } from "../components/factory-graph-editor-controls";
+import type { FactoryGraphEditorMenuAction } from "../components/controls/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "./draft/factory-graph-draft-types";
 
 export function buildFactoryGraphAddEntityMenuActions(
   factoryDefinition: CanonicalFactoryDefinition | null,

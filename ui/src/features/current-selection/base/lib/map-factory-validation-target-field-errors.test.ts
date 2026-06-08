@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { workerFieldValidationTarget } from "../../../../testing/factory-validation-target-fixtures";
 import { resolveWorkerSaveValidationFieldName } from "../../worker-selection/lib/worker-save-validation-field-mapping";
-import { resolveWorkstationSaveValidationFieldName } from "../../workstation-selection/lib/workstation-save-validation-field-mapping";
+import { resolveWorkstationSaveValidationFieldName } from "../../workstation-selection/lib/validation/workstation-save-validation-field-mapping";
 import { mapFactoryValidationTargetsToFieldErrors } from "./map-factory-validation-target-field-errors";
 
 describe("mapFactoryValidationTargetsToFieldErrors", () => {

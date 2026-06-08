@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type {
   EditableFactoryGraphSaveMutation,
   EditableFactoryGraphViewModel,
 } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { buildFactoryGraphDocRemovalIntent } from "../../factory-graph-editor/lib/factory-graph-doc-editor";
 import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
-} from "../../factory-graph-editor/lib/factory-graph-editor-removals";
+} from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-removals";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: removal controller keeps confirm, cancel, and graph/selection delete entry points aligned.
 export function useFactoryGraphRemovalController({

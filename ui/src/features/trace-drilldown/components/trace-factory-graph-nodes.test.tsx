@@ -5,11 +5,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
+import { WORK_RELATION_NODE_TYPES } from "../../graphs/public";
 import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "./trace-dispatch-factory-graph-node";
-import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "./trace-relation-factory-graph-node";
 
 const DispatchNode = TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES.workstation;
-const RelationNode = TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES.workRelation;
+const RelationNode = WORK_RELATION_NODE_TYPES.workRelation;
 
 function dispatchNodeProps(
   data: TraceDispatchFlowNode["data"],

@@ -1,10 +1,10 @@
+import type { ChartPresentation } from "../../../components/ui/chart";
 import { Skeleton } from "../../../components/ui/skeleton";
 import {
   DashboardEmptyState,
   DashboardEmptyStateText,
   DashboardEmptyStateTitle,
 } from "../../../components/ui/widget-frame";
-import type { ChartPresentation } from "../../../components/ui/chart";
 import { cn } from "../../../lib/cn";
 
 // tailwind-exception: intrinsic-sizing

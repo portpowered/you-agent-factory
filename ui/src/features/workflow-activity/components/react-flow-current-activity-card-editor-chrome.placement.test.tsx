@@ -29,7 +29,7 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
   } as unknown as EditableFactoryGraphViewModel;
 }
 
-describe("useFactoryGraphAddEntityController placement", () => {
+describe("useFactoryGraphAddEntityController doc add flow", () => {
   it("opens a doc add draft from the add menu", () => {
     const setActiveTool = vi.fn();
     const { result } = renderHook(
@@ -54,7 +54,9 @@ describe("useFactoryGraphAddEntityController placement", () => {
     expect(setActiveTool).toHaveBeenCalledWith("add");
     expect(result.current.addMenuOpen).toBe(false);
   });
+});
 
+describe("useFactoryGraphAddEntityController add submit", () => {
   it("places a newly added node after a successful add submit", () => {
     placeAddedNode.mockReset();
     const editableGraph = buildEditableGraph();
@@ -158,7 +160,9 @@ describe("useFactoryGraphAddEntityController placement", () => {
 
     expect(editableGraph.actions.addNode).not.toHaveBeenCalled();
   });
+});
 
+describe("useFactoryGraphAddEntityController doc validation", () => {
   it("surfaces validation errors before attempting to add a doc", () => {
     const editableGraph = buildEditableGraph();
     const setActiveTool = vi.fn();

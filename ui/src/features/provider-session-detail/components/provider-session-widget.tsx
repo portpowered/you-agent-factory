@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
-import { DashboardWidgetFrame, DetailCopy } from "../../../components/ui";
+import { DetailCopy } from "../../../components/ui";
+import { DashboardWidgetFrame } from "../../bento/public";
 import type { LoadableProviderSessionRef } from "../lib/provider-session-ref";
 import { getProviderSessionWidgetMessages } from "../messages/provider-session-widget";
 import { ProviderSessionDetailPanel } from "./provider-session-detail-panel";

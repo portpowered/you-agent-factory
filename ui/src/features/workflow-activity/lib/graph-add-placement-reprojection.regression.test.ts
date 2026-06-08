@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
-import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
+import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { resolveStoredNodePositionsForGraphKey } from "./bridge-graph-layout-positions";
 import {
   buildCurrentActivityGraphLayoutFromFactory,

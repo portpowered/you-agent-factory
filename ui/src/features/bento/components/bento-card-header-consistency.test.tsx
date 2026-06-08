@@ -1,10 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-
-import { DashboardWidgetFrame } from "../../../components/ui/widget-frame";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
 import { WorkTotalsCard } from "../../work-totals/components/work-totals-card";
 import { AgentBentoCard, AgentBentoLayout } from "./agent-bento";
+import { DashboardWidgetFrame } from "./dashboard-widget-frame/dashboard-widget-frame";
 
 function expectBentoCardHeaderSemantics(
   card: HTMLElement,

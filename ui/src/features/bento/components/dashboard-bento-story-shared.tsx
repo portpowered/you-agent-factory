@@ -19,8 +19,8 @@ export {
   semanticWorkflowDashboardSnapshot,
 } from "../../../components/dashboard/test-fixtures";
 
-import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
-import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
+import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
+import { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
 import { CurrentSelectionWidget } from "../../current-selection/public";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";

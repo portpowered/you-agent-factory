@@ -1,0 +1,424 @@
+import { renderHook } from "@testing-library/react";
+import { useFactoryGraphDraftState } from "../../hooks/factory-graph-draft-hook";
+import {
+  baseFactoryDefinition,
+  currentFactoryDocument,
+} from "./factory-graph-draft.test-helpers";
+import { buildPendingFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { validateFactoryGraphDraft } from "./factory-graph-draft-validation";
+
+it("derives graph nodes and relations from the canonical editable definition", () => {
+  const topology = buildFactoryGraphTopologyFromDefinition(
+    baseFactoryDefinition,
+  );
+
+  expect(topology.nodes.map((node) => node.id)).toEqual([
+    "resource:gpu",
+    "work-state:story:done",
+    "work-state:story:queued",
+    "work-type:story",
+    "worker:writer",
+    "workstation:draft",
+  ]);
+  expect(topology.edges.map((edge) => edge.id)).toEqual([
+    "work-type-state:work-type:story->work-state:story:done",
+    "work-type-state:work-type:story->work-state:story:queued",
+    "worker-assignment:worker:writer->workstation:draft",
+    "workstation-input:work-state:story:queued->workstation:draft",
+    "workstation-output:workstation:draft->work-state:story:done",
+    "workstation-resource:resource:gpu->workstation:draft",
+  ]);
+});
+
+it("derives graph relations from legacy singular workstation route objects", () => {
+  const topology = buildFactoryGraphTopologyFromDefinition({
+    ...baseFactoryDefinition,
+    workstations: [
+      {
+        inputs: [{ state: "queued", workType: "story" }],
+        name: "draft",
+        onContinue: { state: "queued", workType: "story" },
+        onFailure: { state: "done", workType: "story" },
+        outputs: [],
+        worker: "writer",
+      } as NonNullable<typeof baseFactoryDefinition.workstations>[number],
+    ],
+  });
+
+  expect(topology.edges.map((edge) => edge.id)).toEqual(
+    expect.arrayContaining([
+      "workstation-on-continue:workstation:draft->work-state:story:queued",
+      "workstation-on-failure:workstation:draft->work-state:story:done",
+    ]),
+  );
+});
+
+it("builds a pending full factory definition while preserving untouched content", () => {
+  const draft = createEmptyFactoryGraphDraft();
+  draft.additions.workers.push({
+    model: "gpt-5-mini",
+    name: "reviewer",
+    type: "MODEL_WORKER",
+  });
+  draft.additions.workstations.push({
+    body: "Review the drafted story.",
+    inputs: [
+      {
+        state: "done",
+        workType: "story",
+      },
+    ],
+    name: "review",
+    outputs: [
+      {
+        state: "approved",
+        workType: "story",
+      },
+    ],
+    type: "MODEL_WORKSTATION",
+    worker: "reviewer",
+  });
+  draft.additions.workStates.push({
+    state: {
+      name: "approved",
+      type: "TERMINAL",
+    },
+    workTypeName: "story",
+  });
+  draft.edgeChanges.additions.push({
+    kind: "workstation-input",
+    source: {
+      kind: "work-state",
+      stateName: "done",
+      workTypeName: "story",
+    },
+    target: {
+      kind: "workstation",
+      name: "review",
+    },
+  });
+  draft.edgeChanges.additions.push({
+    kind: "workstation-output",
+    source: {
+      kind: "workstation",
+      name: "review",
+    },
+    target: {
+      kind: "work-state",
+      stateName: "approved",
+      workTypeName: "story",
+    },
+  });
+
+  const pendingFactoryDefinition = buildPendingFactoryDefinition(
+    baseFactoryDefinition,
+    draft,
+  );
+
+  expect(pendingFactoryDefinition).toMatchObject({
+    metadata: {
+      owner: "operations",
+    },
+    resources: [
+      {
+        capacity: 2,
+        name: "gpu",
+      },
+    ],
+    workers: [
+      {
+        model: "gpt-5",
+        name: "writer",
+        type: "MODEL_WORKER",
+      },
+      {
+        model: "gpt-5-mini",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workstations: [
+      {
+        body: "Draft the story.",
+        name: "draft",
+      },
+      {
+        body: "Review the drafted story.",
+        name: "review",
+        worker: "reviewer",
+      },
+    ],
+  });
+  expect(
+    pendingFactoryDefinition?.workTypes?.find(
+      (workType) => workType.name === "story",
+    )?.states,
+  ).toEqual([
+    {
+      name: "queued",
+      type: "INITIAL",
+    },
+    {
+      name: "done",
+      type: "TERMINAL",
+    },
+    {
+      name: "approved",
+      type: "TERMINAL",
+    },
+  ]);
+});
+
+it("validates duplicate identifiers, missing required fields, and incompatible edges before save", () => {
+  const draft = createEmptyFactoryGraphDraft();
+  draft.additions.workers.push({
+    model: "gpt-5-mini",
+    name: "writer",
+    type: "MODEL_WORKER",
+  });
+  draft.additions.workstations.push({
+    body: "Missing worker assignment.",
+    inputs: [],
+    name: "review",
+    outputs: [],
+    type: "MODEL_WORKSTATION",
+    worker: "",
+  });
+  draft.edgeChanges.additions.push({
+    kind: "workstation-input",
+    source: {
+      kind: "worker",
+      name: "writer",
+    },
+    target: {
+      kind: "workstation",
+      name: "draft",
+    },
+  });
+
+  const validationErrors = validateFactoryGraphDraft(
+    baseFactoryDefinition,
+    draft,
+  );
+
+  expect(validationErrors).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: "DUPLICATE_IDENTIFIER",
+        target: {
+          kind: "node",
+          id: "worker:writer",
+        },
+      }),
+      expect.objectContaining({
+        code: "MISSING_REQUIRED_FIELD",
+        field: "worker",
+      }),
+      expect.objectContaining({
+        code: "INCOMPATIBLE_EDGE",
+      }),
+    ]),
+  );
+});
+
+it("reports missing required draft names before save-building", () => {
+  const draft = createEmptyFactoryGraphDraft();
+  draft.additions.workers.push({
+    model: "gpt-5-mini",
+    name: "",
+    type: "MODEL_WORKER",
+  });
+  draft.additions.workStates.push({
+    state: {
+      name: "",
+      type: "TERMINAL",
+    },
+    workTypeName: "",
+  });
+
+  const validationErrors = validateFactoryGraphDraft(
+    baseFactoryDefinition,
+    draft,
+  );
+
+  expect(validationErrors).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: "MISSING_REQUIRED_FIELD",
+        field: "name",
+        target: {
+          kind: "field",
+          field: "worker.name",
+        },
+      }),
+      expect.objectContaining({
+        code: "MISSING_REQUIRED_FIELD",
+        field: "name",
+        target: {
+          kind: "field",
+          field: "work-state.name",
+        },
+      }),
+      expect.objectContaining({
+        code: "MISSING_REQUIRED_FIELD",
+        field: "name",
+        target: {
+          kind: "field",
+          field: "work-type.name",
+        },
+      }),
+    ]),
+  );
+  expect(
+    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
+  ).toBeNull();
+});
+
+it("reports unknown edge nodes when a draft edge references a workstation outside the supported draft state", () => {
+  const draft = createEmptyFactoryGraphDraft();
+  draft.edgeChanges.additions.push({
+    kind: "workstation-input",
+    source: {
+      kind: "work-state",
+      stateName: "queued",
+      workTypeName: "story",
+    },
+    target: {
+      kind: "workstation",
+      name: "missing",
+    },
+  });
+
+  const validationErrors = validateFactoryGraphDraft(
+    baseFactoryDefinition,
+    draft,
+  );
+
+  expect(validationErrors).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        code: "UNKNOWN_NODE",
+        target: {
+          kind: "edge",
+          id: "workstation-input:work-state:story:queued->workstation:missing",
+        },
+      }),
+    ]),
+  );
+  expect(
+    buildPendingFactoryDefinition(baseFactoryDefinition, draft),
+  ).toBeNull();
+});
+
+it("keeps an empty graph until the factory document is available", () => {
+  const { result, rerender } = renderHook(
+    (props: { currentFactoryDocument?: typeof currentFactoryDocument }) =>
+      useFactoryGraphDraftState(props),
+    {
+      initialProps: {},
+    },
+  );
+
+  expect(result.current.source).toBe("projection");
+  expect(result.current.graph).toEqual({
+    edges: [],
+    nodes: [],
+  });
+  expect(result.current.baseDocument).toBeNull();
+  expect(result.current.latestDocument).toBeNull();
+
+  rerender({ currentFactoryDocument });
+
+  expect(result.current.source).toBe("current-factory");
+  expect(result.current.baseDocument?.version.logical).toBe("5");
+  expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+    "workstation:draft",
+  );
+});
+
+it("bases editable graph topology on the factory document, not snapshot-only workstations", () => {
+  const documentFactory: typeof currentFactoryDocument = {
+    ...baseFactoryDefinition,
+    name: "Document Factory",
+    version: {
+      logical: "7",
+      physical: "2026-05-31T00:00:00Z",
+    },
+    workstations: [
+      {
+        body: "From the persisted document.",
+        inputs: [
+          {
+            state: "queued",
+            workType: "story",
+          },
+        ],
+        name: "document-only",
+        outputs: [
+          {
+            state: "done",
+            workType: "story",
+          },
+        ],
+        type: "MODEL_WORKSTATION",
+        worker: "writer",
+      },
+    ],
+  };
+  const snapshotFactory: typeof baseFactoryDefinition = {
+    ...baseFactoryDefinition,
+    name: "Snapshot Factory",
+    workstations: [
+      ...(documentFactory.workstations ?? []),
+      {
+        body: "Only present on the live snapshot plane.",
+        inputs: [
+          {
+            state: "queued",
+            workType: "story",
+          },
+        ],
+        name: "snapshot-only",
+        outputs: [
+          {
+            state: "done",
+            workType: "story",
+          },
+        ],
+        type: "MODEL_WORKSTATION",
+        worker: "writer",
+      },
+    ],
+  };
+
+  const { result } = renderHook(() =>
+    useFactoryGraphDraftState({
+      currentFactoryDocument: documentFactory,
+    }),
+  );
+
+  expect(
+    snapshotFactory.workstations?.map((workstation) => workstation.name),
+  ).toEqual(["document-only", "snapshot-only"]);
+  expect(result.current.source).toBe("current-factory");
+  expect(result.current.baseDocument).toEqual(documentFactory);
+  expect(result.current.latestDocument).toEqual(documentFactory);
+  expect(result.current.graph.nodes.map((node) => node.id)).toContain(
+    "workstation:document-only",
+  );
+  expect(result.current.graph.nodes.map((node) => node.id)).not.toContain(
+    "workstation:snapshot-only",
+  );
+});
+
+it("returns an empty projection when no canonical factory is available", () => {
+  const { result } = renderHook(() => useFactoryGraphDraftState({}));
+
+  expect(result.current.source).toBe("projection");
+  expect(result.current.graph).toEqual({
+    edges: [],
+    nodes: [],
+  });
+});

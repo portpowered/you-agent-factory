@@ -19,7 +19,7 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
-import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/factory-graph-public-ids";
+import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/operations/factory-graph-public-ids";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";

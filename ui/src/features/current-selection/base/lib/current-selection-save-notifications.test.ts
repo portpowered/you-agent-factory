@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
 import { workerFieldValidationTarget } from "../../../../testing/factory-validation-target-fixtures";
-import { buildGraphSaveErrorToastDescription } from "../../../factory-graph-editor/lib/graph-document-save-notifications";
+import { buildGraphSaveErrorToastDescription } from "../../../factory-graph-editor/lib/document-save/graph-document-save-notifications";
 import { buildCurrentSelectionSaveSuccessStableIdentity } from "../../../notifications/lib/save-notification-delivery-policy";
 import { resolveCurrentSelectionSaveToastNotification } from "./current-selection-save-notifications";
 

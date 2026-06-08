@@ -13,7 +13,7 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/workstation-selection/components/workstation-editable-configuration-section.tsx",
+      "src/features/current-selection/workstation-selection/components/editable/workstation-editable-configuration-section.tsx",
   },
   {
     owner: "expandable-panel-trigger",
@@ -38,32 +38,37 @@ export const dashboardExpandDisclosureGuardPaths = [
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/workstation-selection/components/workstation-active-work-list.tsx",
+      "src/features/current-selection/workstation-selection/components/detail-card/workstation-active-work-list.tsx",
   },
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/workstation-selection/components/workstation-request-history-section.tsx",
+      "src/features/current-selection/workstation-selection/components/detail-card/workstation-request-history-section.tsx",
   },
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/workstation-selection/components/provider-session-attempts.tsx",
+      "src/features/current-selection/workstation-selection/components/fields/provider-session-attempts.tsx",
   },
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/dispatch-selection/components/selected-work-dispatch-attempt-sections.tsx",
+      "src/features/current-selection/dispatch-selection/components/dispatch-history/selected-work-dispatch-attempt-sections.tsx",
   },
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/work-selection/components/inference-attempt-body-sections.tsx",
+      "src/features/current-selection/work-selection/components/inference-attempt/inference-attempt.tsx",
   },
   {
     owner: "expandable-panel-trigger",
     relativeFilePath:
-      "src/features/current-selection/workstation-selection/components/workstation-prompt-field.tsx",
+      "src/features/current-selection/work-selection/components/inference-attempt/inference-attempt-body-sections.tsx",
+  },
+  {
+    owner: "expandable-panel-trigger",
+    relativeFilePath:
+      "src/features/current-selection/workstation-selection/components/editable/workstation-prompt-field.tsx",
   },
   {
     owner: "expandable-panel-trigger",

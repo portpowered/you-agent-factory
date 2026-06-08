@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
+import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 import {
   axisAlignedRectFromTopLeft,
   GRAPH_EDITOR_NODE_PLACEMENT_MAX_ATTEMPTS,

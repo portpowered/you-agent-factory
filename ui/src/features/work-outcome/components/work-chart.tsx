@@ -12,8 +12,8 @@ import type { LegendPayload } from "recharts/types/component/DefaultLegendConten
 import { Button } from "../../../components/ui/button";
 import {
   ChartContainer,
-  type ChartPresentation,
   ChartLegendContent,
+  type ChartPresentation,
   ChartTooltip,
   ChartTooltipContent,
 } from "../../../components/ui/chart";
@@ -35,6 +35,7 @@ import { workChartPresentationClasses } from "./work-chart-presentation";
 import { WorkChartStatusPanel } from "./work-chart-status-panel";
 
 export type { WorkChartSeriesDefinition } from "../lib/work-chart-data";
+
 const WORK_CHART_AXIS_LABEL_CLASS = dashboardChartAxisLabelClassName();
 export const WORK_CHART_MARGIN = { bottom: 24, left: 18, right: 28, top: 28 };
 const WORK_CHART_LEGEND_ITEM_CLASS = "gap-1.5 py-0";

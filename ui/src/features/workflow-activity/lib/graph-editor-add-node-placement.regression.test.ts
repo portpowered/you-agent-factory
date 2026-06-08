@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { resolveInitialPlacementTopLeft } from "./graph-editor-add-node-placement";
 import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 

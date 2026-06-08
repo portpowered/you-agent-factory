@@ -1,7 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/factory-graph-topology-impact";
+import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 import {
