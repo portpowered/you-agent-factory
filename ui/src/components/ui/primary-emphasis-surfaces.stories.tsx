@@ -2,9 +2,14 @@ import "../../styles.css";
 
 import { expect, within } from "storybook/test";
 
+import { CurrentSelectionSelectableButton } from "../../features/current-selection/base/components/presentation/current-selection-selectable-button";
+import {
+  DashboardHeaderOptionMenuItem,
+  DashboardHeaderOptionMenuSurface,
+} from "../../features/header/components/dashboard-header-option-menu";
 import { applyDocumentColorPalette } from "../../theme/app-color-palette";
 import { COLOR_PALETTE_IDS } from "../../theme/color-palette";
-import { PrimaryEmphasisSurfacesShowcase } from "./primary-emphasis-surfaces";
+import { DashboardStatusPill } from "./dashboard-status-pill";
 
 const ACCENT_INK_COLOR = "rgb(26,34,40)";
 const FACTORY_LIGHT_ACCENT_COLOR = "rgb(245,199,111)";
@@ -27,6 +32,44 @@ function expectPrimaryContainerBackground(element: HTMLElement): void {
   expect(backgroundColor).not.toBe("rgba(0,0,0,0)");
   expect(backgroundColor).not.toBe("transparent");
   expect(backgroundColor).not.toBe(SECONDARY_TONE_SURFACE);
+}
+
+function PrimaryEmphasisSurfacesShowcase() {
+  return (
+    <div className="grid max-w-xl gap-6 rounded-2xl border border-outline bg-background p-6 text-on-surface">
+      <header className="grid gap-2">
+        <h2 className="m-0 font-display text-2xl tracking-[-0.03em]">
+          Primary emphasis surfaces
+        </h2>
+        <p className="m-0 text-sm text-on-surface-variant">
+          Shared dashboard primitives that should keep accent-ink foreground on
+          primary-container emphasis after palette switches.
+        </p>
+      </header>
+
+      <section
+        aria-label="Primary emphasis runtime surfaces"
+        className="grid gap-4"
+      >
+        <DashboardStatusPill data-testid="status-pill-active" tone="active">
+          Active status
+        </DashboardStatusPill>
+
+        <CurrentSelectionSelectableButton
+          data-testid="current-selection-selected"
+          selected
+        >
+          Selected work item
+        </CurrentSelectionSelectableButton>
+
+        <DashboardHeaderOptionMenuSurface aria-label="Palette menu" role="menu">
+          <DashboardHeaderOptionMenuItem isSelected onClick={() => undefined}>
+            Factory Light
+          </DashboardHeaderOptionMenuItem>
+        </DashboardHeaderOptionMenuSurface>
+      </section>
+    </div>
+  );
 }
 
 export default {

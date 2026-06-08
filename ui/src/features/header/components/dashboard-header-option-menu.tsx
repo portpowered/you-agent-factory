@@ -8,8 +8,6 @@ const DASHBOARD_HEADER_OPTION_MENU_ITEM_UNSELECTED_CLASS =
   "border-transparent bg-transparent text-on-surface-variant hover:bg-af-overlay hover:text-on-surface";
 const DASHBOARD_HEADER_OPTION_MENU_ITEM_SELECTED_CLASS =
   "border-primary bg-primary-container text-on-primary";
-const DASHBOARD_HEADER_OPTION_MENU_ITEM_CONTENT_CLASS =
-  "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left";
 
 export interface DashboardHeaderOptionMenuSurfaceProps
   extends HTMLAttributes<HTMLDivElement> {
@@ -60,7 +58,7 @@ export function DashboardHeaderOptionMenuItem({
       role="menuitemradio"
       type="button"
     >
-      <span className={DASHBOARD_HEADER_OPTION_MENU_ITEM_CONTENT_CLASS}>
+      <span className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left">
         {children}
         {isSelected ? <DashboardHeaderOptionMenuCheckIcon /> : null}
       </span>
