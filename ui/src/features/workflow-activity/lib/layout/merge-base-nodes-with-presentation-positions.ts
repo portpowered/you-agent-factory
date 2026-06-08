@@ -1,4 +1,4 @@
-import type { CurrentActivityNode } from "../../flowchart/public";
+import type { CurrentActivityNode } from "../../../flowchart/public";
 
 function positionsEqual(
   left: { x: number; y: number },

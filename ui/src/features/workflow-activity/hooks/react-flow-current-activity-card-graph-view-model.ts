@@ -6,6 +6,7 @@ import {
 } from "@xyflow/react";
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -50,7 +51,7 @@ import {
 } from "./react-flow-current-activity-card-active-executions";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
-import { mergeBaseNodesWithPresentationPositions } from "../lib/merge-base-nodes-with-presentation-positions";
+import { mergeBaseNodesWithPresentationPositions } from "../lib/layout/merge-base-nodes-with-presentation-positions";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 export type CurrentActivityGraphViewModelInput = {
@@ -236,7 +237,7 @@ function useCurrentActivityGraphNodePresentation(
   const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
   const previousBaseNodesRef = useRef<CurrentActivityNode[]>([]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     setNodes((currentNodes) => {
       const mergedNodes = mergeBaseNodesWithPresentationPositions(
         baseNodes,
