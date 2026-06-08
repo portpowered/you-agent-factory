@@ -217,15 +217,15 @@ const (
 
 // Defines values for FactorySessionListScope.
 const (
-	FactorySessionListScopeAll       FactorySessionListScope = "ALL"
-	FactorySessionListScopeLive      FactorySessionListScope = "LIVE"
-	FactorySessionListScopePersisted FactorySessionListScope = "PERSISTED"
+	FactorySessionListScopeAll       FactorySessionListScope = "all"
+	FactorySessionListScopeLive      FactorySessionListScope = "live"
+	FactorySessionListScopePersisted FactorySessionListScope = "persisted"
 )
 
 // Defines values for FactorySessionResultMode.
 const (
-	FactorySessionResultModeFinal   FactorySessionResultMode = "FINAL"
-	FactorySessionResultModePartial FactorySessionResultMode = "PARTIAL"
+	FactorySessionResultModeFinal   FactorySessionResultMode = "final"
+	FactorySessionResultModePartial FactorySessionResultMode = "partial"
 )
 
 // Defines values for FactorySessionResultStatus.
@@ -1966,7 +1966,7 @@ type FactorySessionLifecycleControlResponse struct {
 	Status FactorySessionDurableLifecycleStatus `json:"status"`
 }
 
-// FactorySessionListScope Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
+// FactorySessionListScope Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted session summaries.
 type FactorySessionListScope string
 
 // FactorySessionLiveResult defines model for FactorySessionLiveResult.
@@ -2771,7 +2771,7 @@ type ListFactorySessionsResponse struct {
 	// DurableSessions Persisted durable session summaries when scope is PERSISTED or ALL.
 	DurableSessions *[]FactorySessionDurableSummary `json:"durableSessions,omitempty"`
 
-	// Scope Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
+	// Scope Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted session summaries.
 	Scope *FactorySessionListScope `json:"scope,omitempty"`
 
 	// Sessions Live workspace session summaries when scope is LIVE or ALL.
@@ -4647,13 +4647,13 @@ type SaveCurrentFactoryConflict = ErrorResponse
 
 // ListFactorySessionsParams defines parameters for ListFactorySessions.
 type ListFactorySessionsParams struct {
-	// Scope Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing.
+	// Scope Optional session list scope. Defaults to live for backward-compatible live workspace session listing.
 	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // GetFactorySessionResultsParams defines parameters for GetFactorySessionResults.
 type GetFactorySessionResultsParams struct {
-	// Mode Optional durable result retrieval mode. Defaults to FINAL for terminal outputs. PARTIAL returns the latest partial workflow output when available.
+	// Mode Optional durable result retrieval mode. Defaults to final for terminal outputs. partial returns the latest partial workflow output when available.
 	Mode *FactorySessionResultMode `form:"mode,omitempty" json:"mode,omitempty"`
 
 	// IncludeArtifacts When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only.

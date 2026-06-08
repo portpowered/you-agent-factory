@@ -137,7 +137,7 @@
         "sessionId": "dur-sess-petri-run-001",
         "resultStatus": "NOT_READY",
         "sessionStatus": "RUNNING",
-        "mode": "FINAL",
+        "mode": "final",
         "includeArtifacts": false,
         "availability": {
           "reason": "RESULT_NOT_READY",
@@ -179,7 +179,7 @@
           "sessionId": "dur-sess-petri-success-001",
           "resultStatus": "FINAL",
           "sessionStatus": "SUCCEEDED",
-          "mode": "FINAL",
+          "mode": "final",
           "includeArtifacts": false,
           "primaryResult": [
             {
@@ -290,7 +290,7 @@
         "sessionId": "dur-sess-petri-success-001",
         "resultStatus": "FINAL",
         "sessionStatus": "SUCCEEDED",
-        "mode": "FINAL",
+        "mode": "final",
         "includeArtifacts": true,
         "primaryResult": [
           {
@@ -440,7 +440,7 @@
         "sessionId": "dur-sess-js-run-n-001",
         "resultStatus": "PARTIAL",
         "sessionStatus": "RUNNING",
-        "mode": "PARTIAL",
+        "mode": "partial",
         "includeArtifacts": false,
         "primaryResult": [
           {
@@ -572,7 +572,7 @@
         "sessionId": "dur-sess-js-paused-001",
         "resultStatus": "PARTIAL",
         "sessionStatus": "PAUSED",
-        "mode": "PARTIAL",
+        "mode": "partial",
         "includeArtifacts": true,
         "primaryResult": [
           {
@@ -692,7 +692,7 @@
         "sessionId": "dur-sess-js-failed-partial-001",
         "resultStatus": "FAILED_WITH_PARTIAL",
         "sessionStatus": "FAILED",
-        "mode": "PARTIAL",
+        "mode": "partial",
         "includeArtifacts": false,
         "primaryResult": [
           {
@@ -797,7 +797,7 @@
         "sessionId": "dur-sess-js-timeout-001",
         "resultStatus": "NOT_READY",
         "sessionStatus": "RUNNING",
-        "mode": "FINAL",
+        "mode": "final",
         "includeArtifacts": false,
         "availability": {
           "reason": "SYNC_WAIT_TIMED_OUT",
@@ -879,7 +879,7 @@
         "sessionId": "dur-sess-petri-cancel-001",
         "resultStatus": "UNAVAILABLE",
         "sessionStatus": "CANCELED",
-        "mode": "FINAL",
+        "mode": "final",
         "includeArtifacts": false,
         "availability": {
           "reason": "SESSION_CANCELED",
@@ -1043,7 +1043,7 @@
         "sessionId": "dur-sess-js-success-002",
         "resultStatus": "FINAL",
         "sessionStatus": "SUCCEEDED",
-        "mode": "FINAL",
+        "mode": "final",
         "includeArtifacts": true,
         "primaryResult": [
           {
@@ -1157,7 +1157,7 @@
         "sessionId": "dur-sess-unsupported-runner-001",
         "resultStatus": "UNAVAILABLE",
         "sessionStatus": "FAILED",
-        "mode": "FINAL",
+        "mode": "final",
         "includeArtifacts": false,
         "failure": {
           "reason": "UNSUPPORTED_RUNNER",
@@ -1239,7 +1239,7 @@
         "sessionId": "dur-sess-missing-source-001",
         "resultStatus": "UNAVAILABLE",
         "sessionStatus": "FAILED",
-        "mode": "FINAL",
+        "mode": "final",
         "includeArtifacts": false,
         "failure": {
           "reason": "MISSING_SOURCE",
@@ -1313,7 +1313,7 @@
     }
   },
   "listResponse": {
-    "scope": "ALL",
+    "scope": "all",
     "sessions": [],
     "durableSessions": [
       {

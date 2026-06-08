@@ -65,7 +65,7 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 		factoryapi.FactorySessionListScopePersisted,
 		factoryapi.FactorySessionListScopeAll:
 	default:
-		s.writeError(w, http.StatusBadRequest, "scope must be LIVE, PERSISTED, or ALL", "BAD_REQUEST")
+		s.writeError(w, http.StatusBadRequest, "scope must be live, persisted, or all", "BAD_REQUEST")
 		return
 	}
 

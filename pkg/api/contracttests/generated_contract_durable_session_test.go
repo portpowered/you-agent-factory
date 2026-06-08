@@ -516,7 +516,7 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertArrayItemRef(t, listResponseProperties, "sessions", "#/components/schemas/FactorySessionSummary")
 	assertArrayItemRef(t, listResponseProperties, "durableSessions", "#/components/schemas/FactorySessionDurableSummary")
 	assertSchemaPropertiesPresent(t, listResponseProperties, "ListFactorySessionsResponse", "scope", "sessions", "durableSessions")
-	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionListScope"), "FactorySessionListScope", []string{"LIVE", "PERSISTED", "ALL"})
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionListScope"), "FactorySessionListScope", []string{"live", "persisted", "all"})
 
 	getOperation := pathOperation(t, paths, "/factory-sessions/{session_id}", "get")
 	if got, _ := getOperation["operationId"].(string); got != "getFactorySession" {
@@ -609,7 +609,7 @@ func assertDurableSessionResultSurfaceSchemas(t *testing.T, schemas map[string]a
 	assertSchemaPropertiesPresent(t, resultProperties, "FactorySessionResult",
 		"sessionId", "resultStatus", "sessionStatus", "mode", "includeArtifacts",
 		"primaryResult", "artifactIds", "artifactRefs", "failure", "availability")
-	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionResultMode"), "FactorySessionResultMode", []string{"FINAL", "PARTIAL"})
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionResultMode"), "FactorySessionResultMode", []string{"final", "partial"})
 
 	liveResultSchema := schemaObject(t, schemas, "FactorySessionLiveResult")
 	assertRequiredFields(t, liveResultSchema, "sessionId", "status")

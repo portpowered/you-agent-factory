@@ -563,10 +563,10 @@ paths:
       operationId: listFactorySessions
       summary: List factory sessions
       description: >-
-        Lists factory sessions for the requested scope. LIVE returns workspace
+        Lists factory sessions for the requested scope. live returns workspace
         sessions kept open by the runtime host, including the reserved default
-        session. PERSISTED returns durable execution sessions stored outside the
-        live workspace. ALL returns both live and persisted summaries. Persisted
+        session. persisted returns durable execution sessions stored outside the
+        live workspace. all returns both live and persisted summaries. Persisted
         summaries cover active, terminal, interrupted, and stale-lease durable
         sessions without exposing raw workflow source or unrestricted host paths.
       parameters:
@@ -641,7 +641,7 @@ paths:
       summary: Get durable factory session results
       description: >-
         Returns final or partial durable workflow outputs for one factory session.
-        Supports mode=FINAL|PARTIAL and includeArtifacts=true|false without requiring
+        Supports mode=final|partial and includeArtifacts=true|false without requiring
         clients to scrape event streams or logs. Non-ready, unavailable, and
         failed-with-partial states return typed FactorySessionResult bodies with
         session identity, current session status, and actionable failure or

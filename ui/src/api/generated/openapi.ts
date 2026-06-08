@@ -377,7 +377,7 @@ export interface paths {
     };
     /**
      * List factory sessions
-     * @description Lists factory sessions for the requested scope. LIVE returns workspace sessions kept open by the runtime host, including the reserved default session. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted summaries. Persisted summaries cover active, terminal, interrupted, and stale-lease durable sessions without exposing raw workflow source or unrestricted host paths.
+     * @description Lists factory sessions for the requested scope. live returns workspace sessions kept open by the runtime host, including the reserved default session. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted summaries. Persisted summaries cover active, terminal, interrupted, and stale-lease durable sessions without exposing raw workflow source or unrestricted host paths.
      */
     get: operations["listFactorySessions"];
     put?: never;
@@ -421,7 +421,7 @@ export interface paths {
     };
     /**
      * Get durable factory session results
-     * @description Returns final or partial durable workflow outputs for one factory session. Supports mode=FINAL|PARTIAL and includeArtifacts=true|false without requiring clients to scrape event streams or logs. Non-ready, unavailable, and failed-with-partial states return typed FactorySessionResult bodies with session identity, current session status, and actionable failure or availability details when known.
+     * @description Returns final or partial durable workflow outputs for one factory session. Supports mode=final|partial and includeArtifacts=true|false without requiring clients to scrape event streams or logs. Non-ready, unavailable, and failed-with-partial states return typed FactorySessionResult bodies with session identity, current session status, and actionable failure or availability details when known.
      */
     get: operations["getFactorySessionResults"];
     put?: never;
@@ -1721,8 +1721,8 @@ export interface components {
       durableSessions?: components["schemas"]["FactorySessionDurableSummary"][];
     };
     /**
-     * @description Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
-     * @default LIVE
+     * @description Session list scope. live returns workspace sessions kept open by the runtime host. persisted returns durable execution sessions stored outside the live workspace. all returns both live and persisted session summaries.
+     * @default live
      * @enum {string}
      */
     FactorySessionListScope: FactorySessionListScope;
@@ -4099,9 +4099,9 @@ export interface components {
     WorkListTraceId: string;
     /** @description Work or token identifier, depending on route. */
     WorkOrTokenID: string;
-    /** @description Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing. */
+    /** @description Optional session list scope. Defaults to live for backward-compatible live workspace session listing. */
     FactorySessionListScope: components["schemas"]["FactorySessionListScope"];
-    /** @description Optional durable result retrieval mode. Defaults to FINAL for terminal outputs. PARTIAL returns the latest partial workflow output when available. */
+    /** @description Optional durable result retrieval mode. Defaults to final for terminal outputs. partial returns the latest partial workflow output when available. */
     FactorySessionResultMode: components["schemas"]["FactorySessionResultMode"];
     /** @description When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only. */
     FactorySessionResultIncludeArtifacts: boolean;
@@ -4648,7 +4648,7 @@ export interface operations {
   listFactorySessions: {
     parameters: {
       query?: {
-        /** @description Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing. */
+        /** @description Optional session list scope. Defaults to live for backward-compatible live workspace session listing. */
         scope?: components["parameters"]["FactorySessionListScope"];
       };
       header?: never;
@@ -4724,7 +4724,7 @@ export interface operations {
   getFactorySessionResults: {
     parameters: {
       query?: {
-        /** @description Optional durable result retrieval mode. Defaults to FINAL for terminal outputs. PARTIAL returns the latest partial workflow output when available. */
+        /** @description Optional durable result retrieval mode. Defaults to final for terminal outputs. partial returns the latest partial workflow output when available. */
         mode?: components["parameters"]["FactorySessionResultMode"];
         /** @description When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only. */
         includeArtifacts?: components["parameters"]["FactorySessionResultIncludeArtifacts"];
@@ -5497,8 +5497,8 @@ export const FactorySessionJavaScriptScriptStatus = {
 export type FactorySessionJavaScriptScriptStatus =
   (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
 export const FactorySessionResultMode = {
-  FactorySessionResultModeFinal: "FINAL",
-  FactorySessionResultModePartial: "PARTIAL",
+  FactorySessionResultModeFinal: "final",
+  FactorySessionResultModePartial: "partial",
 } as const;
 export type FactorySessionResultMode =
   (typeof FactorySessionResultMode)[keyof typeof FactorySessionResultMode];
@@ -5592,9 +5592,9 @@ export const FactoryArtifactAuditMode = {
 export type FactoryArtifactAuditMode =
   (typeof FactoryArtifactAuditMode)[keyof typeof FactoryArtifactAuditMode];
 export const FactorySessionListScope = {
-  FactorySessionListScopeLive: "LIVE",
-  FactorySessionListScopePersisted: "PERSISTED",
-  FactorySessionListScopeAll: "ALL",
+  FactorySessionListScopeLive: "live",
+  FactorySessionListScopePersisted: "persisted",
+  FactorySessionListScopeAll: "all",
 } as const;
 export type FactorySessionListScope =
   (typeof FactorySessionListScope)[keyof typeof FactorySessionListScope];
