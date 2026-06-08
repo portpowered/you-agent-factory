@@ -2,7 +2,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { previewWorkflow } from "../../../api/workflow-preview";
+import {
+  WorkflowPreviewAPIError,
+  previewWorkflow,
+  workflowPreviewAPIErrorMessages,
+} from "../../../api/workflow-preview";
 import { WorkflowPreviewPanel } from "./workflow-preview-panel";
 
 vi.mock("../../../api/workflow-preview", async () => {
@@ -147,5 +151,91 @@ describe("WorkflowPreviewPanel", () => {
     ).toBeTruthy();
     expect(screen.getByText("Denied capabilities")).toBeTruthy();
     expect(screen.getByText(/network access denied/)).toBeTruthy();
+  });
+
+  it("shows API failures from the preview query", async () => {
+    vi.mocked(previewWorkflow).mockRejectedValue(
+      new WorkflowPreviewAPIError(workflowPreviewAPIErrorMessages.network, {
+        code: "NETWORK_ERROR",
+      }),
+    );
+
+    render(
+      <WorkflowPreviewPanel
+        projectRoot="/tmp/project"
+        sourceKind="WORKFLOW_NAME"
+        sourceValue="review"
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("workflow-preview-error")).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(workflowPreviewAPIErrorMessages.network),
+    ).toBeTruthy();
+  });
+
+  it("renders source resolution and policy diagnostics with locations", async () => {
+    vi.mocked(previewWorkflow).mockResolvedValue({
+      valid: false,
+      sourceResolution: {
+        found: false,
+        requestKind: "WORKFLOW_NAME",
+        diagnostics: [
+          {
+            code: "workflow.source.notFound",
+            message: "workflow was not found",
+          },
+        ],
+      },
+      sourceValidationIssues: [
+        {
+          code: "workflow.source.syntaxError",
+          message: "syntax error",
+          path: "orchestrator.javascript",
+          line: 3,
+          column: 5,
+        },
+      ],
+      policyPreview: {
+        effectivePolicy: { mode: "READ_ONLY" },
+        policyHash: "sha256:policy",
+        maxChildCount: 16,
+        maxConcurrency: 4,
+        deniedCapabilities: [],
+        validationIssues: [
+          {
+            code: "workflow.policy.invalidConcurrency",
+            message: "concurrency must be positive",
+            path: "policy.concurrency",
+          },
+        ],
+      },
+      resultConstraints: {
+        requiresStructuredCloneableJson: true,
+        artifactUriScheme: "you-artifact",
+        maxEmbeddedBytes: 65536,
+        rejectedValueKinds: ["function"],
+      },
+    });
+
+    render(
+      <WorkflowPreviewPanel
+        projectRoot="/tmp/project"
+        sourceKind="INLINE_WORKFLOW"
+        inlineSource="phase('setup');"
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Source resolution")).toBeTruthy();
+    });
+
+    expect(screen.getByText(/workflow.source.notFound/)).toBeTruthy();
+    expect(screen.getByText(/line 3, column 5/)).toBeTruthy();
   });
 });
