@@ -27,10 +27,13 @@ func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *tes
 	if err != nil {
 		t.Fatalf("SubscribeFactoryEvents: %v", err)
 	}
-	if len(stream.History) != 2 ||
-		stream.History[0].Type != factoryapi.FactoryEventTypeRunRequest ||
-		stream.History[1].Type != factoryapi.FactoryEventTypeInitialStructureRequest {
-		t.Fatalf("replayed history = %#v, want run-started and initial structure events", stream.History)
+	if len(stream.History) != runtimePreWorkEventCount {
+		t.Fatalf("replayed history count = %d, want %d startup events", len(stream.History), runtimePreWorkEventCount)
+	}
+	for i, wantType := range runtimeStartupEventTypes() {
+		if stream.History[i].Type != wantType {
+			t.Fatalf("replayed history[%d] = %q, want %q", i, stream.History[i].Type, wantType)
+		}
 	}
 
 	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-live"}}); err != nil {

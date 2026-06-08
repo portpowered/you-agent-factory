@@ -190,6 +190,13 @@ Use the invocation API when you want one request to submit text input, wait for
 the factory's invocation policy to resolve, and return one canonical
 `primaryResult` without reconstructing work history yourself.
 
+Synchronous invocation and future `POST /factory-sessions/sync` style callers
+should treat `SESSION_COMPLETED` on the canonical `FactoryEvent` stream as the
+authoritative terminal marker for one durable `FactorySession` execution.
+`SESSION_RESULT_UPDATED` carries partial, final, or failed-with-partial customer
+result availability before that terminal marker. Legacy `RUN_REQUEST` and
+`RUN_RESPONSE` events remain compatibility surfaces during migration.
+
 ```http
 POST /factory-sessions/{session_id}/invocations
 ```

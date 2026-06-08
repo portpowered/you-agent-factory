@@ -46,7 +46,7 @@ func BuildSimpleDashboardProjection(state interfaces.FactoryWorldState) SimpleDa
 			PlaceOccupancyWorkItemsByPlaceID: buildFactoryWorldPlaceOccupancyWorkItemsByPlaceID(state),
 			WorkMoveOperationsByWorkID:       buildWorkMoveOperationsByWorkID(state),
 			Session: interfaces.FactoryWorldSessionRuntime{
-				HasData:         len(activeIDs) > 0 || len(completedHistory) > 0 || hasCustomerWorkItems(state.WorkItemsByID),
+				HasData:         len(activeIDs) > 0 || len(completedHistory) > 0 || hasCustomerWorkItems(state.WorkItemsByID) || state.SessionBracket != nil,
 				DispatchedCount: len(activeIDs) + countCustomerCompletedDispatches(state),
 				CompletedCount:  countCompletedDispatches(state),
 				// Customer-visible failed summaries count failed work items, matching failed_by_work_type.
@@ -56,6 +56,7 @@ func BuildSimpleDashboardProjection(state interfaces.FactoryWorldState) SimpleDa
 				DispatchedByWorkType: countDispatchedByWorkType(state),
 				CompletedByWorkType:  countTerminalByWorkType(state.TerminalWorkByID),
 				FailedByWorkType:     countFailedByWorkType(state.FailedWorkItemsByID),
+				Bracket:              buildFactoryWorldSessionBracketProjection(state),
 			},
 		},
 		WorkstationNodesByID: buildSimpleDashboardWorkstationNodes(state.Topology),

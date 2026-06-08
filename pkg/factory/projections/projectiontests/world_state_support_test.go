@@ -656,6 +656,18 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		if err := event.Payload.FromArtifactCreatedEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.SessionStartedEventPayload:
+		if err := event.Payload.FromSessionStartedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.SessionResultUpdatedEventPayload:
+		if err := event.Payload.FromSessionResultUpdatedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.SessionCompletedEventPayload:
+		if err := event.Payload.FromSessionCompletedEventPayload(typed); err != nil {
+			panic(err)
+		}
 	default:
 		panic("unsupported projection test payload")
 	}

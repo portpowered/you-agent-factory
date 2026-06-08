@@ -54,9 +54,13 @@ type FactoryEventHistory struct {
 	recorders      []func(factoryapi.FactoryEvent)
 	nextID         int
 	streams        map[int]*eventHistorySubscription
-	runRecordedAt  time.Time
-	hasRunRequest  bool
-	hasRunResponse bool
+	runRecordedAt       time.Time
+	hasRunRequest       bool
+	hasRunResponse      bool
+	sessionStartedAt    time.Time
+	hasSessionStarted   bool
+	hasSessionCompleted bool
+	nextSessionSequence int
 }
 
 // NewFactoryEventHistory creates an in-memory factory event history for one
@@ -551,6 +555,12 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromRunResponseEventPayload(typed)
 	case factoryapi.WorkStateChangeEventPayload:
 		err = out.FromWorkStateChangeEventPayload(typed)
+	case factoryapi.SessionStartedEventPayload:
+		err = out.FromSessionStartedEventPayload(typed)
+	case factoryapi.SessionResultUpdatedEventPayload:
+		err = out.FromSessionResultUpdatedEventPayload(typed)
+	case factoryapi.SessionCompletedEventPayload:
+		err = out.FromSessionCompletedEventPayload(typed)
 	default:
 		encoded, marshalErr := json.Marshal(typed)
 		if marshalErr != nil {

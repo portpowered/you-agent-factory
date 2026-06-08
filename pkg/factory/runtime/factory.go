@@ -163,7 +163,60 @@ func ensureEventHistory(cfg *factory.FactoryConfig) *factoryevents.FactoryEventH
 	eventHistory.RecordRunRequest()
 	eventHistory.AddGeneratedRecorder(cfg.FactoryEventRecorder)
 	eventHistory.RecordInitialStructure()
+	recordSessionStartedFromFactoryConfig(cfg, eventHistory)
 	return eventHistory
+}
+
+func sessionIDFromFactoryConfig(cfg *factory.FactoryConfig) string {
+	if cfg != nil && cfg.WorkflowContext != nil {
+		if sessionID := strings.TrimSpace(cfg.WorkflowContext.SessionID); sessionID != "" {
+			return sessionID
+		}
+	}
+	return factory_context.DefaultSessionID
+}
+
+func factoryConfigFromFactoryConfig(cfg *factory.FactoryConfig) *interfaces.FactoryConfig {
+	if cfg == nil {
+		return nil
+	}
+	provider, ok := cfg.RuntimeConfig.(interfaces.RuntimeFactoryConfigLookup)
+	if !ok {
+		return nil
+	}
+	return provider.FactoryConfig()
+}
+
+func recordSessionStartedFromFactoryConfig(cfg *factory.FactoryConfig, eventHistory *factoryevents.FactoryEventHistory) {
+	if cfg == nil || eventHistory == nil {
+		return
+	}
+	eventHistory.RecordSessionLifecycleFromFactoryConfig(
+		sessionIDFromFactoryConfig(cfg),
+		factoryConfigFromFactoryConfig(cfg),
+		0,
+		cfg.Clock.Now(),
+	)
+}
+
+func recordSessionLifecycleCompletionFromFactory(
+	f *factoryImpl,
+	tick int,
+	factoryState interfaces.FactoryState,
+	reason string,
+	eventTime time.Time,
+) {
+	if f == nil || f.eventHistory == nil || f.cfg == nil {
+		return
+	}
+	f.eventHistory.RecordSessionLifecycleCompletion(
+		sessionIDFromFactoryConfig(f.cfg),
+		factoryConfigFromFactoryConfig(f.cfg),
+		tick,
+		factoryState,
+		reason,
+		eventTime,
+	)
 }
 
 func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], eventHistory *factoryevents.FactoryEventHistory) []engine.Option {
@@ -293,7 +346,10 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 	if err != nil && !errors.Is(err, context.Canceled) {
 		runStopReason = err.Error()
 	}
-	f.eventHistory.RecordRunResponse(f.engine.GetRuntimeStateSnapshot().TickCount, nextState, runStopReason, f.clock.Now())
+	tick := f.engine.GetRuntimeStateSnapshot().TickCount
+	completedAt := f.clock.Now()
+	f.eventHistory.RecordRunResponse(tick, nextState, runStopReason, completedAt)
+	recordSessionLifecycleCompletionFromFactory(f, tick, nextState, runStopReason, completedAt)
 
 	if f.usePool {
 		f.pool.Stop()

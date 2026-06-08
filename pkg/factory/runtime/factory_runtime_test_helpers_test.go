@@ -263,6 +263,23 @@ func hasFactoryEventType(events []factoryapi.FactoryEvent, eventType factoryapi.
 	return false
 }
 
+// runtimePreWorkEventCount is the number of canonical startup events emitted
+// before the first work lifecycle event (RUN_REQUEST, INITIAL_STRUCTURE_REQUEST,
+// SESSION_STARTED).
+const runtimePreWorkEventCount = 3
+
+func runtimeStartupEventTypes() []factoryapi.FactoryEventType {
+	return []factoryapi.FactoryEventType{
+		factoryapi.FactoryEventTypeRunRequest,
+		factoryapi.FactoryEventTypeInitialStructureRequest,
+		factoryapi.FactoryEventTypeSessionStarted,
+	}
+}
+
+func runtimeEventIndex(afterStartup int) int {
+	return runtimePreWorkEventCount + afterStartup
+}
+
 func countFactoryEventType(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
 	count := 0
 	for _, event := range events {
