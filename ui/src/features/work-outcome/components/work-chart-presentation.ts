@@ -12,9 +12,7 @@ const WORK_CHART_OVERLAY_CLASS =
 const WORK_CHART_EMBEDDED_OVERLAY_CLASS =
   "flex h-full flex-col gap-2 px-0 pb-3 pt-0";
 
-export function workChartPresentationClasses(
-  presentation: ChartPresentation,
-): {
+export function workChartPresentationClasses(presentation: ChartPresentation): {
   overlayClassName: string;
   readyClassName: string;
 } {

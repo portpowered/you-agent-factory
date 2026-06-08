@@ -7,12 +7,12 @@ import {
   getDashboardPlaceLabelParts,
 } from "../../../components/ui/place-labels";
 import { cn } from "../../../lib/cn";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSemanticIconKind,
   workStatePhaseSurfaceClassName,
-} from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
+} from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling";
 import { GraphNodeButton } from "../../graphs/public";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";

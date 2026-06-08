@@ -15,8 +15,8 @@ import {
   resolvePromptHelpState,
   resolvePromptValidationState,
 } from "../editing/editable-workstation-prompt-state";
-import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
-import { validateEditableWorkstationDraft } from "../lib/editable-workstation-configuration-validation";
+import type { EditableWorkstationConfigurationState } from "../lib/keys/detail-card-types";
+import { validateEditableWorkstationDraft } from "../lib/validation/editable-workstation-configuration-validation";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
@@ -25,7 +25,7 @@ import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorks
 export {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "../lib/editable-workstation-configuration-validation";
+} from "../lib/validation/editable-workstation-configuration-validation";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;

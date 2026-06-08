@@ -49,11 +49,7 @@ export function useFactoryDocumentSave() {
     },
     onSuccess: (document, input) => {
       const resolvedSessionID = input.sessionID ?? dashboardSessionID;
-      syncCurrentFactoryDocumentCache(
-        queryClient,
-        resolvedSessionID,
-        document,
-      );
+      syncCurrentFactoryDocumentCache(queryClient, resolvedSessionID, document);
     },
   });
 

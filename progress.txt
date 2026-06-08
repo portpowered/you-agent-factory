@@ -1,0 +1,28 @@
+## Codebase Patterns
+- Website structure guards live in `ui/scripts/check-*.mjs` with companion `*.test.mjs` vitest files and optional `*-allowlist.mjs` debt inventories; wire new guards into both `check` and `lint` scripts in `ui/package.json`.
+- Shared UI boundary scans use TypeScript AST import collection on production files under `ui/src/components/ui` only (skip `*.test.*` and `*.stories.tsx`); derive `src/` and repo root paths from the scan root directory so temp-dir tests resolve imports correctly.
+- Staged guard debt uses per-violation allowlist entries keyed by `relativeFilePath#importSpecifier`, with stale-entry detection when allowlisted imports disappear without removing the allowlist row.
+- Feature shape guards split root topology (`check-feature-root-files.mjs`: no root files, approved root subdirectories only) from cross-feature reuse (`check-feature-boundary.mjs`: production imports under `ui/src/features` must reach other features through a `/public/` path segment).
+- Large guard allowlist inventories belong in `scripts/*-allowlist.mjs`; disable Biome `noExcessiveLinesPerFile` for that glob via `biome.jsonc` overrides.
+
+## 2026-06-07T20:07:28Z - website-structure-separation-lints-001
+- Implemented `check-shared-ui-boundary.mjs` to block production `ui/src/components/ui` files from importing `ui/src/features`, feature `state/` or `hooks/` lanes, or runtime state/network modules (`zustand`, `@tanstack/react-query`).
+- Added `shared-ui-boundary-allowlist.mjs` with legacy debt for `widget-frame.tsx` → `AgentBentoCard` feature import; wired guard into `check` and `lint` via `check:shared-ui-boundary`.
+- Added vitest coverage for scanner behavior, allowlist debt vs hard-fail violations, stale allowlist detection, and CLI output.
+- Files changed: `ui/scripts/check-shared-ui-boundary.mjs`, `ui/scripts/check-shared-ui-boundary.test.mjs`, `ui/scripts/shared-ui-boundary-allowlist.mjs`, `ui/package.json`
+- **Learnings for future iterations:**
+  - Patterns discovered: follow `check-feature-root-files.mjs` for staged allowlist debt reporting and `check-button-usage.mjs` for TypeScript AST scanning in website guards.
+  - Gotchas encountered: `scanSharedUiBoundary` must compute `src/` relative paths from the passed scan root, not module-level defaults, or temp-dir tests silently miss feature imports.
+  - Useful context: current shared-ui debt hotspot is `ui/src/components/ui/widget-frame.tsx` importing `../../features/bento/components/agent-bento`; stories may import features without tripping the production-only scan.
+---
+
+## 2026-06-08T08:11:30Z - website-structure-separation-lints-002
+- Extended `check-feature-root-files.mjs` to enforce approved feature-root subdirectory lanes (`components/`, `hooks/`, `lib/`, `messages/`, `state/`, `selectors/`, `public/`) with staged allowlist debt for `current-selection` domain folders and `dashboard/session`.
+- Added `check-feature-boundary.mjs` to block new cross-feature internal imports in production feature files unless the import path crosses a target `public/` boundary; seeded `feature-cross-import-allowlist.mjs` with 160 legacy file entries.
+- Wired `check:feature-boundary` into `ui/package.json` `check` and `lint`; added vitest coverage and a Biome override for large `scripts/*-allowlist.mjs` inventories.
+- Files changed: `ui/scripts/check-feature-boundary.mjs`, `ui/scripts/check-feature-boundary.test.mjs`, `ui/scripts/check-feature-root-files.mjs`, `ui/scripts/check-feature-root-files.test.mjs`, `ui/scripts/feature-cross-import-allowlist.mjs`, `ui/scripts/feature-root-subdirectory-allowlist.mjs`, `ui/package.json`, `ui/biome.jsonc`
+- **Learnings for future iterations:**
+  - Patterns discovered: cross-feature boundary classification treats any resolved import under `features/<other>/...` without a `/public/` segment as a violation; nested domain `public/` folders (for example `current-selection/base/public`) satisfy the rule.
+  - Gotchas encountered: guard env overrides must distinguish `undefined` from empty string so tests can disable production subdirectory allowlists without inheriting repo debt entries.
+  - Useful context: current feature-shape debt is concentrated in `current-selection` root domain folders and cross-feature imports across bento, dashboard, workflow-activity, and factory-graph-editor hotspots.
+---

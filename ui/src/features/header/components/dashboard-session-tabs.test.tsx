@@ -1065,9 +1065,7 @@ describe("DashboardSessionTabs", () => {
     const messages = getHeaderControlsMessages("en");
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("tab", { name: "reopen-project" }),
-      ).toBeTruthy();
+      expect(screen.getByRole("tab", { name: "reopen-project" })).toBeTruthy();
     });
 
     const reopenTab = screen.getByRole("tab", { name: "reopen-project" });

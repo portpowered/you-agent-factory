@@ -327,7 +327,11 @@ export async function exportFactoryPngFromDashboard(page, exportName) {
   return { download, downloadDirectory, downloadPath };
 }
 
-export async function openImportDialogForDroppedPng(page, downloadPath, download) {
+export async function openImportDialogForDroppedPng(
+  page,
+  downloadPath,
+  download,
+) {
   const exportedBytes = await readFile(downloadPath);
   const viewport = page.getByRole("region", {
     name: "Work graph viewport",

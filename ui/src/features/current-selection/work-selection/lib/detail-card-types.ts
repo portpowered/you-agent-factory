@@ -5,9 +5,9 @@ import type {
   DashboardWorkstationNode,
 } from "../../../../api/dashboard/types";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
-import type { SelectedWorkRequestHistoryItem } from "../../base/components/detail-card-types";
+import type { SelectedWorkRequestHistoryItem } from "../../base/components/detail-card/detail-card-types";
 import type { DashboardWorkItemSelection } from "../../base/state/selection-types";
-import type { SelectedWorkOperationHistoryItem } from "../../hooks/selected-work-operation-history";
+import type { SelectedWorkOperationHistoryItem } from "../../hooks/helpers/selected-work-operation-history";
 import type { SelectedWorkItemExecutionDetails } from "../state/executionDetails";
 import type { SelectedWorkRelationshipGraph } from "./selected-work-relationship-graph";
 
@@ -35,7 +35,7 @@ export interface InferenceAttemptCardProps {
 export type {
   InferenceAttemptDetailProps,
   InferenceAttemptTextSectionProps,
-} from "../../base/components/detail-card-types";
+} from "../../base/components/detail-card/detail-card-types";
 
 export interface WorkItemDetailCardProps {
   activeTraceID?: string | null;

@@ -6,7 +6,7 @@ import {
 } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { EditableWorkTypeValues } from "../../../current-factory-definition/lib/work-type-editable-values";
-import { CurrentSelectionSectionHeader } from "../../base/components/current-selection-section-header";
+import { CurrentSelectionSectionHeader } from "../../base/components/layout/current-selection-section-header";
 import { CurrentSelectionSupportingText } from "../../base/public";
 import { workStateGraphNodeId } from "../lib/work-state-graph-node-id";
 import type { getWorkTypeDetailMessages } from "../messages/work-type-detail";

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import * as dashboardTestFixtures from "./test-fixtures";
 import { twentyNodeDashboardTopology } from "./fixtures/topologies";
+import * as dashboardTestFixtures from "./test-fixtures";
 
 describe("dashboard/test-fixtures", () => {
   it("does not re-export the canonical twenty-node topology fixture", () => {

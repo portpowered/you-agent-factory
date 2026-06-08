@@ -3,7 +3,7 @@ import {
   formatDurationMillis,
   formatLocalDateTime,
 } from "../../../../components/ui/formatters";
-import type { CurrentSelectionDetailMessages } from "../../base/messages/current-selection-detail";
+import type { CurrentSelectionDetailMessages } from "../../base/messages/shell/current-selection-detail";
 
 export function getInferenceAttemptTimingSummary(
   attempt: DashboardInferenceAttempt,

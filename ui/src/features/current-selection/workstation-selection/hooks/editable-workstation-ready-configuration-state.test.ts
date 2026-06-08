@@ -6,7 +6,7 @@ import {
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
-import { validateEditableWorkstationDraft } from "../lib/editable-workstation-configuration-validation";
+import { validateEditableWorkstationDraft } from "../lib/validation/editable-workstation-configuration-validation";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
 

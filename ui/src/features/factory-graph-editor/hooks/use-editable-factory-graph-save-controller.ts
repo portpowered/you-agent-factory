@@ -1,12 +1,12 @@
 import { useCallback, useMemo } from "react";
 import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
 import { useScopedFactoryDocumentSave } from "../../current-selection/base/public";
-import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
+import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/document-save/graph-document-save-state";
+import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
 import {
   applyFactoryGraphPendingEdits,
   type FactoryGraphOperationResult,
-} from "../lib/factory-graph-operations";
-import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/graph-document-save-state";
+} from "../lib/operations/factory-graph-operations";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 

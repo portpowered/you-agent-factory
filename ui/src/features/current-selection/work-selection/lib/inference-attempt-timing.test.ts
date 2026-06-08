@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
-import { inferenceAttempt } from "../../base/components/detail-card-test-helpers";
-import { getCurrentSelectionDetailMessages } from "../../base/messages/current-selection-detail";
+import { inferenceAttempt } from "../../base/components/detail-card/detail-card-test-helpers";
+import { getCurrentSelectionDetailMessages } from "../../base/messages/shell/current-selection-detail";
 import { getInferenceAttemptTimingSummary } from "./inference-attempt-timing";
 
 describe("getInferenceAttemptTimingSummary", () => {

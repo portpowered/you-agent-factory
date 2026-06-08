@@ -2,7 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,

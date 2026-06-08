@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 
-import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
   factoryGraphNodeIdForAddEntityDraft,

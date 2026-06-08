@@ -35,8 +35,8 @@ import {
   DashboardEmptyState,
   DashboardEmptyStateText,
   DashboardEmptyStateTitle,
-  DashboardWidgetFrame,
 } from "../../../components/ui/widget-frame";
+import { DashboardWidgetFrame } from "../../bento/public";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 import { TraceRelationFlow } from "./trace-relation-flow";
 import { TraceWorkstationPath } from "./trace-workstation-path";
@@ -71,6 +71,7 @@ export function TraceGridBentoCard({
 
   return (
     <DashboardWidgetFrame
+      bodyScroll
       bodyProps={
         { "data-trace-card-body": "" } as HTMLAttributes<HTMLDivElement>
       }
