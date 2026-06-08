@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { buildPendingFactoryDefinition } from "../lib/factory-graph-draft-apply";
-import { buildFactoryGraphTopologyFromDefinition } from "../lib/factory-graph-draft-graph";
+import { buildPendingFactoryDefinition } from "../lib/draft/factory-graph-draft-apply";
+import { buildFactoryGraphTopologyFromDefinition } from "../lib/draft/factory-graph-draft-graph";
 import {
   type CurrentFactoryDocument,
   createEmptyFactoryGraphDraft,
@@ -9,8 +9,8 @@ import {
   type FactoryGraphDraftSessionState,
   type FactoryGraphDraftValidationError,
   hasFactoryGraphDraftChanges,
-} from "../lib/factory-graph-draft-types";
-import { validateFactoryGraphDraft } from "../lib/factory-graph-draft-validation";
+} from "../lib/draft/factory-graph-draft-types";
+import { validateFactoryGraphDraft } from "../lib/draft/factory-graph-draft-validation";
 
 const EMPTY_VALIDATION_ERRORS: FactoryGraphDraftValidationError[] = [];
 

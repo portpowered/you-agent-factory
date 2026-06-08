@@ -6,9 +6,9 @@ import type {
   EditableWorkstationConfigurationState,
   EditableWorkstationSaveState,
   EditableWorkstationSaveValidationErrors,
-} from "../lib/detail-card-types";
-import { parseWorkstationSaveScopeKey } from "../lib/workstation-save-scope-key";
-import { mapWorkstationSaveErrorToFieldErrors } from "../lib/workstation-save-validation-field-mapping";
+} from "../lib/keys/detail-card-types";
+import { parseWorkstationSaveScopeKey } from "../lib/keys/workstation-save-scope-key";
+import { mapWorkstationSaveErrorToFieldErrors } from "../lib/validation/workstation-save-validation-field-mapping";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 
 interface UseSaveEditableWorkstationConfigurationOptions {

@@ -51,6 +51,7 @@ export function buildSaveSuccessStableIdentity(): SaveNotificationStableIdentity
 }
 
 export type CurrentSelectionSaveEntityKind =
+  | "doc"
   | "workstation"
   | "worker"
   | "resource"

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
-import { currentFactoryDocument } from "../features/factory-graph-editor/lib/factory-graph-draft.test-helpers";
+import { currentFactoryDocument } from "../features/factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { mockFactoryDocumentSave } from "./factory-document-save-mocks";
 import {
   baseFactoryDefinitionDocument,

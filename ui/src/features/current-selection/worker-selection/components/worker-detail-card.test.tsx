@@ -1,7 +1,13 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import "@testing-library/jest-dom/vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import { expectNoInlineSaveOutcomesIn } from "../../base/components/current-selection-save-toast-test-helpers";
+import { expectNoInlineSaveOutcomesIn } from "../../base/components/detail-card/current-selection-save-toast-test-helpers";
 import type {
   EditableWorkerConfigurationState,
   EditableWorkerSaveState,
@@ -10,6 +16,18 @@ import { WorkerDetailCard } from "./worker-detail-card";
 import { EditableWorkerConfigurationHeaderActions } from "./worker-save-controls";
 
 const CURRENT_SELECTION_FORM_FIELDS_SELECTOR = ".grid.grid-cols-1.gap-3";
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -229,7 +247,8 @@ describe("WorkerDetailCard", () => {
     expect(screen.queryByText("Plan")).toBeNull();
   });
 
-  it("renders editable worker fields for model workers", () => {
+  it("renders editable worker fields for model workers", async () => {
+    const user = userEvent.setup();
     const onModelProviderChange = vi.fn();
     const editableConfigurationState: EditableWorkerConfigurationState = {
       canSave: false,
@@ -304,12 +323,8 @@ describe("WorkerDetailCard", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Model provider"), {
-      target: { value: "CODEX" },
-    });
-    fireEvent.change(screen.getByLabelText("Model locality"), {
-      target: { value: "LOCAL" },
-    });
+    await selectLabeledComboboxOption(user, "Model provider", "Codex");
+    await selectLabeledComboboxOption(user, "Model locality", "Local");
 
     expect(onModelProviderChange).toHaveBeenCalledWith("CODEX");
     expect(
@@ -918,9 +933,16 @@ describe("WorkerDetailCard", () => {
       canSave: false,
       draft: {
         argsText: "",
+        authSecretRef: "secrets/linear-api-key",
         body: "",
         command: "",
         executorProvider: null,
+        linearClaimAssigneeField: "",
+        linearMappingState: "queued",
+        linearMappingWorkType: "story",
+        linearPollInterval: "30s",
+        linearStateIdsText: "",
+        linearTeamIdsText: "team-a",
         model: "",
         modelLocality: null,
         modelProvider: null,
@@ -935,9 +957,17 @@ describe("WorkerDetailCard", () => {
       hasValidationErrors: false,
       initialValues: {
         args: [],
+        authSecretRef: "secrets/linear-api-key",
         body: null,
         command: null,
         executorProvider: null,
+        linearClaimAssigneeField: null,
+        linearClaimPresent: false,
+        linearMappingState: "queued",
+        linearMappingWorkType: "story",
+        linearPollInterval: "30s",
+        linearStateIds: [],
+        linearTeamIds: ["team-a"],
         model: null,
         modelLocality: null,
         modelProvider: null,
@@ -951,9 +981,16 @@ describe("WorkerDetailCard", () => {
       },
       isDirty: false,
       onArgsTextChange: vi.fn(),
+      onAuthSecretRefChange: vi.fn(),
       onBodyChange: vi.fn(),
       onCommandChange: vi.fn(),
       onExecutorProviderChange: vi.fn(),
+      onLinearClaimAssigneeFieldChange: vi.fn(),
+      onLinearMappingStateChange: vi.fn(),
+      onLinearMappingWorkTypeChange: vi.fn(),
+      onLinearPollIntervalChange: vi.fn(),
+      onLinearStateIdsTextChange: vi.fn(),
+      onLinearTeamIdsTextChange: vi.fn(),
       onModelChange: vi.fn(),
       onModelLocalityChange: vi.fn(),
       onModelProviderChange: vi.fn(),
@@ -996,6 +1033,15 @@ describe("WorkerDetailCard", () => {
     );
 
     expect(screen.getByLabelText("Hosted provider")).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: "Secret reference" }),
+    ).toHaveValue("secrets/linear-api-key");
+    expect(
+      screen.getByRole("textbox", { name: "Mapping work type" }),
+    ).toHaveValue("story");
+    expect(
+      screen.getByText(/never stores or displays the secret value/i),
+    ).toBeTruthy();
   });
 
   it("renders script worker command and body fields in the editable configuration section", () => {

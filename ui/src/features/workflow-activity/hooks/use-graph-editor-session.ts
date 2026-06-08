@@ -1,13 +1,13 @@
 import { useCallback, useMemo } from "react";
 
 import type { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type {
   EditableFactoryGraphSaveMutation,
   EditableFactoryGraphViewModel,
 } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { findClassifierGraphEditorUnsupportedWorkstationName } from "./factory-graph-editor-availability";
 
 export function useGraphEditorSession({
@@ -15,6 +15,7 @@ export function useGraphEditorSession({
   draftState,
   editableDefinitionQuery,
   editorMode,
+  layoutDraftState,
   locale,
   onAttemptLeaveEditor,
   onLeaveEditor,
@@ -25,6 +26,7 @@ export function useGraphEditorSession({
 }: {
   activeTool: FactoryGraphEditorTool;
   draftState: EditableFactoryGraphViewModel["draftState"];
+  layoutDraftState: EditableFactoryGraphViewModel["layoutDraftState"];
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   editorMode: boolean;
   locale?: string | null;
@@ -70,7 +72,11 @@ export function useGraphEditorSession({
       setEditorMode(true);
       return;
     }
-    if (draftState.hasChanges) {
+    if (
+      draftState.hasChanges ||
+      layoutDraftState.layoutDirty ||
+      layoutDraftState.hasChanges
+    ) {
       onAttemptLeaveEditor();
       return;
     }
@@ -78,6 +84,8 @@ export function useGraphEditorSession({
   }, [
     draftState.hasChanges,
     editorMode,
+    layoutDraftState.hasChanges,
+    layoutDraftState.layoutDirty,
     editorUnavailableClassifierWorkstationName,
     onAttemptLeaveEditor,
     onLeaveEditor,

@@ -6,7 +6,7 @@ import type { DashboardSelection } from "../../base/state/selection-types";
 import {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "../lib/editable-workstation-configuration-validation";
+} from "../lib/validation/editable-workstation-configuration-validation";
 import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
@@ -909,9 +909,12 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
           guards: [],
           inputs: [],
           name: "Route",
+          operation: "",
+          operationBindings: [],
           prompt: "",
           runnerName: null,
           workerName: "",
+          workstationType: "LOGICAL_MOVE",
         },
         logicalMoveValues,
         { status: "loading" },
@@ -925,9 +928,12 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
           guards: [],
           inputs: [],
           name: "Route",
+          operation: "",
+          operationBindings: [],
           prompt: "",
           runnerName: null,
           workerName: "legacy-missing-worker",
+          workstationType: "LOGICAL_MOVE",
         },
         logicalMoveValues,
         {

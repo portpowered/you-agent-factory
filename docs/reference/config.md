@@ -142,6 +142,9 @@ Use top-level `layout` when a shared factory should carry authored graph-canvas
 geometry across sessions or exports. Layout metadata is presentation-only: the
 runtime ignores it when building the executable factory topology.
 
+Omit `layout` entirely when no authored canvas state is needed. Missing layout is
+a valid factory state and does not affect runtime execution.
+
 ```json
 {
   "layout": {
@@ -178,14 +181,133 @@ runtime ignores it when building the executable factory topology.
 }
 ```
 
-- `layout.schemaVersion` is required whenever `layout` is present.
-- `layout.nodes[].id` and `layout.edges[].id` must use canonical graph ids such
-  as `workstation:<workstationId>` or
-  `workstation-output:<sourceGraphNodeId>-><targetGraphNodeId>`.
-- `layout.groups[]` is flat in v1. `parentGroupId` is reserved for future
-  nesting and may be omitted or set to `null`.
-- `layout.preferences` is intentionally narrow. Keep only portable display
-  defaults that do not hide nodes, rewrite topology, or change execution.
+### Field contract
+
+| Field | Required when `layout` is present | Description |
+|-------|-----------------------------------|-------------|
+| `schemaVersion` | Yes | Portable layout contract version. The shipped contract is `1`. |
+| `nodes` | No | Authored node geometry keyed by canonical graph node ids. |
+| `edges` | No | Authored edge waypoints and label positions keyed by canonical graph edge ids. |
+| `groups` | No | Flat background groups with bounds and member node ids. |
+| `viewport` | Yes | Authored camera position (`x`, `y`, `zoom`). |
+| `preferences` | No | Portable display defaults. |
+
+#### `layout.nodes[]`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Canonical graph node id such as `workstation:<workstationId>`. |
+| `position` | Yes | Authored node origin in graph canvas space (`x`, `y`). |
+| `size` | No | Authored node dimensions (`width`, `height`). |
+| `locked` | No | Optional authored lock flag for future editor affordances. |
+
+#### `layout.edges[]`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Canonical graph edge id such as `workstation-output:<sourceGraphNodeId>-><targetGraphNodeId>`. |
+| `waypoints` | No | Optional intermediate edge points in graph canvas space. |
+| `labelPosition` | No | Optional authored label anchor in graph canvas space. |
+
+#### `layout.groups[]`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | Yes | Stable authored group id. |
+| `bounds` | Yes | Group rectangle (`x`, `y`, `width`, `height`) in graph canvas space. |
+| `nodeIds` | Yes | Canonical graph node ids visually contained by the group. May be empty after pruning. |
+| `label` | No | Optional visible group label. |
+| `parentGroupId` | No | Reserved for future nesting. Omit or set to `null` for flat groups in v1. |
+| `color` | No | Optional authored accent or fill color. |
+| `locked` | No | Optional authored lock flag for future editor affordances. |
+
+#### `layout.viewport`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `x` | Yes | Authored viewport horizontal offset. |
+| `y` | Yes | Authored viewport vertical offset. |
+| `zoom` | Yes | Authored viewport zoom factor. |
+
+#### `layout.preferences`
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `direction` | No | Preferred authored graph direction: `UP`, `DOWN`, `LEFT`, or `RIGHT`. |
+
+`layout.nodes[].id` and `layout.edges[].id` must use canonical graph ids such as
+`workstation:<workstationId>` or
+`workstation-output:<sourceGraphNodeId>-><targetGraphNodeId>`. Legacy simplified
+edge ids are treated as stale layout references during validation and save.
+
+`layout.preferences` is intentionally narrow. Keep only portable display defaults
+that do not hide nodes, rewrite topology, or change execution.
+
+### Round-trip and portability
+
+Layout round-trips through current-factory GET/PUT, backend load/save,
+named-factory create/replace, activation, import/export, and
+`you config flatten` / `you config expand` when topology is unchanged.
+
+### Validation: blocking topology vs recoverable layout
+
+Factory validation builds pending graph topology indexes from the factory graph,
+then evaluates layout only after those indexes exist (`validation.Validate` in
+`pkg/factory/validation`).
+
+**Blocking topology validation** covers structural factory defects such as
+dangling references, missing outcome routes, and invalid work-type completion
+paths. These targets block editable saves, CLI persist pre-checks, and runtime
+load when the factory graph itself is invalid.
+
+**Recoverable layout validation** covers presentation metadata that does not
+change execution semantics. Layout defects use `factory.layout.*` target codes
+with warning severity. They do not make `HasBlockingTargets()` true, so an
+otherwise valid factory can still save and load for runtime use.
+
+Recoverable layout cases include:
+
+- **Missing layout** — valid; runtime ignores absent layout metadata.
+- **Unsupported `schemaVersion`** — `factory.layout.unsupportedSchemaVersion`;
+  layout still loads when structurally valid.
+- **Stale node, edge, or group member references** —
+  `factory.layout.unknownNodeReference`, `factory.layout.unknownEdgeReference`,
+  and `factory.layout.unknownGroupMemberReference`; references that do not match
+  pending graph ids are warnings, not topology failures.
+- **Non-finite geometry** — `factory.layout.invalidGeometry`; NaN or infinite
+  coordinates are warnings during validation.
+- **Malformed layout JSON** — boundary validation rejects structurally invalid
+  layout on editable OpenAPI payloads. Runtime load
+  (`expandFactoryConfigForRuntimeLoad`) can strip malformed top-level `layout`
+  and continue when the remaining factory topology is valid.
+
+### Save-time pruning and `layoutOutcomes`
+
+Save paths (`PrepareFactoryLayoutPayload`, editable `PUT`, named-factory upsert,
+`you factory save`) prune stale layout references against the pending topology
+before persist:
+
+- Remove `layout.nodes[]` entries whose ids are absent from the pending node
+  index.
+- Remove `layout.edges[]` entries whose ids are absent from the pending edge
+  index.
+- Remove unknown node ids from each `layout.groups[].nodeIds`.
+- Keep groups with empty `nodeIds` unless the author deletes the group
+  explicitly.
+- Reject entries with non-finite geometry rather than persisting them.
+
+Pruning and rejection outcomes are returned on save responses as ephemeral
+`layoutOutcomes` (structured validation targets). `layoutOutcomes` is omitted
+from persisted `factory.json`, ignored on save requests, and not returned on
+subsequent GETs.
+
+| Code | Recoverable | Meaning |
+|------|-------------|---------|
+| `factory.layout.unsupportedSchemaVersion` | Yes | `schemaVersion` is not the supported contract (`1`). |
+| `factory.layout.unknownNodeReference` | Yes | `layout.nodes[].id` does not match a pending graph node. |
+| `factory.layout.unknownEdgeReference` | Yes | `layout.edges[].id` does not match a pending graph edge. |
+| `factory.layout.unknownGroupMemberReference` | Yes | `layout.groups[].nodeIds[]` references an unknown graph node. |
+| `factory.layout.invalidGeometry` | Yes | Layout coordinates contain NaN or infinity. |
 
 ## Portability Resource Manifest
 
@@ -267,9 +389,10 @@ live-linked to the source factory.
   portability checks can probe on `PATH`.
 - `bundledFiles` carry portable file content and a canonical factory-relative
   `targetPath`; they are not the same as runtime `resources`.
-- `config flatten` collects the supported allowlist from `factory/scripts/**`,
-  `factory/docs/**`, and supported root helper files such as `Makefile` when
-  you flatten a checked-in `factory/` layout.
+- `config flatten` auto-discovers the supported allowlist from `factory/scripts/**`
+  and `factory/docs/**` when you flatten a checked-in `factory/` layout.
+  Supported root helper files such as `Makefile` travel only when you declare
+  them explicitly as `type: "ROOT_HELPER"` entries in `supportingFiles.bundledFiles`.
 - `targetPath` must use forward slashes and must not be absolute or contain `.`
   or `..` path segments.
 
@@ -294,6 +417,85 @@ customers to submit a single raw-text prompt through the simplified CLI.
 Validation rejects more than one `DEFAULT` work type. Factories used with
 `you run --factory <factory.json> <prompt>` must declare `DEFAULT` on exactly
 one work type.
+
+## Invocation Contract
+
+Factory invocation is the shared one-shot contract used by:
+
+- `you run --factory <factory.json> <text>`
+- `cat request.txt | you run --factory <factory.json>`
+- `POST /factory-sessions/{session_id}/invocations`
+
+CLI and API invocations resolve one canonical input and one canonical
+`primaryResult`. The runtime does not treat CLI prompt runs as a separate
+submission mode with different return semantics.
+
+### Input sources
+
+The current invocation slice is text-first:
+
+| Surface | Supported source now | Notes |
+|---------|----------------------|-------|
+| CLI | Trailing positional text or non-TTY stdin | Supplying both is rejected with `INVOCATION_INPUT_SOURCE_CONFLICT`. Empty selected stdin is rejected with `INVOCATION_INPUT_EMPTY`. |
+| API | Top-level `sourceKind: "text"` plus canonical `content` (`WorkContent`) | `fileRef` and `audioStream` are reserved future source categories and are not accepted yet. |
+
+Use `you docs sessions` for the session-scoped invocation API examples. Reserve
+future source categories in authored configs and client code, but do not imply
+they are implemented today.
+
+### `invocationReturn`
+
+`Factory.invocationReturn` is the factory-authored policy that tells CLI and API
+invocations which completed work content should be returned as the
+`primaryResult`.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `policy` | Yes when `invocationReturn` is present | `SUBMITTED_WORK_TERMINAL` or `EXPLICIT`. |
+| `workTypeName` | Required for `EXPLICIT` | Work type name to select from the current invocation scope. |
+| `terminalState` | Required for `EXPLICIT` | Terminal state name that must be reached for the selected work. |
+| `workName` | No | Optional authored work name filter when multiple scoped work items share the same type and terminal state. |
+
+When `invocationReturn` is omitted, runtimes use the documented
+`SUBMITTED_WORK_TERMINAL` fallback. That fallback traces the work item
+originally submitted by the invocation until it reaches its first terminal
+output, then returns that work content as the `primaryResult`.
+
+Example using the default fallback by omission:
+
+```json
+{
+  "workTypes": [
+    {
+      "name": "task",
+      "states": [
+        { "name": "queued", "type": "INITIAL" },
+        { "name": "done", "type": "TERMINAL" }
+      ],
+      "handlingBehavior": ["DEFAULT"]
+    }
+  ]
+}
+```
+
+Example with an explicit primary-result selector:
+
+```json
+{
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "workTypeName": "report",
+    "terminalState": "finalized",
+    "workName": "summary"
+  }
+}
+```
+
+Use `EXPLICIT` when the invocation should return a downstream derived result
+instead of the first terminal content for the originally submitted work item.
+If the configured selector cannot resolve a result in the current invocation
+scope, the invocation fails with `INVOCATION_PRIMARY_RESULT_UNRESOLVED` and no
+success payload.
 
 ## Workstation IO
 
@@ -400,10 +602,32 @@ Use this contract when you want a canonical portable `factory.json` to collect,
 carry, and restore supporting files across `config flatten`, `config expand`,
 and `LoadRuntimeConfig(...)` without redefining the manifest shape.
 
-- `config flatten` adds supported `factory/scripts/**`, `factory/docs/**`, and
-  root helper files such as `Makefile` to
-  `supportingFiles.bundledFiles` automatically for checked-in `factory/`
-  layouts.
+- Checked-in files under `factory/docs/**` are bundled by default. `config
+  flatten` and the first load of a split layout discover those docs and add them
+  to `supportingFiles.bundledFiles` when the manifest does not already list DOC
+  entries.
+- After a factory lists DOC entries in `supportingFiles.bundledFiles`, the
+  manifest is authoritative for dashboard/API saves: create, rename, edit, and
+  delete operations round-trip through `PUT /factory-sessions/{id}/factory` and
+  update the saved current-factory document version without requiring a full page
+  reload.
+- Implicit default bundling (checked-in docs discovered on disk) is separate
+  from explicit dashboard edits to bundled docs. Dashboard edits persist DOC
+  entries in the manifest and materialize or prune the matching files under
+  `factory/docs/**` on save.
+- In the dashboard, bundled docs appear as **doc nodes** in the current activity
+  graph. Selecting a doc node opens the current-selection doc editor so you can
+  rename the file under `factory/docs/**` and edit UTF-8 text with the same
+  Monaco surface used for other factory text. Graph editor mode also supports
+  add and delete flows for docs before you save the factory document.
+- Workstation prompt authoring surfaces include attached docs in Monaco
+  suggestions. Inserted references use the canonical `{{ index .Docs
+  "factory/docs/<name>" }}` syntax and are validated against the current
+  factory's bundled DOC manifest.
+- `config flatten` adds supported `factory/scripts/**` and `factory/docs/**`
+  to `supportingFiles.bundledFiles` automatically for checked-in `factory/`
+  layouts. Root helper files such as `Makefile` are opt-in `ROOT_HELPER`
+  manifest entries and are not auto-discovered during export or flatten.
 - `config expand` restores bundled files onto disk beside the expanded
   `factory.json`, `workers/**/AGENTS.md`, and `workstations/**/AGENTS.md`
   layout.
@@ -466,7 +690,8 @@ Clean invocation accepts exactly one primary input source per invocation:
 Do not combine multiple payload sources in the same invocation. If stdin and a
 non-empty positional prompt are both present, the command exits non-zero before
 runtime startup and writes a stable stderr error with code
-`RUN_INVOCATION_AMBIGUOUS_INPUT` naming the conflicting sources.
+`INVOCATION_INPUT_SOURCE_CONFLICT` naming the conflicting sources
+(`positional_text`, `stdin_text`).
 
 Example ambiguity failure:
 
@@ -477,13 +702,13 @@ printf 'from stdin' | you run --factory ./factory.json "from arg"
 Text stderr:
 
 ```text
-RUN_INVOCATION_AMBIGUOUS_INPUT: conflicting input sources: positional prompt, stdin
+INVOCATION_INPUT_SOURCE_CONFLICT: invocation input sources conflict: positional_text, stdin_text
 ```
 
 JSON stderr with global `--json`:
 
 ```json
-{"code":"RUN_INVOCATION_AMBIGUOUS_INPUT","message":"conflicting input sources: positional prompt, stdin"}
+{"code":"INVOCATION_INPUT_SOURCE_CONFLICT","message":"invocation input sources conflict: positional_text, stdin_text"}
 ```
 
 #### Success stdout contract
@@ -502,15 +727,20 @@ Text success example:
 you run --factory ./factory.json "Summarize the changelog" > result.txt
 ```
 
-JSON success example:
+JSON success example for text positional or stdin invocation:
 
 ```bash
 you --json run --factory ./factory.json "Summarize the changelog"
 ```
 
 ```json
-{"output":"Summary text","workId":"work-123","workTypeName":"task","traceId":"trace-123","sessionId":"~default"}
+{"requestId":"req-123","traceId":"trace-123","status":"COMPLETED","primaryResult":[{"type":"text","text":"Summary text"}]}
 ```
+
+`--work` clean invocations still emit the work-target JSON envelope
+`{"output":"...","workId":"...","workTypeName":"...","traceId":"...","sessionId":"..."}`
+because they resolve a submitted work file instead of the shared session
+invocation API.
 
 Stdin-only example:
 
@@ -528,7 +758,7 @@ Stable error codes include:
 - `RUN_INVOCATION_FAILED` for runtime or work failures
 - `RUN_INVOCATION_CANCELLED` for SIGINT or SIGTERM cancellation
 - `RUN_INVOCATION_TIMEOUT` when the invocation deadline is exceeded
-- `RUN_INVOCATION_AMBIGUOUS_INPUT` when payload sources conflict before startup
+- `INVOCATION_INPUT_SOURCE_CONFLICT` when positional text and stdin conflict before startup
 
 Without `--json`, stderr is a single concise text line beginning with the stable
 error code. With global `--json`, stderr is a single parseable JSON object with
@@ -573,6 +803,14 @@ Validate-only and save pre-check can disagree on the same JSON when save uses
 profile. Regression tests in `pkg/service/factorysave` and
 `pkg/factory/validationentry` lock pre-persist parity between save and
 `ValidateFactoryAPI`; use `ProfilePrePersist` when comparing to save.
+
+`Validate()` appends recoverable `factory.layout.*` warnings only after pending
+graph topology indexes are built. Blocking topology targets and recoverable
+layout targets stay separate: layout warnings do not make
+`HasBlockingTargets()` true. Save paths additionally prune stale layout
+references and return ephemeral `layoutOutcomes` on the save response. See
+[Portable Graph Layout](#portable-graph-layout) for the field contract and
+recovery semantics.
 
 ### Post-persist `LoadRuntimeConfig`
 

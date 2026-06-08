@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -372,6 +373,45 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 	if got := submitted.submissions[0].Works[0].WorkID; got != "linear:issue-new" {
 		t.Fatalf("submitted work id = %q, want linear:issue-new", got)
 	}
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_SubmitsMultipleHostedLinearIssuesPerPollCycle(t *testing.T) {
+	server := newHostedLinearIssuesGraphQLServer(t,
+		hostedLinearIssueFixture{
+			ID: "issue-new", Identifier: "ENG-101", Title: "Newest issue",
+			Description: "First", UpdatedAt: "2026-05-22T07:10:00Z",
+		},
+		hostedLinearIssueFixture{
+			ID: "issue-old", Identifier: "ENG-55", Title: "Older issue",
+			Description: "Second", UpdatedAt: "2026-05-22T07:00:00Z",
+		},
+	)
+	defer server.Close()
+
+	fixture := newHostedLinearPollerServiceFixture(t, server, func(linear *interfaces.HostedLinearWorkerConfig) {
+		linear.TeamIDs = []string{"team-1"}
+		linear.StateIDs = []string{"state-1"}
+	})
+	stop := startHostedLinearPollerSidecars(t, fixture)
+	defer stop()
+
+	waitForHostedPollerSubmission(t, fixture.submitted, 1, time.Second)
+	assertHostedLinearBatchWorks(t, fixture.submitted, "linear:issue-old", "linear:issue-new")
+}
+
+func TestFactoryService_StartLiveRuntimeSidecars_RunsHostedAndScriptPollersConcurrently(t *testing.T) {
+	server := newHostedLinearIssuesGraphQLServer(t, hostedLinearIssueFixture{
+		ID: "issue-hosted", Identifier: "ENG-200", Title: "Hosted issue",
+		Description: "From hosted poller", UpdatedAt: "2026-05-22T07:10:00Z",
+	})
+	defer server.Close()
+
+	fixture := newConcurrentHostedAndScriptPollerFixture(t, server)
+	stop := startHostedLinearPollerSidecars(t, fixture.hostedLinearPollerServiceFixture)
+	defer stop()
+
+	waitForHostedPollerSubmission(t, fixture.submitted, 2, 2*time.Second)
+	assertConcurrentHostedAndScriptPollerSubmissions(t, fixture.submitted)
 }
 
 func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLifecycle(t *testing.T) {
@@ -927,6 +967,263 @@ func fieldString(value any) string {
 		return typed.Error()
 	default:
 		return ""
+	}
+}
+
+type hostedLinearIssueFixture struct {
+	ID          string
+	Identifier  string
+	Title       string
+	Description string
+	UpdatedAt   string
+}
+
+type hostedLinearPollerServiceFixture struct {
+	svc        *FactoryService
+	submitted  *aggregateSnapshotFactory
+	runtimeCfg *config.LoadedFactoryConfig
+}
+
+type concurrentHostedAndScriptPollerFixture struct {
+	hostedLinearPollerServiceFixture
+}
+
+func newHostedLinearIssuesGraphQLServer(t *testing.T, issues ...hostedLinearIssueFixture) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		nodes := make([]string, 0, len(issues))
+		for _, issue := range issues {
+			description := issue.Description
+			if description == "" {
+				description = issue.Title
+			}
+			nodes = append(nodes, fmt.Sprintf(`{
+				"id": %q,
+				"identifier": %q,
+				"title": %q,
+				"description": %q,
+				"updatedAt": %q,
+				"url": %q,
+				"team": {"id": "team-1", "key": "ENG", "name": "Engineering"},
+				"state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+				"assignee": null
+			}`, issue.ID, issue.Identifier, issue.Title, description, issue.UpdatedAt,
+				fmt.Sprintf("https://linear.app/example/issue/%s", issue.Identifier)))
+		}
+		_, _ = w.Write([]byte(fmt.Sprintf(`{
+			"data": {
+				"issues": {
+					"nodes": [%s],
+					"pageInfo": {"hasNextPage": false, "endCursor": ""}
+				}
+			}
+		}`, strings.Join(nodes, ","))))
+	}))
+}
+
+func writeHostedLinearSecretForServiceTest(t *testing.T, factoryDir string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(factoryDir, "secrets"), 0o755); err != nil {
+		t.Fatalf("mkdir secrets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "secrets", "linear-api-key"), []byte("runtime-linear-key\n"), 0o600); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+}
+
+func newHostedLinearPollerServiceFixture(
+	t *testing.T,
+	server *httptest.Server,
+	mutateLinear func(*interfaces.HostedLinearWorkerConfig),
+) hostedLinearPollerServiceFixture {
+	t.Helper()
+
+	factoryDir := t.TempDir()
+	writeHostedLinearSecretForServiceTest(t, factoryDir)
+	submitted := &aggregateSnapshotFactory{}
+	svcCfg := &FactoryServiceConfig{
+		RuntimeMode:            interfaces.RuntimeModeService,
+		HostedPollerHTTPClient: server.Client(),
+		HostedLinearEndpoint:   server.URL,
+	}
+	linearCfg := &interfaces.HostedLinearWorkerConfig{
+		PollInterval: "1h",
+		Mapping: interfaces.HostedLinearWorkerMappingConfig{
+			WorkType: "story",
+			State:    "init",
+		},
+	}
+	if mutateLinear != nil {
+		mutateLinear(linearCfg)
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "linear-poller",
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{
+			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workstations: []interfaces.FactoryWorkstationConfig{poller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"linear-poller": {
+				Name:     "linear-poller",
+				Type:     interfaces.WorkerTypeHosted,
+				Provider: interfaces.HostedWorkerProviderLinear,
+				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear:   linearCfg,
+			},
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{poller.Name: &poller},
+	)
+	return hostedLinearPollerServiceFixture{
+		svc: &FactoryService{
+			policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+			logger:        zap.NewNop(),
+			hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+		},
+		submitted:  submitted,
+		runtimeCfg: runtimeCfg,
+	}
+}
+
+func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Server) concurrentHostedAndScriptPollerFixture {
+	t.Helper()
+
+	factoryDir := t.TempDir()
+	writeHostedLinearSecretForServiceTest(t, factoryDir)
+	scriptWorkRequestJSON := []byte(`{
+		"requestId":"script-poller-batch-1",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"script-issue","workTypeName":"task","payload":{"id":"SCRIPT-1"}}]
+	}`)
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: scriptWorkRequestJSON}}},
+	}
+	submitted := &aggregateSnapshotFactory{}
+	svcCfg := &FactoryServiceConfig{
+		RuntimeMode:            interfaces.RuntimeModeService,
+		CommandRunnerOverride:  runner,
+		HostedPollerHTTPClient: server.Client(),
+		HostedLinearEndpoint:   server.URL,
+	}
+	hostedPoller := interfaces.FactoryWorkstationConfig{
+		Name:           "linear-hosted-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: "linear-poller",
+	}
+	scriptPoller := interfaces.FactoryWorkstationConfig{
+		Name:           "script-ingress",
+		Kind:           interfaces.WorkstationKindPoller,
+		WorkerTypeName: canonicalScriptPollerWorkerName,
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		factoryDir,
+		&interfaces.FactoryConfig{
+			Workers: []interfaces.WorkerConfig{
+				{Name: "linear-poller"},
+				{Name: canonicalScriptPollerWorkerName},
+			},
+			Workstations: []interfaces.FactoryWorkstationConfig{hostedPoller, scriptPoller},
+		},
+		map[string]*interfaces.WorkerConfig{
+			"linear-poller": {
+				Name:     "linear-poller",
+				Type:     interfaces.WorkerTypeHosted,
+				Provider: interfaces.HostedWorkerProviderLinear,
+				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &interfaces.HostedLinearWorkerConfig{
+					PollInterval: "1h",
+					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+						WorkType: "story",
+						State:    "init",
+					},
+				},
+			},
+			canonicalScriptPollerWorkerName: newCanonicalScriptPollerWorker(),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			hostedPoller.Name: &hostedPoller,
+			scriptPoller.Name: &scriptPoller,
+		},
+	)
+	return concurrentHostedAndScriptPollerFixture{
+		hostedLinearPollerServiceFixture: hostedLinearPollerServiceFixture{
+			svc: &FactoryService{
+				policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
+				logger:        zap.NewNop(),
+				hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+			},
+			submitted:  submitted,
+			runtimeCfg: runtimeCfg,
+		},
+	}
+}
+
+func startHostedLinearPollerSidecars(t *testing.T, fixture hostedLinearPollerServiceFixture) func() {
+	t.Helper()
+	handle := &liveRuntimeHandle{
+		runtime: &factoryRuntimeBundle{
+			runtimeCfg: fixture.runtimeCfg,
+			factory:    fixture.submitted,
+		},
+	}
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	if err := fixture.svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		cancel()
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	return func() {
+		fixture.svc.stopLiveRuntimeSidecars(handle)
+		cancel()
+	}
+}
+
+func assertHostedLinearBatchWorks(t *testing.T, submitted *aggregateSnapshotFactory, wantWorkIDs ...string) {
+	t.Helper()
+	if submitted.submitCalls != 1 {
+		t.Fatalf("submit calls = %d, want 1 batch submit for the poll cycle", submitted.submitCalls)
+	}
+	if len(submitted.submissions) != 1 {
+		t.Fatalf("submitted requests = %d, want 1", len(submitted.submissions))
+	}
+	works := submitted.submissions[0].Works
+	if len(works) != len(wantWorkIDs) {
+		t.Fatalf("submitted works = %d, want %d canonical outputs from one poll cycle", len(works), len(wantWorkIDs))
+	}
+	for i, wantWorkID := range wantWorkIDs {
+		if works[i].WorkID != wantWorkID {
+			t.Fatalf("submitted work ID[%d] = %q, want %q", i, works[i].WorkID, wantWorkID)
+		}
+	}
+	if submitted.submissions[0].RequestID == "" || works[0].RequestID != works[1].RequestID {
+		t.Fatalf("batch request IDs = [%q %q], want shared non-empty requestId", works[0].RequestID, works[1].RequestID)
+	}
+}
+
+func assertConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *aggregateSnapshotFactory) {
+	t.Helper()
+	if submitted.submitCalls < 2 {
+		t.Fatalf("submit calls = %d, want at least 2 from concurrent pollers", submitted.submitCalls)
+	}
+	var hostedSubmitted, scriptSubmitted bool
+	for _, request := range submitted.submissions {
+		for _, work := range request.Works {
+			if work.WorkID == "linear:issue-hosted" {
+				hostedSubmitted = true
+			}
+			if work.Name == "script-issue" {
+				scriptSubmitted = true
+			}
+		}
+	}
+	if !hostedSubmitted || !scriptSubmitted {
+		t.Fatalf("submitted works = %#v, want both hosted linear:issue-hosted and script-issue outputs", submitted.submissions)
 	}
 }
 

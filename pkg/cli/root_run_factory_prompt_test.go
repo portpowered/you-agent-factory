@@ -36,6 +36,30 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "--factory") {
 		t.Fatal("expected run command long help text to document --factory")
 	}
+	if !strings.Contains(runCmd.Long, "trailing positional text or piped stdin text") {
+		t.Fatal("expected run command long help text to document invocation input sources")
+	}
+	if !strings.Contains(runCmd.Long, "INVOCATION_INPUT_SOURCE_CONFLICT") {
+		t.Fatal("expected run command long help text to document the stable input conflict code")
+	}
+	if !strings.Contains(runCmd.Long, "you docs config") || !strings.Contains(runCmd.Long, "you docs sessions") {
+		t.Fatal("expected run command long help text to point to invocation reference docs")
+	}
+	if !strings.Contains(runCmd.Example, "run --factory ./factory.json \"Fix the lint issues\"") {
+		t.Fatal("expected run command examples to document simplified --factory run")
+	}
+	if !strings.Contains(flag.Usage, "piped stdin") {
+		t.Fatalf("--factory usage = %q, want invocation input guidance", flag.Usage)
+	}
+}
+
+func TestRunCommand_RunCommandLongHelpDocumentsNamedFactory(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
 	if !strings.Contains(runCmd.Long, "--named") {
 		t.Fatal("expected run command long help text to document --named")
 	}
@@ -54,9 +78,6 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	}
 	if !strings.Contains(namedFlag.Usage, "built-ins materialize there on first use and remain editable") {
 		t.Fatalf("--named usage = %q, want built-in editability guidance", namedFlag.Usage)
-	}
-	if !strings.Contains(runCmd.Example, "run --factory ./factory.json \"Fix the lint issues\"") {
-		t.Fatal("expected run command examples to document simplified --factory run")
 	}
 }
 
@@ -416,7 +437,7 @@ func writePortableFactoryWithDefaultHandling(t *testing.T, dir string) string {
 	return factoryPath
 }
 
-func TestRunCommand_FactoryPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
+func TestRunCommand_FactoryPromptCarriesInvocationText(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -439,24 +460,15 @@ func TestRunCommand_FactoryPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute run --factory with prompt: %v", err)
 	}
-	if got.WorkFile == "" {
-		t.Fatal("expected generated work file for factory prompt run")
+	if got.InvocationPositionalText == nil {
+		t.Fatal("expected invocation positional text for factory prompt run")
 	}
-	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
-
-	workRequest, err := runcli.LoadWorkFile(got.WorkFile)
-	if err != nil {
-		t.Fatalf("LoadWorkFile: %v", err)
-	}
-	if len(workRequest.Works) != 1 || workRequest.Works[0].WorkTypeID != "story" {
-		t.Fatalf("works = %#v, want one story work item", workRequest.Works)
-	}
-	if payload, ok := workRequest.Works[0].Payload.(string); !ok || payload != "Fix the lint issues" {
-		t.Fatalf("payload = %#v, want joined prompt text", workRequest.Works[0].Payload)
+	if gotText := *got.InvocationPositionalText; gotText != "Fix the lint issues" {
+		t.Fatalf("invocation positional text = %q, want joined prompt text", gotText)
 	}
 }
 
-func TestRunCommand_FactoryStdinPromptSubmitsDefaultWorkTypeWorkFile(t *testing.T) {
+func TestRunCommand_FactoryStdinPromptCarriesInvocationText(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -480,24 +492,15 @@ func TestRunCommand_FactoryStdinPromptSubmitsDefaultWorkTypeWorkFile(t *testing.
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute run --factory with stdin prompt: %v", err)
 	}
-	if got.WorkFile == "" {
-		t.Fatal("expected generated work file for stdin factory prompt run")
+	if got.InvocationStdinText == nil {
+		t.Fatal("expected invocation stdin text for factory prompt run")
 	}
-	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
-
-	workRequest, err := runcli.LoadWorkFile(got.WorkFile)
-	if err != nil {
-		t.Fatalf("LoadWorkFile: %v", err)
-	}
-	if len(workRequest.Works) != 1 || workRequest.Works[0].WorkTypeID != "story" {
-		t.Fatalf("works = %#v, want one story work item", workRequest.Works)
-	}
-	if payload, ok := workRequest.Works[0].Payload.(string); !ok || payload != "Fix the stdin path" {
-		t.Fatalf("payload = %#v, want stdin prompt text", workRequest.Works[0].Payload)
+	if gotText := *got.InvocationStdinText; gotText != "Fix the stdin path\n" {
+		t.Fatalf("invocation stdin text = %q, want raw stdin prompt text", gotText)
 	}
 }
 
-func TestRunCommand_FactoryPromptSelectsCleanInvocationMode(t *testing.T) {
+func TestRunCommand_FactoryPromptSelectsSharedTextInvocationMode(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -524,26 +527,25 @@ func TestRunCommand_FactoryPromptSelectsCleanInvocationMode(t *testing.T) {
 	root.SetArgs([]string{"--json", "run", "--factory", factoryPath, "Fix the lint issues"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute clean factory prompt run: %v", err)
+		t.Fatalf("execute shared factory prompt run: %v", err)
 	}
-	if got.WorkFile == "" {
-		t.Fatal("expected generated work file for factory prompt run")
+	if got.InvocationPositionalText == nil {
+		t.Fatal("expected invocation positional text for factory prompt run")
 	}
-	t.Cleanup(func() { _ = os.Remove(got.WorkFile) })
-	if !got.CleanInvocation {
-		t.Fatal("expected factory prompt batch run to select clean invocation mode")
+	if got.CleanInvocation {
+		t.Fatal("expected shared text invocation to keep clean invocation disabled")
 	}
 	if !got.SuppressDashboardRendering {
-		t.Fatal("expected clean invocation mode to suppress dashboard rendering")
+		t.Fatal("expected shared text invocation to suppress dashboard rendering")
 	}
 	if got.StartupOutput != nil {
-		t.Fatalf("startup output = %#v, want nil for clean invocation mode", got.StartupOutput)
+		t.Fatalf("startup output = %#v, want nil for shared text invocation mode", got.StartupOutput)
 	}
 	if !got.JSON {
 		t.Fatal("expected global --json to map to clean run config")
 	}
 	if got.Output == nil {
-		t.Fatal("expected clean run config to receive stdout writer")
+		t.Fatal("expected shared text invocation config to receive stdout writer")
 	}
 	assertRunStdoutFreeOfOperatorChatter(t, stdout.String())
 }
@@ -617,7 +619,39 @@ func TestRunCommand_FactoryContinuousPromptKeepsOperatorOutputMode(t *testing.T)
 	}
 }
 
-func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
+func TestRunCommand_FactoryPromptRejectsEmptyPositionalWithStableCode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, ""})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected explicit empty positional rejection")
+	}
+	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start for explicit empty factory positional input")
+	}
+}
+
+func TestRunCommand_FactoryPromptRejectsWhitespaceOnlyPositionalWithStableCode(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -639,13 +673,46 @@ func TestRunCommand_FactoryPromptRejectsEmptyPrompt(t *testing.T) {
 
 	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected empty prompt rejection")
+		t.Fatal("expected whitespace-only positional rejection")
 	}
-	if !strings.Contains(err.Error(), "prompt is required") {
-		t.Fatalf("error = %q, want prompt requirement", err.Error())
+	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
+		t.Fatalf("error = %q, want stable empty code", err.Error())
 	}
 	if runCalled {
-		t.Fatal("run should not start for empty factory prompt")
+		t.Fatal("run should not start for whitespace-only factory positional input")
+	}
+}
+
+func TestRunCommand_FactoryPromptRejectsEmptyStdinWithStableCode(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	dir := t.TempDir()
+	factoryPath := writePortableFactoryWithDefaultHandling(t, dir)
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetIn(strings.NewReader(""))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "-"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected empty stdin rejection")
+	}
+	if !strings.Contains(err.Error(), "INVOCATION_INPUT_EMPTY") {
+		t.Fatalf("error = %q, want stable empty stdin code", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run should not start for empty factory stdin")
 	}
 }
 
@@ -692,9 +759,9 @@ func TestRunCommand_FactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T
 		t.Fatal("expected ambiguous positional and stdin prompt rejection")
 	}
 	for _, want := range []string{
-		runcli.InvocationErrorCodeAmbiguousInput,
-		string(runcli.InvocationInputSourcePositional),
-		string(runcli.InvocationInputSourceStdin),
+		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"positional_text",
+		"stdin_text",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want %q", err.Error(), want)

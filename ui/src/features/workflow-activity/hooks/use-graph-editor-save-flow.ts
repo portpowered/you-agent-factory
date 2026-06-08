@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { isFactoryDocumentSaveConfirming } from "../../current-selection/base/hooks/factory-document-save-types";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type {
   EditableFactoryGraphDocumentSaveControls,
   EditableFactoryGraphSaveMutation,
   EditableFactoryGraphViewModel,
 } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/factory-graph-editor-save-summary";
+import { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
@@ -72,7 +72,15 @@ export function useGraphEditorSaveFlow({
     : isStaleDraft
       ? messages.saveBlockedStaleDraft
       : undefined;
-  const saveSummary = buildFactoryGraphSaveSummary(draftState.draft, locale);
+  const saveSummary = buildFactoryGraphSaveSummary(
+    {
+      draft: draftState.draft,
+      hasLayoutChanges: editableGraph.pendingState.layoutDirty,
+      hasPreferenceChanges: editableGraph.pendingState.preferencesDirty,
+      hasTopologyChanges: editableGraph.pendingState.topologyDirty,
+    },
+    locale,
+  );
 
   const setIsConfirmingSave = useCallback(
     (open: boolean) => {

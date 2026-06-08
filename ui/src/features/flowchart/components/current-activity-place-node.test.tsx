@@ -6,7 +6,7 @@ import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSurfaceClassName,
-} from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
+} from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling";
 import type { StatePositionNodeData } from "./current-activity-place-node";
 import { StatePositionNodeView } from "./current-activity-place-node";
 
@@ -133,7 +133,6 @@ describe("CurrentActivity place node work-state phase styling", () => {
       workStatePhaseSemanticIconClassName("PROCESSING"),
     );
   });
-
 });
 
 describe("CurrentActivity place node work-state phase precedence", () => {
@@ -195,7 +194,9 @@ describe("CurrentActivity place node work-state phase precedence", () => {
       type_id: "story",
     };
     const { container } = render(
-      <StatePositionNodeView {...statePositionNodeProps(place, { activeFlow: true })} />,
+      <StatePositionNodeView
+        {...statePositionNodeProps(place, { activeFlow: true })}
+      />,
     );
     const shell = nodeShell(container);
 
@@ -215,7 +216,9 @@ describe("CurrentActivity place node work-state phase precedence", () => {
       type_id: "story",
     };
     const { container } = render(
-      <StatePositionNodeView {...statePositionNodeProps(place, { muted: true })} />,
+      <StatePositionNodeView
+        {...statePositionNodeProps(place, { muted: true })}
+      />,
     );
     const shell = nodeShell(container);
 

@@ -12,7 +12,7 @@ const stylesSourcePath = path.join(
 );
 
 /** Canonical foundation blue from @theme (--color-af-foundation-background). */
-const FOUNDATION_BACKGROUND = "#0a1117";
+const FOUNDATION_BACKGROUND = "#050b10";
 
 function injectCompiledRootRules(compiledCss: string): void {
   const rootBlocks = compiledCss.match(/:root[^{]*\{[^}]*\}/g) ?? [];

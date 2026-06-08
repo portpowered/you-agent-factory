@@ -1,15 +1,18 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 
-import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { useFactoryGraphEditorLayoutPositions } from "./react-flow-current-activity-card-editor-layout";
 
 const { mockBuildFactoryGraphEditorLayout } = vi.hoisted(() => ({
   mockBuildFactoryGraphEditorLayout: vi.fn(),
 }));
 
-vi.mock("../../factory-graph-editor/lib/factory-graph-editor-layout", () => ({
-  buildFactoryGraphEditorLayout: mockBuildFactoryGraphEditorLayout,
-}));
+vi.mock(
+  "../../factory-graph-editor/lib/editor/factory-graph-editor-layout",
+  () => ({
+    buildFactoryGraphEditorLayout: mockBuildFactoryGraphEditorLayout,
+  }),
+);
 
 const EMPTY_TOPOLOGY: FactoryGraphTopology = {
   edges: [],

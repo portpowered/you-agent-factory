@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -897,3 +898,29 @@ func LoadFromCanonicalJSON(payload []byte, workstationLoader WorkstationLoader) 
 
 	return NewLoadedFactoryConfig("", factoryCfg, runtimeDefs)
 }
+
+// Mock-worker config types and helpers live in pkg/config/mockworkers to keep
+// pkg/config file count and agents_config.go size within enforced limits.
+type (
+	MockWorkerRunType                 = mockworkers.MockWorkerRunType
+	MockWorkerUnmatchedDispatchPolicy = mockworkers.MockWorkerUnmatchedDispatchPolicy
+	MockWorkersConfig                 = mockworkers.MockWorkersConfig
+	MockWorkerConfig                  = mockworkers.MockWorkerConfig
+	MockWorkInputSelector             = mockworkers.MockWorkInputSelector
+	MockWorkerScriptConfig            = mockworkers.MockWorkerScriptConfig
+	MockWorkerRejectConfig            = mockworkers.MockWorkerRejectConfig
+)
+
+const (
+	MockWorkerRunTypeAccept                     = mockworkers.MockWorkerRunTypeAccept
+	MockWorkerRunTypeScript                     = mockworkers.MockWorkerRunTypeScript
+	MockWorkerRunTypeReject                     = mockworkers.MockWorkerRunTypeReject
+	MockWorkerUnmatchedDispatchPolicyAccept     = mockworkers.MockWorkerUnmatchedDispatchPolicyAccept
+	MockWorkerUnmatchedDispatchPolicyPassthrough = mockworkers.MockWorkerUnmatchedDispatchPolicyPassthrough
+)
+
+var (
+	NewEmptyMockWorkersConfig = mockworkers.NewEmptyMockWorkersConfig
+	LoadMockWorkersConfig     = mockworkers.LoadMockWorkersConfig
+	ParseMockWorkersConfig    = mockworkers.ParseMockWorkersConfig
+)

@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required:
+  - sourceKind
+  - content
+properties:
+  sourceKind:
+    $ref: './InvocationInputSourceKind.yaml'
+    description: >-
+      Input source category selected by the API caller. Current runtimes accept
+      `text` only; future multimodal categories are documented in the enum but
+      not implemented by this contract slice.
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: >-
+      Canonical text-first invocation content. Current runtimes resolve exactly
+      one logical text input from this carrier; non-text source categories are
+      reserved for future contract extensions.
+  requestId:
+    type: string
+    description: Optional caller-supplied idempotency key for the invocation request.
+  timeoutMillis:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Optional caller timeout budget in milliseconds for waiting on the primary result.

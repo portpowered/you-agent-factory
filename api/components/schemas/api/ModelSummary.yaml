@@ -1,6 +1,7 @@
 type: object
 required:
   - name
+  - managedRuntime
   - providerLocality
   - status
   - loadState
@@ -10,16 +11,26 @@ required:
 properties:
   name:
     type: string
-    description: Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+    description: >
+      Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors
+      `managedRuntime.identity` for compatibility with earlier discovery fields.
+  managedRuntime:
+    $ref: './ManagedRuntime.yaml'
   providerLocality:
     $ref: '../data-models/WorkerModelLocality.yaml'
+    description: >
+      Managed runtime locality summary. Mirrors `managedRuntime.locality` for
+      compatibility with earlier discovery fields.
   status:
     $ref: './ModelStatus.yaml'
   loadState:
     $ref: './ModelLoadState.yaml'
   operations:
     type: array
-    description: Provider-agnostic operations supported by the discovered model.
+    description: >
+      Provider-agnostic operations supported by the managed runtime. Mirrors
+      `managedRuntime.supportedOperations` for compatibility with earlier
+      discovery fields.
     items:
       $ref: '../data-models/ModelOperation.yaml'
   modalities:

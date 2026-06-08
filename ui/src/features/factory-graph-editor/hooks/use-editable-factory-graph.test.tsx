@@ -8,12 +8,12 @@ import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
-} from "../lib/factory-graph-draft.test-helpers";
+} from "../lib/draft/factory-graph-draft.test-helpers";
 import {
   createHookTestGraphEditorDraftState,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
-import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const hookState = vi.hoisted(() => ({
@@ -60,6 +60,13 @@ describe("useEditableFactoryGraph", () => {
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        operations: [
+          {
+            name: "REVIEW",
+            inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+            outputs: [{ name: "result", contentTypes: ["TEXT"] }],
+          },
+        ],
         workerType: "MODEL_WORKER",
       });
     });
@@ -78,6 +85,7 @@ describe("useEditableFactoryGraph", () => {
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "writer",
+        operations: [],
         workerType: "MODEL_WORKER",
       });
     });

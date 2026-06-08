@@ -11,7 +11,7 @@ import {
   useState,
 } from "react";
 
-import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
   factoryGraphNodeIdForAddEntityDraft,
@@ -60,6 +60,7 @@ export function GraphEditorPlacementRegistrar({
   flowContainerRef,
   flowInstanceRef,
   graphKey,
+  moveLayoutNode,
   nodes,
   setStoredNodePosition,
   storedNodePositions,
@@ -67,6 +68,7 @@ export function GraphEditorPlacementRegistrar({
   flowContainerRef: MutableRefObject<HTMLElement | null>;
   flowInstanceRef: MutableRefObject<ReactFlowInstance | null>;
   graphKey: string;
+  moveLayoutNode?: (nodeId: string, position: { x: number; y: number }) => void;
   nodes: readonly CurrentActivityNode[];
   setStoredNodePosition: (
     graphKey: string,
@@ -132,13 +134,23 @@ export function GraphEditorPlacementRegistrar({
     }
 
     const nodeId = factoryGraphNodeIdForAddEntityDraft(pendingPlacement.draft);
-    placementInput.setStoredNodePosition(
-      pendingPlacement.storageGraphKey,
-      nodeId,
-      topLeft,
-    );
+    if (moveLayoutNode) {
+      moveLayoutNode(nodeId, topLeft);
+    } else {
+      placementInput.setStoredNodePosition(
+        pendingPlacement.storageGraphKey,
+        nodeId,
+        topLeft,
+      );
+    }
     setPendingPlacement(null);
-  }, [flowContainerRef, flowInstanceRef, pendingPlacement, placementInput]);
+  }, [
+    flowContainerRef,
+    flowInstanceRef,
+    moveLayoutNode,
+    pendingPlacement,
+    placementInput,
+  ]);
 
   return null;
 }

@@ -43,7 +43,7 @@ describe("WorkTotalStatCard", () => {
       "bg-error-container",
     );
     expect(screen.getByLabelText("Dispatched: 5").className).toContain(
-      "bg-surface-container-low",
+      "bg-info-container",
     );
   });
 

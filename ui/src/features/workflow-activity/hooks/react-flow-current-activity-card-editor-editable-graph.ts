@@ -5,11 +5,13 @@ import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-ed
 export function useCurrentActivityEditableGraph({
   editorMode: _editorMode,
   factoryDocumentScopeKey,
+  hasPreferenceChanges = false,
   locale,
   snapshot,
 }: {
   editorMode: boolean;
   factoryDocumentScopeKey?: string | null;
+  hasPreferenceChanges?: boolean;
   locale?: string | null;
   snapshot: DashboardSnapshot;
 }) {
@@ -18,6 +20,7 @@ export function useCurrentActivityEditableGraph({
     activeWorkCount: snapshot.runtime.in_flight_dispatch_count,
     currentFactoryDocument: currentFactoryQuery.data,
     factoryDocumentScopeKey,
+    hasPreferenceChanges,
     locale,
   });
 

@@ -26,6 +26,10 @@ func (s staticCatalogAssetPuller) ResolveModelCache(context.Context, *factorycon
 	return s.cache, nil
 }
 
+func (s staticCatalogAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (RuntimeCacheInspection, error) {
+	return RuntimeCacheInspection{}, nil
+}
+
 type countingLocalRuntime struct {
 	mu    sync.Mutex
 	loads int

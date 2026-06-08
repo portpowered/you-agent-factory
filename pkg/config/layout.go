@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file built-in catalog layout and @you/tts factory JSON remain co-located until dedicated config seams split.
+// pkgmaintcheck:ignore-file-lines built-in catalog layout and @you/tts factory JSON remain co-located until dedicated config seams split.
 package config
 
 import (
@@ -9,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -54,7 +57,7 @@ func FlattenFactoryConfig(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, true); err != nil {
+	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, true, true); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files %s: %w", factoryDir, err)
 	}
 	if err := ApplySharedFactoryStarterWork(factoryDir, factoryCfg); err != nil {
@@ -528,20 +531,34 @@ type factorySplitLayoutReplaceHooks struct {
 // PreparedFactoryLayoutPayload holds normalized factory state produced once from
 // submitted JSON for split-layout validation and persist.
 type PreparedFactoryLayoutPayload struct {
-	Config    *interfaces.FactoryConfig
-	Canonical []byte
+	Config         *interfaces.FactoryConfig
+	Canonical      []byte
+	LayoutOutcomes []factoryvalidation.Target
 }
 
 // PrepareFactoryLayoutPayload normalizes factory JSON into expanded config (with
-// inline runtime bodies for split writes) and thin canonical factory.json bytes.
+// inline runtime bodies for split writes), prunes stale layout references for
+// save, and returns thin canonical factory.json bytes.
 func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFactoryLayoutPayload, error) {
-	cfg, canonical, err := normalizeNamedFactoryPayload(segment, payload)
+	cfg, _, err := normalizeNamedFactoryPayload(segment, payload)
 	if err != nil {
 		return nil, err
 	}
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	layoutOutcomes := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
+	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("%w: normalize authored factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
+	mapper := NewFactoryConfigMapper()
+	canonical, err := mapper.Flatten(authoredFactoryCfg)
+	if err != nil {
+		return nil, fmt.Errorf("%w: normalize factory %q config: %w", ErrInvalidNamedFactory, segment, err)
+	}
 	return &PreparedFactoryLayoutPayload{
-		Config:    cfg,
-		Canonical: canonical,
+		Config:         cfg,
+		Canonical:      canonical,
+		LayoutOutcomes: layoutOutcomes.Targets,
 	}, nil
 }
 
@@ -701,10 +718,12 @@ func stageFactorySplitLayoutReplace(
 		factoryCfg = prepared.Config
 		canonical = prepared.Canonical
 	case len(payload) > 0:
-		factoryCfg, canonical, err = normalizeNamedFactoryPayload(segment, payload)
+		preparedPayload, err := PrepareFactoryLayoutPayload(segment, payload)
 		if err != nil {
 			return "", func() {}, err
 		}
+		factoryCfg = preparedPayload.Config
+		canonical = preparedPayload.Canonical
 	default:
 		return "", func() {}, fmt.Errorf("factory layout payload is required")
 	}
@@ -796,53 +815,7 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/tts": []byte(`{
-  "name": "@you/tts",
-  "id": "builtin-tts",
-  "workTypes": [
-    {
-      "name": "task",
-      "states": [
-        {
-          "name": "init",
-          "type": "INITIAL"
-        },
-        {
-          "name": "complete",
-          "type": "TERMINAL"
-        }
-      ]
-    }
-  ],
-  "workers": [
-    {
-      "name": "tts-executor",
-      "type": "MODEL_WORKER",
-      "body": "You are the @you/tts built-in factory worker."
-    }
-  ],
-  "workstations": [
-    {
-      "name": "execute-tts",
-      "type": "MODEL_WORKSTATION",
-      "worker": "tts-executor",
-      "inputs": [
-        {
-          "workType": "task",
-          "state": "init"
-        }
-      ],
-      "outputs": [
-        {
-          "workType": "task",
-          "state": "complete"
-        }
-      ],
-      "body": "Convert the requested text into speech for {{ .WorkID }}."
-    }
-  ]
-  }
-`),
+	"@you/tts": BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
@@ -966,3 +939,79 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 	}
 	return factoryDir, true, nil
 }
+
+// BuiltInTTSFactoryJSON is the canonical runnable @you/tts packaged factory payload.
+var BuiltInTTSFactoryJSON = []byte(`{
+  "name": "@you/tts",
+  "id": "builtin-tts",
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "name": "omnivoice-cache",
+      "type": "MODEL",
+      "capacity": 1,
+      "model": "OMNIVOICE_Q4_K_M",
+      "backend": "LLAMACPP",
+      "loadPolicy": "ON_DEMAND"
+    }
+  ],
+  "workers": [
+    {
+      "name": "tts-executor",
+      "type": "MODEL_WORKER",
+      "model": "OMNIVOICE_Q4_K_M",
+      "modelProvider": "CODEX",
+      "modelLocality": "LOCAL",
+      "command": "omnivoice-llamacpp",
+      "resources": [
+        {"name": "omnivoice-cache", "capacity": 1}
+      ],
+      "operations": [
+        {
+          "name": "TTS",
+          "inputs": [
+            {"name": "text", "contentTypes": ["TEXT"], "required": true}
+          ],
+          "outputs": [
+            {"name": "audio", "contentTypes": ["AUDIO"]}
+          ]
+        }
+      ],
+      "body": "You are the @you/tts built-in factory worker."
+    }
+  ],
+  "workstations": [
+    {
+      "name": "execute-tts",
+      "type": "MODEL_INVOKE",
+      "worker": "tts-executor",
+      "operation": "TTS",
+      "operationBindings": [
+        {
+          "slot": "text",
+          "selector": {"type": "TEXT"}
+        }
+      ],
+      "inputs": [
+        {"workType": "task", "state": "init"}
+      ],
+      "outputs": [
+        {"workType": "task", "state": "complete"}
+      ],
+      "onFailure": [
+        {"workType": "task", "state": "failed"}
+      ],
+      "body": "Convert the requested text into speech for {{ .WorkID }}."
+    }
+  ]
+}`)

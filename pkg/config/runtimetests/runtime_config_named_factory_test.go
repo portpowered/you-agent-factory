@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	. "github.com/portpowered/infinite-you/pkg/config"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -268,10 +267,40 @@ func TestPersistNamedFactory_StripsSupportedBundledFileInlineContentFromFactoryJ
 	}
 }
 
+func TestReplaceNamedFactory_PreservesPortableLayoutAcrossReplace(t *testing.T) {
+	rootDir := t.TempDir()
+
+	if _, err := PersistNamedFactory(rootDir, "alpha", namedFactoryPayloadWithPortableLayout(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	replacePayload := namedFactoryPayloadWithPortableLayout(t, "alpha")
+	if _, err := ReplaceNamedFactory(rootDir, "alpha", replacePayload); err != nil {
+		t.Fatalf("ReplaceNamedFactory: %v", err)
+	}
+
+	factoryDir := filepath.Join(rootDir, "alpha")
+	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig(replaced layout factory): %v", err)
+	}
+	assertLoadedPortableLayoutConfig(t, loaded.FactoryConfig(), "workstation:execute-alpha")
+
+	factoryJSON, err := os.ReadFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	var persisted map[string]any
+	if err := json.Unmarshal(factoryJSON, &persisted); err != nil {
+		t.Fatalf("Unmarshal(factory.json): %v", err)
+	}
+	assertPortableLayoutJSONPayload(t, persisted["layout"], "workstation:execute-alpha")
+}
+
 func TestPersistNamedFactory_PreservesPortableLayoutAcrossNamedFactoryLoadFlattenAndExpand(t *testing.T) {
 	rootDir := t.TempDir()
 
-	factoryDir, err := PersistNamedFactory(rootDir, "alpha", namedFactoryPayloadWithLayout(t, "alpha"))
+	factoryDir, err := PersistNamedFactory(rootDir, "alpha", namedFactoryPayloadWithPortableLayout(t, "alpha"))
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
@@ -280,13 +309,13 @@ func TestPersistNamedFactory_PreservesPortableLayoutAcrossNamedFactoryLoadFlatte
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(persisted layout factory): %v", err)
 	}
-	assertLoadedPortableLayoutConfig(t, loaded.FactoryConfig())
+	assertLoadedPortableLayoutConfig(t, loaded.FactoryConfig(), "workstation:execute-alpha")
 
 	flattened, err := FlattenFactoryConfig(factoryDir)
 	if err != nil {
 		t.Fatalf("FlattenFactoryConfig(named layout): %v", err)
 	}
-	assertPortableLayoutJSON(t, flattened)
+	assertPortableLayoutJSONBytes(t, flattened, "workstation:execute-alpha")
 
 	canonicalDir := t.TempDir()
 	canonicalPath := filepath.Join(canonicalDir, interfaces.FactoryConfigFile)
@@ -302,7 +331,7 @@ func TestPersistNamedFactory_PreservesPortableLayoutAcrossNamedFactoryLoadFlatte
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig(expanded layout factory): %v", err)
 	}
-	assertLoadedPortableLayoutConfig(t, expanded.FactoryConfig())
+	assertLoadedPortableLayoutConfig(t, expanded.FactoryConfig(), "workstation:execute-alpha")
 }
 
 func TestPersistNamedFactory_RejectsDuplicateNames(t *testing.T) {
@@ -571,112 +600,6 @@ func withNamedFactoryPayloadVersion(t *testing.T, payload []byte, logical int64,
 		t.Fatalf("Marshal(namedFactoryPayload with version): %v", err)
 	}
 	return updated
-}
-
-func namedFactoryPayloadWithLayout(t *testing.T, project string) []byte {
-	t.Helper()
-
-	var payload map[string]any
-	if err := json.Unmarshal(namedFactoryPayload(t, project), &payload); err != nil {
-		t.Fatalf("Unmarshal(namedFactoryPayload): %v", err)
-	}
-	payload["layout"] = map[string]any{
-		"schemaVersion": 1,
-		"nodes": []map[string]any{{
-			"id": "workstation:execute-alpha",
-			"position": map[string]any{
-				"x": 128,
-				"y": 256,
-			},
-			"size": map[string]any{
-				"width":  320,
-				"height": 180,
-			},
-			"locked": true,
-		}},
-		"edges": []map[string]any{{
-			"id": "output:workstation:execute-alpha->work-type:task",
-			"waypoints": []map[string]any{{
-				"x": 180,
-				"y": 220,
-			}},
-		}},
-		"groups": []map[string]any{{
-			"id":      "group-1",
-			"label":   "Main lane",
-			"nodeIds": []string{"workstation:execute-alpha"},
-			"bounds": map[string]any{
-				"x":      100,
-				"y":      200,
-				"width":  400,
-				"height": 240,
-			},
-		}},
-		"viewport": map[string]any{
-			"x":    40,
-			"y":    60,
-			"zoom": 0.9,
-		},
-		"preferences": map[string]any{
-			"direction": "RIGHT",
-		},
-	}
-	updated, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("Marshal(namedFactoryPayload with layout): %v", err)
-	}
-	return updated
-}
-
-func assertLoadedPortableLayoutConfig(t *testing.T, cfg *interfaces.FactoryConfig) {
-	t.Helper()
-
-	if cfg == nil || cfg.Layout == nil {
-		t.Fatalf("expected portable layout on loaded factory config, got %#v", cfg)
-	}
-	if cfg.Layout.SchemaVersion != 1 {
-		t.Fatalf("layout schemaVersion = %d, want 1", cfg.Layout.SchemaVersion)
-	}
-	if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != "workstation:execute-alpha" {
-		t.Fatalf("layout nodes = %#v, want execute-alpha node", cfg.Layout.Nodes)
-	}
-	if cfg.Layout.Nodes[0].Position.X != 128 || cfg.Layout.Nodes[0].Position.Y != 256 {
-		t.Fatalf("layout node position = %#v, want x=128 y=256", cfg.Layout.Nodes[0].Position)
-	}
-	if cfg.Layout.Viewport == nil || math.Abs(cfg.Layout.Viewport.Zoom-0.9) > 1e-6 {
-		t.Fatalf("layout viewport = %#v, want zoom 0.9", cfg.Layout.Viewport)
-	}
-	if cfg.Layout.Preferences == nil || cfg.Layout.Preferences.Direction != "RIGHT" {
-		t.Fatalf("layout preferences = %#v, want RIGHT direction", cfg.Layout.Preferences)
-	}
-}
-
-func assertPortableLayoutJSON(t *testing.T, payload []byte) {
-	t.Helper()
-
-	var decoded map[string]any
-	if err := json.Unmarshal(payload, &decoded); err != nil {
-		t.Fatalf("Unmarshal(flattened payload): %v", err)
-	}
-	layout, ok := decoded["layout"].(map[string]any)
-	if !ok {
-		t.Fatalf("flattened layout = %#v, want object", decoded["layout"])
-	}
-	if got := layout["schemaVersion"]; got != float64(1) {
-		t.Fatalf("flattened layout schemaVersion = %#v, want 1", got)
-	}
-	nodes, ok := layout["nodes"].([]any)
-	if !ok || len(nodes) != 1 {
-		t.Fatalf("flattened layout nodes = %#v, want one node", layout["nodes"])
-	}
-	node, ok := nodes[0].(map[string]any)
-	if !ok || node["id"] != "workstation:execute-alpha" {
-		t.Fatalf("flattened layout node = %#v, want workstation:execute-alpha", nodes[0])
-	}
-	viewport, ok := layout["viewport"].(map[string]any)
-	if !ok || viewport["zoom"] != 0.9 {
-		t.Fatalf("flattened layout viewport = %#v, want zoom 0.9", layout["viewport"])
-	}
 }
 
 func assertPersistedNamedFactoryLayout(t *testing.T, factoryDir, wantDir string) {

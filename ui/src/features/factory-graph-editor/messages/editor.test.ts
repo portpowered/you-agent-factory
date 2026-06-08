@@ -37,9 +37,7 @@ describe("getFactoryGraphEditorMessages", () => {
     expect(messages.modeLeaveEditor).toBe(
       locale === "en" ? "Leave editor" : "离开编辑器",
     );
-    expect(messages.toolbarAddLabel).toBe(
-      locale === "en" ? "Add" : "添加",
-    );
+    expect(messages.toolbarAddLabel).toBe(locale === "en" ? "Add" : "添加");
     expect(messages.toolbarConnectLabel).toBe(
       locale === "en" ? "Connect" : "连接",
     );
@@ -397,5 +395,50 @@ describe("getFactoryGraphEditorMessages", () => {
     );
     expect(messages.zAxisIncompleteConnectionHint).toEqual(expect.any(String));
     expect(messages.zAxisIncompleteConnectionHint.length).toBeGreaterThan(0);
+  });
+
+  it("resolves layout dirty-state, save confirm, and toolbar history copy", () => {
+    const messages = getFactoryGraphEditorMessages("en");
+
+    expect(
+      messages.dirtyStateSummary({
+        layoutDirty: true,
+        preferencesDirty: false,
+        topologyDirty: false,
+      }),
+    ).toBe("Unsaved layout changes");
+    expect(
+      messages.dirtyStateSummary({
+        layoutDirty: false,
+        preferencesDirty: true,
+        topologyDirty: false,
+      }),
+    ).toBe("Private view preferences changed");
+    expect(messages.saveConfirmAction("layout-only")).toBe("Save layout");
+    expect(messages.saveConfirmAction("mixed")).toBe("Save changes");
+    expect(messages.toolbarUndoLabel).toBe("Undo");
+    expect(messages.toolbarRedoLabel).toBe("Redo");
+    expect(messages.toolbarResetLayoutLabel).toBe("Reset layout");
+    expect(messages.toolbarClearPreferencesLabel).toBe(
+      "Clear private view preferences",
+    );
+    expect(
+      messages.saveSummaryForDirtyState({
+        changedEdges: 0,
+        createdEntities: 0,
+        dirtyState: {
+          layoutDirty: true,
+          preferencesDirty: false,
+          topologyDirty: false,
+        },
+        kind: "layout-only",
+        removedEntities: 0,
+        topologySummary: "This save will apply 0 topology edits.",
+      }),
+    ).toContain("shared graph layout");
+    expect(messages.leaveDialogTitle).toBe(
+      "Leave graph editor with unsaved changes?",
+    );
+    expect(messages.noticeSaveSuccessTitle).toBe("Topology saved");
   });
 });

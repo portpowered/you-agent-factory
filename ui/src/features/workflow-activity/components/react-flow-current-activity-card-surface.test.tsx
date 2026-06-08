@@ -2,11 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 vi.mock(
-  "../../factory-graph-editor/components/factory-graph-editor-controls",
+  "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
   () => ({
     FactoryGraphEditorNotice: ({
       children,
@@ -21,7 +21,10 @@ vi.mock(
       title: string;
       tone: string;
     }) => (
-      <section data-testid={`notice-${tone}`} role={tone === "danger" ? "alert" : "status"}>
+      <section
+        data-testid={`notice-${tone}`}
+        role={tone === "danger" ? "alert" : "status"}
+      >
         <h3>{title}</h3>
         <div>{children}</div>
         {onDismiss && dismissLabel ? (
@@ -109,7 +112,14 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canSaveDraft: true,
     connectionNotice: "Only workstation-to-work-state routes are supported.",
     currentFactoryDefinition: null,
+    dirtyStateSummary: {
+      layoutDirty: false,
+      preferencesDirty: false,
+      topologyDirty: true,
+    },
     draftState: { hasChanges: true, pendingFactoryDefinition: null },
+    layoutDraftState: { hasChanges: false },
+    moveLayoutNode: vi.fn(),
     editorMode: true,
     structuralValidation: {
       projection: {
@@ -128,6 +138,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     handleEditorNodeDelete: vi.fn(),
     hiddenNodeClasses: new Set(),
     hideShowMenuOpen: false,
+    visibilityPreset: "all",
     hasActiveWork: true,
     isStaleDraft: true,
     saveBlockedReason: "Stop active work before saving this draft.",
@@ -140,6 +151,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     setAddMenuOpen: vi.fn(),
     setHideShowMenuOpen: vi.fn(),
     setIsConfirmingSave: vi.fn(),
+    setVisibilityPreset: vi.fn(),
+    resetPreferences: vi.fn(),
     toggleHiddenNodeClass: vi.fn(),
     ...overrides,
   };

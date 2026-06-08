@@ -8,13 +8,13 @@ import { createMockGraphEditorDraftState } from "../../../testing/graph-editor-h
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
-} from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/factory-graph-topology-impact";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
+import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
-import { currentActivityCardFactoryDefinition } from "./react-flow-current-activity-card-graph-view-model";
+import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 function cloneSavedDocument(

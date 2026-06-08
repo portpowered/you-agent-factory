@@ -1,7 +1,7 @@
 import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
-import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/components/factory-graph-editor-add-dialog";
-import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/factory-graph-editor-leave-dialog";
+import { FactoryGraphEditorAddEntityDialog } from "../../factory-graph-editor/components/add-dialog/factory-graph-editor-add-dialog";
+import { FactoryGraphEditorConfirmationDialog } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/components/dialogs/factory-graph-editor-leave-dialog";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { FactoryImportPreviewDialog } from "../../import/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
@@ -69,7 +69,7 @@ export function CurrentActivityGraphEditorDialogs({
       />
       <FactoryGraphEditorConfirmationDialog
         cancelLabel={messages.leaveDialogKeepEditing}
-        confirmLabel={messages.saveConfirmAction}
+        confirmLabel={editor.saveSummary.confirmActionLabel}
         description={editor.saveSummary.description}
         isBusy={
           editor.saveEditableDefinition.isPending ||

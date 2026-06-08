@@ -177,7 +177,7 @@ func (fs *FactoryService) serializeNamedFactory(
 		if err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
 		}
-		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true); err != nil {
+		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true, false); err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("inline named factory bundled files: %w", err)
 		}
 		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
@@ -211,7 +211,7 @@ func (fs *FactoryService) serializeNamedFactoryUpsertResponse(
 		if err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
 		}
-		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, false); err != nil {
+		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, false, false); err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("merge named factory portable bundled files: %w", err)
 		}
 		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
@@ -760,8 +760,8 @@ func ComposeFactoryCore(
 	coreBuilt := false
 	var runtimeBundle *factoryRuntimeBundle
 	defer func() {
-		if !coreBuilt && runtimeBundle != nil && runtimeBundle.logSink != nil {
-			_ = runtimeBundle.logSink.Close()
+		if !coreBuilt && runtimeBundle != nil {
+			_ = closeRuntimeBundleSinks(runtimeBundle.logSink, runtimeBundle.metricsSink)
 		}
 	}()
 	if cfg.ReplayPath == "" {

@@ -1,6 +1,7 @@
 export type CurrentActivitySelection =
   | { kind: "node"; nodeId: string }
   | { kind: "state-node"; placeId: string }
+  | { kind: "doc"; targetPath: string }
   | { kind: "worker"; workerName: string }
   | { kind: "resource"; resourceName: string }
   | { kind: "work-type"; workTypeName: string }

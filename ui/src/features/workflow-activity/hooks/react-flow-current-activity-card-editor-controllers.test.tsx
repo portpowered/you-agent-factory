@@ -4,12 +4,12 @@ import { act, renderHook } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import type {
   FactoryGraphDraft,
   FactoryGraphTopology,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 
@@ -589,6 +589,64 @@ describe("current activity graph editor controllers", () => {
     expect(onNodeRemovedFromDraft).toHaveBeenCalledWith("workstation:review");
     expect(result.current.pendingRemovalIntent).toBeNull();
     expect(result.current.blockedRemovalReason).toBeNull();
+  });
+
+  it("opens confirmation before deleting a bundled doc node and applies removal on confirm", () => {
+    const reset = vi.fn();
+    const factoryWithDoc: CanonicalFactoryDefinition = {
+      ...baseFactoryDefinition,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Guide\n" },
+            targetPath: "factory/docs/guide.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    const draftState = createDraftState({
+      baseFactoryDefinition: factoryWithDoc,
+    });
+    const editableGraph = createEditableGraph();
+    const onNodeRemovedFromDraft = vi.fn();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        onNodeRemovedFromDraft,
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorNodeDelete("doc:factory/docs/guide.md");
+    });
+
+    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(result.current.pendingRemovalIntent).toMatchObject({
+      requiresConfirmation: true,
+      targetPath: "factory/docs/guide.md",
+      title: "Remove guide.md doc?",
+    });
+
+    act(() => {
+      result.current.handleConfirmRemoval();
+    });
+
+    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
+      "doc:factory/docs/guide.md",
+    );
+    expect(onNodeRemovedFromDraft).toHaveBeenCalledWith(
+      "doc:factory/docs/guide.md",
+    );
+    expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
   it("applies work-type removal through removeNode after delete-tool confirmation", () => {

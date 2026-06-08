@@ -11,18 +11,25 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
+import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/operations/factory-graph-public-ids";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/factory-graph-public-ids";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
+import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
+
+vi.mock("../../../components/ui/dialog", () =>
+  import("../../../testing/mock-dashboard-dialog"),
+);
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
@@ -331,7 +338,13 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       expectedNodeNames: ["worker:analyst"],
       fields: [
         { label: "Identifier", value: "analyst" },
-        { label: "Model provider", role: "combobox" as const, value: "CURSOR" },
+        {
+          label: "Worker type",
+          optionLabel: "Script worker",
+          role: "combobox" as const,
+          value: "SCRIPT_WORKER",
+        },
+        { label: "Command", value: "./analyze.sh" },
       ],
       menuAction: "Worker",
     },
@@ -373,9 +386,20 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Add" }));
     fireEvent.click(screen.getByRole("button", { name: menuAction }));
+    const user = userEvent.setup();
     for (const field of fields) {
-      const role = "role" in field && field.role ? field.role : "textbox";
-      fireEvent.change(screen.getByRole(role, { name: field.label }), {
+      if ("role" in field && field.role === "combobox") {
+        await selectLabeledComboboxOption(
+          user,
+          field.label,
+          "optionLabel" in field && field.optionLabel
+            ? field.optionLabel
+            : field.value,
+        );
+        continue;
+      }
+
+      fireEvent.change(screen.getByRole("textbox", { name: field.label }), {
         target: { value: field.value },
       });
     }
@@ -421,9 +445,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(screen.getByTestId("valid-qa-output-connection").textContent).toBe(
       "true",
@@ -446,9 +468,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
   it("shows validation feedback and leaves graph edges unchanged for invalid connects", async () => {
     renderCurrentActivity();
     enterEditorMode();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(
       screen.queryByRole("button", {
@@ -538,14 +558,87 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     });
   });
 
+  it("renders a newly added doc node and exposes it through the pending factory bridge", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Doc" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "File name" }), {
+      target: { value: "playbook.md" },
+    });
+    fireEvent.change(screen.getByRole("textbox", { name: "Doc text" }), {
+      target: { value: "# Playbook\n" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
+
+    expect(
+      await screen.findByRole("button", { name: "doc:factory/docs/playbook.md" }),
+    ).toBeTruthy();
+    await waitFor(() => {
+      expect(
+        useGraphEditorPendingFactoryBridge
+          .getState()
+          .pendingFactoryDefinition?.supportingFiles?.bundledFiles?.some(
+            (bundledFile) =>
+              bundledFile.type === "DOC" &&
+              bundledFile.targetPath === "factory/docs/playbook.md",
+          ),
+      ).toBe(true);
+    });
+  });
+
+  it("confirms doc deletion before removing the doc node from the draft graph", async () => {
+    const factoryWithDoc: CurrentFactoryDocument = {
+      ...editableFactoryDocument,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Guide\n" },
+            targetPath: "factory/docs/guide.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: factoryWithDoc,
+      error: null,
+      status: "success",
+    } as never);
+
+    renderCurrentActivity(createSnapshot(factoryWithDoc));
+    enterEditorMode();
+
+    expect(
+      await screen.findByRole("button", { name: "doc:factory/docs/guide.md" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "doc:factory/docs/guide.md" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove guide.md doc?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Delete guide.md doc" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "doc:factory/docs/guide.md" }),
+      ).toBeNull();
+    });
+  });
+
   it("opens save confirmation from the activity card host portaled to document.body", async () => {
     renderCurrentActivity();
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );
@@ -622,9 +715,7 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     expect(
       screen.queryByRole("button", { name: "workstation:review" }),
     ).toBeNull();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Connect" }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );
@@ -682,6 +773,7 @@ function renderCurrentActivity(snapshot = createSnapshot()) {
       now={Date.parse("2026-04-08T12:00:04Z")}
       onSelectStateNode={vi.fn()}
       onSelectWorkID={vi.fn()}
+      onSelectDoc={vi.fn()}
       onSelectResource={vi.fn()}
       onSelectWorker={vi.fn()}
       onSelectWorkType={vi.fn()}

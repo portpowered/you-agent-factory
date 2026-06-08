@@ -4,7 +4,7 @@ import * as flowchartPublic from "./index";
 
 describe("flowchart public barrel", () => {
   it("keeps current activity nodes and graph semantic icons available", () => {
-    expect(flowchartPublic.CURRENT_ACTIVITY_NODE_TYPES).toMatchObject({
+    expect(flowchartPublic.NODE_TYPES).toMatchObject({
       constraint: expect.any(Function),
       resource: expect.any(Function),
       statePosition: expect.any(Function),
@@ -16,11 +16,10 @@ describe("flowchart public barrel", () => {
 
     render(<flowchartPublic.GraphSemanticIcon kind="queue" />);
 
-    expect(
-      screen
-        .getByRole("img", { name: "Queue state" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("queue");
+    const icon = screen.getByRole("img", { name: "Queue state" });
+
+    expect(icon.tagName.toLowerCase()).toBe("svg");
+    expect(icon.getAttribute("data-graph-semantic-icon")).toBe("queue");
   });
 
   it("does not expose workstation icon metadata helpers through the public barrel", () => {

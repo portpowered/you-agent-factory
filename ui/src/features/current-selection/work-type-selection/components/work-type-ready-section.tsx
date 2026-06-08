@@ -7,12 +7,12 @@ import {
   Input,
 } from "../../../../components/ui";
 import type { EditableWorkTypeValidationErrors } from "../../../current-factory-definition/lib/work-type-editable-validation";
-import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
-import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
 import {
+  CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,
   CurrentSelectionFormFields,
-  CurrentSelectionDetailFeedback,
   CurrentSelectionSupportingText,
 } from "../../base/public";
 import type {

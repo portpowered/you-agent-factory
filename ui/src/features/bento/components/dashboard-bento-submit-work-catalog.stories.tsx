@@ -1,6 +1,7 @@
 import { expect, userEvent, within } from "storybook/test";
 
 import "../../../styles.css";
+import { selectComboboxOption } from "../../../testing/select-test-helpers";
 import { SubmitWorkWidget } from "../../submit-work/public";
 import { DASHBOARD_WIDGET_IDS } from "../hooks/dashboardLayoutSchema";
 import {
@@ -55,7 +56,8 @@ export const SubmitWorkInteractive = {
         name: "Remove Submit work widget from dashboard",
       }),
     ).toBeVisible();
-    await userEvent.selectOptions(
+    await selectComboboxOption(
+      userEvent,
       within(card).getByRole("combobox", { name: "Work type" }),
       "story",
     );

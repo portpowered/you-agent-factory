@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
+import { GraphNodeButton } from "../../features/graphs/public";
 import { DisclosureButton } from "./disclosure-button";
-import { GraphNodeButton } from "./graph-node-button";
 import { SelectableCardButton } from "./selectable-card-button";
 
 describe("semantic button wrappers", () => {

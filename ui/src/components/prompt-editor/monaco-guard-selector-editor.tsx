@@ -5,7 +5,6 @@ import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
 import { cn } from "../../lib/cn";
-import { configureMonacoReactLoader } from "./monaco-react-loader";
 import { DashboardText, Textarea } from "../ui";
 import {
   applyWorkstationGuardSelectorTheme,
@@ -14,6 +13,7 @@ import {
   WORKSTATION_GUARD_SELECTOR_LANGUAGE_ID,
   WORKSTATION_GUARD_SELECTOR_THEME_ID,
 } from "./monaco-guard-selector-setup";
+import { configureMonacoReactLoader } from "./monaco-react-loader";
 
 const GUARD_SELECTOR_EDITOR_OPTIONS = {
   automaticLayout: true,
@@ -243,7 +243,10 @@ function GuardSelectorEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <DashboardText className="m-0 text-on-surface-variant" variant="supporting">
+      <DashboardText
+        className="m-0 text-on-surface-variant"
+        variant="supporting"
+      >
         {message}
       </DashboardText>
       <Textarea

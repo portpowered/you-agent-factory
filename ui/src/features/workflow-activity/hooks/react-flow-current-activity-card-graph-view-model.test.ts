@@ -7,7 +7,8 @@ import {
   createMockGraphEditorDraftState,
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
-import { currentActivityCardFactoryDefinition } from "./react-flow-current-activity-card-graph-view-model";
+import { sessionFactoryDocumentFromSnapshot } from "../../../testing/session-factory-mocks";
+import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 
 function createEditorStub(
   overrides: {
@@ -152,5 +153,40 @@ describe("currentActivityCardFactoryDefinition", () => {
         "current",
       ),
     ).toEqual(pendingDraft);
+  });
+});
+
+describe("currentActivityCardFactoryDefinition bundled docs", () => {
+  it("keeps bundled docs from the saved document when observe mode prefers the timeline snapshot", () => {
+    const snapshot = structuredClone(singleNodeDashboardSnapshot);
+    const savedDocument = {
+      ...sessionFactoryDocumentFromSnapshot(snapshot),
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+
+    expect(
+      currentActivityCardFactoryDefinition(
+        createEditorStub({
+          editableDefinitionQuery: {
+            data: savedDocument,
+            status: "success",
+          },
+          editorMode: false,
+        }),
+        snapshot,
+        "fixed",
+      ),
+    ).toMatchObject({
+      supportingFiles: savedDocument.supportingFiles,
+      workstations: snapshot.factory?.workstations,
+    });
   });
 });

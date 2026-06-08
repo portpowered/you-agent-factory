@@ -1,5 +1,5 @@
-import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { buildFactoryGraphEditorLayout } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 
 export type TraceFactoryGraphLayoutPosition = {
   x: number;

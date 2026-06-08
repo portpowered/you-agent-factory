@@ -4,6 +4,10 @@ import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
+  isModelInvokeWorkstationType,
+  workstationUsesPromptOrientedEditing,
+} from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import {
   type EditableWorkstationDraft,
   editableWorkstationDraftFromValues,
   resolveEditableWorkstationValues,
@@ -15,8 +19,8 @@ import {
   resolvePromptHelpState,
   resolvePromptValidationState,
 } from "../editing/editable-workstation-prompt-state";
-import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
-import { validateEditableWorkstationDraft } from "../lib/editable-workstation-configuration-validation";
+import type { EditableWorkstationConfigurationState } from "../lib/keys/detail-card-types";
+import { validateEditableWorkstationDraft } from "../lib/validation/editable-workstation-configuration-validation";
 import { getWorkstationDetailMessages } from "../messages/workstation-detail";
 import { buildReadyEditableWorkstationConfigurationState } from "./editable-workstation-ready-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
@@ -25,7 +29,7 @@ import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorks
 export {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "../lib/editable-workstation-configuration-validation";
+} from "../lib/validation/editable-workstation-configuration-validation";
 
 interface EditableWorkstationSessionState {
   draft: EditableWorkstationDraft;
@@ -48,16 +52,23 @@ export function useEditableWorkstationConfigurationState(
       selectedNode,
       selection,
     );
+  const draftWorkstationType =
+    sessionState?.draft.workstationType ?? selectedEditableValues?.workstationType;
+  const usesPromptOrientedEditing =
+    draftWorkstationType != null &&
+    workstationUsesPromptOrientedEditing(draftWorkstationType);
   const promptTemplateContract = useCurrentWorkstationPromptTemplateContract(
     selectedEditableValues?.workstationName,
-    isNodeSelection && selectedEditableValues != null,
+    isNodeSelection && selectedEditableValues != null && usesPromptOrientedEditing,
   );
   const shouldValidatePrompt =
     isNodeSelection &&
     sessionState != null &&
     selectedEditableValues != null &&
+    draftWorkstationType != null &&
+    !isModelInvokeWorkstationType(draftWorkstationType) &&
     workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: draftWorkstationType,
     }) &&
     workstationBehaviorRequiresPrompt(sessionState.draft.behavior);
   const promptValidation = useCurrentWorkstationPromptTemplateValidation(

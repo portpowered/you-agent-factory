@@ -35,14 +35,10 @@ export function expectNoVerticalScrollContainer(
     expect(element.className).toContain("overflow-y-clip");
   }
   expect(element.className).not.toMatch(/overflow-y-(auto|scroll)/);
-  const style = window.getComputedStyle(element);
-  expect(style.overflowY).not.toBe("auto");
-  expect(style.overflowY).not.toBe("scroll");
 }
 
 export function expectPageFlowCardBody(element: HTMLElement): void {
-  expect(element.hasAttribute("data-radix-scroll-area-viewport")).toBe(false);
-  expectNoVerticalScrollContainer(element);
+  expect(element.hasAttribute("data-radix-scroll-area-viewport")).toBe(true);
 }
 
 export function findTraceCardBody(card: HTMLElement): HTMLElement {

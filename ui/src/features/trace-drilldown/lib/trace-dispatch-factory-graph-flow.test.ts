@@ -3,7 +3,6 @@ import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-dispatch-factory-graph-node";
 import { buildTraceDispatchFactoryGraphFlow } from "./trace-dispatch-factory-graph-flow";
 
@@ -36,8 +35,7 @@ function buildDispatch(
 }
 
 describe("buildTraceDispatchFactoryGraphFlow", () => {
-  it("projects dispatch history into factory entity nodes and editor edges", () => {
-    const editorMessages = getFactoryGraphEditorMessages();
+  it("projects dispatch history into shared workstation nodes and editor edges", () => {
     const flow = buildTraceDispatchFactoryGraphFlow([
       buildDispatch("dispatch-plan", {
         output_items: [buildWorkItem("work-reviewed")],
@@ -52,12 +50,24 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
       flow.nodes.find((node) => node.id === "dispatch-plan"),
     ).toMatchObject({
       id: "dispatch-plan",
-      type: "factoryEntity",
+      type: "workstation",
       data: {
+        active: false,
         dispatchId: "dispatch-plan",
         displayLabel: "dispatch-plan",
         kind: "workstation",
-        kindLabel: editorMessages.kindLabel("workstation"),
+        handles: expect.arrayContaining([
+          expect.objectContaining({
+            hidden: true,
+            id: "workstation-input-target",
+          }),
+        ]),
+        workstation: {
+          node_id: "dispatch-plan",
+          transition_id: "dispatch-plan",
+          workstation_kind: "STANDARD",
+          workstation_name: "dispatch-plan",
+        },
       },
     });
     expect(flow.edges).toEqual(
@@ -68,7 +78,7 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
           type: "factoryEditorEdge",
           data: expect.objectContaining({
             kind: "workstation-on-continue",
-            label: editorMessages.edgeKindLabel("workstation-on-continue"),
+            label: "",
           }),
         }),
       ]),
@@ -84,17 +94,15 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
     expect(flow.nodes[0]?.data.locale).toBe("zh");
   });
 
-  it("registers only factory graph React Flow node types", () => {
+  it("registers only shared workstation graph React Flow node types", () => {
     const flow = buildTraceDispatchFactoryGraphFlow([
       buildDispatch("dispatch-plan"),
     ]);
 
     expect(Object.keys(TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES)).toEqual([
-      "factoryEntity",
+      "workstation",
     ]);
-    expect(flow.nodes.every((node) => node.type === "factoryEntity")).toBe(
-      true,
-    );
+    expect(flow.nodes.every((node) => node.type === "workstation")).toBe(true);
     expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(
       true,
     );

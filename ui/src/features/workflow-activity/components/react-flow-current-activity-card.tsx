@@ -19,7 +19,6 @@ import { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-ac
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
-import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
@@ -77,6 +76,7 @@ interface ReactFlowCurrentActivityCardProps {
   now: number;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
+  onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (
@@ -142,23 +142,6 @@ export function ReactFlowCurrentActivityCardView(
         className="relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden"
         style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       >
-        {showHeaderActions ? (
-          <div className="mb-4">
-            <CurrentActivityGraphHeaderActions
-              editorMode={editor.editorMode}
-              editorUnavailableClassifierWorkstationName={
-                editor.editorUnavailableClassifierWorkstationName
-              }
-              hasChanges={editor.draftState.hasChanges}
-              isDefinitionLoading={
-                editor.editableDefinitionQuery.status === "pending"
-              }
-              loadErrorMessage={editor.editableDefinitionQuery.error?.message}
-              locale={props.locale}
-              onToggle={editor.handleEditorModeToggle}
-            />
-          </div>
-        ) : null}
         {showHeaderActions ? (
           <CurrentActivityCardHeading
             headingID={headingID}

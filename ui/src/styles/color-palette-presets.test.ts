@@ -15,6 +15,7 @@ const palettePresetsSourcePath = path.join(
 const REQUIRED_FOUNDATION_KEYS = [
   "--color-af-foundation-background",
   "--color-af-foundation-accent",
+  "--color-af-foundation-accent-ink",
   "--color-af-foundation-secondary-accent",
   "--color-af-foundation-tertiary-accent",
   "--color-af-foundation-success",

@@ -25,6 +25,42 @@ describe("resolveWorkerSaveValidationFieldName", () => {
     ).toBeNull();
   });
 
+  it("maps hosted Linear worker validation targets onto editor fields", () => {
+    expect(
+      resolveWorkerSaveValidationFieldName(
+        workerFieldValidationTarget(
+          "auth.secretRef",
+          "hosted worker requires auth.secretRef",
+        ),
+      ),
+    ).toBe("authSecretRef");
+    expect(
+      resolveWorkerSaveValidationFieldName({
+        code: "hosted-worker-linear-mapping-work-type",
+        message: "LINEAR hosted worker requires linear.mapping.workType",
+        severity: "error",
+        subject: {
+          id: "mapping.workType",
+          location: "DEFINITION",
+          type: "WORKER",
+        },
+      }),
+    ).toBe("linearMappingWorkType");
+    expect(
+      resolveWorkerSaveValidationFieldName({
+        code: "hosted-worker-linear-claim-assignee-field",
+        message:
+          "LINEAR hosted worker claim config requires non-empty assigneeField when claim is present",
+        severity: "error",
+        subject: {
+          id: "linear.claim.assigneeField",
+          location: "DEFINITION",
+          type: "WORKER",
+        },
+      }),
+    ).toBe("linearClaimAssigneeField");
+  });
+
   it("maps worker runtime validation targets onto editor fields", () => {
     expect(
       resolveWorkerSaveValidationFieldName(
@@ -104,6 +140,47 @@ describe("mapWorkerSaveErrorToFieldErrors", () => {
 
     expect(mapWorkerSaveErrorToFieldErrors(error)).toEqual({
       skipPermissions: "factory.workers[0].skipPermissions must be a boolean.",
+    });
+  });
+
+  it("maps hosted Linear save failures from error messages when targets are absent", () => {
+    const error = new CurrentFactoryDefinitionError(
+      "LINEAR hosted worker requires linear.mapping.state",
+      {
+        code: "BAD_REQUEST",
+        status: 400,
+        targets: [
+          {
+            code: "hosted-worker-linear-mapping-state",
+            message: "LINEAR hosted worker requires linear.mapping.state",
+            severity: "error",
+            subject: {
+              id: "mapping.state",
+              location: "DEFINITION",
+              type: "WORKER",
+            },
+          },
+        ],
+      },
+    );
+
+    expect(mapWorkerSaveErrorToFieldErrors(error)).toEqual({
+      linearMappingState: "LINEAR hosted worker requires linear.mapping.state",
+    });
+  });
+
+  it("maps hosted Linear field failures from error messages when targets are absent", () => {
+    const error = new CurrentFactoryDefinitionError(
+      "factory.workers[0].linear.pollInterval must be a valid Go duration.",
+      {
+        code: "BAD_REQUEST",
+        status: 400,
+      },
+    );
+
+    expect(mapWorkerSaveErrorToFieldErrors(error)).toEqual({
+      linearPollInterval:
+        "factory.workers[0].linear.pollInterval must be a valid Go duration.",
     });
   });
 

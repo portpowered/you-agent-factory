@@ -188,6 +188,46 @@ func TestRun_RuntimeLogConfigPassedToServiceConfig(t *testing.T) {
 	}
 }
 
+func TestRun_RuntimeMetricsConfigPassedToServiceConfig(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	var capturedConfig *service.FactoryServiceConfig
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		capturedConfig = cfg
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	runtimeMetricsConfig := logging.RuntimeMetricsConfig{
+		MaxSize:    14,
+		MaxBackups: 7,
+		MaxAge:     28,
+		Compress:   true,
+	}
+	err := Run(context.Background(), RunConfig{
+		RuntimeMetricsDir:    "runtime-metrics",
+		RuntimeMetricsConfig: runtimeMetricsConfig,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedConfig == nil {
+		t.Fatal("expected factory service to be built")
+	}
+	if capturedConfig.RuntimeMetricsDir != "runtime-metrics" {
+		t.Fatalf("runtime metrics dir = %q, want runtime-metrics", capturedConfig.RuntimeMetricsDir)
+	}
+	if capturedConfig.RuntimeMetricsConfig != runtimeMetricsConfig {
+		t.Fatalf("runtime metrics config = %#v, want %#v", capturedConfig.RuntimeMetricsConfig, runtimeMetricsConfig)
+	}
+}
+
 func TestRun_WithMockWorkersWithoutPathPassesDefaultConfigToService(t *testing.T) {
 	originalBuilder := buildFactoryService
 	defer func() {

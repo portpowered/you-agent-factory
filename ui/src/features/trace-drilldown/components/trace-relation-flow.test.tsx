@@ -16,6 +16,8 @@ import { buildTraceFactoryGraphLayoutPositions } from "../lib/trace-factory-grap
 import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
 import { TraceRelationFlow } from "./trace-relation-flow";
 
+const fitViewSpy = vi.fn();
+
 vi.mock("@xyflow/react", async () => {
   return {
     Background: ({
@@ -58,6 +60,7 @@ vi.mock("@xyflow/react", async () => {
       edges,
       nodeTypes,
       nodes,
+      onInit,
     }: {
       children?: ReactNode;
       edges: Array<{
@@ -82,6 +85,7 @@ vi.mock("@xyflow/react", async () => {
         type: string;
         width?: number;
       }>;
+      onInit?: (instance: { fitView: typeof fitViewSpy }) => void;
     }) => (
       <div
         data-edge-payload={JSON.stringify(edges)}
@@ -103,6 +107,9 @@ vi.mock("@xyflow/react", async () => {
           })),
         )}
         data-testid="trace-relation-react-flow"
+        ref={() => {
+          onInit?.({ fitView: fitViewSpy });
+        }}
       >
         {nodes.map((node) => {
           const NodeView = nodeTypes[node.type];
@@ -216,6 +223,7 @@ describe("TraceRelationFlow", () => {
 
   afterEach(() => {
     cleanup();
+    fitViewSpy.mockReset();
     restoreBrowserShims?.();
     restoreBrowserShims = undefined;
   });
@@ -238,6 +246,8 @@ describe("TraceRelationFlow", () => {
         "true",
       );
       expect(graphFrame.className).toContain("shadow-none");
+      expect(graphFrame.className).toContain("bg-transparent");
+      expect(graphFrame.className).not.toContain("bg-surface-container-low");
       expect(graphFrame.className).not.toContain("shadow-af-card");
       expect(graphFrame.className).not.toContain("shadow-af-panel");
     });
@@ -277,6 +287,7 @@ describe("TraceRelationFlow", () => {
         .getByTestId("trace-relation-flow-controls")
         .getAttribute("data-controls-style"),
     ).toContain('"borderRadius":8');
+    expect(fitViewSpy).toHaveBeenCalledWith({ maxZoom: 1.5, padding: 0.08 });
 
     const implementButton = screen.getByRole("button", {
       name: "Implement story",
@@ -308,9 +319,9 @@ describe("TraceRelationFlow", () => {
     expect(edges[0]?.ariaLabel).toBe(
       "Parent-child relation from Plan story to Implement story, requiring Done",
     );
-    expect(edges[0]?.style?.stroke).toBe("var(--color-success)");
-    expect(edges[0]?.style?.strokeDasharray).toBe("7 5");
-    expect(edges[1]?.style?.stroke).toBe("var(--color-on-error-container)");
+    expect(edges[0]?.style?.stroke).toBe("var(--color-outline-variant)");
+    expect(edges[0]?.style?.strokeDasharray).toBeUndefined();
+    expect(edges[1]?.style?.stroke).toBe("var(--color-outline-variant)");
   });
 });
 
@@ -342,9 +353,7 @@ describe("TraceRelationFlow selected work", () => {
       expect(screen.getByTestId("trace-relation-react-flow")).toBeTruthy();
     });
 
-    expect(
-      screen.queryByRole("button", { name: "Plan story" }),
-    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Plan story" })).toBeNull();
 
     const selectedShell = screen.getByText("Plan story").closest("article");
     if (!(selectedShell instanceof HTMLElement)) {
@@ -447,9 +456,8 @@ describe("TraceRelationFlow localization", () => {
       "派生自关系：从 Review story 到 Fix story，要求 未知状态：escalated_review",
     );
     expect(renderedEdges()[0]?.style).toMatchObject({
-      stroke: "var(--color-on-warning-container)",
-      strokeDasharray: "7 5",
-      strokeWidth: 2,
+      stroke: "var(--color-outline-variant)",
+      strokeWidth: 1.7,
     });
   });
 

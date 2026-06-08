@@ -1,6 +1,11 @@
 import "@xyflow/react/dist/style.css";
 
-import { applyNodeChanges, type NodeChange, ReactFlow } from "@xyflow/react";
+import {
+  applyNodeChanges,
+  type NodeChange,
+  ReactFlow,
+  type ReactFlowInstance,
+} from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import {
@@ -8,7 +13,10 @@ import {
   DashboardGraphControls,
   DashboardGraphFrame,
 } from "../../../components/dashboard/dashboard-graph";
-import { FACTORY_GRAPH_EDITOR_EDGE_TYPES } from "../../factory-graph-editor/components/factory-graph-editor-edge";
+import {
+  FACTORY_GRAPH_EDGE_TYPES,
+  WORK_RELATION_NODE_TYPES,
+} from "../../graphs/public";
 import {
   traceRelationTopologyLayoutKey,
   useTraceRelationFactoryGraphLayoutPositions,
@@ -19,8 +27,6 @@ import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-
 import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
-import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "./trace-relation-factory-graph-node";
-
 const GRAPH_SHELL_STYLE = { height: 352, minHeight: 288 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
 const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;
@@ -73,7 +79,7 @@ export function TraceRelationFlow({
       ),
     );
   }, [graph.nodes, onSelectWorkID, positionsByTraceNodeId]);
-  const [nodes, setNodes] = useState<TraceRelationFlowNode[]>([]);
+  const [nodes, setNodes] = useState<TraceRelationFlowNode[]>(baseNodes);
   const draggedNodeIdsRef = useRef(new Set<string>());
   const topologyKeyRef = useRef(topologyKey);
 
@@ -103,6 +109,16 @@ export function TraceRelationFlow({
 
   const renderedNodes =
     topologyKeyRef.current === topologyKey ? nodes : baseNodes;
+  const fitViewKey = useMemo(
+    () =>
+      `${topologyKey}:${baseNodes
+        .map(
+          (node) =>
+            `${node.id}:${node.position.x},${node.position.y}:${node.width ?? 0}x${node.height ?? 0}`,
+        )
+        .join("|")}`,
+    [baseNodes, topologyKey],
+  );
   const handleNodesChange = useCallback(
     (changes: NodeChange<TraceRelationFlowNode>[]) => {
       for (const change of changes) {
@@ -129,7 +145,7 @@ export function TraceRelationFlow({
   return (
     <DashboardGraphFrame
       aria-label={getTraceDrilldownMessages(locale).batchRelationGraphLabel}
-      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-surface-container-low"
+      className="max-w-full min-w-80 resize overflow-hidden border-transparent bg-transparent"
       data-trace-relation-flow
       style={GRAPH_SHELL_STYLE}
     >
@@ -142,6 +158,7 @@ export function TraceRelationFlow({
         {graphViewportReady ? (
           <TraceRelationReactFlow
             edges={graph.edges}
+            fitViewKey={fitViewKey}
             nodes={renderedNodes}
             onNodesChange={handleNodesChange}
           />
@@ -153,24 +170,54 @@ export function TraceRelationFlow({
 
 function TraceRelationReactFlow({
   edges,
+  fitViewKey,
   nodes,
   onNodesChange,
 }: {
   edges: ReturnType<typeof buildTraceRelationFactoryGraphFlow>["edges"];
+  fitViewKey: string;
   nodes: TraceRelationFlowNode[];
   onNodesChange: (changes: NodeChange<TraceRelationFlowNode>[]) => void;
 }) {
+  const flowInstanceRef = useRef<ReactFlowInstance<
+    TraceRelationFlowNode,
+    ReturnType<typeof buildTraceRelationFactoryGraphFlow>["edges"][number]
+  > | null>(null);
+  const appliedFitViewKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!flowInstanceRef.current || nodes.length === 0) {
+      return;
+    }
+
+    if (appliedFitViewKeyRef.current === fitViewKey) {
+      return;
+    }
+
+    appliedFitViewKeyRef.current = fitViewKey;
+    const animationFrameID = requestAnimationFrame(() => {
+      flowInstanceRef.current?.fitView(GRAPH_FIT_VIEW_OPTIONS);
+    });
+
+    return () => {
+      cancelAnimationFrame(animationFrameID);
+    };
+  }, [fitViewKey, nodes]);
+
   return (
     <ReactFlow
       edges={edges}
-      edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
+      edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
       fitView
       fitViewOptions={GRAPH_FIT_VIEW_OPTIONS}
       maxZoom={2}
       minZoom={0.35}
       nodes={nodes}
       nodesDraggable={true}
-      nodeTypes={TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES}
+      nodeTypes={WORK_RELATION_NODE_TYPES}
+      onInit={(instance) => {
+        flowInstanceRef.current = instance;
+      }}
       onNodesChange={onNodesChange}
       onError={failOnTraceReactFlowError}
       panOnDrag

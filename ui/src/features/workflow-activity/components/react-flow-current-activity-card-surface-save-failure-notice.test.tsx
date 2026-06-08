@@ -2,11 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 vi.mock(
-  "../../factory-graph-editor/components/factory-graph-editor-controls",
+  "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
   () => ({
     FactoryGraphEditorNotice: ({
       children,
@@ -51,7 +51,37 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     canSaveDraft: true,
     connectionNotice: null,
     currentFactoryDefinition: null,
+    dirtyStateSummary: {
+      layoutDirty: false,
+      preferencesDirty: false,
+      topologyDirty: true,
+    },
     draftState: { hasChanges: true, pendingFactoryDefinition: null },
+    handleDiscardPendingChanges: vi.fn(),
+    handleEditorConnect: vi.fn(),
+    handleEditorEdgeDelete: vi.fn(),
+    handleEditorNodeDelete: vi.fn(),
+    hiddenNodeClasses: new Set(),
+    hideShowMenuOpen: false,
+    layoutDraftState: {
+      canRedoLayout: false,
+      canUndoLayout: false,
+      layoutDirty: false,
+    },
+    moveLayoutNode: vi.fn(),
+    moveLayoutNodesByDelta: vi.fn(),
+    redoLayout: vi.fn(),
+    resetLayout: vi.fn(),
+    resetPreferences: vi.fn(),
+    setActiveTool: vi.fn(),
+    setAddMenuOpen: vi.fn(),
+    setHideShowMenuOpen: vi.fn(),
+    setIsConfirmingSave: vi.fn(),
+    setVisibilityPreset: vi.fn(),
+    toggleHiddenNodeClass: vi.fn(),
+    undoLayout: vi.fn(),
+    updateLayoutViewport: vi.fn(),
+    visibilityPreset: "all",
     editorMode: true,
     structuralValidation: {
       projection: projectFactoryValidationTargets([]),

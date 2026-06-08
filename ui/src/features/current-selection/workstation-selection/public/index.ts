@@ -1,17 +1,16 @@
-export {
-  CollapsibleProviderSessionAttempts,
-  ProviderSessionAttempts,
-} from "../components/provider-session-attempts";
-export { WorkstationDetailCard } from "../components/workstation-detail-card";
+export { WorkstationDetailCard } from "../components/detail-card/workstation-detail-card";
 export {
   EditableWorkstationConfigurationHeaderActions,
   EditableWorkstationSaveHeaderAction,
-} from "../components/workstation-save-controls";
+} from "../components/editable/workstation-save-controls";
+export {
+  CollapsibleProviderSessionAttempts,
+  ProviderSessionAttempts,
+} from "../components/fields/provider-session-attempts";
 
 export {
   BUILT_IN_RUNNER_IDS,
   getRunnerMetadata,
-  type RunnerID,
   type RunnerMetadata,
 } from "../editing/runner-metadata";
 export type {
@@ -19,7 +18,7 @@ export type {
   EditableWorkstationOverwriteField,
   EditableWorkstationSaveState,
   WorkstationDetailCardProps,
-} from "../lib/detail-card-types";
+} from "../lib/keys/detail-card-types";
 export {
   getWorkstationDetailMessages,
   workstationDetailMessagesByLocale,

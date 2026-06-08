@@ -3,7 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   readGraphDraftHasPendingChanges,
   useFactoryGraphTopologyEditorBridge,
@@ -13,6 +13,7 @@ import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-car
 const fixtureState = vi.hoisted(() => {
   const emptyDraft = () => ({
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -24,6 +25,7 @@ const fixtureState = vi.hoisted(() => {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -114,6 +116,13 @@ const hookState = vi.hoisted(() => ({
   unsupportedFromDefinition: undefined as string | undefined,
   documentSave: { status: "idle" as const },
   saveStateIsStale: false,
+  layoutDirty: false,
+  preferencesDirty: false,
+  topologyDirty: false,
+  layoutDraftState: {
+    hasChanges: false,
+    layoutDirty: false,
+  },
 }));
 
 vi.mock(
@@ -134,6 +143,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
   useEditableFactoryGraph: () => ({
     actions: {
       discard: hookState.draftState.resetDraft,
+      resetLayout: vi.fn(),
       save: async () => {
         if (!hookState.draftState.pendingFactoryDefinition) {
           return false;
@@ -145,6 +155,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         hookState.draftState.replaceDraft(createEmptyFactoryGraphDraft());
         return true;
       },
+      updateLayoutViewport: vi.fn(),
     },
     documentSaveControls: {
       beginConfirmation: vi.fn(() => {
@@ -158,6 +169,37 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       }),
     },
     draftState: hookState.draftState,
+    layoutDraftState: hookState.layoutDraftState,
+    pendingState: {
+      dirtyState: {
+        layoutDirty:
+          hookState.layoutDraftState.layoutDirty || hookState.layoutDirty,
+        preferencesDirty: hookState.preferencesDirty,
+        topologyDirty:
+          hookState.draftState.hasChanges || hookState.topologyDirty,
+      },
+      hasChanges:
+        hookState.layoutDraftState.layoutDirty ||
+        hookState.layoutDirty ||
+        hookState.draftState.hasChanges ||
+        hookState.topologyDirty,
+      hasLayoutChanges:
+        hookState.layoutDraftState.layoutDirty || hookState.layoutDirty,
+      hasPortableDocumentChanges:
+        hookState.layoutDraftState.layoutDirty ||
+        hookState.layoutDirty ||
+        hookState.draftState.hasChanges ||
+        hookState.topologyDirty,
+      hasPreferenceChanges: hookState.preferencesDirty,
+      hasTopologyChanges:
+        hookState.draftState.hasChanges || hookState.topologyDirty,
+      layoutDirty:
+        hookState.layoutDraftState.layoutDirty || hookState.layoutDirty,
+      pendingFactoryDefinition: hookState.draftState.pendingFactoryDefinition,
+      preferencesDirty: hookState.preferencesDirty,
+      topologyDirty:
+        hookState.draftState.hasChanges || hookState.topologyDirty,
+    },
     saveMutation: {
       error: hookState.saveEditableDefinition.error,
       isPending: hookState.saveEditableDefinition.isPending,
@@ -165,7 +207,10 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
     },
     saveState: {
       canSave:
-        hookState.draftState.hasChanges &&
+        (hookState.layoutDraftState.layoutDirty ||
+          hookState.layoutDirty ||
+          hookState.draftState.hasChanges ||
+          hookState.topologyDirty) &&
         hookState.draftState.pendingFactoryDefinition !== null &&
         hookState.draftState.latestDocument !== null &&
         hookState.draftState.validationErrors.length === 0 &&
@@ -183,14 +228,14 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
 }));
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-additions",
+  "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
   () => ({
     buildFactoryGraphAddEntityMenuActions: () => [],
   }),
 );
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-save-summary",
+  "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
   () => ({
     buildFactoryGraphSaveSummary: () => ({
       additions: [],
@@ -216,19 +261,22 @@ vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
   useFactoryGraphRemovalController: () => hookState.removalController,
 }));
 
-vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
-  useFactoryValidation: () => ({
-    data: { targets: [] },
-    isError: false,
-    isFetching: false,
-    isLoading: false,
-    projection: {
-      handleErrorsByAnchorId: new Map(),
-      nodeErrorsByNodeId: new Map(),
-    },
-    targets: [],
+vi.mock(
+  "../../factory-graph-editor/hooks/validation/use-factory-validation",
+  () => ({
+    useFactoryValidation: () => ({
+      data: { targets: [] },
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      projection: {
+        handleErrorsByAnchorId: new Map(),
+        nodeErrorsByNodeId: new Map(),
+      },
+      targets: [],
+    }),
   }),
-}));
+);
 
 vi.mock("./react-flow-current-activity-card-editor-value", () => ({
   buildCurrentActivityGraphEditorValue: (value: Record<string, unknown>) =>

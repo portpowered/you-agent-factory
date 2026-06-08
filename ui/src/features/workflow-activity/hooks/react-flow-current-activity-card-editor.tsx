@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import { useDraftAppliedFactoryValidation } from "./react-flow-current-activity-card-editor-draft-validation";
 import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
@@ -17,6 +18,7 @@ export function useCurrentActivityGraphEditor(
   snapshot: DashboardSnapshot,
   locale?: string | null,
   factoryDocumentScopeKey?: string | null,
+  onDocAdded?: (targetPath: string) => void,
   onNodeRemovedFromDraft?: (nodeId: string) => void,
 ) {
   const [editorMode, setEditorMode] = useState(false);
@@ -24,14 +26,19 @@ export function useCurrentActivityGraphEditor(
   const {
     hiddenNodeClasses,
     hideShowMenuOpen,
+    preferencesDirty,
+    resetPreferences,
     setHideShowMenuOpen,
+    setVisibilityPreset,
     toggleHiddenNodeClass,
-  } = useHiddenFactoryGraphNodeClasses();
+    visibilityPreset,
+  } = useHiddenFactoryGraphNodeClasses(factoryDocumentScopeKey);
   const leaveEditorBridge = useGraphEditorLeaveEditorBridge();
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
       editorMode,
       factoryDocumentScopeKey,
+      hasPreferenceChanges: preferencesDirty,
       locale,
       snapshot,
     });
@@ -45,6 +52,7 @@ export function useCurrentActivityGraphEditor(
     draftState,
     editableDefinitionQuery: currentFactoryQuery,
     editorMode,
+    layoutDraftState: editableGraph.layoutDraftState,
     locale,
     ...leaveEditorBridge.sessionCallbacks,
     projectedFactory: snapshot.factory,
@@ -60,6 +68,7 @@ export function useCurrentActivityGraphEditor(
     editableGraph,
     hiddenNodeClasses,
     locale,
+    onDocAdded,
     onNodeRemovedFromDraft,
     saveEditableDefinition,
     setActiveTool,
@@ -93,14 +102,27 @@ export function useCurrentActivityGraphEditor(
   useEffect(() => {
     useFactoryGraphTopologyEditorBridge
       .getState()
-      .setGraphDraftHasPendingChanges(draftState.hasChanges);
+      .setGraphDraftHasPendingChanges(
+        editableGraph.pendingState.topologyDirty,
+      );
 
     return () => {
       useFactoryGraphTopologyEditorBridge
         .getState()
         .setGraphDraftHasPendingChanges(false);
     };
-  }, [draftState.hasChanges]);
+  }, [editableGraph.pendingState.topologyDirty]);
+
+  useEffect(() => {
+    const pendingFactoryBridge = useGraphEditorPendingFactoryBridge.getState();
+    pendingFactoryBridge.setPendingFactoryDefinition(
+      editorMode ? session.currentFactoryDefinition : null,
+    );
+
+    return () => {
+      pendingFactoryBridge.setPendingFactoryDefinition(null);
+    };
+  }, [editorMode, session.currentFactoryDefinition]);
 
   useEffect(() => {
     const normalizedScopeKey = factoryDocumentScopeKey ?? null;
@@ -131,6 +153,15 @@ export function useCurrentActivityGraphEditor(
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,
+    dirtyStateSummary: editableGraph.pendingState.dirtyState,
+    layoutDraftState: editableGraph.layoutDraftState,
+    moveLayoutNode: editableGraph.actions.moveLayoutNode,
+    moveLayoutNodesByDelta: editableGraph.actions.moveLayoutNodesByDelta,
+    resetLayout: editableGraph.actions.resetLayout,
+    redoLayout: editableGraph.actions.redoLayout,
+    resetPreferences,
+    undoLayout: editableGraph.actions.undoLayout,
+    updateLayoutViewport: editableGraph.actions.updateLayoutViewport,
     editableDefinitionQuery: currentFactoryQuery,
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
@@ -168,6 +199,8 @@ export function useCurrentActivityGraphEditor(
     hiddenNodeClasses,
     hideShowMenuOpen,
     setHideShowMenuOpen,
+    setVisibilityPreset,
     toggleHiddenNodeClass,
+    visibilityPreset,
   });
 }

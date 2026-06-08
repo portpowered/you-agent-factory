@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FactoryValidationResult } from "../../../api/factory-validation";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/use-factory-validation";
-import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
-import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/factory-graph-operations";
+import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/validation/use-factory-validation";
+import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
+import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-apply";
+import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/operations/factory-graph-operations";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 
 const validationFixtures = vi.hoisted(() => {
@@ -64,6 +64,7 @@ const editableDocument: CanonicalFactoryDefinition & {
 function createEmptyDraft() {
   return {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -75,6 +76,7 @@ function createEmptyDraft() {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -105,6 +107,7 @@ const hookState = vi.hoisted(() => ({
     baseDocument: null as CanonicalFactoryDefinition | null,
     draft: {
       additions: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],
@@ -116,6 +119,7 @@ const hookState = vi.hoisted(() => ({
         removals: [],
       },
       removals: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],
@@ -203,6 +207,26 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       clearSaveFeedback: vi.fn(),
     },
     draftState: hookState.draftState,
+    layoutDraftState: {
+      hasChanges: false,
+      layoutDirty: false,
+    },
+    pendingState: {
+      dirtyState: {
+        layoutDirty: false,
+        preferencesDirty: false,
+        topologyDirty: hookState.draftState.hasChanges,
+      },
+      hasChanges: hookState.draftState.hasChanges,
+      hasLayoutChanges: false,
+      hasPortableDocumentChanges: hookState.draftState.hasChanges,
+      hasPreferenceChanges: false,
+      hasTopologyChanges: hookState.draftState.hasChanges,
+      layoutDirty: false,
+      pendingFactoryDefinition: hookState.draftState.pendingFactoryDefinition,
+      preferencesDirty: false,
+      topologyDirty: hookState.draftState.hasChanges,
+    },
     saveMutation: {
       error: hookState.saveEditableDefinition.error,
       isPending: hookState.saveEditableDefinition.isPending,
@@ -217,14 +241,14 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
 }));
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-additions",
+  "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
   () => ({
     buildFactoryGraphAddEntityMenuActions: () => [],
   }),
 );
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-save-summary",
+  "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
   () => ({
     buildFactoryGraphSaveSummary: () => ({
       additions: [],

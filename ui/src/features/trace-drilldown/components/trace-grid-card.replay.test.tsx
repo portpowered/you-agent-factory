@@ -10,9 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import traceWorkstationPathRegressionReplayText from "../../../../integration/fixtures/trace-workstation-path-regression-replay.jsonl?raw";
 
 vi.mock("../lib/trace-factory-graph-layout", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("../lib/trace-factory-graph-layout")
-  >();
+  const actual =
+    await importOriginal<typeof import("../lib/trace-factory-graph-layout")>();
   return {
     ...actual,
     buildTraceFactoryGraphLayoutPositions: async () => new Map(),

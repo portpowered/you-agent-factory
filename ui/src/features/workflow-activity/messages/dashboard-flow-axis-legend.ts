@@ -31,6 +31,7 @@ const dashboardFlowAxisLegendMessagesByLocale = {
     iconLabels: {
       "active-work": "Active work",
       constraint: "Constraint",
+      doc: "Doc",
       cron: "Cron workstation",
       exhaustion: "Exhaustion rule",
       failed: "Failed state",
@@ -60,6 +61,7 @@ const dashboardFlowAxisLegendMessagesByLocale = {
     iconLabels: {
       "active-work": "進行中の作業",
       constraint: "制約",
+      doc: "ドキュメント",
       cron: "Cron ワークステーション",
       exhaustion: "枯渇ルール",
       failed: "失敗状態",
@@ -89,6 +91,7 @@ const dashboardFlowAxisLegendMessagesByLocale = {
     iconLabels: {
       "active-work": "활성 작업",
       constraint: "제약",
+      doc: "문서",
       cron: "Cron 워크스테이션",
       exhaustion: "소진 규칙",
       failed: "실패 상태",
@@ -118,6 +121,7 @@ const dashboardFlowAxisLegendMessagesByLocale = {
     iconLabels: {
       "active-work": "活动工作",
       constraint: "约束",
+      doc: "文档",
       cron: "Cron 工作站",
       exhaustion: "耗尽规则",
       failed: "失败状态",

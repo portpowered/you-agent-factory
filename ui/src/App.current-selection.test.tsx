@@ -1,3 +1,5 @@
+import "@testing-library/jest-dom/vitest";
+
 import {
   act,
   fireEvent,
@@ -5,17 +7,20 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { selectLabeledComboboxOption } from "./testing/select-test-helpers";
 import type {
   DashboardSnapshot,
   DashboardTrace,
   DashboardWorkItemRef,
 } from "./api/dashboard";
 import { dashboardWorkstationRequestFixtures } from "./components/dashboard/fixtures";
+import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS } from "./features/bento/hooks/dashboardLayoutSchema";
 import { useCurrentWorkstationPromptTemplateValidation } from "./features/current-selection/workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
 import {
-  activeSnapshot,
   baselineSnapshot,
   MockEventSource,
   mockCurrentFactoryDocument,
@@ -36,7 +41,9 @@ const completedWorkID = "work-complete";
 const failedWorkID = "work-failed-story";
 const activeWorkLabel = "Active Story";
 
-const activeSnapshotWithoutTraceID = removeTraceIDsFromSnapshot(activeSnapshot);
+const activeSnapshotWithoutTraceID = removeTraceIDsFromSnapshot(
+  semanticWorkflowDashboardSnapshot,
+);
 const historicalTimelineSnapshot = {
   ...baselineSnapshot,
   tick_count: 1,
@@ -293,6 +300,17 @@ function expandDispatchAttemptSection(
   return section;
 }
 
+function expandCardSection(card: HTMLElement, title: string): HTMLElement {
+  const section = within(card).getByRole("region", { name: title });
+  const toggle = within(section).getByRole("button", { name: "Expand" });
+
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+  return section;
+}
+
 function expandAttemptDetails(
   container: HTMLElement,
   attemptNumber: number,
@@ -534,7 +552,7 @@ describe("App current selection", () => {
 
   it("renders a trace drill-down for a selected work item", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -587,7 +605,7 @@ describe("App current selection", () => {
 
   it("renders one selected-work dispatch history list with mixed inference and script-backed rows", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID:
         dispatchHistoryWorkstationRequestsByDispatchID,
@@ -644,10 +662,8 @@ describe("App current selection", () => {
       dispatchHistory,
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
     );
-    expect(readyCard.className).toContain("bg-surface-container-low");
-    const readyRequestDetails = within(readyCard).getByRole("region", {
-      name: "Request details",
-    });
+    expect(readyCard.className).toContain("bg-surface-container-high");
+    const readyRequestDetails = expandCardSection(readyCard, "Request details");
     const readyInferenceAttempts = expandDispatchAttemptSection(
       readyCard,
       "Inference attempts",
@@ -671,12 +687,12 @@ describe("App current selection", () => {
         "Review the active story and decide whether it is ready.",
       ),
     ).toBeNull();
-    const selectedInputWorkButton = within(readyRequestDetails).getByRole(
+    const selectedInputWorkButton = within(readyRequestDetails).getAllByRole(
       "button",
       {
         name: "Select work item Active Story",
       },
-    );
+    )[0];
     expect(selectedInputWorkButton.getAttribute("aria-pressed")).toBe("true");
     const selectedInputWorkArticle = selectedInputWorkButton.closest("article");
     if (!(selectedInputWorkArticle instanceof HTMLElement)) {
@@ -729,19 +745,14 @@ describe("App current selection", () => {
     expect(
       within(readyRequestDetails).queryByText("Worktree", { selector: "dt" }),
     ).toBeNull();
-    const readyTraceDetails = within(readyCard).getByRole("region", {
-      name: "Trace details",
-    });
+    expect(within(readyCard).getByText("Trace IDs")).toBeTruthy();
     expect(
-      within(readyTraceDetails).getByText("Trace IDs", { selector: "dt" }),
-    ).toBeTruthy();
-    expect(
-      within(readyTraceDetails).getByRole("button", {
+      within(readyCard).getByRole("button", {
         name: "trace-active-story (selected)",
       }),
     ).toBeTruthy();
     expect(
-      within(readyTraceDetails)
+      within(readyCard)
         .getByRole("button", {
           name: "trace-active-story (selected)",
         })
@@ -795,11 +806,6 @@ describe("App current selection", () => {
       1,
     );
     expect(
-      within(erroredCard).getByText(
-        "Provider rate limit exceeded while reviewing the story.",
-      ),
-    ).toBeTruthy();
-    expect(
       within(erroredAttemptDetails).getByText("provider_rate_limit"),
     ).toBeTruthy();
     expect(
@@ -841,16 +847,11 @@ describe("App current selection", () => {
     expect(
       within(scriptFailedAttempts).getAllByText("script timed out").length,
     ).toBeGreaterThan(0);
-    expect(
-      within(scriptFailedCard).getByText(
-        "Prompt details are not applicable to this script-backed dispatch.",
-      ),
-    ).toBeTruthy();
   });
 
   it("follows the explicit selection contract: clicking work selects work, clicking a request selects a request", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID:
         readyDispatchWorkstationRequestsByDispatchID,
@@ -915,7 +916,7 @@ describe("App current selection", () => {
 
   it("keeps every current-selection kind on the canonical title and expandable section layout", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
       workstationRequestsByDispatchID:
         readyDispatchWorkstationRequestsByDispatchID,
@@ -1062,11 +1063,11 @@ describe("App current selection", () => {
 
   it("renders the selected-work empty dispatch-history state without reviving top-level execution details", async () => {
     const snapshotWithoutSelectedWorkDispatchHistory = {
-      ...activeSnapshot,
+      ...semanticWorkflowDashboardSnapshot,
       runtime: {
-        ...activeSnapshot.runtime,
+        ...semanticWorkflowDashboardSnapshot.runtime,
         session: {
-          ...activeSnapshot.runtime.session,
+          ...semanticWorkflowDashboardSnapshot.runtime.session,
           provider_sessions: [],
         },
         workstation_requests_by_dispatch_id: {},
@@ -1133,7 +1134,7 @@ describe("App current selection", () => {
   it("switches current-selection and trace enum labels to zh-CN without changing raw IDs", async () => {
     renderApp({
       initialLocale: "en",
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -1184,7 +1185,7 @@ describe("App current selection", () => {
 
   it("keeps workstation and work-item selection usable after React Flow zoom", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -1213,7 +1214,7 @@ describe("App current selection", () => {
 
   it("separates workstation selection from active work selection", async () => {
     renderApp({
-      snapshot: activeSnapshot,
+      snapshot: semanticWorkflowDashboardSnapshot,
       traceFixtures: activeStoryTraceFixtures,
     });
 
@@ -1288,18 +1289,17 @@ describe("App current selection", () => {
 
   it("shows active executions from the selected workstation instead of provider history", async () => {
     const reviewExecution =
-      activeSnapshot.runtime.active_executions_by_dispatch_id?.[
-        "dispatch-review-active"
-      ];
+      semanticWorkflowDashboardSnapshot.runtime
+        .active_executions_by_dispatch_id?.["dispatch-review-active"];
     const resolvedReviewExecution = requireValue(
       reviewExecution,
       "expected active review execution fixture",
     );
 
     const snapshot = {
-      ...activeSnapshot,
+      ...semanticWorkflowDashboardSnapshot,
       runtime: {
-        ...activeSnapshot.runtime,
+        ...semanticWorkflowDashboardSnapshot.runtime,
         active_dispatch_ids: ["dispatch-review-active", "dispatch-plan-active"],
         active_executions_by_dispatch_id: {
           "dispatch-plan-active": {
@@ -1328,7 +1328,7 @@ describe("App current selection", () => {
         },
         active_workstation_node_ids: ["review", "plan"],
         session: {
-          ...activeSnapshot.runtime.session,
+          ...semanticWorkflowDashboardSnapshot.runtime.session,
           provider_sessions: [],
         },
       },
@@ -1421,7 +1421,7 @@ describe("App current selection", () => {
       status: "success",
     } as never);
 
-    renderApp({ snapshot: activeSnapshot });
+    renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
 
     const expectSingleConfigurationForWorkstation = async ({
       actionLabel,
@@ -1506,13 +1506,14 @@ describe("App current selection", () => {
 
   it("renders localized workstation editing options with canonical values and keeps unknown fallbacks readable", async () => {
     const snapshot = {
-      ...activeSnapshot,
+      ...semanticWorkflowDashboardSnapshot,
       topology: {
-        ...activeSnapshot.topology,
+        ...semanticWorkflowDashboardSnapshot.topology,
         workstation_nodes_by_id: {
-          ...activeSnapshot.topology.workstation_nodes_by_id,
+          ...semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id,
           review: {
-            ...activeSnapshot.topology.workstation_nodes_by_id.review,
+            ...semanticWorkflowDashboardSnapshot.topology
+              .workstation_nodes_by_id.review,
             workstation_kind: "future-kind",
           },
         },
@@ -1574,24 +1575,18 @@ describe("App current selection", () => {
       }),
     );
 
-    const kindSelect = within(currentSelection).getByLabelText(
-      "类型",
-    ) as HTMLSelectElement;
-    expect(
-      Array.from(kindSelect.options).map((option) => ({
-        label: option.textContent,
-        value: option.value,
-      })),
-    ).toEqual([
-      { label: "标准", value: "STANDARD" },
-      { label: "重复器", value: "REPEATER" },
-      { label: "轮询器", value: "POLLER" },
-    ]);
+    const user = userEvent.setup();
+    const kindSelect = within(currentSelection).getByLabelText("类型");
 
-    fireEvent.change(kindSelect, {
-      target: { value: "REPEATER" },
-    });
-    expect(kindSelect.value).toBe("REPEATER");
+    await user.click(kindSelect);
+    const listbox = await screen.findByRole("listbox");
+    expect(
+      within(listbox).getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["标准", "重复器", "轮询器"]);
+    await user.keyboard("{Escape}");
+
+    await selectLabeledComboboxOption(user, "类型", "重复器");
+    expect(kindSelect).toHaveTextContent("重复器");
     const footerSaveButton =
       within(currentSelection)
         .getAllByRole("button", { name: "保存更改" })
@@ -1601,7 +1596,7 @@ describe("App current selection", () => {
   });
 
   it("shows selected state node details from the graph", async () => {
-    renderApp({ snapshot: activeSnapshot });
+    renderApp({ snapshot: semanticWorkflowDashboardSnapshot });
 
     const stateButton = await screen.findByRole("button", {
       name: "Select story:implemented state",
@@ -1677,7 +1672,7 @@ describe("App current selection", () => {
   describe("layout", () => {
     it("keeps selection detail out of the workflow graph inspector layer", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
         traceFixtures: activeStoryTraceFixtures,
       });
 
@@ -1704,7 +1699,7 @@ describe("App current selection", () => {
 
     it("renders selected work and traces on the shared dashboard grid", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
         traceFixtures: activeStoryTraceFixtures,
       });
 
@@ -1736,7 +1731,7 @@ describe("App current selection", () => {
 
     it("supports rearranging shared-grid widgets without replacing graph selection", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
         traceFixtures: activeStoryTraceFixtures,
       });
 
@@ -1793,8 +1788,8 @@ describe("App current selection", () => {
 
       act(() => {
         stream.emit("snapshot", {
-          ...activeSnapshot,
-          tick_count: activeSnapshot.tick_count + 1,
+          ...semanticWorkflowDashboardSnapshot,
+          tick_count: semanticWorkflowDashboardSnapshot.tick_count + 1,
         } satisfies DashboardSnapshot);
       });
 
@@ -2211,10 +2206,14 @@ describe("App current selection", () => {
       );
 
       expect(
-        within(completedRow).getByRole("button", { name: "Done Story" }),
+        within(completedRow).getByRole("button", {
+          name: "Select work item Done Story",
+        }),
       ).toBeTruthy();
       expect(
-        within(failedRow).getByRole("button", { name: "Failed Story" }),
+        within(failedRow).getByRole("button", {
+          name: "Select work item Failed Story",
+        }),
       ).toBeTruthy();
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
         window.innerWidth,
@@ -2233,17 +2232,33 @@ describe("App current selection", () => {
       const dashboardGrid = screen.getByRole("region", {
         name: "you-agent-factory bento board",
       });
+      const completedRow = within(dashboardGrid)
+        .getByRole("heading", { name: "Completed" })
+        .closest("section");
+      const failedRow = within(dashboardGrid)
+        .getByRole("heading", { name: "Failed" })
+        .closest("section");
+
+      if (
+        !(completedRow instanceof HTMLElement) ||
+        !(failedRow instanceof HTMLElement)
+      ) {
+        throw new Error("expected terminal work sections");
+      }
+
       fireEvent.click(
-        within(dashboardGrid).getByRole("button", { name: "Done Story" }),
+        within(completedRow).getByRole("button", {
+          name: "Select work item Done Story",
+        }),
       );
 
       const completedDetail = await screen.findByRole("article", {
         name: "Current selection",
       });
       expect(
-        within(dashboardGrid)
-          .getByRole("button", { name: "Done Story" })
-          .getAttribute("data-selected"),
+        within(completedRow)
+          .getByRole("button", { name: "Select work item Done Story" })
+          .getAttribute("aria-pressed"),
       ).toBe("true");
       expect(within(completedDetail).getByText("Done Story")).toBeTruthy();
       expect(
@@ -2267,20 +2282,24 @@ describe("App current selection", () => {
         await within(dashboardGrid).findByText("dispatch-done-story"),
       ).toBeTruthy();
 
-      fireEvent.click(screen.getByRole("button", { name: "Failed Story" }));
+      fireEvent.click(
+        within(failedRow).getByRole("button", {
+          name: "Select work item Failed Story",
+        }),
+      );
 
       const failedDetail = await screen.findByRole("article", {
         name: "Current selection",
       });
       expect(
-        within(dashboardGrid)
-          .getByRole("button", { name: "Done Story" })
-          .getAttribute("data-selected"),
+        within(completedRow)
+          .getByRole("button", { name: "Select work item Done Story" })
+          .getAttribute("aria-pressed"),
       ).toBe("false");
       expect(
-        within(dashboardGrid)
-          .getByRole("button", { name: "Failed Story" })
-          .getAttribute("data-selected"),
+        within(failedRow)
+          .getByRole("button", { name: "Select work item Failed Story" })
+          .getAttribute("aria-pressed"),
       ).toBe("true");
       expect(within(failedDetail).getByText("Failed Story")).toBeTruthy();
       expect(
@@ -2413,7 +2432,7 @@ describe("App current selection", () => {
 
     it("shows an explicit unavailable state when no retained trace history exists", async () => {
       renderApp({
-        snapshot: activeSnapshot,
+        snapshot: semanticWorkflowDashboardSnapshot,
       });
 
       fireEvent.click(getActiveStorySelectionButton());

@@ -1,5 +1,5 @@
 import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
-import { buildGraphSaveErrorToastDescription } from "../../../factory-graph-editor/lib/graph-document-save-notifications";
+import { buildGraphSaveErrorToastDescription } from "../../../factory-graph-editor/lib/document-save/graph-document-save-notifications";
 import type { CurrentSelectionSaveEntityKind } from "../../../notifications/lib/save-notification-delivery-policy";
 import type { FactoryDocumentSaveState } from "../hooks/factory-document-save-types";
 

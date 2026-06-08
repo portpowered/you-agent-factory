@@ -56,6 +56,7 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
       baseDocument: null,
       draft: {
         additions: {
+          docs: [],
           resources: [],
           workers: [],
           workStates: [],
@@ -64,6 +65,7 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
         },
         edgeChanges: { additions: [], removals: [] },
         removals: {
+          docs: [],
           resources: [],
           workers: [],
           workStates: [],

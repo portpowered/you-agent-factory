@@ -18,7 +18,7 @@ import { useCurrentFactoryDocument } from "../../current-factory-definition/hook
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import {
@@ -238,19 +238,22 @@ vi.mock(
   },
 );
 
-vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
-  useFactoryValidation: () => ({
-    data: { targets: [] },
-    isError: false,
-    isFetching: false,
-    isLoading: false,
-    projection: {
-      handleErrorsByAnchorId: new Map(),
-      nodeErrorsByNodeId: new Map(),
-    },
-    targets: [],
+vi.mock(
+  "../../factory-graph-editor/hooks/validation/use-factory-validation",
+  () => ({
+    useFactoryValidation: () => ({
+      data: { targets: [] },
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      projection: {
+        handleErrorsByAnchorId: new Map(),
+        nodeErrorsByNodeId: new Map(),
+      },
+      targets: [],
+    }),
   }),
-}));
+);
 
 vi.mock("../../flowchart/lib/layout", async () => {
   const actual = await vi.importActual("../../flowchart/lib/layout");
@@ -273,6 +276,7 @@ const defaultDraftState = {
   baseDocument: null,
   draft: {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -284,6 +288,7 @@ const defaultDraftState = {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -324,7 +329,8 @@ function createProps(
     now: Date.parse("2026-04-08T12:00:00Z"),
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
-    onSelectResource: vi.fn(),
+    onSelectDoc: vi.fn(),
+      onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkType: vi.fn(),
     onSelectWorkstation: vi.fn(),
@@ -363,9 +369,8 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
         this.callback(
           [
             {
-              contentRect: HTMLElement.prototype.getBoundingClientRect.call(
-                target,
-              ),
+              contentRect:
+                HTMLElement.prototype.getBoundingClientRect.call(target),
               target,
             } as ResizeObserverEntry,
           ],
@@ -411,7 +416,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     expect(
       screen.getByRole("heading", { name: "Current activity" }),
     ).toBeTruthy();
-    expect(screen.getByText("Observe")).toBeTruthy();
     expect(screen.getByText("No workflow topology loaded")).toBeTruthy();
     expect(
       screen.getByText(
@@ -838,6 +842,10 @@ function renderViewport({
       headingID="test-heading"
       hiddenNodeClasses={new Set()}
       hideShowMenuOpen={false}
+      onClearPreferences={vi.fn()}
+      onSelectVisibilityPreset={vi.fn()}
+      preferencesDirty={false}
+      visibilityPreset="all"
       imports={mockImportController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}

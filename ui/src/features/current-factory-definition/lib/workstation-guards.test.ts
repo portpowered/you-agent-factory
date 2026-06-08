@@ -117,9 +117,12 @@ describe("workstation-guards draft equality and rename", () => {
       ],
       inputs: [],
       name: "Alpha",
+      operation: "",
+      operationBindings: [],
       prompt: "",
       runnerName: null,
       workerName: "w",
+      workstationType: "MODEL_WORKSTATION" as const,
     };
     const right = {
       ...left,
@@ -185,9 +188,7 @@ describe("workstation-guards draft equality and rename", () => {
         "Planning",
       ),
     ).toEqual({
-      guards: [
-        { maxVisits: 1, type: "VISIT_COUNT", workstation: "Planning" },
-      ],
+      guards: [{ maxVisits: 1, type: "VISIT_COUNT", workstation: "Planning" }],
       inputs: [
         {
           guards: [

@@ -7,7 +7,7 @@ import {
   resolveDraftForBehaviorChange,
   updateEditableWorkstationCronDraft,
 } from "./editable-workstation-cron-draft-mutators";
-import type { RunnerID } from "./runner-metadata";
+import type { ApiRunnerID } from "../messages/runner-openapi-enums";
 
 export type EditableWorkstationSessionDraftState = {
   draft: EditableWorkstationDraft;
@@ -139,7 +139,7 @@ export function buildEditableWorkstationConfigurationMutators<
           : currentState,
       );
     },
-    onRunnerChange: (value: RunnerID | null) => {
+    onRunnerChange: (value: ApiRunnerID | null) => {
       updateDraft((draft) => ({ ...draft, runnerName: value }));
     },
     onWorkerChange: (value: string) => {

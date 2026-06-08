@@ -526,6 +526,54 @@ describe("resolveDashboardSelection", () => {
     });
   });
 
+  it("retains doc selections that exist only in the graph-editor pending factory", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+    const selection = {
+      kind: "doc" as const,
+      targetPath: "factory/docs/playbook.md",
+    };
+
+    expect(
+      resolveDashboardSelection({
+        pendingFactoryDefinition: {
+          name: "Current Factory",
+          supportingFiles: {
+            bundledFiles: [
+              {
+                content: { encoding: "utf-8", inline: "# Playbook\n" },
+                targetPath: "factory/docs/playbook.md",
+                type: "DOC",
+              },
+            ],
+          },
+        },
+        selection,
+        snapshot,
+      }),
+    ).toEqual(selection);
+  });
+
+  it("falls back when a doc selection is absent from both saved and pending factories", () => {
+    const snapshot = buildFactoryTimelineSnapshot([initialStructureRequest], 1);
+
+    expect(
+      resolveDashboardSelection({
+        pendingFactoryDefinition: {
+          name: "Current Factory",
+          supportingFiles: { bundledFiles: [] },
+        },
+        selection: {
+          kind: "doc",
+          targetPath: "factory/docs/missing.md",
+        },
+        snapshot,
+      }),
+    ).toEqual({
+      kind: "node",
+      nodeId: "review",
+    });
+  });
+
   it("surfaces replayed work content from projected runtime refs for tracked work-item selection", () => {
     const payloadStructureRequest = event(
       "event-payload-structure",

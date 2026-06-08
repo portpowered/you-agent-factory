@@ -1,4 +1,9 @@
 import {
+  type CurrentActivityDocNode,
+  type DocNodeData,
+  DocNodeView,
+} from "./current-activity-doc-node";
+import {
   type ConstraintNodeData,
   ConstraintNodeView,
   type CurrentActivityPlaceNode,
@@ -28,6 +33,7 @@ import {
 
 const NODE_TYPES = {
   constraint: ConstraintNodeView,
+  doc: DocNodeView,
   resource: ResourceNodeView,
   statePosition: StatePositionNodeView,
   worker: WorkerNodeView,
@@ -35,15 +41,17 @@ const NODE_TYPES = {
   workstation: WorkstationNodeView,
 };
 
-export { NODE_TYPES as CURRENT_ACTIVITY_NODE_TYPES };
+export { NODE_TYPES };
 export type CurrentActivityNode =
   | CurrentActivityWorkstationNode
   | CurrentActivityPlaceNode
+  | CurrentActivityDocNode
   | CurrentActivityResourceNode
   | CurrentActivityWorkerNode
   | CurrentActivityWorkTypeNode;
 export type {
   ConstraintNodeData,
+  DocNodeData,
   ResourceNodeData,
   StatePositionNodeData,
   WorkerNodeData,

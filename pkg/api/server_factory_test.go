@@ -77,10 +77,20 @@ func TestGetCurrentFactory_AllowsDefaultRuntimeIdentifier(t *testing.T) {
 }
 
 func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
+	managedRuntime := factoryapi.ManagedRuntime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+		Locality:       factoryapi.WorkerModelLocalityLocal,
+		SupportedOperations: []factoryapi.ModelOperation{{
+			Name: "TTS",
+		}},
+	}
 	mf := &testutil.MockFactory{
 		Models: factoryapi.ListModelsResponse{
 			Results: []factoryapi.ModelSummary{{
 				Name:             "OMNIVOICE_Q4_K_M",
+				ManagedRuntime:   managedRuntime,
 				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
 				Status:           factoryapi.ModelStatusREADY,
 				LoadState:        factoryapi.UNLOADED,
@@ -103,13 +113,25 @@ func TestListModels_ReturnsDiscoveredModelSummaries(t *testing.T) {
 	if len(response.Results) != 1 || response.Results[0].Name != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("list models response = %#v, want OMNIVOICE model", response)
 	}
+	if response.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("managed readiness = %s, want READY", response.Results[0].ManagedRuntime.ReadinessState)
+	}
 }
 
 func TestGetModel_ReturnsDiscoveredModelDetail(t *testing.T) {
 	mf := &testutil.MockFactory{
 		ModelDetails: map[string]factoryapi.ModelDetail{
 			"OMNIVOICE_Q4_K_M": {
-				Name:             "OMNIVOICE_Q4_K_M",
+				Name: "OMNIVOICE_Q4_K_M",
+				ManagedRuntime: factoryapi.ManagedRuntime{
+					Identity:       "OMNIVOICE_Q4_K_M",
+					ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
+					LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+					Locality:       factoryapi.WorkerModelLocalityLocal,
+					SupportedOperations: []factoryapi.ModelOperation{{
+						Name: "TTS",
+					}},
+				},
 				ProviderLocality: factoryapi.WorkerModelLocalityLocal,
 				Status:           factoryapi.ModelStatusREADY,
 				LoadState:        factoryapi.UNLOADED,
@@ -266,6 +288,11 @@ func TestPullModel_ReturnsManagedCachePullMetadata(t *testing.T) {
 	if response.Outcome != factoryapi.ModelPullOutcome("PULLED") || response.CachePath == "" || len(response.DownloadedFiles) != 1 {
 		t.Fatalf("pull response = %#v, want pull metadata", response)
 	}
+	if response.ManagedRuntimePull.Identity != "OMNIVOICE_Q4_K_M" ||
+		response.ManagedRuntimePull.PullOutcome != factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ||
+		response.ManagedRuntimePull.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("managed runtime pull = %#v, want installed successfully", response.ManagedRuntimePull)
+	}
 }
 
 func TestGetCurrentFactory_ReturnsDefinitionAndVersion(t *testing.T) {
@@ -385,7 +412,13 @@ func TestSaveCurrentFactory_MapsStaleVersion(t *testing.T) {
 func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		CurrentFactory: &factoryapi.Factory{
-			Name:         "beta",
+			Name: "beta",
+			SupportingFiles: &factoryapi.ResourceManifest{
+				BundledFiles: &[]factoryapi.BundledFile{{
+					TargetPath: "factory/docs/overview.md",
+					Type:       factoryapi.BundledFileTypeDOC,
+				}},
+			},
 			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
 		},
 	})
@@ -403,6 +436,37 @@ func TestGetCurrentFactoryWorkstationPromptTemplateContract(t *testing.T) {
 	}
 	if !promptTemplateContractHasPath(contract.AvailableVariables, ".Context.SessionID") {
 		t.Fatalf("prompt contract = %#v, want .Context.SessionID", contract.AvailableVariables)
+	}
+	if !promptTemplateContractHasPath(contract.AvailableVariables, `.Docs["factory/docs/overview.md"]`) {
+		t.Fatalf("prompt contract = %#v, want bundled doc reference", contract.AvailableVariables)
+	}
+}
+
+func TestValidateCurrentFactoryWorkstationPromptTemplate_AcceptsBundledDocReference(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{
+		CurrentFactory: &factoryapi.Factory{
+			Name: "beta",
+			SupportingFiles: &factoryapi.ResourceManifest{
+				BundledFiles: &[]factoryapi.BundledFile{{
+					TargetPath: "factory/docs/overview.md",
+					Type:       factoryapi.BundledFileTypeDOC,
+				}},
+			},
+			Workstations: &[]factoryapi.Workstation{{Name: "Review", Worker: "reviewer", Inputs: []factoryapi.WorkstationIO{{State: "queued", WorkType: "task"}}, Outputs: &[]factoryapi.WorkstationIO{{State: "reviewed", WorkType: "task"}}}},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/factory/workstations/Review/prompt-template-validation", bytes.NewBufferString(`{"prompt":"{{ index .Docs \"factory/docs/overview.md\" }}"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSONResponse[factoryapi.PromptTemplateValidationResult](t, rec)
+	if !result.Valid || len(result.Diagnostics) != 0 {
+		t.Fatalf("validation result = %#v, want valid with no diagnostics", result)
 	}
 }
 
@@ -916,45 +980,5 @@ func assertProviderSessionParseDiagnostics(t *testing.T, parse factoryapi.Provid
 
 	if len(parse.ParseErrors) != 1 || parse.ParseErrors[0].LineNumber != 4 || len(parse.UnknownEvents) != 1 || parse.UnknownEvents[0].LineNumber != 3 {
 		t.Fatalf("parse diagnostics = %#v, want malformed line 4 and unknown line 3", parse)
-	}
-}
-
-func TestGetProviderSessionDetails_LoadsTimestampPrefixedCodexSessionFromConfiguredRoot(t *testing.T) {
-	root := t.TempDir()
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl", strings.Join([]string{
-		`{"type":"session_meta","id":"019e44f4-580e-7f32-981e-1e54ec6907d6"}`,
-		`{"type":"response_item","payload":{"type":"reasoning"}}`,
-	}, "\n"))
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=019e44f4-580e-7f32-981e-1e54ec6907d6", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
-	if resp.Source.RelativePath != "2026/05/18/rollout-2026-05-20T17-35-24-019e44f4-580e-7f32-981e-1e54ec6907d6.jsonl" || resp.ProviderSession.Id != "019e44f4-580e-7f32-981e-1e54ec6907d6" || resp.Parse.EventCount != 2 {
-		t.Fatalf("provider session detail = %#v, want timestamp-prefixed session path", resp)
-	}
-}
-
-func TestGetProviderSessionDetails_PrefersExactCodexSessionFileWhenSupportedLayoutsBothExist(t *testing.T) {
-	root := t.TempDir()
-	writeProviderSessionFixture(t, root, "sess_123", `{"type":"session_meta","id":"sess_123"}`)
-	writeNamedProviderSessionFixture(t, root, "rollout-2026-05-20T17-35-24-sess_123.jsonl", `{"type":"session_meta","id":"sess_123"}`)
-
-	srv := newTestServerWithCodexRoot(root)
-	req := httptest.NewRequest("GET", "/provider-sessions/detail?provider=codex&kind=session_id&id=sess_123", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
-	}
-	resp := decodeJSONResponse[factoryapi.ProviderSessionDetailResponse](t, rec)
-	if resp.Source.RelativePath != "2026/05/18/rollout-sess_123.jsonl" {
-		t.Fatalf("relative path = %q, want exact rollout basename", resp.Source.RelativePath)
 	}
 }

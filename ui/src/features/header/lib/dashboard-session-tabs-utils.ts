@@ -7,6 +7,7 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 export const SESSION_TAB_PATH_MAX_LENGTH = 48;
+export const CANONICAL_NESTED_FACTORY_DIR = "factory";
 
 export type FolderValidationState =
   | { status: "idle" }
@@ -25,15 +26,41 @@ export type FolderValidationErrorReason =
   | "unknown";
 
 export function sessionTabLabel(session: FactorySessionSummary): string {
+  const folderBasename = normalizeSessionLabelPart(
+    basename(session.folderPath),
+  );
+  if (isCanonicalNestedFactorySession(session) && folderBasename) {
+    return folderBasename;
+  }
+
   const namedTarget =
     session.target.kind === "named" ? session.target.name : "";
   return (
     normalizeSessionLabelPart(namedTarget) ||
     normalizeSessionLabelPart(basename(session.factoryDir)) ||
-    normalizeSessionLabelPart(basename(session.folderPath)) ||
+    folderBasename ||
     normalizeSessionLabelPart(session.project) ||
-    "factory"
+    CANONICAL_NESTED_FACTORY_DIR
   );
+}
+
+export function initNewFactoryNestedPath(folderPath: string): string {
+  const normalizedFolderPath = normalizePathForCompare(folderPath);
+  if (!normalizedFolderPath) {
+    return CANONICAL_NESTED_FACTORY_DIR;
+  }
+  return `${normalizedFolderPath}/${CANONICAL_NESTED_FACTORY_DIR}`;
+}
+
+export function isCanonicalNestedFactorySession(
+  session: Pick<FactorySessionSummary, "folderPath" | "factoryDir">,
+): boolean {
+  const folderPath = normalizePathForCompare(session.folderPath);
+  const factoryDir = normalizePathForCompare(session.factoryDir);
+  if (!folderPath || !factoryDir || folderPath === factoryDir) {
+    return false;
+  }
+  return factoryDir === `${folderPath}/${CANONICAL_NESTED_FACTORY_DIR}`;
 }
 
 export function sessionTabSecondaryPath(
@@ -86,6 +113,53 @@ export function sessionPanelID(
   sessionID: string,
 ): string {
   return `${sessionTabsID}-panel-${sessionDOMIDFragment(sessionID)}`;
+}
+
+export function orderFactorySessions(
+  sessions: FactorySessionSummary[],
+  orderedSessionIDs: string[],
+): FactorySessionSummary[] {
+  const sessionByID = new Map(sessions.map((session) => [session.id, session]));
+  const orderedSessions: FactorySessionSummary[] = [];
+
+  for (const sessionID of orderedSessionIDs) {
+    const session = sessionByID.get(sessionID);
+    if (!session) {
+      continue;
+    }
+    orderedSessions.push(session);
+    sessionByID.delete(sessionID);
+  }
+
+  for (const session of sessions) {
+    if (sessionByID.has(session.id)) {
+      orderedSessions.push(session);
+    }
+  }
+
+  return orderedSessions;
+}
+
+export function moveSessionTabOrder(
+  orderedSessionIDs: string[],
+  draggedSessionID: string,
+  targetIndex: number,
+): string[] {
+  const currentIndex = orderedSessionIDs.indexOf(draggedSessionID);
+  if (currentIndex === -1) {
+    return orderedSessionIDs;
+  }
+
+  const clampedIndex = Math.max(
+    0,
+    Math.min(targetIndex, orderedSessionIDs.length),
+  );
+  const nextOrder = [...orderedSessionIDs];
+  nextOrder.splice(currentIndex, 1);
+  const insertionIndex =
+    currentIndex < clampedIndex ? clampedIndex - 1 : clampedIndex;
+  nextOrder.splice(insertionIndex, 0, draggedSessionID);
+  return nextOrder;
 }
 
 export function normalizeFactorySessionsError(
@@ -244,6 +318,10 @@ function folderValidationErrorMessage(
 function basename(path: string): string {
   const segments = path.split(/[\\/]/).filter((segment) => segment.length > 0);
   return segments[segments.length - 1] ?? "";
+}
+
+function normalizePathForCompare(path: string): string {
+  return path.trim().replace(/\\/g, "/").replace(/\/+$/, "");
 }
 
 function normalizeSessionLabelPart(value: string | undefined): string {

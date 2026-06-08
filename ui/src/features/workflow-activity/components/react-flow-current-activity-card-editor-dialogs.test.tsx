@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 
 vi.mock(
-  "../../factory-graph-editor/components/factory-graph-editor-add-dialog",
+  "../../factory-graph-editor/components/add-dialog/factory-graph-editor-add-dialog",
   () => ({
     FactoryGraphEditorAddEntityDialog: ({
       isOpen,
@@ -37,7 +37,7 @@ vi.mock(
 );
 
 vi.mock(
-  "../../factory-graph-editor/components/factory-graph-editor-controls",
+  "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
   () => ({
     FactoryGraphEditorConfirmationDialog: ({
       isOpen,
@@ -63,7 +63,7 @@ vi.mock(
 );
 
 vi.mock(
-  "../../factory-graph-editor/components/factory-graph-editor-leave-dialog",
+  "../../factory-graph-editor/components/dialogs/factory-graph-editor-leave-dialog",
   () => ({
     FactoryGraphEditorLeaveDialog: ({
       isOpen,
@@ -161,7 +161,10 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     leaveDialogOpen: true,
     pendingRemovalIntent: null,
     saveEditableDefinition: { isPending: false },
-    saveSummary: { description: "Save pending route changes." },
+    saveSummary: {
+      confirmActionLabel: "Save topology",
+      description: "Save pending route changes.",
+    },
     setAddEntityDraft: vi.fn(),
     setAddEntityErrors: vi.fn(),
     setIsConfirmingLeaveEditor: vi.fn(),

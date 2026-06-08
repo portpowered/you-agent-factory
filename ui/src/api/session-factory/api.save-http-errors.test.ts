@@ -74,10 +74,6 @@ describe("saveSessionFactory version metadata", () => {
 });
 
 describe("saveSessionFactory transport errors", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it("throws NETWORK_ERROR when save fetch is unavailable", async () => {
     await expect(
       saveSessionFactory(
@@ -188,10 +184,6 @@ describe("saveSessionFactory transport errors", () => {
 });
 
 describe("saveSessionFactory operator error mapping", () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
   it.each([
     ["FACTORY_NOT_IDLE", sessionFactoryOperatorErrorMessages.FACTORY_NOT_IDLE],
     ["INVALID_FACTORY", sessionFactoryOperatorErrorMessages.INVALID_FACTORY],

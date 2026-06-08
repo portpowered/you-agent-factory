@@ -29,6 +29,7 @@ export interface WorkstationDetailMessages {
   editableConfigurationSaveStaleVersionDetail: string;
   editableConfigurationSaveSuccess: (workstationName: string) => string;
   editableConfigurationValidationStatus: string;
+  editableConfigurationBehaviorPollerHint: string;
   editableConfigurationBehaviorPollerWorkerUnsupported: string;
   editableConfigurationPromptRequired: string;
   editableConfigurationPromptEditorLoading: string;
@@ -65,6 +66,29 @@ export interface WorkstationDetailMessages {
   ) => string;
   editableConfigurationWorkerUnavailable: string;
   editableConfigurationWorkerUnavailablePrefix: string;
+  editableConfigurationModelInvokeBindingDuplicate: (slotName: string) => string;
+  editableConfigurationModelInvokeBindingRequired: (slotName: string) => string;
+  editableConfigurationModelInvokeBindingsSummary: string;
+  editableConfigurationModelInvokeOperationInvalid: string;
+  editableConfigurationModelInvokeOperationMissing: string;
+  editableConfigurationModelInvokeOperationOptionsEmpty: string;
+  editableConfigurationModelInvokeOperationRequired: string;
+  editableConfigurationModelInvokeWorkerOptionsEmpty: string;
+  editableConfigurationModelInvokeWorkerRequired: string;
+  modelInvokeBindingConfigContentFieldLabel: string;
+  modelInvokeBindingDefaultContentFieldLabel: string;
+  modelInvokeBindingsEmpty: string;
+  modelInvokeBindingsFieldHint: string;
+  modelInvokeBindingsFieldLabel: string;
+  modelInvokeBindingOptionalSlotLabel: string;
+  modelInvokeBindingRequiredSlotLabel: string;
+  modelInvokeBindingSelectorLabelFieldLabel: string;
+  modelInvokeBindingSelectorRoleFieldLabel: string;
+  modelInvokeBindingSelectorSlotFieldLabel: string;
+  modelInvokeBindingSelectorTypeFieldLabel: string;
+  modelInvokeBindingSelectorTypeNoneOption: string;
+  modelInvokeBindingSlotHeading: (slotName: string, requirement: string) => string;
+  modelInvokeOperationFieldLabel: string;
   editableConfigurationCronExpiryWindowInvalid: (value: string) => string;
   editableConfigurationCronJitterInvalid: (value: string) => string;
   editableConfigurationCronScheduleInvalid: (

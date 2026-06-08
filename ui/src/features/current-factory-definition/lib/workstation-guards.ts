@@ -3,6 +3,7 @@ import type {
   EditableWorkstationDraft,
   EditableWorkstationInputDraft,
 } from "./workstation-editable-values";
+import { editableModelInvokeBindingsEqual } from "./workstation/workstation-model-invoke";
 
 type WorkstationGuard = EditableWorkstationDraft["guards"][number];
 type InputGuardBase = EditableWorkstationInputDraft["guards"][number];
@@ -193,11 +194,7 @@ type VisitCountWorkstationReferenceGuard = {
 
 export function rewriteVisitCountWorkstationReference<
   T extends VisitCountWorkstationReferenceGuard,
->(
-  guard: T,
-  previousWorkstationName: string,
-  nextWorkstationName: string,
-): T {
+>(guard: T, previousWorkstationName: string, nextWorkstationName: string): T {
   if (
     guard.type !== "VISIT_COUNT" ||
     guard.workstation !== previousWorkstationName
@@ -252,7 +249,9 @@ export function rewriteWorkstationVisitCountReferences<
       nextWorkstationName,
     );
 
-    if (!guards.every((guard, index) => guard === workstation.guards?.[index])) {
+    if (
+      !guards.every((guard, index) => guard === workstation.guards?.[index])
+    ) {
       nextWorkstation = {
         ...nextWorkstation,
         guards,
@@ -303,7 +302,13 @@ export function editableWorkstationDraftsEqual(
 ): boolean {
   return (
     left.behavior === right.behavior &&
+    left.workstationType === right.workstationType &&
     editableWorkstationDraftNamesEqual(left, right) &&
+    left.operation === right.operation &&
+    editableModelInvokeBindingsDraftEqual(
+      left.operationBindings ?? [],
+      right.operationBindings ?? [],
+    ) &&
     left.prompt === right.prompt &&
     left.runnerName === right.runnerName &&
     left.workerName === right.workerName &&
@@ -311,4 +316,11 @@ export function editableWorkstationDraftsEqual(
     guardsDraftEqual(left.guards, right.guards) &&
     editableWorkstationInputsDraftEqual(left.inputs, right.inputs)
   );
+}
+
+function editableModelInvokeBindingsDraftEqual(
+  left: EditableWorkstationDraft["operationBindings"],
+  right: EditableWorkstationDraft["operationBindings"],
+): boolean {
+  return editableModelInvokeBindingsEqual(left, right);
 }

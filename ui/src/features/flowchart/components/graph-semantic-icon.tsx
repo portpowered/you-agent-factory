@@ -12,6 +12,7 @@ export const GRAPH_SEMANTIC_ICON_KINDS = [
   "worker",
   "work-type",
   "constraint",
+  "doc",
   "limit",
   "workstation",
   "repeater",
@@ -50,6 +51,16 @@ const GRAPH_SEMANTIC_ICON_DEFINITIONS = {
         <rect height="9" rx="2" width="14" x="5" y="10" />
         <path d="M8 10V8a4 4 0 0 1 8 0v2" />
         <path d="M12 13.5v2" />
+      </>
+    ),
+  },
+  doc: {
+    paths: (
+      <>
+        <path d="M8 4h7l5 5v11a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
+        <path d="M15 4v5h5" />
+        <path d="M9 12h6" />
+        <path d="M9 16h4" />
       </>
     ),
   },

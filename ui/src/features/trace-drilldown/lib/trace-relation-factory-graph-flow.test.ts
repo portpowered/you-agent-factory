@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-relation-factory-graph-node";
+import { WORK_RELATION_NODE_TYPES } from "../../graphs/public";
 import { buildTraceRelationFactoryGraphFlow } from "./trace-relation-factory-graph-flow";
 
 const RELATIONS: DashboardWorkRelation[] = [
@@ -26,7 +26,7 @@ const RELATIONS: DashboardWorkRelation[] = [
 ];
 
 describe("buildTraceRelationFactoryGraphFlow", () => {
-  it("projects batch relations into factory entity nodes and editor edges", () => {
+  it("projects batch relations into shared work nodes and clean edges", () => {
     const editorMessages = getFactoryGraphEditorMessages();
     const flow = buildTraceRelationFactoryGraphFlow(RELATIONS);
 
@@ -37,7 +37,7 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
       flow.nodes.find((node) => node.id === "work-implement"),
     ).toMatchObject({
       id: "work-implement",
-      type: "factoryEntity",
+      type: "workRelation",
       data: expect.objectContaining({
         displayLabel: "Implement story",
         endpointKey: "work-implement",
@@ -57,11 +57,11 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
             "Parent-child relation from Plan story to Implement story, requiring Done",
           data: expect.objectContaining({
             kind: "work-type-state",
-            label: editorMessages.edgeKindLabel("work-type-state"),
+            label: "",
           }),
           style: expect.objectContaining({
-            stroke: "var(--color-success)",
-            strokeDasharray: "7 5",
+            stroke: "var(--color-outline-variant)",
+            strokeWidth: 1.7,
           }),
         }),
       ]),
@@ -78,15 +78,13 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
     );
   });
 
-  it("registers only factory graph React Flow node types", () => {
+  it("registers only shared work graph React Flow node types", () => {
     const flow = buildTraceRelationFactoryGraphFlow(RELATIONS);
 
-    expect(Object.keys(TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES)).toEqual([
-      "factoryEntity",
+    expect(Object.keys(WORK_RELATION_NODE_TYPES)).toEqual([
+      "workRelation",
     ]);
-    expect(flow.nodes.every((node) => node.type === "factoryEntity")).toBe(
-      true,
-    );
+    expect(flow.nodes.every((node) => node.type === "workRelation")).toBe(true);
     expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(
       true,
     );
@@ -94,7 +92,7 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
 });
 
 describe("buildTraceRelationFactoryGraphFlow relation styling", () => {
-  it("styles relations without required state from relation type defaults", () => {
+  it("renders relations with a shared clean edge style", () => {
     const parentChildFlow = buildTraceRelationFactoryGraphFlow([
       {
         request_id: "request-parent-child-plain",
@@ -117,18 +115,16 @@ describe("buildTraceRelationFactoryGraphFlow relation styling", () => {
     ]);
 
     expect(parentChildFlow.edges[0]?.style).toMatchObject({
-      stroke: "var(--color-primary)",
-      strokeDasharray: undefined,
+      stroke: "var(--color-outline-variant)",
       strokeWidth: 1.7,
     });
     expect(relatedFlow.edges[0]?.style).toMatchObject({
       stroke: "var(--color-outline-variant)",
-      strokeDasharray: undefined,
       strokeWidth: 1.7,
     });
   });
 
-  it("styles warning and danger relation edges from required state tones", () => {
+  it("keeps required-state relations on the same clean edge style", () => {
     const warningFlow = buildTraceRelationFactoryGraphFlow([
       {
         request_id: "request-blocked",
@@ -153,10 +149,10 @@ describe("buildTraceRelationFactoryGraphFlow relation styling", () => {
     ]);
 
     expect(warningFlow.edges[0]?.style?.stroke).toBe(
-      "var(--color-on-warning-container)",
+      "var(--color-outline-variant)",
     );
     expect(dangerFlow.edges[0]?.style?.stroke).toBe(
-      "var(--color-on-error-container)",
+      "var(--color-outline-variant)",
     );
   });
 });
