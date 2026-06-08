@@ -6,6 +6,16 @@ import {
   factoryGraphLargeEditorFixtures,
 } from "../../fixtures/factory-graph-large-editor-fixtures";
 import {
+  addFactoryLayoutEdgeWaypoint,
+  moveFactoryLayoutEdgeWaypoint,
+  removeFactoryLayoutEdgeWaypoint,
+} from "../factory-graph-layout-edge-waypoints";
+import {
+  applyFactoryLayoutCommand,
+  createUpdateFactoryLayoutEdgeWaypointsCommand,
+  invertFactoryLayoutCommand,
+} from "../history/factory-graph-layout-commands";
+import {
   applyPendingFactoryLayout,
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
@@ -102,6 +112,64 @@ async function expectFixtureWithinBudget(
     });
   });
   expect(saveMedianMs).toBeLessThanOrEqual(budget.saveLayoutRecomputationMs);
+
+  const sampleEdgeId = fixture.topology.edges[0]?.id;
+  expect(sampleEdgeId).toBeDefined();
+  if (!sampleEdgeId) {
+    return;
+  }
+
+  const waypointEditMedianMs = await measureMedianOperationMs(() => {
+    let layout = addFactoryLayoutEdgeWaypoint(fixture.layout, sampleEdgeId, {
+      x: 12,
+      y: 24,
+    });
+    layout = moveFactoryLayoutEdgeWaypoint(layout, sampleEdgeId, 0, {
+      x: 36,
+      y: 48,
+    });
+    removeFactoryLayoutEdgeWaypoint(layout, sampleEdgeId, 0);
+  });
+  expect(waypointEditMedianMs).toBeLessThanOrEqual(budget.waypointEditMs);
+
+  const waypointHistoryMedianMs = await measureMedianOperationMs(() => {
+    const layout = addFactoryLayoutEdgeWaypoint(fixture.layout, sampleEdgeId, {
+      x: 80,
+      y: 90,
+    });
+    const command = createUpdateFactoryLayoutEdgeWaypointsCommand({
+      edgeId: sampleEdgeId,
+      layout: fixture.layout,
+      to: [{ x: 80, y: 90 }],
+    });
+    if (!command) {
+      throw new Error("Expected waypoint command to be created.");
+    }
+    const nextLayout = applyFactoryLayoutCommand(layout, command);
+    applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command),
+    );
+  });
+  expect(waypointHistoryMedianMs).toBeLessThanOrEqual(budget.waypointHistoryMs);
+
+  const waypointSaveMedianMs = await measureMedianOperationMs(() => {
+    const pendingWaypointLayout = addFactoryLayoutEdgeWaypoint(
+      fixture.layout,
+      sampleEdgeId,
+      { x: 144, y: 288 },
+    );
+    hasFactoryLayoutChanges(fixture.layout, pendingWaypointLayout);
+    applyPendingFactoryLayout(fixture.factoryDefinition, pendingWaypointLayout);
+    applyFactoryGraphPendingEdits({
+      baseFactoryDefinition: fixture.factoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      pendingLayout: pendingWaypointLayout,
+    });
+  });
+  expect(waypointSaveMedianMs).toBeLessThanOrEqual(
+    budget.saveLayoutRecomputationMs,
+  );
 }
 
 describe("factory graph layout performance budgets", () => {

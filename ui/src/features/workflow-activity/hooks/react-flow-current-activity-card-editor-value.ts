@@ -33,6 +33,17 @@ export function buildCurrentActivityGraphEditorValue(args: {
   dirtyStateSummary: FactoryGraphEditorDirtyState;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
+  addEdgeWaypoint: (
+    edgeId: string,
+    position: { x: number; y: number },
+    insertIndex?: number,
+  ) => void;
+  moveEdgeWaypoint: (
+    edgeId: string,
+    waypointIndex: number,
+    position: { x: number; y: number },
+  ) => void;
+  removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
   moveLayoutNode: (nodeId: string, position: { x: number; y: number }) => void;
   moveLayoutNodesByDelta: (
     nodeIds: readonly string[],
@@ -114,6 +125,9 @@ export function buildCurrentActivityGraphEditorValue(args: {
     dirtyStateSummary: args.dirtyStateSummary,
     draftState: args.draftState,
     layoutDraftState: args.layoutDraftState,
+    addEdgeWaypoint: args.addEdgeWaypoint,
+    moveEdgeWaypoint: args.moveEdgeWaypoint,
+    removeEdgeWaypoint: args.removeEdgeWaypoint,
     moveLayoutNode: args.moveLayoutNode,
     moveLayoutNodesByDelta: args.moveLayoutNodesByDelta,
     redoLayout: args.redoLayout,

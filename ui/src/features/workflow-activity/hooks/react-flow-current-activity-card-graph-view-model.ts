@@ -1,4 +1,3 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: composes activity graph layout, projection, and editor viewport wiring.
 import {
   applyNodeChanges,
   type FitViewOptions,

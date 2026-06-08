@@ -1,9 +1,15 @@
 import { BaseEdge, type EdgeProps, getBezierPath } from "@xyflow/react";
 import { useEffect, useRef, useState } from "react";
 
+import {
+  buildFactoryGraphEdgePathThroughWaypoints,
+  type FactoryGraphEdgeWaypoint,
+} from "../lib/factory-graph-edge-path";
+
 type FactoryGraphEdgeData = {
   alwaysShowLabel?: boolean;
   label?: string;
+  waypoints?: FactoryGraphEdgeWaypoint[];
 };
 
 export const FACTORY_GRAPH_EDGE_TYPES = {
@@ -27,7 +33,16 @@ function FactoryGraphEdge({
   const edgeRef = useRef<SVGGElement | null>(null);
   const [inspected, setInspected] = useState(false);
   const edgeData = (data ?? {}) as FactoryGraphEdgeData;
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const routedPath = buildFactoryGraphEdgePathThroughWaypoints({
+    sourcePosition,
+    sourceX,
+    sourceY,
+    targetPosition,
+    targetX,
+    targetY,
+    waypoints: edgeData.waypoints,
+  });
+  const [fallbackPath, fallbackLabelX, fallbackLabelY] = getBezierPath({
     sourcePosition,
     sourceX,
     sourceY,
@@ -35,6 +50,18 @@ function FactoryGraphEdge({
     targetX,
     targetY,
   });
+  const edgePath =
+    edgeData.waypoints && edgeData.waypoints.length > 0
+      ? routedPath.path
+      : fallbackPath;
+  const labelX =
+    edgeData.waypoints && edgeData.waypoints.length > 0
+      ? routedPath.labelX
+      : fallbackLabelX;
+  const labelY =
+    edgeData.waypoints && edgeData.waypoints.length > 0
+      ? routedPath.labelY
+      : fallbackLabelY;
 
   useEffect(() => {
     const edgeElement = edgeRef.current?.parentElement;

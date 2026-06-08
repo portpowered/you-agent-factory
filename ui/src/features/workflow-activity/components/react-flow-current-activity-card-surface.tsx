@@ -15,6 +15,9 @@ import {
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
+import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
+import { useFactoryGraphEdgeWaypointEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook";
 import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -87,6 +90,20 @@ export function CurrentActivityGraphSurface({
     hasFailureMessages: saveFailureMessages.length > 0,
     saveAttemptRevision: editor.saveAttemptRevision,
   });
+  const waypointEditor = useFactoryGraphEdgeWaypointEditor({
+    activeTool: editor.activeTool,
+    addEdgeWaypoint: editor.addEdgeWaypoint,
+    canInteractWithEditor: editor.canInteractWithEditor,
+    editorMode: editor.editorMode,
+    handleEditorEdgeDelete: editor.handleEditorEdgeDelete,
+    layout: editor.layoutDraftState?.layout ?? createDefaultFactoryLayout(),
+    locale,
+    moveEdgeWaypoint: editor.moveEdgeWaypoint,
+    removeEdgeWaypoint: editor.removeEdgeWaypoint,
+    nodes: graph.nodes,
+  });
+  const viewportEdges = waypointEditor.decorateEditorEdges(graph.edges);
+
   if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
@@ -176,7 +193,8 @@ export function CurrentActivityGraphSurface({
           editor.editorUnavailableClassifierWorkstationName
         }
         editorMode={editor.editorMode}
-        edges={graph.edges}
+        edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
+        edges={viewportEdges}
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
         graphKey={graph.graphKey}
@@ -210,7 +228,14 @@ export function CurrentActivityGraphSurface({
         preferencesDirty={editor.dirtyStateSummary.preferencesDirty}
         visibilityPreset={editor.visibilityPreset}
         onConnect={editor.handleEditorConnect}
-        onEditorEdgeClick={editor.handleEditorEdgeDelete}
+        onEditorEdgeClick={waypointEditor.handleEditorEdgeClick}
+        onEditorEdgeDoubleClick={waypointEditor.handleEditorEdgeDoubleClick}
+        onMoveEdgeWaypoint={waypointEditor.handleMoveSelectedEdgeWaypoint}
+        onRemoveEdgeWaypoint={waypointEditor.handleRemoveSelectedEdgeWaypoint}
+        selectedEdgeWaypoints={waypointEditor.selectedEdgeWaypoints}
+        selectedWaypointEdgeId={waypointEditor.selectedWaypointEdgeId}
+        waypointAriaLabel={waypointEditor.waypointAriaLabel}
+        waypointControls={waypointEditor.waypointControls}
         onEditorNodeClick={editor.handleEditorNodeDelete}
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}

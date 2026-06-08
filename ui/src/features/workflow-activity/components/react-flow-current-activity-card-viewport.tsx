@@ -33,6 +33,9 @@ import {
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
 } from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
+import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls";
+import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
+import type { FactoryLayoutPoint } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
@@ -268,8 +271,15 @@ export function CurrentActivityGraphViewport({
   onUndoLayout,
   onConnect,
   onEditorEdgeClick,
+  onEditorEdgeDoubleClick,
   onEditorNodeClick,
+  onMoveEdgeWaypoint,
+  onRemoveEdgeWaypoint,
   onSelectTool,
+  selectedEdgeWaypoints = [],
+  selectedWaypointEdgeId = null,
+  waypointAriaLabel,
+  waypointControls = null,
   openAddMenu,
   saveDisabledReason,
   moveLayoutNode,
@@ -319,7 +329,34 @@ export function CurrentActivityGraphViewport({
   onUndoLayout?: () => void;
   onConnect?: (connection: Connection) => void;
   onEditorEdgeClick?: (edgeId: string) => void;
+  onEditorEdgeDoubleClick?: (
+    edgeId: string,
+    position: FactoryLayoutPoint,
+  ) => void;
   onEditorNodeClick?: (nodeId: string) => void;
+  onMoveEdgeWaypoint?: (
+    edgeId: string,
+    waypointIndex: number,
+    position: FactoryLayoutPoint,
+  ) => void;
+  onRemoveEdgeWaypoint?: (edgeId: string, waypointIndex: number) => void;
+  selectedEdgeWaypoints?: readonly FactoryLayoutPoint[];
+  selectedWaypointEdgeId?: string | null;
+  waypointAriaLabel?: (index: number) => string;
+  waypointControls?: {
+    addWaypointLabel: string;
+    edgeKindLabel: string;
+    edgeSourceLabel: string;
+    edgeTargetLabel: string;
+    fieldKindLabel: string;
+    fieldSourceLabel: string;
+    fieldTargetLabel: string;
+    onAddWaypoint: () => void;
+    onRemoveWaypoint: (waypointIndex: number) => void;
+    removeWaypointLabel: (index: number) => string;
+    selectedEdgeLabel: string;
+    waypointCount: number;
+  } | null;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   openAddMenu?: boolean;
   saveDisabledReason?: string;
@@ -475,6 +512,24 @@ export function CurrentActivityGraphViewport({
                   );
                 }
               }}
+              onEdgeDoubleClick={(event, edge) => {
+                if (!editorMode || !onEditorEdgeDoubleClick) {
+                  return;
+                }
+
+                const flowInstance = flowInstanceRef?.current;
+                if (!flowInstance) {
+                  return;
+                }
+
+                onEditorEdgeDoubleClick(
+                  factoryGraphEdgeIdForRenderedEdge(nodes, edge),
+                  flowInstance.screenToFlowPosition({
+                    x: event.clientX,
+                    y: event.clientY,
+                  }),
+                );
+              }}
               nodesDraggable={true}
               onNodeClick={(_, node) => {
                 if (editorMode) {
@@ -568,7 +623,22 @@ export function CurrentActivityGraphViewport({
               <DashboardGraphControls
                 fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
               />
+              {editorMode &&
+              selectedWaypointEdgeId &&
+              onMoveEdgeWaypoint &&
+              waypointAriaLabel ? (
+                <FactoryGraphEdgeWaypointLayer
+                  ariaLabel={waypointAriaLabel}
+                  edgeId={selectedWaypointEdgeId}
+                  onMoveWaypoint={onMoveEdgeWaypoint}
+                  onRemoveWaypoint={onRemoveEdgeWaypoint}
+                  waypoints={selectedEdgeWaypoints}
+                />
+              ) : null}
             </ReactFlow>
+            {editorMode && waypointControls ? (
+              <FactoryGraphEdgeWaypointControls {...waypointControls} />
+            ) : null}
           </div>
         ) : null}
         <FactoryGraphEditorVisibilityPanel

@@ -103,7 +103,10 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
 
 function createEditorStub(overrides: Record<string, unknown> = {}) {
   return {
-    activeTool: "connect",
+    activeTool: "delete",
+    addEdgeWaypoint: vi.fn(),
+    moveEdgeWaypoint: vi.fn(),
+    removeEdgeWaypoint: vi.fn(),
     addMenuActions: [],
     addMenuOpen: false,
     blockedRemovalReason:

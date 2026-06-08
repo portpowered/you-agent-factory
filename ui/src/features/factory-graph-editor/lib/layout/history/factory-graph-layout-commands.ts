@@ -1,4 +1,9 @@
 import {
+  factoryLayoutEdgeWaypoints,
+  factoryLayoutWaypointArraysEqual,
+  setFactoryLayoutEdgeWaypoints,
+} from "../factory-graph-layout-edge-waypoints";
+import {
   type FactoryLayout,
   type FactoryLayoutPoint,
   type FactoryLayoutViewport,
@@ -34,6 +39,12 @@ export type FactoryLayoutCommand =
       type: "reset-layout";
       fromLayout: FactoryLayout;
       toLayout: FactoryLayout;
+    }
+  | {
+      type: "update-edge-waypoints";
+      edgeId: string;
+      from: FactoryLayoutPoint[] | null;
+      to: FactoryLayoutPoint[] | null;
     };
 
 export function snapshotFactoryLayoutNodePosition(
@@ -167,6 +178,28 @@ export function createUpdateFactoryLayoutViewportCommand(input: {
   };
 }
 
+export function createUpdateFactoryLayoutEdgeWaypointsCommand(input: {
+  edgeId: string;
+  layout: FactoryLayout;
+  to: readonly FactoryLayoutPoint[] | null;
+}): FactoryLayoutCommand | null {
+  const from = factoryLayoutEdgeWaypoints(input.layout, input.edgeId) ?? null;
+  const to =
+    input.to === null
+      ? null
+      : input.to.map((point) => ({ x: point.x, y: point.y }));
+  if (factoryLayoutWaypointArraysEqual(from, to)) {
+    return null;
+  }
+
+  return {
+    type: "update-edge-waypoints",
+    edgeId: input.edgeId,
+    from,
+    to,
+  };
+}
+
 export function createResetFactoryLayoutCommand(input: {
   fromLayout: FactoryLayout;
   toLayout: FactoryLayout;
@@ -217,6 +250,13 @@ export function invertFactoryLayoutCommand(
         fromLayout: structuredClone(command.toLayout),
         toLayout: structuredClone(command.fromLayout),
       };
+    case "update-edge-waypoints":
+      return {
+        type: "update-edge-waypoints",
+        edgeId: command.edgeId,
+        from: command.to,
+        to: command.from,
+      };
   }
 }
 
@@ -240,6 +280,8 @@ export function factoryLayoutCommandAffectedNodeIds(
       }
       return [...nodeIds];
     }
+    case "update-edge-waypoints":
+      return [];
   }
 }
 
@@ -314,6 +356,12 @@ export function applyFactoryLayoutCommand(
       };
     case "reset-layout":
       return structuredClone(command.toLayout);
+    case "update-edge-waypoints":
+      return setFactoryLayoutEdgeWaypoints(
+        layout,
+        command.edgeId,
+        command.to,
+      );
   }
 }
 

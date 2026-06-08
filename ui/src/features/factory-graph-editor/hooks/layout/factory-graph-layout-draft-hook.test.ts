@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
+import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
 } from "../../lib/layout/factory-graph-layout-operations";
+
+const EDGE_ID =
+  "workstation-output:workstation:draft->work-state:story:done";
 
 describe("useFactoryGraphLayoutDraftState movement history", () => {
   it("records layout commands and supports undo and redo", () => {
@@ -226,6 +230,142 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
       y: 66,
     });
     expect(result.current.canUndoLayout).toBe(false);
+  });
+});
+
+describe("useFactoryGraphLayoutDraftState edge waypoint edits", () => {
+  it("marks layout dirty without topology changes when removing waypoints", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-waypoint-remove",
+      }),
+    );
+
+    act(() => {
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 10, y: 20 });
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 30, y: 40 });
+    });
+
+    expect(result.current.layoutDirty).toBe(true);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+
+    act(() => {
+      result.current.removeEdgeWaypoint(EDGE_ID, 0);
+    });
+
+    expect(result.current.layoutDirty).toBe(true);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 30, y: 40 },
+    ]);
+
+    act(() => {
+      result.current.removeEdgeWaypoint(EDGE_ID, 0);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
+  });
+
+  it("records waypoint add, move, and remove commands with undo and redo", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-waypoint-history",
+      }),
+    );
+
+    act(() => {
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 10, y: 20 });
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 30, y: 40 });
+      result.current.moveEdgeWaypoint(EDGE_ID, 1, { x: 35, y: 45 });
+    });
+
+    expect(result.current.layoutDirty).toBe(true);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 35, y: 45 },
+    ]);
+    expect(result.current.canUndoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+    expect(result.current.canRedoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
+    expect(result.current.layoutDirty).toBe(false);
+
+    act(() => {
+      result.current.redoLayout();
+      result.current.redoLayout();
+      result.current.redoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 35, y: 45 },
+    ]);
+    expect(result.current.layoutDirty).toBe(true);
+
+    act(() => {
+      result.current.removeEdgeWaypoint(EDGE_ID, 0);
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 35, y: 45 },
+    ]);
+  });
+
+  it("adopts saved waypoint layout after reload without topology dirty state", () => {
+    const savedLayoutDocument = {
+      ...baseFactoryDefinition,
+      layout: {
+        schemaVersion: 1,
+        edges: [
+          {
+            id: EDGE_ID,
+            waypoints: [{ x: 180, y: 220 }],
+          },
+        ],
+      },
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-waypoint-reload",
+      }),
+    );
+
+    const savedLayout = savedLayoutDocument.layout;
+    if (!savedLayout) {
+      throw new Error("Expected saved layout fixture.");
+    }
+
+    act(() => {
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 10, y: 20 });
+      result.current.adoptSavedLayout(savedLayout);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 180, y: 220 },
+    ]);
   });
 });
 

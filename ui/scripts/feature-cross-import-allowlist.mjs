@@ -1284,6 +1284,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/workflow-activity/components/react-flow-current-activity-card-surface.tsx",
     importSpecifiers: [
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
+      "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
       "../../factory-graph-editor/messages/editor",
     ],
     reason:
@@ -1297,6 +1299,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-connections",
+      "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls",
+      "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer",
       "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
       "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts",
       "../../factory-graph-editor/messages/editor",
@@ -1375,6 +1379,9 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
       "../../factory-graph-editor/hooks/validation/use-factory-validation",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-apply",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-validation",
+      "../../factory-graph-editor/lib/projection/factory-validation-graph-projection",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",

@@ -85,6 +85,7 @@ export type FactoryGraphReactFlowEdge = Edge<{
   kind: FactoryGraphEdge["kind"];
   label: string;
   pendingStatus: "addition" | "none" | "removal";
+  waypoints?: { x: number; y: number }[];
 }>;
 
 export interface FactoryGraphReactFlowProjection {

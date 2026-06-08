@@ -97,4 +97,35 @@ describe("factory-definition layout contract", () => {
       ),
     );
   });
+
+  it("rejects non-finite waypoint geometry during normalization", () => {
+    expect(() =>
+      normalizeFactoryDefinition({
+        ...factoryDefinitionWithLayout,
+        layout: {
+          ...factoryDefinitionWithLayout.layout,
+          edges: [
+            {
+              id: "workstation-output:workstation:review->work-state:task:done",
+              waypoints: [{ x: Number.NaN, y: 220 }],
+            },
+          ],
+        },
+      }),
+    ).toThrowError(
+      new FactoryDefinitionAPIError(
+        "factory.layout.edges[0].waypoints[0].x must be a number.",
+      ),
+    );
+  });
+
+  it("round-trips authored edge waypoints through normalization", () => {
+    const normalized = normalizeFactoryDefinition(factoryDefinitionWithLayout);
+
+    expect(normalized.layout?.edges?.[0]).toEqual({
+      id: "workstation-output:workstation:review->work-state:task:done",
+      labelPosition: { x: 590, y: 204 },
+      waypoints: [{ x: 540, y: 220 }],
+    });
+  });
 });

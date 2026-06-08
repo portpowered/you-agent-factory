@@ -1,3 +1,4 @@
+import type { FactoryValidationTarget } from "../../../../api/factory-validation";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import {
   buildDraftAppliedFactoryDefinition,
@@ -44,6 +45,10 @@ import {
   factoryLayoutFromDefinition,
   hasFactoryLayoutChanges,
 } from "../layout/factory-graph-layout-operations";
+import {
+  factoryLayoutTopologyEdgeIds,
+  preparePendingFactoryLayoutForSave,
+} from "../layout/factory-graph-layout-validation";
 import { materializeFactoryGraphEntityIdsForSave } from "./factory-graph-public-ids";
 
 export {
@@ -69,6 +74,7 @@ export type FactoryGraphOperationResult<T> =
   | {
       ok: true;
       value: T;
+      layoutOutcomes?: FactoryValidationTarget[];
     }
   | {
       message: string;
@@ -379,15 +385,30 @@ export function applyFactoryGraphPendingEdits(options: {
     options.baseFactoryDefinition,
     options.draft,
   );
+  const validEdgeIds = factoryLayoutTopologyEdgeIds(
+    buildFactoryGraphTopologyFromDefinition(nextFactoryDefinition),
+  );
+  const preparedPendingLayoutResult =
+    options.pendingLayout == null
+      ? null
+      : preparePendingFactoryLayoutForSave(options.pendingLayout, validEdgeIds);
+  const preparedPendingLayout = preparedPendingLayoutResult?.layout ?? null;
+  const layoutOutcomes = preparedPendingLayoutResult?.layoutOutcomes;
   const nextDefinition =
-    options.pendingLayout &&
-    hasFactoryLayoutChanges(baseLayout, options.pendingLayout)
-      ? applyPendingFactoryLayout(nextFactoryDefinition, options.pendingLayout)
+    preparedPendingLayout &&
+    hasFactoryLayoutChanges(baseLayout, preparedPendingLayout)
+      ? applyPendingFactoryLayout(
+          nextFactoryDefinition,
+          preparedPendingLayout,
+        )
       : nextFactoryDefinition;
 
   return {
     ok: true,
     value: materializeFactoryGraphEntityIdsForSave(nextDefinition),
+    ...(layoutOutcomes && layoutOutcomes.length > 0
+      ? { layoutOutcomes }
+      : {}),
   };
 }
 
