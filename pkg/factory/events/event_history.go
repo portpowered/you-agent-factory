@@ -116,14 +116,6 @@ func (h *FactoryEventHistory) Subscribe(
 	h.mu.Lock()
 	events := make([]factoryapi.FactoryEvent, len(h.events))
 	copy(events, h.events)
-	id := h.nextID
-	h.nextID++
-	subscription := &eventHistorySubscription{
-		events: make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
-		inbox:  make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
-		done:   ctx.Done(),
-	}
-	h.streams[id] = subscription
 	h.mu.Unlock()
 
 	if reconnect != nil {
@@ -133,6 +125,17 @@ func (h *FactoryEventHistory) Subscribe(
 		}
 		events = replayed
 	}
+
+	h.mu.Lock()
+	id := h.nextID
+	h.nextID++
+	subscription := &eventHistorySubscription{
+		events: make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		inbox:  make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		done:   ctx.Done(),
+	}
+	h.streams[id] = subscription
+	h.mu.Unlock()
 
 	go func() {
 		defer close(subscription.events)

@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -53,6 +54,44 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 		stringValueForEventHistoryTest(worker.Type) != string(factoryapi.WorkerTypeModelWorker) ||
 		stringValueForEventHistoryTest(worker.Model) != "gpt-5.4" {
 		t.Fatalf("worker metadata = %#v, want runtime-config provider/model metadata", worker)
+	}
+}
+
+func TestFactoryEventHistory_Subscribe_InvalidReconnectCursorDoesNotRegisterStream(t *testing.T) {
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordInitialStructure()
+
+	_, err := history.Subscribe(context.Background(), &interfaces.FactoryEventReconnectCursor{
+		AfterEventID: "factory-event/missing",
+	}, interfaces.FactoryEventReconnectScope{})
+	if !errors.Is(err, ErrReconnectCursorNotFound) {
+		t.Fatalf("Subscribe error = %v, want %v", err, ErrReconnectCursorNotFound)
+	}
+
+	history.mu.RLock()
+	streamCount := len(history.streams)
+	history.mu.RUnlock()
+	if streamCount != 0 {
+		t.Fatalf("stream count = %d, want 0 after invalid reconnect cursor", streamCount)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("valid Subscribe: %v", err)
+	}
+
+	history.RecordFactoryStateChange(1, interfaces.FactoryStateIdle, interfaces.FactoryStateRunning, "after-invalid-reconnect", time.Unix(1, 0).UTC())
+
+	select {
+	case event := <-stream.Events:
+		if event.Type != factoryapi.FactoryEventTypeFactoryStateResponse {
+			t.Fatalf("live event type = %s, want %s", event.Type, factoryapi.FactoryEventTypeFactoryStateResponse)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for live event on valid subscriber after invalid reconnect attempt")
 	}
 }
 
