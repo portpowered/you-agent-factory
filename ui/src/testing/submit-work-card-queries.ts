@@ -50,7 +50,7 @@ export function getSubmitWorkCardControls<QueryScope extends SyncRoleQuery>(
   requestText: HTMLTextAreaElement;
   submissionItemsList: HTMLOListElement;
   submitButton: HTMLButtonElement;
-  workType: HTMLSelectElement;
+  workType: HTMLElement;
 } {
   return {
     requestName: submitWorkScope.getByRole<HTMLInputElement>("textbox", {
@@ -65,7 +65,7 @@ export function getSubmitWorkCardControls<QueryScope extends SyncRoleQuery>(
     submitButton: submitWorkScope.getByRole<HTMLButtonElement>("button", {
       name: submitWorkCardQueryContract.submitButtonName,
     }),
-    workType: submitWorkScope.getByRole<HTMLSelectElement>("combobox", {
+    workType: submitWorkScope.getByRole("combobox", {
       name: submitWorkCardQueryContract.workTypeFieldName,
     }),
   };

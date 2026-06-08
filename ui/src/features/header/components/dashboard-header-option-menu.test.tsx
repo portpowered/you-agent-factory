@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
 import {
   DashboardHeaderOptionMenuItem,
@@ -49,7 +50,23 @@ describe("DashboardHeaderOptionMenuItem", () => {
 
     expect(selected.getAttribute("aria-checked")).toBe("true");
     expect(selected.className).toContain("bg-primary-container");
+    expect(selected.className).toContain("text-on-primary");
     expect(unselected.getAttribute("aria-checked")).toBe("false");
     expect(unselected.className).toContain("text-on-surface-variant");
+  });
+
+  it("renders selected menu items without conflicting ghost button tone utilities", () => {
+    render(
+      <DashboardHeaderOptionMenuItem isSelected onClick={() => undefined}>
+        Selected
+      </DashboardHeaderOptionMenuItem>,
+    );
+
+    const selected = screen.getByRole("menuitemradio", { name: "Selected" });
+
+    expect(selected.className).toContain("bg-primary-container");
+    expect(selected.className).toContain("text-on-primary");
+    expect(selected.className).not.toContain("bg-transparent");
+    expect(selected.className).not.toContain("text-on-surface-variant");
   });
 });

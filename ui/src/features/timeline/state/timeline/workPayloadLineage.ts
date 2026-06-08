@@ -1,7 +1,5 @@
 import type { FactoryWorkItem } from "../../../../api/events";
-import type { components } from "../../../../api/generated/openapi";
-
-export type WorkContent = components["schemas"]["WorkContent"];
+import type { WorkContent } from "../../../work-content/public";
 
 export type WorkPayloadSnapshotKind =
   | "WORK_REQUEST"

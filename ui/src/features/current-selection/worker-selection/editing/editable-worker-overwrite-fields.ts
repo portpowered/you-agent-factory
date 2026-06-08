@@ -3,6 +3,7 @@ import type { EditableWorkerDraft } from "../../../current-factory-definition/li
 import type { EditableWorkerOverwriteField } from "../lib/detail-card-types";
 import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: overwrite detection compares every editable worker field in one pass.
 export function resolveEditableWorkerOverwriteFields(
   sessionStartDraft: EditableWorkerDraft,
   draft: EditableWorkerDraft,
@@ -66,6 +67,55 @@ export function resolveEditableWorkerOverwriteFields(
     fields.push("provider");
   }
   if (
+    sessionStartDraft.authSecretRef !== latestDefinitionDraft.authSecretRef &&
+    draft.authSecretRef !== latestDefinitionDraft.authSecretRef
+  ) {
+    fields.push("authSecretRef");
+  }
+  if (
+    sessionStartDraft.linearPollInterval !==
+      latestDefinitionDraft.linearPollInterval &&
+    draft.linearPollInterval !== latestDefinitionDraft.linearPollInterval
+  ) {
+    fields.push("linearPollInterval");
+  }
+  if (
+    sessionStartDraft.linearTeamIdsText !==
+      latestDefinitionDraft.linearTeamIdsText &&
+    draft.linearTeamIdsText !== latestDefinitionDraft.linearTeamIdsText
+  ) {
+    fields.push("linearTeamIds");
+  }
+  if (
+    sessionStartDraft.linearStateIdsText !==
+      latestDefinitionDraft.linearStateIdsText &&
+    draft.linearStateIdsText !== latestDefinitionDraft.linearStateIdsText
+  ) {
+    fields.push("linearStateIds");
+  }
+  if (
+    sessionStartDraft.linearMappingWorkType !==
+      latestDefinitionDraft.linearMappingWorkType &&
+    draft.linearMappingWorkType !== latestDefinitionDraft.linearMappingWorkType
+  ) {
+    fields.push("linearMappingWorkType");
+  }
+  if (
+    sessionStartDraft.linearMappingState !==
+      latestDefinitionDraft.linearMappingState &&
+    draft.linearMappingState !== latestDefinitionDraft.linearMappingState
+  ) {
+    fields.push("linearMappingState");
+  }
+  if (
+    sessionStartDraft.linearClaimAssigneeField !==
+      latestDefinitionDraft.linearClaimAssigneeField &&
+    draft.linearClaimAssigneeField !==
+      latestDefinitionDraft.linearClaimAssigneeField
+  ) {
+    fields.push("linearClaimAssigneeField");
+  }
+  if (
     sessionStartDraft.skipPermissions !==
       latestDefinitionDraft.skipPermissions &&
     draft.skipPermissions !== latestDefinitionDraft.skipPermissions
@@ -101,9 +151,16 @@ export function formatEditableWorkerOverwriteFieldLabels(
   messages: Pick<
     WorkerDetailMessages,
     | "argsFieldLabel"
+    | "authSecretRefFieldLabel"
     | "bodyFieldLabel"
     | "commandFieldLabel"
     | "executorProviderLabel"
+    | "linearClaimAssigneeFieldLabel"
+    | "linearMappingStateFieldLabel"
+    | "linearMappingWorkTypeFieldLabel"
+    | "linearPollIntervalFieldLabel"
+    | "linearStateIdsFieldLabel"
+    | "linearTeamIdsFieldLabel"
     | "modelLabel"
     | "modelLocalityLabel"
     | "modelProviderLabel"
@@ -125,9 +182,16 @@ function fieldLabel(
   messages: Pick<
     WorkerDetailMessages,
     | "argsFieldLabel"
+    | "authSecretRefFieldLabel"
     | "bodyFieldLabel"
     | "commandFieldLabel"
     | "executorProviderLabel"
+    | "linearClaimAssigneeFieldLabel"
+    | "linearMappingStateFieldLabel"
+    | "linearMappingWorkTypeFieldLabel"
+    | "linearPollIntervalFieldLabel"
+    | "linearStateIdsFieldLabel"
+    | "linearTeamIdsFieldLabel"
     | "modelLabel"
     | "modelLocalityLabel"
     | "modelProviderLabel"
@@ -158,6 +222,20 @@ function fieldLabel(
       return messages.bodyFieldLabel.toLowerCase();
     case "provider":
       return messages.providerFieldLabel.toLowerCase();
+    case "authSecretRef":
+      return messages.authSecretRefFieldLabel.toLowerCase();
+    case "linearPollInterval":
+      return messages.linearPollIntervalFieldLabel.toLowerCase();
+    case "linearTeamIds":
+      return messages.linearTeamIdsFieldLabel.toLowerCase();
+    case "linearStateIds":
+      return messages.linearStateIdsFieldLabel.toLowerCase();
+    case "linearMappingWorkType":
+      return messages.linearMappingWorkTypeFieldLabel.toLowerCase();
+    case "linearMappingState":
+      return messages.linearMappingStateFieldLabel.toLowerCase();
+    case "linearClaimAssigneeField":
+      return messages.linearClaimAssigneeFieldLabel.toLowerCase();
     case "skipPermissions":
       return messages.skipPermissionsFieldLabel.toLowerCase();
     case "stopToken":

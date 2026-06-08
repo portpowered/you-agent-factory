@@ -1,7 +1,13 @@
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 
-import { DashboardActionButton } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+
+const DASHBOARD_HEADER_OPTION_MENU_ITEM_BASE_CLASS =
+  "inline-flex min-h-0 w-full items-center justify-start rounded-xl border px-3 py-2 text-sm font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-af-focus-ring focus-visible:ring-offset-0 disabled:pointer-events-none disabled:border-outline disabled:bg-surface-container-low disabled:text-on-surface-disabled";
+const DASHBOARD_HEADER_OPTION_MENU_ITEM_UNSELECTED_CLASS =
+  "border-transparent bg-transparent text-on-surface-variant hover:bg-af-overlay hover:text-on-surface";
+const DASHBOARD_HEADER_OPTION_MENU_ITEM_SELECTED_CLASS =
+  "border-primary bg-primary-container text-on-primary";
 
 export interface DashboardHeaderOptionMenuSurfaceProps
   extends HTMLAttributes<HTMLDivElement> {
@@ -40,23 +46,23 @@ export function DashboardHeaderOptionMenuItem({
   onClick,
 }: DashboardHeaderOptionMenuItemProps) {
   return (
-    <DashboardActionButton
+    <button
       aria-checked={isSelected}
       className={cn(
-        "min-h-0 w-full justify-start rounded-xl border-transparent px-3 py-2 text-sm",
-        "[&>span]:grid [&>span]:w-full [&>span]:grid-cols-[minmax(0,1fr)_auto] [&>span]:items-center [&>span]:gap-2 [&>span]:text-left",
+        DASHBOARD_HEADER_OPTION_MENU_ITEM_BASE_CLASS,
         isSelected
-          ? "border-primary bg-primary-container text-on-surface"
-          : "text-on-surface-variant",
+          ? DASHBOARD_HEADER_OPTION_MENU_ITEM_SELECTED_CLASS
+          : DASHBOARD_HEADER_OPTION_MENU_ITEM_UNSELECTED_CLASS,
       )}
       onClick={onClick}
       role="menuitemradio"
-      tone={isSelected ? "secondary" : "ghost"}
       type="button"
     >
-      {children}
-      {isSelected ? <DashboardHeaderOptionMenuCheckIcon /> : null}
-    </DashboardActionButton>
+      <span className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 text-left">
+        {children}
+        {isSelected ? <DashboardHeaderOptionMenuCheckIcon /> : null}
+      </span>
+    </button>
   );
 }
 

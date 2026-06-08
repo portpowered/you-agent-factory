@@ -35,11 +35,40 @@ export const EDITABLE_EXECUTOR_PROVIDERS: ExecutorProvider[] = ["SCRIPT_WRAP"];
 
 export const EDITABLE_HOSTED_PROVIDERS: HostedProvider[] = ["LINEAR"];
 
+export const EMPTY_HOSTED_LINEAR_EDITABLE_VALUES = {
+  authSecretRef: null,
+  linearClaimAssigneeField: null,
+  linearClaimPresent: false,
+  linearMappingState: null,
+  linearMappingWorkType: null,
+  linearPollInterval: null,
+  linearStateIds: [],
+  linearTeamIds: [],
+} as const;
+
+export const EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS = {
+  authSecretRef: "",
+  linearClaimAssigneeField: "",
+  linearMappingState: "",
+  linearMappingWorkType: "",
+  linearPollInterval: "",
+  linearStateIdsText: "",
+  linearTeamIdsText: "",
+} as const;
+
 export interface EditableWorkerValues {
   args: string[];
+  authSecretRef: string | null;
   body: string | null;
   command: string | null;
   executorProvider: ExecutorProvider | null;
+  linearClaimAssigneeField: string | null;
+  linearClaimPresent: boolean;
+  linearMappingState: string | null;
+  linearMappingWorkType: string | null;
+  linearPollInterval: string | null;
+  linearStateIds: string[];
+  linearTeamIds: string[];
   model: string | null;
   modelLocality: ModelLocality | null;
   modelProvider: ModelProvider | null;
@@ -54,10 +83,17 @@ export interface EditableWorkerValues {
 
 export interface EditableWorkerDraft {
   argsText: string;
+  authSecretRef: string;
   body: string;
   command: string;
   name: string;
   executorProvider: ExecutorProvider | null;
+  linearClaimAssigneeField: string;
+  linearMappingState: string;
+  linearMappingWorkType: string;
+  linearPollInterval: string;
+  linearStateIdsText: string;
+  linearTeamIdsText: string;
   model: string;
   modelLocality: ModelLocality | null;
   modelProvider: ModelProvider | null;
@@ -82,9 +118,17 @@ export function resolveEditableWorkerValues(
 
   return {
     args: worker.args ?? [],
+    authSecretRef: worker.auth?.secretRef ?? null,
     body: worker.body ?? null,
     command: worker.command ?? null,
     executorProvider: worker.executorProvider ?? null,
+    linearClaimAssigneeField: worker.linear?.claim?.assigneeField ?? null,
+    linearClaimPresent: worker.linear?.claim != null,
+    linearMappingState: worker.linear?.mapping?.state ?? null,
+    linearMappingWorkType: worker.linear?.mapping?.workType ?? null,
+    linearPollInterval: worker.linear?.pollInterval ?? null,
+    linearStateIds: worker.linear?.stateIds ?? [],
+    linearTeamIds: worker.linear?.teamIds ?? [],
     model: worker.model ?? null,
     modelLocality: worker.modelLocality ?? null,
     modelProvider: worker.modelProvider ?? null,
@@ -108,10 +152,17 @@ export function editableWorkerDraftFromValues(
 
   return {
     argsText: formatWorkerArgsText(values.args),
+    authSecretRef: values.authSecretRef ?? "",
     body: values.body ?? "",
     command: values.command ?? "",
     name: values.workerName,
     executorProvider: values.executorProvider,
+    linearClaimAssigneeField: values.linearClaimAssigneeField ?? "",
+    linearMappingState: values.linearMappingState ?? "",
+    linearMappingWorkType: values.linearMappingWorkType ?? "",
+    linearPollInterval: values.linearPollInterval ?? "",
+    linearStateIdsText: formatWorkerArgsText(values.linearStateIds),
+    linearTeamIdsText: formatWorkerArgsText(values.linearTeamIds),
     model: values.model ?? "",
     modelLocality: values.modelLocality,
     modelProvider: values.modelProvider,
@@ -122,6 +173,35 @@ export function editableWorkerDraftFromValues(
     timeoutUnit: timeoutPicker.unit,
     type: values.type ?? "MODEL_WORKER",
   };
+}
+
+export function areEditableWorkerDraftsEqual(
+  left: EditableWorkerDraft,
+  right: EditableWorkerDraft,
+): boolean {
+  return (
+    left.argsText === right.argsText &&
+    left.authSecretRef === right.authSecretRef &&
+    left.body === right.body &&
+    left.command === right.command &&
+    left.executorProvider === right.executorProvider &&
+    left.linearClaimAssigneeField === right.linearClaimAssigneeField &&
+    left.linearMappingState === right.linearMappingState &&
+    left.linearMappingWorkType === right.linearMappingWorkType &&
+    left.linearPollInterval === right.linearPollInterval &&
+    left.linearStateIdsText === right.linearStateIdsText &&
+    left.linearTeamIdsText === right.linearTeamIdsText &&
+    left.model === right.model &&
+    left.modelLocality === right.modelLocality &&
+    left.modelProvider === right.modelProvider &&
+    left.name === right.name &&
+    left.provider === right.provider &&
+    left.skipPermissions === right.skipPermissions &&
+    left.stopToken === right.stopToken &&
+    left.timeoutAmount === right.timeoutAmount &&
+    left.timeoutUnit === right.timeoutUnit &&
+    left.type === right.type
+  );
 }
 
 export function applyEditableWorkerDraft(
@@ -205,10 +285,76 @@ function buildWorkerFromDraft(
     };
   }
 
-  return {
+  return applyHostedWorkerFromDraft(base, draft);
+}
+
+function applyHostedWorkerFromDraft(
+  base: CanonicalWorker,
+  draft: EditableWorkerDraft,
+): CanonicalWorker {
+  const worker: CanonicalWorker = {
     ...base,
     ...(draft.provider ? { provider: draft.provider } : {}),
   };
+
+  if (draft.provider !== "LINEAR") {
+    return worker;
+  }
+
+  const trimmedSecretRef = draft.authSecretRef.trim();
+  if (trimmedSecretRef.length > 0) {
+    worker.auth = { secretRef: trimmedSecretRef };
+  }
+
+  const linear = buildHostedLinearConfigFromDraft(draft);
+  if (linear) {
+    worker.linear = linear;
+  }
+
+  return worker;
+}
+
+function buildHostedLinearConfigFromDraft(
+  draft: EditableWorkerDraft,
+): CanonicalWorker["linear"] | undefined {
+  const config: NonNullable<CanonicalWorker["linear"]> = {};
+  let hasConfig = false;
+
+  const pollInterval = draft.linearPollInterval.trim();
+  if (pollInterval.length > 0) {
+    config.pollInterval = pollInterval;
+    hasConfig = true;
+  }
+
+  const teamIds = parseWorkerArgsText(draft.linearTeamIdsText);
+  if (teamIds.length > 0) {
+    config.teamIds = teamIds;
+    hasConfig = true;
+  }
+
+  const stateIds = parseWorkerArgsText(draft.linearStateIdsText);
+  if (stateIds.length > 0) {
+    config.stateIds = stateIds;
+    hasConfig = true;
+  }
+
+  const workType = draft.linearMappingWorkType.trim();
+  const state = draft.linearMappingState.trim();
+  if (workType.length > 0 || state.length > 0) {
+    config.mapping = {
+      ...(workType.length > 0 ? { workType } : {}),
+      ...(state.length > 0 ? { state } : {}),
+    };
+    hasConfig = true;
+  }
+
+  const assigneeField = draft.linearClaimAssigneeField.trim();
+  if (assigneeField.length > 0) {
+    config.claim = { assigneeField };
+    hasConfig = true;
+  }
+
+  return hasConfig ? config : undefined;
 }
 
 function applyWorkerTimeoutFromDraft(
@@ -240,8 +386,10 @@ function applyWorkerSkipPermissionsFromDraft(
   worker: CanonicalWorker,
   draft: EditableWorkerDraft,
 ): CanonicalWorker {
-  const { skipPermissions: _preservedSkipPermissions, ...withoutSkipPermissions } =
-    worker;
+  const {
+    skipPermissions: _preservedSkipPermissions,
+    ...withoutSkipPermissions
+  } = worker;
 
   return draft.skipPermissions
     ? { ...withoutSkipPermissions, skipPermissions: true }
@@ -258,12 +406,6 @@ function pickPreservedWorkerFields(
   }
   if (worker.operations !== undefined) {
     preserved.operations = worker.operations;
-  }
-  if (worker.auth !== undefined) {
-    preserved.auth = worker.auth;
-  }
-  if (worker.linear !== undefined) {
-    preserved.linear = worker.linear;
   }
 
   return preserved;

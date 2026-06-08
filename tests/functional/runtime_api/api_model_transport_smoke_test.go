@@ -1,14 +1,10 @@
 package runtime_api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -54,10 +50,22 @@ func TestModelTransportSmoke_ServiceModeStartupAndDirectModelRoutesStayAligned(t
 	if models.Results[0].Name != "OMNIVOICE_Q4_K_M" || models.Results[0].ProviderLocality != factoryapi.WorkerModelLocalityCloud {
 		t.Fatalf("GET /models first result = %#v, want OMNIVOICE cloud model", models.Results[0])
 	}
+	if models.Results[0].ManagedRuntime.Identity != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("GET /models managed runtime identity = %q, want OMNIVOICE_Q4_K_M", models.Results[0].ManagedRuntime.Identity)
+	}
+	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("GET /models managed readiness = %s, want READY", models.Results[0].ManagedRuntime.ReadinessState)
+	}
+	if models.Results[0].ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE {
+		t.Fatalf("GET /models managed lifecycle = %s, want NOT_APPLICABLE", models.Results[0].ManagedRuntime.LifecycleState)
+	}
 
 	model := getGeneratedJSON[factoryapi.ModelDetail](t, server.URL()+"/models/OMNIVOICE_Q4_K_M")
 	if model.Name != "OMNIVOICE_Q4_K_M" || len(model.Capabilities) != 1 || model.Capabilities[0].Worker != "tts-worker" {
 		t.Fatalf("GET /models/OMNIVOICE_Q4_K_M = %#v, want one tts-worker capability", model)
+	}
+	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("GET /models/{name} managed readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
 	}
 
 	response := postJSON[factoryapi.ModelInvocationResponse](t, server.URL()+"/models/OMNIVOICE_Q4_K_M/invocations", factoryapi.ModelInvocationRequest{
@@ -132,44 +140,6 @@ func providerBackedModelTransportSmokeConfig() map[string]any {
 	}
 }
 
-func postJSON[T any](t *testing.T, endpoint string, request any, failurePrefix string) T {
-	t.Helper()
-	var body io.Reader
-	if request != nil {
-		encoded, err := json.Marshal(request)
-		if err != nil {
-			t.Fatalf("%s: marshal request: %v", failurePrefix, err)
-		}
-		body = bytes.NewReader(encoded)
-	}
-	resp, err := http.Post(endpoint, "application/json", body)
-	if err != nil {
-		t.Fatalf("%s: POST %s: %v", failurePrefix, endpoint, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(resp.Body)
-		t.Fatalf("%s: POST %s status = %d, want 200: %s", failurePrefix, endpoint, resp.StatusCode, string(payload))
-	}
-	var out T
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("%s: decode %s response: %v", failurePrefix, endpoint, err)
-	}
-	return out
-}
-
-func mustGeneratedFunctionalTextPart(t *testing.T, text string) factoryapi.WorkContentPart {
-	t.Helper()
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-		Type: factoryapi.WorkContentPartTypeTextUpper,
-		Text: text,
-	}); err != nil {
-		t.Fatalf("encode generated text part: %v", err)
-	}
-	return part
-}
-
 func mustMarshalFunctionalAudioContentResponse(t *testing.T, audioPath string) string {
 	t.Helper()
 	body, err := json.Marshal([]interfaces.WorkContentPart{{
@@ -193,16 +163,6 @@ func providerBackedModelTransportBindings() *[]factoryapi.WorkstationOperationBi
 			}(),
 		},
 	}}
-}
-
-func generatedAudioPath(audio factoryapi.WorkAudioContentPart) string {
-	if audio.File != nil && strings.TrimSpace(string(*audio.File)) != "" {
-		return string(*audio.File)
-	}
-	if strings.TrimSpace(string(audio.Url)) != "" {
-		return strings.TrimPrefix(string(audio.Url), "file://")
-	}
-	return ""
 }
 
 type modelTransportSmokeProvider struct {

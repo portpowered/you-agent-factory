@@ -500,10 +500,9 @@ describe("AgentBentoLayout", () => {
       latestLayout?.filter((item) => item.widgetType === "add-widget"),
     ).toHaveLength(1);
     expect(
-      within(addWidgetItem).getByRole("option", {
-        name: "No widgets available",
-      }),
-    ).toBeTruthy();
+      within(addWidgetItem).getByRole("combobox", { name: "Browse widgets" })
+        .textContent,
+    ).toContain("No widgets available");
   });
 
   it("renders real dashboard feature cards through the shared bento seam", () => {
@@ -585,7 +584,7 @@ describe("AgentBentoLayout", () => {
 });
 
 describe("AgentBentoCard", () => {
-  it("renders page-flow card bodies by default without a nested ScrollArea", () => {
+  it("uses the shared ScrollArea primitive by default for card bodies", () => {
     render(
       <AgentBentoCard
         bodyProps={{ "data-testid": "submit-work-body" }}
@@ -596,13 +595,14 @@ describe("AgentBentoCard", () => {
     );
 
     const card = screen.getByRole("article", { name: "Submit work" });
-    const body = screen.getByTestId("submit-work-body");
+    const viewport = card.querySelector("[data-radix-scroll-area-viewport]");
 
-    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeNull();
-    expect(card.className).not.toContain("h-full");
-    expect(card.className).not.toContain("overflow-hidden");
-    expect(body.className).toContain("af-dashboard-body-text");
-    expect(body.className).not.toContain("h-full");
+    expect(viewport).toBeTruthy();
+    expect(card.className).toContain("h-full");
+    expect(card.className).toContain("overflow-hidden");
+    expect(viewport?.className).toContain("af-dashboard-body-text");
+    expect(viewport?.className).toContain("h-full");
+    expect(screen.getByTestId("submit-work-body")).toBe(viewport);
   });
 
   it("supports explicit localized body scrolling through the shared ScrollArea primitive", () => {

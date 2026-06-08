@@ -20,7 +20,7 @@ export const Table = forwardRef<HTMLTableElement, TableProps>(function Table(
   return (
     <div
       className={cn(
-        "w-full overflow-x-auto overflow-y-clip rounded-2xl border border-outline bg-surface-container-low",
+        "w-full overflow-x-auto overflow-y-clip rounded-2xl border border-outline ",
         containerClassName,
       )}
       {...containerProps}

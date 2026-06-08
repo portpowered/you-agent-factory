@@ -3,7 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   readGraphDraftHasPendingChanges,
   useFactoryGraphTopologyEditorBridge,
@@ -183,14 +183,14 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
 }));
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-additions",
+  "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
   () => ({
     buildFactoryGraphAddEntityMenuActions: () => [],
   }),
 );
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-save-summary",
+  "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
   () => ({
     buildFactoryGraphSaveSummary: () => ({
       additions: [],
@@ -216,19 +216,22 @@ vi.mock("./react-flow-current-activity-card-editor-removals", () => ({
   useFactoryGraphRemovalController: () => hookState.removalController,
 }));
 
-vi.mock("../../factory-graph-editor/hooks/use-factory-validation", () => ({
-  useFactoryValidation: () => ({
-    data: { targets: [] },
-    isError: false,
-    isFetching: false,
-    isLoading: false,
-    projection: {
-      handleErrorsByAnchorId: new Map(),
-      nodeErrorsByNodeId: new Map(),
-    },
-    targets: [],
+vi.mock(
+  "../../factory-graph-editor/hooks/validation/use-factory-validation",
+  () => ({
+    useFactoryValidation: () => ({
+      data: { targets: [] },
+      isError: false,
+      isFetching: false,
+      isLoading: false,
+      projection: {
+        handleErrorsByAnchorId: new Map(),
+        nodeErrorsByNodeId: new Map(),
+      },
+      targets: [],
+    }),
   }),
-}));
+);
 
 vi.mock("./react-flow-current-activity-card-editor-value", () => ({
   buildCurrentActivityGraphEditorValue: (value: Record<string, unknown>) =>

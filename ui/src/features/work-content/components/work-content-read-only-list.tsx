@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
-import type { components } from "../../../api/generated/openapi";
 import { DashboardLabel, DashboardText } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
 import {
   getWorkContentInspectMessages,
   type WorkContentInspectMessages,
 } from "../messages/work-content";
+import type { WorkContent } from "../lib/work-content-types";
 import { WorkContentPartList } from "./work-content-part-list";
-
-export type WorkContent = components["schemas"]["WorkContent"];
 
 export interface WorkContentReadOnlyListProps {
   ariaLabel?: string;
@@ -43,9 +41,7 @@ export function WorkContentReadOnlyList({
 
   const contentBody = (
     <>
-      {showHeading ? (
-        <DashboardLabel>{messages.heading}</DashboardLabel>
-      ) : null}
+      {showHeading ? <DashboardLabel>{messages.heading}</DashboardLabel> : null}
       {body}
     </>
   );

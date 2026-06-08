@@ -1,5 +1,5 @@
-import type { FactoryGraphWorkStateReference } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { nodeKeyId } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphWorkStateReference } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { nodeKeyId } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { GraphNodePositions } from "../state/currentActivityGraphStore";
 
 export interface MigrateWorkStateGraphLayoutPositionsInput {

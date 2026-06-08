@@ -1,5 +1,5 @@
 import { WorkstationType } from "../../../api/generated/openapi";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 
 export function findClassifierGraphEditorUnsupportedWorkstationName(
   factoryDefinition: CanonicalFactoryDefinition | null,

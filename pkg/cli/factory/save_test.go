@@ -134,7 +134,7 @@ func TestSaveFromFile_PreCheckMatchesValidateFactoryAPIPrePersist(t *testing.T) 
 	if err != nil {
 		t.Fatalf("ValidateFactoryAPI: %v", err)
 	}
-	apiFailed := apiResult.HasTargets()
+	apiFailed := apiResult.HasBlockingTargets()
 
 	err = SaveFromFile(SaveFromFileConfig{
 		Name:   "invalid",

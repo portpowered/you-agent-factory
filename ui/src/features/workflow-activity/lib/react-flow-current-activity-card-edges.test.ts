@@ -32,7 +32,8 @@ describe("buildGraphEdges hover emphasis", () => {
     ).toBe(true);
 
     const activeEdge = visibleGraphEdges.find(
-      (edge) => edge.outcomeKind === "accepted" && edge.stateCategory !== "FAILED",
+      (edge) =>
+        edge.outcomeKind === "accepted" && edge.stateCategory !== "FAILED",
     );
     expect(activeEdge).toBeTruthy();
     const activeHighlights: ActiveGraphHighlights = {
@@ -67,7 +68,8 @@ describe("buildGraphEdges hover emphasis", () => {
     );
 
     const semanticEdge = visibleGraphEdges.find(
-      (edge) => edge.outcomeKind !== "accepted" || edge.stateCategory === "FAILED",
+      (edge) =>
+        edge.outcomeKind !== "accepted" || edge.stateCategory === "FAILED",
     );
     expect(semanticEdge).toBeTruthy();
     const semanticEdges = buildGraphEdges(

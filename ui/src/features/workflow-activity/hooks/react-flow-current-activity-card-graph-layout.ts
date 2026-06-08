@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/factory-graph-topology-impact";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { buildCurrentActivityGraphLayoutFromFactory } from "../lib/current-activity-factory-graph-layout";
 import { EMPTY_GRAPH_LAYOUT } from "../lib/react-flow-current-activity-card-graph";

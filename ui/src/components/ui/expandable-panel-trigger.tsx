@@ -91,7 +91,7 @@ export const ExpandablePanelTrigger = forwardRef<
       type={type}
       {...props}
     >
-      <ExpandablePanelIcon expanded={expanded} /> 
+      <ExpandablePanelIcon expanded={expanded} />
       {children}
     </DisclosureButton>
   );

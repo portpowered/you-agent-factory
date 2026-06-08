@@ -7,7 +7,9 @@ import {
   buildTimeoutMs,
   expectNoBrowserErrors,
   fillWorkstationPromptBody,
+  modelProviderOptionLabel,
   openBrowserPage,
+  selectLabeledComboboxOption,
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
@@ -279,9 +281,11 @@ async function addWorker(
     timeout: uiInteractionTimeoutMs,
   });
   await addDialog.getByLabel("Identifier").fill(name);
-  await addDialog
-    .getByRole("combobox", { name: "Model provider" })
-    .selectOption(modelProvider);
+  await selectLabeledComboboxOption(
+    addDialog,
+    "Model provider",
+    modelProviderOptionLabel(modelProvider),
+  );
   await addDialog.getByRole("textbox", { name: "Model" }).fill(model);
   await addDialog.getByRole("button", { name: "Add entity" }).click();
 }

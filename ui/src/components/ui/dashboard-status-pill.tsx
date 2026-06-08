@@ -15,7 +15,7 @@ const DASHBOARD_STATUS_PILL_SIZE_CLASS = {
 
 /** Non-interactive status labels. Use accent tones for brand emphasis, semantic tones for state meaning only. */
 const DASHBOARD_STATUS_PILL_TONE_CLASS = {
-  active: "border-primary bg-primary-container text-on-surface",
+  active: "border-primary bg-primary-container text-on-primary",
   danger: "border-af-danger-border bg-error-container text-on-error-container",
   info: "border-af-info-border bg-info-container text-on-info-container",
   neutral: "border-outline bg-surface-container-low text-on-surface-variant",

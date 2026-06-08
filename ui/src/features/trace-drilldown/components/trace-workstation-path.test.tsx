@@ -569,7 +569,7 @@ describe("TraceWorkstationPath semantics", () => {
     });
 
     expect(screen.queryByText("Dispatch")).toBeNull();
-    expect(screen.getAllByText("Workstation").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Workstation")).toBeNull();
     expect(screen.queryByText("Accepted")).toBeNull();
     expect(screen.queryByText("Failed")).toBeNull();
     expect(screen.queryByText(/^In:/)).toBeNull();
@@ -579,14 +579,18 @@ describe("TraceWorkstationPath semantics", () => {
     if (!acceptedNode) {
       throw new Error("Expected accepted workstation node to render.");
     }
-    expect(acceptedNode.className).toContain("border-primary");
-    expect(acceptedNode.className).toContain("bg-primary-container");
+    expect(acceptedNode.className).toContain(
+      "af-current-activity-node-surface-neutral",
+    );
+    expect(acceptedNode.className).toContain("border-info-border");
 
     const failedNode = screen.getByText("dispatch-repair").closest("article");
     if (!failedNode) {
       throw new Error("Expected failed workstation node to render.");
     }
-    expect(failedNode.className).toContain("border-primary");
-    expect(failedNode.className).toContain("bg-primary-container");
+    expect(failedNode.className).toContain(
+      "af-current-activity-node-surface-neutral",
+    );
+    expect(failedNode.className).toContain("border-info-border");
   });
 });

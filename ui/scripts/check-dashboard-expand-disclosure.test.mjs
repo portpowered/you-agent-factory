@@ -81,8 +81,8 @@ test("scanDashboardExpandDisclosure accepts StandardExpandableSection ownership"
 
 test("scanDashboardExpandDisclosure accepts CurrentSelectionExpandableSection ownership", async () => {
   const tempRoot = await createUiTree({
-    "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx": `
-      import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
+    "src/features/current-selection/workstation-selection/components/detail-card/workstation-detail-card.tsx": `
+      import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 
       export function WorkstationDetailCard() {
         return (
@@ -100,7 +100,7 @@ test("scanDashboardExpandDisclosure accepts CurrentSelectionExpandableSection ow
         {
           owner: "expandable-panel-trigger",
           relativeFilePath:
-            "src/features/current-selection/workstation-selection/components/workstation-detail-card.tsx",
+            "src/features/current-selection/workstation-selection/components/detail-card/workstation-detail-card.tsx",
         },
       ]),
     ).resolves.toEqual({ violations: [] });

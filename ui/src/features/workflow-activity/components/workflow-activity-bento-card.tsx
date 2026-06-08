@@ -12,7 +12,6 @@ import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCardView,
 } from "./react-flow-current-activity-card";
-import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 
 interface WorkflowActivityBentoCardProps {
   headerAction?: ReactNode;
@@ -98,24 +97,7 @@ export function WorkflowActivityBentoCard({
       bodyScroll={false}
       chromeDensity="compact"
       className="h-full max-h-full min-h-0 overflow-hidden"
-      headerAction={
-        <CurrentActivityGraphHeaderActions
-          key={`graph-editor-header-${editor.editorMode}-${editor.draftState.hasChanges}`}
-          compact
-          editorMode={editor.editorMode}
-          editorUnavailableClassifierWorkstationName={
-            editor.editorUnavailableClassifierWorkstationName
-          }
-          hasChanges={editor.draftState.hasChanges}
-          headerActions={headerAction}
-          isDefinitionLoading={
-            editor.editableDefinitionQuery.status === "pending"
-          }
-          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
-          locale={locale}
-          onToggle={editor.handleEditorModeToggle}
-        />
-      }
+      headerAction={headerAction}
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       title={messages.widgetTitle}
     >

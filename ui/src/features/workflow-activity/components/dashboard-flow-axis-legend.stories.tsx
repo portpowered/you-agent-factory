@@ -88,6 +88,7 @@ export const Interactive = {
       [messages.iconLabels.workstation, "workstation"],
       [messages.iconLabels.repeater, "repeater"],
       [messages.iconLabels.cron, "cron"],
+      [messages.iconLabels.poller, "poller"],
       [messages.iconLabels["active-work"], "active-work"],
       [messages.iconLabels.exhaustion, "exhaustion"],
     ]) {

@@ -1,7 +1,7 @@
 import { useMemo, useRef } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../factory-graph-editor/lib/factory-graph-topology-impact";
+import { doesFactoryDefinitionChangeAffectGraphTopology } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 
 /**
  * Keeps the factory definition reference used for graph layout stable across

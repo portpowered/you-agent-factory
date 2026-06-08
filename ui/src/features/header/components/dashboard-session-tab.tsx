@@ -1,4 +1,7 @@
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import type {
+  DragEvent as ReactDragEvent,
+  KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
 import type { DashboardStreamState } from "../../../api/dashboard/types";
 import type { FactorySessionSummary } from "../../../api/factory-sessions";
@@ -11,11 +14,11 @@ import {
 import type { getHeaderControlsMessages } from "../messages/header-controls";
 
 const SESSION_TAB_ITEM_CLASS =
-  "group relative flex min-h-0 h-full min-w-0 shrink-0 items-stretch self-stretch transition-colors";
+  "group relative flex h-full min-h-0 min-w-0 flex-1 basis-0 items-stretch self-stretch overflow-hidden transition-[opacity,colors,box-shadow]";
 const SESSION_TAB_BUTTON_CLASS =
-  "min-w-0 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+  "min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_CLOSE_BUTTON_CLASS =
-  "px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
+  "shrink-0 px-2.5 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-af-focus-ring";
 const SESSION_TAB_ACTIVE_CLASS = cn(
   "z-10 -mb-0.5 overflow-visible rounded-t-2xl rounded-b-none bg-surface-container-low text-on-surface",
   "before:pointer-events-none before:absolute before:-left-4 before:-bottom-0 before:h-4 before:w-4 before:bg-[radial-gradient(circle_at_top_left,transparent_1rem,var(--color-surface-container-low)_1rem)]",
@@ -68,9 +71,16 @@ export function SessionTabButton({
   buttonRef,
   closeDisabled,
   controlsID,
+  dragPreview,
+  draggable,
+  dropIndicator,
   messages,
   onClick,
   onClose,
+  onDragEnd,
+  onDragOver,
+  onDragStart,
+  onDrop,
   onKeyDown,
   session,
   streamStatus,
@@ -80,9 +90,16 @@ export function SessionTabButton({
   buttonRef: (element: HTMLButtonElement | null) => void;
   closeDisabled: boolean;
   controlsID: string;
+  dragPreview: boolean;
+  draggable: boolean;
+  dropIndicator: "before" | "after" | null;
   messages: ReturnType<typeof getHeaderControlsMessages>;
   onClick: () => void;
   onClose: () => void;
+  onDragEnd: () => void;
+  onDragOver: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDragStart: (event: ReactDragEvent<HTMLDivElement>) => void;
+  onDrop: (event: ReactDragEvent<HTMLDivElement>) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLButtonElement>) => void;
   session: FactorySessionSummary;
   streamStatus: DashboardStreamState["status"];
@@ -91,11 +108,23 @@ export function SessionTabButton({
   const label = sessionTabLabel(session);
   const secondaryPath = sessionTabSecondaryPath(session.folderPath);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop is attached to the tab shell while the semantic tab control remains the inner button.
     <div
       className={cn(
         SESSION_TAB_ITEM_CLASS,
         active ? SESSION_TAB_ACTIVE_CLASS : SESSION_TAB_INACTIVE_CLASS,
+        dropIndicator === "before" &&
+          "shadow-[-2px_0_0_0_var(--color-primary)]",
+        dropIndicator === "after" && "shadow-[2px_0_0_0_var(--color-primary)]",
+        dragPreview && "bg-surface-container-low text-on-surface-disabled",
+        "max-w-72",
       )}
+      draggable={draggable}
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragStart={onDragStart}
+      onDrop={onDrop}
+      data-dragging={dragPreview}
       title={`${session.folderPath} (${session.id})`}
     >
       <button
@@ -121,7 +150,7 @@ export function SessionTabButton({
           <span className="truncate text-sm font-semibold">{label}</span>
         </span>
         <span
-          className="block truncate text-[11px] text-on-surface-subtle"
+          className="block min-w-0 max-w-full truncate text-[11px] text-on-surface-subtle"
           title={session.folderPath}
         >
           {secondaryPath}

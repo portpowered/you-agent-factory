@@ -7,16 +7,17 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
-import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
   type FactoryGraphEdge,
   type FactoryGraphNode,
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/factory-graph-node-class-visibility";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
+import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
+import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
@@ -26,15 +27,6 @@ import {
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
 } from "../../flowchart/lib/workstation-icon-metadata";
-
-const WORKSTATION_NODE_WIDTH = 156;
-const WORKSTATION_NODE_HEIGHT = 196;
-const STATE_NODE_WIDTH = 164;
-const STATE_NODE_HEIGHT = 86;
-const RESOURCE_NODE_WIDTH = 168;
-const RESOURCE_NODE_HEIGHT = STATE_NODE_HEIGHT;
-const AUXILIARY_NODE_WIDTH = 156;
-const AUXILIARY_NODE_HEIGHT = 58;
 
 interface FactoryGraphSeedNode {
   height: number;
@@ -257,14 +249,15 @@ function nodeKindForFactoryGraphNode(
 function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
   switch (node.kind) {
     case "resource":
-      return { height: RESOURCE_NODE_HEIGHT, width: RESOURCE_NODE_WIDTH };
+      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.resource;
     case "work-state":
-      return { height: STATE_NODE_HEIGHT, width: STATE_NODE_WIDTH };
+      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND["work-state"];
     case "worker":
+      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.worker;
     case "work-type":
-      return { height: AUXILIARY_NODE_HEIGHT, width: AUXILIARY_NODE_WIDTH };
+      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND["work-type"];
     case "workstation":
-      return { height: WORKSTATION_NODE_HEIGHT, width: WORKSTATION_NODE_WIDTH };
+      return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.workstation;
   }
 }
 
@@ -283,7 +276,7 @@ function seedNodeFromFactoryGraphNode(
       workstationNodeId:
         parseFactoryGraphWorkstationNodeId(node.id) ?? node.label,
     };
-   }
+  }
 
   return {
     height: dimensions.height,
