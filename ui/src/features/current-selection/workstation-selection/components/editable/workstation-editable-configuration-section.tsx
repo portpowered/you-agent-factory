@@ -424,21 +424,20 @@ function EditableConfigurationWorkstationTypeInput({
   >;
 }) {
   return (
-    <Select
+    <EnumSelect
+      aria-label={messages.workstationTypeLabel}
       id="editable-workstation-type"
-      onChange={(event) =>
-        state.onWorkstationTypeChange(
-          event.target.value as EditableWorkstationType,
-        )
+      onValueChange={(nextValue) =>
+        state.onWorkstationTypeChange(nextValue as EditableWorkstationType)
       }
+      options={state.initialValues.workstationTypeOptions.map(
+        (workstationType) => ({
+          label: messages.localizeWorkstationType(workstationType),
+          value: workstationType,
+        }),
+      )}
       value={state.draft.workstationType}
-    >
-      {state.initialValues.workstationTypeOptions.map((workstationType) => (
-        <option key={workstationType} value={workstationType}>
-          {messages.localizeWorkstationType(workstationType)}
-        </option>
-      ))}
-    </Select>
+    />
   );
 }
 

@@ -339,6 +339,7 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
         { label: "Identifier", value: "analyst" },
         {
           label: "Worker type",
+          optionLabel: "Script worker",
           role: "combobox" as const,
           value: "SCRIPT_WORKER",
         },

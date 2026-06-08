@@ -1,5 +1,4 @@
 import { validateEditableWorkstationCronDraft } from "../../../current-factory-definition/lib/editable-workstation-cron-validation";
-import { parseWorkerArgsText } from "../../../current-factory-definition/lib/worker-editable-values";
 import type {
   FactoryGraphAddModelOperationDraft,
   FactoryGraphAddModelOperationValidationErrors,

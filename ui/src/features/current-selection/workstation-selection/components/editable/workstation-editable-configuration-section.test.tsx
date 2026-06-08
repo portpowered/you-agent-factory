@@ -294,9 +294,10 @@ describe("EditableConfigurationSection model workstation fields", () => {
 
     expandEditableConfigurationSection();
 
-    await user.selectOptions(
-      screen.getByLabelText("Workstation type"),
-      "MODEL_INVOKE",
+    await selectLabeledComboboxOption(
+      user,
+      "Workstation type",
+      "Model invoke",
     );
     expect(onWorkstationTypeChange).toHaveBeenCalledWith("MODEL_INVOKE");
   });

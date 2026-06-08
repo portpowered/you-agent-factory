@@ -903,7 +903,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/factory-graph-editor/lib/editor/factory-graph-editor-additions.ts",
     importSpecifiers: [
       "../../../current-factory-definition/lib/editable-workstation-cron-validation",
-      "../../../current-factory-definition/lib/worker-editable-values",
       "../../../current-factory-definition/lib/workstation-behavior",
       "../../../current-factory-definition/lib/workstation-editable-values",
       "../../../current-factory-definition/lib/workstation/workstation-type",

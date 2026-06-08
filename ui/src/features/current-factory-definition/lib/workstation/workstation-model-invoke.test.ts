@@ -153,6 +153,7 @@ describe("workstation model invoke binding projection", () => {
 
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: binding validation cases share one operation fixture.
 describe("workstation model invoke binding validation", () => {
   it("omits empty optional bindings from canonical projection", () => {
     const operation = resolveModelWorkerOperations(

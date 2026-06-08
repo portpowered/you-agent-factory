@@ -2,10 +2,11 @@ import type { ReactNode } from "react";
 import type { ModelOperationContentType } from "../../../../api/generated/openapi";
 import {
   DashboardLabel,
+  EnumSelect,
   FormDescription,
   FormError,
   Input,
-  Select,
+  OptionalEnumSelect,
 } from "../../../../components/ui";
 import { FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES } from "../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import { updateEditableModelInvokeBindingDraft } from "../editing/model-invoke/editable-workstation-model-invoke-mutators";
@@ -43,7 +44,12 @@ export function EditableConfigurationModelInvokeFields({
       <EditableConfigurationField
         errorMessage={validationErrors.operation}
         fieldId="editable-workstation-operation"
-        input={<EditableConfigurationModelInvokeOperationInput state={state} />}
+        input={
+          <EditableConfigurationModelInvokeOperationInput
+            messages={messages}
+            state={state}
+          />
+        }
         label={messages.modelInvokeOperationFieldLabel}
       />
       <EditableConfigurationModelInvokeBindingsField
@@ -80,29 +86,30 @@ function EditableConfigurationModelInvokeWorkerInput({
   }
 
   return (
-    <Select
+    <EnumSelect
       aria-describedby={
         state.validationErrors.workerName
           ? "editable-workstation-worker-error"
           : undefined
       }
       aria-invalid={state.validationErrors.workerName ? "true" : undefined}
+      aria-label={messages.workerFieldLabel}
       id="editable-workstation-worker"
-      onChange={(event) => state.onWorkerChange(event.target.value)}
+      onValueChange={state.onWorkerChange}
+      options={state.workerOptionsState.options.map((workerName) => ({
+        label: workerName,
+        value: workerName,
+      }))}
       value={state.draft.workerName}
-    >
-      {state.workerOptionsState.options.map((workerName) => (
-        <option key={workerName} value={workerName}>
-          {workerName}
-        </option>
-      ))}
-    </Select>
+    />
   );
 }
 
 function EditableConfigurationModelInvokeOperationInput({
+  messages,
   state,
 }: {
+  messages: ReturnType<typeof getWorkstationDetailMessages>;
   state: ReadyEditableConfigurationState;
 }) {
   if (state.operationOptionsState.status === "empty") {
@@ -118,23 +125,22 @@ function EditableConfigurationModelInvokeOperationInput({
   }
 
   return (
-    <Select
+    <EnumSelect
       aria-describedby={
         state.validationErrors.operation
           ? "editable-workstation-operation-error"
           : undefined
       }
       aria-invalid={state.validationErrors.operation ? "true" : undefined}
+      aria-label={messages.modelInvokeOperationFieldLabel}
       id="editable-workstation-operation"
-      onChange={(event) => state.onOperationChange(event.target.value)}
+      onValueChange={state.onOperationChange}
+      options={state.operationOptionsState.options.map((operationName) => ({
+        label: operationName,
+        value: operationName,
+      }))}
       value={state.draft.operation}
-    >
-      {state.operationOptionsState.options.map((operationName) => (
-        <option key={operationName} value={operationName}>
-          {operationName}
-        </option>
-      ))}
-    </Select>
+    />
   );
 }
 
@@ -262,29 +268,28 @@ function EditableConfigurationModelInvokeBindingSlotCard({
           >
             {messages.modelInvokeBindingSelectorTypeFieldLabel}
           </DashboardLabel>
-          <Select
+          <OptionalEnumSelect
+            aria-label={messages.modelInvokeBindingSelectorTypeFieldLabel}
+            emptyOptionLabel={
+              messages.modelInvokeBindingSelectorTypeNoneOption
+            }
             id={`editable-workstation-binding-${inputSlot.name}-type`}
-            onChange={(event) =>
+            onValueChange={(nextValue) =>
               updateBindingSelector(
                 state,
                 inputSlot.name,
                 "type",
-                event.target.value,
+                nextValue ?? "",
               )
             }
-            value={selector.type}
-          >
-            <option value="">
-              {messages.modelInvokeBindingSelectorTypeNoneOption}
-            </option>
-            {FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES.map(
-              (contentType) => (
-                <option key={contentType} value={contentType}>
-                  {contentType}
-                </option>
-              ),
+            options={FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES.map(
+              (contentType) => ({
+                label: contentType,
+                value: contentType,
+              }),
             )}
-          </Select>
+            value={selector.type || null}
+          />
         </div>
         <BindingSelectorField
           fieldId={`editable-workstation-binding-${inputSlot.name}-config`}

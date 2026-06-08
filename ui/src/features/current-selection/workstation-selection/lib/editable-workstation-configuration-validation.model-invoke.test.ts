@@ -9,6 +9,7 @@ import {
   modelWorkstationValues,
 } from "../../../../testing/editable-workstation-configuration-validation-fixtures";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: grouped model-invoke validation cases share one fixture harness.
 describe("validateEditableWorkstationDraft model invoke", () => {
   const modelInvokeValues = {
     ...modelWorkstationValues,

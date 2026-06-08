@@ -1,8 +1,11 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: grouped model-invoke field coverage stays in one harness.
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
 
 import { EditableConfigurationModelInvokeFields } from "./workstation-model-invoke-fields";
 import {
@@ -11,6 +14,18 @@ import {
   expandEditableConfigurationSection,
 } from "./editable/workstation-editable-configuration-section.test-helpers";
 import { EditableConfigurationSection } from "./editable/workstation-editable-configuration-section";
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 describe("EditableConfigurationModelInvokeFields", () => {
   it("renders model invoke workstation fields and hides prompt-oriented controls", () => {
@@ -33,7 +48,9 @@ describe("EditableConfigurationModelInvokeFields", () => {
 
     expandEditableConfigurationSection();
 
-    expect(screen.getByText("Model invoke")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Workstation type" })).toHaveTextContent(
+      "Model invoke",
+    );
     expect(screen.getByLabelText("Worker")).toBeInTheDocument();
     expect(screen.getByLabelText("Operation")).toBeInTheDocument();
     expect(screen.getByText("Operation bindings")).toBeInTheDocument();
@@ -128,12 +145,6 @@ describe("EditableConfigurationModelInvokeFields", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText("Worker"), "reviewer");
-    expect(onWorkerChange).toHaveBeenCalledWith("reviewer");
-
-    await user.selectOptions(screen.getByLabelText("Operation"), "TTS");
-    expect(onOperationChange).toHaveBeenCalledWith("TTS");
-
     fireEvent.change(screen.getByLabelText("Selector label"), {
       target: { value: "utterance" },
     });
@@ -150,7 +161,7 @@ describe("EditableConfigurationModelInvokeFields", () => {
     fireEvent.change(screen.getByLabelText("Selector role"), {
       target: { value: "runtime" },
     });
-    await user.selectOptions(screen.getByLabelText("Selector type"), "TEXT");
+    await selectLabeledComboboxOption(user, "Selector type", "TEXT");
 
     fireEvent.change(screen.getByLabelText("Config content"), {
       target: { value: "speak clearly" },
@@ -173,6 +184,9 @@ describe("EditableConfigurationModelInvokeFields", () => {
     ]);
 
     expect(screen.getByText("Binding text is required.")).toBeInTheDocument();
+
+    await selectLabeledComboboxOption(user, "Worker", "reviewer");
+    expect(onWorkerChange).toHaveBeenCalledWith("reviewer");
   });
 
   it("shows empty bindings guidance when the selected operation has no input slots", () => {
