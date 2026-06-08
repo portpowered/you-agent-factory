@@ -30,6 +30,8 @@ var canonicalFactoryEventTypeValues = []string{
 	"FACTORY_STATE_RESPONSE",
 	"RUN_RESPONSE",
 	"JAVASCRIPT_CHECKPOINT_REF",
+	"JAVASCRIPT_PHASE_CHANGE",
+	"ARTIFACT_CREATED",
 }
 
 var retiredFactoryEventTypeValues = []string{
@@ -82,6 +84,8 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"FactoryStateResponseEventPayload",
 	"RunResponseEventPayload",
 	"JavaScriptCheckpointRefEventPayload",
+	"JavaScriptPhaseChangeEventPayload",
+	"ArtifactCreatedEventPayload",
 }
 
 var bundledFactoryEventPayloadRefs = []string{
@@ -102,6 +106,8 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/FactoryStateResponseEventPayload",
 	"#/components/schemas/RunResponseEventPayload",
 	"#/components/schemas/JavaScriptCheckpointRefEventPayload",
+	"#/components/schemas/JavaScriptPhaseChangeEventPayload",
+	"#/components/schemas/ArtifactCreatedEventPayload",
 }
 
 var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
@@ -122,6 +128,8 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"FACTORY_STATE_RESPONSE":      "FactoryStateResponseEventPayload",
 	"RUN_RESPONSE":                "RunResponseEventPayload",
 	"JAVASCRIPT_CHECKPOINT_REF":   "JavaScriptCheckpointRefEventPayload",
+	"JAVASCRIPT_PHASE_CHANGE":     "JavaScriptPhaseChangeEventPayload",
+	"ARTIFACT_CREATED":            "ArtifactCreatedEventPayload",
 }
 
 const openAPISchemaRefPrefix = "#/components/schemas/"

@@ -109,6 +109,7 @@ const (
 
 // Defines values for FactoryEventType.
 const (
+	FactoryEventTypeArtifactCreated           FactoryEventType = "ARTIFACT_CREATED"
 	FactoryEventTypeDispatchRequest           FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse          FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeFactoryChange             FactoryEventType = "FACTORY_CHANGE"
@@ -117,6 +118,7 @@ const (
 	FactoryEventTypeInferenceResponse         FactoryEventType = "INFERENCE_RESPONSE"
 	FactoryEventTypeInitialStructureRequest   FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
 	FactoryEventTypeJavaScriptCheckpointRef   FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
+	FactoryEventTypeJavaScriptPhaseChange     FactoryEventType = "JAVASCRIPT_PHASE_CHANGE"
 	FactoryEventTypeModelRequest              FactoryEventType = "MODEL_REQUEST"
 	FactoryEventTypeModelResponse             FactoryEventType = "MODEL_RESPONSE"
 	FactoryEventTypeRelationshipChangeRequest FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
@@ -592,6 +594,14 @@ const (
 const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
+
+// ArtifactCreatedEventPayload Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload.
+type ArtifactCreatedEventPayload struct {
+	Artifact FactoryArtifact `json:"artifact"`
+
+	// CapturedAt When the artifact payload was captured.
+	CapturedAt *time.Time `json:"capturedAt,omitempty"`
+}
 
 // BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
 type BundledFile struct {
@@ -1951,6 +1961,22 @@ type JavaScriptCheckpointRefEventPayload struct {
 
 	// Timestamp When the checkpoint was recorded.
 	Timestamp *time.Time `json:"timestamp,omitempty"`
+}
+
+// JavaScriptPhaseChangeEventPayload JavaScript workflow phase transition recorded on the canonical factory event stream. JavaScript workflow progress is represented through phase changes, not Petri WORK_STATE_CHANGE marking events.
+type JavaScriptPhaseChangeEventPayload struct {
+	// ArgsDigest Stable digest of the effective workflow arguments.
+	ArgsDigest          *string                                     `json:"argsDigest,omitempty"`
+	ChildDispatchCounts FactorySessionJavaScriptChildDispatchCounts `json:"childDispatchCounts"`
+
+	// Phase Current JavaScript workflow phase name after this event.
+	Phase string `json:"phase"`
+
+	// Phases Ordered phase names visible in the session runtime.
+	Phases []string `json:"phases"`
+
+	// ScriptStatus JavaScript workflow script runtime status for one factory session.
+	ScriptStatus FactorySessionJavaScriptScriptStatus `json:"scriptStatus"`
 }
 
 // ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
@@ -3450,7 +3476,7 @@ type WorkState struct {
 	Type WorkStateType `json:"type"`
 }
 
-// WorkStateChangeEventPayload Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
+// WorkStateChangeEventPayload Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
 type WorkStateChangeEventPayload struct {
 	// FromPlaceId Marking place identifier before the move.
 	FromPlaceId string `json:"fromPlaceId"`
@@ -4312,6 +4338,58 @@ func (t *FactoryEvent_Payload) FromJavaScriptCheckpointRefEventPayload(v JavaScr
 
 // MergeJavaScriptCheckpointRefEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided JavaScriptCheckpointRefEventPayload
 func (t *FactoryEvent_Payload) MergeJavaScriptCheckpointRefEventPayload(v JavaScriptCheckpointRefEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsJavaScriptPhaseChangeEventPayload returns the union data inside the FactoryEvent_Payload as a JavaScriptPhaseChangeEventPayload
+func (t FactoryEvent_Payload) AsJavaScriptPhaseChangeEventPayload() (JavaScriptPhaseChangeEventPayload, error) {
+	var body JavaScriptPhaseChangeEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromJavaScriptPhaseChangeEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided JavaScriptPhaseChangeEventPayload
+func (t *FactoryEvent_Payload) FromJavaScriptPhaseChangeEventPayload(v JavaScriptPhaseChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeJavaScriptPhaseChangeEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided JavaScriptPhaseChangeEventPayload
+func (t *FactoryEvent_Payload) MergeJavaScriptPhaseChangeEventPayload(v JavaScriptPhaseChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsArtifactCreatedEventPayload returns the union data inside the FactoryEvent_Payload as a ArtifactCreatedEventPayload
+func (t FactoryEvent_Payload) AsArtifactCreatedEventPayload() (ArtifactCreatedEventPayload, error) {
+	var body ArtifactCreatedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromArtifactCreatedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided ArtifactCreatedEventPayload
+func (t *FactoryEvent_Payload) FromArtifactCreatedEventPayload(v ArtifactCreatedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeArtifactCreatedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided ArtifactCreatedEventPayload
+func (t *FactoryEvent_Payload) MergeArtifactCreatedEventPayload(v ArtifactCreatedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

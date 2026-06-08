@@ -398,5 +398,48 @@
         "sizeBytes": 128
       }
     }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-javascript-phase-change",
+    "type": "JAVASCRIPT_PHASE_CHANGE",
+    "context": {
+      "sequence": 16,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:11Z"
+    },
+    "payload": {
+      "phase": "execute",
+      "phases": ["plan", "execute"],
+      "argsDigest": "sha256:args",
+      "scriptStatus": "RUNNING",
+      "childDispatchCounts": {
+        "queued": 1,
+        "running": 2,
+        "completed": 3
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-artifact-created",
+    "type": "ARTIFACT_CREATED",
+    "context": {
+      "sequence": 17,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:12Z"
+    },
+    "payload": {
+      "artifact": {
+        "id": "artifact-result-1",
+        "kind": "FINAL_RESULT",
+        "visibility": "PUBLIC",
+        "label": "Review summary",
+        "summary": "Completed review findings",
+        "contentHash": "sha256:result-body",
+        "sizeBytes": 512
+      },
+      "capturedAt": "2026-04-21T12:00:12Z"
+    }
   }
 ]

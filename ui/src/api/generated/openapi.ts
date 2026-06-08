@@ -1278,6 +1278,26 @@ export interface components {
       summary?: string;
       artifactRef: components["schemas"]["FactoryArtifactRef"];
     };
+    /** @description JavaScript workflow phase transition recorded on the canonical factory event stream. JavaScript workflow progress is represented through phase changes, not Petri WORK_STATE_CHANGE marking events. */
+    JavaScriptPhaseChangeEventPayload: {
+      /** @description Current JavaScript workflow phase name after this event. */
+      phase: string;
+      /** @description Ordered phase names visible in the session runtime. */
+      phases: string[];
+      /** @description Stable digest of the effective workflow arguments. */
+      argsDigest?: string;
+      scriptStatus: components["schemas"]["FactorySessionJavaScriptScriptStatus"];
+      childDispatchCounts: components["schemas"]["FactorySessionJavaScriptChildDispatchCounts"];
+    };
+    /** @description Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload. */
+    ArtifactCreatedEventPayload: {
+      artifact: components["schemas"]["FactoryArtifact"];
+      /**
+       * Format: date-time
+       * @description When the artifact payload was captured.
+       */
+      capturedAt?: string;
+    };
     ListFactorySessionsResponse: {
       sessions: components["schemas"]["FactorySessionSummary"][];
     };
@@ -1662,7 +1682,9 @@ export interface components {
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
         | components["schemas"]["RunResponseEventPayload"]
-        | components["schemas"]["JavaScriptCheckpointRefEventPayload"];
+        | components["schemas"]["JavaScriptCheckpointRefEventPayload"]
+        | components["schemas"]["JavaScriptPhaseChangeEventPayload"]
+        | components["schemas"]["ArtifactCreatedEventPayload"];
     };
     /**
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -1926,7 +1948,7 @@ export interface components {
       outputResources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["StringMap"];
     };
-    /** @description Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
+    /** @description Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
     WorkStateChangeEventPayload: {
       workId: string;
       workTypeName: string;
@@ -4375,6 +4397,10 @@ export const FactoryEventType = {
   FactoryEventTypeRunResponse: "RUN_RESPONSE",
   // A JavaScript workflow checkpoint reference was recorded without exposing raw VM state.
   FactoryEventTypeJavaScriptCheckpointRef: "JAVASCRIPT_CHECKPOINT_REF",
+  // A JavaScript workflow phase transition was recorded without using Petri marking terminology.
+  FactoryEventTypeJavaScriptPhaseChange: "JAVASCRIPT_PHASE_CHANGE",
+  // A customer-visible factory artifact was created without exposing raw artifact bodies.
+  FactoryEventTypeArtifactCreated: "ARTIFACT_CREATED",
 } as const;
 export type FactoryEventType =
   (typeof FactoryEventType)[keyof typeof FactoryEventType];

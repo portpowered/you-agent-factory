@@ -62,7 +62,21 @@ type FactoryWorldWorkstationEdge struct {
 }
 
 type FactoryWorldJavaScriptProjection struct {
-	Checkpoints []FactorySessionJavaScriptCheckpointRef `json:"checkpoints,omitempty"`
+	Phase               string                                `json:"phase,omitempty"`
+	Phases              []string                              `json:"phases,omitempty"`
+	ArgsDigest          string                                `json:"argsDigest,omitempty"`
+	Checkpoints         []FactorySessionJavaScriptCheckpointRef `json:"checkpoints,omitempty"`
+	ScriptStatus        string                                `json:"scriptStatus,omitempty"`
+	ChildDispatchCounts FactoryWorldJavaScriptChildDispatchCounts `json:"childDispatchCounts,omitempty"`
+	Artifacts           []FactorySessionArtifactState         `json:"artifacts,omitempty"`
+}
+
+// FactoryWorldJavaScriptChildDispatchCounts summarizes JavaScript child dispatch
+// counts reconstructed from canonical factory events.
+type FactoryWorldJavaScriptChildDispatchCounts struct {
+	Queued    int `json:"queued"`
+	Running   int `json:"running"`
+	Completed int `json:"completed"`
 }
 
 type FactoryWorldRuntimeView struct {

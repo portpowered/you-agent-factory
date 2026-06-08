@@ -1002,6 +1002,10 @@ components:
       $ref: './components/schemas/data-models/FactoryArtifactCaptureMetadata.yaml'
     JavaScriptCheckpointRefEventPayload:
       $ref: './components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml'
+    JavaScriptPhaseChangeEventPayload:
+      $ref: './components/schemas/events/payloads/JavaScriptPhaseChangeEventPayload.yaml'
+    ArtifactCreatedEventPayload:
+      $ref: './components/schemas/events/payloads/ArtifactCreatedEventPayload.yaml'
     ListFactorySessionsResponse:
       $ref: './components/schemas/api/ListFactorySessionsResponse.yaml'
     OpenFactorySessionRequest:

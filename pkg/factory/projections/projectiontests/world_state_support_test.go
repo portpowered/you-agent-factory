@@ -644,6 +644,18 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		if err := event.Payload.FromRunResponseEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.JavaScriptCheckpointRefEventPayload:
+		if err := event.Payload.FromJavaScriptCheckpointRefEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.JavaScriptPhaseChangeEventPayload:
+		if err := event.Payload.FromJavaScriptPhaseChangeEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.ArtifactCreatedEventPayload:
+		if err := event.Payload.FromArtifactCreatedEventPayload(typed); err != nil {
+			panic(err)
+		}
 	default:
 		panic("unsupported projection test payload")
 	}

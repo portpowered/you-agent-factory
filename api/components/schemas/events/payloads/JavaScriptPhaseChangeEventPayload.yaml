@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+description: >-
+  JavaScript workflow phase transition recorded on the canonical factory event
+  stream. JavaScript workflow progress is represented through phase changes,
+  not Petri WORK_STATE_CHANGE marking events.
+required:
+  - phase
+  - phases
+  - scriptStatus
+  - childDispatchCounts
+properties:
+  phase:
+    type: string
+    description: Current JavaScript workflow phase name after this event.
+  phases:
+    type: array
+    items:
+      type: string
+    description: Ordered phase names visible in the session runtime.
+  argsDigest:
+    type: string
+    description: Stable digest of the effective workflow arguments.
+  scriptStatus:
+    $ref: '../../api/FactorySessionJavaScriptScriptStatus.yaml'
+  childDispatchCounts:
+    $ref: '../../api/FactorySessionJavaScriptChildDispatchCounts.yaml'

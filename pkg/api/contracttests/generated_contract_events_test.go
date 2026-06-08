@@ -353,6 +353,39 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 				},
 			}),
 		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-javascript-phase-change",
+			Type:          factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+			Context:       factoryapi.FactoryEventContext{Sequence: 11, Tick: 6, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.JavaScriptPhaseChangeEventPayload{
+				Phase:      "execute",
+				Phases:     []string{"plan", "execute"},
+				ArgsDigest: stringPtr("sha256:args"),
+				ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusRUNNING,
+				ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
+					Queued:    1,
+					Running:   2,
+					Completed: 3,
+				},
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-artifact-created",
+			Type:          factoryapi.FactoryEventTypeArtifactCreated,
+			Context:       factoryapi.FactoryEventContext{Sequence: 12, Tick: 6, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.ArtifactCreatedEventPayload{
+				Artifact: factoryapi.FactoryArtifact{
+					Id:         "artifact-result-1",
+					Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
+					Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+					Label:      stringPtr("Review summary"),
+					Summary:    stringPtr("Completed review findings"),
+				},
+				CapturedAt: &eventTime,
+			}),
+		},
 	}
 }
 

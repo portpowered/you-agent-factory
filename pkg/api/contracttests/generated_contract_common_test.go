@@ -27,6 +27,8 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeFactoryStateResponse,
 	factoryapi.FactoryEventTypeRunResponse,
 	factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+	factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+	factoryapi.FactoryEventTypeArtifactCreated,
 }
 
 var retiredFactoryEventTypeStrings = []string{
@@ -108,6 +110,14 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 		_, err := payload.AsJavaScriptCheckpointRefEventPayload()
 		return err
 	},
+	factoryapi.FactoryEventTypeJavaScriptPhaseChange: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsJavaScriptPhaseChangeEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeArtifactCreated: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsArtifactCreatedEventPayload()
+		return err
+	},
 }
 
 var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.FactoryEvent_Payload, any) error{
@@ -161,6 +171,12 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.JavaScriptCheckpointRefEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromJavaScriptCheckpointRefEventPayload(value.(factoryapi.JavaScriptCheckpointRefEventPayload))
+	},
+	reflect.TypeOf(factoryapi.JavaScriptPhaseChangeEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromJavaScriptPhaseChangeEventPayload(value.(factoryapi.JavaScriptPhaseChangeEventPayload))
+	},
+	reflect.TypeOf(factoryapi.ArtifactCreatedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromArtifactCreatedEventPayload(value.(factoryapi.ArtifactCreatedEventPayload))
 	},
 }
 
