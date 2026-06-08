@@ -1,0 +1,14 @@
+type: string
+description: >-
+  Session list scope. LIVE returns workspace sessions kept open by the runtime
+  host. PERSISTED returns durable execution sessions stored outside the live
+  workspace. ALL returns both live and persisted session summaries.
+enum:
+  - LIVE
+  - PERSISTED
+  - ALL
+default: LIVE
+x-enum-varnames:
+  - FactorySessionListScopeLive
+  - FactorySessionListScopePersisted
+  - FactorySessionListScopeAll

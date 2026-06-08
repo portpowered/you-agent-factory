@@ -376,8 +376,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * List live factory sessions
-     * @description Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
+     * List factory sessions
+     * @description Lists factory sessions for the requested scope. LIVE returns workspace sessions kept open by the runtime host, including the reserved default session. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted summaries. Persisted summaries cover active, terminal, interrupted, and stale-lease durable sessions without exposing raw workflow source or unrestricted host paths.
      */
     get: operations["listFactorySessions"];
     put?: never;
@@ -440,8 +440,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Get one live factory session
-     * @description Returns the canonical factory session projection for one live session, including orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections.
+     * Get one factory session
+     * @description Returns the canonical factory session inspection read model. Live workspace sessions return the existing FactorySession projection with orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections. Durable execution sessions return a durable read model with status, resolved source ref/hash, phase summaries, progress counts, budgets, usage, policy hash, artifact refs, result summary, failure details, and lifecycle timestamps. Responses expose public source refs and hashes without raw workflow source or diagnostic artifacts.
      */
     get: operations["getFactorySession"];
     put?: never;
@@ -1339,8 +1339,164 @@ export interface components {
       capturedAt?: string;
     };
     ListFactorySessionsResponse: {
+      /** @description Applied list scope echoed in the response when provided by the server. */
+      scope?: components["schemas"]["FactorySessionListScope"];
+      /** @description Live workspace session summaries when scope is LIVE or ALL. */
       sessions: components["schemas"]["FactorySessionSummary"][];
+      /** @description Persisted durable session summaries when scope is PERSISTED or ALL. */
+      durableSessions?: components["schemas"]["FactorySessionDurableSummary"][];
     };
+    /**
+     * @description Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
+     * @default LIVE
+     * @enum {string}
+     */
+    FactorySessionListScope: FactorySessionListScope;
+    FactorySessionDurableSummary: {
+      /** @description Stable durable factory-session identifier. */
+      sessionId: string;
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT. */
+      dialect?: string;
+      resolvedSource: components["schemas"]["FactorySessionResolvedSourceIdentity"];
+      /** @description Stable hash of the resolved workflow or factory source when available. */
+      sourceHash?: string;
+      /** @description Stable hash of the effective approved orchestrator policy when available. */
+      effectivePolicyHash?: string;
+      /** @description True when the durable session lease is stale or interrupted while status still appears active. */
+      staleLease?: boolean;
+      lifecycle?: components["schemas"]["FactorySessionDurableLifecycleTimestamps"];
+      /** @description Polling and inspection links for durable session clients. */
+      links?: components["schemas"]["FactorySessionExecutionLinks"];
+    };
+    /** @description Durable factory-session inspection read model. Exposes public source refs and hashes without raw workflow source, unrestricted host paths, or diagnostic artifacts. */
+    FactorySessionDurableReadModel: {
+      /** @description Stable durable factory-session identifier. */
+      sessionId: string;
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT. */
+      dialect?: string;
+      resolvedSource: components["schemas"]["FactorySessionResolvedSourceIdentity"];
+      /** @description Stable hash of the resolved workflow or factory source when available. */
+      sourceHash?: string;
+      /** @description Stable hash of the effective approved orchestrator policy when available. */
+      effectivePolicyHash?: string;
+      /** @description Current workflow phase when execution is in progress. */
+      phase?: string;
+      /** @description Per-phase dispatch summaries for workflow inspection. */
+      phaseSummaries?: components["schemas"]["FactorySessionDurablePhaseSummary"][];
+      progress?: components["schemas"]["FactorySessionDurableProgressCounts"];
+      budgets?: components["schemas"]["FactorySessionBudgets"];
+      usage?: components["schemas"]["FactorySessionUsage"];
+      /** @description Customer-visible artifact refs without raw artifact bodies. */
+      artifactRefs?: components["schemas"]["FactoryArtifactRef"][];
+      resultSummary?: components["schemas"]["FactorySessionDurableResultSummary"];
+      failure?: components["schemas"]["FactorySessionDurableFailureDetail"];
+      lifecycle?: components["schemas"]["FactorySessionDurableLifecycleTimestamps"];
+      /** @description True when the durable session lease is stale or interrupted while status still appears active. */
+      staleLease?: boolean;
+      /** @description Polling and inspection links for durable session clients. */
+      links?: components["schemas"]["FactorySessionExecutionLinks"];
+    };
+    /** @description Factory session inspection response. Live workspace sessions return the existing FactorySession projection. Durable execution sessions return the durable read model. */
+    FactorySessionGetResponse:
+      | components["schemas"]["FactorySession"]
+      | components["schemas"]["FactorySessionDurableReadModel"];
+    FactorySessionDurablePhaseSummary: {
+      /** @description Workflow phase name for this summary row. */
+      phase: string;
+      /** @description Customer-visible phase label when different from the phase name. */
+      label?: string;
+      /** @description Total dispatches attributed to this phase. */
+      dispatchCount?: number;
+      /** @description Dispatches that reached a terminal success state in this phase. */
+      completedDispatchCount?: number;
+      /** @description Dispatches that failed in this phase. */
+      failedDispatchCount?: number;
+    };
+    FactorySessionDurableProgressCounts: {
+      /** @description Total durable dispatches recorded for the session. */
+      totalDispatches?: number;
+      /** @description Dispatches that reached a terminal success state. */
+      completedDispatches?: number;
+      /** @description Dispatches that reached a terminal failure state. */
+      failedDispatches?: number;
+      /** @description Dispatches currently running or awaiting completion. */
+      inFlightDispatches?: number;
+      /** @description Number of workflow phases represented in phase summaries. */
+      phaseCount?: number;
+    };
+    FactorySessionDurableResultSummary: {
+      resultStatus: components["schemas"]["FactorySessionResultStatus"];
+      /** @description Short customer-visible summary of the current or final result. */
+      summary?: string;
+      /** @description Artifact refs for large or non-text outputs without raw bodies. */
+      artifactRefs?: components["schemas"]["FactoryArtifactRef"][];
+    };
+    FactorySessionDurableFailureDetail: {
+      /** @description Stable failure reason code when the session failed or was interrupted. */
+      reason?: string;
+      /** @description Customer-visible failure message. */
+      message?: string;
+      /** @description Provider or runtime error class when available. */
+      errorClass?: string;
+      /** @description Whether partial results remain inspectable after the failure. */
+      partialResultAvailable?: boolean;
+    };
+    FactorySessionDurableLifecycleTimestamps: {
+      /**
+       * Format: date-time
+       * @description When the durable session entered the queued state.
+       */
+      queuedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the durable session began awaiting approval.
+       */
+      awaitingApprovalAt?: string;
+      /**
+       * Format: date-time
+       * @description When durable execution started.
+       */
+      startedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the durable session was most recently paused.
+       */
+      pausedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the durable session was most recently resumed.
+       */
+      resumedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the durable session reached a terminal finished state.
+       */
+      finishedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the durable session projection was last refreshed.
+       */
+      updatedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the durable session was interrupted.
+       */
+      interruptedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the durable session was explicitly terminated.
+       */
+      terminatedAt?: string;
+    };
+    /**
+     * @description Customer-visible durable session result availability for session read models and result retrieval endpoints.
+     * @enum {string}
+     */
+    FactorySessionResultStatus: FactorySessionResultStatus;
     OpenFactorySessionRequest: {
       folderPath: string;
       target?: components["schemas"]["FactorySessionTargetRef"];
@@ -3442,6 +3598,8 @@ export interface components {
     WorkListTraceId: string;
     /** @description Work or token identifier, depending on route. */
     WorkOrTokenID: string;
+    /** @description Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing. */
+    FactorySessionListScope: components["schemas"]["FactorySessionListScope"];
   };
   requestBodies: never;
   headers: never;
@@ -3980,14 +4138,17 @@ export interface operations {
   };
   listFactorySessions: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing. */
+        scope?: components["parameters"]["FactorySessionListScope"];
+      };
       header?: never;
       path?: never;
       cookie?: never;
     };
     requestBody?: never;
     responses: {
-      /** @description Live factory sessions that can be rendered as workspace tabs. */
+      /** @description Factory session summaries for the requested scope. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -3996,6 +4157,7 @@ export interface operations {
           "application/json": components["schemas"]["ListFactorySessionsResponse"];
         };
       };
+      400: components["responses"]["BadRequest"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -4087,13 +4249,13 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Canonical factory session projection for the targeted live session. */
+      /** @description Canonical factory session inspection read model for the targeted session. */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["FactorySession"];
+          "application/json": components["schemas"]["FactorySessionGetResponse"];
         };
       };
       404: components["responses"]["NotFound"];
@@ -4532,6 +4694,22 @@ export const FactoryArtifactAuditMode = {
 } as const;
 export type FactoryArtifactAuditMode =
   (typeof FactoryArtifactAuditMode)[keyof typeof FactoryArtifactAuditMode];
+export const FactorySessionListScope = {
+  FactorySessionListScopeLive: "LIVE",
+  FactorySessionListScopePersisted: "PERSISTED",
+  FactorySessionListScopeAll: "ALL",
+} as const;
+export type FactorySessionListScope =
+  (typeof FactorySessionListScope)[keyof typeof FactorySessionListScope];
+export const FactorySessionResultStatus = {
+  FactorySessionResultStatusNotReady: "NOT_READY",
+  FactorySessionResultStatusPartial: "PARTIAL",
+  FactorySessionResultStatusFinal: "FINAL",
+  FactorySessionResultStatusFailedWithPartial: "FAILED_WITH_PARTIAL",
+  FactorySessionResultStatusUnavailable: "UNAVAILABLE",
+} as const;
+export type FactorySessionResultStatus =
+  (typeof FactorySessionResultStatus)[keyof typeof FactorySessionResultStatus];
 export const FactorySessionExecutionSourceKind = {
   // Resolve a stored named factory by customer-facing factory id.
   FactorySessionExecutionSourceKindFactoryId: "FACTORY_ID",

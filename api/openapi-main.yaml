@@ -555,15 +555,25 @@ paths:
       tags:
         - Factory
       operationId: listFactorySessions
-      summary: List live factory sessions
-      description: Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
+      summary: List factory sessions
+      description: >-
+        Lists factory sessions for the requested scope. LIVE returns workspace
+        sessions kept open by the runtime host, including the reserved default
+        session. PERSISTED returns durable execution sessions stored outside the
+        live workspace. ALL returns both live and persisted summaries. Persisted
+        summaries cover active, terminal, interrupted, and stale-lease durable
+        sessions without exposing raw workflow source or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/FactorySessionListScope'
       responses:
         '200':
-          description: Live factory sessions that can be rendered as workspace tabs.
+          description: Factory session summaries for the requested scope.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListFactorySessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
@@ -642,17 +652,26 @@ paths:
       tags:
         - Factory
       operationId: getFactorySession
-      summary: Get one live factory session
-      description: Returns the canonical factory session projection for one live session, including orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections.
+      summary: Get one factory session
+      description: >-
+        Returns the canonical factory session inspection read model. Live
+        workspace sessions return the existing FactorySession projection with
+        orchestrator identity, lifecycle status, progress, budgets, usage, and
+        kind-specific runtime projections. Durable execution sessions return a
+        durable read model with status, resolved source ref/hash, phase
+        summaries, progress counts, budgets, usage, policy hash, artifact refs,
+        result summary, failure details, and lifecycle timestamps. Responses
+        expose public source refs and hashes without raw workflow source or
+        diagnostic artifacts.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       responses:
         '200':
-          description: Canonical factory session projection for the targeted live session.
+          description: Canonical factory session inspection read model for the targeted session.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/FactorySession'
+                $ref: '#/components/schemas/FactorySessionGetResponse'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':
@@ -878,6 +897,8 @@ components:
       $ref: './components/parameters/WorkListTraceId.yaml'
     WorkOrTokenID:
       $ref: './components/parameters/WorkOrTokenID.yaml'
+    FactorySessionListScope:
+      $ref: './components/parameters/FactorySessionListScope.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'
@@ -1088,6 +1109,26 @@ components:
       $ref: './components/schemas/events/payloads/ArtifactCreatedEventPayload.yaml'
     ListFactorySessionsResponse:
       $ref: './components/schemas/api/ListFactorySessionsResponse.yaml'
+    FactorySessionListScope:
+      $ref: './components/schemas/api/FactorySessionListScope.yaml'
+    FactorySessionDurableSummary:
+      $ref: './components/schemas/api/FactorySessionDurableSummary.yaml'
+    FactorySessionDurableReadModel:
+      $ref: './components/schemas/api/FactorySessionDurableReadModel.yaml'
+    FactorySessionGetResponse:
+      $ref: './components/schemas/api/FactorySessionGetResponse.yaml'
+    FactorySessionDurablePhaseSummary:
+      $ref: './components/schemas/api/FactorySessionDurablePhaseSummary.yaml'
+    FactorySessionDurableProgressCounts:
+      $ref: './components/schemas/api/FactorySessionDurableProgressCounts.yaml'
+    FactorySessionDurableResultSummary:
+      $ref: './components/schemas/api/FactorySessionDurableResultSummary.yaml'
+    FactorySessionDurableFailureDetail:
+      $ref: './components/schemas/api/FactorySessionDurableFailureDetail.yaml'
+    FactorySessionDurableLifecycleTimestamps:
+      $ref: './components/schemas/api/FactorySessionDurableLifecycleTimestamps.yaml'
+    FactorySessionResultStatus:
+      $ref: './components/schemas/api/FactorySessionResultStatus.yaml'
     OpenFactorySessionRequest:
       $ref: './components/schemas/api/OpenFactorySessionRequest.yaml'
     OpenFactorySessionResponse:

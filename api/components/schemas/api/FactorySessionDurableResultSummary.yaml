@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required:
+  - resultStatus
+properties:
+  resultStatus:
+    $ref: './FactorySessionResultStatus.yaml'
+  summary:
+    type: string
+    description: Short customer-visible summary of the current or final result.
+  artifactRefs:
+    type: array
+    items:
+      $ref: '../data-models/FactoryArtifactRef.yaml'
+    description: Artifact refs for large or non-text outputs without raw bodies.

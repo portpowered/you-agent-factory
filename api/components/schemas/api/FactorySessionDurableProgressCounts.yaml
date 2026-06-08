@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+properties:
+  totalDispatches:
+    type: integer
+    minimum: 0
+    description: Total durable dispatches recorded for the session.
+  completedDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches that reached a terminal success state.
+  failedDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches that reached a terminal failure state.
+  inFlightDispatches:
+    type: integer
+    minimum: 0
+    description: Dispatches currently running or awaiting completion.
+  phaseCount:
+    type: integer
+    minimum: 0
+    description: Number of workflow phases represented in phase summaries.

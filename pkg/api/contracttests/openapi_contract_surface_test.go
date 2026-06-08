@@ -22,6 +22,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertSubmitWorkSurfaceSchemas(t, schemas)
 	assertInvocationSurfaceSchemas(t, schemas, paths)
 	assertDurableExecutionSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionReadSurfaceSchemas(t, schemas, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
@@ -508,6 +509,85 @@ func assertDurableExecutionSurfaceSchemas(t *testing.T, schemas map[string]any, 
 	if !strings.Contains(strings.ToLower(invokeDescription), "not the primary durable") {
 		t.Fatalf("paths./factory-sessions/{session_id}/invocations.post.description must document live-session compatibility, got %q", invokeDescription)
 	}
+}
+
+func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	listOperation := pathOperation(t, paths, "/factory-sessions", "get")
+	if got, _ := listOperation["operationId"].(string); got != "listFactorySessions" {
+		t.Fatalf("paths./factory-sessions.get.operationId = %q, want listFactorySessions", got)
+	}
+	assertResponseSchemaRef(t, listOperation, "200", "#/components/schemas/ListFactorySessionsResponse")
+	assertResponseRef(t, listOperation, "400", "#/components/responses/BadRequest")
+	parameters, ok := listOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions.get.parameters is missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/FactorySessionListScope")
+
+	listResponseSchema := schemaObject(t, schemas, "ListFactorySessionsResponse")
+	assertRequiredFields(t, listResponseSchema, "sessions")
+	listResponseProperties := schemaProperties(t, listResponseSchema, "ListFactorySessionsResponse")
+	assertPropertyRef(t, listResponseProperties, "scope", "#/components/schemas/FactorySessionListScope")
+	assertArrayItemRef(t, listResponseProperties, "sessions", "#/components/schemas/FactorySessionSummary")
+	assertArrayItemRef(t, listResponseProperties, "durableSessions", "#/components/schemas/FactorySessionDurableSummary")
+	assertSchemaPropertiesPresent(t, listResponseProperties, "ListFactorySessionsResponse", "scope", "sessions", "durableSessions")
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionListScope"), "FactorySessionListScope", []string{"LIVE", "PERSISTED", "ALL"})
+
+	getOperation := pathOperation(t, paths, "/factory-sessions/{session_id}", "get")
+	if got, _ := getOperation["operationId"].(string); got != "getFactorySession" {
+		t.Fatalf("paths./factory-sessions/{session_id}.get.operationId = %q, want getFactorySession", got)
+	}
+	assertResponseSchemaRef(t, getOperation, "200", "#/components/schemas/FactorySessionGetResponse")
+	assertResponseRef(t, getOperation, "404", "#/components/responses/NotFound")
+
+	getResponseSchema := schemaObject(t, schemas, "FactorySessionGetResponse")
+	assertSchemaOneOfRefs(t, getResponseSchema, "FactorySessionGetResponse", []string{
+		"#/components/schemas/FactorySession",
+		"#/components/schemas/FactorySessionDurableReadModel",
+	})
+
+	durableReadModel := schemaObject(t, schemas, "FactorySessionDurableReadModel")
+	assertRequiredFields(t, durableReadModel, "sessionId", "status", "orchestratorKind", "resolvedSource")
+	durableReadModelProperties := schemaProperties(t, durableReadModel, "FactorySessionDurableReadModel")
+	assertPropertyRef(t, durableReadModelProperties, "status", "#/components/schemas/FactorySessionDurableLifecycleStatus")
+	assertPropertyRef(t, durableReadModelProperties, "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
+	assertPropertyRef(t, durableReadModelProperties, "resolvedSource", "#/components/schemas/FactorySessionResolvedSourceIdentity")
+	assertArrayItemRef(t, durableReadModelProperties, "phaseSummaries", "#/components/schemas/FactorySessionDurablePhaseSummary")
+	assertPropertyRef(t, durableReadModelProperties, "progress", "#/components/schemas/FactorySessionDurableProgressCounts")
+	assertPropertyRef(t, durableReadModelProperties, "budgets", "#/components/schemas/FactorySessionBudgets")
+	assertPropertyRef(t, durableReadModelProperties, "usage", "#/components/schemas/FactorySessionUsage")
+	assertArrayItemRef(t, durableReadModelProperties, "artifactRefs", "#/components/schemas/FactoryArtifactRef")
+	assertPropertyRef(t, durableReadModelProperties, "resultSummary", "#/components/schemas/FactorySessionDurableResultSummary")
+	assertPropertyRef(t, durableReadModelProperties, "failure", "#/components/schemas/FactorySessionDurableFailureDetail")
+	assertPropertyRef(t, durableReadModelProperties, "lifecycle", "#/components/schemas/FactorySessionDurableLifecycleTimestamps")
+	assertPropertyRef(t, durableReadModelProperties, "links", "#/components/schemas/FactorySessionExecutionLinks")
+	assertSchemaPropertiesPresent(t, durableReadModelProperties, "FactorySessionDurableReadModel",
+		"sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash",
+		"effectivePolicyHash", "phase", "phaseSummaries", "progress", "budgets", "usage",
+		"artifactRefs", "resultSummary", "failure", "lifecycle", "staleLease", "links")
+
+	durableSummary := schemaObject(t, schemas, "FactorySessionDurableSummary")
+	assertRequiredFields(t, durableSummary, "sessionId", "status", "orchestratorKind", "resolvedSource")
+	durableSummaryProperties := schemaProperties(t, durableSummary, "FactorySessionDurableSummary")
+	assertPropertyRef(t, durableSummaryProperties, "status", "#/components/schemas/FactorySessionDurableLifecycleStatus")
+	assertPropertyRef(t, durableSummaryProperties, "resolvedSource", "#/components/schemas/FactorySessionResolvedSourceIdentity")
+	assertSchemaPropertiesPresent(t, durableSummaryProperties, "FactorySessionDurableSummary",
+		"sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash",
+		"effectivePolicyHash", "staleLease", "lifecycle", "links")
+
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionDurableLifecycleStatus"), "FactorySessionDurableLifecycleStatus", []string{
+		"QUEUED", "AWAITING_APPROVAL", "RUNNING", "PAUSED", "RESUMING", "SUCCEEDED", "FAILED",
+		"CANCELING", "CANCELED", "TIMED_OUT", "INTERRUPTED", "TERMINATED",
+	})
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionResultStatus"), "FactorySessionResultStatus", []string{
+		"NOT_READY", "PARTIAL", "FINAL", "FAILED_WITH_PARTIAL", "UNAVAILABLE",
+	})
+
+	resultSummary := schemaObject(t, schemas, "FactorySessionDurableResultSummary")
+	assertRequiredFields(t, resultSummary, "resultStatus")
+	assertPropertyRef(t, schemaProperties(t, resultSummary, "FactorySessionDurableResultSummary"), "resultStatus", "#/components/schemas/FactorySessionResultStatus")
 }
 
 func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {

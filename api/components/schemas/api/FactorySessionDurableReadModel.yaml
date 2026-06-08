@@ -1,0 +1,63 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - status
+  - orchestratorKind
+  - resolvedSource
+description: >-
+  Durable factory-session inspection read model. Exposes public source refs and
+  hashes without raw workflow source, unrestricted host paths, or diagnostic
+  artifacts.
+properties:
+  sessionId:
+    type: string
+    description: Stable durable factory-session identifier.
+  status:
+    $ref: './FactorySessionDurableLifecycleStatus.yaml'
+  orchestratorKind:
+    $ref: '../data-models/FactoryOrchestratorKind.yaml'
+  dialect:
+    type: string
+    description: Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
+  resolvedSource:
+    $ref: './FactorySessionResolvedSourceIdentity.yaml'
+  sourceHash:
+    type: string
+    description: Stable hash of the resolved workflow or factory source when available.
+  effectivePolicyHash:
+    type: string
+    description: Stable hash of the effective approved orchestrator policy when available.
+  phase:
+    type: string
+    description: Current workflow phase when execution is in progress.
+  phaseSummaries:
+    type: array
+    items:
+      $ref: './FactorySessionDurablePhaseSummary.yaml'
+    description: Per-phase dispatch summaries for workflow inspection.
+  progress:
+    $ref: './FactorySessionDurableProgressCounts.yaml'
+  budgets:
+    $ref: './FactorySessionBudgets.yaml'
+  usage:
+    $ref: './FactorySessionUsage.yaml'
+  artifactRefs:
+    type: array
+    items:
+      $ref: '../data-models/FactoryArtifactRef.yaml'
+    description: Customer-visible artifact refs without raw artifact bodies.
+  resultSummary:
+    $ref: './FactorySessionDurableResultSummary.yaml'
+  failure:
+    $ref: './FactorySessionDurableFailureDetail.yaml'
+  lifecycle:
+    $ref: './FactorySessionDurableLifecycleTimestamps.yaml'
+  staleLease:
+    type: boolean
+    description: >-
+      True when the durable session lease is stale or interrupted while status
+      still appears active.
+  links:
+    $ref: './FactorySessionExecutionLinks.yaml'
+    description: Polling and inspection links for durable session clients.

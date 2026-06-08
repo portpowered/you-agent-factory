@@ -55,16 +55,43 @@ func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.Sessio
 	return s.sessionRuntime, true
 }
 
-func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
+	scope := factoryapi.FactorySessionListScopeLive
+	if params.Scope != nil {
+		scope = *params.Scope
+	}
+	switch scope {
+	case factoryapi.FactorySessionListScopeLive,
+		factoryapi.FactorySessionListScopePersisted,
+		factoryapi.FactorySessionListScopeAll:
+	default:
+		s.writeError(w, http.StatusBadRequest, "scope must be LIVE, PERSISTED, or ALL", "BAD_REQUEST")
+		return
+	}
+
+	response := factoryapi.ListFactorySessionsResponse{Scope: &scope}
+	if scope == factoryapi.FactorySessionListScopePersisted {
+		emptyDurableSessions := []factoryapi.FactorySessionDurableSummary{}
+		response.Sessions = []factoryapi.FactorySessionSummary{}
+		response.DurableSessions = &emptyDurableSessions
+		s.writeJSON(w, http.StatusOK, response)
+		return
+	}
+
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
 	}
-	response, err := sessionRuntime.ListFactorySessions(r.Context())
+	liveResponse, err := sessionRuntime.ListFactorySessions(r.Context())
 	if err != nil {
 		s.logger.Error("list factory sessions failed", zap.Error(err))
 		s.writeError(w, http.StatusInternalServerError, "failed to list factory sessions", "INTERNAL_ERROR")
 		return
+	}
+	response.Sessions = liveResponse.Sessions
+	if scope == factoryapi.FactorySessionListScopeAll {
+		emptyDurableSessions := []factoryapi.FactorySessionDurableSummary{}
+		response.DurableSessions = &emptyDurableSessions
 	}
 	s.writeJSON(w, http.StatusOK, response)
 }

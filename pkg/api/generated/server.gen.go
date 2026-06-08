@@ -190,6 +190,22 @@ const (
 	FactorySessionJavaScriptScriptStatusRUNNING  FactorySessionJavaScriptScriptStatus = "RUNNING"
 )
 
+// Defines values for FactorySessionListScope.
+const (
+	FactorySessionListScopeAll       FactorySessionListScope = "ALL"
+	FactorySessionListScopeLive      FactorySessionListScope = "LIVE"
+	FactorySessionListScopePersisted FactorySessionListScope = "PERSISTED"
+)
+
+// Defines values for FactorySessionResultStatus.
+const (
+	FactorySessionResultStatusFailedWithPartial FactorySessionResultStatus = "FAILED_WITH_PARTIAL"
+	FactorySessionResultStatusFinal             FactorySessionResultStatus = "FINAL"
+	FactorySessionResultStatusNotReady          FactorySessionResultStatus = "NOT_READY"
+	FactorySessionResultStatusPartial           FactorySessionResultStatus = "PARTIAL"
+	FactorySessionResultStatusUnavailable       FactorySessionResultStatus = "UNAVAILABLE"
+)
+
 // Defines values for FactorySessionStatus.
 const (
 	FactorySessionStatusACTIVE   FactorySessionStatus = "ACTIVE"
@@ -1312,8 +1328,179 @@ type FactorySessionBudgets struct {
 	MaxAgents *int `json:"maxAgents,omitempty"`
 }
 
+// FactorySessionDurableFailureDetail defines model for FactorySessionDurableFailureDetail.
+type FactorySessionDurableFailureDetail struct {
+	// ErrorClass Provider or runtime error class when available.
+	ErrorClass *string `json:"errorClass,omitempty"`
+
+	// Message Customer-visible failure message.
+	Message *string `json:"message,omitempty"`
+
+	// PartialResultAvailable Whether partial results remain inspectable after the failure.
+	PartialResultAvailable *bool `json:"partialResultAvailable,omitempty"`
+
+	// Reason Stable failure reason code when the session failed or was interrupted.
+	Reason *string `json:"reason,omitempty"`
+}
+
 // FactorySessionDurableLifecycleStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
 type FactorySessionDurableLifecycleStatus string
+
+// FactorySessionDurableLifecycleTimestamps defines model for FactorySessionDurableLifecycleTimestamps.
+type FactorySessionDurableLifecycleTimestamps struct {
+	// AwaitingApprovalAt When the durable session began awaiting approval.
+	AwaitingApprovalAt *time.Time `json:"awaitingApprovalAt,omitempty"`
+
+	// FinishedAt When the durable session reached a terminal finished state.
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+
+	// InterruptedAt When the durable session was interrupted.
+	InterruptedAt *time.Time `json:"interruptedAt,omitempty"`
+
+	// PausedAt When the durable session was most recently paused.
+	PausedAt *time.Time `json:"pausedAt,omitempty"`
+
+	// QueuedAt When the durable session entered the queued state.
+	QueuedAt *time.Time `json:"queuedAt,omitempty"`
+
+	// ResumedAt When the durable session was most recently resumed.
+	ResumedAt *time.Time `json:"resumedAt,omitempty"`
+
+	// StartedAt When durable execution started.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+
+	// TerminatedAt When the durable session was explicitly terminated.
+	TerminatedAt *time.Time `json:"terminatedAt,omitempty"`
+
+	// UpdatedAt When the durable session projection was last refreshed.
+	UpdatedAt *time.Time `json:"updatedAt,omitempty"`
+}
+
+// FactorySessionDurablePhaseSummary defines model for FactorySessionDurablePhaseSummary.
+type FactorySessionDurablePhaseSummary struct {
+	// CompletedDispatchCount Dispatches that reached a terminal success state in this phase.
+	CompletedDispatchCount *int `json:"completedDispatchCount,omitempty"`
+
+	// DispatchCount Total dispatches attributed to this phase.
+	DispatchCount *int `json:"dispatchCount,omitempty"`
+
+	// FailedDispatchCount Dispatches that failed in this phase.
+	FailedDispatchCount *int `json:"failedDispatchCount,omitempty"`
+
+	// Label Customer-visible phase label when different from the phase name.
+	Label *string `json:"label,omitempty"`
+
+	// Phase Workflow phase name for this summary row.
+	Phase string `json:"phase"`
+}
+
+// FactorySessionDurableProgressCounts defines model for FactorySessionDurableProgressCounts.
+type FactorySessionDurableProgressCounts struct {
+	// CompletedDispatches Dispatches that reached a terminal success state.
+	CompletedDispatches *int `json:"completedDispatches,omitempty"`
+
+	// FailedDispatches Dispatches that reached a terminal failure state.
+	FailedDispatches *int `json:"failedDispatches,omitempty"`
+
+	// InFlightDispatches Dispatches currently running or awaiting completion.
+	InFlightDispatches *int `json:"inFlightDispatches,omitempty"`
+
+	// PhaseCount Number of workflow phases represented in phase summaries.
+	PhaseCount *int `json:"phaseCount,omitempty"`
+
+	// TotalDispatches Total durable dispatches recorded for the session.
+	TotalDispatches *int `json:"totalDispatches,omitempty"`
+}
+
+// FactorySessionDurableReadModel Durable factory-session inspection read model. Exposes public source refs and hashes without raw workflow source, unrestricted host paths, or diagnostic artifacts.
+type FactorySessionDurableReadModel struct {
+	// ArtifactRefs Customer-visible artifact refs without raw artifact bodies.
+	ArtifactRefs *[]FactoryArtifactRef `json:"artifactRefs,omitempty"`
+
+	// Budgets Effective orchestrator policy budgets projected for one factory session.
+	Budgets *FactorySessionBudgets `json:"budgets,omitempty"`
+
+	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	EffectivePolicyHash *string                                   `json:"effectivePolicyHash,omitempty"`
+	Failure             *FactorySessionDurableFailureDetail       `json:"failure,omitempty"`
+	Lifecycle           *FactorySessionDurableLifecycleTimestamps `json:"lifecycle,omitempty"`
+
+	// Links Relative links for polling and inspecting one durable factory session.
+	Links *FactorySessionExecutionLinks `json:"links,omitempty"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// Phase Current workflow phase when execution is in progress.
+	Phase *string `json:"phase,omitempty"`
+
+	// PhaseSummaries Per-phase dispatch summaries for workflow inspection.
+	PhaseSummaries *[]FactorySessionDurablePhaseSummary `json:"phaseSummaries,omitempty"`
+	Progress       *FactorySessionDurableProgressCounts `json:"progress,omitempty"`
+
+	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
+	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
+	ResultSummary  *FactorySessionDurableResultSummary  `json:"resultSummary,omitempty"`
+
+	// SessionId Stable durable factory-session identifier.
+	SessionId string `json:"sessionId"`
+
+	// SourceHash Stable hash of the resolved workflow or factory source when available.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// StaleLease True when the durable session lease is stale or interrupted while status still appears active.
+	StaleLease *bool `json:"staleLease,omitempty"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+	Usage  *FactorySessionUsage                 `json:"usage,omitempty"`
+}
+
+// FactorySessionDurableResultSummary defines model for FactorySessionDurableResultSummary.
+type FactorySessionDurableResultSummary struct {
+	// ArtifactRefs Artifact refs for large or non-text outputs without raw bodies.
+	ArtifactRefs *[]FactoryArtifactRef `json:"artifactRefs,omitempty"`
+
+	// ResultStatus Customer-visible durable session result availability for session read models and result retrieval endpoints.
+	ResultStatus FactorySessionResultStatus `json:"resultStatus"`
+
+	// Summary Short customer-visible summary of the current or final result.
+	Summary *string `json:"summary,omitempty"`
+}
+
+// FactorySessionDurableSummary defines model for FactorySessionDurableSummary.
+type FactorySessionDurableSummary struct {
+	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	EffectivePolicyHash *string                                   `json:"effectivePolicyHash,omitempty"`
+	Lifecycle           *FactorySessionDurableLifecycleTimestamps `json:"lifecycle,omitempty"`
+
+	// Links Relative links for polling and inspecting one durable factory session.
+	Links *FactorySessionExecutionLinks `json:"links,omitempty"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
+	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
+
+	// SessionId Stable durable factory-session identifier.
+	SessionId string `json:"sessionId"`
+
+	// SourceHash Stable hash of the resolved workflow or factory source when available.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// StaleLease True when the durable session lease is stale or interrupted while status still appears active.
+	StaleLease *bool `json:"staleLease,omitempty"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+}
 
 // FactorySessionExecutionInlineWorkflow Inline workflow source carried directly in a durable execution request.
 type FactorySessionExecutionInlineWorkflow struct {
@@ -1424,6 +1611,11 @@ type FactorySessionExecutionWaitOptions struct {
 	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
 }
 
+// FactorySessionGetResponse Factory session inspection response. Live workspace sessions return the existing FactorySession projection. Durable execution sessions return the durable read model.
+type FactorySessionGetResponse struct {
+	union json.RawMessage
+}
+
 // FactorySessionJavaScriptCheckpointRef defines model for FactorySessionJavaScriptCheckpointRef.
 type FactorySessionJavaScriptCheckpointRef struct {
 	ArtifactRef *FactoryArtifactRef `json:"artifactRef,omitempty"`
@@ -1486,6 +1678,9 @@ type FactorySessionLifecycle struct {
 	// UpdatedAt When the session projection was last refreshed.
 	UpdatedAt time.Time `json:"updatedAt"`
 }
+
+// FactorySessionListScope Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
+type FactorySessionListScope string
 
 // FactorySessionPartialResult defines model for FactorySessionPartialResult.
 type FactorySessionPartialResult struct {
@@ -1564,6 +1759,9 @@ type FactorySessionResult struct {
 	// Status Canonical lifecycle status for one live factory session runtime.
 	Status FactorySessionStatus `json:"status"`
 }
+
+// FactorySessionResultStatus Customer-visible durable session result availability for session read models and result retrieval endpoints.
+type FactorySessionResultStatus string
 
 // FactorySessionRuntime defines model for FactorySessionRuntime.
 type FactorySessionRuntime struct {
@@ -2186,6 +2384,13 @@ type JavaScriptPhaseChangeEventPayload struct {
 
 // ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
 type ListFactorySessionsResponse struct {
+	// DurableSessions Persisted durable session summaries when scope is PERSISTED or ALL.
+	DurableSessions *[]FactorySessionDurableSummary `json:"durableSessions,omitempty"`
+
+	// Scope Session list scope. LIVE returns workspace sessions kept open by the runtime host. PERSISTED returns durable execution sessions stored outside the live workspace. ALL returns both live and persisted session summaries.
+	Scope *FactorySessionListScope `json:"scope,omitempty"`
+
+	// Sessions Live workspace session summaries when scope is LIVE or ALL.
 	Sessions []FactorySessionSummary `json:"sessions"`
 }
 
@@ -4042,6 +4247,12 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
 
+// ListFactorySessionsParams defines parameters for ListFactorySessions.
+type ListFactorySessionsParams struct {
+	// Scope Optional session list scope. Defaults to LIVE for backward-compatible live workspace session listing.
+	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
 // ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
 type ListWorkBySessionIdParams struct {
 	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
@@ -4692,6 +4903,68 @@ func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsFactorySession returns the union data inside the FactorySessionGetResponse as a FactorySession
+func (t FactorySessionGetResponse) AsFactorySession() (FactorySession, error) {
+	var body FactorySession
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactorySession overwrites any union data inside the FactorySessionGetResponse as the provided FactorySession
+func (t *FactorySessionGetResponse) FromFactorySession(v FactorySession) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactorySession performs a merge with any union data inside the FactorySessionGetResponse, using the provided FactorySession
+func (t *FactorySessionGetResponse) MergeFactorySession(v FactorySession) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactorySessionDurableReadModel returns the union data inside the FactorySessionGetResponse as a FactorySessionDurableReadModel
+func (t FactorySessionGetResponse) AsFactorySessionDurableReadModel() (FactorySessionDurableReadModel, error) {
+	var body FactorySessionDurableReadModel
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactorySessionDurableReadModel overwrites any union data inside the FactorySessionGetResponse as the provided FactorySessionDurableReadModel
+func (t *FactorySessionGetResponse) FromFactorySessionDurableReadModel(v FactorySessionDurableReadModel) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactorySessionDurableReadModel performs a merge with any union data inside the FactorySessionGetResponse, using the provided FactorySessionDurableReadModel
+func (t *FactorySessionGetResponse) MergeFactorySessionDurableReadModel(v FactorySessionDurableReadModel) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactorySessionGetResponse) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactorySessionGetResponse) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // AsSubmitWorkTextItem returns the union data inside the SubmitWorkItem as a SubmitWorkTextItem
 func (t SubmitWorkItem) AsSubmitWorkTextItem() (SubmitWorkTextItem, error) {
 	var body SubmitWorkTextItem
@@ -4977,9 +5250,9 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request)
-	// List live factory sessions
+	// List factory sessions
 	// (GET /factory-sessions)
-	ListFactorySessions(w http.ResponseWriter, r *http.Request)
+	ListFactorySessions(w http.ResponseWriter, r *http.Request, params ListFactorySessionsParams)
 	// Open another live factory session
 	// (POST /factory-sessions)
 	OpenFactorySession(w http.ResponseWriter, r *http.Request)
@@ -4992,7 +5265,7 @@ type ServerInterface interface {
 	// Close one live factory session
 	// (DELETE /factory-sessions/{session_id})
 	CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionId string)
-	// Get one live factory session
+	// Get one factory session
 	// (GET /factory-sessions/{session_id})
 	GetFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Stream factory events for one session
@@ -5089,8 +5362,21 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 // ListFactorySessions operation middleware
 func (siw *ServerInterfaceWrapper) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFactorySessionsParams
+
+	// ------------- Optional query parameter "scope" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "scope", r.URL.Query(), &params.Scope)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "scope", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListFactorySessions(w, r)
+		siw.Handler.ListFactorySessions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
