@@ -1,11 +1,11 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { ModelOperationContentType } from "../../../api/generated/openapi";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
 import { createEmptyFactoryGraphAddModelOperationDraft } from "./factory-graph-add-model-operation-draft";
+import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import {
   applyFactoryGraphAddEntityDraft,
   validateFactoryGraphAddEntityDraft,
-} from "./factory-graph-editor-additions";
+} from "./editor/factory-graph-editor-additions";
 
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
