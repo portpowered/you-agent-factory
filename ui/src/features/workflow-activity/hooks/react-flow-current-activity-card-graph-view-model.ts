@@ -35,8 +35,7 @@ import {
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
-import { preserveExistingBundledFilesWhenAbsent } from "../../../api/factory-definition";
-import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
+import { currentActivityCardDisplayFactoryDefinition } from "./current-activity-card-factory-definition";
 import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
@@ -179,70 +178,6 @@ function useActiveGraphHighlights({
   );
 }
 
-function observeModeFactoryWithBundledDocs(
-  factory: DashboardSnapshot["factory"] | null | undefined,
-  document: ReturnType<
-    typeof useCurrentActivityGraphEditor
-  >["editableDefinitionQuery"]["data"],
-) {
-  if (!document) {
-    return factory ?? undefined;
-  }
-
-  return preserveExistingBundledFilesWhenAbsent(factory ?? document, document);
-}
-
-export function currentActivityCardFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-  snapshot: DashboardSnapshot,
-  timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
-): DashboardSnapshot["factory"] | null | undefined {
-  if (!editor.editorMode) {
-    const document = editor.editableDefinitionQuery?.data;
-    if (editor.editableDefinitionQuery?.status !== "success") {
-      return observeModeFactoryWithBundledDocs(snapshot.factory, document) ?? null;
-    }
-
-    return observeModeFactoryDefinition(editor, snapshot, timelineMode);
-  }
-
-  if (editor.editableDefinitionQuery?.status !== "success") {
-    return null;
-  }
-
-  return editorModeFactoryDefinition(editor) ?? null;
-}
-
-function observeModeFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-  snapshot: DashboardSnapshot,
-  timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
-): DashboardSnapshot["factory"] | undefined {
-  const document = editor.editableDefinitionQuery?.data;
-  if (!document) {
-    return snapshot.factory;
-  }
-
-  const resolvedFactory = resolveObserveModeFactoryDefinition({
-    document,
-    snapshotFactory: snapshot.factory,
-    timelineMode,
-  });
-
-  return preserveExistingBundledFilesWhenAbsent(resolvedFactory, document);
-}
-
-function editorModeFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-) {
-  return (
-    editor.draftState.pendingFactoryDefinition ??
-    editor.draftState.latestDocument ??
-    editor.draftState.baseDocument ??
-    undefined
-  );
-}
-
 function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
 ) {
@@ -285,15 +220,11 @@ function useStableCurrentActivityGraphLayout(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
   const timelineMode = useFactoryTimelineStore((state) => state.mode);
-  const document = editor.editableDefinitionQuery?.data;
-  const displayFactoryDefinition = useMemo(() => {
-    const resolvedFactory = currentActivityCardFactoryDefinition(
-      editor,
-      snapshot,
-      timelineMode,
-    );
-    return observeModeFactoryWithBundledDocs(resolvedFactory, document);
-  }, [document, editor, snapshot, timelineMode]);
+  const displayFactoryDefinition = useMemo(
+    () =>
+      currentActivityCardDisplayFactoryDefinition(editor, snapshot, timelineMode),
+    [editor, snapshot, timelineMode],
+  );
   const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
     displayFactoryDefinition,
   );

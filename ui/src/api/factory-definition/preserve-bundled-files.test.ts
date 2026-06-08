@@ -57,4 +57,29 @@ describe("preserveExistingBundledFilesWhenAbsent", () => {
       incoming,
     );
   });
+
+  it("keeps explicit empty bundled files when the incoming factory clears docs", () => {
+    const existing = {
+      name: "factory",
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Stale" },
+            targetPath: "factory/docs/stale.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    const incoming = {
+      name: "factory",
+      supportingFiles: {
+        bundledFiles: [],
+      },
+    };
+
+    expect(preserveExistingBundledFilesWhenAbsent(incoming, existing)).toEqual(
+      incoming,
+    );
+  });
 });

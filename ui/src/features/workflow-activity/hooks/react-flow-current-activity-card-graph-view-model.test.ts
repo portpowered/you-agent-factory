@@ -8,7 +8,7 @@ import {
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
 import { sessionFactoryDocumentFromSnapshot } from "../../../testing/session-factory-mocks";
-import { currentActivityCardFactoryDefinition } from "./react-flow-current-activity-card-graph-view-model";
+import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 
 function createEditorStub(
   overrides: {

@@ -12,7 +12,7 @@ import {
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { syncCurrentFactoryDefinition } from "../../dashboard/lib/dashboard-event-stream";
 import { listFactoryBundledDocs } from "../lib/factory-bundled-docs";
-import { currentActivityCardFactoryDefinition } from "./react-flow-current-activity-card-graph-view-model";
+import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 
 const sessionID = "~default";
 

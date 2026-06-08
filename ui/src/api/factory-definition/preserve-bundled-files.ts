@@ -21,7 +21,7 @@ export function preserveExistingBundledFilesWhenAbsent(
   }
 
   const incomingBundledFiles = incoming.supportingFiles?.bundledFiles;
-  if (incomingBundledFiles !== undefined && incomingBundledFiles.length > 0) {
+  if (incomingBundledFiles !== undefined) {
     return incoming;
   }
 

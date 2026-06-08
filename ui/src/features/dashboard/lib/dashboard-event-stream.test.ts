@@ -290,6 +290,33 @@ describe("syncCurrentFactoryDefinition", () => {
       },
     });
   });
+});
+
+describe("syncCurrentFactoryDefinition bundled docs", () => {
+  const sessionID = "~default";
+  const validFactory = {
+    name: "factory",
+    workers: [
+      {
+        model: "gpt-5.6",
+        modelProvider: "CODEX",
+        name: "reviewer",
+        type: "MODEL_WORKER",
+      },
+    ],
+    workTypes: [{ name: "story", states: [{ name: "new", type: "INITIAL" }] }],
+    workstations: [
+      {
+        body: "Updated prompt",
+        id: "review",
+        inputs: [{ state: "new", workType: "story" }],
+        name: "Review",
+        outputs: [],
+        promptFile: "prompts/review.md",
+        worker: "reviewer",
+      },
+    ],
+  };
 
   it("preserves bundled docs when FACTORY_CHANGE omits supportingFiles", () => {
     const queryClient = new QueryClient();

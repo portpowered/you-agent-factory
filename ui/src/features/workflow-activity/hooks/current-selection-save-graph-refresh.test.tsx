@@ -14,7 +14,7 @@ import * as currentActivityFactoryGraphLayout from "../lib/current-activity-fact
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
-import { currentActivityCardFactoryDefinition } from "./react-flow-current-activity-card-graph-view-model";
+import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 function cloneSavedDocument(

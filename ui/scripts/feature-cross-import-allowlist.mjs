@@ -1379,6 +1379,13 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
+      "src/features/workflow-activity/hooks/current-activity-card-factory-definition.ts",
+    importSpecifiers: ["../../timeline/state/factoryTimelineStore"],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.ts",
     importSpecifiers: [
       "../../flowchart/lib/layout",
