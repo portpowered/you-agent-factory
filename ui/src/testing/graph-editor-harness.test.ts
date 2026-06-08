@@ -104,6 +104,7 @@ describe("graph-editor-harness", () => {
   it("createHookTestGraphEditorDraftState seeds draft workstation topology", () => {
     const draftState = createHookTestGraphEditorDraftState();
     expect(draftState.baseDocument).toEqual(currentFactoryDocument);
+    expect(draftState.latestDocument).toEqual(currentFactoryDocument);
     expect(draftState.graph.nodes.map((node) => node.id)).toContain(
       "workstation:draft",
     );
