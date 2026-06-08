@@ -1,12 +1,29 @@
 import { vi } from "vitest";
 
 import type { CanonicalFactoryDefinition } from "../../../../api/factory-definition/api";
-import {
-  EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
-  EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
-} from "../../../current-factory-definition/lib/worker-editable-values";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
+
+const EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS = {
+  authSecretRef: "",
+  linearClaimAssigneeField: "",
+  linearMappingState: "",
+  linearMappingWorkType: "",
+  linearPollInterval: "",
+  linearStateIdsText: "",
+  linearTeamIdsText: "",
+};
+
+const EMPTY_HOSTED_LINEAR_EDITABLE_VALUES = {
+  authSecretRef: null,
+  linearClaimAssigneeField: null,
+  linearClaimPresent: false,
+  linearMappingState: null,
+  linearMappingWorkType: null,
+  linearPollInterval: null,
+  linearStateIds: [] as string[],
+  linearTeamIds: [] as string[],
+};
 
 export const workerEditableConfigurationSectionMessages =
   getWorkerDetailMessages();
@@ -14,7 +31,17 @@ export const workerEditableConfigurationSectionMessages =
 export function buildReadyWorkerEditableConfigurationState(
   workstationNames: string[],
 ): Extract<EditableWorkerConfigurationState, { status: "ready" }> {
+  const savedFactoryDefinition = {
+    name: "Current Factory",
+    workers: [],
+    workstations: [],
+  } as CanonicalFactoryDefinition;
+
   return {
+    baseVersion: {
+      logical: "1",
+      physical: "2026-06-08T00:00:00Z",
+    },
     canSave: true,
     draft: {
       argsText: "",
@@ -42,7 +69,6 @@ export function buildReadyWorkerEditableConfigurationState(
       model: "gpt-5.5",
       modelLocality: null,
       modelProvider: "CURSOR",
-      name: "reviewer",
       provider: null,
       skipPermissions: null,
       stopToken: null,
@@ -77,7 +103,8 @@ export function buildReadyWorkerEditableConfigurationState(
     onResetToLatest: vi.fn(),
     onTypeChange: vi.fn(),
     overwriteFieldNames: [],
-    pendingFactoryDefinition: {} as CanonicalFactoryDefinition,
+    pendingFactoryDefinition: null,
+    savedFactoryDefinition,
     status: "ready",
     validationErrors: {},
   };

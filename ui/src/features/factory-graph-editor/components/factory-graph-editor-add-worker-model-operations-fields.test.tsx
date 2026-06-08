@@ -4,29 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import {
-  createEmptyFactoryGraphAddModelOperationDraft,
-  type FactoryGraphAddModelOperationDraft,
-} from "../lib/factory-graph-add-model-operation-draft";
+import { createEmptyFactoryGraphAddModelOperationDraft } from "../lib/factory-graph-add-model-operation-draft";
 import { FactoryGraphEditorAddWorkerModelOperationsFields } from "./factory-graph-editor-add-worker-model-operations-fields";
+import { buildOperationDraft } from "./factory-graph-editor-add-worker-model-operations-fields.test-helpers";
 
 let restoreBrowserShims: (() => void) | undefined;
-
-function buildOperationDraft(): FactoryGraphAddModelOperationDraft {
-  const operation = createEmptyFactoryGraphAddModelOperationDraft();
-  operation.name = "TTS";
-  operation.inputs[0] = {
-    contentTypes: ["TEXT"],
-    name: "text",
-    required: true,
-  };
-  operation.outputs[0] = {
-    contentTypes: ["AUDIO"],
-    name: "audio",
-    required: false,
-  };
-  return operation;
-}
 
 beforeEach(() => {
   restoreBrowserShims = installDashboardBrowserTestShims();
