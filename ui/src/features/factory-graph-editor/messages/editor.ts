@@ -9,6 +9,10 @@ import type {
 } from "../lib/draft/factory-graph-draft-types";
 import type { components } from "../../../api/generated/openapi";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
+import type {
+  FactoryGraphEditorDirtyState,
+  FactoryGraphSaveSummaryKind,
+} from "../lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/editor-runtime/factory-graph-editor-runtime";
 
 type ModelOperationContentType =
@@ -123,14 +127,23 @@ export interface FactoryGraphEditorMessages {
   operationEdgeNotFound: (edgeId: string) => string;
   operationGraphEditsInvalid: string;
   operationNodeNotFound: (nodeId: string) => string;
-  saveConfirmAction: string;
+  saveConfirmAction: (kind: FactoryGraphSaveSummaryKind) => string;
   saveBlockedActiveWork: string;
   saveBlockedStaleDraft: string;
   saveConfirmTitle: string;
+  dirtyStateSummary: (dirtyState: FactoryGraphEditorDirtyState) => string;
   saveSummaryDescription: (summary: {
     changedEdges: number;
     createdEntities: number;
     removedEntities: number;
+  }) => string;
+  saveSummaryForDirtyState: (summary: {
+    changedEdges: number;
+    createdEntities: number;
+    dirtyState: FactoryGraphEditorDirtyState;
+    kind: FactoryGraphSaveSummaryKind;
+    removedEntities: number;
+    topologySummary: string;
   }) => string;
   stateCollapsed: string;
   stateTypeLabel: (stateType: FactoryWorkState["type"]) => string;
@@ -142,11 +155,19 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
   toolbarDeleteLabel: string;
+  toolbarRedoDescription: string;
+  toolbarRedoLabel: string;
+  toolbarResetLayoutDescription: string;
+  toolbarResetLayoutLabel: string;
+  toolbarUndoDescription: string;
+  toolbarUndoLabel: string;
   toolbarHideShowDescription: string;
   toolbarHideShowLabel: string;
   toolbarHideShowMenuAriaLabel: string;
   toolbarHideShowMenuDescription: string;
   toolbarHideShowMenuTitle: string;
+  toolbarClearPreferencesDescription: string;
+  toolbarClearPreferencesLabel: string;
   toolbarOpenAddMenuLabel: string;
   toolbarOpenHideShowMenuLabel: string;
   nodeClassVisibilityDescription: (kind: FactoryGraphNodeKind) => string;
@@ -322,7 +343,7 @@ function describeEnglishSaveSummary(summary: {
   ].filter((segment) => segment !== null);
 
   if (segments.length === 0) {
-    return "No graph changes are pending.";
+    return "No graph topology changes are pending.";
   }
   if (segments.length === 1) {
     return `This save will apply ${segments[0]}.`;
@@ -330,6 +351,61 @@ function describeEnglishSaveSummary(summary: {
 
   const finalSegment = segments[segments.length - 1];
   return `This save will apply ${segments.slice(0, -1).join(", ")} and ${finalSegment}.`;
+}
+
+function describeEnglishSaveConfirmAction(kind: FactoryGraphSaveSummaryKind) {
+  switch (kind) {
+    case "layout-only":
+      return "Save layout";
+    case "topology-only":
+      return "Save topology";
+    case "mixed":
+      return "Save changes";
+    case "preferences-only":
+      return "Save preferences";
+    case "none":
+      return "Save changes";
+  }
+}
+
+function describeEnglishDirtyStateSummary(
+  dirtyState: FactoryGraphEditorDirtyState,
+) {
+  if (dirtyState.preferencesDirty && !dirtyState.layoutDirty && !dirtyState.topologyDirty) {
+    return "Private view preferences changed";
+  }
+  if (dirtyState.layoutDirty && dirtyState.topologyDirty) {
+    return "Unsaved layout and topology changes";
+  }
+  if (dirtyState.layoutDirty) {
+    return "Unsaved layout changes";
+  }
+  if (dirtyState.topologyDirty) {
+    return "Unsaved topology changes";
+  }
+  return "Unsaved changes";
+}
+
+function describeEnglishSaveSummaryForDirtyState(summary: {
+  changedEdges: number;
+  createdEntities: number;
+  dirtyState: FactoryGraphEditorDirtyState;
+  kind: FactoryGraphSaveSummaryKind;
+  removedEntities: number;
+  topologySummary: string;
+}) {
+  switch (summary.kind) {
+    case "preferences-only":
+      return "Visibility and filter preferences changed for your view only. They stay private and are not saved into the shared factory document.";
+    case "layout-only":
+      return "This save will update shared graph layout positions and viewport. Factory topology stays unchanged.";
+    case "topology-only":
+      return summary.topologySummary;
+    case "mixed":
+      return `This save will update shared graph layout and apply topology changes: ${summary.topologySummary.replace(/^This save will apply /, "").replace(/\.$/, "")}.`;
+    case "none":
+      return "No shared factory document changes are pending.";
+  }
 }
 
 function describeEnglishAddMenuAction(
@@ -592,13 +668,15 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         "Graph edits must be valid before they can be applied.",
       operationNodeNotFound: (nodeId) =>
         `Graph node "${nodeId}" was not found.`,
-      saveConfirmAction: "Save topology",
+      dirtyStateSummary: describeEnglishDirtyStateSummary,
+      saveConfirmAction: describeEnglishSaveConfirmAction,
       saveBlockedActiveWork:
         "Topology save is unavailable while active work is still running in this factory.",
       saveBlockedStaleDraft:
         "A newer factory topology arrived while this draft was open. Refresh or discard before saving.",
       saveConfirmTitle: "Save factory graph changes?",
       saveSummaryDescription: describeEnglishSaveSummary,
+      saveSummaryForDirtyState: describeEnglishSaveSummaryForDirtyState,
       stateCollapsed: "Collapsed",
       stateTypeLabel: describeEnglishStateType,
       stateVisible: "Visible",
@@ -609,12 +687,22 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove",
       toolbarDeleteLabel: "Delete",
+      toolbarRedoDescription: "Redo the last undone layout change",
+      toolbarRedoLabel: "Redo",
+      toolbarResetLayoutDescription:
+        "Reset node positions to the saved shared layout baseline",
+      toolbarResetLayoutLabel: "Reset layout",
+      toolbarUndoDescription: "Undo the last layout change",
+      toolbarUndoLabel: "Undo",
       toolbarHideShowDescription: "Show",
       toolbarHideShowLabel: "Show or hide",
       toolbarHideShowMenuAriaLabel: "Factory graph node class visibility menu",
       toolbarHideShowMenuDescription:
         "Toggle which node classes appear on the graph. Hidden classes stay out of the view until you show them again.",
       toolbarHideShowMenuTitle: "Hide or show node classes",
+      toolbarClearPreferencesDescription:
+        "Restore the shared authored graph view for this factory. Private visibility and filter choices are cleared.",
+      toolbarClearPreferencesLabel: "Clear private view preferences",
       toolbarOpenAddMenuLabel: "Add",
       toolbarOpenHideShowMenuLabel: "Show or hide",
       nodeClassVisibilityDescription: describeEnglishNodeClassVisibility,
@@ -974,7 +1062,39 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       operationEdgeNotFound: (edgeId) => `未找到图边“${edgeId}”。`,
       operationGraphEditsInvalid: "图编辑必须有效后才能应用。",
       operationNodeNotFound: (nodeId) => `未找到图节点“${nodeId}”。`,
-      saveConfirmAction: "保存拓扑",
+      dirtyStateSummary: (dirtyState) => {
+        if (
+          dirtyState.preferencesDirty &&
+          !dirtyState.layoutDirty &&
+          !dirtyState.topologyDirty
+        ) {
+          return "私有视图偏好已更改";
+        }
+        if (dirtyState.layoutDirty && dirtyState.topologyDirty) {
+          return "未保存的布局和拓扑更改";
+        }
+        if (dirtyState.layoutDirty) {
+          return "未保存的布局更改";
+        }
+        if (dirtyState.topologyDirty) {
+          return "未保存的拓扑更改";
+        }
+        return "未保存的更改";
+      },
+      saveConfirmAction: (kind) => {
+        switch (kind) {
+          case "layout-only":
+            return "保存布局";
+          case "topology-only":
+            return "保存拓扑";
+          case "mixed":
+            return "保存更改";
+          case "preferences-only":
+            return "保存偏好";
+          case "none":
+            return "保存更改";
+        }
+      },
       saveBlockedActiveWork: "此工厂仍有活动工作在运行，因此无法保存拓扑。",
       saveBlockedStaleDraft:
         "此草稿打开后收到了更新的工厂拓扑。请先刷新或放弃再保存。",
@@ -991,13 +1111,27 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         ].filter((segment) => segment !== null);
 
         if (segments.length === 0) {
-          return "没有待处理的图更改。";
+          return "没有待处理的图拓扑更改。";
         }
         if (segments.length === 1) {
           return `此保存将应用 ${segments[0]}。`;
         }
         const finalSegment = segments[segments.length - 1];
         return `此保存将应用 ${segments.slice(0, -1).join("、")} 和 ${finalSegment}。`;
+      },
+      saveSummaryForDirtyState: (summary) => {
+        switch (summary.kind) {
+          case "preferences-only":
+            return "可见性和筛选偏好仅针对你的视图更改。它们会保持私有，不会保存到共享工厂文档中。";
+          case "layout-only":
+            return "此保存将更新共享图布局位置和视口。工厂拓扑保持不变。";
+          case "topology-only":
+            return summary.topologySummary;
+          case "mixed":
+            return `此保存将更新共享图布局并应用拓扑更改：${summary.topologySummary.replace(/^此保存将应用 /, "").replace(/\.$/, "")}。`;
+          case "none":
+            return "没有待处理的共享工厂文档更改。";
+        }
       },
       stateCollapsed: "已折叠",
       stateTypeLabel: (stateType) => {
@@ -1020,12 +1154,21 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从图中删除节点或边",
       toolbarDeleteLabel: "删除",
+      toolbarRedoDescription: "重做上一条已撤销的布局更改",
+      toolbarRedoLabel: "重做",
+      toolbarResetLayoutDescription: "将节点位置重置为已保存的共享布局基线",
+      toolbarResetLayoutLabel: "重置布局",
+      toolbarUndoDescription: "撤销上一条布局更改",
+      toolbarUndoLabel: "撤销",
       toolbarHideShowDescription: "在图上显示或隐藏节点类别",
       toolbarHideShowLabel: "显示或隐藏",
       toolbarHideShowMenuAriaLabel: "工厂图节点类别可见性菜单",
       toolbarHideShowMenuDescription:
         "切换哪些节点类别显示在图上。隐藏的类别会保持不可见，直到你再次显示它们。",
       toolbarHideShowMenuTitle: "隐藏或显示节点类别",
+      toolbarClearPreferencesDescription:
+        "恢复此工厂的共享创作图视图。私有的可见性和筛选选择将被清除。",
+      toolbarClearPreferencesLabel: "清除私有视图偏好",
       toolbarOpenAddMenuLabel: "添加",
       toolbarOpenHideShowMenuLabel: "显示或隐藏",
       nodeClassVisibilityDescription: (kind) => {

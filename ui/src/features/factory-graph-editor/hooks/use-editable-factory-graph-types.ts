@@ -26,6 +26,7 @@ import type {
   FactoryGraphState,
 } from "../lib/operations/factory-graph-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 
 export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;
@@ -53,7 +54,27 @@ export interface EditableFactoryGraphViewModel {
     removeNode: (
       nodeId: string,
     ) => FactoryGraphOperationResult<FactoryGraphDraft>;
+    moveLayoutNode: (
+      nodeId: string,
+      position: { x: number; y: number },
+    ) => void;
+    moveLayoutNodesByDelta: (
+      nodeIds: readonly string[],
+      delta: { x: number; y: number },
+      resolvedPositionsByNodeId: ReadonlyMap<
+        string,
+        { x: number; y: number }
+      >,
+    ) => void;
+    resetLayout: (options?: { recordHistory?: boolean }) => void;
+    redoLayout: () => void;
     save: () => Promise<boolean>;
+    undoLayout: () => void;
+    updateLayoutViewport: (viewport: {
+      x: number;
+      y: number;
+      zoom: number;
+    }) => void;
     updateNodeField: (
       update: FactoryGraphNodeFieldUpdate,
     ) => FactoryGraphOperationResult<CanonicalFactoryDefinition>;
@@ -61,9 +82,24 @@ export interface EditableFactoryGraphViewModel {
   blockedOperation: FactoryGraphOperationResult<never> | null;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   graphState: FactoryGraphState | null;
+  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
   pendingState: {
+    canRedoLayout: boolean;
+    canUndoLayout: boolean;
+    dirtyState: {
+      layoutDirty: boolean;
+      preferencesDirty: boolean;
+      topologyDirty: boolean;
+    };
     hasChanges: boolean;
+    hasLayoutChanges: boolean;
+    hasPortableDocumentChanges: boolean;
+    hasPreferenceChanges: boolean;
+    hasTopologyChanges: boolean;
+    layoutDirty: boolean;
     pendingFactoryDefinition: CanonicalFactoryDefinition | null;
+    preferencesDirty: boolean;
+    topologyDirty: boolean;
   };
   projection: FactoryGraphReactFlowProjection;
   saveState: {

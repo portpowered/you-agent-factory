@@ -331,6 +331,10 @@ function renderViewport({
       hasPendingChanges={false}
       hiddenNodeClasses={new Set()}
       hideShowMenuOpen={false}
+      onClearPreferences={vi.fn()}
+      onSelectVisibilityPreset={vi.fn()}
+      preferencesDirty={false}
+      visibilityPreset="all"
       headingID="test-heading"
       imports={importController}
       initialFitViewKey="full-graph"

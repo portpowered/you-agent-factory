@@ -24,14 +24,19 @@ export function useCurrentActivityGraphEditor(
   const {
     hiddenNodeClasses,
     hideShowMenuOpen,
+    preferencesDirty,
+    resetPreferences,
     setHideShowMenuOpen,
+    setVisibilityPreset,
     toggleHiddenNodeClass,
-  } = useHiddenFactoryGraphNodeClasses();
+    visibilityPreset,
+  } = useHiddenFactoryGraphNodeClasses(factoryDocumentScopeKey);
   const leaveEditorBridge = useGraphEditorLeaveEditorBridge();
   const { currentFactoryQuery, editableGraph, saveEditableDefinition } =
     useCurrentActivityEditableGraph({
       editorMode,
       factoryDocumentScopeKey,
+      hasPreferenceChanges: preferencesDirty,
       locale,
       snapshot,
     });
@@ -45,6 +50,7 @@ export function useCurrentActivityGraphEditor(
     draftState,
     editableDefinitionQuery: currentFactoryQuery,
     editorMode,
+    layoutDraftState: editableGraph.layoutDraftState,
     locale,
     ...leaveEditorBridge.sessionCallbacks,
     projectedFactory: snapshot.factory,
@@ -93,14 +99,16 @@ export function useCurrentActivityGraphEditor(
   useEffect(() => {
     useFactoryGraphTopologyEditorBridge
       .getState()
-      .setGraphDraftHasPendingChanges(draftState.hasChanges);
+      .setGraphDraftHasPendingChanges(
+        editableGraph.pendingState.topologyDirty,
+      );
 
     return () => {
       useFactoryGraphTopologyEditorBridge
         .getState()
         .setGraphDraftHasPendingChanges(false);
     };
-  }, [draftState.hasChanges]);
+  }, [editableGraph.pendingState.topologyDirty]);
 
   useEffect(() => {
     const normalizedScopeKey = factoryDocumentScopeKey ?? null;
@@ -131,6 +139,15 @@ export function useCurrentActivityGraphEditor(
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition: session.currentFactoryDefinition,
     draftState,
+    dirtyStateSummary: editableGraph.pendingState.dirtyState,
+    layoutDraftState: editableGraph.layoutDraftState,
+    moveLayoutNode: editableGraph.actions.moveLayoutNode,
+    moveLayoutNodesByDelta: editableGraph.actions.moveLayoutNodesByDelta,
+    resetLayout: editableGraph.actions.resetLayout,
+    redoLayout: editableGraph.actions.redoLayout,
+    resetPreferences,
+    undoLayout: editableGraph.actions.undoLayout,
+    updateLayoutViewport: editableGraph.actions.updateLayoutViewport,
     editableDefinitionQuery: currentFactoryQuery,
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
@@ -168,6 +185,8 @@ export function useCurrentActivityGraphEditor(
     hiddenNodeClasses,
     hideShowMenuOpen,
     setHideShowMenuOpen,
+    setVisibilityPreset,
     toggleHiddenNodeClass,
+    visibilityPreset,
   });
 }

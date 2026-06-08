@@ -15,9 +15,11 @@ import {
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
+import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
@@ -562,6 +564,7 @@ export function findFactoryWorkstationByNodeId(
 export async function buildCurrentActivityGraphLayoutFromFactory(
   factory: CanonicalFactoryDefinition,
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
+  visibilityPreset: FactoryGraphEditorVisibilityPreset = "all",
 ): Promise<GraphLayout> {
   const nodes = new Map<string, FactoryGraphSeedNode>();
   const edges = new Map<string, FactoryGraphSeedEdge>();
@@ -570,8 +573,11 @@ export async function buildCurrentActivityGraphLayoutFromFactory(
   const resourceAvailabilityWorkTypes =
     resourceAvailabilityWorkTypeNames(normalizedFactory);
   const topology = projectFactoryGraphByHiddenNodeClasses(
-    filterFactoryGraphTopologyForCustomerDisplay(
-      buildFactoryGraphTopologyFromDefinition(normalizedFactory),
+    projectFactoryGraphByVisibilityPreset(
+      filterFactoryGraphTopologyForCustomerDisplay(
+        buildFactoryGraphTopologyFromDefinition(normalizedFactory),
+      ),
+      visibilityPreset,
     ),
     hiddenNodeClasses,
   );

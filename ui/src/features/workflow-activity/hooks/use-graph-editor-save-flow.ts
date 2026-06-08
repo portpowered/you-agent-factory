@@ -72,7 +72,15 @@ export function useGraphEditorSaveFlow({
     : isStaleDraft
       ? messages.saveBlockedStaleDraft
       : undefined;
-  const saveSummary = buildFactoryGraphSaveSummary(draftState.draft, locale);
+  const saveSummary = buildFactoryGraphSaveSummary(
+    {
+      draft: draftState.draft,
+      hasLayoutChanges: editableGraph.pendingState.layoutDirty,
+      hasPreferenceChanges: editableGraph.pendingState.preferencesDirty,
+      hasTopologyChanges: editableGraph.pendingState.topologyDirty,
+    },
+    locale,
+  );
 
   const setIsConfirmingSave = useCallback(
     (open: boolean) => {

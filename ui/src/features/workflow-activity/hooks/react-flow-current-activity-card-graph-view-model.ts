@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: composes activity graph layout, projection, and editor viewport wiring.
 import {
   applyNodeChanges,
   type FitViewOptions,
@@ -8,6 +9,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -31,6 +33,14 @@ import {
   buildHandleAssignments,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
+import {
+  createDefaultFactoryLayout,
+  factoryLayoutFromDefinition,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import {
+  graphNodePositionsFromCanonicalLayout,
+  mergeLegacyStoredGraphNodePositions,
+} from "../lib/layout/factory-graph-canonical-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
@@ -41,6 +51,7 @@ import {
 } from "./react-flow-current-activity-card-active-executions";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
+import { mergeBaseNodesWithPresentationPositions } from "../lib/layout/merge-base-nodes-with-presentation-positions";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 export type CurrentActivityGraphViewModelInput = {
@@ -224,16 +235,17 @@ function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
 ) {
   const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
+  const previousBaseNodesRef = useRef<CurrentActivityNode[]>([]);
 
   useEffect(() => {
     setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
+      const mergedNodes = mergeBaseNodesWithPresentationPositions(
+        baseNodes,
+        previousBaseNodesRef.current,
+        currentNodes,
       );
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
+      previousBaseNodesRef.current = baseNodes;
+      return mergedNodes;
     });
   }, [baseNodes]);
 
@@ -243,16 +255,15 @@ function useCurrentActivityGraphNodePresentation(
         applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
     );
   }, []);
-  const displayNodes = useMemo(() => {
-    const positionOverrides = new Map(
-      nodes.map((node) => [node.id, node.position] as const),
-    );
-
-    return baseNodes.map((node) => ({
-      ...node,
-      position: positionOverrides.get(node.id) ?? node.position,
-    }));
-  }, [baseNodes, nodes]);
+  const displayNodes = useMemo(
+    () =>
+      mergeBaseNodesWithPresentationPositions(
+        baseNodes,
+        previousBaseNodesRef.current,
+        nodes,
+      ),
+    [baseNodes, nodes],
+  );
 
   return { displayNodes, handleNodesChange };
 }
@@ -274,6 +285,7 @@ function useStableCurrentActivityGraphLayout(
     snapshot,
     layoutFactoryDefinition,
     editor.hiddenNodeClasses,
+    editor.visibilityPreset,
   );
 
   return { displayFactoryDefinition, graphLayout };
@@ -323,6 +335,7 @@ function useInitialFitViewOptions(graphLayout: GraphLayout) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes activity graph nodes, edges, and canonical viewport projection.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
@@ -357,7 +370,7 @@ export function useCurrentActivityGraphViewModel({
   const bridgePositionsToGraphKey = useCurrentActivityGraphStore(
     (state) => state.bridgePositionsToGraphKey,
   );
-  const storedNodePositions = useMemo(
+  const legacyStoredNodePositions = useMemo(
     () =>
       graphKey
         ? resolveStoredNodePositionsForGraphKey(
@@ -368,6 +381,30 @@ export function useCurrentActivityGraphViewModel({
         : EMPTY_NODE_POSITIONS,
     [graphKey, layoutNodeIds, positionsByGraphKey],
   );
+  const storedNodePositions = useMemo(() => {
+    const canonicalLayout = editor.editorMode
+      ? (editor.layoutDraftState?.layout ?? createDefaultFactoryLayout())
+      : factoryLayoutFromDefinition(displayFactoryDefinition);
+    const canonicalPositions = graphNodePositionsFromCanonicalLayout(
+      graphLayout,
+      canonicalLayout,
+    );
+
+    if (editor.editorMode) {
+      return canonicalPositions;
+    }
+
+    return mergeLegacyStoredGraphNodePositions(
+      canonicalPositions,
+      legacyStoredNodePositions,
+    );
+  }, [
+    displayFactoryDefinition,
+    editor.editorMode,
+    editor.layoutDraftState?.layout,
+    graphLayout,
+    legacyStoredNodePositions,
+  ]);
   const setStoredNodePosition = useCurrentActivityGraphStore(
     (state) => state.setNodePosition,
   );
@@ -429,8 +466,12 @@ export function useCurrentActivityGraphViewModel({
     visibleGraphEdges,
   });
   const initialFitViewOptions = useInitialFitViewOptions(graphLayout);
+  const canonicalLayoutViewport = editor.editorMode
+    ? editor.layoutDraftState?.layout.viewport
+    : factoryLayoutFromDefinition(displayFactoryDefinition).viewport;
 
   return {
+    canonicalLayoutViewport,
     edges,
     graphKey,
     handleNodesChange,

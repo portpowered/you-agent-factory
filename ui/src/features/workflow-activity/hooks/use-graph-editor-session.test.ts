@@ -31,6 +31,10 @@ function renderSession(editorMode = false) {
       draftState: fixtureState.draftState,
       editableDefinitionQuery: { status: "success" } as never,
       editorMode,
+      layoutDraftState: {
+        hasChanges: false,
+        layoutDirty: false,
+      } as EditableFactoryGraphViewModel["layoutDraftState"],
       onAttemptLeaveEditor,
       onLeaveEditor,
       saveEditableDefinition: { isPending: false } as never,

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 
-import { FactoryGraphEditorLeaveDialog } from "../dialogs/factory-graph-editor-leave-dialog";
+import { FactoryGraphEditorLeaveDialog } from "./factory-graph-editor-leave-dialog";
 
 describe("FactoryGraphEditorLeaveDialog", () => {
   it("opens with keep-editing, discard, and save actions", () => {
@@ -112,5 +112,26 @@ describe("FactoryGraphEditorLeaveDialog", () => {
         .getByRole("button", { name: "Save changes" })
         .getAttribute("disabled"),
     ).not.toBeNull();
+  });
+});
+
+describe("FactoryGraphEditorLeaveDialog dismissal", () => {
+  it("calls cancel when the dialog closes while idle", () => {
+    const onCancel = vi.fn();
+
+    render(
+      <FactoryGraphEditorLeaveDialog
+        canSave={true}
+        isOpen={true}
+        isSaving={false}
+        onCancel={onCancel}
+        onDiscard={() => {}}
+        onSave={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });

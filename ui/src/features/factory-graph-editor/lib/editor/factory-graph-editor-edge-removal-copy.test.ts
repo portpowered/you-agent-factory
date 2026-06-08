@@ -71,6 +71,17 @@ describe("factory graph editor edge removal copy", () => {
     expect(buildEdgeRemovalDescription(graphEdge)).toBe(expectedDescription);
   });
 
+  it("returns empty copy for visibility bypass edges", () => {
+    const graphEdge = edge(
+      "work-state-visibility-bypass",
+      queuedStateKey,
+      doneStateKey,
+    );
+
+    expect(describeEdgeLabel(graphEdge)).toBe("");
+    expect(buildEdgeRemovalDescription(graphEdge)).toBe("");
+  });
+
   it("describes destructive edge removal copy in a non-default locale", () => {
     const graphEdge = edge("worker-assignment", workerKey, workstationKey);
 
