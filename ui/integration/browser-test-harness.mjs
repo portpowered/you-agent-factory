@@ -53,6 +53,11 @@ export async function fillWorkstationPromptBody(scope, text) {
   }
 }
 
+/** Check a shared styled checkbox whose native input is visually hidden. */
+export async function checkStyledCheckbox(checkboxLocator) {
+  await checkboxLocator.check({ force: true });
+}
+
 /** Select a Radix/shadcn combobox option by visible option label. */
 export async function selectComboboxOption(combobox, optionName) {
   const page = combobox.page();
@@ -98,20 +103,22 @@ export async function fillModelWorkerAddOperationDraft(
   );
   await inputSlotNameField.scrollIntoViewIfNeeded();
   await inputSlotNameField.fill(inputSlotName);
-  await scope
-    .locator("#factory-graph-add-model-operation-input-slot-0-content-type-TEXT")
-    .check();
+  await checkStyledCheckbox(
+    scope.locator(
+      "#factory-graph-add-model-operation-input-slot-0-content-type-TEXT",
+    ),
+  );
 
   const outputSlotNameField = scope.locator(
     "#factory-graph-add-model-operation-output-slot-name-0",
   );
   await outputSlotNameField.scrollIntoViewIfNeeded();
   await outputSlotNameField.fill(outputSlotName);
-  await scope
-    .locator(
+  await checkStyledCheckbox(
+    scope.locator(
       "#factory-graph-add-model-operation-output-slot-0-content-type-AUDIO",
-    )
-    .check();
+    ),
+  );
 }
 
 const modelProviderOptionLabels = {
