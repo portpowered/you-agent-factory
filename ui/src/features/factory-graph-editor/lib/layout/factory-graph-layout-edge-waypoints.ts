@@ -35,16 +35,6 @@ export function factoryLayoutEdgeWaypoints(
   return validWaypoints.length > 0 ? validWaypoints : undefined;
 }
 
-export function factoryLayoutEdgesById(
-  layout: FactoryLayout,
-): Map<string, FactoryLayoutEdge> {
-  const edgesById = new Map<string, FactoryLayoutEdge>();
-  for (const edge of layout.edges ?? []) {
-    edgesById.set(edge.id, edge);
-  }
-  return edgesById;
-}
-
 export function setFactoryLayoutEdgeWaypoints(
   layout: FactoryLayout,
   edgeId: string,

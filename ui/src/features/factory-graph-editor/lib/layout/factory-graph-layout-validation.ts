@@ -167,19 +167,6 @@ export function preparePendingFactoryLayoutForSave(
   };
 }
 
-export function preparePendingFactoryLayoutForTopology(
-  layout: FactoryLayout,
-  topology: FactoryGraphTopology,
-): {
-  layout: FactoryLayout;
-  layoutOutcomes: FactoryValidationTarget[];
-} {
-  return preparePendingFactoryLayoutForSave(
-    layout,
-    factoryLayoutTopologyEdgeIds(topology),
-  );
-}
-
 function toFactoryValidationTarget(
   target: FactoryLayoutValidationTarget,
   layout: FactoryLayout,

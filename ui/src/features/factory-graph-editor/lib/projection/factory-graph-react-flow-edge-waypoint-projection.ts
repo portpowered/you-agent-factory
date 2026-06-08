@@ -40,8 +40,12 @@ export function decorateProjectedEdgesWithWaypoints(input: {
   }
 
   return input.edges.map((edge): FactoryGraphReactFlowEdge => {
+    const data = edge.data;
+    if (!data) {
+      return edge;
+    }
+
     const waypoints = factoryLayoutEdgeWaypoints(input.layout, edge.id);
-    const data = edge.data as NonNullable<FactoryGraphReactFlowEdge["data"]>;
 
     return {
       ...edge,
