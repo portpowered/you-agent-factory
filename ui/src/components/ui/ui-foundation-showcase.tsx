@@ -144,7 +144,9 @@ export function UIFoundationShowcase({
               <SelectSeparator />
               <SelectGroup>
                 <SelectLabel>{messages.workTypeTaskOption}</SelectLabel>
-                <SelectItem value="incident">incident</SelectItem>
+                <SelectItem value="task">
+                  {messages.workTypeTaskOption}
+                </SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
