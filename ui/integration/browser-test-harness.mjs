@@ -68,6 +68,27 @@ export async function selectLabeledComboboxOption(scope, label, optionName) {
   );
 }
 
+/** Fill the default model-worker operation contract in the add-worker dialog. */
+export async function fillModelWorkerAddOperationDraft(
+  scope,
+  {
+    inputContentType = "Text",
+    inputSlotName = "text",
+    operationName = "TTS",
+    outputContentType = "Audio",
+    outputSlotName = "audio",
+  } = {},
+) {
+  await scope.getByLabel("Operation name").fill(operationName);
+
+  const slotNameFields = scope.getByLabel("Slot name");
+  await slotNameFields.nth(0).fill(inputSlotName);
+  await slotNameFields.nth(1).fill(outputSlotName);
+
+  await scope.getByLabel(inputContentType, { exact: true }).first().check();
+  await scope.getByLabel(outputContentType, { exact: true }).last().check();
+}
+
 const modelProviderOptionLabels = {
   CLAUDE: "Claude",
   CODEX: "Codex",
