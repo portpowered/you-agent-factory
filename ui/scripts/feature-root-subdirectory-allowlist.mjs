@@ -3,6 +3,7 @@
 export const allowlistedFeatureRootSubdirectories = [
   "src/features/current-selection/base",
   "src/features/current-selection/dispatch-selection",
+  "src/features/current-selection/doc-selection",
   "src/features/current-selection/editing",
   "src/features/current-selection/history",
   "src/features/current-selection/resource-selection",

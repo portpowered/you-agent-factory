@@ -4813,6 +4813,7 @@ components:
             - HISTORY
             - CONTEXT
             - MAP_ACCESS
+            - DOC
           description: High-level grouping for the variable reference.
         description:
           type: string

@@ -1,3 +1,4 @@
+import { isFactoryBundledDocTargetPath } from "../../../workflow-activity/lib/factory-bundled-docs";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -57,8 +58,60 @@ export function buildDraftAppliedFactoryDefinition(
     ...workType,
     states: applyWorkStateChanges(workType.states, draft, workType.name),
   }));
+  if (
+    draft.additions.docs.length > 0 ||
+    draft.removals.docs.length > 0 ||
+    baseFactoryDefinition.supportingFiles !== undefined
+  ) {
+    nextFactoryDefinition.supportingFiles = applyBundledDocChanges(
+      baseFactoryDefinition,
+      draft,
+    );
+  }
 
   return nextFactoryDefinition;
+}
+
+function applyBundledDocChanges(
+  baseFactoryDefinition: CanonicalFactoryDefinition,
+  draft: FactoryGraphDraft,
+): CanonicalFactoryDefinition["supportingFiles"] {
+  const removalPaths = new Set(draft.removals.docs);
+  const retainedBundledFiles = (
+    baseFactoryDefinition.supportingFiles?.bundledFiles ?? []
+  ).filter(
+    (bundledFile) =>
+      !(
+        bundledFile.type === "DOC" &&
+        bundledFile.targetPath &&
+        removalPaths.has(bundledFile.targetPath)
+      ),
+  );
+  const existingDocPaths = new Set(
+    retainedBundledFiles
+      .filter((bundledFile) => bundledFile.type === "DOC")
+      .map((bundledFile) => bundledFile.targetPath)
+      .filter(
+        (targetPath): targetPath is string =>
+          targetPath != null && isFactoryBundledDocTargetPath(targetPath),
+      ),
+  );
+  const addedDocs = draft.additions.docs
+    .filter((doc) => isFactoryBundledDocTargetPath(doc.targetPath))
+    .filter((doc) => !existingDocPaths.has(doc.targetPath))
+    .map((doc) => ({
+      content: {
+        encoding: "utf-8" as const,
+        inline: doc.inlineContent,
+      },
+      targetPath: doc.targetPath,
+      type: "DOC" as const,
+    }));
+
+  return {
+    ...baseFactoryDefinition.supportingFiles,
+    bundledFiles: [...retainedBundledFiles, ...addedDocs],
+  };
 }
 
 export function applyNamedEntityChanges<T extends { name: string }>(

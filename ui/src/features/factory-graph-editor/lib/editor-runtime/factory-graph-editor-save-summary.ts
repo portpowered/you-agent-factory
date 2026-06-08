@@ -31,12 +31,14 @@ export function buildFactoryGraphSaveSummary(
 ): FactoryGraphSaveSummary {
   const summaryInput = normalizeFactoryGraphSaveSummaryInput(input);
   const createdEntities =
+    summaryInput.draft.additions.docs.length +
     summaryInput.draft.additions.resources.length +
     summaryInput.draft.additions.workers.length +
     summaryInput.draft.additions.workStates.length +
     summaryInput.draft.additions.workTypes.length +
     summaryInput.draft.additions.workstations.length;
   const removedEntities =
+    summaryInput.draft.removals.docs.length +
     summaryInput.draft.removals.resources.length +
     summaryInput.draft.removals.workers.length +
     summaryInput.draft.removals.workStates.length +

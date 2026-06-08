@@ -20,6 +20,7 @@ import { projectFactoryValidationTargets } from "../projection/factory-validatio
 
 const baseDraft: FactoryGraphDraft = {
   additions: {
+    docs: [],
     resources: [],
     workers: [],
     workStates: [],
@@ -31,6 +32,7 @@ const baseDraft: FactoryGraphDraft = {
     removals: [],
   },
   removals: {
+    docs: [],
     resources: [],
     workers: [],
     workStates: [],

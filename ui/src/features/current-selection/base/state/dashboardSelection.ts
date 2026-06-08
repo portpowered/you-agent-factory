@@ -11,6 +11,7 @@ import type {
   FactoryWorker,
   FactoryWorkType,
 } from "../../../../api/events/types";
+import { factoryBundledDocExists } from "../../../workflow-activity/lib/factory-bundled-docs";
 import { hasDashboardStatePlace } from "./dashboardStatePlaces";
 import { resolveFactoryGraphNodeSelection } from "./factoryGraphNodeSelection";
 
@@ -54,6 +55,11 @@ export interface DashboardWorkTypeSelection {
   workTypeName: string;
 }
 
+export interface DashboardDocSelection {
+  kind: "doc";
+  targetPath: string;
+}
+
 export type DashboardSelection =
   | DashboardNodeSelection
   | DashboardStateNodeSelection
@@ -61,7 +67,8 @@ export type DashboardSelection =
   | DashboardWorkstationRequestSelection
   | DashboardWorkerSelection
   | DashboardResourceSelection
-  | DashboardWorkTypeSelection;
+  | DashboardWorkTypeSelection
+  | DashboardDocSelection;
 
 export function selectDefaultSelection(
   snapshot: DashboardSnapshot,
@@ -80,6 +87,8 @@ interface ResolveDashboardSelectionInput {
   snapshot: DashboardSnapshot;
   /** When set, topology entity existence checks use this factory instead of snapshot.factory. */
   topologyFactory?: DashboardSnapshot["factory"];
+  /** Graph-editor draft factory used to retain unsaved doc selections. */
+  pendingFactoryDefinition?: DashboardSnapshot["factory"];
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
@@ -87,6 +96,7 @@ export function resolveDashboardSelection({
   selection,
   snapshot,
   topologyFactory,
+  pendingFactoryDefinition,
   workstationRequestsByDispatchID,
 }: ResolveDashboardSelectionInput): DashboardSelection | null {
   if (selection === null) {
@@ -130,6 +140,13 @@ export function resolveDashboardSelection({
 
   if (selection.kind === "work-type") {
     return workTypeExistsInSnapshotFactory(snapshot, selection.workTypeName)
+      ? selection
+      : selectDefaultSelection(snapshot);
+  }
+
+  if (selection.kind === "doc") {
+    return factoryBundledDocExists(factory, selection.targetPath) ||
+      factoryBundledDocExists(pendingFactoryDefinition, selection.targetPath)
       ? selection
       : selectDefaultSelection(snapshot);
   }

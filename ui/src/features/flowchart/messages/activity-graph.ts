@@ -97,6 +97,8 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "Active work";
           case "constraint":
             return "Constraint";
+          case "doc":
+            return "Doc";
           case "cron":
             return "Cron workstation";
           case "exhaustion":
@@ -151,6 +153,8 @@ const activityGraphMessagesByLocale: LocalizedMessageCatalog<ActivityGraphMessag
             return "活动工作";
           case "constraint":
             return "约束";
+          case "doc":
+            return "文档";
           case "cron":
             return "Cron 工作站";
           case "exhaustion":

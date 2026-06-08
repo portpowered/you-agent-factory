@@ -1443,6 +1443,13 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
+      "src/features/workflow-activity/hooks/current-activity-card-factory-definition.ts",
+    importSpecifiers: ["../../timeline/state/factoryTimelineStore"],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.ts",
     importSpecifiers: [
       "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
@@ -1650,5 +1657,178 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-factory-definition/lib/doc-editable-values.ts",
+    importSpecifiers: ["../../workflow-activity/lib/factory-bundled-docs"],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/base/state/dashboardSelection.ts",
+    importSpecifiers: ["../../../workflow-activity/lib/factory-bundled-docs"],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/components/widget/current-selection-widget-save-notifications.tsx",
+    importSpecifiers: ["../../../workflow-activity/lib/factory-bundled-docs"],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/doc-selection/components/doc-detail-card.tsx",
+    importSpecifiers: ["../../../workflow-activity/lib/factory-bundled-docs"],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/doc-selection/components/doc-editable-configuration-section.tsx",
+    importSpecifiers: [
+      "../../../current-factory-definition/lib/doc-editable-values",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/doc-selection/editing/editable-doc-overwrite-fields.ts",
+    importSpecifiers: [
+      "../../../current-factory-definition/lib/doc-editable-values",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/doc-selection/hooks/use-doc-detail-state.ts",
+    importSpecifiers: [
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+      "../../../workflow-activity/lib/factory-bundled-docs",
+      "../../../workflow-activity/state/graph-editor-pending-factory-bridge",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/doc-selection/hooks/use-editable-doc-configuration-state.ts",
+    importSpecifiers: [
+      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+      "../../../current-factory-definition/lib/doc-editable-values",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/doc-selection/lib/detail-card-types.ts",
+    importSpecifiers: [
+      "../../../current-factory-definition/lib/doc-editable-values",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/doc-selection/lib/doc-editable-validation.ts",
+    importSpecifiers: [
+      "../../../current-factory-definition/lib/doc-editable-values",
+      "../../../workflow-activity/lib/factory-bundled-docs",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/hooks/core/useCurrentSelection.ts",
+    importSpecifiers: [
+      "../../../workflow-activity/state/graph-editor-pending-factory-bridge",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/factory-graph-editor/lib/draft/factory-graph-draft-apply.ts",
+    importSpecifiers: ["../../../workflow-activity/lib/factory-bundled-docs"],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/factory-graph-editor/lib/factory-graph-doc-editor.ts",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/doc-editable-values",
+      "../../workflow-activity/lib/factory-bundled-docs",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/factory-graph-editor/lib/factory-graph-editor-doc-additions.ts",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/doc-editable-values",
+      "../../workflow-activity/lib/factory-bundled-docs",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/flowchart/components/current-activity-doc-node.tsx",
+    importSpecifiers: ["../../workflow-activity/messages/activity-shell"],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/components/react-flow-current-activity-card-editor-chrome.tsx",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/doc-editable-values",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/react-flow-current-activity-card-editor-removals.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/lib/factory-graph-doc-editor",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/lib/current-activity-doc-graph-layout.ts",
+    importSpecifiers: ["../../flowchart/lib/layout"],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/lib/graph-editor-add-node-placement.ts",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/doc-editable-values",
+      "../../factory-graph-editor/lib/factory-graph-doc-editor",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/state/graph-editor-pending-factory-bridge.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+    ],
+    reason:
+      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
   },
 ];

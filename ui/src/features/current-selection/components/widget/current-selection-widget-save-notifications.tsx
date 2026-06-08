@@ -1,8 +1,10 @@
+import { factoryBundledDocDisplayLabel } from "../../../workflow-activity/lib/factory-bundled-docs";
 import { useFactoryGraphTopologyEditorBridge } from "../../../workflow-activity/state/factory-graph-topology-editor-bridge";
 import { CurrentSelectionGraphDraftConflictNotifications } from "../../base/components/save/current-selection-graph-draft-conflict-notifications";
 import { buildCurrentSelectionSaveToastMessages } from "../../base/lib/build-current-selection-save-toast-messages";
 import { CurrentSelectionSaveNotifications } from "../../base/public";
 import type { DashboardSelection } from "../../base/state/selection-types";
+import type { useEditableDocConfigurationState } from "../../doc-selection/hooks/use-editable-doc-configuration-state";
 import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";
 import type { useEditableResourceConfigurationState } from "../../resource-selection/hooks/use-editable-resource-configuration-state";
 import type { useEditableWorkStateConfigurationState } from "../../work-state-selection/hooks/use-editable-work-state-configuration-state";
@@ -33,8 +35,15 @@ function resolveEditableDisplayName({
 }
 
 export type CurrentSelectionWidgetSaveNotificationsProps = {
+  docSave: ReturnType<typeof useCurrentSelectionDetailSave>["docSave"];
+  docSaveState: ReturnType<
+    typeof useCurrentSelectionDetailSave
+  >["docSaveState"];
   editableConfigurationState: ReturnType<
     typeof useEditableWorkstationConfigurationState
+  >;
+  editableDocConfigurationState: ReturnType<
+    typeof useEditableDocConfigurationState
   >;
   editableResourceConfigurationState: ReturnType<
     typeof useEditableResourceConfigurationState
@@ -55,6 +64,7 @@ export type CurrentSelectionWidgetSaveNotificationsProps = {
   resourceSaveState: ReturnType<
     typeof useCurrentSelectionDetailSave
   >["resourceSaveState"];
+  selectedDocTargetPath: string | null;
   selectedNode: CurrentSelectionState["selectedNode"];
   selectedResourceName: string | null;
   selectedWorkerName: string | null;
@@ -81,7 +91,10 @@ export type CurrentSelectionWidgetSaveNotificationsProps = {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one mount surface wires all five editable entity save toasts.
 export function CurrentSelectionWidgetSaveNotifications({
+  docSave,
+  docSaveState,
   editableConfigurationState,
+  editableDocConfigurationState,
   editableResourceConfigurationState,
   editableWorkStateConfigurationState,
   editableWorkerConfigurationState,
@@ -89,6 +102,7 @@ export function CurrentSelectionWidgetSaveNotifications({
   locale,
   resourceSave,
   resourceSaveState,
+  selectedDocTargetPath,
   selectedNode,
   selectedResourceName,
   selectedWorkerName,
@@ -143,6 +157,12 @@ export function CurrentSelectionWidgetSaveNotifications({
     editableState: editableConfigurationState,
     fallbackName: selectedNode?.workstation_name ?? "",
   });
+  const docDisplayName =
+    editableDocConfigurationState?.status === "ready"
+      ? factoryBundledDocDisplayLabel(
+          editableDocConfigurationState.pendingTargetPath,
+        )
+      : factoryBundledDocDisplayLabel(selectedDocTargetPath ?? "");
 
   return (
     <>
@@ -173,6 +193,23 @@ export function CurrentSelectionWidgetSaveNotifications({
             saveAttemptRevision={workstationSave.saveAttemptRevision}
           />
         </>
+      ) : null}
+      {selection?.kind === "doc" && selectedDocTargetPath ? (
+        <CurrentSelectionSaveNotifications
+          documentSave={docSaveState}
+          entityKind="doc"
+          hasDraftChanges={hasEditableDraftChanges(
+            editableDocConfigurationState,
+          )}
+          locale={locale}
+          messages={buildCurrentSelectionSaveToastMessages({
+            entityDisplayName: docDisplayName,
+            entityKind: "doc",
+            locale,
+          })}
+          saveAttemptRevision={docSave.saveAttemptRevision}
+          saveMutationError={docSave.saveMutationError}
+        />
       ) : null}
       {selection?.kind === "worker" && selectedWorkerName ? (
         <>

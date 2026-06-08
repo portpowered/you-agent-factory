@@ -57,7 +57,7 @@ func FlattenFactoryConfig(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, true); err != nil {
+	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, true, true); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files %s: %w", factoryDir, err)
 	}
 	if err := ApplySharedFactoryStarterWork(factoryDir, factoryCfg); err != nil {

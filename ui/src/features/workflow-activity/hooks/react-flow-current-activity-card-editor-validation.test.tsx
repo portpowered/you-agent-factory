@@ -64,6 +64,7 @@ const editableDocument: CanonicalFactoryDefinition & {
 function createEmptyDraft() {
   return {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -75,6 +76,7 @@ function createEmptyDraft() {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -105,6 +107,7 @@ const hookState = vi.hoisted(() => ({
     baseDocument: null as CanonicalFactoryDefinition | null,
     draft: {
       additions: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],
@@ -116,6 +119,7 @@ const hookState = vi.hoisted(() => ({
         removals: [],
       },
       removals: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],

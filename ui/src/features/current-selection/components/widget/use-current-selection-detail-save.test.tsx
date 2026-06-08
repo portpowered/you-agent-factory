@@ -1,12 +1,17 @@
 import { renderHook } from "@testing-library/react";
 import type { DashboardSelection } from "../../base/state/selection-types";
 import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";
+import { useSaveEditableDocConfiguration } from "../../doc-selection/hooks/use-save-editable-doc-configuration";
 import { useSaveEditableResourceConfiguration } from "../../resource-selection/hooks/use-save-editable-resource-configuration";
 import { useSaveEditableWorkStateConfiguration } from "../../work-state-selection/hooks/use-save-editable-work-state-configuration";
 import { useSaveEditableWorkTypeConfiguration } from "../../work-type-selection/hooks/use-save-editable-work-type-configuration";
 import { useSaveEditableWorkerConfiguration } from "../../worker-selection/hooks/use-save-editable-worker-configuration";
 import { useSaveEditableWorkstationConfiguration } from "../../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import { useCurrentSelectionDetailSave } from "./use-current-selection-detail-save";
+
+vi.mock("../../doc-selection/hooks/use-save-editable-doc-configuration", () => ({
+  useSaveEditableDocConfiguration: vi.fn(),
+}));
 
 vi.mock(
   "../../resource-selection/hooks/use-save-editable-resource-configuration",
@@ -56,6 +61,7 @@ function buildIdleSaveHookReturn() {
 
 function buildCurrentSelectionStub(): CurrentSelectionState {
   return {
+    selectDoc: vi.fn(),
     selectResource: vi.fn(),
     selectStateNode: vi.fn(),
     selectWorkstation: vi.fn(),
@@ -70,10 +76,12 @@ function buildHookArgs(
   return {
     currentSelection: buildCurrentSelectionStub(),
     editableConfigurationState: { status: "loading" },
+    editableDocConfigurationState: { status: "loading" },
     editableResourceConfigurationState: { status: "loading" },
     editableWorkStateConfigurationState: { status: "loading" },
     editableWorkerConfigurationState: { status: "loading" },
     editableWorkTypeConfigurationState: { status: "loading" },
+    selectedDocTargetPath: null,
     selectedNode: null,
     selectedResourceName: null,
     selectedWorkerName: null,
@@ -99,6 +107,9 @@ describe("useCurrentSelectionDetailSave", () => {
       buildIdleSaveHookReturn(),
     );
     vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableDocConfiguration).mockReturnValue(
       buildIdleSaveHookReturn(),
     );
   });
@@ -162,6 +173,30 @@ describe("useCurrentSelectionDetailSave", () => {
     );
   });
 
+});
+
+describe("useCurrentSelectionDetailSave additional scopes", () => {
+  beforeEach(() => {
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkerConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableResourceConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkStateConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableDocConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+  });
+
   it("scopes work state saves to the selected place id", () => {
     const selection: DashboardSelection = {
       kind: "state-node",
@@ -206,11 +241,57 @@ describe("useCurrentSelectionDetailSave", () => {
     );
   });
 
+  it("scopes doc saves to the selected doc target path", () => {
+    const selection: DashboardSelection = {
+      kind: "doc",
+      targetPath: "factory/docs/overview.md",
+    };
+
+    renderHook(() =>
+      useCurrentSelectionDetailSave(
+        buildHookArgs({
+          selectedDocTargetPath: "factory/docs/overview.md",
+          selection,
+        }),
+      ),
+    );
+
+    expect(useSaveEditableDocConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scopeKey: "factory/docs/overview.md",
+      }),
+    );
+  });
+});
+
+describe("useCurrentSelectionDetailSave header actions", () => {
+  beforeEach(() => {
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkerConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableResourceConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkStateConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableWorkTypeConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+    vi.mocked(useSaveEditableDocConfiguration).mockReturnValue(
+      buildIdleSaveHookReturn(),
+    );
+  });
+
   it("returns header actions for each editable selection kind", () => {
     const { result } = renderHook(() =>
       useCurrentSelectionDetailSave(buildHookArgs()),
     );
 
+    expect(result.current.docHeaderAction).toBeTruthy();
     expect(result.current.resourceHeaderAction).toBeTruthy();
     expect(result.current.workerHeaderAction).toBeTruthy();
     expect(result.current.workstationHeaderAction).toBeTruthy();

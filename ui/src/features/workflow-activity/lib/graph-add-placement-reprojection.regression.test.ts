@@ -130,6 +130,7 @@ describe("graph add placement reprojection regression", () => {
       activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
       graphLayout,
       now: Date.parse("2026-06-04T00:00:00Z"),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),

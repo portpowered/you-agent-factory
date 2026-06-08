@@ -54,6 +54,9 @@ function selectionHistorySelectionKey(
     case "work-type":
       // hardcoded-ui-copy-exception: non-product-diagnostic
       return `work-type:${selection.workTypeName}`;
+    case "doc":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return `doc:${selection.targetPath}`;
   }
 }
 

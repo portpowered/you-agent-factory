@@ -1,3 +1,4 @@
+export { DocDetailCard } from "../../doc-selection/components/doc-detail-card";
 export { NoSelectionDetailCard } from "../../base/public";
 export { WorkstationRequestDetailCard } from "../../dispatch-selection/public";
 export { ResourceDetailCard } from "../../resource-selection/public";

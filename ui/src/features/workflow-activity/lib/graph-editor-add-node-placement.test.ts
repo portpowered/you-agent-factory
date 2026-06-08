@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import {
+  CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
+  CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+} from "./current-activity-doc-graph-layout";
+import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,
   resolveInitialPlacementTopLeft,
@@ -57,6 +61,35 @@ describe("factoryGraphNodeIdForAddEntityDraft", () => {
         workTypeName: "story",
       }),
     ).toBe("work-state:story:queued");
+    expect(
+      factoryGraphNodeIdForAddEntityDraft({
+        fileName: "playbook.md",
+        inlineContent: "",
+        kind: "doc",
+      }),
+    ).toBe("doc:factory/docs/playbook.md");
+  });
+});
+
+describe("resolveInitialPlacementTopLeft for docs", () => {
+  const docDraft: FactoryGraphAddEntityDraft = {
+    fileName: "playbook.md",
+    inlineContent: "# Playbook\n",
+    kind: "doc",
+  };
+
+  it("centers doc nodes at the viewport when the canvas center is free", () => {
+    const topLeft = resolveInitialPlacementTopLeft({
+      draft: docDraft,
+      nodes: [],
+      storedPositions: {},
+      viewportCenter: { x: 640, y: 360 },
+    });
+
+    expect(topLeft).toEqual({
+      x: 640 - CURRENT_ACTIVITY_DOC_NODE_WIDTH / 2,
+      y: 360 - CURRENT_ACTIVITY_DOC_NODE_HEIGHT / 2,
+    });
   });
 });
 

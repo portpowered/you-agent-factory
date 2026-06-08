@@ -408,6 +408,7 @@ async function expectRenderableCurrentActivityGraphEdges(
     now: Date.parse("2026-04-08T12:00:04Z"),
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
+    onSelectDoc: vi.fn(),
     onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkType: vi.fn(),
@@ -463,6 +464,7 @@ function renderCurrentActivity({
       (workID: string, hint?: { dispatchID?: string; nodeID?: string }) => void
     >();
   const onSelectStateNode = vi.fn<(placeId: string) => void>();
+  const onSelectDoc = vi.fn<(targetPath: string) => void>();
   const onSelectResource = vi.fn<(resourceName: string) => void>();
   const onSelectWorker = vi.fn<(workerName: string) => void>();
   const onSelectWorkType = vi.fn<(workTypeName: string) => void>();
@@ -477,6 +479,7 @@ function renderCurrentActivity({
       onFactoryActivated={onFactoryActivated}
       onFactoryImportReady={onFactoryImportReady}
       onSelectWorkID={onSelectWorkID}
+      onSelectDoc={onSelectDoc}
       onSelectResource={onSelectResource}
       onSelectStateNode={onSelectStateNode}
       onSelectWorker={onSelectWorker}
@@ -490,6 +493,7 @@ function renderCurrentActivity({
   );
 
   return {
+    onSelectDoc,
     onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
@@ -1367,6 +1371,42 @@ function registerCurrentActivityCardEditorChromeTests(): void {
         name: "Select Document Only workstation",
       }),
     ).toBeNull();
+  });
+
+  it("renders bundled docs as observe-mode graph nodes from the saved factory document", async () => {
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    refreshFactoryFromTopology(snapshot);
+    const savedDocument = {
+      ...currentFactoryDocumentFromSnapshot(snapshot),
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "# Planning" },
+            targetPath: "factory/docs/planning.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+
+    renderCurrentActivity({
+      currentFactoryDocument: savedDocument,
+      snapshot,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select overview.md doc" }),
+      ).toBeTruthy();
+    });
+    expect(
+      screen.getByRole("button", { name: "Select planning.md doc" }),
+    ).toBeTruthy();
   });
 
   it("renders saved document workstations in observe mode when the document plane diverges from the snapshot", async () => {
@@ -3703,7 +3743,8 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     const callbacks = {
       onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
-      onSelectResource: vi.fn(),
+      onSelectDoc: vi.fn(),
+    onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),

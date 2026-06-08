@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePatterns(t *testing.T) {
-	contract := BuildPromptTemplateContract(1)
+	contract := BuildPromptTemplateContract(1, nil)
 
 	if contract.InputCount != 1 {
 		t.Fatalf("InputCount = %d, want 1", contract.InputCount)
@@ -50,7 +50,7 @@ func TestBuildPromptTemplateContract_ListsSelectedInputVariablesAndUnavailablePa
 }
 
 func TestValidatePromptTemplate_AcceptsContextSessionID(t *testing.T) {
-	result := ValidatePromptTemplate(`you submit --session {{ .Context.SessionID }} --work follow-up`, 1)
+	result := ValidatePromptTemplate(`you submit --session {{ .Context.SessionID }} --work follow-up`, 1, nil)
 
 	if !result.Valid {
 		t.Fatalf("Valid = false, diagnostics = %#v", result.Diagnostics)
@@ -61,7 +61,7 @@ func TestValidatePromptTemplate_AcceptsContextSessionID(t *testing.T) {
 }
 
 func TestBuildPromptTemplateContract_ListsContextSessionIDMetadata(t *testing.T) {
-	contract := BuildPromptTemplateContract(0)
+	contract := BuildPromptTemplateContract(0, nil)
 
 	reference, ok := findVariableReference(contract.AvailableVariables, ".Context.SessionID")
 	if !ok {
@@ -85,7 +85,7 @@ Tags: {{ index (index .Inputs 0).Tags "branch" }}
 Relations: {{ (index .Inputs 0).Relations }} {{ (index (index .Inputs 0).Relations 0).Type }} {{ (index (index .Inputs 0).Relations 0).TargetWorkID }} {{ (index (index .Inputs 0).Relations 0).RequiredState }}
 Retry: {{ (index .Inputs 0).PreviousOutput }} {{ (index .Inputs 0).RejectionFeedback }}
 History: {{ (index .Inputs 0).History }} {{ (index .Inputs 0).History.AttemptNumber }} {{ (index .Inputs 0).History.TotalVisits }} {{ (index .Inputs 0).History.FailureCount }} {{ (index .Inputs 0).History.LastError }} {{ (index .Inputs 0).History.FailureLog }}
-{{ range $i, $input := .Inputs }}{{ $input.WorkID }}{{ end }}`, 1)
+{{ range $i, $input := .Inputs }}{{ $input.WorkID }}{{ end }}`, 1, nil)
 
 	if !result.Valid {
 		t.Fatalf("Valid = false, diagnostics = %#v", result.Diagnostics)
@@ -97,7 +97,7 @@ History: {{ (index .Inputs 0).History }} {{ (index .Inputs 0).History.AttemptNum
 
 func TestValidatePromptTemplate_NormalizesSyntaxErrorMessages(t *testing.T) {
 	tmpl := `{{ if .Context.Project }}`
-	result := ValidatePromptTemplate(tmpl, 1)
+	result := ValidatePromptTemplate(tmpl, 1, nil)
 
 	if result.Valid {
 		t.Fatal("Valid = true, want false")
@@ -126,7 +126,7 @@ func TestValidatePromptTemplate_NormalizesSyntaxErrorMessages(t *testing.T) {
 	}
 
 	multilineTemplate := "Valid line\n{{ bad"
-	multilineResult := ValidatePromptTemplate(multilineTemplate, 1)
+	multilineResult := ValidatePromptTemplate(multilineTemplate, 1, nil)
 	if len(multilineResult.Diagnostics) != 1 {
 		t.Fatalf("multiline diagnostics = %#v, want one syntax error", multilineResult.Diagnostics)
 	}
@@ -143,7 +143,7 @@ func TestValidatePromptTemplate_NormalizesSyntaxErrorMessages(t *testing.T) {
 }
 
 func TestValidatePromptTemplate_SeparatesSyntaxErrorsFromUnavailableVariables(t *testing.T) {
-	syntaxResult := ValidatePromptTemplate(`{{ if .Context.Project }}`, 1)
+	syntaxResult := ValidatePromptTemplate(`{{ if .Context.Project }}`, 1, nil)
 	if syntaxResult.Valid {
 		t.Fatal("syntaxResult.Valid = true, want false")
 	}
@@ -154,7 +154,7 @@ func TestValidatePromptTemplate_SeparatesSyntaxErrorsFromUnavailableVariables(t 
 		t.Fatalf("syntax message = %q, want line-based prefix", syntaxResult.Diagnostics[0].Message)
 	}
 
-	unavailableResult := ValidatePromptTemplate(`{{ (index .Inputs 1).Payload }}`, 1)
+	unavailableResult := ValidatePromptTemplate(`{{ (index .Inputs 1).Payload }}`, 1, nil)
 	if unavailableResult.Valid {
 		t.Fatal("unavailableResult.Valid = true, want false")
 	}
@@ -173,7 +173,7 @@ func TestValidatePromptTemplate_SeparatesSyntaxErrorsFromUnavailableVariables(t 
 func TestValidatePromptTemplate_FlagsInvalidFieldsAndMapDotAccess(t *testing.T) {
 	result := ValidatePromptTemplate(`{{ (index .Inputs 0).Unknown }}
 {{ (index .Inputs 0).Tags.branch }}
-{{ .Context.Env.API_KEY }}`, 1)
+{{ .Context.Env.API_KEY }}`, 1, nil)
 
 	if result.Valid {
 		t.Fatal("Valid = true, want false")
@@ -219,7 +219,7 @@ func TestValidatePromptTemplate_RejectsTemplatesThatRuntimeWouldFailToExecute(t 
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			result := ValidatePromptTemplate(testCase.template, 1)
+			result := ValidatePromptTemplate(testCase.template, 1, nil)
 
 			if result.Valid {
 				t.Fatalf("Valid = true, diagnostics = %#v", result.Diagnostics)
@@ -246,7 +246,7 @@ func TestValidatePromptTemplate_RejectsTemplatesThatRuntimeWouldFailToExecute(t 
 }
 
 func TestValidatePromptTemplate_UsesOneBasedOffsetsForRuntimeExecutionDiagnostics(t *testing.T) {
-	result := ValidatePromptTemplate(`x{{ index .Context.Env 0 }}`, 1)
+	result := ValidatePromptTemplate(`x{{ index .Context.Env 0 }}`, 1, nil)
 
 	if result.Valid {
 		t.Fatalf("Valid = true, diagnostics = %#v", result.Diagnostics)
@@ -284,6 +284,49 @@ func findVariableReference(references []PromptTemplateVariableReference, want st
 		}
 	}
 	return PromptTemplateVariableReference{}, false
+}
+
+func TestBuildPromptTemplateContract_ListsBundledDocReferences(t *testing.T) {
+	contract := BuildPromptTemplateContract(0, []string{
+		"factory/docs/guide.md",
+		"factory/docs/overview.md",
+	})
+
+	reference, ok := findVariableReference(contract.AvailableVariables, `.Docs["factory/docs/overview.md"]`)
+	if !ok {
+		t.Fatalf("available variables = %#v, want bundled doc reference", contract.AvailableVariables)
+	}
+	if reference.Category != PromptTemplateVariableCategoryDoc {
+		t.Fatalf("category = %q, want %q", reference.Category, PromptTemplateVariableCategoryDoc)
+	}
+	if reference.Example != `{{ index .Docs "factory/docs/overview.md" }}` {
+		t.Fatalf("example = %q, want doc index example", reference.Example)
+	}
+}
+
+func TestValidatePromptTemplate_AcceptsBundledDocReference(t *testing.T) {
+	docPaths := []string{"factory/docs/overview.md"}
+	result := ValidatePromptTemplate(`Read this: {{ index .Docs "factory/docs/overview.md" }}`, 0, docPaths)
+
+	if !result.Valid {
+		t.Fatalf("Valid = false, diagnostics = %#v", result.Diagnostics)
+	}
+}
+
+func TestValidatePromptTemplate_RejectsMissingBundledDocReference(t *testing.T) {
+	result := ValidatePromptTemplate(`{{ index .Docs "factory/docs/missing.md" }}`, 0, []string{
+		"factory/docs/overview.md",
+	})
+
+	if result.Valid {
+		t.Fatal("Valid = true, want false")
+	}
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %#v, want one unavailable-variable diagnostic", result.Diagnostics)
+	}
+	if result.Diagnostics[0].Kind != PromptTemplateDiagnosticKindUnavailableVariable {
+		t.Fatalf("diagnostic kind = %q, want %q", result.Diagnostics[0].Kind, PromptTemplateDiagnosticKindUnavailableVariable)
+	}
 }
 
 func hasUnavailablePattern(patterns []PromptTemplateUnavailableAccessPattern, want string) bool {

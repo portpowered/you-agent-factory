@@ -316,6 +316,7 @@ const (
 // Defines values for PromptTemplateVariableReferenceCategory.
 const (
 	PromptTemplateVariableReferenceCategoryCONTEXT   PromptTemplateVariableReferenceCategory = "CONTEXT"
+	PromptTemplateVariableReferenceCategoryDOC       PromptTemplateVariableReferenceCategory = "DOC"
 	PromptTemplateVariableReferenceCategoryHISTORY   PromptTemplateVariableReferenceCategory = "HISTORY"
 	PromptTemplateVariableReferenceCategoryINPUT     PromptTemplateVariableReferenceCategory = "INPUT"
 	PromptTemplateVariableReferenceCategoryMAPACCESS PromptTemplateVariableReferenceCategory = "MAP_ACCESS"

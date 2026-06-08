@@ -276,6 +276,7 @@ const defaultDraftState = {
   baseDocument: null,
   draft: {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -287,6 +288,7 @@ const defaultDraftState = {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -327,7 +329,8 @@ function createProps(
     now: Date.parse("2026-04-08T12:00:00Z"),
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
-    onSelectResource: vi.fn(),
+    onSelectDoc: vi.fn(),
+      onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkType: vi.fn(),
     onSelectWorkstation: vi.fn(),

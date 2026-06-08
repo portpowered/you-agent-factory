@@ -4,7 +4,10 @@ import type { CurrentFactoryDocument } from "../../../api/current-factory-defini
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
-import { normalizeFactoryDefinition } from "../../../api/factory-definition";
+import {
+  normalizeFactoryDefinition,
+  preserveExistingBundledFilesWhenAbsent,
+} from "../../../api/factory-definition";
 import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
@@ -59,6 +62,20 @@ export function pausedDashboardStreamState() {
   };
 }
 
+function cachedFactoryWithBundledFiles(
+  queryClient: QueryClient,
+  sessionID: string,
+): CanonicalFactoryDefinition | null | undefined {
+  return (
+    queryClient.getQueryData<CurrentFactoryDocument>(
+      currentFactoryDocumentQueryKey(sessionID),
+    ) ??
+    queryClient.getQueryData<CanonicalFactoryDefinition>(
+      currentFactoryDefinitionQueryKey(sessionID),
+    )
+  );
+}
+
 export function syncCurrentFactoryDefinition(
   queryClient: QueryClient,
   event: FactoryEvent,
@@ -73,12 +90,21 @@ export function syncCurrentFactoryDefinition(
   }
   try {
     const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
+    const factoryWithBundledFiles = preserveExistingBundledFilesWhenAbsent(
+      normalizedFactory,
+      cachedFactoryWithBundledFiles(queryClient, sessionID),
+    );
     queryClient.setQueryData(
       currentFactoryDefinitionQueryKey(sessionID),
-      normalizedFactory,
+      factoryWithBundledFiles,
     );
-    const document =
-      toCurrentFactoryDocumentFromNormalizedFactory(normalizedFactory);
+    const factoryForDocumentCache = preserveExistingBundledFilesWhenAbsent(
+      factoryWithBundledFiles,
+      cachedFactoryWithBundledFiles(queryClient, sessionID),
+    );
+    const document = toCurrentFactoryDocumentFromNormalizedFactory(
+      factoryForDocumentCache,
+    );
     if (document) {
       queryClient.setQueryData(
         currentFactoryDocumentQueryKey(sessionID),

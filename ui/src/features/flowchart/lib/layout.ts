@@ -13,6 +13,7 @@ import { isExhaustionWorkstation } from "./workstation-semantics";
 
 export type PositionedNodeKind =
   | "constraint"
+  | "doc"
   | "state_position"
   | "resource"
   | "workstation";
@@ -38,7 +39,16 @@ export interface PositionedWorkstationNode extends PositionedBaseNode {
   workstationNodeId: string;
 }
 
-export type PositionedNode = PositionedPlaceNode | PositionedWorkstationNode;
+export interface PositionedDocNode extends PositionedBaseNode {
+  displayLabel: string;
+  nodeKind: "doc";
+  targetPath: string;
+}
+
+export type PositionedNode =
+  | PositionedPlaceNode
+  | PositionedDocNode
+  | PositionedWorkstationNode;
 
 export interface PositionedEdge {
   edgeId: string;
@@ -75,7 +85,7 @@ interface GraphSeedNode extends ElkNode {
   height: number;
   id: string;
   nodeId: string;
-  nodeKind: PositionedNodeKind;
+  nodeKind: Exclude<PositionedNodeKind, "doc">;
   place?: DashboardPlaceRef;
   width: number;
   workstationNodeId?: string;

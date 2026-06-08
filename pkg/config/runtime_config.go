@@ -81,7 +81,7 @@ func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) 
 	if err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
-	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, false); err != nil {
+	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, false, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
 	if err := validateBlockingFactoryLoad(factoryCfg); err != nil {

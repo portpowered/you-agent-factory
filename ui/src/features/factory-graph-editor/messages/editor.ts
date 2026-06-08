@@ -24,6 +24,10 @@ export interface FactoryGraphEditorMessages {
   addDialogAssignedWorkerPlaceholder: string;
   addDialogCancelAction: string;
   addDialogCapacityLabel: string;
+  addDialogDocContentHelp: string;
+  addDialogDocContentLabel: string;
+  addDialogDocFileNameHelp: string;
+  addDialogDocFileNameLabel: string;
   addDialogDescription: (kind: FactoryGraphAddEntityDraft["kind"]) => string;
   addDialogFirstStateHelp: string;
   addDialogFirstStateLabel: string;
@@ -215,6 +219,9 @@ export interface FactoryGraphEditorMessages {
     kind: FactoryGraphNodeKind,
   ) => string;
   removalEntityTitle: (label: string, kind: FactoryGraphNodeKind) => string;
+  removalDocConfirmLabel: (displayLabel: string) => string;
+  removalDocDescription: (targetPath: string) => string;
+  removalDocTitle: (displayLabel: string) => string;
   removalFallbackConfirmDescription: string;
   removalFallbackConfirmLabel: string;
   removalFallbackTitle: string;
@@ -232,6 +239,9 @@ export interface FactoryGraphEditorMessages {
 }
 
 function describeEnglishAddDialog(kind: FactoryGraphAddEntityDraft["kind"]) {
+  if (kind === "doc") {
+    return "Create a bundled doc under factory/docs with editable text before save.";
+  }
   if (kind === "workstation") {
     return "Create a pending workstation in the current graph draft.";
   }
@@ -250,6 +260,9 @@ function describeEnglishAddDialog(kind: FactoryGraphAddEntityDraft["kind"]) {
 function describeEnglishAddDialogTitle(
   kind: FactoryGraphAddEntityDraft["kind"],
 ) {
+  if (kind === "doc") {
+    return "Add doc";
+  }
   if (kind === "work-type") {
     return "Add work type";
   }
@@ -412,6 +425,12 @@ function describeEnglishAddMenuAction(
   kind: FactoryGraphAddEntityDraft["kind"],
 ) {
   switch (kind) {
+    case "doc":
+      return {
+        description:
+          "Add a bundled documentation file under factory/docs with editable text.",
+        label: "Doc",
+      };
     case "workstation":
       return {
         description:
@@ -558,6 +577,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogAssignedWorkerPlaceholder: "Select a worker",
       addDialogCancelAction: "Cancel",
       addDialogCapacityLabel: "Capacity",
+      addDialogDocContentHelp:
+        "Optional UTF-8 text saved with the bundled doc entry.",
+      addDialogDocContentLabel: "Doc text",
+      addDialogDocFileNameHelp:
+        "Saved under factory/docs/. Include the file extension.",
+      addDialogDocFileNameLabel: "File name",
       addDialogDescription: describeEnglishAddDialog,
       addDialogFirstStateHelp:
         "New work types start with one required ordered state.",
@@ -800,6 +825,10 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       removalEdgeTitle: (edgeLabel) => `Remove ${edgeLabel}?`,
       removalEntityConfirmLabel: (label, kind) => `Delete ${label} ${kind}`,
       removalEntityTitle: (label, kind) => `Remove ${label} ${kind}?`,
+      removalDocConfirmLabel: (displayLabel) => `Delete ${displayLabel} doc`,
+      removalDocDescription: (targetPath) =>
+        `This removes the bundled doc at ${targetPath} from the current factory draft.`,
+      removalDocTitle: (displayLabel) => `Remove ${displayLabel} doc?`,
       removalFallbackConfirmDescription:
         "Remove this graph entity from the current draft.",
       removalFallbackConfirmLabel: "Delete entity",
@@ -823,7 +852,15 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogAssignedWorkerPlaceholder: "选择一个工作者",
       addDialogCancelAction: "取消",
       addDialogCapacityLabel: "容量",
+      addDialogDocContentHelp: "保存到捆绑文档条目的可选 UTF-8 文本。",
+      addDialogDocContentLabel: "文档文本",
+      addDialogDocFileNameHelp:
+        "保存到 factory/docs/ 下。请包含文件扩展名。",
+      addDialogDocFileNameLabel: "文件名",
       addDialogDescription: (kind) => {
+        if (kind === "doc") {
+          return "在 factory/docs 下创建可在保存前编辑文本的捆绑文档。";
+        }
         if (kind === "workstation") {
           return "在当前图草稿中创建一个待处理工作站。";
         }
@@ -871,6 +908,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogPromptBodyLabel: "提示正文",
       addDialogStateTypeLabel: "状态类型",
       addDialogTitle: (kind) => {
+        if (kind === "doc") {
+          return "添加文档";
+        }
         if (kind === "work-type") {
           return "添加工作类型";
         }
@@ -883,6 +923,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogWorkTypePlaceholder: "选择一个工作类型",
       addMenuAction: (kind) => {
         switch (kind) {
+          case "doc":
+            return {
+              description:
+                "在 factory/docs 下添加可编辑文本的捆绑文档文件。",
+              label: "文档",
+            };
           case "workstation":
             return {
               description: "创建一个待处理工作站并分配现有工作者。",
@@ -1267,6 +1313,10 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `删除 ${label} ${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}`,
       removalEntityTitle: (label, kind) =>
         `移除 ${label} ${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}？`,
+      removalDocConfirmLabel: (displayLabel) => `删除 ${displayLabel} 文档`,
+      removalDocDescription: (targetPath) =>
+        `这将从当前工厂草稿中移除位于 ${targetPath} 的捆绑文档。`,
+      removalDocTitle: (displayLabel) => `移除 ${displayLabel} 文档？`,
       removalFallbackConfirmDescription: "从当前草稿中移除此图实体。",
       removalFallbackConfirmLabel: "删除实体",
       removalFallbackTitle: "移除图实体？",

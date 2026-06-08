@@ -4,6 +4,11 @@ import type {
   FactoryGraphAddModelOperationValidationErrors,
 } from "../factory-graph-add-model-operation-draft";
 import {
+  applyFactoryGraphDocAddEntityDraft,
+  createFactoryGraphDocAddEntityDraft,
+  validateFactoryGraphDocAddEntityDraft,
+} from "../factory-graph-editor-doc-additions";
+import {
   applyFactoryGraphAddWorkerDraft,
   validateFactoryGraphAddWorkerDraft,
 } from "../factory-graph-editor-additions.worker";
@@ -23,8 +28,7 @@ import {
   type EditableWorkstationType,
 } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
-import type { FactoryGraphEditorMenuAction } from "../../components/controls/factory-graph-editor-controls";
-import { getFactoryGraphEditorMessages } from "../../messages/editor";
+export { buildFactoryGraphAddEntityMenuActions } from "../factory-graph-editor-add-menu";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -41,6 +45,7 @@ export type FactoryGraphAddWorkerType = Extract<
 >;
 
 export type FactoryGraphAddEntityKind =
+  | "doc"
   | "resource"
   | "worker"
   | "work-type"
@@ -48,6 +53,11 @@ export type FactoryGraphAddEntityKind =
   | "workstation";
 
 export type FactoryGraphAddEntityDraft =
+  | {
+      fileName: string;
+      inlineContent: string;
+      kind: "doc";
+    }
   | {
       capacity: string;
       kind: "resource";
@@ -89,6 +99,8 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "args"
     | "capacity"
     | "command"
+    | "fileName"
+    | "inlineContent"
     | "initialStateName"
     | "model"
     | "modelProvider"
@@ -119,47 +131,14 @@ const FACTORY_GRAPH_ADD_CRON_VALIDATION_MESSAGES = {
 const DEFAULT_RESOURCE_CAPACITY = "1";
 const DEFAULT_WORK_STATE_TYPE: FactoryWorkState["type"] = "PROCESSING";
 
-export function buildFactoryGraphAddEntityMenuActions(
-  factoryDefinition: CanonicalFactoryDefinition | null,
-  locale?: string | null,
-): FactoryGraphEditorMenuAction[] {
-  const hasWorkTypes = (factoryDefinition?.workTypes?.length ?? 0) > 0;
-  const messages = getFactoryGraphEditorMessages(locale);
-
-  return [
-    {
-      description: messages.addMenuAction("workstation").description,
-      id: "workstation",
-      label: messages.addMenuAction("workstation").label,
-    },
-    {
-      description: messages.addMenuAction("worker").description,
-      id: "worker",
-      label: messages.addMenuAction("worker").label,
-    },
-    {
-      description: messages.addMenuAction("work-type").description,
-      id: "work-type",
-      label: messages.addMenuAction("work-type").label,
-    },
-    {
-      description: messages.addMenuAction("work-state").description,
-      disabled: !hasWorkTypes,
-      id: "work-state",
-      label: messages.addMenuAction("work-state").label,
-    },
-    {
-      description: messages.addMenuAction("resource").description,
-      id: "resource",
-      label: messages.addMenuAction("resource").label,
-    },
-  ];
-}
-
 export function createFactoryGraphAddEntityDraft(
   kind: FactoryGraphAddEntityKind,
   factoryDefinition: CanonicalFactoryDefinition | null,
 ): FactoryGraphAddEntityDraft {
+  if (kind === "doc") {
+    return createFactoryGraphDocAddEntityDraft(factoryDefinition);
+  }
+
   if (kind === "resource") {
     return {
       capacity: DEFAULT_RESOURCE_CAPACITY,
@@ -215,6 +194,11 @@ export function validateFactoryGraphAddEntityDraft(
   _locale?: string | null,
 ): FactoryGraphAddEntityFieldErrors {
   const errors: FactoryGraphAddEntityFieldErrors = {};
+
+  if (draft.kind === "doc") {
+    return validateFactoryGraphDocAddEntityDraft(draft, factoryDefinition);
+  }
+
   const name = draft.name.trim();
 
   if (name.length === 0) {
@@ -306,6 +290,10 @@ export function applyFactoryGraphAddEntityDraft(
   entityDraft: FactoryGraphAddEntityDraft,
 ): FactoryGraphDraft {
   const nextDraft = structuredClone(currentDraft);
+
+  if (entityDraft.kind === "doc") {
+    return applyFactoryGraphDocAddEntityDraft(nextDraft, entityDraft);
+  }
 
   if (entityDraft.kind === "resource") {
     nextDraft.additions.resources.push({

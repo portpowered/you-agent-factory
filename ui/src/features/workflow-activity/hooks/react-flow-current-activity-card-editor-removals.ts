@@ -5,6 +5,7 @@ import type {
   EditableFactoryGraphViewModel,
 } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { buildFactoryGraphDocRemovalIntent } from "../../factory-graph-editor/lib/factory-graph-doc-editor";
 import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
@@ -134,7 +135,10 @@ export function useFactoryGraphRemovalController({
       return;
     }
 
-    if ("key" in pendingRemovalIntent && pendingRemovalNodeId) {
+    if (
+      ("key" in pendingRemovalIntent || "targetPath" in pendingRemovalIntent) &&
+      pendingRemovalNodeId
+    ) {
       applyConfirmedNodeRemoval(pendingRemovalNodeId);
       return;
     }
@@ -212,12 +216,20 @@ function useFactoryGraphNodeRemovalRequest({
         return;
       }
 
-      const intent = buildFactoryGraphRemovalIntent({
+      const docIntent = buildFactoryGraphDocRemovalIntent({
         baseFactoryDefinition: draftState.latestDocument,
         draft: draftState.draft,
         locale,
         nodeId,
       });
+      const intent =
+        docIntent ??
+        buildFactoryGraphRemovalIntent({
+          baseFactoryDefinition: draftState.latestDocument,
+          draft: draftState.draft,
+          locale,
+          nodeId,
+        });
       if (!intent) {
         return;
       }
@@ -372,12 +384,18 @@ function usePendingRemovalIntentState(
   >(null);
   const pendingNodeRemovalIntent =
     draftState.latestDocument && pendingRemovalNodeId
-      ? buildFactoryGraphRemovalIntent({
+      ? (buildFactoryGraphDocRemovalIntent({
           baseFactoryDefinition: draftState.latestDocument,
           draft: draftState.draft,
           locale,
           nodeId: pendingRemovalNodeId,
-        })
+        }) ??
+        buildFactoryGraphRemovalIntent({
+          baseFactoryDefinition: draftState.latestDocument,
+          draft: draftState.draft,
+          locale,
+          nodeId: pendingRemovalNodeId,
+        }))
       : null;
   const pendingEdgeRemovalIntent =
     draftState.latestDocument && pendingRemovalEdgeId

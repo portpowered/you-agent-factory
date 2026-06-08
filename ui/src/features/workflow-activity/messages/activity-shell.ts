@@ -6,6 +6,7 @@ import {
 export interface WorkflowActivityShellMessages {
   emptyMessage: string;
   emptyTitle: string;
+  selectDocLabel: (docName: string) => string;
   selectExhaustionRuleLabel: (workstationTitle: string) => string;
   selectStateLabel: (placeLabel: string) => string;
   selectResourceLabel: (resourceName: string) => string;
@@ -21,6 +22,7 @@ const workflowActivityShellMessagesByLocale = {
   en: {
     emptyMessage: "The factory has not published any workstation graph yet.",
     emptyTitle: "No workflow topology loaded",
+    selectDocLabel: (docName) => `Select ${docName} doc`,
     selectExhaustionRuleLabel: (workstationTitle) =>
       `Select ${workstationTitle} exhaustion rule`,
     selectStateLabel: (placeLabel) => `Select ${placeLabel} state`,
@@ -36,6 +38,7 @@ const workflowActivityShellMessagesByLocale = {
   "zh-CN": {
     emptyMessage: "这个工厂还没有发布任何工作站图。",
     emptyTitle: "尚未加载工作流拓扑",
+    selectDocLabel: (docName) => `选择 ${docName} 文档`,
     selectExhaustionRuleLabel: (workstationTitle) =>
       `选择 ${workstationTitle} 枯竭规则`,
     selectStateLabel: (placeLabel) => `选择 ${placeLabel} 状态`,

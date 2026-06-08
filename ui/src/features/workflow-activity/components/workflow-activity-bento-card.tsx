@@ -19,6 +19,7 @@ interface WorkflowActivityBentoCardProps {
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
+  onDocAdded?: (targetPath: string) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
@@ -26,6 +27,7 @@ interface WorkflowActivityBentoCardProps {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorker: (workerName: string) => void;
@@ -39,11 +41,13 @@ export function WorkflowActivityBentoCard({
   importController,
   locale,
   now,
+  onDocAdded,
   onNodeRemovedFromDraft,
   selection,
   snapshot,
   widgetInstanceID,
   onSelectWorkID,
+  onSelectDoc,
   onSelectResource,
   onSelectStateNode,
   onSelectWorker,
@@ -59,6 +63,7 @@ export function WorkflowActivityBentoCard({
     snapshot,
     locale,
     sessionID,
+    onDocAdded,
     onNodeRemovedFromDraft,
   );
 
@@ -135,6 +140,7 @@ export function WorkflowActivityBentoCard({
           snapshot={snapshot}
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
+          onSelectDoc={onSelectDoc}
           onSelectResource={onSelectResource}
           onSelectStateNode={onSelectStateNode}
           onSelectWorker={onSelectWorker}
@@ -154,6 +160,7 @@ function toCurrentActivitySelection(
   }
 
   if (
+    selection?.kind === "doc" ||
     selection?.kind === "worker" ||
     selection?.kind === "resource" ||
     selection?.kind === "work-type"

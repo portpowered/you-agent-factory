@@ -88,6 +88,13 @@ export function useCurrentSelectionActions({
     });
   };
 
+  const selectDoc = (targetPath: string) => {
+    commitSelectionState({
+      selection: { kind: "doc", targetPath },
+      terminalWorkDetail: null,
+    });
+  };
+
   const clearSelectedWorkerIfMatching = (workerName: string) => {
     if (selection?.kind !== "worker" || selection.workerName !== workerName) {
       return;
@@ -112,6 +119,17 @@ export function useCurrentSelectionActions({
 
   const clearSelectedStateNodeIfMatching = (placeId: string) => {
     if (selection?.kind !== "state-node" || selection.placeId !== placeId) {
+      return;
+    }
+
+    commitSelectionState({
+      selection: snapshot ? selectDefaultSelection(snapshot) : null,
+      terminalWorkDetail: null,
+    });
+  };
+
+  const clearSelectedDocIfMatching = (targetPath: string) => {
+    if (selection?.kind !== "doc" || selection.targetPath !== targetPath) {
       return;
     }
 
@@ -241,6 +259,7 @@ export function useCurrentSelectionActions({
   };
 
   return {
+    clearSelectedDocIfMatching,
     clearSelectedFactoryGraphNodeIfMatching,
     clearSelectedStateNodeIfMatching,
     clearSelectedWorkerIfMatching,
@@ -251,6 +270,7 @@ export function useCurrentSelectionActions({
     selectWorkItem,
     selectWorkstation,
     selectWorkstationRequest,
+    selectDoc,
     selectResource,
     selectWorker,
     selectWorkType,

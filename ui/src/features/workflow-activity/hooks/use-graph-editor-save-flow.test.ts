@@ -6,6 +6,7 @@ import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 const fixtureState = vi.hoisted(() => {
   const emptyDraft = {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -17,6 +18,7 @@ const fixtureState = vi.hoisted(() => {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
