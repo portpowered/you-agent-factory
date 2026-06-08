@@ -980,6 +980,9 @@ func (r *factoryWorldReducer) topologyPlace(placeID string) (interfaces.FactoryP
 	return interfaces.FactoryPlace{}, false
 }
 func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
+	if handled, err := r.applyOrchestratorProgressEvent(event); handled {
+		return true, err
+	}
 	switch event.Type {
 	case factoryapi.FactoryEventTypeJavaScriptCheckpointRef:
 		return true, r.applyJavaScriptCheckpointRefEvent(event)

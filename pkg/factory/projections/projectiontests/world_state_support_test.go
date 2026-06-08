@@ -668,6 +668,14 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		if err := event.Payload.FromSessionCompletedEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.OrchestratorPhaseChangedEventPayload:
+		if err := event.Payload.FromOrchestratorPhaseChangedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.OrchestratorCheckpointWrittenEventPayload:
+		if err := event.Payload.FromOrchestratorCheckpointWrittenEventPayload(typed); err != nil {
+			panic(err)
+		}
 	default:
 		panic("unsupported projection test payload")
 	}
