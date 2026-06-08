@@ -101,18 +101,19 @@ func renderListResult(output io.Writer, result factoryapi.ListFactorySessionsRes
 		return err
 	}
 
-	if _, err := fmt.Fprintln(output, "SESSION ID\tPROJECT\tFOLDER PATH\tFACTORY DIR\tDEFAULT\tTARGET KIND\tTARGET NAME"); err != nil {
+	if _, err := fmt.Fprintln(output, "SESSION ID\tPROJECT\tFOLDER PATH\tFACTORY DIR\tDEFAULT\tORCHESTRATOR KIND\tTARGET KIND\tTARGET NAME"); err != nil {
 		return err
 	}
 	for _, session := range result.Sessions {
 		if _, err := fmt.Fprintf(
 			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			session.Id,
 			session.Project,
 			session.FolderPath,
 			session.FactoryDir,
 			defaultMarker(session.IsDefault),
+			orchestratorKindLabel(session),
 			session.Target.Kind,
 			targetName(session.Target.Name),
 		); err != nil {
@@ -134,4 +135,11 @@ func targetName(name *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*name)
+}
+
+func orchestratorKindLabel(session factoryapi.FactorySessionSummary) string {
+	if session.Runtime == nil {
+		return ""
+	}
+	return string(session.Runtime.OrchestratorKind)
 }

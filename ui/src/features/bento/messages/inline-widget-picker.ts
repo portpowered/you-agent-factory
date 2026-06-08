@@ -44,6 +44,11 @@ const inlineWidgetPickerMessagesByLocale = {
           "Keep the active work, node, and trace context visible while you explore the factory.",
         title: "Current selection",
       },
+      "factory-session": {
+        description:
+          "Inspect orchestrator-aware factory session runtime, checkpoints, and results.",
+        title: "Factory session",
+      },
       "provider-session": {
         description:
           "Follow the selected provider session without leaving the dashboard grid.",
@@ -94,6 +99,10 @@ const inlineWidgetPickerMessagesByLocale = {
       "current-selection": {
         description: "在浏览工厂时持续显示当前工作、节点和追踪上下文。",
         title: "当前选择",
+      },
+      "factory-session": {
+        description: "检查编排器感知的工厂会话运行时、检查点和结果。",
+        title: "工厂会话",
       },
       "provider-session": {
         description: "无需离开仪表板网格即可跟踪所选提供方会话。",

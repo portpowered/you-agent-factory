@@ -8,6 +8,8 @@ import type { useCurrentSelectionDetails } from "../../current-selection/hooks/c
 import { CurrentSelectionWidget } from "../../current-selection/public";
 import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";
+import { FactorySessionWidget } from "../../factory-session-detail/public";
+import { getFactorySessionWidgetMessages } from "../../factory-session-detail/messages/factory-session-widget";
 import { getProviderSessionWidgetMessages } from "../../provider-session-detail/messages/provider-session-widget";
 import { ProviderSessionWidget } from "../../provider-session-detail/public";
 import { getSubmitWorkMessages } from "../../submit-work/messages/submit-work";
@@ -42,6 +44,7 @@ export interface DashboardCardBuilderArgs {
   onRemoveDashboardWidget: (widgetInstanceID: string) => void;
   onSelectInlineWidget: (widgetType: DashboardWidgetPickerWidgetType) => void;
   providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
+  selectedSessionID: string | null;
   selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
   selectedTraceID: string | null;
   selectedWorkExecutionDetails: ReturnType<
@@ -64,6 +67,7 @@ interface DashboardWidgetCardBuilderArgs {
   now: number;
   onRemoveDashboardWidget: (widgetInstanceID: string) => void;
   providerSessionState: ReturnType<typeof useSelectedProviderSessionState>;
+  selectedSessionID: string | null;
   selectedTrace: ReturnType<typeof useTraceDrilldown>["selectedTrace"];
   selectedTraceID: string | null;
   selectedWorkExecutionDetails: ReturnType<
@@ -87,6 +91,7 @@ export function buildDashboardCards({
   onRemoveDashboardWidget,
   onSelectInlineWidget,
   providerSessionState,
+  selectedSessionID,
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
@@ -129,6 +134,7 @@ export function buildDashboardCards({
         now,
         onRemoveDashboardWidget,
         providerSessionState,
+        selectedSessionID,
         selectedTrace,
         selectedTraceID,
         selectedWorkExecutionDetails,
@@ -150,6 +156,7 @@ function buildWidgetCard({
   now,
   onRemoveDashboardWidget,
   providerSessionState,
+  selectedSessionID,
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
@@ -202,6 +209,7 @@ function buildWidgetCard({
     locale,
     now,
     providerSessionState,
+    selectedSessionID,
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
@@ -355,6 +363,7 @@ function buildSingletonWidgetCard({
   locale,
   now,
   providerSessionState,
+  selectedSessionID,
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
@@ -369,6 +378,7 @@ function buildSingletonWidgetCard({
   | "locale"
   | "now"
   | "providerSessionState"
+  | "selectedSessionID"
   | "selectedTrace"
   | "selectedTraceID"
   | "selectedWorkExecutionDetails"
@@ -404,6 +414,19 @@ function buildSingletonWidgetCard({
             selectedTrace={selectedTrace}
             selectedWorkRelationshipGraph={selectedWorkRelationshipGraph}
             selectedWorkExecutionDetails={selectedWorkExecutionDetails}
+            widgetId={layoutItem.id}
+          />
+        ),
+      };
+    case DASHBOARD_WIDGET_IDS.factorySession:
+      return {
+        id: layoutItem.id,
+        widgetType: layoutItem.widgetType,
+        children: (
+          <FactorySessionWidget
+            headerAction={headerAction}
+            locale={locale}
+            sessionID={selectedSessionID}
             widgetId={layoutItem.id}
           />
         ),
@@ -460,6 +483,8 @@ function getDashboardWidgetTitle(widgetType: string, locale?: string): string {
   switch (widgetType) {
     case DASHBOARD_WIDGET_IDS.currentSelection:
       return getCurrentSelectionShellMessages(locale).title;
+    case DASHBOARD_WIDGET_IDS.factorySession:
+      return getFactorySessionWidgetMessages(locale).title;
     case DASHBOARD_WIDGET_IDS.providerSession:
       return getProviderSessionWidgetMessages(locale).title;
     case DASHBOARD_WIDGET_IDS.submitWork:

@@ -40,6 +40,7 @@ var listWork = workcli.List
 var showWork = workcli.Show
 var moveWork = workcli.Move
 var listSessions = sessioncli.List
+var showSession = sessioncli.Show
 var createSession = sessioncli.Create
 var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
@@ -102,7 +103,7 @@ func NewRootCommand() *cobra.Command {
 		newModelsCommand(globals, diagnostics),
 		newRunCommand(globals, diagnostics),
 		newSubmitCommand(globals, diagnostics),
-		newSessionCommand(diagnostics),
+		newSessionCommand(globals, diagnostics),
 		newWorkCommand(globals, diagnostics),
 	)
 
@@ -346,19 +347,22 @@ func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 	return cmd
 }
 
-func newSessionCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	sessionCmd := &cobra.Command{
 		Use:   "session",
 		Short: "List, open, and close live factory sessions on a running host",
 		Long: "Manage live factory sessions on a running you-agent-factory service.\n\n" +
 			"Subcommands:\n" +
 			"  list    list live factory sessions from GET /factory-sessions\n" +
+			"  show    show one live factory session from GET /factory-sessions/{session_id}\n" +
 			"  create  open another live session from a folder path\n" +
 			"  delete  close a live session by session id\n\n" +
 			"Session commands use the same default --port as work list. Use --json to emit API-shaped " +
 			"responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
 		Example: "  # List live sessions on the default local port.\n" +
 			"  " + cliBinaryName + " session list\n\n" +
+			"  # Show orchestrator-aware runtime for one live session.\n" +
+			"  " + cliBinaryName + " session show session-beta\n\n" +
 			"  # Emit API-shaped JSON for automation.\n" +
 			"  " + cliBinaryName + " session list --json\n\n" +
 			"  # Open and close sessions on a non-default port.\n" +
@@ -369,10 +373,49 @@ func newSessionCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	}
 	sessionCmd.AddCommand(
 		newSessionListCommand(diagnostics),
+		newSessionShowCommand(globals, diagnostics),
 		newSessionCreateCommand(diagnostics),
 		newSessionDeleteCommand(diagnostics),
 	)
 	return sessionCmd
+}
+
+func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := sessioncli.ShowConfig{Server: globals.server}
+
+	cmd := &cobra.Command{
+		Use:   "show [session-id]",
+		Short: "Show one live factory session",
+		Long: "Show one live factory session from GET /factory-sessions/{session_id}.\n\n" +
+			"Human output uses FactorySession as the canonical runtime noun and prints orchestrator " +
+			"kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only " +
+			"as JavaScript shorthand. Omit session-id to target the default compatibility session " +
+			"(~default). Use global --json for the API-shaped FactorySession payload and global " +
+			"--server to target the same factory API base URI as work list and factory query.",
+		Example: "  # Show the default compatibility factory session.\n" +
+			"  " + cliBinaryName + " session show\n\n" +
+			"  # Show one named live session with orchestrator-aware runtime fields.\n" +
+			"  " + cliBinaryName + " session show session-beta\n\n" +
+			"  # Emit API-shaped JSON for automation.\n" +
+			"  " + cliBinaryName + " --json session show session-beta",
+		Args:    cobra.MaximumNArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				cfg.SessionID = args[0]
+			}
+			cfg.Server = globals.server
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return showSession(cfg)
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	return cmd
 }
 
 func newSessionListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
