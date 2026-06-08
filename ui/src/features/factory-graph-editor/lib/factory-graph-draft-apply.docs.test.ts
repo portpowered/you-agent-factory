@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
-import { applyFactoryGraphAddEntityDraft } from "./factory-graph-editor-additions";
+import { buildDraftAppliedFactoryDefinition } from "./draft/factory-graph-draft-apply";
+import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
+import { applyFactoryGraphAddEntityDraft } from "./editor/factory-graph-editor-additions";
 
 const baseFactory: CanonicalFactoryDefinition = {
   name: "Current Factory",

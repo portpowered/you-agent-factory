@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import {
   applyFactoryGraphDocAddEntityDraft,
   createFactoryGraphDocAddEntityDraft,

@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import {
   applyFactoryGraphDocRemoval,
   buildFactoryGraphDocRemovalIntent,
   factoryGraphDocNodeIdForTargetPath,
   suggestDefaultDocFileName,
 } from "./factory-graph-doc-editor";
-import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
+import { buildDraftAppliedFactoryDefinition } from "./draft/factory-graph-draft-apply";
 import {
   applyFactoryGraphAddEntityDraft,
   validateFactoryGraphAddEntityDraft,
-} from "./factory-graph-editor-additions";
+} from "./editor/factory-graph-editor-additions";
 
 const baseFactory: CanonicalFactoryDefinition = {
   name: "Current Factory",
