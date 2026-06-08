@@ -6,9 +6,11 @@ import {
 } from "../../../testing/editable-factory-graph-hook-test-helpers";
 import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
+  baseFactoryDefinition,
+  currentFactoryDocument,
+} from "../lib/draft/factory-graph-draft.test-helpers";
+import {
   createHookTestGraphEditorDraftState,
-  draftWorkstationFactoryDefinition,
-  draftWorkstationFactoryDocument,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
 import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
@@ -31,7 +33,7 @@ describe("useEditableFactoryGraph", () => {
 
   it("exposes pending, projection, validation, and blocked operation state", () => {
     const { result, rerender } = renderEditableFactoryGraphHook({
-      currentFactoryDocument: draftWorkstationFactoryDocument,
+      currentFactoryDocument: currentFactoryDocument,
     });
 
     expect(result.current.pendingState.hasChanges).toBe(false);
@@ -98,7 +100,7 @@ describe("useEditableFactoryGraph", () => {
   it("reports stale save state when the current factory changes during a draft", () => {
     hookState.draftState.hasChanges = true;
     hookState.draftState.latestDocument = {
-      ...draftWorkstationFactoryDocument,
+      ...currentFactoryDocument,
       version: {
         logical: "6",
         physical: "2026-05-18T16:00:00Z",
@@ -125,7 +127,7 @@ describe("useEditableFactoryGraph", () => {
     hookState.draftState.hasChanges = true;
 
     const { result } = renderEditableFactoryGraphHook({
-      currentFactoryDocument: draftWorkstationFactoryDocument,
+      currentFactoryDocument: currentFactoryDocument,
       factoryDocumentScopeKey: "session-graph",
     });
 
@@ -165,7 +167,7 @@ describe("useEditableFactoryGraph", () => {
     };
 
     const { result } = renderEditableFactoryGraphHook({
-      currentFactoryDocument: draftWorkstationFactoryDocument,
+      currentFactoryDocument: currentFactoryDocument,
       factoryDocumentScopeKey: "session-graph",
     });
 
@@ -176,7 +178,7 @@ describe("useEditableFactoryGraph", () => {
 
     expect(didSave).toBe(true);
     expect(saveMutation.saveAsync).toHaveBeenCalledWith({
-      baseVersion: draftWorkstationFactoryDocument.version,
+      baseVersion: currentFactoryDocument.version,
       factory: expect.objectContaining({
         resources: expect.arrayContaining([
           expect.objectContaining({ name: "review-slot" }),
@@ -202,7 +204,7 @@ describe("useEditableFactoryGraph", () => {
     const { result } = renderHook(
       () =>
         useEditableFactoryGraph({
-          currentFactoryDocument: draftWorkstationFactoryDocument,
+          currentFactoryDocument: currentFactoryDocument,
           factoryDocumentScopeKey: null,
         }),
       {
@@ -244,8 +246,8 @@ describe("useEditableFactoryGraph", () => {
 
     const { result } = renderEditableFactoryGraphHook({
       currentFactoryDocument: {
-        ...draftWorkstationFactoryDefinition,
-        version: draftWorkstationFactoryDocument.version,
+        ...baseFactoryDefinition,
+        version: currentFactoryDocument.version,
       },
     });
 

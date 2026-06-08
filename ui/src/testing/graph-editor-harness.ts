@@ -14,10 +14,7 @@ import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
 } from "../features/factory-graph-editor/hooks/use-editable-factory-graph-types";
-import {
-  baseFactoryDefinition as draftWorkstationFactoryDefinition,
-  currentFactoryDocument as draftWorkstationFactoryDocument,
-} from "../features/factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
+import { currentFactoryDocument } from "../features/factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../features/factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
   createEmptyFactoryGraphDraft,
@@ -34,8 +31,6 @@ import {
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
 } from "../features/factory-graph-editor/lib/operations/factory-graph-operations";
-
-export { draftWorkstationFactoryDefinition, draftWorkstationFactoryDocument };
 
 export const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -277,7 +272,7 @@ export function createHookTestGraphEditorDraftState(
   const document =
     overrides.latestDocument ??
     overrides.baseDocument ??
-    draftWorkstationFactoryDocument;
+    currentFactoryDocument;
   const draft = overrides.draft ?? createEmptyFactoryGraphDraft();
   const state = createMockGraphEditorDraftState({
     baseDocument: document,
