@@ -352,10 +352,12 @@ export function CurrentActivityGraphViewport({
   const graphViewport =
     useMeasuredCurrentActivityGraphViewport(flowContainerRef);
   const shouldFitView = canonicalLayoutViewport == null;
+  const skipNextViewportMoveEndRef = useRef(false);
   useCanonicalLayoutViewportSync({
     canonicalLayoutViewport,
     fitViewOptions: initialFitViewOptions,
     flowInstanceRef,
+    skipNextViewportMoveEndRef,
     viewportResetKey: initialFitViewKey,
   });
   const handleConnect = useCallback(
@@ -482,9 +484,16 @@ export function CurrentActivityGraphViewport({
                 }
               }}
               onMoveEnd={(_, viewport) => {
-                if (editorMode && updateLayoutViewport) {
-                  updateLayoutViewport(viewport);
+                if (!editorMode || !updateLayoutViewport) {
+                  return;
                 }
+
+                if (skipNextViewportMoveEndRef.current) {
+                  skipNextViewportMoveEndRef.current = false;
+                  return;
+                }
+
+                updateLayoutViewport(viewport);
               }}
               onNodeDragStart={(_, node) => {
                 if (!editorMode) {

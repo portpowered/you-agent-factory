@@ -1,5 +1,10 @@
 import type { FitViewOptions, ReactFlowInstance } from "@xyflow/react";
-import { useEffect, useRef, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useRef,
+  type MutableRefObject,
+  type RefObject,
+} from "react";
 
 import type { FactoryLayoutViewport } from "../../factory-graph-editor/lib/factory-graph-layout-operations";
 
@@ -17,11 +22,13 @@ export function useCanonicalLayoutViewportSync({
   canonicalLayoutViewport,
   fitViewOptions,
   flowInstanceRef,
+  skipNextViewportMoveEndRef,
   viewportResetKey,
 }: {
   canonicalLayoutViewport?: FactoryLayoutViewport | null;
   fitViewOptions: FitViewOptions;
   flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
+  skipNextViewportMoveEndRef?: RefObject<boolean>;
   viewportResetKey: string;
 }) {
   const lastAppliedKeyRef = useRef<string | null>(null);
@@ -38,6 +45,10 @@ export function useCanonicalLayoutViewportSync({
     }
     lastAppliedKeyRef.current = nextKey;
 
+    if (skipNextViewportMoveEndRef) {
+      skipNextViewportMoveEndRef.current = true;
+    }
+
     if (canonicalLayoutViewport) {
       void instance.setViewport(canonicalLayoutViewport, { duration: 0 });
       return;
@@ -48,6 +59,7 @@ export function useCanonicalLayoutViewportSync({
     canonicalLayoutViewport,
     fitViewOptions,
     flowInstanceRef,
+    skipNextViewportMoveEndRef,
     viewportResetKey,
   ]);
 }

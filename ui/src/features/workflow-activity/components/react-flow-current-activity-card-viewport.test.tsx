@@ -21,7 +21,6 @@ vi.mock("@xyflow/react", async () => {
       nodes,
       onEdgeClick,
       onInit,
-      onMoveEnd,
       onNodeClick,
     }: {
       className?: string;
@@ -35,10 +34,6 @@ vi.mock("@xyflow/react", async () => {
         fitView: () => Promise<boolean>;
         setViewport: () => Promise<boolean>;
       }) => void;
-      onMoveEnd?: (
-        _event: unknown,
-        viewport: { x: number; y: number; zoom: number },
-      ) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
     }) => {
       useEffect(() => {
@@ -55,14 +50,6 @@ vi.mock("@xyflow/react", async () => {
         data-fit-view={String(fitView ?? false)}
         data-testid="mock-react-flow"
       >
-        <button
-          onClick={() =>
-            onMoveEnd?.(null, { x: 12, y: 34, zoom: 1.25 })
-          }
-          type="button"
-        >
-          pan-viewport
-        </button>
         {(nodes ?? []).map((node) => (
           <button
             key={node.id}
@@ -366,35 +353,6 @@ describe("CurrentActivityGraphViewport", () => {
     expect(handleEditorEdgeClick).not.toHaveBeenCalled();
   });
 
-  it("projects saved canonical viewport into React Flow and skips fitView", () => {
-    renderViewport({
-      canonicalLayoutViewport: { x: 80, y: 120, zoom: 1.4 },
-    });
-
-    const reactFlow = screen.getByTestId("mock-react-flow");
-    expect(reactFlow.getAttribute("data-fit-view")).toBe("false");
-    expect(reactFlow.getAttribute("data-default-viewport")).toBe(
-      JSON.stringify({ x: 80, y: 120, zoom: 1.4 }),
-    );
-  });
-
-  it("persists viewport panning into canonical layout in editor mode", () => {
-    const updateLayoutViewport = vi.fn();
-
-    renderViewport({
-      editorMode: true,
-      updateLayoutViewport,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "pan-viewport" }));
-
-    expect(updateLayoutViewport).toHaveBeenCalledWith({
-      x: 12,
-      y: 34,
-      zoom: 1.25,
-    });
-  });
-
   it("keeps the current-activity graph shell and React Flow canvas flat", () => {
     renderViewport();
 
@@ -414,26 +372,18 @@ describe("CurrentActivityGraphViewport", () => {
 
 function renderViewport({
   activeTool = null,
-  canonicalLayoutViewport = null,
   edges = [],
   editorMode = false,
   nodes = [],
   onEditorEdgeClick = vi.fn(),
   onEditorNodeClick = vi.fn(),
-  updateLayoutViewport = vi.fn(),
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
-  canonicalLayoutViewport?: { x: number; y: number; zoom: number } | null;
   edges?: Edge[];
   editorMode?: boolean;
   nodes?: Node[];
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
-  updateLayoutViewport?: (viewport: {
-    x: number;
-    y: number;
-    zoom: number;
-  }) => void;
 } = {}) {
   const flowContainerRef = { current: null as HTMLElement | null };
 
@@ -442,7 +392,6 @@ function renderViewport({
       activeTool={activeTool}
       canInteractWithEditor={true}
       canSaveDraft={false}
-      canonicalLayoutViewport={canonicalLayoutViewport}
       editorUnavailableClassifierWorkstationName={undefined}
       editorMode={editorMode}
       edges={edges}
@@ -471,7 +420,6 @@ function renderViewport({
       onToggleHiddenNodeClass={vi.fn()}
       onSelectTool={vi.fn()}
       setStoredNodePosition={vi.fn()}
-      updateLayoutViewport={updateLayoutViewport}
     />,
   );
 }

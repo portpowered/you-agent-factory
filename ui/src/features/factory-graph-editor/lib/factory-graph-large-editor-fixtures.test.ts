@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildLargeFactoryEditorFixture,
   FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS,
   factoryGraphLargeEditorFixtures,
 } from "./factory-graph-large-editor-fixtures";
@@ -22,6 +23,16 @@ describe("factory graph large editor fixtures", () => {
     ).toBeGreaterThanOrEqual(
       FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS.stressThousand,
     );
+  });
+
+  it("builds repeatable fixtures for arbitrary graph-node targets", () => {
+    const fixture = buildLargeFactoryEditorFixture(12, "hundred");
+
+    expect(fixture.fixtureKey).toBe("hundred");
+    expect(fixture.targetGraphNodeCount).toBe(12);
+    expect(fixture.graphNodeCount).toBeGreaterThanOrEqual(12);
+    expect(fixture.layout.nodes?.length).toBeGreaterThan(0);
+    expect(fixture.topology.nodes.length).toBe(fixture.graphNodeCount);
   });
 
   it("includes representative shared layout metadata without mutating topology", () => {

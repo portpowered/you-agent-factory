@@ -6,6 +6,7 @@ import {
   FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY,
   factoryGraphEditorViewPreferencesDirty,
   readFactoryGraphEditorPreferencesForScope,
+  readStoredFactoryGraphEditorPreferences,
   serializeFactoryGraphEditorViewPreferences,
   writeFactoryGraphEditorPreferencesForScope,
 } from "./factory-graph-editor-preferences";
@@ -131,5 +132,40 @@ describe("factoryGraphEditorViewPreferences", () => {
         visibilityPreset: "workflow",
       }),
     ).toBe("resource,work-state|workflow");
+  });
+
+  it("returns an empty record for missing, malformed, or non-object stored payloads", () => {
+    const storage = createMemoryStorage();
+    storage.setItem(FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY, "{not-json");
+    expect(readStoredFactoryGraphEditorPreferences(storage)).toEqual({});
+
+    storage.setItem(
+      FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY,
+      JSON.stringify(["not", "an", "object"]),
+    );
+    expect(readStoredFactoryGraphEditorPreferences(storage)).toEqual({});
+  });
+
+  it("ignores write failures without throwing", () => {
+    const storage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("quota exceeded");
+      },
+      removeItem: () => {
+        throw new Error("quota exceeded");
+      },
+    };
+
+    expect(() =>
+      writeFactoryGraphEditorPreferencesForScope(
+        "session-alpha",
+        {
+          hiddenNodeClasses: new Set(["resource"]),
+          visibilityPreset: "workflow",
+        },
+        storage,
+      ),
+    ).not.toThrow();
   });
 });

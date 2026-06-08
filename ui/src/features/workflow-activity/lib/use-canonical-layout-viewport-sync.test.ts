@@ -24,12 +24,14 @@ describe("useCanonicalLayoutViewportSync", () => {
     const setViewport = vi.fn().mockResolvedValue(undefined);
     const fitView = vi.fn().mockResolvedValue(undefined);
     const flowInstanceRef = { current: { setViewport, fitView } };
+    const skipNextViewportMoveEndRef = { current: false };
 
     renderHook(() =>
       useCanonicalLayoutViewportSync({
         canonicalLayoutViewport: { x: 10, y: 20, zoom: 1.5 },
         fitViewOptions: { padding: 0.2 },
         flowInstanceRef,
+        skipNextViewportMoveEndRef,
         viewportResetKey: "base",
       }),
     );
@@ -39,6 +41,7 @@ describe("useCanonicalLayoutViewportSync", () => {
       { duration: 0 },
     );
     expect(fitView).not.toHaveBeenCalled();
+    expect(skipNextViewportMoveEndRef.current).toBe(true);
   });
 
   it("falls back to fitView when canonical viewport is absent", () => {
@@ -46,18 +49,21 @@ describe("useCanonicalLayoutViewportSync", () => {
     const fitView = vi.fn().mockResolvedValue(undefined);
     const flowInstanceRef = { current: { setViewport, fitView } };
     const fitViewOptions = { padding: 0.2 };
+    const skipNextViewportMoveEndRef = { current: false };
 
     renderHook(() =>
       useCanonicalLayoutViewportSync({
         canonicalLayoutViewport: null,
         fitViewOptions,
         flowInstanceRef,
+        skipNextViewportMoveEndRef,
         viewportResetKey: "base",
       }),
     );
 
     expect(fitView).toHaveBeenCalledWith(fitViewOptions);
     expect(setViewport).not.toHaveBeenCalled();
+    expect(skipNextViewportMoveEndRef.current).toBe(true);
   });
 
   it("skips when flow instance is unavailable", () => {
