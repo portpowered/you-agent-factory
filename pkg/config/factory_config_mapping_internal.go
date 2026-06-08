@@ -26,6 +26,11 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
 	}
 	cfg.InvocationReturn = invocationReturnInternalFromAPI(apiCfg.InvocationReturn)
+	orchestrator, err := orchestratorInternalFromAPI(apiCfg.Orchestrator)
+	if err != nil {
+		return interfaces.FactoryConfig{}, err
+	}
+	cfg.Orchestrator = orchestrator
 	if apiCfg.WorkTypes != nil {
 		cfg.WorkTypes = workTypesInternalFromAPI(*apiCfg.WorkTypes)
 	}

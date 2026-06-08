@@ -425,7 +425,9 @@ func assertFactoryConfigJSONUsesCanonicalPublicKeys(t *testing.T, data []byte) {
 		`"resource-usage"`,
 		`"runtimeStopWords"`,
 		`"stop_words"`,
-		`"kind"`,
+		`"kind":"standard"`,
+		`"kind":"cron"`,
+		`"kind":"repeater"`,
 		`"max_execution_time"`,
 		`"working_directory"`,
 		`"trigger_at_start"`,
@@ -452,7 +454,9 @@ func assertRepresentativeFactoryConfigJSONUsesCanonicalPublicKeys(t *testing.T, 
 		`"work_types"`,
 		`"work_type"`,
 		`"on_failure"`,
-		`"kind"`,
+		`"kind":"standard"`,
+		`"kind":"cron"`,
+		`"kind":"repeater"`,
 		`"stop_token"`,
 		`"prompt_template"`,
 		`"runtime_type"`,
@@ -517,6 +521,11 @@ func assertComparableFactoryContractsMatch(t *testing.T, flattened factoryapi.Fa
 	comparable.FactoryDirectory = nil
 	comparable.SourceDirectory = nil
 	comparable.Metadata = nil
+	if comparable.Orchestrator != nil &&
+		comparable.Orchestrator.Kind == factoryapi.PETRI &&
+		comparable.Orchestrator.Javascript == nil {
+		comparable.Orchestrator = nil
+	}
 	if !reflect.DeepEqual(flattened, comparable) {
 		t.Fatalf("flattened canonical config and generated Factory model diverged\nflattened: %#v\ngenerated: %#v", flattened, comparable)
 	}

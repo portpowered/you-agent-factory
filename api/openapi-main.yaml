@@ -1049,6 +1049,16 @@ components:
       $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    FactoryOrchestrator:
+      $ref: './components/schemas/data-models/FactoryOrchestrator.yaml'
+    FactoryOrchestratorKind:
+      $ref: './components/schemas/data-models/FactoryOrchestratorKind.yaml'
+    FactoryOrchestratorPetriConfig:
+      $ref: './components/schemas/data-models/FactoryOrchestratorPetriConfig.yaml'
+    FactoryOrchestratorJavaScriptConfig:
+      $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptConfig.yaml'
+    FactoryOrchestratorJavaScriptInlineSource:
+      $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptInlineSource.yaml'
     InvocationReturn:
       $ref: './components/schemas/data-models/InvocationReturn.yaml'
     InvocationReturnPolicy:

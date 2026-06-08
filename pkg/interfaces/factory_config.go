@@ -133,6 +133,7 @@ type FactoryConfig struct {
 	Guards           []FactoryGuardConfig            `json:"guards,omitempty"`
 	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
 	InvocationReturn *InvocationReturnConfig         `json:"invocation_return,omitempty"`
+	Orchestrator     *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
 	WorkTypes        []WorkTypeConfig                `json:"work_types"`
 	Resources        []ResourceConfig                `json:"resources"`
 	ResourceManifest *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`

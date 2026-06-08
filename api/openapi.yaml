@@ -3955,6 +3955,9 @@ components:
         metadata:
           $ref: '#/components/schemas/StringMap'
           description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
+        orchestrator:
+          $ref: '#/components/schemas/FactoryOrchestrator'
+          description: Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
         inputTypes:
           type: array
           description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
@@ -3999,6 +4002,81 @@ components:
           description: Processing steps that consume work, invoke workers, and emit the next work states.
           items:
             $ref: '#/components/schemas/Workstation'
+    FactoryOrchestrator:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      description: Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+      properties:
+        kind:
+          $ref: '#/components/schemas/FactoryOrchestratorKind'
+        petri:
+          $ref: '#/components/schemas/FactoryOrchestratorPetriConfig'
+          description: Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored.
+        javascript:
+          $ref: '#/components/schemas/FactoryOrchestratorJavaScriptConfig'
+          description: JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT.
+    FactoryOrchestratorKind:
+      type: string
+      description: Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+      enum:
+        - PETRI
+        - JAVASCRIPT
+      x-enum-descriptions:
+        - Petri-net orchestration backed by work types, workers, and workstations.
+        - JavaScript workflow orchestration backed by authored source identity and policy.
+    FactoryOrchestratorPetriConfig:
+      type: object
+      additionalProperties: false
+      description: Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
+    FactoryOrchestratorJavaScriptConfig:
+      type: object
+      additionalProperties: false
+      description: JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
+      properties:
+        dialect:
+          type: string
+          description: Optional JavaScript dialect label for the authored workflow source.
+        sourceRef:
+          type: string
+          description: Factory-relative or authored reference to the workflow source file.
+        inlineSource:
+          $ref: '#/components/schemas/FactoryOrchestratorJavaScriptInlineSource'
+          description: Inline workflow source when the factory carries source text directly.
+        sourceHash:
+          type: string
+          description: Optional content hash for the resolved workflow source.
+        entrypoint:
+          type: string
+          description: Optional exported entrypoint or phase name used to start the workflow.
+        metadata:
+          $ref: '#/components/schemas/StringMap'
+          description: Free-form JavaScript orchestrator metadata for authoring and diagnostics.
+        argsSchema:
+          type: object
+          additionalProperties: true
+          description: JSON Schema object describing workflow invocation arguments.
+        defaultPolicy:
+          type: object
+          additionalProperties: true
+          description: Default JavaScript workflow policy object applied when no runtime override exists.
+    FactoryOrchestratorJavaScriptInlineSource:
+      type: object
+      additionalProperties: false
+      required:
+        - encoding
+        - inline
+      description: Inline JavaScript workflow source carried directly in the factory definition.
+      properties:
+        encoding:
+          type: string
+          enum:
+            - utf-8
+          description: Declared content encoding for the inline workflow source.
+        inline:
+          type: string
+          description: Inline JavaScript workflow source text.
     InvocationReturn:
       type: object
       additionalProperties: false

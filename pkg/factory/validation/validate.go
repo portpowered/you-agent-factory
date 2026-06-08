@@ -16,6 +16,10 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 	if cfg == nil {
 		return Result{}
 	}
+	result := Result{Targets: OrchestratorTargets(cfg)}
+	if !IsPetriOrchestratorValidationScope(cfg) {
+		return result
+	}
 	var targets []Target
 	targets = append(targets, duplicateIdentifierTargets(cfg)...)
 	targets = append(targets, duplicateWorkStateTargets(cfg)...)
@@ -24,7 +28,8 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 	targets = append(targets, conflictingWorkstationOutputTargets(cfg)...)
 	targets = append(targets, missingOutcomeRouteTargets(cfg)...)
 	targets = append(targets, ManagedRuntimeDependencyTargets(cfg)...)
-	return Result{Targets: targets}
+	result.Targets = append(result.Targets, targets...)
+	return result
 }
 
 // Validate runs structural factory validation for a complete factory definition and
@@ -32,6 +37,9 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 func Validate(cfg *interfaces.FactoryConfig) Result {
 	result := ValidateStructural(cfg)
 	if cfg == nil {
+		return result
+	}
+	if !IsPetriOrchestratorValidationScope(cfg) {
 		return result
 	}
 	result.Targets = append(result.Targets, WorkTypeHandlingBehaviorTargets(cfg, WorkTypeHandlingBehaviorOptions{})...)

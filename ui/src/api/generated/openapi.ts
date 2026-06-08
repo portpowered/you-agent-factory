@@ -1944,6 +1944,8 @@ export interface components {
       version?: components["schemas"]["HybridLogicalTimestamp"];
       /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
       metadata?: components["schemas"]["StringMap"];
+      /** @description Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
+      orchestrator?: components["schemas"]["FactoryOrchestrator"];
       /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
       inputTypes?: components["schemas"]["InputType"][];
       /** @description Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation. */
@@ -1964,6 +1966,54 @@ export interface components {
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
+    };
+    /** @description Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
+    FactoryOrchestrator: {
+      kind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored. */
+      petri?: components["schemas"]["FactoryOrchestratorPetriConfig"];
+      /** @description JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT. */
+      javascript?: components["schemas"]["FactoryOrchestratorJavaScriptConfig"];
+    };
+    /**
+     * @description Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+     * @enum {string}
+     */
+    FactoryOrchestratorKind: FactoryOrchestratorKind;
+    /** @description Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI. */
+    FactoryOrchestratorPetriConfig: Record<string, never>;
+    /** @description JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here. */
+    FactoryOrchestratorJavaScriptConfig: {
+      /** @description Optional JavaScript dialect label for the authored workflow source. */
+      dialect?: string;
+      /** @description Factory-relative or authored reference to the workflow source file. */
+      sourceRef?: string;
+      /** @description Inline workflow source when the factory carries source text directly. */
+      inlineSource?: components["schemas"]["FactoryOrchestratorJavaScriptInlineSource"];
+      /** @description Optional content hash for the resolved workflow source. */
+      sourceHash?: string;
+      /** @description Optional exported entrypoint or phase name used to start the workflow. */
+      entrypoint?: string;
+      /** @description Free-form JavaScript orchestrator metadata for authoring and diagnostics. */
+      metadata?: components["schemas"]["StringMap"];
+      /** @description JSON Schema object describing workflow invocation arguments. */
+      argsSchema?: {
+        [key: string]: unknown;
+      };
+      /** @description Default JavaScript workflow policy object applied when no runtime override exists. */
+      defaultPolicy?: {
+        [key: string]: unknown;
+      };
+    };
+    /** @description Inline JavaScript workflow source carried directly in the factory definition. */
+    FactoryOrchestratorJavaScriptInlineSource: {
+      /**
+       * @description Declared content encoding for the inline workflow source.
+       * @enum {string}
+       */
+      encoding: FactoryOrchestratorJavaScriptInlineSourceEncoding;
+      /** @description Inline JavaScript workflow source text. */
+      inline: string;
     };
     /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
     InvocationReturn: {
@@ -3881,6 +3931,19 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const FactoryOrchestratorKind = {
+  // Petri-net orchestration backed by work types, workers, and workstations.
+  PETRI: "PETRI",
+  // JavaScript workflow orchestration backed by authored source identity and policy.
+  JAVASCRIPT: "JAVASCRIPT",
+} as const;
+export type FactoryOrchestratorKind =
+  (typeof FactoryOrchestratorKind)[keyof typeof FactoryOrchestratorKind];
+export const FactoryOrchestratorJavaScriptInlineSourceEncoding = {
+  utf_8: "utf-8",
+} as const;
+export type FactoryOrchestratorJavaScriptInlineSourceEncoding =
+  (typeof FactoryOrchestratorJavaScriptInlineSourceEncoding)[keyof typeof FactoryOrchestratorJavaScriptInlineSourceEncoding];
 export const InvocationReturnPolicy = {
   // Use the invocation-submitted work item terminal content as the primary result.
   InvocationReturnPolicySubmittedWorkTerminal: "SUBMITTED_WORK_TERMINAL",

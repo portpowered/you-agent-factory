@@ -266,7 +266,7 @@ func FactoryMetadataWarnings(artifactFactory, currentFactory factoryapi.Factory)
 }
 
 func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {
-	return config.FactoryConfigToOpenAPI(cfg)
+	return config.ProjectEffectiveOrchestratorForAPIRead(config.FactoryConfigToOpenAPI(cfg), cfg)
 }
 
 func generatedWorkstationAPIFromConfig(name string, cfg interfaces.FactoryWorkstationConfig) factoryapi.Workstation {

@@ -24,7 +24,7 @@ const (
 
 // Defines values for BundledFileContentEncoding.
 const (
-	Utf8 BundledFileContentEncoding = "utf-8"
+	BundledFileContentEncodingUtf8 BundledFileContentEncoding = "utf-8"
 )
 
 // Defines values for ErrorFamily.
@@ -79,6 +79,17 @@ const (
 	LEFT  FactoryLayoutPreferencesDirection = "LEFT"
 	RIGHT FactoryLayoutPreferencesDirection = "RIGHT"
 	UP    FactoryLayoutPreferencesDirection = "UP"
+)
+
+// Defines values for FactoryOrchestratorJavaScriptInlineSourceEncoding.
+const (
+	FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8 FactoryOrchestratorJavaScriptInlineSourceEncoding = "utf-8"
+)
+
+// Defines values for FactoryOrchestratorKind.
+const (
+	JAVASCRIPT FactoryOrchestratorKind = "JAVASCRIPT"
+	PETRI      FactoryOrchestratorKind = "PETRI"
 )
 
 // Defines values for FactorySaveMode.
@@ -689,6 +700,9 @@ type Factory struct {
 	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
+	// Orchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+	Orchestrator *FactoryOrchestrator `json:"orchestrator,omitempty"`
+
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
 
@@ -922,6 +936,61 @@ type FactoryLayoutViewport struct {
 
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
+
+// FactoryOrchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+type FactoryOrchestrator struct {
+	// Javascript JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
+	Javascript *FactoryOrchestratorJavaScriptConfig `json:"javascript,omitempty"`
+
+	// Kind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	Kind FactoryOrchestratorKind `json:"kind"`
+
+	// Petri Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
+	Petri *FactoryOrchestratorPetriConfig `json:"petri,omitempty"`
+}
+
+// FactoryOrchestratorJavaScriptConfig JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
+type FactoryOrchestratorJavaScriptConfig struct {
+	// ArgsSchema JSON Schema object describing workflow invocation arguments.
+	ArgsSchema *map[string]interface{} `json:"argsSchema,omitempty"`
+
+	// DefaultPolicy Default JavaScript workflow policy object applied when no runtime override exists.
+	DefaultPolicy *map[string]interface{} `json:"defaultPolicy,omitempty"`
+
+	// Dialect Optional JavaScript dialect label for the authored workflow source.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// Entrypoint Optional exported entrypoint or phase name used to start the workflow.
+	Entrypoint *string `json:"entrypoint,omitempty"`
+
+	// InlineSource Inline JavaScript workflow source carried directly in the factory definition.
+	InlineSource *FactoryOrchestratorJavaScriptInlineSource `json:"inlineSource,omitempty"`
+	Metadata     *StringMap                                 `json:"metadata,omitempty"`
+
+	// SourceHash Optional content hash for the resolved workflow source.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// SourceRef Factory-relative or authored reference to the workflow source file.
+	SourceRef *string `json:"sourceRef,omitempty"`
+}
+
+// FactoryOrchestratorJavaScriptInlineSource Inline JavaScript workflow source carried directly in the factory definition.
+type FactoryOrchestratorJavaScriptInlineSource struct {
+	// Encoding Declared content encoding for the inline workflow source.
+	Encoding FactoryOrchestratorJavaScriptInlineSourceEncoding `json:"encoding"`
+
+	// Inline Inline JavaScript workflow source text.
+	Inline string `json:"inline"`
+}
+
+// FactoryOrchestratorJavaScriptInlineSourceEncoding Declared content encoding for the inline workflow source.
+type FactoryOrchestratorJavaScriptInlineSourceEncoding string
+
+// FactoryOrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+type FactoryOrchestratorKind string
+
+// FactoryOrchestratorPetriConfig Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
+type FactoryOrchestratorPetriConfig = map[string]interface{}
 
 // FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
 type FactorySaveMode string

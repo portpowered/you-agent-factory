@@ -1,0 +1,33 @@
+type: object
+additionalProperties: false
+description: >-
+  JavaScript-specific orchestrator configuration. JavaScript factories do not
+  require Petri graph fields and instead declare workflow source identity,
+  metadata, args schema, and default policy here.
+properties:
+  dialect:
+    type: string
+    description: Optional JavaScript dialect label for the authored workflow source.
+  sourceRef:
+    type: string
+    description: Factory-relative or authored reference to the workflow source file.
+  inlineSource:
+    $ref: './FactoryOrchestratorJavaScriptInlineSource.yaml'
+    description: Inline workflow source when the factory carries source text directly.
+  sourceHash:
+    type: string
+    description: Optional content hash for the resolved workflow source.
+  entrypoint:
+    type: string
+    description: Optional exported entrypoint or phase name used to start the workflow.
+  metadata:
+    $ref: '../shared/StringMap.yaml'
+    description: Free-form JavaScript orchestrator metadata for authoring and diagnostics.
+  argsSchema:
+    type: object
+    additionalProperties: true
+    description: JSON Schema object describing workflow invocation arguments.
+  defaultPolicy:
+    type: object
+    additionalProperties: true
+    description: Default JavaScript workflow policy object applied when no runtime override exists.

@@ -117,6 +117,9 @@ func validateGeneratedFactoryBoundary(apiCfg factoryapi.Factory) error {
 // stable for persisted output and downstream tooling.
 func (m *FactoryConfigMapper) Flatten(cfg *interfaces.FactoryConfig) ([]byte, error) {
 	apiCfg := factoryAPIFromInternalConfig(cfg)
+	if isDefaultPetriOrchestratorAPI(apiCfg.Orchestrator) {
+		apiCfg.Orchestrator = nil
+	}
 
 	raw, err := json.Marshal(apiCfg)
 	if err != nil {
@@ -148,6 +151,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		Guards:           factoryGuardsAPIFromInternal(cfg.Guards),
 		InputTypes:       inputTypesAPIFromInternal(cfg.InputTypes),
 		InvocationReturn: invocationReturnAPIFromInternal(cfg.InvocationReturn),
+		Orchestrator:     orchestratorAPIFromInternal(cfg),
 		WorkTypes:        workTypesAPIFromInternal(cfg.WorkTypes),
 		Resources:        resourcesAPIFromInternal(cfg.Resources),
 		SupportingFiles:  resourceManifestAPIFromInternal(cfg.ResourceManifest),
