@@ -34,4 +34,25 @@ describe("DocNodeView", () => {
 
     expect(onSelectDoc).toHaveBeenCalledWith("factory/docs/guide.md");
   });
+
+  it("renders a read-only doc node when selection is unavailable", () => {
+    render(
+      <DocNodeView
+        data={{
+          displayLabel: "guide.md",
+          factoryGraphNodeId: "doc:factory/docs/guide.md",
+          handles: [],
+          kind: "doc",
+          selectedDoc: true,
+          targetPath: "factory/docs/guide.md",
+        }}
+        id="doc:factory/docs/guide.md"
+        type="doc"
+      />,
+    );
+
+    expect(screen.getByText("guide.md")).toBeTruthy();
+    expect(screen.getByText("factory/docs/guide.md")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
 });

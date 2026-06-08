@@ -43,4 +43,64 @@ describe("useDocDetailState", () => {
       targetPath: "factory/docs/playbook.md",
     });
   });
+
+  it("reports loading, error, empty, and saved-document ready states", () => {
+    const useCurrentFactoryDocument = vi.spyOn(
+      currentFactoryDefinitionHooks,
+      "useCurrentFactoryDocument",
+    );
+
+    useCurrentFactoryDocument.mockReturnValue({
+      data: undefined,
+      error: null,
+      status: "pending",
+    } as never);
+    const { result, rerender } = renderHook(() =>
+      useDocDetailState("factory/docs/guide.md"),
+    );
+    expect(result.current).toEqual({ status: "loading" });
+
+    useCurrentFactoryDocument.mockReturnValue({
+      data: undefined,
+      error: new Error("network down"),
+      status: "error",
+    } as never);
+    rerender();
+    expect(result.current).toEqual({
+      status: "error",
+      errorMessage: "network down",
+    });
+
+    useCurrentFactoryDocument.mockReturnValue({
+      data: { name: "Current Factory" },
+      error: null,
+      status: "success",
+    } as never);
+    rerender();
+    expect(result.current).toEqual({ status: "empty" });
+
+    useCurrentFactoryDocument.mockReturnValue({
+      data: {
+        name: "Current Factory",
+        supportingFiles: {
+          bundledFiles: [
+            {
+              content: { encoding: "utf-8", inline: "# Guide\n" },
+              targetPath: "factory/docs/guide.md",
+              type: "DOC",
+            },
+          ],
+        },
+      },
+      error: null,
+      status: "success",
+    } as never);
+    rerender();
+    expect(result.current).toEqual({
+      status: "ready",
+      displayLabel: "guide.md",
+      inlineContent: "# Guide\n",
+      targetPath: "factory/docs/guide.md",
+    });
+  });
 });

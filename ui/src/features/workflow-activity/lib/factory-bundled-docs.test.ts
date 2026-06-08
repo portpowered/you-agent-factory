@@ -4,6 +4,7 @@ import {
   factoryBundledDocDisplayLabel,
   factoryBundledDocExists,
   factoryBundledDocNodeId,
+  isFactoryBundledDocTargetPath,
   listFactoryBundledDocs,
 } from "./factory-bundled-docs";
 
@@ -45,6 +46,14 @@ describe("factory bundled docs", () => {
     ]);
   });
 
+  it("accepts only non-empty paths under factory/docs", () => {
+    expect(isFactoryBundledDocTargetPath("factory/docs/guide.md")).toBe(true);
+    expect(isFactoryBundledDocTargetPath("factory/docs/")).toBe(false);
+    expect(isFactoryBundledDocTargetPath("factory/scripts/setup.py")).toBe(
+      false,
+    );
+  });
+
   it("derives stable node ids and display labels", () => {
     expect(factoryBundledDocNodeId("factory/docs/usage.md")).toBe(
       "doc:factory/docs/usage.md",
@@ -52,6 +61,38 @@ describe("factory bundled docs", () => {
     expect(factoryBundledDocDisplayLabel("factory/docs/usage.md")).toBe(
       "usage.md",
     );
+  });
+
+  it("skips DOC bundled files with invalid or empty target paths", () => {
+    expect(
+      listFactoryBundledDocs({
+        supportingFiles: {
+          bundledFiles: [
+            {
+              content: { encoding: "utf-8", inline: "# Missing path" },
+              targetPath: "   ",
+              type: "DOC",
+            },
+            {
+              content: { encoding: "utf-8", inline: "# Outside docs" },
+              targetPath: "factory/scripts/setup.py",
+              type: "DOC",
+            },
+            {
+              content: { encoding: "utf-8", inline: "# Valid" },
+              targetPath: "factory/docs/valid.md",
+              type: "DOC",
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      {
+        displayLabel: "valid.md",
+        nodeId: "doc:factory/docs/valid.md",
+        targetPath: "factory/docs/valid.md",
+      },
+    ]);
   });
 
   it("checks doc existence against the current factory definition", () => {
