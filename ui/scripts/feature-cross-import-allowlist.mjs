@@ -519,10 +519,21 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
+      "src/features/current-selection/workstation-selection/components/workstation-model-invoke-fields.tsx",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
       "src/features/current-selection/workstation-selection/components/editable/workstation-editable-configuration-section.tsx",
     importSpecifiers: [
       "../../../../current-factory-definition/lib/workstation-guards",
       "../../../../current-factory-definition/lib/workstation-worker-assignment",
+      "../../../../current-factory-definition/lib/workstation/workstation-model-invoke",
+      "../../../../current-factory-definition/lib/workstation/workstation-type",
       "../../../../flowchart/components/graph-semantic-icon",
     ],
     reason:
@@ -602,6 +613,28 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     importSpecifiers: [
       "../../../current-factory-definition/lib/workstation-editable-values",
       "../../../current-factory-definition/lib/workstation-guards",
+      "../../../current-factory-definition/lib/workstation/workstation-model-invoke",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/workstation-selection/editing/model-invoke/editable-workstation-model-invoke-mutators.ts",
+    importSpecifiers: [
+      "../../../../current-factory-definition/lib/workstation-editable-values",
+      "../../../../current-factory-definition/lib/workstation/workstation-model-invoke",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/workstation-selection/editing/type/editable-workstation-type-mutators.ts",
+    importSpecifiers: [
+      "../../../../current-factory-definition/lib/workstation-editable-values",
+      "../../../../current-factory-definition/lib/workstation/workstation-model-invoke",
+      "../../../../current-factory-definition/lib/workstation/workstation-type",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -615,6 +648,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../../current-factory-definition/lib/workstation-editable-values",
       "../../../current-factory-definition/lib/workstation-guards",
       "../../../current-factory-definition/lib/workstation-worker-assignment",
+      "../../../current-factory-definition/lib/workstation/workstation-model-invoke",
+      "../../../current-factory-definition/lib/workstation/workstation-type",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -628,6 +663,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../../current-factory-definition/lib/workstation-editable-values",
       "../../../current-factory-definition/lib/workstation-guards",
       "../../../current-factory-definition/lib/workstation-worker-assignment",
+      "../../../current-factory-definition/lib/workstation/workstation-model-invoke",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -648,10 +684,21 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
+      "src/features/current-selection/workstation-selection/lib/editable-workstation-model-invoke-options.ts",
+    importSpecifiers: [
+      "../../../current-factory-definition/lib/workstation-editable-values",
+      "../../../current-factory-definition/lib/workstation/workstation-model-invoke",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
       "src/features/current-selection/workstation-selection/lib/keys/detail-card-types.ts",
     importSpecifiers: [
       "../../../../current-factory-definition/lib/workstation-behavior",
       "../../../../current-factory-definition/lib/workstation-editable-values",
+      "../../../../current-factory-definition/lib/workstation/workstation-model-invoke",
       "../../../../provider-session-detail/lib/provider-session-ref",
     ],
     reason:
@@ -674,6 +721,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../../../current-factory-definition/lib/workstation-behavior",
       "../../../../current-factory-definition/lib/workstation-editable-values",
       "../../../../current-factory-definition/lib/workstation-worker-assignment",
+      "../../../../current-factory-definition/lib/workstation/workstation-model-invoke",
+      "../../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -812,7 +861,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     importSpecifiers: [
       "../../../current-factory-definition/lib/workstation-behavior",
       "../../../current-factory-definition/lib/workstation-editable-values",
-      "../../../current-factory-definition/lib/workstation-type",
+      "../../../current-factory-definition/lib/workstation/workstation-type",
       "../../../current-factory-definition/lib/workstation-worker-assignment",
       "../../../current-selection/workstation-selection/messages/workstation-detail",
     ],
@@ -854,11 +903,19 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/factory-graph-editor/lib/editor/factory-graph-editor-additions.ts",
     importSpecifiers: [
       "../../../current-factory-definition/lib/editable-workstation-cron-validation",
-      "../../../current-factory-definition/lib/worker-editable-values",
       "../../../current-factory-definition/lib/workstation-behavior",
       "../../../current-factory-definition/lib/workstation-editable-values",
-      "../../../current-factory-definition/lib/workstation-type",
+      "../../../current-factory-definition/lib/workstation/workstation-type",
       "../../../current-factory-definition/lib/workstation-worker-assignment",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/factory-graph-editor/lib/factory-graph-editor-additions.worker.ts",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/worker-editable-values",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",

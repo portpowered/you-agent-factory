@@ -68,6 +68,52 @@ export async function selectLabeledComboboxOption(scope, label, optionName) {
   );
 }
 
+/** Fill the default model-worker operation contract in the add-worker dialog. */
+export async function fillModelWorkerAddOperationDraft(
+  scope,
+  {
+    inputSlotName = "text",
+    operationName = "TTS",
+    outputSlotName = "audio",
+  } = {},
+) {
+  const addOperationButton = scope.getByRole("button", {
+    name: "Add operation",
+  });
+  await addOperationButton.scrollIntoViewIfNeeded();
+  await addOperationButton.click();
+
+  const operationNameField = scope.locator(
+    "#factory-graph-add-model-operation-name-0",
+  );
+  await operationNameField.scrollIntoViewIfNeeded();
+  await operationNameField.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  await operationNameField.fill(operationName);
+
+  const inputSlotNameField = scope.locator(
+    "#factory-graph-add-model-operation-input-slot-name-0",
+  );
+  await inputSlotNameField.scrollIntoViewIfNeeded();
+  await inputSlotNameField.fill(inputSlotName);
+  await scope
+    .locator("#factory-graph-add-model-operation-input-slot-0-content-type-TEXT")
+    .check();
+
+  const outputSlotNameField = scope.locator(
+    "#factory-graph-add-model-operation-output-slot-name-0",
+  );
+  await outputSlotNameField.scrollIntoViewIfNeeded();
+  await outputSlotNameField.fill(outputSlotName);
+  await scope
+    .locator(
+      "#factory-graph-add-model-operation-output-slot-0-content-type-AUDIO",
+    )
+    .check();
+}
+
 const modelProviderOptionLabels = {
   CLAUDE: "Claude",
   CODEX: "Codex",

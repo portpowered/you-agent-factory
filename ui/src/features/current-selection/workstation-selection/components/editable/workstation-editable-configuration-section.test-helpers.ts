@@ -19,6 +19,135 @@ export function expandEditableConfigurationSection() {
   );
 }
 
+function buildEditableConfigurationSectionDraftDefaults(
+  overrides?: Partial<{
+    behavior?: "STANDARD" | "REPEATER" | "POLLER" | "CRON";
+    cron?: {
+      expiryWindow: string;
+      jitter: string;
+      schedule: string;
+      triggerAtStart: boolean;
+    } | null;
+    guards: Array<{
+      type: "VISIT_COUNT";
+      workstation: string;
+      maxVisits: number;
+    }>;
+    name?: string;
+    operation?: string;
+    operationBindings?: Array<{
+      slot: string;
+      configText?: string;
+      defaultContentText?: string;
+      selector: {
+        label: string;
+        role: string;
+        slot: string;
+        type: string;
+      };
+    }>;
+    prompt?: string;
+    runnerName?: string;
+    workerName?: string;
+  }>,
+  workstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE" = "MODEL_WORKSTATION",
+) {
+  const behavior = overrides?.behavior ?? ("STANDARD" as const);
+  const cron =
+    overrides?.cron !== undefined
+      ? overrides.cron
+      : behavior === "CRON"
+        ? {
+            expiryWindow: "30m",
+            jitter: "5s",
+            schedule: "0 9 * * *",
+            triggerAtStart: true,
+          }
+        : null;
+
+  return {
+    behavior,
+    cron,
+    guards: overrides?.guards ?? [],
+    inputs: [],
+    name: overrides?.name ?? "Review",
+    operation: overrides?.operation ?? "TTS",
+    operationBindings: overrides?.operationBindings ?? [
+      {
+        slot: "text",
+        configText: "",
+        defaultContentText: "",
+        selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+      },
+    ],
+    prompt: overrides?.prompt ?? "Review prompt",
+    runnerName: overrides?.runnerName ?? ("gemini" as const),
+    workerName: overrides?.workerName ?? "reviewer",
+    workstationType,
+  };
+}
+
+function buildEditableConfigurationSectionInitialValues(
+  overrides?: Partial<{
+    sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
+  }>,
+  workstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE" = "MODEL_WORKSTATION",
+) {
+  return {
+    behavior: "STANDARD" as const,
+    behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
+    cron: null,
+    effectiveRunnerName: "gemini",
+    factoryRunnerName: "codex",
+    guards: [],
+    inputs: [],
+    modelInvokeWorkerOptions: ["tts-worker"],
+    modelOperationsByWorkerName: {
+      "tts-worker": [
+        {
+          name: "TTS",
+          inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+          outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+        },
+      ],
+    },
+    operation: "TTS",
+    operationBindings: [
+      {
+        slot: "text",
+        configText: "",
+        defaultContentText: "",
+        selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+      },
+    ],
+    prompt: "Review prompt",
+    resolvedRunnerSelection: {
+      runnerId: "gemini",
+      source: "workstation" as const,
+    },
+    runnerName: "gemini",
+    runnerOptions: ["codex", "gemini"],
+    runnerSelectionSource: "workstation" as const,
+    sharedWorkerWorkstationNames: [],
+    sharedWorkerWorkstationNamesByWorkerName:
+      overrides?.sharedWorkerWorkstationNamesByWorkerName ?? {},
+    workerModelProvider: null,
+    workerName: "reviewer",
+    workerOptions: ["reviewer", "planner"],
+    workerTypeByName: {
+      planner: "MODEL_WORKER" as const,
+      reviewer: "MODEL_WORKER" as const,
+    },
+    workstationName: "Review",
+    workstationOptions: ["Plan", "Review"],
+    workstationType,
+    workstationTypeOptions:
+      workstationType === "LOGICAL_MOVE"
+        ? (["LOGICAL_MOVE"] as const)
+        : (["MODEL_WORKSTATION", "MODEL_INVOKE"] as const),
+  };
+}
+
 export function buildEditableConfigurationSectionReadyState(
   overrides?: Partial<{
     draft: {
@@ -35,9 +164,37 @@ export function buildEditableConfigurationSectionReadyState(
         maxVisits: number;
       }>;
       name?: string;
+      operation?: string;
+      operationBindings?: Array<{
+        slot: string;
+        configText?: string;
+        defaultContentText?: string;
+        selector: {
+          label: string;
+          role: string;
+          slot: string;
+          type: string;
+        };
+      }>;
       prompt?: string;
       runnerName?: string;
+      workerName?: string;
     };
+    operationOptionsState:
+      | {
+          operations: Array<{
+            name: string;
+            inputs?: Array<{
+              name: string;
+              contentTypes: string[];
+              required?: boolean;
+            }>;
+            outputs?: Array<{ name: string; contentTypes: string[] }>;
+          }>;
+          options: string[];
+          status: "ready";
+        }
+      | { message: string; status: "empty" | "error" };
     hasValidationErrors: boolean;
     initialValues: Partial<{
       sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
@@ -52,65 +209,21 @@ export function buildEditableConfigurationSectionReadyState(
     overwriteFieldNames: Array<
       "name" | "worker" | "prompt" | "behavior" | "runner"
     >;
-    workstationType: "MODEL_WORKSTATION" | "LOGICAL_MOVE";
+    workstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE";
   }>,
 ): EditableConfigurationSectionReadyState {
-  const behavior = overrides?.draft?.behavior ?? ("STANDARD" as const);
-  const cron =
-    overrides?.draft?.cron !== undefined
-      ? overrides.draft.cron
-      : behavior === "CRON"
-        ? {
-            expiryWindow: "30m",
-            jitter: "5s",
-            schedule: "0 9 * * *",
-            triggerAtStart: true,
-          }
-        : null;
+  const workstationType = overrides?.workstationType ?? "MODEL_WORKSTATION";
 
   return {
-    draft: {
-      behavior,
-      cron,
-      guards: overrides?.draft?.guards ?? [],
-      inputs: [],
-      name: overrides?.draft?.name ?? "Review",
-      prompt: overrides?.draft?.prompt ?? "Review prompt",
-      runnerName: overrides?.draft?.runnerName ?? ("gemini" as const),
-      workerName: "reviewer",
-    },
+    draft: buildEditableConfigurationSectionDraftDefaults(
+      overrides?.draft,
+      workstationType,
+    ),
     hasValidationErrors: overrides?.hasValidationErrors ?? false,
-    initialValues: {
-      behavior: "STANDARD" as const,
-      behaviorOptions: ["STANDARD", "REPEATER", "POLLER"] as const,
-      cron: null,
-      effectiveRunnerName: "gemini",
-      factoryRunnerName: "codex",
-      guards: [],
-      inputs: [],
-      prompt: "Review prompt",
-      resolvedRunnerSelection: {
-        runnerId: "gemini",
-        source: "workstation" as const,
-      },
-      runnerName: "gemini",
-      runnerOptions: ["codex", "gemini"],
-      runnerSelectionSource: "workstation" as const,
-      sharedWorkerWorkstationNames: [],
-      sharedWorkerWorkstationNamesByWorkerName:
-        overrides?.initialValues?.sharedWorkerWorkstationNamesByWorkerName ??
-        {},
-      workerModelProvider: null,
-      workerName: "reviewer",
-      workerOptions: ["reviewer", "planner"],
-      workerTypeByName: {
-        planner: "MODEL_WORKER" as const,
-        reviewer: "MODEL_WORKER" as const,
-      },
-      workstationName: "Review",
-      workstationOptions: ["Plan", "Review"],
-      workstationType: overrides?.workstationType ?? "MODEL_WORKSTATION",
-    },
+    initialValues: buildEditableConfigurationSectionInitialValues(
+      overrides?.initialValues,
+      workstationType,
+    ),
     isDirty: overrides?.isDirty ?? false,
     markChangesSaved: vi.fn(),
     baseVersion: { logical: "1", physical: "2026-06-01T00:00:00Z" },
@@ -122,9 +235,12 @@ export function buildEditableConfigurationSectionReadyState(
     onGuardsChange: vi.fn(),
     onInputsChange: vi.fn(),
     onNameChange: vi.fn(),
+    onOperationBindingsChange: vi.fn(),
+    onOperationChange: vi.fn(),
     onPromptChange: vi.fn(),
     onResetToLatest: vi.fn(),
     onRunnerChange: vi.fn(),
+    onWorkstationTypeChange: vi.fn(),
     onWorkerChange: vi.fn(),
     overwriteFieldNames: overrides?.overwriteFieldNames ?? [],
     pendingFactoryDefinition:
@@ -140,6 +256,17 @@ export function buildEditableConfigurationSectionReadyState(
     },
     status: "ready" as const,
     validationErrors: overrides?.validationErrors ?? {},
+    operationOptionsState: overrides?.operationOptionsState ?? {
+      operations: [
+        {
+          name: "TTS",
+          inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+          outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+        },
+      ],
+      options: ["TTS"],
+      status: "ready" as const,
+    },
     workerOptionsState: overrides?.workerOptionsState ?? {
       options: ["reviewer", "planner"],
       status: "ready" as const,

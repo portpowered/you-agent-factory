@@ -258,6 +258,50 @@ describe("EditableConfigurationSection logical move workstations", () => {
 });
 
 describe("EditableConfigurationSection model workstation fields", () => {
+  it("lets customers switch a model workstation into MODEL_INVOKE editing", async () => {
+    const user = userEvent.setup();
+    const onWorkstationTypeChange = vi.fn();
+
+    render(
+      <EditableConfigurationSection
+        messages={messages}
+        state={{
+          ...buildEditableConfigurationSectionReadyState({
+            draft: {
+              operation: "",
+              operationBindings: [],
+              workerName: "tts-worker",
+            },
+            initialValues: {
+              modelInvokeWorkerOptions: ["tts-worker"],
+              modelOperationsByWorkerName: {
+                "tts-worker": [
+                  {
+                    name: "TTS",
+                    inputs: [
+                      { name: "text", contentTypes: ["TEXT"], required: true },
+                    ],
+                    outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+                  },
+                ],
+              },
+            },
+          }),
+          onWorkstationTypeChange,
+        }}
+      />,
+    );
+
+    expandEditableConfigurationSection();
+
+    await selectLabeledComboboxOption(
+      user,
+      "Workstation type",
+      "Model invoke",
+    );
+    expect(onWorkstationTypeChange).toHaveBeenCalledWith("MODEL_INVOKE");
+  });
+
   it("renders kind, runner, and prompt fields and updates behavior", async () => {
     const user = userEvent.setup();
     const onBehaviorChange = vi.fn();

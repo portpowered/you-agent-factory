@@ -120,7 +120,8 @@ export function addFactoryGraphNode(options: {
     currentFactoryDefinition,
     options.locale,
   );
-  const firstFieldError = Object.values(fieldErrors).find(Boolean);
+  const firstFieldError =
+    resolveFirstFactoryGraphAddFieldErrorMessage(fieldErrors);
 
   if (firstFieldError) {
     return {
@@ -342,4 +343,21 @@ export function applyFactoryGraphPendingEdits(options: {
       ),
     ),
   };
+}
+
+function resolveFirstFactoryGraphAddFieldErrorMessage(
+  fieldErrors: FactoryGraphAddEntityFieldErrors,
+): string | undefined {
+  for (const value of Object.values(fieldErrors)) {
+    if (!value) {
+      continue;
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    if (typeof value.summary === "string" && value.summary.length > 0) {
+      return value.summary;
+    }
+  }
+  return undefined;
 }

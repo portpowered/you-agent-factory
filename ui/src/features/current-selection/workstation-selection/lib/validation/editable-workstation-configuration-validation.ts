@@ -7,6 +7,12 @@ import type {
   EditableWorkstationDraft,
   resolveEditableWorkstationValues,
 } from "../../../../current-factory-definition/lib/workstation-editable-values";
+import {
+  isModelInvokeWorkstationType,
+  resolveModelOperationByName,
+  validateEditableModelInvokeBindings,
+} from "../../../../current-factory-definition/lib/workstation/workstation-model-invoke";
+import { isValidUppercaseModelOperationName } from "../../../../factory-graph-editor/lib/factory-graph-add-model-operation-draft";
 import { workstationRequiresWorkerAssignment } from "../../../../current-factory-definition/lib/workstation-worker-assignment";
 import {
   getWorkstationDetailMessages,
@@ -38,6 +44,12 @@ export function validateEditableWorkstationDraft(
     | "editableConfigurationPromptValidationErrorPrefix"
     | "editableConfigurationPromptFieldHint"
     | "editableConfigurationBehaviorPollerWorkerUnsupported"
+    | "editableConfigurationModelInvokeBindingDuplicate"
+    | "editableConfigurationModelInvokeBindingRequired"
+    | "editableConfigurationModelInvokeBindingsSummary"
+    | "editableConfigurationModelInvokeOperationMissing"
+    | "editableConfigurationModelInvokeOperationRequired"
+    | "editableConfigurationModelInvokeOperationInvalid"
     | "editableConfigurationWorkerRequired"
     | "editableConfigurationWorkerUnavailable"
     | "editableConfigurationVisitCountMaxVisitsInvalid"
@@ -69,22 +81,35 @@ export function validateEditableWorkstationDraft(
   const requiresWorkerAssignment =
     selectedEditableValues == null ||
     workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: draft.workstationType,
     });
+  const isModelInvoke = isModelInvokeWorkstationType(draft.workstationType);
   const promptIsRequired =
     requiresWorkerAssignment &&
+    !isModelInvoke &&
     workstationBehaviorRequiresPrompt(draft.behavior);
+
+  if (isModelInvoke && selectedEditableValues != null) {
+    appendModelInvokeValidationErrors(
+      validationErrors,
+      draft,
+      selectedEditableValues,
+      messages,
+    );
+  }
 
   if (requiresWorkerAssignment) {
     if (draft.workerName.trim().length === 0) {
       validationErrors.workerName =
         messages.editableConfigurationWorkerRequired;
-    } else if (
-      selectedEditableValues &&
-      !selectedEditableValues.workerOptions.includes(draft.workerName)
-    ) {
-      validationErrors.workerName =
-        messages.editableConfigurationWorkerUnavailable;
+    } else if (selectedEditableValues) {
+      const workerOptions = isModelInvoke
+        ? selectedEditableValues.modelInvokeWorkerOptions
+        : selectedEditableValues.workerOptions;
+      if (!workerOptions.includes(draft.workerName)) {
+        validationErrors.workerName =
+          messages.editableConfigurationWorkerUnavailable;
+      }
     }
     if (
       draft.behavior === "POLLER" &&
@@ -151,12 +176,59 @@ export function hasEditableWorkstationValidationErrors(
   );
 }
 
+function appendModelInvokeValidationErrors(
+  validationErrors: EditableWorkstationValidationErrors,
+  draft: EditableWorkstationDraft,
+  selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
+  messages: Pick<
+    WorkstationDetailMessages,
+    | "editableConfigurationModelInvokeBindingDuplicate"
+    | "editableConfigurationModelInvokeBindingRequired"
+    | "editableConfigurationModelInvokeBindingsSummary"
+    | "editableConfigurationModelInvokeOperationInvalid"
+    | "editableConfigurationModelInvokeOperationMissing"
+    | "editableConfigurationModelInvokeOperationRequired"
+  >,
+) {
+  const trimmedOperation = draft.operation.trim();
+  if (trimmedOperation.length === 0) {
+    validationErrors.operation =
+      messages.editableConfigurationModelInvokeOperationRequired;
+    return;
+  }
+
+  if (!isValidUppercaseModelOperationName(trimmedOperation)) {
+    validationErrors.operation =
+      messages.editableConfigurationModelInvokeOperationInvalid;
+    return;
+  }
+
+  const operations =
+    selectedEditableValues?.modelOperationsByWorkerName[draft.workerName] ?? [];
+  const operation = resolveModelOperationByName(operations, trimmedOperation);
+  if (!operation) {
+    validationErrors.operation =
+      messages.editableConfigurationModelInvokeOperationMissing;
+    return;
+  }
+
+  Object.assign(
+    validationErrors,
+    validateEditableModelInvokeBindings(draft.operationBindings, operation, {
+      bindingDuplicate: messages.editableConfigurationModelInvokeBindingDuplicate,
+      bindingRequired: messages.editableConfigurationModelInvokeBindingRequired,
+      bindingSummary: messages.editableConfigurationModelInvokeBindingsSummary,
+    }),
+  );
+}
+
 export function resolveWorkerOptionsState(
   draft: EditableWorkstationDraft,
   selectedEditableValues: ReturnType<typeof resolveEditableWorkstationValues>,
   messages: Pick<
     WorkstationDetailMessages,
     | "editableConfigurationEmpty"
+    | "editableConfigurationModelInvokeWorkerOptionsEmpty"
     | "editableConfigurationWorkerMissing"
     | "editableConfigurationWorkerOptionsEmpty"
   >,
@@ -170,7 +242,7 @@ export function resolveWorkerOptionsState(
 
   if (
     !workstationRequiresWorkerAssignment({
-      type: selectedEditableValues.workstationType,
+      type: draft.workstationType,
     })
   ) {
     return {
@@ -179,14 +251,23 @@ export function resolveWorkerOptionsState(
     };
   }
 
-  if (selectedEditableValues.workerOptions.length === 0) {
+  const workerOptions = isModelInvokeWorkstationType(draft.workstationType)
+    ? selectedEditableValues.modelInvokeWorkerOptions
+    : selectedEditableValues.workerOptions;
+  const workerOptionsEmptyMessage = isModelInvokeWorkstationType(
+    draft.workstationType,
+  )
+    ? messages.editableConfigurationModelInvokeWorkerOptionsEmpty
+    : messages.editableConfigurationWorkerOptionsEmpty;
+
+  if (workerOptions.length === 0) {
     return {
-      message: messages.editableConfigurationWorkerOptionsEmpty,
+      message: workerOptionsEmptyMessage,
       status: "empty",
     };
   }
 
-  if (!selectedEditableValues.workerOptions.includes(draft.workerName)) {
+  if (!workerOptions.includes(draft.workerName)) {
     return {
       message: messages.editableConfigurationWorkerMissing,
       status: "error",
@@ -194,7 +275,7 @@ export function resolveWorkerOptionsState(
   }
 
   return {
-    options: selectedEditableValues.workerOptions,
+    options: workerOptions,
     status: "ready",
   };
 }

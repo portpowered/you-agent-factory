@@ -9,6 +9,14 @@ import {
 import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
+const modelWorkerAddOperations = [
+  {
+    name: "REVIEW",
+    inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+    outputs: [{ name: "result", contentTypes: ["TEXT"] }],
+  },
+] as const;
+
 const sharedWorkType = {
   name: "story",
   states: [
@@ -94,6 +102,7 @@ describe("useEditableFactoryGraph document plane projection", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: document-plane scope scenarios share one fixture setup.
 describe("useEditableFactoryGraph document plane scope isolation", () => {
   beforeEach(() => {
     setupEditableFactoryGraphSaveTestEnvironment();
@@ -135,10 +144,14 @@ describe("useEditableFactoryGraph document plane scope isolation", () => {
 
     act(() => {
       result.current.actions.addNode({
+        argsText: "",
+        command: "",
         kind: "worker",
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        operations: modelWorkerAddOperations,
+        workerType: "MODEL_WORKER",
       });
     });
 
@@ -204,6 +217,7 @@ describe("useEditableFactoryGraph document plane scope isolation", () => {
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        operations: modelWorkerAddOperations,
         workerType: "MODEL_WORKER",
       });
     });
@@ -273,6 +287,7 @@ describe("useEditableFactoryGraph document plane persist", () => {
         model: "gpt-5",
         modelProvider: "CURSOR",
         name: "extra",
+        operations: modelWorkerAddOperations,
         workerType: "MODEL_WORKER",
       });
     });

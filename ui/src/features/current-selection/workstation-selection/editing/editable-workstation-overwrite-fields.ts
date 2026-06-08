@@ -4,6 +4,7 @@ import type {
   EditableWorkstationDraft,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftNamesEqual } from "../../../current-factory-definition/lib/workstation-guards";
+import { editableModelInvokeBindingsEqual } from "../../../current-factory-definition/lib/workstation/workstation-model-invoke";
 import type { EditableWorkstationOverwriteField } from "../lib/keys/detail-card-types";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
@@ -40,6 +41,30 @@ export function resolveEditableWorkstationOverwriteFields(
     draft.workerName !== latestDefinitionDraft.workerName
   ) {
     fields.push("worker");
+  }
+  if (
+    sessionStartDraft.workstationType !== latestDefinitionDraft.workstationType &&
+    draft.workstationType !== latestDefinitionDraft.workstationType
+  ) {
+    fields.push("workstationType");
+  }
+  if (
+    sessionStartDraft.operation !== latestDefinitionDraft.operation &&
+    draft.operation !== latestDefinitionDraft.operation
+  ) {
+    fields.push("operation");
+  }
+  if (
+    !editableModelInvokeBindingsEqual(
+      sessionStartDraft.operationBindings,
+      latestDefinitionDraft.operationBindings,
+    ) &&
+    !editableModelInvokeBindingsEqual(
+      draft.operationBindings,
+      latestDefinitionDraft.operationBindings,
+    )
+  ) {
+    fields.push("operationBindings");
   }
   if (
     sessionStartDraft.runnerName !== latestDefinitionDraft.runnerName &&
@@ -140,10 +165,13 @@ export function formatEditableOverwriteFieldLabels(
     | "cronScheduleFieldLabel"
     | "cronTriggerAtStartFieldLabel"
     | "kindLabel"
+    | "modelInvokeBindingsFieldLabel"
+    | "modelInvokeOperationFieldLabel"
     | "promptFieldLabel"
     | "runnerFieldLabel"
     | "workerFieldLabel"
     | "workstationNameFieldLabel"
+    | "workstationTypeLabel"
   >,
 ) {
   return formatList(
@@ -160,15 +188,20 @@ function fieldLabel(
     | "cronScheduleFieldLabel"
     | "cronTriggerAtStartFieldLabel"
     | "kindLabel"
+    | "modelInvokeBindingsFieldLabel"
+    | "modelInvokeOperationFieldLabel"
     | "promptFieldLabel"
     | "runnerFieldLabel"
     | "workerFieldLabel"
     | "workstationNameFieldLabel"
+    | "workstationTypeLabel"
   >,
 ) {
   switch (field) {
     case "name":
       return messages.workstationNameFieldLabel.toLowerCase();
+    case "workstationType":
+      return messages.workstationTypeLabel.toLowerCase();
     case "behavior":
       return messages.kindLabel.toLowerCase();
     case "prompt":
@@ -177,6 +210,10 @@ function fieldLabel(
       return messages.runnerFieldLabel.toLowerCase();
     case "worker":
       return messages.workerFieldLabel.toLowerCase();
+    case "operation":
+      return messages.modelInvokeOperationFieldLabel.toLowerCase();
+    case "operationBindings":
+      return messages.modelInvokeBindingsFieldLabel.toLowerCase();
     case "cronSchedule":
       return messages.cronScheduleFieldLabel.toLowerCase();
     case "cronTriggerAtStart":
