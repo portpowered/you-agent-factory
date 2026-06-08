@@ -13,6 +13,7 @@ export {
   getRunnerMetadata,
   type RunnerMetadata,
 } from "../editing/runner-metadata";
+export type { ApiRunnerID } from "../messages/runner-openapi-enums";
 export type {
   EditableWorkstationConfigurationState,
   EditableWorkstationOverwriteField,

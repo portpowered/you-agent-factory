@@ -1,8 +1,10 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { components } from "../../../api/generated/openapi";
-import { BUILT_IN_RUNNER_IDS } from "../../current-selection/workstation-selection/public";
-import type { ApiRunnerID } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
+import {
+  BUILT_IN_RUNNER_IDS,
+  type ApiRunnerID,
+} from "../../current-selection/workstation-selection/public";
 import {
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,
