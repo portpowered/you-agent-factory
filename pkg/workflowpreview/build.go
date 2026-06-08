@@ -31,11 +31,6 @@ func BuildPreview(input Request) Preview {
 	return preview
 }
 
-// BuildSessionStartPreview applies the same contract used before session creation.
-func BuildSessionStartPreview(input Request) Preview {
-	return BuildPreview(input)
-}
-
 func validateSource(input Request, resolution workflowsource.Resolution) []SourceValidationIssue {
 	var issues []SourceValidationIssue
 	issues = append(issues, validateOrchestratorConfig(input)...)

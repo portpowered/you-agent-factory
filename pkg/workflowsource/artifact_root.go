@@ -57,6 +57,18 @@ func resolveArtifactRoot(projectRoot, requested string) ArtifactRootDecision {
 		resolved = cleaned
 	}
 
+	if strings.TrimSpace(projectRoot) != "" && pathWithinRoot(projectRoot, resolved) {
+		return ArtifactRootDecision{
+			Requested: requested,
+			Effective: resolved,
+			Allowed:   false,
+			Diagnostic: &Diagnostic{
+				Code:    CodeArtifactRootInsideRepo,
+				Message: fmt.Sprintf("artifact root %q resolves inside the target repository %q", resolved, projectRoot),
+			},
+		}
+	}
+
 	return ArtifactRootDecision{
 		Requested: requested,
 		Effective: resolved,
@@ -65,8 +77,8 @@ func resolveArtifactRoot(projectRoot, requested string) ArtifactRootDecision {
 }
 
 func pathWithinRoot(root, candidate string) bool {
-	root = filepath.Clean(strings.TrimSpace(root))
-	candidate = filepath.Clean(strings.TrimSpace(candidate))
+	root = resolvedComparablePath(root)
+	candidate = resolvedComparablePath(candidate)
 	if root == "" || candidate == "" {
 		return false
 	}
@@ -75,4 +87,24 @@ func pathWithinRoot(root, candidate string) bool {
 		return false
 	}
 	return rel == "." || (!strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel))
+}
+
+func resolvedComparablePath(path string) string {
+	path = filepath.Clean(strings.TrimSpace(path))
+	if path == "" {
+		return ""
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return path
+	}
+	resolvedParent, err := filepath.EvalSymlinks(parent)
+	if err != nil {
+		return path
+	}
+	return filepath.Join(resolvedParent, filepath.Base(path))
 }

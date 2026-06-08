@@ -17,24 +17,6 @@ func parsePolicyDocument(raw json.RawMessage) (map[string]any, error) {
 	return document, nil
 }
 
-func mergePolicy(base EffectivePolicy, overrides map[string]any) (EffectivePolicy, error) {
-	if len(overrides) == 0 {
-		return normalizePolicy(base), nil
-	}
-	encoded, err := json.Marshal(base)
-	if err != nil {
-		return EffectivePolicy{}, err
-	}
-	var merged map[string]any
-	if err := json.Unmarshal(encoded, &merged); err != nil {
-		return EffectivePolicy{}, err
-	}
-	for key, value := range overrides {
-		merged[key] = value
-	}
-	return policyFromMap(merged)
-}
-
 func policyFromMap(document map[string]any) (EffectivePolicy, error) {
 	encoded, err := json.Marshal(document)
 	if err != nil {

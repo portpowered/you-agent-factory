@@ -70,7 +70,7 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 			Visibility: "PUBLIC",
 		}},
 	}
-	eventPayload := workflowresult.BuildSessionResultUpdatedPayload(input)
+	eventPayload := apisurface.BuildWorkflowSessionResultUpdatedPayload(input)
 	events := []factoryapi.FactoryEvent{
 		javascriptRunRequestEvent(t0),
 		javascriptSessionResultUpdatedEvent(1, t0.Add(2*time.Second), eventPayload),

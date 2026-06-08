@@ -180,6 +180,32 @@ func TestResolve_InlineWorkflow_ComputesStableHash(t *testing.T) {
 	}
 }
 
+func TestResolve_ArtifactRoot_RejectsSymlinkThatResolvesInsideRepo(t *testing.T) {
+	projectRoot := t.TempDir()
+	ctx := testContext(t, projectRoot)
+
+	insideRepo := filepath.Join(projectRoot, "artifacts")
+	if err := os.MkdirAll(insideRepo, 0o755); err != nil {
+		t.Fatalf("mkdir inside repo: %v", err)
+	}
+	outsideLink := filepath.Join(filepath.Dir(projectRoot), "outside-artifact-link")
+	if err := os.Symlink(insideRepo, outsideLink); err != nil {
+		t.Fatalf("symlink outside->inside: %v", err)
+	}
+
+	resolution := workflowsource.Resolve(workflowsource.Request{
+		Kind:         workflowsource.KindInlineWorkflow,
+		InlineSource: validWorkflowSource,
+		ArtifactRoot: outsideLink,
+	}, ctx)
+	if resolution.Found || resolution.ArtifactRoot.Allowed {
+		t.Fatalf("symlinked artifact root = %#v, want rejection when resolved path is inside repo", resolution.ArtifactRoot)
+	}
+	if resolution.ArtifactRoot.Diagnostic == nil || resolution.ArtifactRoot.Diagnostic.Code != workflowsource.CodeArtifactRootInsideRepo {
+		t.Fatalf("diagnostic = %#v, want inside-repo rejection", resolution.ArtifactRoot.Diagnostic)
+	}
+}
+
 func TestResolve_ArtifactRoot_RejectsRelativeAndInsideRepoPaths(t *testing.T) {
 	projectRoot := t.TempDir()
 	ctx := testContext(t, projectRoot)

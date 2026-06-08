@@ -3,8 +3,10 @@ package workflow_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	mcpworkflow "github.com/portpowered/infinite-you/pkg/mcp/workflow"
 	"github.com/portpowered/infinite-you/pkg/workflowpreview"
@@ -23,7 +25,7 @@ func TestValidateTool_MatchesAPISurfacePreview(t *testing.T) {
 
 	projectRootPtr := projectRoot
 	sourceValue := "review"
-	result, err := mcpworkflow.ValidateTool(mcpworkflow.ValidateToolInput{
+	result, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
 		SourceKind:  "WORKFLOW_NAME",
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,
@@ -48,13 +50,61 @@ func TestValidateTool_MatchesAPISurfacePreview(t *testing.T) {
 	}
 }
 
+func TestStartTool_MatchesValidateTool(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
+
+	projectRootPtr := projectRoot
+	sourceValue := "review"
+	request := factoryapi.WorkflowPreviewRequest{
+		SourceKind:  "WORKFLOW_NAME",
+		ProjectRoot: &projectRootPtr,
+		SourceValue: &sourceValue,
+	}
+	validateResult, err := mcpworkflow.ValidateTool(request)
+	if err != nil {
+		t.Fatalf("ValidateTool: %v", err)
+	}
+	startResult, err := mcpworkflow.StartTool(request)
+	if err != nil {
+		t.Fatalf("StartTool: %v", err)
+	}
+	if validateResult.Valid != startResult.Valid || deref(validateResult.SourceResolution.SourceHash) != deref(startResult.SourceResolution.SourceHash) {
+		t.Fatalf("start = %#v, validate = %#v", startResult, validateResult)
+	}
+}
+
+func TestMarshalToolError_EncodesStructuredFailure(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
+
+	projectRootPtr := projectRoot
+	sourceValue := "broken"
+	result, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
+		SourceKind:  "WORKFLOW_NAME",
+		ProjectRoot: &projectRootPtr,
+		SourceValue: &sourceValue,
+	})
+	if err != nil {
+		t.Fatalf("ValidateTool: %v", err)
+	}
+	toolErr := mcpworkflow.StructuredErrorFromPreview(result, "validation")
+	encoded, err := mcpworkflow.MarshalToolError(toolErr)
+	if err != nil {
+		t.Fatalf("MarshalToolError: %v", err)
+	}
+	if len(encoded) == 0 || !strings.Contains(string(encoded), toolErr.Code) {
+		t.Fatalf("encoded = %q, want structured tool error JSON", string(encoded))
+	}
+}
+
 func TestStructuredErrorFromPreview_UsesFirstBlockingIssue(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
 
 	projectRootPtr := projectRoot
 	sourceValue := "broken"
-	result, err := mcpworkflow.ValidateTool(mcpworkflow.ValidateToolInput{
+	result, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
 		SourceKind:  "WORKFLOW_NAME",
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,

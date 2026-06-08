@@ -16,11 +16,6 @@ func BuildWorkflowPreview(input workflowpreview.Request) workflowpreview.Preview
 	return workflowpreview.BuildPreview(input)
 }
 
-// BuildWorkflowSessionStartPreview is the shared entry point for session-start preview projection.
-func BuildWorkflowSessionStartPreview(input workflowpreview.Request) workflowpreview.Preview {
-	return workflowpreview.BuildSessionStartPreview(input)
-}
-
 // WorkflowPreviewRequestFromAPI maps one public request into the shared preview contract.
 func WorkflowPreviewRequestFromAPI(req factoryapi.WorkflowPreviewRequest) (workflowpreview.Request, error) {
 	sourceKind, err := workflowSourceKindFromAPI(string(req.SourceKind))

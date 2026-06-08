@@ -24,14 +24,8 @@ func (e ToolError) Error() string {
 	return "workflow tool failed"
 }
 
-// ValidateToolInput is the MCP validation tool request payload.
-type ValidateToolInput = factoryapi.WorkflowPreviewRequest
-
-// StartToolInput is the MCP session-start validation tool request payload.
-type StartToolInput = factoryapi.WorkflowPreviewRequest
-
 // ValidateTool runs the shared workflow validation/preview contract for MCP hosts.
-func ValidateTool(input ValidateToolInput) (factoryapi.WorkflowPreviewResult, error) {
+func ValidateTool(input factoryapi.WorkflowPreviewRequest) (factoryapi.WorkflowPreviewResult, error) {
 	previewInput, err := apisurface.WorkflowPreviewRequestFromAPI(input)
 	if err != nil {
 		return factoryapi.WorkflowPreviewResult{}, err
@@ -40,12 +34,8 @@ func ValidateTool(input ValidateToolInput) (factoryapi.WorkflowPreviewResult, er
 }
 
 // StartTool validates workflow source and policy before session start for MCP hosts.
-func StartTool(input StartToolInput) (factoryapi.WorkflowPreviewResult, error) {
-	previewInput, err := apisurface.WorkflowPreviewRequestFromAPI(input)
-	if err != nil {
-		return factoryapi.WorkflowPreviewResult{}, err
-	}
-	return apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowSessionStartPreview(previewInput)), nil
+func StartTool(input factoryapi.WorkflowPreviewRequest) (factoryapi.WorkflowPreviewResult, error) {
+	return ValidateTool(input)
 }
 
 // StructuredErrorFromPreview maps one invalid preview into an MCP structured tool error.

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	mcpworkflow "github.com/portpowered/infinite-you/pkg/mcp/workflow"
 	"github.com/portpowered/infinite-you/pkg/workflowpreview"
@@ -38,7 +39,7 @@ func TestWorkflowPreviewSurfaces_MatchForValidWorkflow(t *testing.T) {
 
 	projectRootPtr := projectRoot
 	sourceValue := "review"
-	mcpToolResult, err := mcpworkflow.ValidateTool(mcpworkflow.ValidateToolInput{
+	mcpToolResult, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
 		SourceKind:  "WORKFLOW_NAME",
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,

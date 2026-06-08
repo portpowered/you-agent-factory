@@ -1,9 +1,6 @@
 package workflowsource
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 // Resolve applies the shared workflow source lookup contract.
 func Resolve(req Request, ctx Context) Resolution {
@@ -47,8 +44,4 @@ func resolveSource(req Request, ctx Context) (Resolution, bool) {
 	default:
 		return Resolution{}, false
 	}
-}
-
-func stringsTrim(value string) string {
-	return strings.TrimSpace(value)
 }

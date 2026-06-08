@@ -28,6 +28,37 @@ var (
 
 func validatePolicyMap(document map[string]any, deploymentCap int) []Issue {
 	var issues []Issue
+	if value, ok := document["mode"]; ok {
+		mode, ok := value.(string)
+		if !ok || strings.TrimSpace(mode) != ModeReadOnly {
+			issues = append(issues, Issue{
+				Code:    CodeUnsupportedPolicyMode,
+				Message: fmt.Sprintf("policy.mode must be %q for the read-only MVP default", ModeReadOnly),
+				Path:    "policy.mode",
+			})
+		}
+	}
+	for field, capability := range map[string]string{
+		"allowNetwork":          "network access",
+		"allowConnectors":       "connectors",
+		"allowDangerFullAccess": "danger-full-access",
+	} {
+		if value, ok := document[field]; ok {
+			allowed, ok := value.(bool)
+			if ok && allowed {
+				issues = append(issues, validateDeniedFlag(field, capability))
+			}
+		}
+	}
+	if value, ok := document["writableRoots"]; ok {
+		if roots, ok := value.([]any); ok && len(roots) > 0 {
+			issues = append(issues, Issue{
+				Code:    CodeWritableRootsReadOnly,
+				Message: "writableRoots are not allowed when policy.mode is READ_ONLY",
+				Path:    "policy.writableRoots",
+			})
+		}
+	}
 	if value, ok := document["concurrency"]; ok {
 		concurrency, ok := asInt(value)
 		if !ok || concurrency <= 0 {

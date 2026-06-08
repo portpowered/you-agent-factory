@@ -10,6 +10,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -301,7 +302,7 @@ func projectedCheckpointArtifactRef(ref interfaces.JavaScriptCheckpointArtifactR
 }
 
 func projectedJavaScriptBudgets(raw json.RawMessage) *factoryapi.FactorySessionBudgets {
-	resolution := workflowpolicy.ResolveFromFactoryDefault(raw)
+	resolution := apisurface.ResolveWorkflowPolicy(workflowpolicy.Request{FactoryDefault: raw})
 	if resolution.Policy.MaxAgents <= 0 {
 		return nil
 	}

@@ -14,4 +14,5 @@ const (
 	CodeUnsupportedSandboxMode   = "workflow.policy.unsupportedSandboxMode"
 	CodeDeniedCapability         = "workflow.policy.deniedCapability"
 	CodeInvalidPolicyDocument    = "workflow.policy.invalidDocument"
+	CodeUnsupportedPolicyMode    = "workflow.policy.unsupportedMode"
 )

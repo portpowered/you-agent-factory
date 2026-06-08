@@ -8,6 +8,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workflowresult"
 )
@@ -222,7 +223,7 @@ func ProjectSessionResult(
 	if input.ResultArtifact == nil {
 		input.ResultArtifact = finalResultArtifactRef(input.Artifacts)
 	}
-	return workflowresult.BuildLiveSessionResult(input)
+	return apisurface.BuildWorkflowSessionLiveResult(input)
 }
 
 func finalResultArtifactRef(artifacts []interfaces.FactorySessionArtifactState) *factoryapi.FactoryArtifactRef {

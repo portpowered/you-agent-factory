@@ -90,6 +90,36 @@ func TestValidate_RejectsInvalidConcurrencyAndExcessiveMaxAgents(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsUnsupportedPolicyModeOverrides(t *testing.T) {
+	unsafeMode := workflowpolicy.Resolve(workflowpolicy.Request{
+		Requested: map[string]any{
+			"mode":                  "WRITE",
+			"allowNetwork":          true,
+			"allowConnectors":       true,
+			"allowDangerFullAccess": true,
+		},
+	})
+	foundMode := false
+	foundDenied := false
+	for _, issue := range unsafeMode.Issues {
+		switch issue.Code {
+		case workflowpolicy.CodeUnsupportedPolicyMode:
+			foundMode = true
+		case workflowpolicy.CodeDeniedCapability:
+			foundDenied = true
+		}
+	}
+	if !foundMode {
+		t.Fatalf("issues = %#v, want unsupportedMode for non-READ_ONLY policy.mode", unsafeMode.Issues)
+	}
+	if !foundDenied {
+		t.Fatalf("issues = %#v, want denied capability diagnostics for unsafe flags", unsafeMode.Issues)
+	}
+	if unsafeMode.Policy.Mode == workflowpolicy.ModeReadOnly && len(unsafeMode.Issues) == 0 {
+		t.Fatal("unsafe policy overrides should not produce a valid read-only effective policy")
+	}
+}
+
 func TestValidate_RejectsWritableRootsAndUnknownRunnerUnderReadOnly(t *testing.T) {
 	writableRoots := workflowpolicy.Resolve(workflowpolicy.Request{
 		Requested: map[string]any{"writableRoots": []any{"/tmp/out"}},
