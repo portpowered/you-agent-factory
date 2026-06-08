@@ -237,3 +237,25 @@ it("projects active customer runtime state while filtering system-only work", ()
     trace_ids: ["trace-review"],
   });
 });
+
+it("projects session bracket, artifacts, and javascript dispatches into runtime session", () => {
+  const state = buildReplayWorldState();
+  state.sessionBracket = {
+    factory_id: "factory-alpha",
+    result_status: "PARTIAL",
+    session_id: "session-alpha",
+    terminal: false,
+  };
+  state.sessionArtifacts = [{ id: "artifact-1", kind: "CHILD_RESULT" }];
+  state.javascriptRuntime = {
+    checkpoints: [],
+    child_dispatch_counts: { completed: 0, queued: 1, running: 0 },
+    dispatches: [{ id: "dispatch-1", status: "QUEUED" }],
+    phases: ["plan"],
+  };
+
+  const runtime = projectRuntime(state);
+
+  expect(runtime.session.bracket).toEqual(state.sessionBracket);
+  expect(runtime.session.has_data).toBe(true);
+});

@@ -135,6 +135,7 @@ func (r *factoryWorldReducer) upsertJavaScriptDispatch(state interfaces.FactoryS
 	r.recountJavaScriptDispatchTotals()
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity dispatch replay merge keeps JavaScript dispatch field updates together for queue/interrupt/reconcile states.
 func mergeJavaScriptDispatchState(
 	existing interfaces.FactorySessionDispatchState,
 	incoming interfaces.FactorySessionDispatchState,

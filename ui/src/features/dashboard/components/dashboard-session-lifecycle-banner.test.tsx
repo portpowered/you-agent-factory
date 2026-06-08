@@ -59,4 +59,39 @@ describe("DashboardSessionLifecycleBanner", () => {
     expect(screen.getByText("Session failed")).toBeTruthy();
     expect(screen.getByText("workflow execution failed")).toBeTruthy();
   });
+
+  it("shows stale stream and terminal success lifecycle notices", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          result_status: "FINAL",
+          terminal: true,
+        }}
+        phase="execute"
+        streamState={{
+          message: "",
+          status: "offline",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Event stream stale")).toBeTruthy();
+    expect(screen.getByText("Session finished")).toBeTruthy();
+    expect(screen.getByText("execute")).toBeTruthy();
+  });
+
+  it("shows phase-only lifecycle notice when bracket data is absent", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        phase="plan"
+        streamState={{
+          message: "Factory event stream connected.",
+          status: "live",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Current phase").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("plan").length).toBeGreaterThan(0);
+  });
 });

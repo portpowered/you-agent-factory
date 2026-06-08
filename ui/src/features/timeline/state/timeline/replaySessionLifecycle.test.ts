@@ -144,4 +144,158 @@ describe("reconstructWorldState session lifecycle replay", () => {
       }),
     ]);
   });
+
+});
+
+describe("reconstructWorldState dispatch interruption replay", () => {
+  it("reconstructs checkpoint, interrupted dispatch, and skipped phase script status", () => {
+    const events = [
+      {
+        context: {
+          checkpointId: "checkpoint-1",
+          eventTime: "2026-06-09T12:00:01Z",
+          phaseName: "plan",
+          sequence: 1,
+          sessionSequence: 1,
+          tick: 1,
+        },
+        id: "checkpoint",
+        payload: {
+          label: "plan checkpoint",
+          phaseSummary: "planned work",
+        },
+        type: FACTORY_EVENT_TYPES.orchestratorCheckpointWritten,
+      },
+      {
+        context: {
+          eventTime: "2026-06-09T12:00:02Z",
+          phaseId: "phase-skipped",
+          sequence: 2,
+          sessionSequence: 2,
+          tick: 2,
+        },
+        id: "phase-skipped",
+        payload: {
+          phaseStatus: "SKIPPED",
+          previousPhaseId: "phase-plan",
+        },
+        type: FACTORY_EVENT_TYPES.orchestratorPhaseChanged,
+      },
+      {
+        context: {
+          dispatchId: "dispatch-2",
+          eventTime: "2026-06-09T12:00:03Z",
+          phaseId: "phase-skipped",
+          sequence: 3,
+          sessionSequence: 3,
+          tick: 3,
+        },
+        id: "queued-2",
+        payload: {
+          dispatchKind: "JAVASCRIPT_AGENT",
+          label: "child dispatch",
+        },
+        type: FACTORY_EVENT_TYPES.dispatchQueued,
+      },
+      {
+        context: {
+          dispatchId: "dispatch-2",
+          eventTime: "2026-06-09T12:00:04Z",
+          sequence: 4,
+          sessionSequence: 4,
+          tick: 4,
+        },
+        id: "interrupted-2",
+        payload: {
+          observedStatus: "RUNNING",
+        },
+        type: FACTORY_EVENT_TYPES.dispatchInterrupted,
+      },
+      {
+        context: {
+          dispatchId: "dispatch-2",
+          eventTime: "2026-06-09T12:00:05Z",
+          sequence: 5,
+          sessionSequence: 5,
+          tick: 5,
+        },
+        id: "reconciled-2",
+        payload: {
+          reconciledStatus: "COMPLETED",
+          resultArtifactRef: { id: "artifact-result-ref" },
+        },
+        type: FACTORY_EVENT_TYPES.dispatchReconciled,
+      },
+    ];
+
+    const state = reconstructWorldState(events, 5);
+    expect(state.javascriptRuntime?.checkpoints).toEqual([
+      expect.objectContaining({
+        id: "checkpoint-1",
+        label: "plan checkpoint",
+        summary: "planned work",
+      }),
+    ]);
+    expect(state.javascriptRuntime?.script_status).toBe("SKIPPED");
+    expect(state.javascriptRuntime?.child_dispatch_counts).toEqual({
+      completed: 1,
+      queued: 0,
+      running: 0,
+    });
+    expect(state.javascriptRuntime?.dispatches[0]).toMatchObject({
+      artifact_ids: ["artifact-result-ref"],
+      id: "dispatch-2",
+      status: "COMPLETED",
+    });
+  });
+
+});
+
+describe("reconstructWorldState failed session replay", () => {
+  it("reconstructs failed session bracket details and partial result summaries", () => {
+    const events = [
+      {
+        ...lifecycleEvent(FACTORY_EVENT_TYPES.sessionStarted, "started", 1, 1, {
+          factoryId: "factory-alpha",
+          sourceRef: "workflow/main.js",
+          startedAt: "2026-06-09T12:00:00Z",
+        }),
+        context: {
+          eventTime: "2026-06-09T12:00:00Z",
+          orchestratorDialect: "petri-js",
+          orchestratorKind: "JAVASCRIPT",
+          sequence: 1,
+          sessionId: "session-alpha",
+          sessionSequence: 1,
+          tick: 1,
+        },
+      },
+      lifecycleEvent(FACTORY_EVENT_TYPES.sessionResultUpdated, "partial", 2, 2, {
+        artifactIds: ["artifact-partial"],
+        resultStatus: "FAILED_WITH_PARTIAL",
+        resultSummary: [{ text: "partial output", type: "TEXT" }],
+      }),
+      lifecycleEvent(FACTORY_EVENT_TYPES.sessionCompleted, "completed", 3, 3, {
+        artifactIds: ["artifact-partial"],
+        completedAt: "2026-06-09T12:00:05Z",
+        durationMillis: 5000,
+        failureDetail: {
+          message: "child dispatch failed",
+          reason: "DISPATCH_FAILED",
+        },
+        finalStatus: "FINISHED",
+        resultStatus: "FAILED_WITH_PARTIAL",
+      }),
+    ];
+
+    const state = reconstructWorldState(events, 3);
+    expect(state.sessionBracket).toMatchObject({
+      failure_message: "child dispatch failed",
+      failure_reason: "DISPATCH_FAILED",
+      orchestrator_dialect: "petri-js",
+      result_status: "FAILED_WITH_PARTIAL",
+      result_summary: [{ text: "partial output", type: "TEXT" }],
+      terminal: true,
+    });
+  });
 });

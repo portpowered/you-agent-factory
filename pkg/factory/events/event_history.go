@@ -543,6 +543,7 @@ func factoryEvent(eventType factoryapi.FactoryEventType, id string, context fact
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity canonical event payload union stays on one generated-type switch for replay-safe emission.
 func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 	var out factoryapi.FactoryEvent_Payload
 	var err error

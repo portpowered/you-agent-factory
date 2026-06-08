@@ -74,6 +74,7 @@ func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsReprese
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this replay assertion keeps JavaScript dispatch lifecycle counts, metadata, and artifacts visible in one scenario.
 func assertJavaScriptDispatchLifecycleReplay(t *testing.T, worldState interfaces.FactoryWorldState) {
 	t.Helper()
 	if worldState.JavaScriptRuntime == nil {

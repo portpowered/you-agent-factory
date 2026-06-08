@@ -91,6 +91,7 @@ type ArtifactCreatedInput struct {
 }
 
 // RecordDispatchQueued records a canonical dispatch queue marker.
+// pkgmaintcheck:ignore-cyclomatic-complexity dispatch queue emission keeps optional replay metadata on one canonical recorder.
 func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, eventTime time.Time) {
 	if h == nil || strings.TrimSpace(input.SessionID) == "" || strings.TrimSpace(input.DispatchID) == "" || input.DispatchKind == "" {
 		return

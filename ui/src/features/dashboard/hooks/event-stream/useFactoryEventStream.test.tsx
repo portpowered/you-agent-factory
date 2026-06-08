@@ -206,7 +206,7 @@ describe("useFactoryEventStream transport", () => {
   });
 });
 
-describe("useFactoryEventStream side effects", () => {
+describe("useFactoryEventStream query side effects", () => {
   let queryClient = createFactoryEventStreamQueryClient();
 
   beforeEach(() => {
@@ -306,6 +306,20 @@ describe("useFactoryEventStream side effects", () => {
       ).toBe(true);
     });
   });
+});
+
+describe("useFactoryEventStream stream reconnect", () => {
+  let queryClient = createFactoryEventStreamQueryClient();
+
+  beforeEach(() => {
+    replayHarness.install();
+    queryClient = createFactoryEventStreamQueryClient();
+    seedFactoryEventStreamStores();
+  });
+
+  afterEach(() => {
+    resetFactoryEventStreamStores();
+  });
 
   it("surfaces offline stream state when the connection fails before the first event", async () => {
     renderHook(
@@ -333,6 +347,50 @@ describe("useFactoryEventStream side effects", () => {
         message: "Factory event stream disconnected. Showing last event state.",
       });
     });
+  });
+
+  it("reconnects from the last delivered event after a stream error", async () => {
+    renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          locale: "en",
+          onEvent: () => {},
+          sessionID: DEFAULT_FACTORY_SESSION_ID,
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    const stream = replayHarness.getStreams()[0];
+    if (!stream) {
+      throw new Error("expected dashboard stream to be opened");
+    }
+
+    await act(async () => {
+      stream.emit("message", CANONICAL_SELECTED_TICK_EVENTS[0]);
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 20);
+      });
+    });
+
+    act(() => {
+      stream.onerror?.(new Event("error"));
+    });
+
+    expect(useDashboardStreamStore.getState().streamState).toMatchObject({
+      message: "Reconnecting event stream",
+      status: "reconnecting",
+    });
+
+    await waitFor(
+      () => {
+        expect(replayHarness.getStreams()).toHaveLength(2);
+      },
+      { timeout: 3000 },
+    );
+    expect(replayHarness.getStreams()[1]?.url).toContain(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
   });
 });
 

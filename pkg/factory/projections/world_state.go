@@ -90,6 +90,7 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity world-state replay keeps canonical event routing on one reducer switch.
 func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 	r.stateValue.EventTime = event.Context.EventTime
 	switch event.Type {

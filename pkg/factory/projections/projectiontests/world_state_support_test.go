@@ -577,7 +577,6 @@ func factoryStateEvent(tick int, eventTime time.Time, previous string, next stri
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeFactoryStateResponse, "state/"+next, tick, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this event fixture builder keeps the supported replay payload variants on one canonical helper.
 func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, tick int, eventTime time.Time, context factoryapi.FactoryEventContext, payload any) factoryapi.FactoryEvent {
 	context.Tick = tick
 	context.EventTime = eventTime
@@ -591,6 +590,7 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 	return event
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this event fixture builder keeps the supported replay payload variants on one canonical helper.
 func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload any) {
 	switch typed := payload.(type) {
 	case factoryapi.RunRequestEventPayload:
@@ -662,6 +662,7 @@ func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload an
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity session lifecycle fixture payloads stay on one generated-type switch for replay tests.
 func assignGeneratedProjectionSessionLifecyclePayload(event *factoryapi.FactoryEvent, payload any) {
 	switch typed := payload.(type) {
 	case factoryapi.ArtifactCreatedEventPayload:
