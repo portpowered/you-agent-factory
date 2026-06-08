@@ -11,6 +11,7 @@ import { useFactoryGraphEdgeWaypointEditor } from "./factory-graph-edge-waypoint
 const EDGE_ID =
   "workstation-output:workstation:draft->work-state:story:done";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: waypoint editor hook scenarios stay grouped around one hook contract.
 describe("useFactoryGraphEdgeWaypointEditor", () => {
   it("selects edges for waypoint editing and adds waypoints through layout actions", () => {
     const addEdgeWaypoint = vi.fn();
