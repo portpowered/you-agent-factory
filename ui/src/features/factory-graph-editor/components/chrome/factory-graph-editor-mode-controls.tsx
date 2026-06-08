@@ -3,7 +3,7 @@ import { cn } from "../../../../lib/cn";
 import {
   type FactoryGraphEditorDirtyState,
   hasAnyFactoryGraphEditorChanges,
-} from "../../lib/factory-graph-editor-dirty-state";
+} from "../../lib/editor-runtime/factory-graph-editor-dirty-state";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import { FactoryGraphEditorTooltipActionButton } from "./factory-graph-editor-tooltip-button";
 

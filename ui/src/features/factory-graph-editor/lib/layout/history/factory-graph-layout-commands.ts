@@ -4,7 +4,7 @@ import {
   type FactoryLayoutViewport,
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
-} from "./factory-graph-layout-operations";
+} from "../factory-graph-layout-operations";
 
 export type FactoryLayoutNodePositionSnapshot =
   | { kind: "absent" }

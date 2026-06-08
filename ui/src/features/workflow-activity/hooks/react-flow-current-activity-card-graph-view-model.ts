@@ -35,11 +35,11 @@ import {
 import {
   createDefaultFactoryLayout,
   factoryLayoutFromDefinition,
-} from "../../factory-graph-editor/lib/factory-graph-layout-operations";
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   graphNodePositionsFromCanonicalLayout,
   mergeLegacyStoredGraphNodePositions,
-} from "../lib/factory-graph-canonical-layout-positions";
+} from "../lib/layout/factory-graph-canonical-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";

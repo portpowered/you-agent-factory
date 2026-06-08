@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
-import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
+import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
+import { createEmptyFactoryGraphDraft } from "../draft/factory-graph-draft-types";
 import {
   DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES,
   writeFactoryGraphEditorPreferencesForScope,
 } from "./factory-graph-editor-preferences";
-import { applyFactoryGraphPendingEdits } from "./factory-graph-operations";
+import { applyFactoryGraphPendingEdits } from "../operations/factory-graph-operations";
 import {
   factoryDefinitionSavePayloadHasGraphLayoutFields,
   findGraphLayoutPropertyPaths,
-} from "./factory-graph-save-layout-boundary";
-import { moveFactoryLayoutNode } from "./factory-graph-layout-operations";
+} from "../document-save/factory-graph-save-layout-boundary";
+import { moveFactoryLayoutNode } from "../layout/factory-graph-layout-operations";
 
 describe("factory graph editor preference save boundary", () => {
   it("does not export private editor preferences in portable save payloads", () => {

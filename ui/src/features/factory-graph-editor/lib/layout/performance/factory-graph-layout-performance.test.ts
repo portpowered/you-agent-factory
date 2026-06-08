@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vitest";
 
-import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../draft/factory-graph-draft-types";
 import {
   type FactoryGraphLargeEditorFixture,
   factoryGraphLargeEditorFixtures,
-} from "./factory-graph-large-editor-fixtures";
+} from "../../fixtures/factory-graph-large-editor-fixtures";
 import {
   applyPendingFactoryLayout,
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
-} from "./factory-graph-layout-operations";
+} from "../factory-graph-layout-operations";
 import {
   FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS,
   measureMedianOperationMs,
 } from "./factory-graph-layout-performance-budgets";
-import { projectFactoryGraphWithCanonicalLayout } from "./factory-graph-layout-projection";
-import { applyFactoryGraphPendingEdits } from "./factory-graph-operations";
+import { projectFactoryGraphWithCanonicalLayout } from "../factory-graph-layout-projection";
+import { applyFactoryGraphPendingEdits } from "../../operations/factory-graph-operations";
 
 const MULTI_NODE_DRAG_SELECTION_SIZE = 20;
 

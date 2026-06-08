@@ -6,7 +6,7 @@ import {
   type RefObject,
 } from "react";
 
-import type { FactoryLayoutViewport } from "../../factory-graph-editor/lib/factory-graph-layout-operations";
+import type { FactoryLayoutViewport } from "../../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 
 export function canonicalLayoutViewportKey(
   viewport: FactoryLayoutViewport | null | undefined,

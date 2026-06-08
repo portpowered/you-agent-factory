@@ -1,9 +1,9 @@
 import {
   type FactoryLayout,
   resolveProjectedLayoutPositions,
-} from "../../factory-graph-editor/lib/factory-graph-layout-operations";
-import type { GraphLayout } from "../../flowchart/lib/layout";
-import type { GraphNodePositions } from "../state/currentActivityGraphStore";
+} from "../../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import type { GraphLayout } from "../../../flowchart/lib/layout";
+import type { GraphNodePositions } from "../../state/currentActivityGraphStore";
 
 export function graphNodePositionsFromCanonicalLayout(
   graphLayout: GraphLayout,

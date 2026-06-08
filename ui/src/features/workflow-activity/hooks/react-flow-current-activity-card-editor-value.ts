@@ -5,10 +5,10 @@ import type {
   FactoryGraphEditorVisibilityPreset,
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
-import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/factory-graph-layout-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryValidation } from "../../factory-graph-editor/hooks/validation/use-factory-validation";
-import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/factory-graph-editor-dirty-state";
+import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,

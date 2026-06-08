@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { CurrentFactoryDocument } from "../lib/draft/factory-graph-draft-types";
+import type { CurrentFactoryDocument } from "../../lib/draft/factory-graph-draft-types";
 import {
   createMoveFactoryLayoutNodeCommand,
   createMoveFactoryLayoutNodesCommand,
   createResetFactoryLayoutCommand,
   createUpdateFactoryLayoutViewportCommand,
   type FactoryLayoutCommand,
-} from "../lib/factory-graph-layout-commands";
+} from "../../lib/layout/history/factory-graph-layout-commands";
 import {
   canRedoFactoryLayoutHistory,
   canUndoFactoryLayoutHistory,
@@ -17,7 +17,7 @@ import {
   pushFactoryLayoutHistoryCommand,
   redoFactoryLayoutHistory,
   undoFactoryLayoutHistory,
-} from "../lib/factory-graph-layout-history";
+} from "../../lib/layout/history/factory-graph-layout-history";
 import {
   type FactoryLayout,
   type FactoryLayoutPoint,
@@ -28,7 +28,7 @@ import {
   moveFactoryLayoutNode,
   moveFactoryLayoutNodesByDelta,
   updateFactoryLayoutViewport,
-} from "../lib/factory-graph-layout-operations";
+} from "../../lib/layout/factory-graph-layout-operations";
 
 export interface FactoryGraphLayoutDraftDerivedState {
   adoptSavedLayout: (layout: FactoryLayout) => void;

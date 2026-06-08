@@ -14,7 +14,7 @@ import {
   createDefaultFactoryLayout,
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
-} from "./factory-graph-layout-operations";
+} from "../factory-graph-layout-operations";
 
 function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
   expect(command).not.toBeNull();

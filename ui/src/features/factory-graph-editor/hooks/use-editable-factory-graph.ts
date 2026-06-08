@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 
-import { resolveFactoryGraphEditorDirtyState } from "../lib/factory-graph-editor-dirty-state";
-import { resolveProjectedLayoutPositions } from "../lib/factory-graph-layout-operations";
+import { resolveFactoryGraphEditorDirtyState } from "../lib/editor-runtime/factory-graph-editor-dirty-state";
+import { resolveProjectedLayoutPositions } from "../lib/layout/factory-graph-layout-operations";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -20,7 +20,7 @@ import {
   removeFactoryGraphNode,
 } from "../lib/operations/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
-import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
+import { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 import { useEditableFactoryGraphSaveController } from "./use-editable-factory-graph-save-controller";
 import type {
   EditableFactoryGraphViewModel,

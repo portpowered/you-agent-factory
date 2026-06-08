@@ -8,9 +8,9 @@ import {
   type FactoryGraphOperationResult,
 } from "../lib/operations/factory-graph-operations";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import { factoryLayoutFromDefinition } from "../lib/factory-graph-layout-operations";
+import { factoryLayoutFromDefinition } from "../lib/layout/factory-graph-layout-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
-import type { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 
 const FACTORY_GRAPH_SAVE_FALLBACK_ERROR = "Factory graph save failed.";
 

@@ -4,7 +4,7 @@ import {
   factoryLayoutCommandReferencesDeletedNodeIds,
   invertFactoryLayoutCommand,
 } from "./factory-graph-layout-commands";
-import type { FactoryLayout } from "./factory-graph-layout-operations";
+import type { FactoryLayout } from "../factory-graph-layout-operations";
 
 export interface FactoryLayoutHistoryState {
   future: FactoryLayoutCommand[];

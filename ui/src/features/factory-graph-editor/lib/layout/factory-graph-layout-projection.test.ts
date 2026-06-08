@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
-import { buildFactoryGraphTopologyFromDefinition } from "./draft/factory-graph-draft-graph";
+import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
+import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
 import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,

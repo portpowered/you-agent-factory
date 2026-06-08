@@ -14,8 +14,8 @@ import {
   pushFactoryLayoutHistoryCommand,
   redoFactoryLayoutHistory,
   undoFactoryLayoutHistory,
-} from "./factory-graph-layout-history";
-import { createDefaultFactoryLayout } from "./factory-graph-layout-operations";
+} from "../history/factory-graph-layout-history";
+import { createDefaultFactoryLayout } from "../factory-graph-layout-operations";
 
 function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
   expect(command).not.toBeNull();

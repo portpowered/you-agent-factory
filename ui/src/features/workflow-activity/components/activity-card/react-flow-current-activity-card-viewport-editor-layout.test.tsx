@@ -2,8 +2,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { Node } from "@xyflow/react";
 import { useEffect, type ReactNode } from "react";
 
-import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
+import type { CurrentActivityImportController } from "../../hooks/current-activity-import-controller";
+import { CurrentActivityGraphViewport } from "../react-flow-current-activity-card-viewport";
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");

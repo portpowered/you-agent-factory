@@ -8,7 +8,7 @@ import {
   factoryGraphEditorViewPreferencesDirty,
   readFactoryGraphEditorPreferencesForScope,
   writeFactoryGraphEditorPreferencesForScope,
-} from "../../factory-graph-editor/lib/factory-graph-editor-preferences";
+} from "../../factory-graph-editor/lib/preferences/factory-graph-editor-preferences";
 
 export function useHiddenFactoryGraphNodeClasses(
   factoryViewScopeKey?: string | null,

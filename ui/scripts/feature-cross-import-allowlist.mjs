@@ -1173,7 +1173,9 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
       "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
+      "../../factory-graph-editor/messages/editor",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -1229,6 +1231,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-connections",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts",
       "../../factory-graph-editor/messages/editor",
     ],
     reason:
@@ -1348,9 +1352,11 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
       "../../factory-graph-editor/hooks/factory-graph-draft-hook",
+      "../../factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook",
       "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
       "../../factory-graph-editor/hooks/validation/use-factory-validation",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state",
       "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
     ],
@@ -1370,6 +1376,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-layout.ts",
     importSpecifiers: [
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/operations/factory-graph-topology-impact",
       "../../flowchart/lib/layout",
@@ -1381,6 +1388,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.ts",
     importSpecifiers: [
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
       "../../flowchart/lib/layout",
       "../../timeline/state/factoryTimelineStore",
     ],
@@ -1428,7 +1436,9 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/workflow-activity/hooks/use-hidden-factory-graph-node-classes.ts",
     importSpecifiers: [
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/preferences/factory-graph-editor-preferences",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -1446,15 +1456,36 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/workflow-activity/lib/current-activity-factory-graph-layout.ts",
     importSpecifiers: [
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-graph",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-layout",
       "../../factory-graph-editor/lib/operations/factory-graph-customer-display",
+      "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection",
       "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility",
       "../../factory-graph-editor/messages/editor",
       "../../flowchart/lib/layered-layout",
       "../../flowchart/lib/layout",
       "../../flowchart/lib/workstation-icon-metadata",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/lib/layout/factory-graph-canonical-layout-positions.ts",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../../flowchart/lib/layout",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/lib/layout/use-canonical-layout-viewport-sync.ts",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",

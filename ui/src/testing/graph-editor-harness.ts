@@ -26,7 +26,7 @@ import {
 import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,
-} from "../features/factory-graph-editor/lib/factory-graph-layout-operations";
+} from "../features/factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,

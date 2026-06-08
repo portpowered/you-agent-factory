@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 
-import { FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY } from "../../factory-graph-editor/lib/factory-graph-editor-preferences";
+import { FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY } from "../../factory-graph-editor/lib/preferences/factory-graph-editor-preferences";
 import { useHiddenFactoryGraphNodeClasses } from "./use-hidden-factory-graph-node-classes";
 
 describe("useHiddenFactoryGraphNodeClasses", () => {

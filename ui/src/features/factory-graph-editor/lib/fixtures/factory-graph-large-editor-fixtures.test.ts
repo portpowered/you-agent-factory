@@ -4,7 +4,7 @@ import {
   buildLargeFactoryEditorFixture,
   FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS,
   factoryGraphLargeEditorFixtures,
-} from "./factory-graph-large-editor-fixtures";
+} from "../fixtures/factory-graph-large-editor-fixtures";
 
 describe("factory graph large editor fixtures", () => {
   it("covers the required 100, 500, and stress 1000 node graph sizes", () => {

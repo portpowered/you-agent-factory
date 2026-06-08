@@ -32,13 +32,13 @@ import {
   isFactoryGraphEditorRedoKeyboardEvent,
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
-} from "../../factory-graph-editor/lib/factory-graph-layout-keyboard-shortcuts";
+} from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
-import { useCanonicalLayoutViewportSync } from "../lib/use-canonical-layout-viewport-sync";
+import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";
 import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
-import type { FactoryLayoutViewport } from "../../factory-graph-editor/lib/factory-graph-layout-operations";
+import type { FactoryLayoutViewport } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,

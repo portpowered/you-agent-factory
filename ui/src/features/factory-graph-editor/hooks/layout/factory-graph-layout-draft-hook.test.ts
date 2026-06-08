@@ -2,11 +2,11 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
-import { baseFactoryDefinition } from "../lib/factory-graph-draft.test-helpers";
+import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
 import {
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
-} from "../lib/factory-graph-layout-operations";
+} from "../../lib/layout/factory-graph-layout-operations";
 
 describe("useFactoryGraphLayoutDraftState movement history", () => {
   it("records layout commands and supports undo and redo", () => {

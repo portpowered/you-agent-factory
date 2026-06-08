@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
+import { CurrentActivityGraphHeaderActions } from "../react-flow-current-activity-card-editor-chrome";
 
 describe("CurrentActivityGraphHeaderActions", () => {
   it("renders dirty summary text without mode toggle when showModeToggle is false", async () => {

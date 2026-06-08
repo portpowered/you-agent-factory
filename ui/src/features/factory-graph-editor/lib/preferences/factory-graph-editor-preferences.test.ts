@@ -9,7 +9,7 @@ import {
   readStoredFactoryGraphEditorPreferences,
   serializeFactoryGraphEditorViewPreferences,
   writeFactoryGraphEditorPreferencesForScope,
-} from "./factory-graph-editor-preferences";
+} from "../preferences/factory-graph-editor-preferences";
 
 function createMemoryStorage(): Storage {
   const values = new Map<string, string>();

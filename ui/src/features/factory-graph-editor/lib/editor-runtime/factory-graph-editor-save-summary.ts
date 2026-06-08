@@ -5,7 +5,7 @@ import {
   type FactoryGraphSaveSummaryKind,
   resolveFactoryGraphEditorDirtyState,
   resolveFactoryGraphSaveSummaryKind,
-} from "../factory-graph-editor-dirty-state";
+} from "./factory-graph-editor-dirty-state";
 
 export interface FactoryGraphSaveSummary {
   changedEdges: number;

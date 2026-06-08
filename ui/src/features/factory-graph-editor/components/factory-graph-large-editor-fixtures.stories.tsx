@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { expect, within } from "storybook/test";
 
 import "../../../styles.css";
-import { factoryGraphLargeEditorFixtures } from "../lib/factory-graph-large-editor-fixtures";
-import { projectFactoryGraphWithCanonicalLayout } from "../lib/factory-graph-layout-projection";
+import { factoryGraphLargeEditorFixtures } from "../lib/fixtures/factory-graph-large-editor-fixtures";
+import { projectFactoryGraphWithCanonicalLayout } from "../lib/layout/factory-graph-layout-projection";
 import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,

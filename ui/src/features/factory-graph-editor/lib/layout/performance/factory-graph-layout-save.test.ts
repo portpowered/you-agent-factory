@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
-import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
-import { applyFactoryGraphPendingEdits } from "./factory-graph-operations";
-import { factoryDefinitionSavePayloadHasGraphLayoutFields } from "./factory-graph-save-layout-boundary";
+import { baseFactoryDefinition } from "../../draft/factory-graph-draft.test-helpers";
+import { createEmptyFactoryGraphDraft } from "../../draft/factory-graph-draft-types";
+import { applyFactoryGraphPendingEdits } from "../../operations/factory-graph-operations";
+import { factoryDefinitionSavePayloadHasGraphLayoutFields } from "../../document-save/factory-graph-save-layout-boundary";
 import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,
-} from "./factory-graph-layout-operations";
+} from "../factory-graph-layout-operations";
 
 describe("factory graph layout save", () => {
   it("persists layout-only edits without topology draft changes", () => {

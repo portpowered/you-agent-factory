@@ -11,7 +11,7 @@ import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-edi
 import type {
   FactoryGraphEditorDirtyState,
   FactoryGraphSaveSummaryKind,
-} from "../lib/factory-graph-editor-dirty-state";
+} from "../lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/editor-runtime/factory-graph-editor-runtime";
 
 export interface FactoryGraphEditorMessages {

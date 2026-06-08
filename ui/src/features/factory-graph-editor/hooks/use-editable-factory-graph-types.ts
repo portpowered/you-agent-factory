@@ -26,7 +26,7 @@ import type {
   FactoryGraphState,
 } from "../lib/operations/factory-graph-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
-import type { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 
 export interface UseEditableFactoryGraphOptions {
   activeWorkCount?: number;

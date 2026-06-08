@@ -10,7 +10,7 @@ import {
 import {
   type FactoryGraphEditorDirtyState,
   hasAnyFactoryGraphEditorChanges,
-} from "../../factory-graph-editor/lib/factory-graph-editor-dirty-state";
+} from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {

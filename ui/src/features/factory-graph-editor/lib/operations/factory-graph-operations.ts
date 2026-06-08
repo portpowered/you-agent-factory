@@ -38,7 +38,7 @@ import {
   type FactoryLayout,
   factoryLayoutFromDefinition,
   hasFactoryLayoutChanges,
-} from "../factory-graph-layout-operations";
+} from "../layout/factory-graph-layout-operations";
 import { materializeFactoryGraphEntityIdsForSave } from "./factory-graph-public-ids";
 
 export {

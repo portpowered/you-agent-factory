@@ -1,4 +1,4 @@
-import type { FactoryGraphLargeEditorFixtureKey } from "./factory-graph-large-editor-fixtures";
+import type { FactoryGraphLargeEditorFixtureKey } from "../../fixtures/factory-graph-large-editor-fixtures";
 
 /**
  * Canonical layout-editor performance budgets for large factory graph fixtures.

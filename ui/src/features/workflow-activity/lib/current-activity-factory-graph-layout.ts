@@ -19,7 +19,7 @@ import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-edi
 import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
-import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/factory-graph-visibility-preset-projection";
+import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
