@@ -10,10 +10,8 @@ import {
   saveFactoryForSessionDocument,
 } from "../../../api/current-factory-definition";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
-import {
-  currentFactoryDefinitionQueryKey,
-  currentFactoryDocumentQueryKey,
-} from "./useCurrentFactoryDefinition";
+import { syncCurrentFactoryDocumentCache } from "../lib/sync-current-factory-document-cache";
+import { currentFactoryDocumentQueryKey } from "./useCurrentFactoryDefinition";
 
 export type FactoryDocumentSaveInput = {
   baseVersion?: CurrentFactoryVersion;
@@ -34,26 +32,24 @@ export function useFactoryDocumentSave() {
     mutationFn: (input) => {
       const resolvedSessionID = input.sessionID ?? dashboardSessionID;
       const factoryDefinition = structuredClone(input.factory);
+      const resolvedMode = input.mode ?? CURRENT_FACTORY_EDITOR_SAVE_MODE;
+      const cachedDocument = queryClient.getQueryData<CurrentFactoryDocument>(
+        currentFactoryDocumentQueryKey(resolvedSessionID),
+      );
 
       return saveFactoryForSessionDocument(
         {
           baseVersion: input.baseVersion,
+          canonicalFactoryName: cachedDocument?.name,
           factoryDefinition,
-          mode: input.mode ?? CURRENT_FACTORY_EDITOR_SAVE_MODE,
+          mode: resolvedMode,
         },
         { sessionID: resolvedSessionID },
       );
     },
     onSuccess: (document, input) => {
       const resolvedSessionID = input.sessionID ?? dashboardSessionID;
-      queryClient.setQueryData(
-        currentFactoryDocumentQueryKey(resolvedSessionID),
-        document,
-      );
-      queryClient.setQueryData(
-        currentFactoryDefinitionQueryKey(resolvedSessionID),
-        document,
-      );
+      syncCurrentFactoryDocumentCache(queryClient, resolvedSessionID, document);
     },
   });
 

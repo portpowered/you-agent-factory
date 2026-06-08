@@ -3,7 +3,6 @@ import {
   type CanonicalFactoryDefinition,
   type CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
-  getCurrentFactoryDefinition,
   getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
@@ -35,7 +34,7 @@ export function useCurrentFactoryDefinition(isEnabled = true) {
 
   return useQuery<CanonicalFactoryDefinition, CurrentFactoryDefinitionError>({
     queryKey: currentFactoryDefinitionQueryKey(sessionID),
-    queryFn: () => getCurrentFactoryDefinition({ sessionID }),
+    queryFn: () => getCurrentFactoryDocument({ sessionID }),
     enabled: isEnabled,
     gcTime: 0,
     refetchOnWindowFocus: false,

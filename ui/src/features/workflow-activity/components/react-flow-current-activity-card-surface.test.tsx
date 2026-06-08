@@ -2,11 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
 vi.mock(
-  "../../factory-graph-editor/components/factory-graph-editor-controls",
+  "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
   () => ({
     FactoryGraphEditorNotice: ({
       children,
@@ -21,7 +21,10 @@ vi.mock(
       title: string;
       tone: string;
     }) => (
-      <section data-testid={`notice-${tone}`} role={tone === "danger" ? "alert" : "status"}>
+      <section
+        data-testid={`notice-${tone}`}
+        role={tone === "danger" ? "alert" : "status"}
+      >
         <h3>{title}</h3>
         <div>{children}</div>
         {onDismiss && dismissLabel ? (

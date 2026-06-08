@@ -1,7 +1,7 @@
 import { forwardRef, type HTMLAttributes, type ReactNode } from "react";
 import { surfacePanelVariants } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
-import { CurrentSelectionExecutionPill } from "../../base/components/current-selection-pill";
+import { CurrentSelectionExecutionPill } from "../../base/components/presentation/current-selection-pill";
 import { CurrentSelectionSupportingText } from "../../base/public";
 
 export interface CurrentSelectionHistoryCardProps
@@ -21,7 +21,7 @@ export const CurrentSelectionHistoryCard = forwardRef<
       className={surfacePanelVariants({
         className: cn("grid min-w-0 gap-2.5", className),
         radius: "lg",
-        surface: "low",
+        surface: "high",
         tone: highlighted ? "accent" : "default",
       })}
       ref={ref}
@@ -35,6 +35,7 @@ export interface CurrentSelectionHistoryCardHeaderProps
   badges?: ReactNode;
   identifier?: ReactNode;
   subtitle?: ReactNode;
+  trailingContent?: ReactNode;
   title: ReactNode;
   titleClassName?: string;
 }
@@ -43,7 +44,16 @@ export const CurrentSelectionHistoryCardHeader = forwardRef<
   HTMLDivElement,
   CurrentSelectionHistoryCardHeaderProps
 >(function CurrentSelectionHistoryCardHeader(
-  { badges, className, identifier, subtitle, title, titleClassName, ...props },
+  {
+    badges,
+    className,
+    identifier,
+    subtitle,
+    title,
+    titleClassName,
+    trailingContent,
+    ...props
+  },
   ref,
 ) {
   return (
@@ -69,6 +79,9 @@ export const CurrentSelectionHistoryCardHeader = forwardRef<
           </div>
         ) : null}
       </div>
+      {trailingContent ? (
+        <div className="shrink-0 self-start">{trailingContent}</div>
+      ) : null}
       {identifier ? (
         <CurrentSelectionExecutionPill>
           {identifier}

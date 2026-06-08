@@ -9,7 +9,7 @@ import {
   type FactoryGraphNode,
   type FactoryGraphTopology,
   nodeKeyId,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
 
 export interface TraceRelationNodeOverlay {

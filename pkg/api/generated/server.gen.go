@@ -201,6 +201,37 @@ const (
 	InputKindDefault InputKind = "DEFAULT"
 )
 
+// Defines values for InvocationInputSourceKind.
+const (
+	InvocationInputSourceKindAudioStream InvocationInputSourceKind = "audioStream"
+	InvocationInputSourceKindFileRef     InvocationInputSourceKind = "fileRef"
+	InvocationInputSourceKindText        InvocationInputSourceKind = "text"
+)
+
+// Defines values for InvocationResponseErrorCode.
+const (
+	INVOCATIONCANCELED                InvocationResponseErrorCode = "INVOCATION_CANCELED"
+	INVOCATIONPRIMARYRESULTUNRESOLVED InvocationResponseErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
+	INVOCATIONRUNTIMEFAILURE          InvocationResponseErrorCode = "INVOCATION_RUNTIME_FAILURE"
+	INVOCATIONTIMEDOUT                InvocationResponseErrorCode = "INVOCATION_TIMED_OUT"
+	INVOCATIONTTSGENERATIONFAILED     InvocationResponseErrorCode = "INVOCATION_TTS_GENERATION_FAILED"
+	INVOCATIONTTSMODELNOTREADY        InvocationResponseErrorCode = "INVOCATION_TTS_MODEL_NOT_READY"
+)
+
+// Defines values for InvocationReturnPolicy.
+const (
+	InvocationReturnPolicyExplicit              InvocationReturnPolicy = "EXPLICIT"
+	InvocationReturnPolicySubmittedWorkTerminal InvocationReturnPolicy = "SUBMITTED_WORK_TERMINAL"
+)
+
+// Defines values for InvocationTerminalStatus.
+const (
+	InvocationTerminalStatusCanceled  InvocationTerminalStatus = "CANCELED"
+	InvocationTerminalStatusCompleted InvocationTerminalStatus = "COMPLETED"
+	InvocationTerminalStatusFailed    InvocationTerminalStatus = "FAILED"
+	InvocationTerminalStatusTimedOut  InvocationTerminalStatus = "TIMED_OUT"
+)
+
 // Defines values for LoadableProviderSessionKind.
 const (
 	LoadableProviderSessionKindSessionID LoadableProviderSessionKind = "session_id"
@@ -210,6 +241,36 @@ const (
 const (
 	Codex  LoadableProviderSessionProvider = "codex"
 	Cursor LoadableProviderSessionProvider = "cursor"
+)
+
+// Defines values for ManagedRuntimeLifecycleState.
+const (
+	ManagedRuntimeLifecycleStateINSTALLED     ManagedRuntimeLifecycleState = "INSTALLED"
+	ManagedRuntimeLifecycleStateINSTALLING    ManagedRuntimeLifecycleState = "INSTALLING"
+	ManagedRuntimeLifecycleStateLOADED        ManagedRuntimeLifecycleState = "LOADED"
+	ManagedRuntimeLifecycleStateLOADING       ManagedRuntimeLifecycleState = "LOADING"
+	ManagedRuntimeLifecycleStateNOTAPPLICABLE ManagedRuntimeLifecycleState = "NOT_APPLICABLE"
+	ManagedRuntimeLifecycleStateNOTINSTALLED  ManagedRuntimeLifecycleState = "NOT_INSTALLED"
+)
+
+// Defines values for ManagedRuntimePullOutcome.
+const (
+	ManagedRuntimePullOutcomeALREADYPRESENT        ManagedRuntimePullOutcome = "ALREADY_PRESENT"
+	ManagedRuntimePullOutcomeALREADYREADY          ManagedRuntimePullOutcome = "ALREADY_READY"
+	ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY ManagedRuntimePullOutcome = "INSTALLED_SUCCESSFULLY"
+	ManagedRuntimePullOutcomeSOURCEFETCHFAILED     ManagedRuntimePullOutcome = "SOURCE_FETCH_FAILED"
+	ManagedRuntimePullOutcomeSTILLLOADING          ManagedRuntimePullOutcome = "STILL_LOADING"
+	ManagedRuntimePullOutcomeTIMEDOUT              ManagedRuntimePullOutcome = "TIMED_OUT"
+	ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME    ManagedRuntimePullOutcome = "UNSUPPORTED_RUNTIME"
+)
+
+// Defines values for ManagedRuntimeReadinessState.
+const (
+	ManagedRuntimeReadinessStateFAILED      ManagedRuntimeReadinessState = "FAILED"
+	ManagedRuntimeReadinessStateLOADING     ManagedRuntimeReadinessState = "LOADING"
+	ManagedRuntimeReadinessStateMISSING     ManagedRuntimeReadinessState = "MISSING"
+	ManagedRuntimeReadinessStateREADY       ManagedRuntimeReadinessState = "READY"
+	ManagedRuntimeReadinessStateUNSUPPORTED ManagedRuntimeReadinessState = "UNSUPPORTED"
 )
 
 // Defines values for ModelInvocationResponseMode.
@@ -235,8 +296,8 @@ const (
 
 // Defines values for ModelPullOutcome.
 const (
-	ALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
-	PULLED         ModelPullOutcome = "PULLED"
+	ModelPullOutcomeALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
+	ModelPullOutcomePULLED         ModelPullOutcome = "PULLED"
 )
 
 // Defines values for ModelStatus.
@@ -449,7 +510,7 @@ const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
 
-// BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
+// BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
 type BundledFile struct {
 	// Content Inline content payload for a portable bundled file.
 	Content BundledFileContent `json:"content"`
@@ -457,11 +518,11 @@ type BundledFile struct {
 	// TargetPath Canonical factory-relative restoration target for the bundled file. Absolute paths, backslash-separated paths, and paths that require dot-segment normalization are rejected.
 	TargetPath string `json:"targetPath"`
 
-	// Type Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
+	// Type Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
 	Type BundledFileType `json:"type"`
 }
 
-// BundledFileType Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
+// BundledFileType Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
 type BundledFileType string
 
 // BundledFileContent Inline content payload for a portable bundled file.
@@ -469,7 +530,7 @@ type BundledFileContent struct {
 	// Encoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
 	Encoding BundledFileContentEncoding `json:"encoding"`
 
-	// Inline Inline bundled file content carried in the manifest. Files under factory/scripts/, factory/docs/, and supported root helper paths are only bundled when they appear in bundledFiles.
+	// Inline Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles.
 	Inline string `json:"inline"`
 }
 
@@ -614,9 +675,15 @@ type Factory struct {
 	// InputTypes Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 
+	// InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+	InvocationReturn *InvocationReturn `json:"invocationReturn,omitempty"`
+
 	// Layout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
-	Layout   *FactoryLayout `json:"layout,omitempty"`
-	Metadata *StringMap     `json:"metadata,omitempty"`
+	Layout *FactoryLayout `json:"layout,omitempty"`
+
+	// LayoutOutcomes Ephemeral save-response metadata listing layout pruning or validation outcomes. Omitted from persisted factory documents, ignored on save requests, and cleared before split-layout writes.
+	LayoutOutcomes *[]FactoryValidationTarget `json:"layoutOutcomes,omitempty"`
+	Metadata       *StringMap                 `json:"metadata,omitempty"`
 
 	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
@@ -1296,6 +1363,69 @@ type InputType struct {
 // IntegerMap defines model for IntegerMap.
 type IntegerMap map[string]int
 
+// InvocationInputSourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+type InvocationInputSourceKind string
+
+// InvocationRequest defines model for InvocationRequest.
+type InvocationRequest struct {
+	// Content Ordered canonical content parts for one work item.
+	Content WorkContent `json:"content"`
+
+	// RequestId Optional caller-supplied idempotency key for the invocation request.
+	RequestId *string `json:"requestId,omitempty"`
+
+	// SourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
+	SourceKind InvocationInputSourceKind `json:"sourceKind"`
+
+	// TimeoutMillis Optional caller timeout budget in milliseconds for waiting on the primary result.
+	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
+}
+
+// InvocationResponse defines model for InvocationResponse.
+type InvocationResponse struct {
+	// ErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
+	ErrorCode *InvocationResponseErrorCode `json:"errorCode,omitempty"`
+
+	// Message Human-readable failure summary when status is not `COMPLETED`.
+	Message *string `json:"message,omitempty"`
+
+	// PrimaryResult Ordered canonical content parts for one work item.
+	PrimaryResult *WorkContent `json:"primaryResult,omitempty"`
+
+	// RequestId Stable invocation request identifier assigned or accepted by the server.
+	RequestId string `json:"requestId"`
+
+	// Status Terminal status for a factory-session invocation.
+	Status InvocationTerminalStatus `json:"status"`
+
+	// TraceId Trace identifier for the work submitted by this invocation.
+	TraceId string `json:"traceId"`
+}
+
+// InvocationResponseErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.
+type InvocationResponseErrorCode string
+
+// InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+type InvocationReturn struct {
+	// Policy Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+	Policy InvocationReturnPolicy `json:"policy"`
+
+	// TerminalState Authored terminal state name used by EXPLICIT policy selection.
+	TerminalState *string `json:"terminalState,omitempty"`
+
+	// WorkName Optional authored work name filter used by EXPLICIT policy selection.
+	WorkName *string `json:"workName,omitempty"`
+
+	// WorkTypeName Work type name used by EXPLICIT policy selection.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
+}
+
+// InvocationReturnPolicy Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+type InvocationReturnPolicy string
+
+// InvocationTerminalStatus Terminal status for a factory-session invocation.
+type InvocationTerminalStatus string
+
 // ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
 type ListFactorySessionsResponse struct {
 	Sessions []FactorySessionSummary `json:"sessions"`
@@ -1303,7 +1433,7 @@ type ListFactorySessionsResponse struct {
 
 // ListModelsResponse defines model for ListModelsResponse.
 type ListModelsResponse struct {
-	// Results Discovered models exposed by the currently loaded runtime configuration.
+	// Results Managed runtimes exposed by the currently loaded runtime configuration.
 	Results []ModelSummary `json:"results"`
 }
 
@@ -1331,6 +1461,71 @@ type LoadableProviderSessionRef struct {
 	Provider LoadableProviderSessionProvider `json:"provider"`
 }
 
+// ManagedRuntime defines model for ManagedRuntime.
+type ManagedRuntime struct {
+	Diagnostics *StringMap `json:"diagnostics,omitempty"`
+
+	// Identity Stable managed runtime identity shared by discovery, inspect, pull or install, and factory dependency surfaces.
+	Identity string `json:"identity"`
+
+	// LifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
+	LifecycleState ManagedRuntimeLifecycleState `json:"lifecycleState"`
+
+	// Locality Provider locality for a model worker capability declaration.
+	Locality WorkerModelLocality `json:"locality"`
+
+	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
+
+	// SupportedOperations Provider-agnostic operations supported by this managed runtime.
+	SupportedOperations []ModelOperation `json:"supportedOperations"`
+}
+
+// ManagedRuntimeLifecycleState Customer-facing lifecycle position for one managed runtime. Lifecycle state tracks install, cache, and load progression independently from short-lived readiness used by invocation surfaces.
+type ManagedRuntimeLifecycleState string
+
+// ManagedRuntimePullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+type ManagedRuntimePullOutcome string
+
+// ManagedRuntimePullResult defines model for ManagedRuntimePullResult.
+type ManagedRuntimePullResult struct {
+	// CachePath Managed cache directory that now contains the installed runtime assets.
+	CachePath *string `json:"cachePath,omitempty"`
+
+	// DownloadedFiles Files downloaded or verified as already present for the managed cache entry.
+	DownloadedFiles *[]ModelPullDownloadedFile `json:"downloadedFiles,omitempty"`
+
+	// Identity Stable managed runtime identity targeted by the pull or install request.
+	Identity string `json:"identity"`
+
+	// PullOutcome Source-agnostic outcome for one managed runtime pull or install request. Outcomes classify whether the runtime is already ready, newly installed, still preparing, timed out, failed to fetch required assets, or unsupported.
+	PullOutcome ManagedRuntimePullOutcome `json:"pullOutcome"`
+
+	// ReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+	ReadinessState ManagedRuntimeReadinessState `json:"readinessState"`
+
+	// Revision Managed revision identifier for the installed runtime assets.
+	Revision *string `json:"revision,omitempty"`
+
+	// SourceDiagnostics Optional advanced diagnostics for how one managed runtime resolved assets from a configured backend source. Source details are implementation diagnostics and are not required for the primary customer lifecycle contract.
+	SourceDiagnostics *ManagedRuntimeSourceDiagnostics `json:"sourceDiagnostics,omitempty"`
+}
+
+// ManagedRuntimeReadinessState Customer-facing readiness for one managed runtime. Readiness describes whether the runtime can be invoked now or what action is required next, without naming upstream repository or provider-specific cache semantics.
+type ManagedRuntimeReadinessState string
+
+// ManagedRuntimeSourceDiagnostics Optional advanced diagnostics for how one managed runtime resolved assets from a configured backend source. Source details are implementation diagnostics and are not required for the primary customer lifecycle contract.
+type ManagedRuntimeSourceDiagnostics struct {
+	// ResolverNotes Concise resolver note suitable for operator diagnostics.
+	ResolverNotes *string `json:"resolverNotes,omitempty"`
+
+	// SourceId Opaque resolver identifier for the selected backend source instance.
+	SourceId *string `json:"sourceId,omitempty"`
+
+	// SourceKind Resolver-classified backend source kind, such as `UPSTREAM_REPOSITORY` or `MANAGED_MIRROR`, without exposing provider-native repository vocabulary in the primary customer contract.
+	SourceKind *string `json:"sourceKind,omitempty"`
+}
+
 // ModelCapability defines model for ModelCapability.
 type ModelCapability struct {
 	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
@@ -1355,16 +1550,17 @@ type ModelDetail struct {
 	Capabilities []ModelCapability `json:"capabilities"`
 	Diagnostics  StringMap         `json:"diagnostics"`
 
-	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
-	LoadState ModelLoadState `json:"loadState"`
+	// LoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
+	LoadState      ModelLoadState `json:"loadState"`
+	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across all declared operation inputs and outputs.
 	Modalities []ModelOperationContentType `json:"modalities"`
 
-	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier inspect fields.
 	Name string `json:"name"`
 
-	// Operations Union of provider-agnostic operations supported by workers for this model.
+	// Operations Union of provider-agnostic operations supported by workers for this managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier inspect fields.
 	Operations []ModelOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
@@ -1373,7 +1569,7 @@ type ModelDetail struct {
 	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
 	Resources []ModelResourceSummary `json:"resources"`
 
-	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	// Status Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
 	Status ModelStatus `json:"status"`
 }
 
@@ -1422,7 +1618,7 @@ type ModelInvocationResponse struct {
 // ModelInvocationResponseMode Requested direct-invocation response mode.
 type ModelInvocationResponseMode string
 
-// ModelLoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
+// ModelLoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
 type ModelLoadState string
 
 // ModelOperation One provider-agnostic operation exposed by a model worker, such as `TTS`.
@@ -1467,27 +1663,28 @@ type ModelPullDownloadedFile struct {
 	Sha256 *string `json:"sha256,omitempty"`
 }
 
-// ModelPullOutcome Outcome of a managed local-model asset pull request.
+// ModelPullOutcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
 type ModelPullOutcome string
 
 // ModelPullResponse defines model for ModelPullResponse.
 type ModelPullResponse struct {
-	// CachePath Final managed cache directory that now contains the pulled model assets.
+	// CachePath Final managed cache directory that now contains the installed runtime assets. Mirrors `managedRuntimePull.cachePath`.
 	CachePath string `json:"cachePath"`
 
 	// DownloadedFiles Files that were downloaded or verified as already present for the managed cache entry.
-	DownloadedFiles []ModelPullDownloadedFile `json:"downloadedFiles"`
+	DownloadedFiles    []ModelPullDownloadedFile `json:"downloadedFiles"`
+	ManagedRuntimePull ManagedRuntimePullResult  `json:"managedRuntimePull"`
 
-	// ModelName Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	// ModelName Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntimePull.identity` for compatibility with earlier pull fields.
 	ModelName string `json:"modelName"`
 
-	// Outcome Outcome of a managed local-model asset pull request.
+	// Outcome Compatibility pull outcome projection for one managed runtime. Prefer `managedRuntimePull.pullOutcome` for the canonical managed-runtime vocabulary. `PULLED` maps to managed pull outcome `INSTALLED_SUCCESSFULLY`; `ALREADY_PRESENT` maps to managed pull outcome `ALREADY_PRESENT`.
 	Outcome ModelPullOutcome `json:"outcome"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
 	ProviderLocality WorkerModelLocality `json:"providerLocality"`
 
-	// Revision Pulled source revision identifier, such as an upstream repository commit SHA.
+	// Revision Managed revision identifier for the installed runtime assets. Mirrors `managedRuntimePull.revision`.
 	Revision string `json:"revision"`
 }
 
@@ -1608,21 +1805,22 @@ type ModelResponseEventPayload struct {
 	Worker string `json:"worker"`
 }
 
-// ModelStatus Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+// ModelStatus Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
 type ModelStatus string
 
 // ModelSummary defines model for ModelSummary.
 type ModelSummary struct {
-	// LoadState Runtime-visible load state for one discovered model. Before local model-manager support lands, local discovered models report `UNLOADED` and cloud-backed models report `NOT_APPLICABLE`.
-	LoadState ModelLoadState `json:"loadState"`
+	// LoadState Compatibility lifecycle projection for one managed runtime. Prefer `managedRuntime.lifecycleState` for the canonical managed-runtime vocabulary. `UNLOADED` maps to managed lifecycle `NOT_INSTALLED` or `LOADED` depending on cache and load state; `NOT_APPLICABLE` maps to managed lifecycle `NOT_APPLICABLE` for cloud-backed runtimes.
+	LoadState      ModelLoadState `json:"loadState"`
+	ManagedRuntime ManagedRuntime `json:"managedRuntime"`
 
 	// Modalities Uppercase content modalities observed across the model's declared operation inputs and outputs.
 	Modalities []ModelOperationContentType `json:"modalities"`
 
-	// Name Concrete public model identifier such as `OMNIVOICE_Q4_K_M`.
+	// Name Stable managed runtime identity such as `OMNIVOICE_Q4_K_M`. Mirrors `managedRuntime.identity` for compatibility with earlier discovery fields.
 	Name string `json:"name"`
 
-	// Operations Provider-agnostic operations supported by the discovered model.
+	// Operations Provider-agnostic operations supported by the managed runtime. Mirrors `managedRuntime.supportedOperations` for compatibility with earlier discovery fields.
 	Operations []ModelOperation `json:"operations"`
 
 	// ProviderLocality Provider locality for a model worker capability declaration.
@@ -1631,7 +1829,7 @@ type ModelSummary struct {
 	// Resources Factory resource summaries associated with this model's workers or explicit model metadata.
 	Resources []ModelResourceSummary `json:"resources"`
 
-	// Status Readiness status derived from the currently loaded runtime configuration and declared resources for one discovered model.
+	// Status Compatibility readiness projection for one managed runtime. Prefer `managedRuntime.readinessState` for the canonical managed-runtime vocabulary. `READY` maps to managed readiness `READY`; `UNAVAILABLE` maps to managed readiness `MISSING` for local runtimes that still require install or setup.
 	Status ModelStatus `json:"status"`
 }
 
@@ -2049,7 +2247,7 @@ type ResolvedModelOperationBindingSource string
 
 // Resource Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
 type Resource struct {
-	// Backend Backend identifier for local model resources, such as a managed runtime or embedded inference backend.
+	// Backend Managed runtime backend identifier for `MODEL` resources, such as `LLAMACPP`. Backend selection stays provider-agnostic in customer-facing factory config.
 	Backend *string `json:"backend,omitempty"`
 
 	// Capacity Total units of this resource available to the factory at one time.
@@ -2058,10 +2256,10 @@ type Resource struct {
 	// Id Optional durable public identifier for this resource. When present, graph and layout references should use this id instead of the mutable name.
 	Id *string `json:"id,omitempty"`
 
-	// LoadPolicy Load policy for local model resources, such as `ON_DEMAND` or `EAGER`.
+	// LoadPolicy Managed runtime load policy for `MODEL` resources, such as `ON_DEMAND` or `EAGER`.
 	LoadPolicy *string `json:"loadPolicy,omitempty"`
 
-	// Model Concrete model identifier associated with this resource, such as `OMNIVOICE_Q4_K_M`.
+	// Model Stable managed runtime identity for `MODEL` resources, such as `OMNIVOICE_Q4_K_M`. Packaged and authored factories declare the same managed-runtime dependency through this field plus matching `MODEL_WORKER.model` values.
 	Model *string `json:"model,omitempty"`
 
 	// Name Resource name referenced from worker requirements and workstation resourceUsage entries.
@@ -2076,7 +2274,7 @@ type Resource struct {
 
 // ResourceManifest Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
 type ResourceManifest struct {
-	// BundledFiles Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.
+	// BundledFiles Portable bundled files that belong inside the factory boundary. Entries are explicit only, use factory-relative target paths, and must stay under the canonical script, docs, or inputs roots for SCRIPT, DOC, or INPUT entries, or match the supported root-helper allowlist for ROOT_HELPER entries. Export, share, flatten, and materialize flows auto-discover SCRIPT and DOC files under the documented factory subtrees, but ROOT_HELPER entries such as Makefile are opt-in manifest entries that travel only when explicitly declared here. In v1 shared-factory flows, INPUT entries capture the source factory's current starter work at share time and are restored as independent recipient copies.
 	BundledFiles *[]BundledFile `json:"bundledFiles,omitempty"`
 
 	// RequiredTools Declarative external tools that must already resolve on PATH. These entries are validated but not embedded or installed.
@@ -3134,6 +3332,9 @@ type SaveCurrentFactoryBySessionIdJSONRequestBody = SaveFactoryForSessionRequest
 // ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody defines body for ValidateCurrentFactoryWorkstationPromptTemplateBySessionId for application/json ContentType.
 type ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody = PromptTemplateValidationRequest
 
+// InvokeFactorySessionBySessionIdJSONRequestBody defines body for InvokeFactorySessionBySessionId for application/json ContentType.
+type InvokeFactorySessionBySessionIdJSONRequestBody = InvocationRequest
+
 // SubmitWorkBySessionIdJSONRequestBody defines body for SubmitWorkBySessionId for application/json ContentType.
 type SubmitWorkBySessionIdJSONRequestBody = SubmitWorkRequest
 
@@ -3887,6 +4088,9 @@ type ServerInterface interface {
 	// Validate workstation prompt template
 	// (POST /factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation)
 	ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, workstationName string)
+	// Invoke one factory session and return its primary result
+	// (POST /factory-sessions/{session_id}/invocations)
+	InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -3911,16 +4115,16 @@ type ServerInterface interface {
 	// Validate factory definition
 	// (POST /factory-validations)
 	ValidateFactory(w http.ResponseWriter, r *http.Request)
-	// List discovered models
+	// List managed runtimes
 	// (GET /models)
 	ListModels(w http.ResponseWriter, r *http.Request)
-	// Get one discovered model
+	// Inspect one managed runtime
 	// (GET /models/{model_name})
 	GetModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Invoke one discovered model directly
 	// (POST /models/{model_name}/invocations)
 	InvokeModel(w http.ResponseWriter, r *http.Request, modelName string)
-	// Pull local model assets into the managed cache
+	// Pull or install one managed runtime
 	// (POST /models/{model_name}/pull)
 	PullModel(w http.ResponseWriter, r *http.Request, modelName string)
 	// Get provider session details
@@ -4141,6 +4345,31 @@ func (siw *ServerInterfaceWrapper) ValidateCurrentFactoryWorkstationPromptTempla
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w, r, sessionId, workstationName)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// InvokeFactorySessionBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.InvokeFactorySessionBySessionId(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4730,6 +4959,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-contract", wrapper.GetCurrentFactoryWorkstationPromptTemplateContractBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/invocations", wrapper.InvokeFactorySessionBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
 

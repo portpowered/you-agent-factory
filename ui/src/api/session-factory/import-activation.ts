@@ -2,7 +2,7 @@ import {
   CurrentFactoryDefinitionError,
   type CurrentFactoryDocument,
   getCurrentFactoryDocument,
-  saveCurrentFactoryDocument,
+  IMPORT_CREATE_NAMED_SAVE_MODE,
   saveFactoryForSessionDocument,
 } from "../current-factory-definition";
 import { listFactorySessions, openFactorySession } from "../factory-sessions";
@@ -122,15 +122,16 @@ async function activateImportedFactoryReplaceCurrentForSession(
     throw toSessionFactoryAPIErrorFromCurrentFactoryDefinition(error);
   }
 
+  const { version: _version, ...importedWithoutVersion } = importedFactory;
+
   let savedDocument: CurrentFactoryDocument;
   try {
-    savedDocument = await saveCurrentFactoryDocument(
+    savedDocument = await saveFactoryForSessionDocument(
       {
         baseVersion: currentDocument.version,
-        factoryDefinition: toImportedFactoryDefinition(
-          importedFactory,
-          currentDocument.name,
-        ),
+        canonicalFactoryName: currentDocument.name,
+        factoryDefinition: importedWithoutVersion,
+        mode: "REPLACE_CURRENT",
       },
       {
         fetch: options.fetch,
@@ -180,12 +181,10 @@ async function activateImportedFactoryCreateNamedForSession(
     savedDocument = await saveFactoryForSessionDocument(
       {
         baseVersion: includeVersion ? currentDocument.version : undefined,
-        factoryDefinition: {
-          ...importedWithoutVersion,
-          name: createFactoryName,
-        },
+        canonicalFactoryName: createFactoryName,
+        factoryDefinition: importedWithoutVersion,
         includeVersion,
-        mode: "UPSERT_NAMED_AND_ACTIVATE",
+        mode: IMPORT_CREATE_NAMED_SAVE_MODE,
       },
       {
         fetch: options.fetch,
@@ -202,17 +201,6 @@ async function activateImportedFactoryCreateNamedForSession(
 function normalizeSessionID(sessionID: string | null | undefined): string {
   const trimmed = sessionID?.trim();
   return trimmed ? trimmed : "~default";
-}
-
-function toImportedFactoryDefinition(
-  importedFactory: ImportFactoryValue,
-  sessionFactoryName: string,
-): ImportFactoryValue {
-  const { version: _version, ...importedWithoutVersion } = importedFactory;
-  return {
-    ...importedWithoutVersion,
-    name: sessionFactoryName,
-  };
 }
 
 function shouldIncludeVersionForImportCreateNamed(

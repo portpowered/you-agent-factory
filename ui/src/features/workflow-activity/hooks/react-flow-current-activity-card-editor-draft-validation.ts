@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { useFactoryValidation } from "../../factory-graph-editor/hooks/use-factory-validation";
-import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
+import { useFactoryValidation } from "../../factory-graph-editor/hooks/validation/use-factory-validation";
+import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-apply";
 
 export function useDraftAppliedFactoryValidation(
   draftState: EditableFactoryGraphViewModel["draftState"],

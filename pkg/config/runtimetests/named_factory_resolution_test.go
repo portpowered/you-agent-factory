@@ -144,6 +144,47 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInIntoGlobalRoot(t *tes
 	}
 }
 
+func TestResolveNamedFactoryAcrossRoots_RepeatedBuiltinResolutionReusesMaterializedDir(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	first, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/tts")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(first): %v", err)
+	}
+	second, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/tts")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(second): %v", err)
+	}
+	third, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/tts")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(third): %v", err)
+	}
+
+	if first.Source != NamedFactoryResolutionSourceBuiltin {
+		t.Fatalf("first resolution source = %q, want builtin materialization", first.Source)
+	}
+	for idx, resolution := range []*NamedFactoryResolution{first, second, third} {
+		if resolution.FactoryDir != first.FactoryDir {
+			t.Fatalf("resolution[%d] dir = %q, want stable %q", idx, resolution.FactoryDir, first.FactoryDir)
+		}
+	}
+	if second.Source != NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("second resolution source = %q, want global reuse of materialized builtin", second.Source)
+	}
+	if third.Source != NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("third resolution source = %q, want global reuse of materialized builtin", third.Source)
+	}
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(first.FactoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(stable builtin): %v", err)
+	}
+	if loaded.FactoryConfig().Project != "builtin-tts" {
+		t.Fatalf("stable builtin project = %q, want builtin-tts", loaded.FactoryConfig().Project)
+	}
+}
+
 func TestResolveNamedFactoryAcrossRoots_UsesEditedMaterializedBuiltInOnNextLoad(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()

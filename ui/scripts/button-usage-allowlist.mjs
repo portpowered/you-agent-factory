@@ -26,7 +26,7 @@ export const approvedButtonUsageAllowlist = [
     ],
     rawButtonReason:
       "Graph nodes stay behind the dedicated GraphNodeButton semantic wrapper owner.",
-    relativeFilePath: "src/components/ui/graph-node-button.tsx",
+    relativeFilePath: "src/features/graphs/components/graph-node-button.tsx",
   },
   {
     rawButtonFingerprints: [

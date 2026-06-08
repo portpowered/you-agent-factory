@@ -304,6 +304,7 @@ function normalizeFactoryMetadata(
     ok: true,
     value: {
       ...normalizedFactory,
+      name: normalizedFactoryName.value,
       schemaVersion: PORT_OS_FACTORY_PNG_SCHEMA_VERSION,
     },
   };

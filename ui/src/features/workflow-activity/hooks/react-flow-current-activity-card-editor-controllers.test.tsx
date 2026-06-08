@@ -4,12 +4,12 @@ import { act, renderHook } from "@testing-library/react";
 
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import type {
   FactoryGraphDraft,
   FactoryGraphTopology,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 

@@ -12,4 +12,4 @@ properties:
     description: Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
   inline:
     type: string
-    description: Inline bundled file content carried in the manifest. Files under factory/scripts/, factory/docs/, and supported root helper paths are only bundled when they appear in bundledFiles.
+    description: Inline bundled file content carried in the manifest. SCRIPT and DOC files under factory/scripts/ and factory/docs/ may be discovered during flatten, but supported root helper paths such as Makefile are bundled only when they appear as explicit ROOT_HELPER entries in bundledFiles.

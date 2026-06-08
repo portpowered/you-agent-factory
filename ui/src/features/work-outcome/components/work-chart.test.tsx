@@ -1,14 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-
-import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
-import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
-import {
-  buildWorkChartModel,
-  type WorkChartModel,
-} from "../lib/trends";
+import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
 import { buildWorkOutcomeTimelineSamplesFromEvents } from "../hooks/useWorkOutcomeChart";
+import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
+import { buildWorkChartModel, type WorkChartModel } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { WorkChartCard } from "./d3-information-card";
 import {
@@ -650,6 +646,7 @@ describe("WorkChart", () => {
 
     expect(svg).toBeTruthy();
     expect(chart.getAttribute("data-work-chart-ready")).toBe("true");
+    expect(chart.className).toContain("select-none");
     expect(chart.getAttribute("data-work-chart-visible-ticks")).toBe(
       "0,1,2,4,6,7,11,12",
     );

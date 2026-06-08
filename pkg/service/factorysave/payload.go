@@ -7,13 +7,14 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 func prepareEditableFactoryPersistView(
 	segment string,
 	factory factoryapi.Factory,
 ) (*configpersist.PreparedFactoryLayoutPayload, error) {
-	sanitized := factory
+	sanitized := stripEphemeralFactoryResponseFields(factory)
 	sanitized.Version = nil
 	raw, err := json.Marshal(sanitized)
 	if err != nil {
@@ -34,8 +35,9 @@ func persistPayloadFromView(
 		return nil, err
 	}
 	return &configpersist.PreparedFactoryLayoutPayload{
-		Config:    view.Config,
-		Canonical: versioned,
+		Config:         view.Config,
+		Canonical:      versioned,
+		LayoutOutcomes: view.LayoutOutcomes,
 	}, nil
 }
 
@@ -68,4 +70,19 @@ func preparePersistedFactoryPayload(
 		return nil, err
 	}
 	return persistPayloadFromView(view, version)
+}
+
+func stripEphemeralFactoryResponseFields(factory factoryapi.Factory) factoryapi.Factory {
+	factory.LayoutOutcomes = nil
+	return factory
+}
+
+func withLayoutOutcomes(factory factoryapi.Factory, outcomes []factoryvalidation.Target) factoryapi.Factory {
+	if len(outcomes) == 0 {
+		factory.LayoutOutcomes = nil
+		return factory
+	}
+	targets := factoryvalidation.ToValidationTargets(outcomes)
+	factory.LayoutOutcomes = &targets
+	return factory
 }

@@ -1,13 +1,13 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
-import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
-import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
+import { factoryGraphConnectionAnchorContext } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "./current-activity-factory-graph-layout";
 import {
-  buildEditorHandles,
+  buildSemanticGraphHandles,
   resolveWorkstationConnectionAnchorContext,
 } from "./react-flow-current-activity-card-editor-handles";
 import {
@@ -69,7 +69,7 @@ function handleIds(handles: { id: string }[]) {
 
 it("omits continue, failure, and reject handles on LOGICAL_MOVE workstations in connect mode", () => {
   const ids = handleIds(
-    buildEditorHandles({
+    buildSemanticGraphHandles({
       connectionAnchorContext: logicalMoveContext,
       editor: {
         activeTool: "connect",
@@ -90,7 +90,7 @@ it("omits continue, failure, and reject handles on LOGICAL_MOVE workstations in 
 
 it("keeps failure and omits continue and reject for a standard processor without stopWords", () => {
   const ids = handleIds(
-    buildEditorHandles({
+    buildSemanticGraphHandles({
       connectionAnchorContext: standardProcessorWithoutStopWords,
       editor: {
         activeTool: "connect",
@@ -111,7 +111,7 @@ it("keeps failure and omits continue and reject for a standard processor without
 
 it("renders all progress-outcome handles when stopWords are configured", () => {
   const ids = handleIds(
-    buildEditorHandles({
+    buildSemanticGraphHandles({
       connectionAnchorContext: standardProcessorWithStopWords,
       editor: {
         activeTool: "connect",
@@ -167,7 +167,7 @@ it("does not attach progress-outcome validation to hidden logical-move anchors",
       },
     },
   ]);
-  const handles = buildEditorHandles({
+  const handles = buildSemanticGraphHandles({
     connectionAnchorContext: logicalMoveContext,
     editor: {
       activeTool: "connect",
@@ -194,7 +194,7 @@ it("does not attach progress-outcome validation to hidden logical-move anchors",
 
 it("omits worker-assignment-target on LOGICAL_MOVE workstations", () => {
   const ids = handleIds(
-    buildEditorHandles({
+    buildSemanticGraphHandles({
       connectionAnchorContext: logicalMoveContext,
       editor: {
         activeTool: "connect",
@@ -220,7 +220,7 @@ it("omits worker-assignment-target on LOGICAL_MOVE workstations", () => {
 
 it("exposes worker-assignment-target on worker-backed workstations", () => {
   const ids = handleIds(
-    buildEditorHandles({
+    buildSemanticGraphHandles({
       connectionAnchorContext: modelWorkstationContext,
       editor: {
         activeTool: "connect",

@@ -1,5 +1,5 @@
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 
 export interface AxisAlignedRect {
   height: number;

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/json"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,7 +11,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestWriteExpandedFactoryLayout_CopiesReferencedScriptForOptedInScriptWorkstation(t *testing.T) {
@@ -241,13 +246,51 @@ Execute {{ (index .Inputs 0).WorkID }}.
 	if cfg.ResourceManifest == nil {
 		t.Fatal("expected flatten to include bundled files")
 	}
-	if len(cfg.ResourceManifest.BundledFiles) != 3 {
-		t.Fatalf("expected 3 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
+	if len(cfg.ResourceManifest.BundledFiles) != 2 {
+		t.Fatalf("expected 2 bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
 	}
 
+	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
+	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
+}
+
+func TestFlattenFactoryConfig_IncludesExplicitMakefileWhenDeclared(t *testing.T) {
+	projectDir := t.TempDir()
+	factoryDir := filepath.Join(projectDir, portableFactoryDirName)
+
+	writePortableBundledTestFile(t, filepath.Join(factoryDir, interfaces.FactoryConfigFile), `{
+  "name":"portable-bundled-files-test",
+  "supportingFiles":{
+    "bundledFiles":[
+      {"type":"ROOT_HELPER","targetPath":"Makefile","content":{}}
+    ]
+  },
+  "workTypes": [{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+  "resources": [],
+  "workers": [{"name":"executor"}],
+  "workstations": [{
+    "name":"execute-story",
+    "worker":"executor",
+    "inputs":[{"workType":"task","state":"init"}],
+    "outputs":[{"workType":"task","state":"complete"}],
+    "onFailure":[{"workType":"task","state":"failed"}]
+  }]
+}`)
+	writePortableBundledTestFile(t, filepath.Join(projectDir, "Makefile"), "test:\n\tgo test ./...\n")
+
+	flattened, err := FlattenFactoryConfig(filepath.Join(factoryDir, interfaces.FactoryConfigFile))
+	if err != nil {
+		t.Fatalf("FlattenFactoryConfig: %v", err)
+	}
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(flattened)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) != 1 {
+		t.Fatalf("expected one explicit bundled file, got %#v", cfg.ResourceManifest)
+	}
 	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
-	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[1], interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n")
-	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[2], interfaces.BundledFileTypeScript, "factory/scripts/execute-story.ps1", "Write-Output 'portable script'\n")
 }
 
 func TestFlattenFactoryConfig_CheckedInFactoryBundlesOverviewDoc(t *testing.T) {
@@ -332,6 +375,50 @@ func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.
 	assertPortableBundledExpandedFile(t, targetDir, "Makefile", "test:\n\tgo test ./...\n")
 	assertPortableBundledExecutableScriptMode(t, filepath.Join(targetDir, "scripts", "execute-story.ps1"))
 	assertPortableBundledPersistedThinManifest(t, filepath.Join(targetDir, interfaces.FactoryConfigFile))
+}
+
+func TestMaterializePortableBundledFiles_OmitsMakefileWhenManifestDeclaresNone(t *testing.T) {
+	targetDir := t.TempDir()
+	writePortableBundledTestFile(t, filepath.Join(targetDir, "Makefile"), "stale makefile\n")
+
+	cfg := &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{
+				portableBundledFixtureFile(interfaces.BundledFileTypeDoc, "factory/docs/README.md", "# Portable factory\n"),
+			},
+		},
+	}
+
+	replacements, err := materializePortableBundledFiles(targetDir, cfg)
+	if err != nil {
+		t.Fatalf("materializePortableBundledFiles: %v", err)
+	}
+	if len(replacements) != 0 {
+		t.Fatalf("replacement report = %#v, want no Makefile replacement when manifest omits it", replacements)
+	}
+	assertPortableBundledRoundTripFile(t, filepath.Join(targetDir, "Makefile"), "stale makefile\n")
+}
+
+func TestMaterializePortableBundledFiles_RestoresExplicitMakefileWithMode(t *testing.T) {
+	targetDir := t.TempDir()
+
+	cfg := &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{
+				portableBundledFixtureFile(interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n"),
+			},
+		},
+	}
+
+	replacements, err := materializePortableBundledFiles(targetDir, cfg)
+	if err != nil {
+		t.Fatalf("materializePortableBundledFiles: %v", err)
+	}
+	if len(replacements) != 0 {
+		t.Fatalf("replacement report = %#v, want none for fresh explicit Makefile", replacements)
+	}
+	assertPortableBundledExpandedFile(t, targetDir, "Makefile", "test:\n\tgo test ./...\n")
+	assertPortableBundledRegularFileMode(t, filepath.Join(targetDir, "Makefile"), 0o644)
 }
 
 func TestMaterializePortableBundledFiles_ReportsDifferingExistingFileReplacement(t *testing.T) {
@@ -625,6 +712,30 @@ func assertPortableBundledExecutableScriptMode(t *testing.T, path string) {
 	}
 }
 
+func assertPortableBundledRegularFileMode(t *testing.T, path string, wantPerm os.FileMode) {
+	t.Helper()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat(%s): %v", path, err)
+	}
+	if info.Mode().Perm() != wantPerm {
+		t.Fatalf("%s mode = %#o, want %#o", path, info.Mode().Perm(), wantPerm)
+	}
+}
+
+func assertPortableBundledRoundTripFile(t *testing.T, path, want string) {
+	t.Helper()
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(got) != want {
+		t.Fatalf("%s content = %q, want %q", path, string(got), want)
+	}
+}
+
 func mustCreatePortableBundledDirLink(t *testing.T, targetPath, linkPath string) {
 	t.Helper()
 
@@ -651,4 +762,67 @@ func writeFactorySplitLayoutForExpand(
 		SourceDir:             sourceDir,
 		CopyReferencedScripts: true,
 	})
+}
+
+func TestPrepareFactoryLayoutPayload_RejectsInvalidGroupBoundsGeometry(t *testing.T) {
+	t.Parallel()
+
+	payload, err := json.Marshal(factoryWithPortableLayoutGroups())
+	if err != nil {
+		t.Fatalf("Marshal(factory): %v", err)
+	}
+	cfg, _, err := normalizeNamedFactoryPayload("alpha", payload)
+	if err != nil {
+		t.Fatalf("normalizeNamedFactoryPayload: %v", err)
+	}
+	cfg.Layout.Groups[0].Bounds.Width = math.NaN()
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	layoutOutcomes := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
+	validationassert.HasDomainTargetCode(t, layoutOutcomes.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+	if len(cfg.Layout.Groups) != 0 {
+		t.Fatalf("pruned layout groups = %#v, want []", cfg.Layout.Groups)
+	}
+
+	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfg)
+	if err != nil {
+		t.Fatalf("authoredFactoryConfigForExpandedLayout: %v", err)
+	}
+	mapper := NewFactoryConfigMapper()
+	canonical, err := mapper.Flatten(authoredFactoryCfg)
+	if err != nil {
+		t.Fatalf("Flatten: %v", err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(canonical, &decoded); err != nil {
+		t.Fatalf("Unmarshal canonical: %v", err)
+	}
+	layout, ok := decoded["layout"].(map[string]any)
+	if !ok {
+		t.Fatalf("canonical layout = %#v, want object", decoded["layout"])
+	}
+	if groups, ok := layout["groups"].([]any); ok && len(groups) != 0 {
+		t.Fatalf("canonical layout groups = %#v, want []", layout["groups"])
+	}
+}
+
+func factoryWithPortableLayoutGroups() factoryapi.Factory {
+	return factoryapi.Factory{
+		Name: "alpha",
+		Layout: &factoryapi.FactoryLayout{
+			SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+			Nodes: &[]factoryapi.FactoryLayoutNode{{
+				Id:       "workstation:process",
+				Position: factoryapi.FactoryLayoutPoint{X: 10, Y: 20},
+				Size:     &factoryapi.FactoryLayoutSize{Width: 100, Height: 80},
+			}},
+			Groups: &[]factoryapi.FactoryLayoutGroup{{
+				Id:      "group-1",
+				NodeIds: []string{"workstation:process"},
+				Bounds:  factoryapi.FactoryLayoutBounds{X: 0, Y: 0, Width: 100, Height: 80},
+			}},
+			Viewport: &factoryapi.FactoryLayoutViewport{Zoom: 1},
+		},
+	}
 }

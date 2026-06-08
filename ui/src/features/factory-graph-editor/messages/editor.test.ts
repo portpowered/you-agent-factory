@@ -37,9 +37,7 @@ describe("getFactoryGraphEditorMessages", () => {
     expect(messages.modeLeaveEditor).toBe(
       locale === "en" ? "Leave editor" : "离开编辑器",
     );
-    expect(messages.toolbarAddLabel).toBe(
-      locale === "en" ? "Add" : "添加",
-    );
+    expect(messages.toolbarAddLabel).toBe(locale === "en" ? "Add" : "添加");
     expect(messages.toolbarConnectLabel).toBe(
       locale === "en" ? "Connect" : "连接",
     );

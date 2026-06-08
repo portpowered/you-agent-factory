@@ -7,12 +7,12 @@ import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { workTypeHasDefaultHandling } from "../../current-factory-definition/lib/work-type-default-handling";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import { workstationSupportsProgressOutcomeRoutes } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
-import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+import { PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import {
   type FactoryValidationGraphProjection,
   projectFactoryValidationTargets,
   validationNodeErrorForNode,
-} from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+} from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import type {
   GraphLayout,
   PositionedEdge,

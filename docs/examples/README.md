@@ -7,6 +7,12 @@ These files are reusable inputs for the factory authoring workflow in
   behavior for the review-loop example. It targets the `reviewer` worker at the
   `review-story` workstation and returns a rejection for consumed `story`
   work in the `in-review` state.
+- [`mock-workers-script.json`](mock-workers-script.json) runs a local script
+  command for the `executor` worker at `execute-story` instead of returning a
+  synthetic accept or reject result.
+- [`mock-workers-mixed.json`](mock-workers-mixed.json) keeps the reviewer
+  rejection mock and sets `unmatchedDispatchPolicy: "passthrough"` so unmatched
+  dispatches execute through the normal worker path.
 - [`startup-work.json`](startup-work.json) is a startup
   `FACTORY_REQUEST_BATCH` request for a `story` work item in the `init` state.
   Pass it with `you run --dir ./examples/write-code-review --work

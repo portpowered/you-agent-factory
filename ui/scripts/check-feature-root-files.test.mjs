@@ -47,9 +47,12 @@ test("scanFeatureRootFiles passes when feature roots contain directories only", 
   });
 
   try {
-    await expect(scanFeatureRootFiles(featuresDir, [])).resolves.toEqual({
+    await expect(scanFeatureRootFiles(featuresDir, [], [])).resolves.toEqual({
       allowlistedDebt: [],
+      allowlistedSubdirectoryDebt: [],
       staleAllowlistEntries: [],
+      staleSubdirectoryAllowlistEntries: [],
+      subdirectoryViolations: [],
       violations: [],
     });
   } finally {
@@ -65,17 +68,18 @@ test("scanFeatureRootFiles distinguishes allowlisted debt from new hard-fail vio
       "components/panel.tsx": "export function Panel() { return null; }\n",
     },
     beta: {
+      "components/widget.stories.tsx": "export const Story = {};\n",
       "widget.test.ts": "export const beta = true;\n",
-      "stories/widget.stories.tsx": "export const Story = {};\n",
     },
   });
 
   try {
     await expect(
-      scanFeatureRootFiles(featuresDir, [
-        "src/features/alpha/index.ts",
-        "src/features/beta/widget.test.ts",
-      ]),
+      scanFeatureRootFiles(
+        featuresDir,
+        ["src/features/alpha/index.ts", "src/features/beta/widget.test.ts"],
+        [],
+      ),
     ).resolves.toEqual({
       allowlistedDebt: [
         expect.objectContaining({
@@ -85,7 +89,10 @@ test("scanFeatureRootFiles distinguishes allowlisted debt from new hard-fail vio
           relativeFilePath: "src/features/beta/widget.test.ts",
         }),
       ],
+      allowlistedSubdirectoryDebt: [],
       staleAllowlistEntries: [],
+      staleSubdirectoryAllowlistEntries: [],
+      subdirectoryViolations: [],
       violations: [
         expect.objectContaining({
           relativeFilePath: "src/features/alpha/README.md",
@@ -107,10 +114,13 @@ test("scanFeatureRootFiles reports stale allowlist entries when the root file no
 
   try {
     await expect(
-      scanFeatureRootFiles(featuresDir, ["src/features/alpha/index.ts"]),
+      scanFeatureRootFiles(featuresDir, ["src/features/alpha/index.ts"], []),
     ).resolves.toEqual({
       allowlistedDebt: [],
+      allowlistedSubdirectoryDebt: [],
       staleAllowlistEntries: ["src/features/alpha/index.ts"],
+      staleSubdirectoryAllowlistEntries: [],
+      subdirectoryViolations: [],
       violations: [],
     });
   } finally {
@@ -134,6 +144,7 @@ test("CLI reports allowlisted legacy debt during a passing run", async () => {
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
           AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
             "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_SUBDIRECTORY_ALLOWLIST: "",
         },
       }),
     ).resolves.toMatchObject({
@@ -165,6 +176,7 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
           AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
             "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_SUBDIRECTORY_ALLOWLIST: "",
         },
       }),
     ).rejects.toMatchObject({
@@ -179,6 +191,7 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
           AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
             "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_SUBDIRECTORY_ALLOWLIST: "",
         },
       }),
     ).rejects.toMatchObject({
@@ -192,10 +205,47 @@ test("CLI fails with actionable hard-violation output and still shows allowliste
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
           AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
             "src/features/bento/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_SUBDIRECTORY_ALLOWLIST: "",
         },
       }),
     ).rejects.toMatchObject({
       stderr: expect.stringContaining("Allowlisted legacy debt:"),
+    });
+  } finally {
+    await rm(tempRoot, { force: true, recursive: true });
+  }
+});
+
+test("scanFeatureRootFiles distinguishes allowlisted domain subdirectories from new hard-fail violations", async () => {
+  const { featuresDir, tempRoot } = await createFeatureTree({
+    alpha: {
+      "components/panel.tsx": "export function Panel() { return null; }\n",
+      "session/provider.tsx": "export function Provider() { return null; }\n",
+    },
+    beta: {
+      "editing/editor.tsx": "export function Editor() { return null; }\n",
+      "public/index.ts": "export * from '../components/panel';\n",
+    },
+  });
+
+  try {
+    await expect(
+      scanFeatureRootFiles(featuresDir, [], ["src/features/alpha/session"]),
+    ).resolves.toEqual({
+      allowlistedDebt: [],
+      allowlistedSubdirectoryDebt: [
+        expect.objectContaining({
+          relativeDirectoryPath: "src/features/alpha/session",
+        }),
+      ],
+      staleAllowlistEntries: [],
+      staleSubdirectoryAllowlistEntries: [],
+      subdirectoryViolations: [
+        expect.objectContaining({
+          relativeDirectoryPath: "src/features/beta/editing",
+        }),
+      ],
+      violations: [],
     });
   } finally {
     await rm(tempRoot, { force: true, recursive: true });
@@ -218,6 +268,7 @@ test("CLI fails when the allowlist contains a stale entry", async () => {
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
           AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
             "src/features/alpha/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_SUBDIRECTORY_ALLOWLIST: "",
         },
       }),
     ).rejects.toMatchObject({
@@ -232,6 +283,7 @@ test("CLI fails when the allowlist contains a stale entry", async () => {
           AGENT_FACTORY_UI_FEATURES_DIR: featuresDir,
           AGENT_FACTORY_UI_FEATURE_ROOT_FILE_ALLOWLIST:
             "src/features/alpha/index.ts",
+          AGENT_FACTORY_UI_FEATURE_ROOT_SUBDIRECTORY_ALLOWLIST: "",
         },
       }),
     ).rejects.toMatchObject({

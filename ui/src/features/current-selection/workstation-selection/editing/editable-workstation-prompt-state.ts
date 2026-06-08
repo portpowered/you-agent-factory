@@ -4,7 +4,7 @@ import type {
   EditableWorkstationPromptDiagnostic,
   EditableWorkstationPromptHelpState,
   EditableWorkstationPromptValidationState,
-} from "../lib/detail-card-types";
+} from "../lib/keys/detail-card-types";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
 export function resolvePromptHelpState(

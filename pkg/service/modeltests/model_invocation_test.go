@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -62,8 +61,15 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 			mustGeneratedServiceTextPart(t, "hello world"),
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), apisurface.ErrModelNotAvailable.Error()) {
-		t.Fatalf("InvokeModel error = %v, want model not available", err)
+	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
+		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
+	}
+	var readinessErr *apisurface.ManagedRuntimeInvocationError
+	if !errors.As(err, &readinessErr) {
+		t.Fatalf("InvokeModel error = %T, want *ManagedRuntimeInvocationError", err)
+	}
+	if readinessErr.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
+		t.Fatalf("readinessState = %s, want MISSING", readinessErr.ReadinessState)
 	}
 }
 

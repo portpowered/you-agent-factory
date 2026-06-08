@@ -242,8 +242,10 @@ func TestRootCommand_NoArgsAndExplicitRunShareHarnessConfig(t *testing.T) {
 	noArgs.OpenDashboard = false
 	noArgs.Logger = nil
 	noArgs.StartupOutput = nil
+	noArgs.Output = nil
 	explicit.Logger = nil
 	explicit.StartupOutput = nil
+	explicit.Output = nil
 	if !reflect.DeepEqual(noArgs, explicit) {
 		t.Fatalf("no-args and explicit run configs diverge outside documented defaults:\nno-args: %#v\nrun:     %#v", noArgs, explicit)
 	}

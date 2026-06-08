@@ -33,6 +33,7 @@ concept owners below when you need the complete customer-facing contract.
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
+| `packaged-tts` | Packaged `@you/tts` invocation, materialization, metadata result, and editability | [Packaged TTS](packaged-tts.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
 
@@ -60,10 +61,12 @@ access tokens, full model input text, full successful response bodies,
 sensitive generated content, or full command stdout or stderr unless an
 existing explicit failure policy already permits a bounded preview.
 
-CLI verbose diagnostics are separate from service runtime logs controlled by
-`you run --runtime-log-*`. Runtime logs are structured service-owned logs;
-command diagnostics explain the CLI invocation and transport or filesystem work
-around that invocation.
+CLI verbose diagnostics are separate from service runtime logs and runtime
+metrics controlled by `you run --runtime-log-*` and
+`you run --runtime-metrics-*`. Runtime logs are structured service-owned
+diagnostic logs. Runtime metrics are a separate structured operational JSONL
+channel. Command diagnostics explain the CLI invocation and transport or
+filesystem work around that invocation.
 
 ## Canonical Concept Owners
 
@@ -78,7 +81,8 @@ around that invocation.
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
 - [Workers](workers.md) owns worker types, worker-scoped runtime fields,
-  model/script backend fields, and split `workers/<name>/AGENTS.md` placement.
+  model/script/hosted backend fields, hosted `auth.secretRef` guidance, and
+  split `workers/<name>/AGENTS.md` placement.
 
 Use these canonical concept owners when you need the current contract.
 

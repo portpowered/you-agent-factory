@@ -1,18 +1,10 @@
 import { describe, expect, it } from "vitest";
-
-import {
-  projectSelectedWorkRelationshipGraphToDashboardRelations,
-} from "./selected-work-relationship-relations";
 import type { SelectedWorkRelationshipGraph } from "./selected-work-relationship-graph";
+import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "./selected-work-relationship-relations";
 
 function readyGraph(): SelectedWorkRelationshipGraph {
   return {
     edges: [
-      {
-        relationship: "CHILD",
-        sourceWorkID: "work-active-story",
-        targetWorkID: "work-child-story",
-      },
       {
         relationship: "DEPENDS_ON",
         requiredState: "ready",
@@ -25,16 +17,33 @@ function readyGraph(): SelectedWorkRelationshipGraph {
         targetWorkID: "work-parent-story",
       },
       {
-        relationship: "REQUIRED_BY",
+        relationship: "DEPENDS_ON",
         requiredState: "approved",
-        sourceWorkID: "work-active-story",
-        targetWorkID: "work-blocked-story",
+        sourceWorkID: "work-blocked-story",
+        targetWorkID: "work-active-story",
       },
       {
         relationship: "DEPENDS_ON",
         requiredState: "ready",
         sourceWorkID: "work-active-story",
         targetWorkID: "work-dependency-story",
+      },
+    ],
+    relations: [
+      {
+        source_work_id: "work-active-story",
+        source_work_name: "Active Story",
+        target_work_id: "work-parent-story",
+        target_work_name: "Parent Story",
+        type: "PARENT_CHILD",
+      },
+      {
+        required_state: "approved",
+        source_work_id: "work-blocked-story",
+        source_work_name: "Blocked Story",
+        target_work_id: "work-active-story",
+        target_work_name: "Active Story",
+        type: "DEPENDS_ON",
       },
     ],
     relatedWork: [
@@ -79,25 +88,10 @@ function readyGraph(): SelectedWorkRelationshipGraph {
 }
 
 describe("projectSelectedWorkRelationshipGraphToDashboardRelations", () => {
-  it("projects ready relationship graphs into deduplicated dashboard relations", () => {
+  it("projects ready relationship graphs from direct relations when available", () => {
     expect(
       projectSelectedWorkRelationshipGraphToDashboardRelations(readyGraph()),
     ).toEqual([
-      {
-        source_work_id: "work-child-story",
-        source_work_name: "Child Story",
-        target_work_id: "work-active-story",
-        target_work_name: "Active Story",
-        type: "PARENT_CHILD",
-      },
-      {
-        required_state: "ready",
-        source_work_id: "work-active-story",
-        source_work_name: "Active Story",
-        target_work_id: "work-dependency-story",
-        target_work_name: "Dependency Story",
-        type: "DEPENDS_ON",
-      },
       {
         source_work_id: "work-active-story",
         source_work_name: "Active Story",
@@ -135,6 +129,7 @@ describe("projectSelectedWorkRelationshipGraphToDashboardRelations", () => {
     expect(
       projectSelectedWorkRelationshipGraphToDashboardRelations({
         edges: [],
+        relations: [],
         relatedWork: [],
         selectedWork: readyGraph().selectedWork,
         status: "empty",

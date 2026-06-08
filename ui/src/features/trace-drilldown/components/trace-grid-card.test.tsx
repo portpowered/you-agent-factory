@@ -205,17 +205,15 @@ describe("TraceGridBentoCard ready state", () => {
     expect(inputHeader.className).toContain("uppercase");
     expect(within(card).getAllByText("Plan").length).toBeGreaterThan(0);
     expect(within(card).getAllByText("Implement").length).toBeGreaterThan(0);
-    const dispatchPill = within(card)
+    const dispatchCell = within(card)
       .getAllByText("dispatch-review-active")
-      .find((element) => element.tagName === "SPAN");
-    if (!dispatchPill) {
+      .find((element) => element.tagName === "TD");
+    if (!dispatchCell) {
       throw new Error(
-        "Expected dispatch pill to render in the trace grid table.",
+        "Expected dispatch ID to render in the trace grid table.",
       );
     }
-    expect(dispatchPill.className).toContain("border-af-info-border");
-    expect(dispatchPill.className).toContain("bg-info-container");
-    expect(dispatchPill.className).toContain("py-0.5");
+    expect(dispatchCell.className).toContain("align-top");
     expect(within(card).getByText("Accepted · 1s")).toBeTruthy();
     expect(within(card).getByText("Accepted · 2s")).toBeTruthy();
     const tableScroller = card.querySelector("[data-trace-dispatch-table]");
@@ -297,7 +295,8 @@ describe("TraceGridBentoCard work item selection", () => {
     const activeStoryButtons = within(card).getAllByRole("button", {
       name: "(story):Active Story",
     });
-    expect(activeStoryButtons[0]?.className).toContain("border-primary");
+    expect(activeStoryButtons[0]?.className).toContain("border-outline");
+    expect(activeStoryButtons[0]?.className).toContain("justify-start");
 
     fireEvent.click(activeStoryButtons[0]);
     expect(onSelectWorkID).toHaveBeenCalledWith("work-active-story");
@@ -377,18 +376,17 @@ describe("TraceGridBentoCard graph sizing", () => {
     expect(
       [...frames].every(
         (frame) =>
-          frame.className.includes("resize") &&
-          frame.className.includes("min-w-80") &&
-          frame.className.includes("max-w-full") &&
-          !frame.className.includes("shadow-af-card") &&
-          !frame.className.includes("shadow-af-panel"),
+          frame.className.includes("border-transparent") &&
+          frame.className.includes("rounded-3xl") &&
+          frame.className.includes("shadow-none") &&
+          !frame.className.includes("shadow-af-card"),
       ),
     ).toBe(true);
     expect(
       [...viewports].every(
         (viewport) =>
-          viewport.getAttribute("style")?.includes("height: 100%") &&
-          viewport.getAttribute("style")?.includes("width: 100%"),
+          viewport.className.includes("h-full") &&
+          viewport.className.includes("w-full"),
       ),
     ).toBe(true);
 

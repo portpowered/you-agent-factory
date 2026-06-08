@@ -1,4 +1,4 @@
-import { CurrentSelectionSelectableButton } from "../../features/current-selection/base/components/current-selection-selectable-button";
+import { CurrentSelectionSelectableButton } from "../../features/current-selection/base/components/presentation/current-selection-selectable-button";
 import {
   DashboardHeaderOptionMenuItem,
   DashboardHeaderOptionMenuSurface,

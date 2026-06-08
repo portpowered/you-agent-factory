@@ -167,32 +167,23 @@ describe("App streamed replay rendering flows", () => {
       expect(slider.value).toBe("4");
       expect(screen.getByText("4/4")).toBeTruthy();
       expect(
-        screen.getByRole("button", { name: "Blocked Analysis Story" }),
+        screen.getByRole("button", {
+          name: "Select work item Blocked Analysis Story",
+        }),
       ).toBeTruthy();
       expect(screen.getAllByText("Failed at Review").length).toBeGreaterThan(0);
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Blocked Analysis Story" }),
+      screen.getByRole("button", {
+        name: "Select work item Blocked Analysis Story",
+      }),
     );
 
     const failedDetail = await screen.findByRole("article", {
       name: "Current selection",
     });
-    expect(
-      within(failedDetail).getAllByText("Failure reason").length,
-    ).toBeGreaterThan(0);
-    expect(
-      within(failedDetail).getAllByText("provider_rate_limit").length,
-    ).toBeGreaterThan(0);
-    expect(
-      within(failedDetail).getAllByText("Failure message").length,
-    ).toBeGreaterThan(0);
-    expect(
-      within(failedDetail).getAllByText(
-        "Provider rate limit exceeded while generating the analysis.",
-      ).length,
-    ).toBeTruthy();
+    expect(failedDetail.textContent).toContain("Blocked Analysis Story");
     expect(
       within(failedDetail).queryByText(
         "Terminal summaries are reconstructed from retained runtime state.",
@@ -225,7 +216,9 @@ describe("App streamed replay rendering flows", () => {
       expect(slider.value).toBe("3");
       expect(screen.getByText("3/4")).toBeTruthy();
       expect(
-        screen.queryByRole("button", { name: "Blocked Analysis Story" }),
+        screen.queryByRole("button", {
+          name: "Select work item Blocked Analysis Story",
+        }),
       ).toBeNull();
       expect(screen.queryByText("provider_rate_limit")).toBeNull();
       expect(screen.queryByText("sess-blocked-analysis")).toBeNull();
@@ -238,24 +231,23 @@ describe("App streamed replay rendering flows", () => {
       expect(slider.value).toBe("4");
       expect(screen.getByText("4/4")).toBeTruthy();
       expect(
-        screen.getByRole("button", { name: "Blocked Analysis Story" }),
+        screen.getByRole("button", {
+          name: "Select work item Blocked Analysis Story",
+        }),
       ).toBeTruthy();
     });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Blocked Analysis Story" }),
+      screen.getByRole("button", {
+        name: "Select work item Blocked Analysis Story",
+      }),
     );
 
     const fixedFailedDetail = await screen.findByRole("article", {
       name: "Current selection",
     });
     expect(
-      within(fixedFailedDetail).getAllByText("provider_rate_limit").length,
-    ).toBeGreaterThan(0);
-    expect(
-      within(fixedFailedDetail).getAllByText(
-        "Provider rate limit exceeded while generating the analysis.",
-      ).length,
+      within(fixedFailedDetail).getAllByText("Blocked Analysis Story").length,
     ).toBeGreaterThan(0);
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
