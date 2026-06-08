@@ -10,8 +10,8 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  Select,
 } from "../../../components/ui";
+import { OptionalEnumSelect } from "../../../components/ui/enum-select";
 import { DashboardWidgetFrame } from "../../bento/public";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmissionItemsList } from "./submit-work-items-list";
@@ -265,24 +265,22 @@ function SubmitWorkHeaderControls({
         <label className="sr-only" htmlFor={workTypeID}>
           {messages.workTypeLabel}
         </label>
-        <Select
+        <OptionalEnumSelect
           aria-describedby={
             validationErrors?.workTypeName ? workTypeErrorID : undefined
           }
           aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
           className="min-h-9 py-2 text-xs"
           disabled={controlsDisabled}
+          emptyOptionLabel={messages.selectWorkTypePlaceholder}
           id={workTypeID}
-          onChange={(event) => onWorkTypeNameChange(event.target.value)}
-          value={workTypeName}
-        >
-          <option value="">{messages.selectWorkTypePlaceholder}</option>
-          {submitWorkTypeNames.map((submitWorkTypeName) => (
-            <option key={submitWorkTypeName} value={submitWorkTypeName}>
-              {submitWorkTypeName}
-            </option>
-          ))}
-        </Select>
+          onValueChange={(value) => onWorkTypeNameChange(value ?? "")}
+          options={submitWorkTypeNames.map((submitWorkTypeName) => ({
+            label: submitWorkTypeName,
+            value: submitWorkTypeName,
+          }))}
+          value={workTypeName || null}
+        />
         {validationErrors?.workTypeName ? (
           <p className="sr-only" id={workTypeErrorID}>
             {validationErrors.workTypeName}

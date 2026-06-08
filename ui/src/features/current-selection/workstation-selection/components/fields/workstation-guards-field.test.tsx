@@ -1,7 +1,11 @@
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, useState } from "react";
+import { afterEach, beforeEach } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import { buildWorkstationGuardSelectorCompletionItems } from "../../../../../components/prompt-editor";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
@@ -12,6 +16,18 @@ const readyWorkstationOptions = {
   options: ["Plan", "Review"],
   status: "ready" as const,
 };
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 function renderWorkstationGuardsField(
   props: Partial<
@@ -78,7 +94,7 @@ describe("EditableConfigurationWorkstationGuardsField rendering", () => {
       onGuardsChange,
     });
 
-    await user.selectOptions(screen.getByLabelText("Add guard"), "VISIT_COUNT");
+    await selectLabeledComboboxOption(user, "Add guard", "Visit count");
 
     expect(onGuardsChange).toHaveBeenCalledWith([
       {

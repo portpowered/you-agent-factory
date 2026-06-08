@@ -575,7 +575,7 @@ export function CurrentActivityGraphViewport({
           locale={locale}
           onSelectPreset={onSelectVisibilityPreset}
           options={buildVisibilityPresetOptions(locale, visibilityPreset)}
-          visible={true}
+          visible={false}
         />
         <CurrentActivityGraphEditorChrome
           activeTool={activeTool}

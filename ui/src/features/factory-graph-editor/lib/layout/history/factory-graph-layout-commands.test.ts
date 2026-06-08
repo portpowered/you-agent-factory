@@ -6,6 +6,7 @@ import {
   createMoveFactoryLayoutNodesCommand,
   createResetFactoryLayoutCommand,
   createUpdateFactoryLayoutViewportCommand,
+  factoryLayoutCommandAffectedNodeIds,
   factoryLayoutCommandReferencesDeletedNodeIds,
   invertFactoryLayoutCommand,
   type FactoryLayoutCommand,
@@ -157,5 +158,36 @@ describe("factory graph layout commands", () => {
     expect(
       factoryLayoutCommandReferencesDeletedNodeIds(command, new Set(["workstation:draft"])),
     ).toBe(true);
+  });
+});
+
+describe("factory graph layout command helpers", () => {
+  it("clears viewport when applying a null viewport command target", () => {
+    const layout = {
+      ...createDefaultFactoryLayout(),
+      viewport: { x: 10, y: 20, zoom: 1.5 },
+    };
+    const command: FactoryLayoutCommand = {
+      type: "update-viewport",
+      from: layout.viewport ?? null,
+      to: null,
+    };
+
+    expect(applyFactoryLayoutCommand(layout, command).viewport).toBeUndefined();
+  });
+
+  it("collects affected node ids for reset-layout commands", () => {
+    const fromLayout = moveFactoryLayoutNode(createDefaultFactoryLayout(), "worker:writer", {
+      x: 40,
+      y: 80,
+    });
+    const command = requireCommand(
+      createResetFactoryLayoutCommand({
+        fromLayout,
+        toLayout: createDefaultFactoryLayout(),
+      }),
+    );
+
+    expect(factoryLayoutCommandAffectedNodeIds(command)).toEqual(["worker:writer"]);
   });
 });

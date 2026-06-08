@@ -9,12 +9,14 @@ import {
 import {
   canRedoFactoryLayoutHistory,
   canUndoFactoryLayoutHistory,
+  clearFactoryLayoutHistoryState,
   createFactoryLayoutHistoryState,
+  FACTORY_LAYOUT_HISTORY_LIMIT,
   pruneFactoryLayoutHistoryForNodeIds,
   pushFactoryLayoutHistoryCommand,
   redoFactoryLayoutHistory,
   undoFactoryLayoutHistory,
-} from "../history/factory-graph-layout-history";
+} from "./factory-graph-layout-history";
 import { createDefaultFactoryLayout } from "../factory-graph-layout-operations";
 
 function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
@@ -84,5 +86,49 @@ describe("factory graph layout history", () => {
     );
 
     expect(pruned.past).toEqual([viewportCommand]);
+  });
+
+  it("returns null commands when undo or redo stacks are empty", () => {
+    const layout = createDefaultFactoryLayout();
+    const history = createFactoryLayoutHistoryState();
+
+    expect(undoFactoryLayoutHistory(history, layout)).toEqual({
+      command: null,
+      history,
+      layout,
+    });
+    expect(redoFactoryLayoutHistory(history, layout)).toEqual({
+      command: null,
+      history,
+      layout,
+    });
+  });
+
+  it("drops the oldest history entry after the limit is exceeded", () => {
+    let history = createFactoryLayoutHistoryState();
+    const layout = createDefaultFactoryLayout();
+
+    for (let index = 0; index < FACTORY_LAYOUT_HISTORY_LIMIT + 1; index += 1) {
+      const command = requireCommand(
+        createMoveFactoryLayoutNodeCommand({
+          layout,
+          nodeId: "worker:writer",
+          to: { x: index, y: index },
+        }),
+      );
+      history = pushFactoryLayoutHistoryCommand(history, command);
+    }
+
+    expect(history.past).toHaveLength(FACTORY_LAYOUT_HISTORY_LIMIT);
+    expect(history.past[0]?.type).toBe("move-node");
+    expect(history.past.at(-1)?.type).toBe("move-node");
+  });
+
+  it("clears undo and redo stacks", () => {
+    const cleared = clearFactoryLayoutHistoryState();
+
+    expect(cleared).toEqual({ future: [], past: [] });
+    expect(canUndoFactoryLayoutHistory(cleared)).toBe(false);
+    expect(canRedoFactoryLayoutHistory(cleared)).toBe(false);
   });
 });

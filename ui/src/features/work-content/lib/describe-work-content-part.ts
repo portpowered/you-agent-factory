@@ -1,7 +1,5 @@
-import type { components } from "../../../api/generated/openapi";
 import { workContentPartTypeLabel } from "./work-content-part-type-label";
-
-export type WorkContentPart = components["schemas"]["WorkContentPart"];
+import type { WorkContentPart } from "./work-content-types";
 
 function workContentURLDisplayName(url: string): string | undefined {
   try {

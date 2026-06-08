@@ -1,3 +1,5 @@
+import "@testing-library/jest-dom/vitest";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   cleanup,
@@ -7,6 +9,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import type {
   DashboardPlaceRef,
@@ -28,6 +31,7 @@ import {
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import {
   baseFactoryDefinition,
   baseFactoryDefinitionDocument,
@@ -130,6 +134,10 @@ vi.mock(
       useFactoryGraphDraftState: vi.fn(),
     };
   },
+);
+
+vi.mock("../../../components/ui/dialog", () =>
+  import("../../../testing/mock-dashboard-dialog"),
 );
 
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
@@ -1152,6 +1160,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
 
   it("distinguishes work-state creation from work-type creation and blocks missing work-type association", async () => {
     const replaceDraft = vi.fn();
+    const user = userEvent.setup();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: baseFactoryDefinitionDocument,
       error: null,
@@ -1174,24 +1183,14 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     expect(
       screen.getByText("Append a new ordered state to an existing work type."),
     ).toBeTruthy();
-    expect(
-      (
-        screen.getByRole("combobox", {
-          name: "Work type",
-        }) as HTMLSelectElement
-      ).value,
-    ).toBe("story");
-    expect(
-      (
-        screen.getByRole("combobox", {
-          name: "State type",
-        }) as HTMLSelectElement
-      ).value,
-    ).toBe("PROCESSING");
+    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
+      "story",
+    );
+    expect(screen.getByRole("combobox", { name: "State type" })).toHaveTextContent(
+      "PROCESSING",
+    );
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Work type" }), {
-      target: { value: "" },
-    });
+    await selectLabeledComboboxOption(user, "Work type", "Select a work type");
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
     expect(
@@ -1202,6 +1201,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
 
   it("submits valid work-state add-entity forms into the pending graph draft", async () => {
     const replaceDraft = vi.fn();
+    const user = userEvent.setup();
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: baseFactoryDefinitionDocument,
       error: null,
@@ -1222,9 +1222,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     fireEvent.change(screen.getByRole("textbox", { name: "Identifier" }), {
       target: { value: "approved" },
     });
-    fireEvent.change(screen.getByRole("combobox", { name: "State type" }), {
-      target: { value: "TERMINAL" },
-    });
+    await selectLabeledComboboxOption(user, "State type", "TERMINAL");
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
     expect(replaceDraft).toHaveBeenCalledTimes(1);
@@ -1478,7 +1476,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     ).toBeNull();
   });
 
-  it("renders editor visibility preset controls in embedded editor mode", async () => {
+  it("does not render the editor-only visibility preset controls in embedded editor mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: workerDenseFactoryDefinitionDocument,
       error: null,
@@ -1504,9 +1502,9 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       ).toBeTruthy();
     });
 
-    expect(screen.getByRole("button", { name: "Infrastructure" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Workflow" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "All" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Infrastructure" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Workflow" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "All" })).toBeNull();
   });
 
   it("renders supported workstation and work-state editor handles on the shared observer graph", async () => {

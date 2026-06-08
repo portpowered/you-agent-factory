@@ -104,4 +104,32 @@ describe("projectFactoryGraphByVisibilityPreset", () => {
       "worker-resource",
     ]);
   });
+
+  it("filters execution nodes and edges", () => {
+    const topology: FactoryGraphTopology = {
+      ...SAMPLE_TOPOLOGY,
+      edges: [
+        ...SAMPLE_TOPOLOGY.edges,
+        {
+          id: "workstation-on-continue:process",
+          kind: "workstation-on-continue",
+          sourceId: "workstation:process",
+          targetId: "work-state:task:init",
+        },
+      ],
+    };
+    const projected = projectFactoryGraphByVisibilityPreset(
+      topology,
+      "execution",
+    );
+
+    expect(projected.nodes.map((node) => node.kind)).toEqual([
+      "work-state",
+      "workstation",
+    ]);
+    expect(projected.edges.map((edge) => edge.kind)).toEqual([
+      "workstation-input",
+      "workstation-on-continue",
+    ]);
+  });
 });
