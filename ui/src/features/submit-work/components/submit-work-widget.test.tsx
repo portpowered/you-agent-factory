@@ -30,7 +30,7 @@ let restoreBrowserShims: (() => void) | undefined;
 let user: ReturnType<typeof userEvent.setup>;
 
 async function selectWorkType(
-  label: string | RegExp = "Work type",
+  label: string | RegExp = /Work type/,
   optionName = "story",
 ) {
   await selectLabeledComboboxOption(user, label, optionName);
@@ -70,10 +70,10 @@ describe("SubmitWorkWidget form behavior", () => {
       ),
     ).toBeNull();
     expect(
-      within(card).getByRole("combobox", { name: "Work type" }),
+      within(card).getByRole("combobox", { name: /Work type/ }),
     ).toBeTruthy();
     expect(
-      within(card).getByRole("textbox", { name: "Request name" }),
+      within(card).getByRole("textbox", { name: /Request name/ }),
     ).toBeTruthy();
     expect(
       within(card).getByRole("list", { name: "Submission items" }),
@@ -160,7 +160,7 @@ describe("SubmitWorkWidget form behavior", () => {
       />,
     );
 
-    const workType = screen.getByRole("combobox", { name: "Work type" });
+    const workType = screen.getByRole("combobox", { name: /Work type/ });
     const addInput = screen.getByRole("button", { name: "Add input" });
     const remove = screen.getByRole("button", {
       name: "Remove Submit work widget from dashboard",
@@ -183,7 +183,7 @@ describe("SubmitWorkWidget form behavior", () => {
     ).toBe(true);
   });
 
-  it("enables submission only after a configured work type and non-blank request name are present", async () => {
+  it("keeps submit reachable for validation and uses primary styling when required fields are complete", async () => {
     renderSubmitWorkWidget(
       <SubmitWorkWidget
         submitWorkTypes={[
@@ -194,7 +194,7 @@ describe("SubmitWorkWidget form behavior", () => {
     );
 
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -203,7 +203,8 @@ describe("SubmitWorkWidget form behavior", () => {
       name: "Submit work",
     });
 
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).not.toContain("bg-primary");
     expect(
       screen.queryByText(
         "Choose a work type and enter a request name to continue.",
@@ -211,14 +212,17 @@ describe("SubmitWorkWidget form behavior", () => {
     ).toBeNull();
 
     await selectWorkType();
-    expect(submitButton.disabled).toBe(true);
-    expect(screen.getByText("Enter a request name to continue.")).toBeTruthy();
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).not.toContain("bg-primary");
+    expect(screen.getByText("(required)")).toBeTruthy();
 
     fireEvent.change(requestName, { target: { value: "   " } });
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).not.toContain("bg-primary");
 
     fireEvent.change(requestName, { target: { value: "Driver review" } });
     expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).toContain("bg-primary");
 
     fireEvent.change(requestText, {
       target: { value: "Review the failed driver trace." },
@@ -242,28 +246,48 @@ describe("SubmitWorkWidget form behavior", () => {
     const submitButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Submit work",
     });
-    const form = submitButton.closest("form");
 
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error(
-        "expected the submit button to be rendered inside a form",
-      );
-    }
-
-    fireEvent.submit(form);
+    await user.click(submitButton);
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      await screen.findAllByText(
+      screen.queryByText(
         "Choose a work type and enter a request name before submitting.",
       ),
-    ).toHaveLength(1);
+    ).toBeNull();
+    const workType = screen.getByRole("combobox", { name: /Work type/ });
+
     expect(
       screen.getByText("Choose a work type before submitting."),
-    ).toBeTruthy();
+    ).toHaveAttribute("role", "alert");
+    expect(workType.getAttribute("aria-invalid")).toBe("true");
     expect(
       screen.getByText("Enter a request name before submitting."),
-    ).toBeTruthy();
+    ).toHaveAttribute("role", "alert");
+  });
+
+  it("shows field validation when pressing Enter in the request name field", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: /Request name/,
+    });
+
+    requestName.focus();
+    await user.keyboard("{Enter}");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(requestName.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.getByText("Enter a request name before submitting."),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.getByText("Choose a work type before submitting."),
+    ).toHaveAttribute("role", "alert");
   });
 
   it("renders a seeded ordered submission-items list with one blank text item by default", () => {
@@ -998,8 +1022,8 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
       />,
     );
 
-    await selectWorkType("工作类型");
-    fireEvent.change(screen.getByRole("textbox", { name: "请求名称" }), {
+    await selectWorkType(/工作类型/);
+    fireEvent.change(screen.getByRole("textbox", { name: /请求名称/ }), {
       target: { value: "中文请求" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "文本项 1" }), {
@@ -1206,10 +1230,10 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1293,7 +1317,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
 
     await selectWorkType();
@@ -1307,7 +1331,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
+    expect(screen.getByRole("combobox", { name: /Work type/ })).toHaveTextContent(
       "Select a work type",
     );
   });
@@ -1330,28 +1354,26 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Submit work",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
 
     await selectWorkType();
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
 
     fireEvent.change(requestName, { target: { value: "   " } });
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
 
-    const form = submitButton.closest("form");
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error(
-        "expected the submit button to be rendered inside a form",
-      );
-    }
-
-    fireEvent.submit(form);
+    await user.click(submitButton);
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      await screen.findAllByText("Enter a request name before submitting."),
-    ).toHaveLength(2);
+      screen.getByText("Enter a request name before submitting."),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.queryByText(
+        "Choose a work type and enter a request name before submitting.",
+      ),
+    ).toBeNull();
     expect(requestName.getAttribute("aria-invalid")).toBe("true");
   });
 
@@ -1371,7 +1393,7 @@ describe("SubmitWorkWidget submission behavior", () => {
 
     const card = screen.getByRole("article", { name: "Submit work" });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const defaultTextItem = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1430,7 +1452,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     await selectWorkType();
-    fireEvent.change(screen.getByRole("textbox", { name: "Request name" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /Request name/ }), {
       target: { value: "Ordered text payload" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Text item 1" }), {
@@ -1461,6 +1483,82 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
   });
 
+  it("clears stale required-field invalid styling after a successful submit", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Submit work",
+    });
+
+    await user.click(submitButton);
+
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: /Request name/,
+    });
+    const workType = screen.getByRole("combobox", { name: /Work type/ });
+
+    expect(requestName.getAttribute("aria-invalid")).toBe("true");
+    expect(workType.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByRole("status")).toBeNull();
+
+    await selectWorkType();
+    fireEvent.change(requestName, {
+      target: { value: "Driver review" },
+    });
+    await user.click(submitButton);
+
+    expect(
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-submit-story.",
+      ),
+    ).toBeTruthy();
+    expect(requestName).not.toHaveAttribute("aria-invalid");
+    expect(workType).not.toHaveAttribute("aria-invalid");
+    expect(
+      screen.queryByText("Enter a request name before submitting."),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Choose a work type before submitting."),
+    ).toBeNull();
+  });
+
+  it("shows network submission failures through the card status panel", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    await selectWorkType();
+    fireEvent.change(screen.getByRole("textbox", { name: /Request name/ }), {
+      target: { value: "Driver review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    const statusPanel = await screen.findByRole("alert");
+    expect(statusPanel).toHaveTextContent(
+      "We couldn't submit your request. Try again in a moment.",
+    );
+    expect(statusPanel.className).toContain("bg-error-container");
+    expect(
+      screen.getByRole("textbox", { name: /Request name/ }),
+    ).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByRole("combobox", { name: /Work type/ })).not.toHaveAttribute(
+      "aria-invalid",
+    );
+  });
+
   it("shows the server error inline and preserves the draft after a failed submission", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
@@ -1483,10 +1581,10 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1525,7 +1623,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     await selectWorkType();
     fireEvent.change(
       screen.getByRole<HTMLInputElement>("textbox", {
-        name: "Request name",
+        name: /Request name/,
       }),
       {
         target: { value: "Beta submission" },
@@ -1566,10 +1664,10 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1616,10 +1714,10 @@ describe("SubmitWorkWidget submission behavior", () => {
     renderSubmitWorkWidget(<SubmitWorkWidget submitWorkTypes={[]} />);
 
     const workType = screen.getByRole("combobox", {
-      name: "Work type",
+      name: /Work type/,
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1648,10 +1746,10 @@ describe("SubmitWorkWidget submission behavior", () => {
     const card = screen.getByRole("article", { name: "提交工作" });
 
     expect(
-      within(card).getByRole("combobox", { name: "工作类型" }),
+      within(card).getByRole("combobox", { name: /工作类型/ }),
     ).toBeTruthy();
     expect(
-      within(card).getByRole("textbox", { name: "请求名称" }),
+      within(card).getByRole("textbox", { name: /请求名称/ }),
     ).toBeTruthy();
     expect(within(card).getByRole("list", { name: "提交项" })).toBeTruthy();
     expect(

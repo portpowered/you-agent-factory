@@ -30,6 +30,8 @@ describe("Input primitives", () => {
 
     const textarea = screen.getByLabelText("Factory notes");
     expect(textarea.className).toContain("min-h-28");
+    expect(textarea.className).toContain("max-h-52");
+    expect(textarea.className).toContain("overflow-y-auto");
     expect(textarea.className).toContain("border-outline");
   });
 
@@ -37,5 +39,13 @@ describe("Input primitives", () => {
     expect(inputVariants({ className: "custom-input" })).toContain(
       "custom-input",
     );
+  });
+
+  it("applies the shared invalid field treatment when aria-invalid is true", () => {
+    render(<Input aria-invalid="true" aria-label="Factory name" />);
+
+    const input = screen.getByLabelText("Factory name");
+    expect(input.className).toContain("aria-invalid:border-af-danger-border");
+    expect(input.className).toContain("aria-invalid:ring-af-danger-border");
   });
 });

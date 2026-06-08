@@ -111,7 +111,12 @@ export function buildStatus({
   }
 
   const validationErrors = validateDraft(draft, messages);
-  if (showValidation && hasValidationErrors(validationErrors)) {
+  if (
+    showValidation &&
+    hasValidationErrors(validationErrors) &&
+    !validationErrors.requestName &&
+    !validationErrors.workTypeName
+  ) {
     return {
       kind: "validation-error",
       message: buildValidationSummary(validationErrors, messages),
@@ -120,19 +125,19 @@ export function buildStatus({
 
   if (draft.workTypeName.length === 0) {
     if (draft.requestName.trim().length === 0) {
+      if (!showValidation) {
+        return {
+          kind: "guidance",
+          message: messages.statusMessages.emptyGuidance,
+        };
+      }
+    } else if (!showValidation) {
       return {
         kind: "guidance",
-        message: messages.statusMessages.emptyGuidance,
+        message: messages.statusMessages.workTypeOnly,
       };
     }
-
-    return {
-      kind: "guidance",
-      message: messages.statusMessages.workTypeOnly,
-    };
-  }
-
-  if (draft.requestName.trim().length === 0) {
+  } else if (draft.requestName.trim().length === 0 && !showValidation) {
     return {
       kind: "guidance",
       message: messages.statusMessages.requestOnly,

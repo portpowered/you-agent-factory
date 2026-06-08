@@ -18,10 +18,10 @@ describe("submit-work public barrel", () => {
     const card = screen.getByRole("article", { name: "Submit work" });
 
     expect(
-      within(card).getByRole("combobox", { name: "Work type" }),
+      within(card).getByRole("combobox", { name: /Work type/ }),
     ).toBeTruthy();
     expect(
-      within(card).getByRole("textbox", { name: "Request name" }),
+      within(card).getByRole("textbox", { name: /Request name/ }),
     ).toBeTruthy();
     expect(
       within(card).getByRole("list", { name: "Submission items" }),

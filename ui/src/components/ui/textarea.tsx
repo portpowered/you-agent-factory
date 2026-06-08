@@ -6,9 +6,16 @@ import { inputVariants } from "./input";
 const TEXTAREA_PLAIN_CLASS =
   "m-0 w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-on-surface outline-none";
 
+const TEXTAREA_FIELD_CLASS =
+  "min-h-28 max-h-52 resize-none overflow-y-auto py-3";
+
 export interface TextareaProps
   extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   variant?: "field" | "plain";
+}
+
+export function textareaVariants({ className }: { className?: string } = {}) {
+  return inputVariants({ className: cn(TEXTAREA_FIELD_CLASS, className) });
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
@@ -18,9 +25,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
         className={
           variant === "plain"
             ? cn(TEXTAREA_PLAIN_CLASS, className)
-            : inputVariants({
-                className: `min-h-28 resize-y py-3 ${className ?? ""}`,
-              })
+            : textareaVariants({ className })
         }
         ref={ref}
         {...props}

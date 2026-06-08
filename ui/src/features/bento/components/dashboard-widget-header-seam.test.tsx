@@ -165,6 +165,9 @@ describe("dashboard widget header seam", () => {
     ).toBeNull();
   });
 
+});
+
+describe("submit work dashboard widget header seam", () => {
   it("routes submit work header controls through the shared tools region without a separate move handle", () => {
     const messages = getSubmitWorkMessages();
     renderBentoWidget(
@@ -200,7 +203,9 @@ describe("dashboard widget header seam", () => {
       title: messages.cardTitle,
     });
     expect(
-      within(card).getByRole("combobox", { name: messages.workTypeLabel }),
+      within(card).getByRole("combobox", {
+        name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+      }),
     ).toBeTruthy();
   });
 });

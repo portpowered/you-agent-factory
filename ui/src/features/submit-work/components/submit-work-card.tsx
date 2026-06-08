@@ -6,6 +6,7 @@ import {
   DashboardIconButtonShell,
   DashboardLabel,
   DashboardText,
+  FormError,
   Input,
   Popover,
   PopoverContent,
@@ -108,12 +109,10 @@ export function SubmitWorkCard({
   const hasSelectedWorkType = draft.workTypeName.length > 0;
   const hasValidRequestName = draft.requestName.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
-  const canSubmit =
-    hasConfiguredWorkTypes &&
-    !hasIncompleteFileItems &&
-    hasSelectedWorkType &&
-    hasValidRequestName &&
-    !isSubmitting;
+  const canAttemptSubmit =
+    hasConfiguredWorkTypes && !hasIncompleteFileItems && !isSubmitting;
+  const isFormReady =
+    canAttemptSubmit && hasSelectedWorkType && hasValidRequestName;
   const requestNameID = `${widgetId}-request-name`;
   const requestNameErrorID = `${widgetId}-request-name-error`;
   const submissionItemsID = `${widgetId}-submission-items`;
@@ -160,13 +159,23 @@ export function SubmitWorkCard({
         >
           <div className="grid gap-2">
             <label htmlFor={requestNameID}>
-              <DashboardLabel>{messages.requestNameLabel}</DashboardLabel>
+              <DashboardLabel>
+                {messages.requestNameLabel}{" "}
+                <DashboardText
+                  as="span"
+                  className="text-on-error-container"
+                  variant="supporting"
+                >
+                  ({messages.requestNameRequiredAffordance})
+                </DashboardText>
+              </DashboardLabel>
             </label>
             <Input
               aria-describedby={
                 validationErrors?.requestName ? requestNameErrorID : undefined
               }
               aria-invalid={validationErrors?.requestName ? "true" : undefined}
+              aria-required="true"
               disabled={controlsDisabled}
               id={requestNameID}
               onChange={(event) => onRequestNameChange(event.target.value)}
@@ -175,13 +184,9 @@ export function SubmitWorkCard({
               value={draft.requestName}
             />
             {validationErrors?.requestName ? (
-              <DashboardText
-                className="text-on-error-container"
-                id={requestNameErrorID}
-                variant="supporting"
-              >
+              <FormError id={requestNameErrorID}>
                 {validationErrors.requestName}
-              </DashboardText>
+              </FormError>
             ) : null}
           </div>
 
@@ -218,8 +223,8 @@ export function SubmitWorkCard({
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
             className="w-full justify-center"
-            disabled={!canSubmit}
-            tone={canSubmit ? "default" : "outline"}
+            disabled={!canAttemptSubmit}
+            tone={isFormReady ? "default" : "outline"}
             type="submit"
           >
             {isSubmitting ? messages.submittingAction : messages.submitAction}
@@ -263,13 +268,14 @@ function SubmitWorkHeaderControls({
     <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
       <div className="grid min-w-36 gap-1">
         <label className="sr-only" htmlFor={workTypeID}>
-          {messages.workTypeLabel}
+          {messages.workTypeLabel} ({messages.workTypeRequiredAffordance})
         </label>
         <OptionalEnumSelect
           aria-describedby={
             validationErrors?.workTypeName ? workTypeErrorID : undefined
           }
           aria-invalid={validationErrors?.workTypeName ? "true" : undefined}
+          aria-required="true"
           className="min-h-9 py-2 text-xs"
           disabled={controlsDisabled}
           emptyOptionLabel={messages.selectWorkTypePlaceholder}
@@ -282,9 +288,9 @@ function SubmitWorkHeaderControls({
           value={workTypeName || null}
         />
         {validationErrors?.workTypeName ? (
-          <p className="sr-only" id={workTypeErrorID}>
+          <FormError id={workTypeErrorID}>
             {validationErrors.workTypeName}
-          </p>
+          </FormError>
         ) : null}
       </div>
       <AddSubmissionItemMenu
