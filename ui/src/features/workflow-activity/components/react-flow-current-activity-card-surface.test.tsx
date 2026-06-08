@@ -106,6 +106,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     activeTool: "delete",
     addEdgeWaypoint: vi.fn(),
     moveEdgeWaypoint: vi.fn(),
+    removeEdgeWaypoint: vi.fn(),
     addMenuActions: [],
     addMenuOpen: false,
     blockedRemovalReason:

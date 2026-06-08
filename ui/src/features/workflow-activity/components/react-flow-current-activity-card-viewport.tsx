@@ -274,6 +274,7 @@ export function CurrentActivityGraphViewport({
   onEditorEdgeDoubleClick,
   onEditorNodeClick,
   onMoveEdgeWaypoint,
+  onRemoveEdgeWaypoint,
   onSelectTool,
   selectedEdgeWaypoints = [],
   selectedWaypointEdgeId = null,
@@ -338,6 +339,7 @@ export function CurrentActivityGraphViewport({
     waypointIndex: number,
     position: FactoryLayoutPoint,
   ) => void;
+  onRemoveEdgeWaypoint?: (edgeId: string, waypointIndex: number) => void;
   selectedEdgeWaypoints?: readonly FactoryLayoutPoint[];
   selectedWaypointEdgeId?: string | null;
   waypointAriaLabel?: (index: number) => string;
@@ -350,7 +352,10 @@ export function CurrentActivityGraphViewport({
     fieldSourceLabel: string;
     fieldTargetLabel: string;
     onAddWaypoint: () => void;
+    onRemoveWaypoint: (waypointIndex: number) => void;
+    removeWaypointLabel: (index: number) => string;
     selectedEdgeLabel: string;
+    waypointCount: number;
   } | null;
   onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
   openAddMenu?: boolean;
@@ -626,6 +631,7 @@ export function CurrentActivityGraphViewport({
                   ariaLabel={waypointAriaLabel}
                   edgeId={selectedWaypointEdgeId}
                   onMoveWaypoint={onMoveEdgeWaypoint}
+                  onRemoveWaypoint={onRemoveEdgeWaypoint}
                   waypoints={selectedEdgeWaypoints}
                 />
               ) : null}

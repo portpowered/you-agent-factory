@@ -81,6 +81,7 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     waypointIndex: number,
     position: { x: number; y: number },
   ) => void;
+  removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
   nodes: Node[];
 }) {
   const messages = getFactoryGraphEditorMessages(input.locale);
@@ -185,6 +186,17 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     [canEditWaypoints, input, selectedWaypointEdgeId],
   );
 
+  const handleRemoveSelectedEdgeWaypoint = useCallback(
+    (edgeId: string, waypointIndex: number) => {
+      if (!canEditWaypoints || edgeId !== selectedWaypointEdgeId) {
+        return;
+      }
+
+      input.removeEdgeWaypoint(edgeId, waypointIndex);
+    },
+    [canEditWaypoints, input, selectedWaypointEdgeId],
+  );
+
   const handleEditorEdgeDoubleClick = useCallback(
     (edgeId: string, position: { x: number; y: number }) => {
       if (!canEditWaypoints) {
@@ -216,6 +228,7 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     handleEditorEdgeClick,
     handleEditorEdgeDoubleClick,
     handleMoveSelectedEdgeWaypoint,
+    handleRemoveSelectedEdgeWaypoint,
     selectedEdgeDescription,
     selectedEdgeWaypoints,
     selectedWaypointEdgeId,
@@ -230,7 +243,14 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
           fieldSourceLabel: messages.edgeWaypointSourceLabel,
           fieldTargetLabel: messages.edgeWaypointTargetLabel,
           onAddWaypoint: () => handleAddSelectedEdgeWaypoint(),
+          onRemoveWaypoint: (waypointIndex: number) =>
+            handleRemoveSelectedEdgeWaypoint(
+              selectedWaypointEdgeId,
+              waypointIndex,
+            ),
+          removeWaypointLabel: messages.edgeWaypointRemoveLabel,
           selectedEdgeLabel: messages.edgeWaypointSelectedLabel,
+          waypointCount: selectedEdgeWaypoints.length,
         }
       : null,
   };

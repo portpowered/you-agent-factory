@@ -87,6 +87,7 @@ export interface FactoryGraphEditorMessages {
   edgeAriaLabel: (label: string, source: string, target: string) => string;
   edgeWaypointAddLabel: string;
   edgeWaypointHandleLabel: (index: number) => string;
+  edgeWaypointRemoveLabel: (index: number) => string;
   edgeWaypointKindLabel: string;
   edgeWaypointSelectedLabel: string;
   edgeWaypointSourceLabel: string;
@@ -656,6 +657,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `${label} from ${source} to ${target}`,
       edgeWaypointAddLabel: "Add waypoint",
       edgeWaypointHandleLabel: (index) => `Move edge waypoint ${index + 1}`,
+      edgeWaypointRemoveLabel: (index) => `Remove waypoint ${index + 1}`,
       edgeWaypointKindLabel: "Kind",
       edgeWaypointSelectedLabel: "Selected edge route",
       edgeWaypointSourceLabel: "Source",
@@ -1048,6 +1050,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `${label}：从 ${source} 到 ${target}`,
       edgeWaypointAddLabel: "添加路径点",
       edgeWaypointHandleLabel: (index) => `移动边路径点 ${index + 1}`,
+      edgeWaypointRemoveLabel: (index) => `移除路径点 ${index + 1}`,
       edgeWaypointKindLabel: "类型",
       edgeWaypointSelectedLabel: "已选边路由",
       edgeWaypointSourceLabel: "来源",

@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
+import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
 } from "../../lib/layout/factory-graph-layout-operations";
+
+const EDGE_ID =
+  "workstation-output:workstation:review->work-state:story:done";
 
 describe("useFactoryGraphLayoutDraftState movement history", () => {
   it("records layout commands and supports undo and redo", () => {
@@ -226,6 +230,44 @@ describe("useFactoryGraphLayoutDraftState reset and adoption", () => {
       y: 66,
     });
     expect(result.current.canUndoLayout).toBe(false);
+  });
+});
+
+describe("useFactoryGraphLayoutDraftState edge waypoint edits", () => {
+  it("marks layout dirty without topology changes when removing waypoints", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-waypoint-remove",
+      }),
+    );
+
+    act(() => {
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 10, y: 20 });
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 30, y: 40 });
+    });
+
+    expect(result.current.layoutDirty).toBe(true);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+
+    act(() => {
+      result.current.removeEdgeWaypoint(EDGE_ID, 0);
+    });
+
+    expect(result.current.layoutDirty).toBe(true);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 30, y: 40 },
+    ]);
+
+    act(() => {
+      result.current.removeEdgeWaypoint(EDGE_ID, 0);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
   });
 });
 

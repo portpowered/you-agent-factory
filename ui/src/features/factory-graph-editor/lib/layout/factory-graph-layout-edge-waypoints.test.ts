@@ -5,6 +5,7 @@ import {
   addFactoryLayoutEdgeWaypoint,
   factoryLayoutEdgeWaypoints,
   moveFactoryLayoutEdgeWaypoint,
+  removeFactoryLayoutEdgeWaypoint,
   setFactoryLayoutEdgeWaypoints,
 } from "./factory-graph-layout-edge-waypoints";
 
@@ -38,6 +39,32 @@ describe("factory-graph-layout-edge-waypoints", () => {
       { x: 10, y: 20 },
     ]);
     const cleared = setFactoryLayoutEdgeWaypoints(layout, EDGE_ID, null);
+
+    expect(factoryLayoutEdgeWaypoints(cleared, EDGE_ID)).toBeUndefined();
+    expect(cleared.edges).toBeUndefined();
+  });
+
+  it("removes one waypoint while preserving order for remaining waypoints", () => {
+    const layout = setFactoryLayoutEdgeWaypoints(createDefaultFactoryLayout(), EDGE_ID, [
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+      { x: 50, y: 60 },
+    ]);
+
+    const withoutMiddle = removeFactoryLayoutEdgeWaypoint(layout, EDGE_ID, 1);
+
+    expect(factoryLayoutEdgeWaypoints(withoutMiddle, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 50, y: 60 },
+    ]);
+  });
+
+  it("removes the last authored waypoint and restores generated routing", () => {
+    const layout = setFactoryLayoutEdgeWaypoints(createDefaultFactoryLayout(), EDGE_ID, [
+      { x: 10, y: 20 },
+    ]);
+
+    const cleared = removeFactoryLayoutEdgeWaypoint(layout, EDGE_ID, 0);
 
     expect(factoryLayoutEdgeWaypoints(cleared, EDGE_ID)).toBeUndefined();
     expect(cleared.edges).toBeUndefined();

@@ -14,6 +14,7 @@ export function FactoryGraphEdgeWaypointLayer({
   ariaLabel,
   edgeId,
   onMoveWaypoint,
+  onRemoveWaypoint,
   waypoints,
 }: {
   ariaLabel: (index: number) => string;
@@ -22,6 +23,10 @@ export function FactoryGraphEdgeWaypointLayer({
     edgeId: string,
     waypointIndex: number,
     position: FactoryLayoutPoint,
+  ) => void;
+  onRemoveWaypoint?: (
+    edgeId: string,
+    waypointIndex: number,
   ) => void;
   waypoints: readonly FactoryLayoutPoint[];
 }) {
@@ -78,6 +83,23 @@ export function FactoryGraphEdgeWaypointLayer({
     [screenToFlowPosition, waypoints],
   );
 
+  const handleKeyDown = useCallback(
+    (waypointIndex: number) =>
+      (event: React.KeyboardEvent<HTMLButtonElement>) => {
+        if (
+          !onRemoveWaypoint ||
+          (event.key !== "Delete" && event.key !== "Backspace")
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        onRemoveWaypoint(edgeId, waypointIndex);
+      },
+    [edgeId, onRemoveWaypoint],
+  );
+
   const handlePointerUp = useCallback(
     (event: React.PointerEvent<HTMLButtonElement>) => {
       const dragSession = dragSessionRef.current;
@@ -121,6 +143,7 @@ export function FactoryGraphEdgeWaypointLayer({
             data-factory-edge-waypoint={index}
             // biome-ignore lint/suspicious/noArrayIndexKey: waypoint order is the stable identity while dragging updates position.
             key={`${edgeId}:waypoint:${index}`}
+            onKeyDown={handleKeyDown(index)}
             onPointerDown={handlePointerDown(index)}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}

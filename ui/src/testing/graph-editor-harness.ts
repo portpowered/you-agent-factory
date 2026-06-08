@@ -23,6 +23,7 @@ import {
 import {
   addFactoryLayoutEdgeWaypoint,
   moveFactoryLayoutEdgeWaypoint,
+  removeFactoryLayoutEdgeWaypoint,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-edge-waypoints";
 import {
   createDefaultFactoryLayout,
@@ -355,6 +356,15 @@ function createMockLayoutDraftState() {
         state.layoutDirty = true;
       },
     ),
+    removeEdgeWaypoint: vi.fn((edgeId: string, waypointIndex: number) => {
+      state.layout = removeFactoryLayoutEdgeWaypoint(
+        state.layout,
+        edgeId,
+        waypointIndex,
+      );
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
     moveNode: vi.fn((nodeId: string, position: { x: number; y: number }) => {
       state.layout = moveFactoryLayoutNode(state.layout, nodeId, position);
       state.hasChanges = true;
@@ -459,6 +469,7 @@ function createMockEditableFactoryGraphActions(
     },
     addEdgeWaypoint: layoutDraftState.addEdgeWaypoint,
     moveEdgeWaypoint: layoutDraftState.moveEdgeWaypoint,
+    removeEdgeWaypoint: layoutDraftState.removeEdgeWaypoint,
     moveLayoutNode: layoutDraftState.moveNode,
     moveLayoutNodesByDelta: layoutDraftState.moveNodesByDelta,
     resetLayout: layoutDraftState.resetLayout,

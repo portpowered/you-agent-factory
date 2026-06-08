@@ -43,6 +43,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     waypointIndex: number,
     position: { x: number; y: number },
   ) => void;
+  removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
   moveLayoutNode: (nodeId: string, position: { x: number; y: number }) => void;
   moveLayoutNodesByDelta: (
     nodeIds: readonly string[],
@@ -126,6 +127,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     layoutDraftState: args.layoutDraftState,
     addEdgeWaypoint: args.addEdgeWaypoint,
     moveEdgeWaypoint: args.moveEdgeWaypoint,
+    removeEdgeWaypoint: args.removeEdgeWaypoint,
     moveLayoutNode: args.moveLayoutNode,
     moveLayoutNodesByDelta: args.moveLayoutNodesByDelta,
     redoLayout: args.redoLayout,

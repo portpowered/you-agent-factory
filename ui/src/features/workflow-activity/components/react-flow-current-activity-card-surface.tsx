@@ -99,6 +99,7 @@ export function CurrentActivityGraphSurface({
     layout: editor.layoutDraftState?.layout ?? createDefaultFactoryLayout(),
     locale,
     moveEdgeWaypoint: editor.moveEdgeWaypoint,
+    removeEdgeWaypoint: editor.removeEdgeWaypoint,
     nodes: graph.nodes,
   });
   const viewportEdges = waypointEditor.decorateEditorEdges(graph.edges);
@@ -230,6 +231,7 @@ export function CurrentActivityGraphSurface({
         onEditorEdgeClick={waypointEditor.handleEditorEdgeClick}
         onEditorEdgeDoubleClick={waypointEditor.handleEditorEdgeDoubleClick}
         onMoveEdgeWaypoint={waypointEditor.handleMoveSelectedEdgeWaypoint}
+        onRemoveEdgeWaypoint={waypointEditor.handleRemoveSelectedEdgeWaypoint}
         selectedEdgeWaypoints={waypointEditor.selectedEdgeWaypoints}
         selectedWaypointEdgeId={waypointEditor.selectedWaypointEdgeId}
         waypointAriaLabel={waypointEditor.waypointAriaLabel}

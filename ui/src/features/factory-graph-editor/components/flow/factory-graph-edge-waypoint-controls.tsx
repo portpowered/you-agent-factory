@@ -9,7 +9,10 @@ export function FactoryGraphEdgeWaypointControls({
   fieldSourceLabel,
   fieldTargetLabel,
   onAddWaypoint,
+  onRemoveWaypoint,
+  removeWaypointLabel,
   selectedEdgeLabel,
+  waypointCount,
 }: {
   addWaypointLabel: string;
   edgeKindLabel: string;
@@ -19,7 +22,10 @@ export function FactoryGraphEdgeWaypointControls({
   fieldSourceLabel: string;
   fieldTargetLabel: string;
   onAddWaypoint: () => void;
+  onRemoveWaypoint: (waypointIndex: number) => void;
+  removeWaypointLabel: (index: number) => string;
   selectedEdgeLabel: string;
+  waypointCount: number;
 }) {
   return (
     <section
@@ -44,10 +50,20 @@ export function FactoryGraphEdgeWaypointControls({
           <dd className="m-0">{edgeKindLabel}</dd>
         </div>
       </dl>
-      <div className="mt-3">
+      <div className="mt-3 flex flex-wrap gap-2">
         <DashboardActionButton onClick={onAddWaypoint} tone="secondary">
           {addWaypointLabel}
         </DashboardActionButton>
+        {Array.from({ length: waypointCount }, (_, index) => (
+          <DashboardActionButton
+            // biome-ignore lint/suspicious/noArrayIndexKey: waypoint order is the stable identity for remove controls.
+            key={`remove-waypoint-${index}`}
+            onClick={() => onRemoveWaypoint(index)}
+            tone="secondary"
+          >
+            {removeWaypointLabel(index)}
+          </DashboardActionButton>
+        ))}
       </div>
     </section>
   );

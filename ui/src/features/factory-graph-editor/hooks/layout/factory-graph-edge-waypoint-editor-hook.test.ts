@@ -1,6 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  addFactoryLayoutEdgeWaypoint,
+  factoryLayoutEdgeWaypoints,
+} from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import { createDefaultFactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 import { useFactoryGraphEdgeWaypointEditor } from "./factory-graph-edge-waypoint-editor-hook";
 
@@ -11,6 +15,7 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
   it("selects edges for waypoint editing and adds waypoints through layout actions", () => {
     const addEdgeWaypoint = vi.fn();
     const moveEdgeWaypoint = vi.fn();
+    const removeEdgeWaypoint = vi.fn();
 
     const { result } = renderHook(() =>
       useFactoryGraphEdgeWaypointEditor({
@@ -22,6 +27,7 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
         layout: createDefaultFactoryLayout(),
         locale: "en",
         moveEdgeWaypoint,
+        removeEdgeWaypoint,
         nodes: [
           {
             id: "workstation:review",
@@ -53,6 +59,48 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
     expect(addEdgeWaypoint).toHaveBeenCalledWith(EDGE_ID, { x: 100, y: 50 });
   });
 
+  it("removes selected edge waypoints through layout actions", () => {
+    const removeEdgeWaypoint = vi.fn();
+    const layout = addFactoryLayoutEdgeWaypoint(
+      addFactoryLayoutEdgeWaypoint(createDefaultFactoryLayout(), EDGE_ID, {
+        x: 10,
+        y: 20,
+      }),
+      EDGE_ID,
+      { x: 30, y: 40 },
+    );
+
+    const { result } = renderHook(() =>
+      useFactoryGraphEdgeWaypointEditor({
+        activeTool: null,
+        addEdgeWaypoint: vi.fn(),
+        canInteractWithEditor: true,
+        editorMode: true,
+        handleEditorEdgeDelete: vi.fn(),
+        layout,
+        locale: "en",
+        moveEdgeWaypoint: vi.fn(),
+        removeEdgeWaypoint,
+        nodes: [],
+      }),
+    );
+
+    act(() => {
+      result.current.handleEditorEdgeClick(EDGE_ID);
+    });
+
+    expect(factoryLayoutEdgeWaypoints(layout, EDGE_ID)).toHaveLength(2);
+    expect(result.current.waypointControls?.waypointCount).toBe(2);
+
+    act(() => {
+      result.current.handleRemoveSelectedEdgeWaypoint(EDGE_ID, 0);
+      result.current.waypointControls?.onRemoveWaypoint(1);
+    });
+
+    expect(removeEdgeWaypoint).toHaveBeenNthCalledWith(1, EDGE_ID, 0);
+    expect(removeEdgeWaypoint).toHaveBeenNthCalledWith(2, EDGE_ID, 1);
+  });
+
   it("routes delete-tool edge clicks to edge deletion", () => {
     const handleEditorEdgeDelete = vi.fn();
 
@@ -66,6 +114,7 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
         layout: createDefaultFactoryLayout(),
         locale: "en",
         moveEdgeWaypoint: vi.fn(),
+        removeEdgeWaypoint: vi.fn(),
         nodes: [],
       }),
     );

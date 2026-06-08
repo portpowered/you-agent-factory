@@ -121,6 +121,31 @@ export function addFactoryLayoutEdgeWaypoint(
   return setFactoryLayoutEdgeWaypoints(layout, edgeId, currentWaypoints);
 }
 
+export function removeFactoryLayoutEdgeWaypoint(
+  layout: FactoryLayout,
+  edgeId: string,
+  waypointIndex: number,
+): FactoryLayout {
+  const currentWaypoints = factoryLayoutEdgeWaypoints(layout, edgeId);
+  if (
+    !currentWaypoints ||
+    waypointIndex < 0 ||
+    waypointIndex >= currentWaypoints.length
+  ) {
+    return layout;
+  }
+
+  const nextWaypoints = currentWaypoints.filter(
+    (_, index) => index !== waypointIndex,
+  );
+
+  return setFactoryLayoutEdgeWaypoints(
+    layout,
+    edgeId,
+    nextWaypoints.length > 0 ? nextWaypoints : null,
+  );
+}
+
 export function moveFactoryLayoutEdgeWaypoint(
   layout: FactoryLayout,
   edgeId: string,

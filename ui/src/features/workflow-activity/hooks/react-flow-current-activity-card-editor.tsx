@@ -157,6 +157,7 @@ export function useCurrentActivityGraphEditor(
     layoutDraftState: editableGraph.layoutDraftState,
     addEdgeWaypoint: editableGraph.actions.addEdgeWaypoint,
     moveEdgeWaypoint: editableGraph.actions.moveEdgeWaypoint,
+    removeEdgeWaypoint: editableGraph.actions.removeEdgeWaypoint,
     moveLayoutNode: editableGraph.actions.moveLayoutNode,
     moveLayoutNodesByDelta: editableGraph.actions.moveLayoutNodesByDelta,
     resetLayout: editableGraph.actions.resetLayout,

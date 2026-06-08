@@ -5,6 +5,7 @@ import {
   addFactoryLayoutEdgeWaypoint,
   factoryLayoutEdgeWaypoints,
   moveFactoryLayoutEdgeWaypoint,
+  removeFactoryLayoutEdgeWaypoint,
 } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
   createMoveFactoryLayoutNodeCommand,
@@ -54,6 +55,7 @@ export interface FactoryGraphLayoutDraftDerivedState {
     waypointIndex: number,
     position: FactoryLayoutPoint,
   ) => void;
+  removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
   moveNode: (nodeId: string, position: FactoryLayoutPoint) => void;
   moveNodesByDelta: (
     nodeIds: readonly string[],
@@ -268,6 +270,18 @@ export function useFactoryGraphLayoutDraftState(
     },
     [commitEdgeWaypointUpdate],
   );
+  const removeEdgeWaypoint = useCallback(
+    (edgeId: string, waypointIndex: number) => {
+      commitEdgeWaypointUpdate(edgeId, (currentLayout) =>
+        removeFactoryLayoutEdgeWaypoint(
+          currentLayout,
+          edgeId,
+          waypointIndex,
+        ),
+      );
+    },
+    [commitEdgeWaypointUpdate],
+  );
   const moveNode = useCallback(
     (nodeId: string, position: FactoryLayoutPoint) => {
       commitLayoutUpdate(({ currentLayout }) => ({
@@ -403,6 +417,7 @@ export function useFactoryGraphLayoutDraftState(
     layout,
     layoutDirty,
     moveEdgeWaypoint,
+    removeEdgeWaypoint,
     moveNode,
     moveNodesByDelta,
     pruneLayoutHistoryForNodeIds,
