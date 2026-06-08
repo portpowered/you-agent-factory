@@ -30,6 +30,8 @@ describe("Input primitives", () => {
 
     const textarea = screen.getByLabelText("Factory notes");
     expect(textarea.className).toContain("min-h-28");
+    expect(textarea.className).toContain("max-h-52");
+    expect(textarea.className).toContain("overflow-y-auto");
     expect(textarea.className).toContain("border-outline");
   });
 

@@ -407,3 +407,103 @@ describe("SubmitWorkCard submission outcomes", () => {
     ).not.toHaveAttribute("aria-invalid");
   });
 });
+
+describe("SubmitWorkCard submission textarea", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("uses the shared textarea primitive with scroll constraints for long text", () => {
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        items: [
+          {
+            id: "submission-item-1",
+            text: "line\n".repeat(40),
+            type: "text",
+          },
+        ],
+      },
+    });
+
+    const submissionTextarea = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: messages.requestItemLabel(1),
+    });
+
+    expect(submissionTextarea.className).toContain("min-h-28");
+    expect(submissionTextarea.className).toContain("max-h-52");
+    expect(submissionTextarea.className).toContain("overflow-y-auto");
+    expect(submissionTextarea.className).toContain("resize-none");
+    expect(submissionTextarea.className).toContain("border-outline");
+
+    Object.defineProperty(submissionTextarea, "scrollHeight", {
+      configurable: true,
+      value: 480,
+    });
+    Object.defineProperty(submissionTextarea, "clientHeight", {
+      configurable: true,
+      value: 208,
+    });
+
+    expect(submissionTextarea.scrollHeight).toBeGreaterThan(
+      submissionTextarea.clientHeight,
+    );
+    submissionTextarea.scrollTop = 72;
+    expect(submissionTextarea.scrollTop).toBe(72);
+  });
+
+  it("preserves authoring behavior and disabled treatment on the submission textarea", () => {
+    const onItemTextChange = vi.fn();
+
+    const { rerender } = renderSubmitWorkCard({
+      onItemTextChange,
+    });
+
+    const submissionTextarea = screen.getByRole<HTMLTextAreaElement>("textbox", {
+      name: messages.requestItemLabel(1),
+    });
+
+    fireEvent.change(submissionTextarea, {
+      target: { value: "Driver review details" },
+    });
+    expect(onItemTextChange).toHaveBeenCalledWith(
+      "submission-item-1",
+      "Driver review details",
+    );
+
+    fireEvent.paste(submissionTextarea, {
+      clipboardData: {
+        getData: () => " pasted",
+      },
+    });
+
+    submissionTextarea.focus();
+    expect(submissionTextarea).toHaveFocus();
+
+    rerender(
+      <SubmitWorkCard
+        draft={defaultDraft}
+        isSubmitting
+        onAddItem={() => {}}
+        onItemTextChange={onItemTextChange}
+        onRemoveItem={() => {}}
+        onRequestNameChange={() => {}}
+        onStageFileItems={() => {}}
+        onSubmit={() => {}}
+        onWorkTypeNameChange={() => {}}
+        status={{
+          kind: "submitting",
+          message: messages.statusMessages.submitting,
+        }}
+        submitWorkTypeNames={["story", "task"]}
+      />,
+    );
+
+    expect(
+      screen.getByRole<HTMLTextAreaElement>("textbox", {
+        name: messages.requestItemLabel(1),
+      }),
+    ).toBeDisabled();
+  });
+});
