@@ -186,6 +186,14 @@ function EditableConfigurationCronTriggerAtStartField({
         htmlFor={fieldId}
       >
         <Checkbox
+          aria-describedby={
+            state.validationErrors.cronTriggerAtStart
+              ? `${fieldId}-error`
+              : undefined
+          }
+          aria-invalid={
+            state.validationErrors.cronTriggerAtStart ? "true" : undefined
+          }
           checked={cron.triggerAtStart}
           id={fieldId}
           onChange={(event) =>

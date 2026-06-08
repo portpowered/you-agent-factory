@@ -123,6 +123,10 @@ describe("EditableConfigurationSection cron workstations", () => {
     });
 
     expectStyledCheckbox(triggerAtStartCheckbox);
+    expect(triggerAtStartCheckbox.getAttribute("aria-invalid")).toBe("true");
+    expect(triggerAtStartCheckbox.getAttribute("aria-describedby")).toBe(
+      "editable-workstation-cron-trigger-at-start-error",
+    );
     expect(screen.getByText(validationMessage)).toBeInTheDocument();
   });
 
