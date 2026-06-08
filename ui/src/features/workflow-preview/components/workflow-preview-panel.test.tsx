@@ -238,4 +238,48 @@ describe("WorkflowPreviewPanel", () => {
     expect(screen.getByText(/workflow.source.notFound/)).toBeTruthy();
     expect(screen.getByText(/line 3, column 5/)).toBeTruthy();
   });
+
+  it("formats diagnostics with line-only locations", async () => {
+    vi.mocked(previewWorkflow).mockResolvedValue({
+      valid: false,
+      sourceResolution: {
+        found: true,
+        requestKind: "WORKFLOW_NAME",
+      },
+      sourceValidationIssues: [
+        {
+          code: "workflow.source.syntaxError",
+          message: "unexpected token",
+          line: 9,
+        },
+      ],
+      policyPreview: {
+        effectivePolicy: { mode: "READ_ONLY" },
+        policyHash: "sha256:policy",
+        maxChildCount: 16,
+        maxConcurrency: 4,
+        deniedCapabilities: [],
+        validationIssues: [],
+      },
+      resultConstraints: {
+        requiresStructuredCloneableJson: true,
+        artifactUriScheme: "you-artifact",
+        maxEmbeddedBytes: 65536,
+        rejectedValueKinds: ["function"],
+      },
+    });
+
+    render(
+      <WorkflowPreviewPanel
+        projectRoot="/tmp/project"
+        sourceKind="WORKFLOW_NAME"
+        sourceValue="broken"
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/\(line 9\)/)).toBeTruthy();
+    });
+  });
 });

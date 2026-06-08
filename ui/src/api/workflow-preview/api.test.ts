@@ -114,4 +114,71 @@ describe("previewWorkflow", () => {
       code: "NETWORK_ERROR",
     });
   });
+
+  it("uses the network message when fetch throws", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("connection reset")),
+    );
+
+    await expect(
+      previewWorkflow({
+        sourceKind: "WORKFLOW_NAME",
+        projectRoot: "/tmp/project",
+        sourceValue: "review",
+      }),
+    ).rejects.toMatchObject({
+      message: workflowPreviewAPIErrorMessages.network,
+      code: "NETWORK_ERROR",
+    });
+  });
+
+  it("maps server errors without messages to the rejected request copy", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({}), {
+          headers: { "Content-Type": "application/json" },
+          status: 500,
+          statusText: "Internal Server Error",
+        }),
+      ),
+    );
+
+    await expect(
+      previewWorkflow({
+        sourceKind: "WORKFLOW_NAME",
+        projectRoot: "/tmp/project",
+        sourceValue: "review",
+      }),
+    ).rejects.toMatchObject({
+      message: workflowPreviewAPIErrorMessages.rejectedRequest,
+      code: "INTERNAL_ERROR",
+      status: 500,
+    });
+  });
+
+  it("rejects non-object preview payloads", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify("not-an-object"), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+          statusText: "OK",
+        }),
+      ),
+    );
+
+    await expect(
+      previewWorkflow({
+        sourceKind: "WORKFLOW_NAME",
+        projectRoot: "/tmp/project",
+        sourceValue: "review",
+      }),
+    ).rejects.toMatchObject({
+      message: workflowPreviewAPIErrorMessages.invalidResponse,
+      code: "INTERNAL_ERROR",
+    });
+  });
 });
