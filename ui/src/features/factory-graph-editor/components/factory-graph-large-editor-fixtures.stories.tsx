@@ -9,7 +9,7 @@ import {
   buildFactoryGraphEditorFlowModel,
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
-} from "./factory-graph-editor-flow";
+} from "./flow/factory-graph-editor-flow";
 
 const fiveHundredNodeFixture = factoryGraphLargeEditorFixtures.fiveHundred;
 
