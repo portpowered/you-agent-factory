@@ -474,7 +474,7 @@ paths:
         - Factory
       operationId: startDurableFactorySessionAsync
       summary: Start durable factory session execution asynchronously
-      description: Primary durable execution entrypoint for dynamic workflow-backed factory sessions. Accepts the normalized FactorySessionExecutionRequest, resolves the requested source, and returns session identity plus polling links without waiting for terminal completion. Replaying the same requestId with the same normalized source, args, orchestrator, and requested policy returns the existing session instead of starting duplicate work. Reusing requestId with materially different inputs returns 409 Conflict.
+      description: 'Primary durable execution entrypoint for dynamic workflow-backed factory sessions. Accepts the normalized FactorySessionExecutionRequest, resolves the requested source, and returns session identity plus polling links without waiting for terminal completion. WORKFLOW_FILE and WORKFLOW_NAME sources resolve in order: project `.claude/workflows`, user `~/.you-agent-factory/workflows`, package-relative workflow directories, built-in/global JavaScript factories, then explicit factory lookup when requested or required. Replaying the same requestId with the same normalized source, args, orchestrator, and requested policy returns the existing session instead of starting duplicate work. Reusing requestId with materially different inputs returns 409 Conflict with EXECUTION_REQUEST_ID_CONFLICT.'
       requestBody:
         required: true
         content:
@@ -500,7 +500,7 @@ paths:
         - Factory
       operationId: startDurableFactorySessionSync
       summary: Start durable factory session execution synchronously
-      description: Durable execution entrypoint that waits for terminal completion or a sync timeout before returning. Accepts the same normalized FactorySessionExecutionRequest as POST /factory-sessions/async. When the session reaches a terminal result before timeout, the response includes FactorySessionResult. Timeout responses use syncOutcome = TIMED_OUT and must not imply the session was canceled unless wait.cancelOnTimeout was explicitly true in the request.
+      description: Durable execution entrypoint that waits for terminal completion or a sync timeout before returning. Accepts the same normalized FactorySessionExecutionRequest as POST /factory-sessions/async and uses the same workflow source resolution order and requestId idempotency semantics. When the session reaches a terminal result before timeout, the response includes FactorySessionResult. Timeout responses use syncOutcome = TIMED_OUT and must not imply the session was canceled unless wait.cancelOnTimeout was explicitly true in the request.
       requestBody:
         required: true
         content:
@@ -3633,9 +3633,15 @@ components:
         sourceHash:
           type: string
           description: Stable hash of the resolved workflow or factory source when available.
+        requestedPolicy:
+          $ref: '#/components/schemas/FactorySessionRequestedPolicy'
+          description: Caller-requested policy from the original execution request when available.
+        effectivePolicy:
+          $ref: '#/components/schemas/FactorySessionEffectivePolicy'
+          description: Effective approved orchestrator policy after any required approval.
         effectivePolicyHash:
           type: string
-          description: Stable hash of the effective approved orchestrator policy when available.
+          description: Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
         staleLease:
           type: boolean
           description: True when the durable session lease is stale or interrupted while status still appears active.
@@ -3669,9 +3675,15 @@ components:
         sourceHash:
           type: string
           description: Stable hash of the resolved workflow or factory source when available.
+        requestedPolicy:
+          $ref: '#/components/schemas/FactorySessionRequestedPolicy'
+          description: Caller-requested policy from the original execution request when available.
+        effectivePolicy:
+          $ref: '#/components/schemas/FactorySessionEffectivePolicy'
+          description: Effective approved orchestrator policy after any required approval.
         effectivePolicyHash:
           type: string
-          description: Stable hash of the effective approved orchestrator policy when available.
+          description: Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
         phase:
           type: string
           description: Current workflow phase when execution is in progress.
@@ -3881,12 +3893,12 @@ components:
       required:
         - requestId
         - source
-      description: Normalized durable factory-session execution request shared by async and sync start routes. Replaying the same requestId with materially different source, args, orchestrator, or requested policy is rejected with an idempotency conflict.
+      description: Normalized durable factory-session execution request shared by async and sync start routes. Idempotency compares requestId against the normalized tuple of source, args, orchestrator, and requestedPolicy. Replaying the same requestId with the same normalized tuple returns the existing session or sync result instead of starting duplicate work. Reusing requestId with a materially different tuple returns 409 Conflict with EXECUTION_REQUEST_ID_CONFLICT.
       properties:
         requestId:
           type: string
           minLength: 1
-          description: Caller-supplied idempotency key. Replays with the same normalized source, args, orchestrator, and requested policy return the existing session instead of starting duplicate work.
+          description: Caller-supplied idempotency key. Normalization includes source kind and kind-specific selector, JSON-canonical args, orchestrator when present, and requestedPolicy when present (preferring policyHash when supplied). Replays with the same normalized tuple return the existing session instead of starting duplicate work.
         source:
           $ref: '#/components/schemas/FactorySessionExecutionSource'
         args:
@@ -3907,7 +3919,7 @@ components:
       additionalProperties: false
       required:
         - kind
-      description: Durable execution source selector. Exactly one payload field matching `kind` must be supplied. Resolution order for workflow file and workflow name sources is documented on the durable execution routes.
+      description: 'Durable execution source selector. Exactly one payload field matching `kind` must be supplied. WORKFLOW_FILE and WORKFLOW_NAME sources resolve using FactorySessionWorkflowSourceResolutionOrder: project `.claude/workflows`, user `~/.you-agent-factory/workflows`, package-relative workflow directories, built-in/global JavaScript factories, then explicit factory lookup when requested or required by the reference.'
       properties:
         kind:
           $ref: '#/components/schemas/FactorySessionExecutionSourceKind'
@@ -3968,11 +3980,40 @@ components:
     FactorySessionRequestedPolicy:
       type: object
       additionalProperties: true
-      description: Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload.
+      description: Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
       properties:
         policyHash:
           type: string
           description: Optional stable hash of the requested policy object when the caller already computed one for idempotency comparisons.
+    FactorySessionEffectivePolicy:
+      type: object
+      additionalProperties: true
+      description: Effective approved orchestrator policy for one durable execution after any required approval. Distinct from FactorySessionRequestedPolicy, which captures caller intent before approval.
+      properties:
+        policyHash:
+          type: string
+          description: Stable hash of the effective approved policy object when available.
+    FactorySessionWorkflowSourceResolutionOrder:
+      type: string
+      description: 'Documented workflow and factory source resolution order for durable execution. WORKFLOW_FILE and WORKFLOW_NAME sources are resolved in this order: (1) project `.claude/workflows`, (2) user `~/.you-agent-factory/workflows`, (3) package-relative workflow directories for the active project or package, (4) built-in/global JavaScript factories, (5) explicit named factory lookup when `source.kind` is FACTORY_ID or when a workflow reference requires factory fallback. FACTORY_ID resolves a stored named factory directly. FACTORY_INLINE and INLINE_WORKFLOW use the inline payload from the request without filesystem search.'
+      enum:
+        - PROJECT_CLAUDE_WORKFLOWS
+        - USER_YOU_AGENT_FACTORY_WORKFLOWS
+        - PACKAGE_RELATIVE_WORKFLOW_DIRECTORIES
+        - BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES
+        - EXPLICIT_FACTORY_LOOKUP
+      x-enum-varnames:
+        - FactorySessionWorkflowSourceResolutionOrderProjectClaudeWorkflows
+        - FactorySessionWorkflowSourceResolutionOrderUserYouAgentFactoryWorkflows
+        - FactorySessionWorkflowSourceResolutionOrderPackageRelativeWorkflowDirectories
+        - FactorySessionWorkflowSourceResolutionOrderBuiltinGlobalJavaScriptFactories
+        - FactorySessionWorkflowSourceResolutionOrderExplicitFactoryLookup
+      x-enum-descriptions:
+        - Search project-local `.claude/workflows` first for workflow file and name sources.
+        - Search user-local `~/.you-agent-factory/workflows` when project-local search misses.
+        - Search package-relative workflow directories for the active project or package.
+        - Search built-in/global JavaScript factories when no authored workflow file matches.
+        - Resolve an explicit named factory when requested or when workflow resolution requires factory fallback.
     FactorySessionExecutionWaitOptions:
       type: object
       additionalProperties: false
@@ -3999,12 +4040,20 @@ components:
         sourceRef:
           type: string
           description: Safe customer-facing source reference after resolution.
+        sourceHash:
+          type: string
+          description: Stable hash of the resolved workflow or factory source when available.
         dialect:
           type: string
           description: Resolved workflow dialect when applicable.
         metadata:
           $ref: '#/components/schemas/StringMap'
           description: Safe resolved source metadata for clients and dashboards.
+        resolutionOrder:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionWorkflowSourceResolutionOrder'
+          description: Resolution stages that matched for WORKFLOW_FILE and WORKFLOW_NAME sources. Omitted for inline and direct factory-id sources.
     FactorySessionDurableLifecycleStatus:
       type: string
       description: Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
@@ -4075,9 +4124,15 @@ components:
         sourceHash:
           type: string
           description: Stable hash of the resolved workflow or factory source when available.
+        requestedPolicy:
+          $ref: '#/components/schemas/FactorySessionRequestedPolicy'
+          description: Caller-requested policy echoed from the execution request when available.
+        effectivePolicy:
+          $ref: '#/components/schemas/FactorySessionEffectivePolicy'
+          description: Effective approved orchestrator policy after any required approval.
         effectivePolicyHash:
           type: string
-          description: Stable hash of the effective approved orchestrator policy when available.
+          description: Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
         links:
           $ref: '#/components/schemas/FactorySessionExecutionLinks'
           description: Polling and inspection links for async clients.
@@ -4122,9 +4177,15 @@ components:
         sourceHash:
           type: string
           description: Stable hash of the resolved workflow or factory source when available.
+        requestedPolicy:
+          $ref: '#/components/schemas/FactorySessionRequestedPolicy'
+          description: Caller-requested policy echoed from the execution request when available.
+        effectivePolicy:
+          $ref: '#/components/schemas/FactorySessionEffectivePolicy'
+          description: Effective approved orchestrator policy after any required approval.
         effectivePolicyHash:
           type: string
-          description: Stable hash of the effective approved orchestrator policy when available.
+          description: Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
         links:
           $ref: '#/components/schemas/FactorySessionExecutionLinks'
           description: Inspection links for the started session.

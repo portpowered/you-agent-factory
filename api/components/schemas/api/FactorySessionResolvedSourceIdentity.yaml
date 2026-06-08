@@ -11,9 +11,19 @@ properties:
   sourceRef:
     type: string
     description: Safe customer-facing source reference after resolution.
+  sourceHash:
+    type: string
+    description: Stable hash of the resolved workflow or factory source when available.
   dialect:
     type: string
     description: Resolved workflow dialect when applicable.
   metadata:
     $ref: '../shared/StringMap.yaml'
     description: Safe resolved source metadata for clients and dashboards.
+  resolutionOrder:
+    type: array
+    items:
+      $ref: './FactorySessionWorkflowSourceResolutionOrder.yaml'
+    description: >-
+      Resolution stages that matched for WORKFLOW_FILE and WORKFLOW_NAME sources.
+      Omitted for inline and direct factory-id sources.

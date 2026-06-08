@@ -22,6 +22,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertSubmitWorkSurfaceSchemas(t, schemas)
 	assertInvocationSurfaceSchemas(t, schemas, paths)
 	assertDurableExecutionSurfaceSchemas(t, schemas, paths)
+	assertDurableSourceResolutionAndIdempotencySurfaceSchemas(t, schemas, paths)
 	assertDurableSessionReadSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionResultSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionDispatchArtifactSurfaceSchemas(t, schemas, paths)
@@ -488,14 +489,14 @@ func assertDurableExecutionSurfaceSchemas(t *testing.T, schemas map[string]any, 
 	assertPropertyRef(t, asyncResponseProperties, "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
 	assertPropertyRef(t, asyncResponseProperties, "resolvedSource", "#/components/schemas/FactorySessionResolvedSourceIdentity")
 	assertPropertyRef(t, asyncResponseProperties, "links", "#/components/schemas/FactorySessionExecutionLinks")
-	assertSchemaPropertiesPresent(t, asyncResponseProperties, "FactorySessionExecutionResponse", "sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash", "effectivePolicyHash", "links")
+	assertSchemaPropertiesPresent(t, asyncResponseProperties, "FactorySessionExecutionResponse", "sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash", "requestedPolicy", "effectivePolicy", "effectivePolicyHash", "links")
 
 	syncResponseSchema := schemaObject(t, schemas, "FactorySessionSyncExecutionResponse")
 	assertRequiredFields(t, syncResponseSchema, "sessionId", "status", "orchestratorKind", "resolvedSource", "syncOutcome")
 	syncResponseProperties := schemaProperties(t, syncResponseSchema, "FactorySessionSyncExecutionResponse")
 	assertPropertyRef(t, syncResponseProperties, "syncOutcome", "#/components/schemas/FactorySessionSyncExecutionOutcome")
 	assertPropertyRef(t, syncResponseProperties, "result", "#/components/schemas/FactorySessionResult")
-	assertSchemaPropertiesPresent(t, syncResponseProperties, "FactorySessionSyncExecutionResponse", "syncOutcome", "result", "timedOut", "sessionCanceledByTimeout")
+	assertSchemaPropertiesPresent(t, syncResponseProperties, "FactorySessionSyncExecutionResponse", "requestedPolicy", "effectivePolicy", "effectivePolicyHash", "syncOutcome", "result", "timedOut", "sessionCanceledByTimeout")
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionSyncExecutionOutcome"), "FactorySessionSyncExecutionOutcome", []string{"COMPLETED", "TIMED_OUT", "STILL_RUNNING"})
 
 	waitOptions := schemaObject(t, schemas, "FactorySessionExecutionWaitOptions")
@@ -511,6 +512,82 @@ func assertDurableExecutionSurfaceSchemas(t *testing.T, schemas map[string]any, 
 	invokeDescription, _ := invokeOperation["description"].(string)
 	if !strings.Contains(strings.ToLower(invokeDescription), "not the primary durable") {
 		t.Fatalf("paths./factory-sessions/{session_id}/invocations.post.description must document live-session compatibility, got %q", invokeDescription)
+	}
+}
+
+func assertDurableSourceResolutionAndIdempotencySurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	asyncOperation := pathOperation(t, paths, "/factory-sessions/async", "post")
+	asyncDescription, _ := asyncOperation["description"].(string)
+	for _, fragment := range []string{
+		".claude/workflows",
+		"~/.you-agent-factory/workflows",
+		"package-relative workflow directories",
+		"built-in/global JavaScript factories",
+		"explicit factory lookup",
+		"EXECUTION_REQUEST_ID_CONFLICT",
+	} {
+		if !strings.Contains(asyncDescription, fragment) {
+			t.Fatalf("paths./factory-sessions/async.post.description must document %q, got %q", fragment, asyncDescription)
+		}
+	}
+
+	syncOperation := pathOperation(t, paths, "/factory-sessions/sync", "post")
+	syncDescription, _ := syncOperation["description"].(string)
+	if !strings.Contains(strings.ToLower(syncDescription), "idempotency") {
+		t.Fatalf("paths./factory-sessions/sync.post.description must document requestId idempotency, got %q", syncDescription)
+	}
+
+	sourceSchema := schemaObject(t, schemas, "FactorySessionExecutionSource")
+	sourceDescription, _ := sourceSchema["description"].(string)
+	if !strings.Contains(sourceDescription, "FactorySessionWorkflowSourceResolutionOrder") {
+		t.Fatalf("components.schemas.FactorySessionExecutionSource.description must reference FactorySessionWorkflowSourceResolutionOrder")
+	}
+
+	resolvedSourceSchema := schemaObject(t, schemas, "FactorySessionResolvedSourceIdentity")
+	resolvedSourceProperties := schemaProperties(t, resolvedSourceSchema, "FactorySessionResolvedSourceIdentity")
+	assertPropertyRef(t, resolvedSourceProperties, "kind", "#/components/schemas/FactorySessionExecutionSourceKind")
+	assertArrayItemRef(t, resolvedSourceProperties, "resolutionOrder", "#/components/schemas/FactorySessionWorkflowSourceResolutionOrder")
+	assertSchemaPropertiesPresent(t, resolvedSourceProperties, "FactorySessionResolvedSourceIdentity",
+		"kind", "sourceRef", "sourceHash", "dialect", "metadata", "resolutionOrder")
+
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionWorkflowSourceResolutionOrder"), "FactorySessionWorkflowSourceResolutionOrder", []string{
+		"PROJECT_CLAUDE_WORKFLOWS",
+		"USER_YOU_AGENT_FACTORY_WORKFLOWS",
+		"PACKAGE_RELATIVE_WORKFLOW_DIRECTORIES",
+		"BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES",
+		"EXPLICIT_FACTORY_LOOKUP",
+	})
+
+	requestedPolicySchema := schemaObject(t, schemas, "FactorySessionRequestedPolicy")
+	requestedPolicyProperties := schemaProperties(t, requestedPolicySchema, "FactorySessionRequestedPolicy")
+	assertSchemaPropertiesPresent(t, requestedPolicyProperties, "FactorySessionRequestedPolicy", "policyHash")
+
+	effectivePolicySchema := schemaObject(t, schemas, "FactorySessionEffectivePolicy")
+	effectivePolicyProperties := schemaProperties(t, effectivePolicySchema, "FactorySessionEffectivePolicy")
+	assertSchemaPropertiesPresent(t, effectivePolicyProperties, "FactorySessionEffectivePolicy", "policyHash")
+
+	requestSchema := schemaObject(t, schemas, "FactorySessionExecutionRequest")
+	requestDescription, _ := requestSchema["description"].(string)
+	if !strings.Contains(strings.ToLower(requestDescription), "idempotency") {
+		t.Fatalf("components.schemas.FactorySessionExecutionRequest.description must document idempotency normalization")
+	}
+	requestProperties := schemaProperties(t, requestSchema, "FactorySessionExecutionRequest")
+	assertPropertyRef(t, requestProperties, "requestedPolicy", "#/components/schemas/FactorySessionRequestedPolicy")
+
+	asyncResponseProperties := schemaProperties(t, schemaObject(t, schemas, "FactorySessionExecutionResponse"), "FactorySessionExecutionResponse")
+	assertPropertyRef(t, asyncResponseProperties, "requestedPolicy", "#/components/schemas/FactorySessionRequestedPolicy")
+	assertPropertyRef(t, asyncResponseProperties, "effectivePolicy", "#/components/schemas/FactorySessionEffectivePolicy")
+
+	errorSchema := schemaObject(t, schemas, "ErrorResponse")
+	codeProperty, ok := schemaProperties(t, errorSchema, "ErrorResponse")["code"].(map[string]any)
+	if !ok {
+		t.Fatalf("components.schemas.ErrorResponse.properties.code is missing")
+	}
+	codeEnum, ok := codeProperty["enum"].([]any)
+	if !ok || !containsString(codeEnum, "EXECUTION_REQUEST_ID_CONFLICT") {
+		t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing EXECUTION_REQUEST_ID_CONFLICT")
 	}
 }
 
@@ -566,9 +643,11 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, durableReadModelProperties, "failure", "#/components/schemas/FactorySessionDurableFailureDetail")
 	assertPropertyRef(t, durableReadModelProperties, "lifecycle", "#/components/schemas/FactorySessionDurableLifecycleTimestamps")
 	assertPropertyRef(t, durableReadModelProperties, "links", "#/components/schemas/FactorySessionExecutionLinks")
+	assertPropertyRef(t, durableReadModelProperties, "requestedPolicy", "#/components/schemas/FactorySessionRequestedPolicy")
+	assertPropertyRef(t, durableReadModelProperties, "effectivePolicy", "#/components/schemas/FactorySessionEffectivePolicy")
 	assertSchemaPropertiesPresent(t, durableReadModelProperties, "FactorySessionDurableReadModel",
 		"sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash",
-		"effectivePolicyHash", "phase", "phaseSummaries", "progress", "budgets", "usage",
+		"requestedPolicy", "effectivePolicy", "effectivePolicyHash", "phase", "phaseSummaries", "progress", "budgets", "usage",
 		"artifactRefs", "resultSummary", "failure", "lifecycle", "staleLease", "links")
 
 	durableSummary := schemaObject(t, schemas, "FactorySessionDurableSummary")
@@ -576,9 +655,11 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	durableSummaryProperties := schemaProperties(t, durableSummary, "FactorySessionDurableSummary")
 	assertPropertyRef(t, durableSummaryProperties, "status", "#/components/schemas/FactorySessionDurableLifecycleStatus")
 	assertPropertyRef(t, durableSummaryProperties, "resolvedSource", "#/components/schemas/FactorySessionResolvedSourceIdentity")
+	assertPropertyRef(t, durableSummaryProperties, "requestedPolicy", "#/components/schemas/FactorySessionRequestedPolicy")
+	assertPropertyRef(t, durableSummaryProperties, "effectivePolicy", "#/components/schemas/FactorySessionEffectivePolicy")
 	assertSchemaPropertiesPresent(t, durableSummaryProperties, "FactorySessionDurableSummary",
 		"sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash",
-		"effectivePolicyHash", "staleLease", "lifecycle", "links")
+		"requestedPolicy", "effectivePolicy", "effectivePolicyHash", "staleLease", "lifecycle", "links")
 
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionDurableLifecycleStatus"), "FactorySessionDurableLifecycleStatus", []string{
 		"QUEUED", "AWAITING_APPROVAL", "RUNNING", "PAUSED", "RESUMING", "SUCCEEDED", "FAILED",
@@ -1020,7 +1101,7 @@ func assertErrorSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	if !ok {
 		t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing")
 	}
-	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
+	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "EXECUTION_REQUEST_ID_CONFLICT", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
 		if !containsString(codeEnum, code) {
 			t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing %q", code)
 		}

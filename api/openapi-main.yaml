@@ -494,10 +494,15 @@ paths:
         Primary durable execution entrypoint for dynamic workflow-backed factory
         sessions. Accepts the normalized FactorySessionExecutionRequest, resolves
         the requested source, and returns session identity plus polling links
-        without waiting for terminal completion. Replaying the same requestId with
-        the same normalized source, args, orchestrator, and requested policy
-        returns the existing session instead of starting duplicate work. Reusing
-        requestId with materially different inputs returns 409 Conflict.
+        without waiting for terminal completion. WORKFLOW_FILE and WORKFLOW_NAME
+        sources resolve in order: project `.claude/workflows`, user
+        `~/.you-agent-factory/workflows`, package-relative workflow directories,
+        built-in/global JavaScript factories, then explicit factory lookup when
+        requested or required. Replaying the same requestId with the same
+        normalized source, args, orchestrator, and requested policy returns the
+        existing session instead of starting duplicate work. Reusing requestId
+        with materially different inputs returns 409 Conflict with
+        EXECUTION_REQUEST_ID_CONFLICT.
       requestBody:
         required: true
         content:
@@ -526,11 +531,12 @@ paths:
       description: >-
         Durable execution entrypoint that waits for terminal completion or a sync
         timeout before returning. Accepts the same normalized
-        FactorySessionExecutionRequest as POST /factory-sessions/async. When the
-        session reaches a terminal result before timeout, the response includes
-        FactorySessionResult. Timeout responses use syncOutcome = TIMED_OUT and
-        must not imply the session was canceled unless wait.cancelOnTimeout was
-        explicitly true in the request.
+        FactorySessionExecutionRequest as POST /factory-sessions/async and uses
+        the same workflow source resolution order and requestId idempotency
+        semantics. When the session reaches a terminal result before timeout, the
+        response includes FactorySessionResult. Timeout responses use
+        syncOutcome = TIMED_OUT and must not imply the session was canceled
+        unless wait.cancelOnTimeout was explicitly true in the request.
       requestBody:
         required: true
         content:
@@ -1539,6 +1545,10 @@ components:
       $ref: './components/schemas/api/FactorySessionExecutionInlineWorkflow.yaml'
     FactorySessionRequestedPolicy:
       $ref: './components/schemas/api/FactorySessionRequestedPolicy.yaml'
+    FactorySessionEffectivePolicy:
+      $ref: './components/schemas/api/FactorySessionEffectivePolicy.yaml'
+    FactorySessionWorkflowSourceResolutionOrder:
+      $ref: './components/schemas/api/FactorySessionWorkflowSourceResolutionOrder.yaml'
     FactorySessionExecutionWaitOptions:
       $ref: './components/schemas/api/FactorySessionExecutionWaitOptions.yaml'
     FactorySessionResolvedSourceIdentity:

@@ -257,6 +257,15 @@ const (
 	FactorySessionTargetRefKindNamed   FactorySessionTargetRefKind = "named"
 )
 
+// Defines values for FactorySessionWorkflowSourceResolutionOrder.
+const (
+	FactorySessionWorkflowSourceResolutionOrderBuiltinGlobalJavaScriptFactories   FactorySessionWorkflowSourceResolutionOrder = "BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES"
+	FactorySessionWorkflowSourceResolutionOrderExplicitFactoryLookup              FactorySessionWorkflowSourceResolutionOrder = "EXPLICIT_FACTORY_LOOKUP"
+	FactorySessionWorkflowSourceResolutionOrderPackageRelativeWorkflowDirectories FactorySessionWorkflowSourceResolutionOrder = "PACKAGE_RELATIVE_WORKFLOW_DIRECTORIES"
+	FactorySessionWorkflowSourceResolutionOrderProjectClaudeWorkflows             FactorySessionWorkflowSourceResolutionOrder = "PROJECT_CLAUDE_WORKFLOWS"
+	FactorySessionWorkflowSourceResolutionOrderUserYouAgentFactoryWorkflows       FactorySessionWorkflowSourceResolutionOrder = "USER_YOU_AGENT_FACTORY_WORKFLOWS"
+)
+
 // Defines values for FactoryState.
 const (
 	FactoryStateCompleted FactoryState = "COMPLETED"
@@ -1364,7 +1373,7 @@ type FactorySessionApproveRequest struct {
 	// ApprovalPreviewId Optional approval preview identity when the caller reviewed a server-side approval preview before submitting approval.
 	ApprovalPreviewId *string `json:"approvalPreviewId,omitempty"`
 
-	// ApprovedPolicy Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload.
+	// ApprovedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
 	ApprovedPolicy *FactorySessionRequestedPolicy `json:"approvedPolicy,omitempty"`
 
 	// Reason Optional operator-provided reason for audit and diagnostics.
@@ -1604,7 +1613,10 @@ type FactorySessionDurableReadModel struct {
 	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
 	Dialect *string `json:"dialect,omitempty"`
 
-	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	// EffectivePolicy Effective approved orchestrator policy for one durable execution after any required approval. Distinct from FactorySessionRequestedPolicy, which captures caller intent before approval.
+	EffectivePolicy *FactorySessionEffectivePolicy `json:"effectivePolicy,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
 	EffectivePolicyHash *string                                   `json:"effectivePolicyHash,omitempty"`
 	Failure             *FactorySessionDurableFailureDetail       `json:"failure,omitempty"`
 	Lifecycle           *FactorySessionDurableLifecycleTimestamps `json:"lifecycle,omitempty"`
@@ -1621,6 +1633,9 @@ type FactorySessionDurableReadModel struct {
 	// PhaseSummaries Per-phase dispatch summaries for workflow inspection.
 	PhaseSummaries *[]FactorySessionDurablePhaseSummary `json:"phaseSummaries,omitempty"`
 	Progress       *FactorySessionDurableProgressCounts `json:"progress,omitempty"`
+
+	// RequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
+	RequestedPolicy *FactorySessionRequestedPolicy `json:"requestedPolicy,omitempty"`
 
 	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
 	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
@@ -1657,7 +1672,10 @@ type FactorySessionDurableSummary struct {
 	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
 	Dialect *string `json:"dialect,omitempty"`
 
-	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	// EffectivePolicy Effective approved orchestrator policy for one durable execution after any required approval. Distinct from FactorySessionRequestedPolicy, which captures caller intent before approval.
+	EffectivePolicy *FactorySessionEffectivePolicy `json:"effectivePolicy,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
 	EffectivePolicyHash *string                                   `json:"effectivePolicyHash,omitempty"`
 	Lifecycle           *FactorySessionDurableLifecycleTimestamps `json:"lifecycle,omitempty"`
 
@@ -1666,6 +1684,9 @@ type FactorySessionDurableSummary struct {
 
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// RequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
+	RequestedPolicy *FactorySessionRequestedPolicy `json:"requestedPolicy,omitempty"`
 
 	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
 	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
@@ -1681,6 +1702,13 @@ type FactorySessionDurableSummary struct {
 
 	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
 	Status FactorySessionDurableLifecycleStatus `json:"status"`
+}
+
+// FactorySessionEffectivePolicy Effective approved orchestrator policy for one durable execution after any required approval. Distinct from FactorySessionRequestedPolicy, which captures caller intent before approval.
+type FactorySessionEffectivePolicy struct {
+	// PolicyHash Stable hash of the effective approved policy object when available.
+	PolicyHash           *string                `json:"policyHash,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
 // FactorySessionExecutionInlineWorkflow Inline workflow source carried directly in a durable execution request.
@@ -1711,7 +1739,7 @@ type FactorySessionExecutionLinks struct {
 	Status *string `json:"status,omitempty"`
 }
 
-// FactorySessionExecutionRequest Normalized durable factory-session execution request shared by async and sync start routes. Replaying the same requestId with materially different source, args, orchestrator, or requested policy is rejected with an idempotency conflict.
+// FactorySessionExecutionRequest Normalized durable factory-session execution request shared by async and sync start routes. Idempotency compares requestId against the normalized tuple of source, args, orchestrator, and requestedPolicy. Replaying the same requestId with the same normalized tuple returns the existing session or sync result instead of starting duplicate work. Reusing requestId with a materially different tuple returns 409 Conflict with EXECUTION_REQUEST_ID_CONFLICT.
 type FactorySessionExecutionRequest struct {
 	// Args Structured workflow invocation arguments validated by the resolved source.
 	Args *map[string]interface{} `json:"args,omitempty"`
@@ -1719,13 +1747,13 @@ type FactorySessionExecutionRequest struct {
 	// Orchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
 	Orchestrator *FactoryOrchestrator `json:"orchestrator,omitempty"`
 
-	// RequestId Caller-supplied idempotency key. Replays with the same normalized source, args, orchestrator, and requested policy return the existing session instead of starting duplicate work.
+	// RequestId Caller-supplied idempotency key. Normalization includes source kind and kind-specific selector, JSON-canonical args, orchestrator when present, and requestedPolicy when present (preferring policyHash when supplied). Replays with the same normalized tuple return the existing session instead of starting duplicate work.
 	RequestId string `json:"requestId"`
 
-	// RequestedPolicy Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload.
+	// RequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
 	RequestedPolicy *FactorySessionRequestedPolicy `json:"requestedPolicy,omitempty"`
 
-	// Source Durable execution source selector. Exactly one payload field matching `kind` must be supplied. Resolution order for workflow file and workflow name sources is documented on the durable execution routes.
+	// Source Durable execution source selector. Exactly one payload field matching `kind` must be supplied. WORKFLOW_FILE and WORKFLOW_NAME sources resolve using FactorySessionWorkflowSourceResolutionOrder: project `.claude/workflows`, user `~/.you-agent-factory/workflows`, package-relative workflow directories, built-in/global JavaScript factories, then explicit factory lookup when requested or required by the reference.
 	Source FactorySessionExecutionSource `json:"source"`
 
 	// Wait Optional wait and timeout controls for durable execution. Sync routes use these options to bound how long the server waits for a terminal result. Async routes may accept them for future compatibility but do not block on terminal completion.
@@ -1737,7 +1765,10 @@ type FactorySessionExecutionResponse struct {
 	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
 	Dialect *string `json:"dialect,omitempty"`
 
-	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	// EffectivePolicy Effective approved orchestrator policy for one durable execution after any required approval. Distinct from FactorySessionRequestedPolicy, which captures caller intent before approval.
+	EffectivePolicy *FactorySessionEffectivePolicy `json:"effectivePolicy,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
 	EffectivePolicyHash *string `json:"effectivePolicyHash,omitempty"`
 
 	// Links Relative links for polling and inspecting one durable factory session.
@@ -1745,6 +1776,9 @@ type FactorySessionExecutionResponse struct {
 
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// RequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
+	RequestedPolicy *FactorySessionRequestedPolicy `json:"requestedPolicy,omitempty"`
 
 	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
 	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
@@ -1759,7 +1793,7 @@ type FactorySessionExecutionResponse struct {
 	Status FactorySessionDurableLifecycleStatus `json:"status"`
 }
 
-// FactorySessionExecutionSource Durable execution source selector. Exactly one payload field matching `kind` must be supplied. Resolution order for workflow file and workflow name sources is documented on the durable execution routes.
+// FactorySessionExecutionSource Durable execution source selector. Exactly one payload field matching `kind` must be supplied. WORKFLOW_FILE and WORKFLOW_NAME sources resolve using FactorySessionWorkflowSourceResolutionOrder: project `.claude/workflows`, user `~/.you-agent-factory/workflows`, package-relative workflow directories, built-in/global JavaScript factories, then explicit factory lookup when requested or required by the reference.
 type FactorySessionExecutionSource struct {
 	// FactoryId Stored named factory identifier when kind = FACTORY_ID.
 	FactoryId *string `json:"factoryId,omitempty"`
@@ -1993,7 +2027,7 @@ type FactorySessionProgress struct {
 	TotalTokens int `json:"totalTokens"`
 }
 
-// FactorySessionRequestedPolicy Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload.
+// FactorySessionRequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
 type FactorySessionRequestedPolicy struct {
 	// PolicyHash Optional stable hash of the requested policy object when the caller already computed one for idempotency comparisons.
 	PolicyHash           *string                `json:"policyHash,omitempty"`
@@ -2008,6 +2042,12 @@ type FactorySessionResolvedSourceIdentity struct {
 	// Kind Durable execution source category. Each kind selects which source field on FactorySessionExecutionSource is authoritative for workflow resolution.
 	Kind     FactorySessionExecutionSourceKind `json:"kind"`
 	Metadata *StringMap                        `json:"metadata,omitempty"`
+
+	// ResolutionOrder Resolution stages that matched for WORKFLOW_FILE and WORKFLOW_NAME sources. Omitted for inline and direct factory-id sources.
+	ResolutionOrder *[]FactorySessionWorkflowSourceResolutionOrder `json:"resolutionOrder,omitempty"`
+
+	// SourceHash Stable hash of the resolved workflow or factory source when available.
+	SourceHash *string `json:"sourceHash,omitempty"`
 
 	// SourceRef Safe customer-facing source reference after resolution.
 	SourceRef *string `json:"sourceRef,omitempty"`
@@ -2135,7 +2175,10 @@ type FactorySessionSyncExecutionResponse struct {
 	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
 	Dialect *string `json:"dialect,omitempty"`
 
-	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	// EffectivePolicy Effective approved orchestrator policy for one durable execution after any required approval. Distinct from FactorySessionRequestedPolicy, which captures caller intent before approval.
+	EffectivePolicy *FactorySessionEffectivePolicy `json:"effectivePolicy,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
 	EffectivePolicyHash *string `json:"effectivePolicyHash,omitempty"`
 
 	// Links Relative links for polling and inspecting one durable factory session.
@@ -2143,6 +2186,9 @@ type FactorySessionSyncExecutionResponse struct {
 
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// RequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
+	RequestedPolicy *FactorySessionRequestedPolicy `json:"requestedPolicy,omitempty"`
 
 	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
 	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
@@ -2192,6 +2238,9 @@ type FactorySessionUsage struct {
 	// Resources Resource availability and consumption for the session runtime.
 	Resources []ResourceUsage `json:"resources"`
 }
+
+// FactorySessionWorkflowSourceResolutionOrder Documented workflow and factory source resolution order for durable execution. WORKFLOW_FILE and WORKFLOW_NAME sources are resolved in this order: (1) project `.claude/workflows`, (2) user `~/.you-agent-factory/workflows`, (3) package-relative workflow directories for the active project or package, (4) built-in/global JavaScript factories, (5) explicit named factory lookup when `source.kind` is FACTORY_ID or when a workflow reference requires factory fallback. FACTORY_ID resolves a stored named factory directly. FACTORY_INLINE and INLINE_WORKFLOW use the inline payload from the request without filesystem search.
+type FactorySessionWorkflowSourceResolutionOrder string
 
 // FactoryState Lifecycle state of the running factory.
 type FactoryState string
@@ -4706,6 +4755,74 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
+
+// Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
+// element and whether it was found
+func (a FactorySessionEffectivePolicy) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactorySessionEffectivePolicy
+func (a *FactorySessionEffectivePolicy) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactorySessionEffectivePolicy to handle AdditionalProperties
+func (a *FactorySessionEffectivePolicy) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["policyHash"]; found {
+		err = json.Unmarshal(raw, &a.PolicyHash)
+		if err != nil {
+			return fmt.Errorf("error reading 'policyHash': %w", err)
+		}
+		delete(object, "policyHash")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactorySessionEffectivePolicy to handle AdditionalProperties
+func (a FactorySessionEffectivePolicy) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.PolicyHash != nil {
+		object["policyHash"], err = json.Marshal(a.PolicyHash)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'policyHash': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
 
 // Getter for additional properties for FactorySessionRequestedPolicy. Returns the specified
 // element and whether it was found

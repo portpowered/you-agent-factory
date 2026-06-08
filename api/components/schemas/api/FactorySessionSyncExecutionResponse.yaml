@@ -26,9 +26,17 @@ properties:
   sourceHash:
     type: string
     description: Stable hash of the resolved workflow or factory source when available.
+  requestedPolicy:
+    $ref: './FactorySessionRequestedPolicy.yaml'
+    description: Caller-requested policy echoed from the execution request when available.
+  effectivePolicy:
+    $ref: './FactorySessionEffectivePolicy.yaml'
+    description: Effective approved orchestrator policy after any required approval.
   effectivePolicyHash:
     type: string
-    description: Stable hash of the effective approved orchestrator policy when available.
+    description: >-
+      Stable hash of the effective approved orchestrator policy when available.
+      Mirrors effectivePolicy.policyHash when both are present.
   links:
     $ref: './FactorySessionExecutionLinks.yaml'
     description: Inspection links for the started session.

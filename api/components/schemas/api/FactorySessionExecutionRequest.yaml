@@ -5,15 +5,20 @@ required:
   - source
 description: >-
   Normalized durable factory-session execution request shared by async and sync
-  start routes. Replaying the same requestId with materially different source,
-  args, orchestrator, or requested policy is rejected with an idempotency conflict.
+  start routes. Idempotency compares requestId against the normalized tuple of
+  source, args, orchestrator, and requestedPolicy. Replaying the same requestId
+  with the same normalized tuple returns the existing session or sync result
+  instead of starting duplicate work. Reusing requestId with a materially
+  different tuple returns 409 Conflict with EXECUTION_REQUEST_ID_CONFLICT.
 properties:
   requestId:
     type: string
     minLength: 1
     description: >-
-      Caller-supplied idempotency key. Replays with the same normalized source,
-      args, orchestrator, and requested policy return the existing session instead
+      Caller-supplied idempotency key. Normalization includes source kind and
+      kind-specific selector, JSON-canonical args, orchestrator when present,
+      and requestedPolicy when present (preferring policyHash when supplied).
+      Replays with the same normalized tuple return the existing session instead
       of starting duplicate work.
   source:
     $ref: './FactorySessionExecutionSource.yaml'
