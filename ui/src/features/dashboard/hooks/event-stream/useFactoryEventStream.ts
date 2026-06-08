@@ -21,6 +21,7 @@ import {
   syncCurrentFactoryDefinition,
 } from "../../lib/dashboard-event-stream";
 import { dashboardSessionKey } from "../../lib/dashboard-session-lifecycle";
+import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
 import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
 export interface UseFactoryEventStreamOptions {
@@ -49,6 +50,7 @@ interface DashboardStreamConnectionOptions {
   openStream: typeof openFactoryEventStream;
   queryClient: ReturnType<typeof useQueryClient>;
   queuedEventsRef: RefObject<FactoryEvent[]>;
+  locale?: string | null;
   refreshToken: number;
   scheduleQueuedFlush: () => void;
   sessionID: string | null;
@@ -74,6 +76,7 @@ function useDashboardStreamConnection({
   enabled,
   flushHandleRef,
   flushQueuedEvents,
+  locale,
   openStream,
   queryClient,
   queuedEventsRef,
@@ -163,7 +166,8 @@ function useDashboardStreamConnection({
           return;
         }
         setStreamState({
-          message: "Reconnecting to factory events...",
+          message:
+            getDashboardSessionLifecycleMessages(locale).reconnectingStreamLabel,
           status: "reconnecting",
         });
         reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -187,6 +191,7 @@ function useDashboardStreamConnection({
     enabled,
     flushHandleRef,
     flushQueuedEvents,
+    locale,
     openStream,
     queryClient,
     queuedEventsRef,
@@ -200,7 +205,7 @@ function useDashboardStreamConnection({
 
 export function useFactoryEventStream({
   enabled,
-  locale: _locale,
+  locale,
   onEvent,
   openStream = openFactoryEventStream,
   refreshToken = 0,
@@ -256,6 +261,7 @@ export function useFactoryEventStream({
     enabled,
     flushHandleRef,
     flushQueuedEvents,
+    locale,
     openStream,
     queryClient,
     queuedEventsRef,

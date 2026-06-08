@@ -142,18 +142,34 @@ function applyDispatchReconciled(
   });
 }
 
+function artifactContentType(
+  artifact: Record<string, unknown>,
+): string | undefined {
+  const captureMetadata = artifact.captureMetadata as
+    | Record<string, string | undefined>
+    | undefined;
+  return (
+    stringValue(captureMetadata?.mimeType) ??
+    stringValue(artifact.contentType as string | undefined)
+  );
+}
+
 function applyArtifactCreated(state: ReplayWorldState, event: FactoryEvent): void {
   const payload = event.payload as Record<string, unknown>;
-  const artifactID = stringValue(payload.artifactId as string | undefined);
+  const artifactPayload = payload.artifact as Record<string, unknown> | undefined;
+  if (!artifactPayload) {
+    return;
+  }
+  const artifactID = stringValue(artifactPayload.id as string | undefined);
   if (!artifactID) {
     return;
   }
   const artifact: ReplaySessionArtifact = {
-    content_type: stringValue(payload.contentType as string | undefined),
+    content_type: artifactContentType(artifactPayload),
     id: artifactID,
-    kind: stringValue(payload.kind as string | undefined),
-    label: stringValue(payload.label as string | undefined),
-    visibility: stringValue(payload.visibility as string | undefined),
+    kind: stringValue(artifactPayload.kind as string | undefined),
+    label: stringValue(artifactPayload.label as string | undefined),
+    visibility: stringValue(artifactPayload.visibility as string | undefined),
   };
   state.sessionArtifacts = [...state.sessionArtifacts, artifact];
 }

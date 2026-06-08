@@ -35,7 +35,7 @@ export function DashboardSessionLifecycleBanner({
         <AlertPanel tone={streamNotice.tone}>{streamNotice.message}</AlertPanel>
       ) : null}
       {lifecycleNotice ? (
-        <div className="grid gap-2 rounded-md border border-border/60 p-3 sm:grid-cols-2">
+        <div className="grid gap-2 rounded-md border border-af-border p-3 sm:grid-cols-2">
           <LifecycleMetric
             label={lifecycleNotice.title}
             value={lifecycleNotice.summary}

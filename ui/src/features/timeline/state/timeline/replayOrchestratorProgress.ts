@@ -1,5 +1,6 @@
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
+import { FactorySessionJavaScriptScriptStatus } from "../../../../api/generated/openapi";
 import type { ReplayJavaScriptRuntime, ReplayWorldState } from "./types";
 
 function stringValue(value: string | null | undefined): string | undefined {
@@ -42,10 +43,11 @@ function appendPhaseHistoryEntry(phases: string[], phase: string): string[] {
 function orchestratorPhaseStatusToScriptStatus(status: string): string {
   switch (status) {
     case "ACTIVE":
-      return "RUNNING";
+      return FactorySessionJavaScriptScriptStatus.RUNNING;
     case "COMPLETED":
-      return "FINISHED";
+      return FactorySessionJavaScriptScriptStatus.FINISHED;
     case "SKIPPED":
+      // hardcoded-ui-copy-exception: non-product-diagnostic
       return "SKIPPED";
     default:
       return status;

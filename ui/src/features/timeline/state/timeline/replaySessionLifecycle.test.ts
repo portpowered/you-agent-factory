@@ -113,9 +113,16 @@ describe("reconstructWorldState session lifecycle replay", () => {
         },
         id: "artifact",
         payload: {
-          artifactId: "artifact-child",
-          kind: "CHILD_RESULT",
-          visibility: "CUSTOMER",
+          artifact: {
+            captureMetadata: {
+              mimeType: "application/json",
+            },
+            id: "artifact-child",
+            kind: "CHILD_RESULT",
+            label: "Review summary",
+            visibility: "CUSTOMER",
+          },
+          capturedAt: "2026-06-09T12:00:04Z",
         },
         type: FACTORY_EVENT_TYPES.artifactCreated,
       },
@@ -128,7 +135,13 @@ describe("reconstructWorldState session lifecycle replay", () => {
       status: "RECONCILED",
     });
     expect(state.sessionArtifacts).toEqual([
-      expect.objectContaining({ id: "artifact-child", kind: "CHILD_RESULT" }),
+      expect.objectContaining({
+        content_type: "application/json",
+        id: "artifact-child",
+        kind: "CHILD_RESULT",
+        label: "Review summary",
+        visibility: "CUSTOMER",
+      }),
     ]);
   });
 });

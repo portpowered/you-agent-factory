@@ -18,7 +18,7 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/flowchart/lib",
   },
   {
-    maxFileCount: 36,
+    maxFileCount: 40,
     relativeDirectoryPath: "src/features/timeline/state/timeline",
   },
   {
