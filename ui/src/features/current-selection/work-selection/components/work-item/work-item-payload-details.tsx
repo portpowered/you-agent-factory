@@ -18,7 +18,6 @@ interface WorkItemPayloadMessages {
   workTypeLabel: string;
 }
 
-export type PayloadAwareWorkItem = DashboardWorkItemRef;
 type WorkItemPayloadListVariant = "panel" | "plain";
 
 export function WorkItemPayloadList({
@@ -32,7 +31,7 @@ export function WorkItemPayloadList({
   onSelectWorkID?: (workID: string) => void;
   selectedWorkID?: string | null;
   variant?: WorkItemPayloadListVariant;
-  workItems: PayloadAwareWorkItem[];
+  workItems: DashboardWorkItemRef[];
 }) {
   const fallbackMessages = useCurrentSelectionDetailMessages();
   const resolvedMessages = messages ?? fallbackMessages;
@@ -94,7 +93,7 @@ function WorkItemPayloadDetails({
   workItem,
 }: {
   messages: WorkItemPayloadMessages;
-  workItem: PayloadAwareWorkItem;
+  workItem: DashboardWorkItemRef;
 }) {
   const payloadStatus =
     workItem.payloadStatus ?? workItem.payload_status ?? undefined;
@@ -118,11 +117,11 @@ function WorkItemPayloadDetails({
   );
 }
 
-function _resolveWorkTypeID(workItem: PayloadAwareWorkItem) {
+function _resolveWorkTypeID(workItem: DashboardWorkItemRef) {
   return workItem.work_type_id ?? workItem.workTypeId;
 }
 
-function workItemHasPayloadDetails(workItem: PayloadAwareWorkItem) {
+function workItemHasPayloadDetails(workItem: DashboardWorkItemRef) {
   return Boolean(
     workItem.payloadStatus ||
       workItem.payload_status ||
