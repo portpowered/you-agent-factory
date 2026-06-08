@@ -21,7 +21,7 @@ describe("submit-work public barrel", () => {
       within(card).getByRole("combobox", { name: "Work type" }),
     ).toBeTruthy();
     expect(
-      within(card).getByRole("textbox", { name: "Request name" }),
+      within(card).getByRole("textbox", { name: /Request name/ }),
     ).toBeTruthy();
     expect(
       within(card).getByRole("list", { name: "Submission items" }),

@@ -22,6 +22,7 @@ export interface SubmitWorkMessages {
   requestHint?: string;
   requestItemLabel: (position: number) => string;
   requestNameLabel: string;
+  requestNameRequiredAffordance: string;
   requestNamePlaceholder: string;
   requestPlaceholder: string;
   selectWorkTypePlaceholder: string;
@@ -91,6 +92,7 @@ const submitWorkMessagesByLocale = {
       `Remove ${typeLabel.toLowerCase()} item ${position}`,
     replaceFileAction: "Replace file",
     requestNameLabel: "Request name",
+    requestNameRequiredAffordance: "required",
     requestNamePlaceholder: "Add a name for this request.",
     requestPlaceholder:
       "Optional: describe what you want this request to accomplish.",
@@ -153,6 +155,7 @@ const submitWorkMessagesByLocale = {
     removeItemLabel: (typeLabel, position) => `移除${typeLabel}项 ${position}`,
     replaceFileAction: "替换文件",
     requestNameLabel: "请求名称",
+    requestNameRequiredAffordance: "必填",
     requestNamePlaceholder: "为此请求添加名称。",
     requestPlaceholder: "可选：描述你希望这个请求完成什么。",
     requestItemLabel: (position) => `文本项 ${position}`,

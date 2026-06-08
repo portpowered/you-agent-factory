@@ -38,4 +38,12 @@ describe("Input primitives", () => {
       "custom-input",
     );
   });
+
+  it("applies the shared invalid field treatment when aria-invalid is true", () => {
+    render(<Input aria-invalid="true" aria-label="Factory name" />);
+
+    const input = screen.getByLabelText("Factory name");
+    expect(input.className).toContain("aria-invalid:border-af-danger-border");
+    expect(input.className).toContain("aria-invalid:ring-af-danger-border");
+  });
 });

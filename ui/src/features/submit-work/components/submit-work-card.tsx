@@ -6,6 +6,7 @@ import {
   DashboardIconButtonShell,
   DashboardLabel,
   DashboardText,
+  FormError,
   Input,
   Popover,
   PopoverContent,
@@ -160,28 +161,35 @@ export function SubmitWorkCard({
         >
           <div className="grid gap-2">
             <label htmlFor={requestNameID}>
-              <DashboardLabel>{messages.requestNameLabel}</DashboardLabel>
+              <DashboardLabel>
+                {messages.requestNameLabel}{" "}
+                <DashboardText
+                  as="span"
+                  className="text-on-error-container"
+                  variant="supporting"
+                >
+                  ({messages.requestNameRequiredAffordance})
+                </DashboardText>
+              </DashboardLabel>
             </label>
             <Input
               aria-describedby={
                 validationErrors?.requestName ? requestNameErrorID : undefined
               }
               aria-invalid={validationErrors?.requestName ? "true" : undefined}
+              aria-required="true"
               disabled={controlsDisabled}
               id={requestNameID}
               onChange={(event) => onRequestNameChange(event.target.value)}
               placeholder={messages.requestNamePlaceholder}
+              required
               type="text"
               value={draft.requestName}
             />
             {validationErrors?.requestName ? (
-              <DashboardText
-                className="text-on-error-container"
-                id={requestNameErrorID}
-                variant="supporting"
-              >
+              <FormError id={requestNameErrorID}>
                 {validationErrors.requestName}
-              </DashboardText>
+              </FormError>
             ) : null}
           </div>
 

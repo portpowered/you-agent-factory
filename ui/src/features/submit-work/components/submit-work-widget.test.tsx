@@ -73,7 +73,7 @@ describe("SubmitWorkWidget form behavior", () => {
       within(card).getByRole("combobox", { name: "Work type" }),
     ).toBeTruthy();
     expect(
-      within(card).getByRole("textbox", { name: "Request name" }),
+      within(card).getByRole("textbox", { name: /Request name/ }),
     ).toBeTruthy();
     expect(
       within(card).getByRole("list", { name: "Submission items" }),
@@ -194,7 +194,7 @@ describe("SubmitWorkWidget form behavior", () => {
     );
 
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -212,7 +212,7 @@ describe("SubmitWorkWidget form behavior", () => {
 
     await selectWorkType();
     expect(submitButton.disabled).toBe(true);
-    expect(screen.getByText("Enter a request name to continue.")).toBeTruthy();
+    expect(screen.getByText("(required)")).toBeTruthy();
 
     fireEvent.change(requestName, { target: { value: "   " } });
     expect(submitButton.disabled).toBe(true);
@@ -254,16 +254,16 @@ describe("SubmitWorkWidget form behavior", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      await screen.findAllByText(
+      screen.queryByText(
         "Choose a work type and enter a request name before submitting.",
       ),
-    ).toHaveLength(1);
+    ).toBeNull();
     expect(
       screen.getByText("Choose a work type before submitting."),
     ).toBeTruthy();
     expect(
       screen.getByText("Enter a request name before submitting."),
-    ).toBeTruthy();
+    ).toHaveAttribute("role", "alert");
   });
 
   it("renders a seeded ordered submission-items list with one blank text item by default", () => {
@@ -999,7 +999,7 @@ describe("SubmitWorkWidget file-backed item behavior", () => {
     );
 
     await selectWorkType("工作类型");
-    fireEvent.change(screen.getByRole("textbox", { name: "请求名称" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /请求名称/ }), {
       target: { value: "中文请求" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "文本项 1" }), {
@@ -1209,7 +1209,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1330,7 +1330,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Submit work",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
 
     await selectWorkType();
@@ -1350,8 +1350,13 @@ describe("SubmitWorkWidget submission behavior", () => {
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
-      await screen.findAllByText("Enter a request name before submitting."),
-    ).toHaveLength(2);
+      screen.getByText("Enter a request name before submitting."),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.queryByText(
+        "Choose a work type and enter a request name before submitting.",
+      ),
+    ).toBeNull();
     expect(requestName.getAttribute("aria-invalid")).toBe("true");
   });
 
@@ -1371,7 +1376,7 @@ describe("SubmitWorkWidget submission behavior", () => {
 
     const card = screen.getByRole("article", { name: "Submit work" });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const defaultTextItem = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1430,7 +1435,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     );
 
     await selectWorkType();
-    fireEvent.change(screen.getByRole("textbox", { name: "Request name" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: /Request name/ }), {
       target: { value: "Ordered text payload" },
     });
     fireEvent.change(screen.getByRole("textbox", { name: "Text item 1" }), {
@@ -1486,7 +1491,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1525,7 +1530,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     await selectWorkType();
     fireEvent.change(
       screen.getByRole<HTMLInputElement>("textbox", {
-        name: "Request name",
+        name: /Request name/,
       }),
       {
         target: { value: "Beta submission" },
@@ -1569,7 +1574,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1619,7 +1624,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       name: "Work type",
     });
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
-      name: "Request name",
+      name: /Request name/,
     });
     const requestText = screen.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",
@@ -1651,7 +1656,7 @@ describe("SubmitWorkWidget submission behavior", () => {
       within(card).getByRole("combobox", { name: "工作类型" }),
     ).toBeTruthy();
     expect(
-      within(card).getByRole("textbox", { name: "请求名称" }),
+      within(card).getByRole("textbox", { name: /请求名称/ }),
     ).toBeTruthy();
     expect(within(card).getByRole("list", { name: "提交项" })).toBeTruthy();
     expect(

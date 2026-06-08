@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { SubmitWorkDraft } from "../components/submit-work-card";
-import { buildStructuredSubmitItems } from "./use-submit-work-widget-helpers";
+import { getSubmitWorkMessages } from "../messages/submit-work";
+import {
+  buildStatus,
+  buildStructuredSubmitItems,
+  createDefaultDraft,
+} from "./use-submit-work-widget-helpers";
 
 function fileContentURL(path: string): string {
   return path.startsWith("/") ? `file://${path}` : `file:///${path}`;
@@ -62,5 +67,53 @@ describe("buildStructuredSubmitItems", () => {
     };
 
     expect(buildStructuredSubmitItems(draft)).toEqual([]);
+  });
+});
+
+describe("buildStatus", () => {
+  const messages = getSubmitWorkMessages("en");
+
+  it("keeps missing request name feedback field-scoped after a submit attempt", () => {
+    const draft = {
+      ...createDefaultDraft(),
+      workTypeName: "story",
+    };
+
+    expect(
+      buildStatus({
+        draft,
+        error: null,
+        isSubmitting: false,
+        isSuccess: false,
+        messages,
+        showValidation: true,
+        submitWorkTypeNames: ["story"],
+      }),
+    ).toEqual({
+      kind: "guidance",
+      message: messages.statusMessages.ready,
+    });
+  });
+
+  it("still surfaces detached validation for non-request-name field issues", () => {
+    const draft = {
+      ...createDefaultDraft(),
+      requestName: "Driver review",
+    };
+
+    expect(
+      buildStatus({
+        draft,
+        error: null,
+        isSubmitting: false,
+        isSuccess: false,
+        messages,
+        showValidation: true,
+        submitWorkTypeNames: ["story"],
+      }),
+    ).toEqual({
+      kind: "validation-error",
+      message: messages.validationMessages.workTypeRequired,
+    });
   });
 });
