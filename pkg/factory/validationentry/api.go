@@ -34,7 +34,7 @@ func ValidateFactoryAPI(ctx context.Context, factory factoryapi.Factory, opts fa
 	case factoryvalidation.ProfilePrePersist:
 		return validateFactoryPrePersist(factory, cfg, opts)
 	default:
-		return factoryvalidation.Validate(&cfg), nil
+		return validateFactoryTopology(cfg, opts), nil
 	}
 }
 
@@ -59,5 +59,13 @@ func validateFactoryPrePersist(
 		}
 		return factoryvalidation.Result{}, loadErr
 	}
-	return factoryvalidation.Validate(&cfg), nil
+	return validateFactoryTopology(cfg, opts), nil
+}
+
+func validateFactoryTopology(cfg interfaces.FactoryConfig, opts factoryvalidation.Options) factoryvalidation.Result {
+	result := factoryvalidation.Validate(&cfg)
+	if cfg.Orchestrator != nil && cfg.Orchestrator.JavaScript != nil && opts.WorkflowSourceReader != nil {
+		result.Targets = append(result.Targets, factoryvalidation.WorkflowSourceTargets(cfg.Orchestrator.JavaScript, opts.WorkflowSourceReader)...)
+	}
+	return result
 }

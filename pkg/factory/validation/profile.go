@@ -20,6 +20,11 @@ const (
 	ProfilePrePersist Profile = "pre_persist"
 )
 
+// WorkflowSourceReader loads file-backed JavaScript workflow source for validation.
+type WorkflowSourceReader interface {
+	ReadWorkflowSource(sourceRef string) (string, error)
+}
+
 // Options configures ValidateFactoryAPI for a single validation invocation.
 type Options struct {
 	// Profile selects topology-only vs pre-persist canonical checks. When empty,
@@ -30,6 +35,10 @@ type Options struct {
 	// workstation definitions must be resolved during LoadFromCanonicalJSON.
 	// Values implementing pkg/config.WorkstationLoader are accepted.
 	WorkstationLoader WorkstationLoader
+
+	// WorkflowSourceReader resolves file-backed orchestrator.javascript.sourceRef
+	// values for workflow source validation. Inline source is always validated.
+	WorkflowSourceReader WorkflowSourceReader
 }
 
 // WorkstationLoader loads workstation definitions by name for pre-persist validation.

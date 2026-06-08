@@ -6,6 +6,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
 )
 
 const validationRoot = "factory"
@@ -258,7 +259,98 @@ func javascriptOrchestratorConfigTargets(cfg *interfaces.FactoryConfig) []Target
 			))
 		}
 	}
+	targets = append(targets, javascriptWorkflowConfigAndInlineTargets(jsCfg)...)
 	return targets
+}
+
+// WorkflowSourceTargets validates file-backed workflow source when a reader is provided.
+func WorkflowSourceTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig, reader WorkflowSourceReader) []Target {
+	if jsCfg == nil || reader == nil {
+		return nil
+	}
+	sourceRef := strings.TrimSpace(jsCfg.SourceRef)
+	if sourceRef == "" {
+		return nil
+	}
+	if jsCfg.InlineSource != nil && strings.TrimSpace(jsCfg.InlineSource.Inline) != "" {
+		return nil
+	}
+	content, err := reader.ReadWorkflowSource(sourceRef)
+	if err != nil {
+		return []Target{workflowSourceTarget(workflowvalidation.Issue{
+			Code:    workflowvalidation.CodeSourceUnreadable,
+			Message: fmt.Sprintf("unable to read workflow source %q: %v", sourceRef, err),
+			Path:    "orchestrator.javascript.sourceRef",
+		})}
+	}
+	fileResult := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:     content,
+		SourceRef:  sourceRef,
+		ConfigPath: "orchestrator.javascript.sourceRef",
+	})
+	return workflowSourceIssuesToTargets(fileResult.Issues)
+}
+
+func javascriptWorkflowConfigAndInlineTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig) []Target {
+	if jsCfg == nil {
+		return nil
+	}
+	var targets []Target
+	configResult := workflowvalidation.Validate(workflowvalidation.Request{
+		ConfigPath: "orchestrator.javascript",
+		Metadata:   jsCfg.Metadata,
+		ArgsSchema: jsCfg.ArgsSchema,
+	})
+	targets = append(targets, workflowSourceIssuesToTargets(configResult.Issues)...)
+
+	if jsCfg.InlineSource == nil {
+		return targets
+	}
+	inline := strings.TrimSpace(jsCfg.InlineSource.Inline)
+	if inline == "" {
+		return targets
+	}
+	inlineResult := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:     inline,
+		SourceRef:  "inline",
+		ConfigPath: "orchestrator.javascript.inlineSource",
+	})
+	targets = append(targets, workflowSourceIssuesToTargets(inlineResult.Issues)...)
+	return targets
+}
+
+func workflowSourceIssuesToTargets(issues []workflowvalidation.Issue) []Target {
+	if len(issues) == 0 {
+		return nil
+	}
+	targets := make([]Target, 0, len(issues))
+	for _, issue := range issues {
+		targets = append(targets, workflowSourceTarget(issue))
+	}
+	return targets
+}
+
+func workflowSourceTarget(issue workflowvalidation.Issue) Target {
+	targetPath := "javascript"
+	switch {
+	case strings.HasPrefix(issue.Path, "orchestrator.javascript."):
+		targetPath = strings.TrimPrefix(issue.Path, "orchestrator.")
+	case issue.Path == "inline":
+		targetPath = "javascript.inlineSource"
+	case issue.Path != "":
+		targetPath = "javascript.sourceRef"
+	}
+	return Target{
+		Code:     issue.Code,
+		Severity: SeverityError,
+		Message:  issue.Message + issue.LocationSuffix(),
+		Path:     fmt.Sprintf("%s.%s", validationRoot, targetPath),
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       "factory",
+			Location: SubjectLocationDefinition,
+		},
+	}
 }
 
 func orchestratorTarget(code, path, message string) Target {
