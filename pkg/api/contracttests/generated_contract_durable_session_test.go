@@ -108,6 +108,31 @@ func assertDurableSessionScenarioFixture(t *testing.T, doc *openapi3.T, scenario
 		decodeRoundTripJSON(t, raw, &value, scenario.ID+" list summary")
 	})
 
+	assertDurableSessionScenarioDispatchArtifactFixtures(t, doc, scenario)
+
+	assertOpenAPIFixtureValidates(t, doc, "FactorySessionResult", scenario.Result)
+	assertGeneratedFixtureRoundTrip(t, scenario.Result, "FactorySessionResult", func(raw []byte) {
+		var value factoryapi.FactorySessionResult
+		decodeRoundTripJSON(t, raw, &value, scenario.ID+" result")
+		if value.SessionId != scenario.Session["sessionId"] {
+			t.Fatalf("%s result sessionId = %q, want %q", scenario.ID, value.SessionId, scenario.Session["sessionId"])
+		}
+	})
+
+	if scenario.LifecycleControl != nil {
+		assertOpenAPIFixtureValidates(t, doc, "FactorySessionLifecycleControlResponse", scenario.LifecycleControl)
+		assertGeneratedFixtureRoundTrip(t, scenario.LifecycleControl, "FactorySessionLifecycleControlResponse", func(raw []byte) {
+			var value factoryapi.FactorySessionLifecycleControlResponse
+			decodeRoundTripJSON(t, raw, &value, scenario.ID+" lifecycle control")
+		})
+	}
+
+	assertDurableSessionFixtureOmitsHostPaths(t, scenario)
+}
+
+func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {
+	t.Helper()
+
 	if len(scenario.Dispatches) > 0 {
 		listResponse := map[string]any{
 			"sessionId":  scenario.Session["sessionId"],
@@ -148,25 +173,6 @@ func assertDurableSessionScenarioFixture(t *testing.T, doc *openapi3.T, scenario
 			assertArtifactRetrievalRefSafe(t, value.ContentRef)
 		})
 	}
-
-	assertOpenAPIFixtureValidates(t, doc, "FactorySessionResult", scenario.Result)
-	assertGeneratedFixtureRoundTrip(t, scenario.Result, "FactorySessionResult", func(raw []byte) {
-		var value factoryapi.FactorySessionResult
-		decodeRoundTripJSON(t, raw, &value, scenario.ID+" result")
-		if value.SessionId != scenario.Session["sessionId"] {
-			t.Fatalf("%s result sessionId = %q, want %q", scenario.ID, value.SessionId, scenario.Session["sessionId"])
-		}
-	})
-
-	if scenario.LifecycleControl != nil {
-		assertOpenAPIFixtureValidates(t, doc, "FactorySessionLifecycleControlResponse", scenario.LifecycleControl)
-		assertGeneratedFixtureRoundTrip(t, scenario.LifecycleControl, "FactorySessionLifecycleControlResponse", func(raw []byte) {
-			var value factoryapi.FactorySessionLifecycleControlResponse
-			decodeRoundTripJSON(t, raw, &value, scenario.ID+" lifecycle control")
-		})
-	}
-
-	assertDurableSessionFixtureOmitsHostPaths(t, scenario)
 }
 
 func assertDurableSessionIdempotentReplayFixture(t *testing.T, doc *openapi3.T, fixture durableSessionIdempotentReplayFixture) {
