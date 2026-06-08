@@ -1,9 +1,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-
-import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
-import { inferenceAttempt } from "../../base/components/detail-card-test-helpers";
-import { InferenceAttemptCard } from "./inference-attempt";
+import { inferenceAttempt } from "../../base/components/detail-card/detail-card-test-helpers";
+import { CurrentSelectionLocaleProvider } from "../../base/components/presentation/current-selection-locale";
+import { InferenceAttemptCard } from "./inference-attempt/inference-attempt";
 
 describe("InferenceAttemptCard", () => {
   it("renders a collapsed preview with outcome, timing, and provider-session action", () => {

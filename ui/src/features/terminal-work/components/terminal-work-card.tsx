@@ -4,14 +4,12 @@ import {
   DashboardActionButton,
   surfacePanelVariants,
 } from "../../../components/ui";
-import {
-  DashboardWidgetFrame,
-  DetailCopy,
-} from "../../../components/ui/widget-frame";
+import { DetailCopy } from "../../../components/ui/widget-frame";
 import { cn } from "../../../lib/cn";
-import { CurrentSelectionExecutionPill } from "../../current-selection/base/components/current-selection-pill";
-import { CurrentSelectionSupportingText } from "../../current-selection/base/components/current-selection-supporting-text";
-import { WorkstationDispatchRow } from "../../current-selection/workstation-selection/components/workstation-dispatch-row";
+import { DashboardWidgetFrame } from "../../bento/public";
+import { CurrentSelectionExecutionPill } from "../../current-selection/base/components/presentation/current-selection-pill";
+import { CurrentSelectionSupportingText } from "../../current-selection/base/components/presentation/current-selection-supporting-text";
+import { WorkstationDispatchRow } from "../../current-selection/workstation-selection/components/detail-card/workstation-dispatch-row";
 import type { GraphSemanticIconKind } from "../../flowchart/public";
 import { GraphSemanticIcon } from "../../flowchart/public";
 import { StandardExpandableSection } from "../../standard-card-components/public";

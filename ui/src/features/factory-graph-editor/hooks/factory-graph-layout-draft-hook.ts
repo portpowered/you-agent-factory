@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { CurrentFactoryDocument } from "../lib/factory-graph-draft-types";
+import type { CurrentFactoryDocument } from "../lib/draft/factory-graph-draft-types";
 import {
   createMoveFactoryLayoutNodeCommand,
   createMoveFactoryLayoutNodesCommand,

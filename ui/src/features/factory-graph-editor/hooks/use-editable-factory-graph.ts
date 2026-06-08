@@ -5,11 +5,11 @@ import { resolveProjectedLayoutPositions } from "../lib/factory-graph-layout-ope
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
-} from "../lib/factory-graph-draft-types";
-import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
-import { createFactoryGraphWorkstationResolver } from "../lib/factory-graph-editor-connections";
-import type { FactoryGraphNodeFieldUpdate } from "../lib/factory-graph-field-operations";
-import { updateFactoryGraphNodeField } from "../lib/factory-graph-field-operations";
+} from "../lib/draft/factory-graph-draft-types";
+import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
+import { createFactoryGraphWorkstationResolver } from "../lib/editor/factory-graph-editor-connections";
+import type { FactoryGraphNodeFieldUpdate } from "../lib/editor-runtime/factory-graph-field-operations";
+import { updateFactoryGraphNodeField } from "../lib/editor-runtime/factory-graph-field-operations";
 import {
   addFactoryGraphNode,
   buildFactoryGraphState,
@@ -18,7 +18,7 @@ import {
   type FactoryGraphOperationResult,
   projectFactoryGraphToReactFlow,
   removeFactoryGraphNode,
-} from "../lib/factory-graph-operations";
+} from "../lib/operations/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-hook";
 import { useEditableFactoryGraphSaveController } from "./use-editable-factory-graph-save-controller";

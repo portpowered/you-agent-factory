@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
-import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import {
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,

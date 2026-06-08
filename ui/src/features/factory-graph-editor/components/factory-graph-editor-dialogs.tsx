@@ -12,7 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui";
-import { FactoryGraphEditorMenuHeader } from "./factory-graph-editor-menu-header";
+import { FactoryGraphEditorMenuHeader } from "./menu/factory-graph-editor-menu-header";
 
 export function FactoryGraphEditorActionPopover({
   children,

@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { getCurrentSelectionShellMessages } from "../../current-selection/base/public";
-import type { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
-import type { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
+import type { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
+import type { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
 import { CurrentSelectionWidget } from "../../current-selection/public";
 import type { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { InlineAddWidgetCard } from "../../dashboard-add-card/components/inline-add-widget-card";

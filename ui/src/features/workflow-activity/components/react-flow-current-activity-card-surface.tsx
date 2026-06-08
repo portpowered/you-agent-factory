@@ -3,7 +3,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AlertPanel } from "../../../components/ui";
-import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";

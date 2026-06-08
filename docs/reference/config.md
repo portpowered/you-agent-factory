@@ -389,9 +389,10 @@ live-linked to the source factory.
   portability checks can probe on `PATH`.
 - `bundledFiles` carry portable file content and a canonical factory-relative
   `targetPath`; they are not the same as runtime `resources`.
-- `config flatten` collects the supported allowlist from `factory/scripts/**`,
-  `factory/docs/**`, and supported root helper files such as `Makefile` when
-  you flatten a checked-in `factory/` layout.
+- `config flatten` auto-discovers the supported allowlist from `factory/scripts/**`
+  and `factory/docs/**` when you flatten a checked-in `factory/` layout.
+  Supported root helper files such as `Makefile` travel only when you declare
+  them explicitly as `type: "ROOT_HELPER"` entries in `supportingFiles.bundledFiles`.
 - `targetPath` must use forward slashes and must not be absolute or contain `.`
   or `..` path segments.
 
@@ -601,10 +602,10 @@ Use this contract when you want a canonical portable `factory.json` to collect,
 carry, and restore supporting files across `config flatten`, `config expand`,
 and `LoadRuntimeConfig(...)` without redefining the manifest shape.
 
-- `config flatten` adds supported `factory/scripts/**`, `factory/docs/**`, and
-  root helper files such as `Makefile` to
-  `supportingFiles.bundledFiles` automatically for checked-in `factory/`
-  layouts.
+- `config flatten` adds supported `factory/scripts/**` and `factory/docs/**`
+  to `supportingFiles.bundledFiles` automatically for checked-in `factory/`
+  layouts. Root helper files such as `Makefile` are opt-in `ROOT_HELPER`
+  manifest entries and are not auto-discovered during export or flatten.
 - `config expand` restores bundled files onto disk beside the expanded
   `factory.json`, `workers/**/AGENTS.md`, and `workstations/**/AGENTS.md`
   layout.

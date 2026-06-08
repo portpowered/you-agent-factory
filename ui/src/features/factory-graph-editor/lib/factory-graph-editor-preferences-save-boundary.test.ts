@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import {
   DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES,
   writeFactoryGraphEditorPreferencesForScope,

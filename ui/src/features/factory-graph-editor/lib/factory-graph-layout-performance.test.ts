@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createEmptyFactoryGraphDraft } from "./factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import {
   type FactoryGraphLargeEditorFixture,
   factoryGraphLargeEditorFixtures,

@@ -1,8 +1,8 @@
-import type { FactoryGraphEditorVisibilityPreset } from "../components/factory-graph-editor-controls";
+import type { FactoryGraphEditorVisibilityPreset } from "../components/controls/factory-graph-editor-controls";
 import type {
   FactoryGraphNodeKind,
   FactoryGraphTopology,
-} from "./factory-graph-draft-types";
+} from "./draft/factory-graph-draft-types";
 
 function nodeVisibleForVisibilityPreset(
   kind: FactoryGraphNodeKind,

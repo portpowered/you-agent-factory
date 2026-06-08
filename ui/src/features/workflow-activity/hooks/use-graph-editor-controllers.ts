@@ -1,4 +1,4 @@
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type {
   EditableFactoryGraphSaveMutation,
   EditableFactoryGraphViewModel,
@@ -6,7 +6,7 @@ import type {
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";

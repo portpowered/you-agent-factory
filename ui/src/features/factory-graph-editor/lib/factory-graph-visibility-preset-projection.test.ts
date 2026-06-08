@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { FactoryGraphTopology } from "./factory-graph-draft-types";
+import type { FactoryGraphTopology } from "./draft/factory-graph-draft-types";
 import { projectFactoryGraphByVisibilityPreset } from "./factory-graph-visibility-preset-projection";
 
 const SAMPLE_TOPOLOGY: FactoryGraphTopology = {

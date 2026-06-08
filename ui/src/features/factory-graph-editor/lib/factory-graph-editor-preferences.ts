@@ -1,6 +1,6 @@
-import type { FactoryGraphEditorVisibilityPreset } from "../components/factory-graph-editor-controls";
-import type { FactoryGraphNodeKind } from "./factory-graph-draft-types";
-import { FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS } from "./factory-graph-node-class-visibility";
+import type { FactoryGraphEditorVisibilityPreset } from "../components/controls/factory-graph-editor-controls";
+import type { FactoryGraphNodeKind } from "./draft/factory-graph-draft-types";
+import { FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS } from "./work-state/factory-graph-node-class-visibility";
 
 export const FACTORY_GRAPH_EDITOR_PREFERENCES_STORAGE_KEY =
   "agent-factory.factory-graph.editor-preferences.v1";

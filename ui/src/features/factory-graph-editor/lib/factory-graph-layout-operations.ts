@@ -1,5 +1,5 @@
 import type { components } from "../../../api/generated/openapi";
-import type { CanonicalFactoryDefinition } from "./factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "./draft/factory-graph-draft-types";
 
 export type FactoryLayout = NonNullable<
   components["schemas"]["Factory"]["layout"]

@@ -6,13 +6,13 @@ import {
 import type {
   FactoryGraphNodeKind,
   FactoryWorkState,
-} from "../lib/factory-graph-draft-types";
-import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
+} from "../lib/draft/factory-graph-draft-types";
+import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
 import type {
   FactoryGraphEditorDirtyState,
   FactoryGraphSaveSummaryKind,
 } from "../lib/factory-graph-editor-dirty-state";
-import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
+import type { FactoryGraphWorkerRuntimeStatus } from "../lib/editor-runtime/factory-graph-editor-runtime";
 
 export interface FactoryGraphEditorMessages {
   addDialogAddEntityAction: string;

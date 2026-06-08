@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/factory-graph-editor-controls";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   clearFactoryGraphEditorPreferencesForScope,
   DEFAULT_FACTORY_GRAPH_EDITOR_VIEW_PREFERENCES,

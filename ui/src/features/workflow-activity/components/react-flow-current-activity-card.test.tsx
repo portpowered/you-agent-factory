@@ -42,13 +42,13 @@ import { useCurrentFactoryDocument } from "../../current-factory-definition/hook
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
 import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-editable-factory-graph";
+import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/fixtures/maintainer-runtime-shaped-factory.fixture";
 import {
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
   SYSTEM_TIME_WORK_TYPE_ID,
   systemTimeGraphNodeId,
-} from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/factory-graph-operations";
-import { maintainerRuntimeShapedFactory } from "../../factory-graph-editor/lib/maintainer-runtime-shaped-factory.fixture";
+} from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
+import { removeFactoryGraphNode } from "../../factory-graph-editor/lib/operations/factory-graph-operations";
 import {
   EXHAUSTION_WORKSTATION_ICON_METADATA,
   SUPPORTED_WORKSTATION_ICON_METADATA,
@@ -3256,6 +3256,20 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
     });
 
     expect(cronButton.getAttribute("title")).toBe("Nightly Cron");
+    expect(
+      cronButton.closest("article")?.className.includes("border-dashed"),
+    ).toBe(true);
+
+    const pollerExpectation = workstationKindParityExpectations.find(
+      (expectation) => expectation.nodeID === "linear-poller",
+    );
+    const pollerButton = await screen.findByRole("button", {
+      name: pollerExpectation?.buttonName ?? "Select Linear Poller workstation",
+    });
+
+    expect(
+      pollerButton.closest("article")?.className.includes("border-dotted"),
+    ).toBe(true);
 
     fireEvent.click(cronButton);
 

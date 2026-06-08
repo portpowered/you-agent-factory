@@ -1,8 +1,8 @@
-import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import { buildFactoryGraphTopologyFromDefinition } from "./draft/factory-graph-draft-graph";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphTopology,
-} from "./factory-graph-draft-types";
+} from "./draft/factory-graph-draft-types";
 import type { FactoryLayout } from "./factory-graph-layout-operations";
 
 export const FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS = {

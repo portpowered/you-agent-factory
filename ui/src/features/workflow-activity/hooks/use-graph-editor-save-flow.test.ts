@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 
 const fixtureState = vi.hoisted(() => {

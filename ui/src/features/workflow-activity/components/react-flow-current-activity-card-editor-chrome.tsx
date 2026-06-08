@@ -6,20 +6,20 @@ import {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
-} from "../../factory-graph-editor/components/factory-graph-editor-controls";
+} from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import {
   type FactoryGraphEditorDirtyState,
   hasAnyFactoryGraphEditorChanges,
 } from "../../factory-graph-editor/lib/factory-graph-editor-dirty-state";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   createFactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityDraft,
   type FactoryGraphAddEntityFieldErrors,
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
-} from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+} from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 
