@@ -1,11 +1,13 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
+import { getCurrentFactoryDocument } from "../../../api/current-factory-definition";
 import {
   activateImportedFactoryForSession,
   type ImportFactoryValue,
   SessionFactoryAPIError,
 } from "../../../api/session-factory";
+import { syncCurrentFactoryDocumentCache } from "../../current-factory-definition/lib/sync-current-factory-document-cache";
 import type { FactoryImportConfirmInput } from "../lib/factory-import-save-choice";
 
 export type FactoryImportActivationState =
@@ -34,6 +36,7 @@ export function useFactoryImportActivation({
   onActivated,
   sessionID,
 }: UseFactoryImportActivationOptions = {}): UseFactoryImportActivationResult {
+  const queryClient = useQueryClient();
   const activateFactory = useMemo(
     () =>
       activateFactoryOverride ??
@@ -53,8 +56,14 @@ export function useFactoryImportActivation({
     onError: (error) => {
       setActivationError(normalizeActivationError(error));
     },
-    onSuccess: (value) => {
+    onSuccess: async (value) => {
       setActivationError(null);
+      try {
+        const document = await getCurrentFactoryDocument({ sessionID });
+        syncCurrentFactoryDocumentCache(queryClient, sessionID, document);
+      } catch {
+        // Activation already persisted; cache sync failures should not block UI success.
+      }
       onActivated?.(value);
     },
   });

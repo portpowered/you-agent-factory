@@ -6,7 +6,7 @@ import type { DashboardSelection } from "../../base/state/selection-types";
 import {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "../lib/editable-workstation-configuration-validation";
+} from "../lib/validation/editable-workstation-configuration-validation";
 import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";

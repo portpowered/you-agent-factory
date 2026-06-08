@@ -6,10 +6,10 @@ import {
 import type {
   FactoryGraphNodeKind,
   FactoryWorkState,
-} from "../lib/factory-graph-draft-types";
+} from "../lib/draft/factory-graph-draft-types";
 import type { components } from "../../../api/generated/openapi";
-import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
-import type { FactoryGraphWorkerRuntimeStatus } from "../lib/factory-graph-editor-runtime";
+import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
+import type { FactoryGraphWorkerRuntimeStatus } from "../lib/editor-runtime/factory-graph-editor-runtime";
 
 type ModelOperationContentType =
   components["schemas"]["ModelOperationContentType"];

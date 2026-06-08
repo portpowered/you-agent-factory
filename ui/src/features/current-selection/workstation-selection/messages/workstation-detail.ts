@@ -64,6 +64,8 @@ const workstationDetailMessagesByLocale = {
       "Loading the current factory definition for this workstation.",
     editableConfigurationValidationStatus:
       "Resolve the highlighted fields before saving this workstation.",
+    editableConfigurationBehaviorPollerHint:
+      "Poller workstations supervise a long-lived ingress worker. Configure the hosted or script worker separately; this workstation only binds the poller behavior and routes emitted work.",
     editableConfigurationBehaviorPollerWorkerUnsupported:
       "Poller workstations must use a script or hosted worker before saving this workstation.",
     editableConfigurationPromptRequired:
@@ -347,6 +349,8 @@ const workstationDetailMessagesByLocale = {
       "このワークステーション向けに現在のファクトリー定義を読み込んでいます。",
     editableConfigurationValidationStatus:
       "このワークステーションを保存する前に、強調表示された項目を修正してください。",
+    editableConfigurationBehaviorPollerHint:
+      "ポーラーワークステーションは長寿命のイングレスワーカーを監督します。ホストまたはスクリプトワーカーは別途設定し、このワークステーションはポーラー動作の割り当てと出力ルーティングのみを担います。",
     editableConfigurationBehaviorPollerWorkerUnsupported:
       "このワークステーションを保存する前に、ポーラーのワークステーションではスクリプトまたは hosted worker を使用してください。",
     editableConfigurationPromptRequired:
@@ -632,6 +636,8 @@ const workstationDetailMessagesByLocale = {
       "이 워크스테이션의 현재 팩토리 정의를 불러오는 중입니다.",
     editableConfigurationValidationStatus:
       "이 워크스테이션을 저장하기 전에 강조 표시된 필드를 수정하세요.",
+    editableConfigurationBehaviorPollerHint:
+      "폴러 워크스테이션은 장기 실행 인그레스 워커를 감독합니다. 호스티드 또는 스크립트 워커는 별도로 구성하고, 이 워크스테이션은 폴러 동작 바인딩과 출력 라우팅만 담당합니다.",
     editableConfigurationBehaviorPollerWorkerUnsupported:
       "이 워크스테이션을 저장하기 전에 폴러 워크스테이션에는 스크립트 또는 hosted worker를 사용하세요.",
     editableConfigurationPromptRequired:
@@ -907,6 +913,8 @@ const workstationDetailMessagesByLocale = {
       `运行中的工厂已保存。${workstationName} 已在运行中的工厂定义中更新。`,
     editableConfigurationLoading: "正在加载此工作站的当前工厂定义。",
     editableConfigurationValidationStatus: "请先修正高亮字段，再保存此工作站。",
+    editableConfigurationBehaviorPollerHint:
+      "轮询器工作站会监督长期运行的入口工作者。请在工作者侧单独配置托管或脚本轮询器；此工作站只负责绑定轮询器行为并路由其输出。",
     editableConfigurationBehaviorPollerWorkerUnsupported:
       "保存此工作站前，请先为轮询器工作站选择脚本或 hosted worker。",
     editableConfigurationPromptRequired: "保存此工作站前请输入提示词。",

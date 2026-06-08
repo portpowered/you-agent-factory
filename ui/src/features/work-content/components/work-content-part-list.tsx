@@ -1,8 +1,8 @@
 import type { components } from "../../../api/generated/openapi";
 import { DashboardText, SurfacePanel } from "../../../components/ui";
 import {
-  AuthoredBodyText,
   AUTHORED_BODY_TEXT_CLASS,
+  AuthoredBodyText,
 } from "../../../lib/authored-body-text";
 import { cn } from "../../../lib/cn";
 import { describeWorkContentPart } from "../lib/describe-work-content-part";

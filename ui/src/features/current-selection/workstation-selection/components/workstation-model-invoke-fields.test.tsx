@@ -9,8 +9,8 @@ import {
   buildEditableConfigurationSectionReadyState,
   editableConfigurationSectionMessages,
   expandEditableConfigurationSection,
-} from "./workstation-editable-configuration-section.test-helpers";
-import { EditableConfigurationSection } from "./workstation-editable-configuration-section";
+} from "./editable/workstation-editable-configuration-section.test-helpers";
+import { EditableConfigurationSection } from "./editable/workstation-editable-configuration-section";
 
 describe("EditableConfigurationModelInvokeFields", () => {
   it("renders model invoke workstation fields and hides prompt-oriented controls", () => {

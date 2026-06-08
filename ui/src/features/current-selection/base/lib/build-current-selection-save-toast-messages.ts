@@ -7,7 +7,7 @@ import { getWorkstationDetailMessages } from "../../workstation-selection/messag
 import {
   getCurrentSelectionSaveToastCatalogMessages,
   resolveCurrentSelectionSaveToastTitles,
-} from "../messages/current-selection-save-toast";
+} from "../messages/shell/current-selection-save-toast";
 import type { CurrentSelectionSaveToastMessages } from "./current-selection-save-notifications";
 
 export function buildCurrentSelectionSaveToastMessages({

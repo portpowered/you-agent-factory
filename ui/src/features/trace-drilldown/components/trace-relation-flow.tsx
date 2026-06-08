@@ -13,7 +13,10 @@ import {
   DashboardGraphControls,
   DashboardGraphFrame,
 } from "../../../components/dashboard/dashboard-graph";
-import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
+import {
+  FACTORY_GRAPH_EDGE_TYPES,
+  WORK_RELATION_NODE_TYPES,
+} from "../../graphs/public";
 import {
   traceRelationTopologyLayoutKey,
   useTraceRelationFactoryGraphLayoutPositions,
@@ -24,8 +27,6 @@ import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-
 import { buildTraceRelationFactoryGraphFlow } from "../lib/trace-relation-factory-graph-flow";
 import { useMeasuredTraceGraphViewport } from "../lib/use-measured-trace-graph-viewport";
 import { getTraceDrilldownMessages } from "../messages/trace-drilldown";
-import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "./trace-relation-factory-graph-node";
-
 const GRAPH_SHELL_STYLE = { height: 352, minHeight: 288 };
 const GRAPH_VIEWPORT_STYLE = { height: "100%", width: "100%" };
 const GRAPH_FIT_VIEW_OPTIONS = { maxZoom: 1.5, padding: 0.08 } as const;
@@ -213,7 +214,7 @@ function TraceRelationReactFlow({
       minZoom={0.35}
       nodes={nodes}
       nodesDraggable={true}
-      nodeTypes={TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES}
+      nodeTypes={WORK_RELATION_NODE_TYPES}
       onInit={(instance) => {
         flowInstanceRef.current = instance;
       }}

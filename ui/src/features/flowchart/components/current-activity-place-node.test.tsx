@@ -6,7 +6,7 @@ import type { DashboardPlaceRef } from "../../../api/dashboard/types";
 import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSurfaceClassName,
-} from "../../factory-graph-editor/lib/factory-graph-work-state-phase-styling";
+} from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling";
 import type { StatePositionNodeData } from "./current-activity-place-node";
 import { StatePositionNodeView } from "./current-activity-place-node";
 

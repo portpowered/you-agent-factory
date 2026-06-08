@@ -6,8 +6,8 @@ import {
 import type {
   FactoryGraphAddEntityDraft,
   FactoryGraphAddEntityFieldErrors,
-} from "./factory-graph-editor-additions";
-import type { FactoryGraphDraft } from "./factory-graph-draft-types";
+} from "./editor/factory-graph-editor-additions";
+import type { FactoryGraphDraft } from "./draft/factory-graph-draft-types";
 
 type CanonicalWorker = NonNullable<
   FactoryGraphDraft["additions"]["workers"][number]

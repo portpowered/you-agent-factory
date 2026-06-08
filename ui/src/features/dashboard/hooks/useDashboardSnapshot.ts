@@ -4,10 +4,10 @@ import type { FactoryEvent } from "../../../api/events";
 import { readFactoryTimelineDebugOptions } from "../../timeline/state/factoryTimelineDebug";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { useDashboardSession } from "../session/dashboard-session-provider";
+import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
-import { useFactoryEventStream } from "./useFactoryEventStream";
 
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;

@@ -11,7 +11,7 @@ import {
   draftWorkstationFactoryDocument,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
-import { createEmptyFactoryGraphDraft } from "../lib/factory-graph-draft-types";
+import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const hookState = vi.hoisted(() => ({

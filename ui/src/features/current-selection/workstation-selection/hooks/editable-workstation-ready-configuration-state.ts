@@ -34,11 +34,11 @@ import type {
   EditableWorkstationPromptValidationState,
   EditableWorkstationValidationErrors,
   EditableWorkstationWorkstationOptionsState,
-} from "../lib/detail-card-types";
+} from "../lib/keys/detail-card-types";
 import {
   hasEditableWorkstationValidationErrors,
   resolveWorkerOptionsState,
-} from "../lib/editable-workstation-configuration-validation";
+} from "../lib/validation/editable-workstation-configuration-validation";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail";
 
 interface EditableWorkstationSessionState {

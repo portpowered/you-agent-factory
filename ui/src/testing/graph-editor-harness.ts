@@ -17,19 +17,19 @@ import type {
 import {
   baseFactoryDefinition as draftWorkstationFactoryDefinition,
   currentFactoryDocument as draftWorkstationFactoryDocument,
-} from "../features/factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import { buildFactoryGraphTopologyFromDefinition } from "../features/factory-graph-editor/lib/factory-graph-draft-graph";
+} from "../features/factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
+import { buildFactoryGraphTopologyFromDefinition } from "../features/factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
   createEmptyFactoryGraphDraft,
   type FactoryGraphDraftDerivedState,
-} from "../features/factory-graph-editor/lib/factory-graph-draft-types";
+} from "../features/factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   addFactoryGraphNode,
   applyFactoryGraphPendingEdits,
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
-} from "../features/factory-graph-editor/lib/factory-graph-operations";
+} from "../features/factory-graph-editor/lib/operations/factory-graph-operations";
 
 export { draftWorkstationFactoryDefinition, draftWorkstationFactoryDocument };
 

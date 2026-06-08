@@ -5,7 +5,7 @@ import type {
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import { editableWorkstationDraftNamesEqual } from "../../../current-factory-definition/lib/workstation-guards";
 import { editableModelInvokeBindingsEqual } from "../../../current-factory-definition/lib/workstation-model-invoke";
-import type { EditableWorkstationOverwriteField } from "../lib/detail-card-types";
+import type { EditableWorkstationOverwriteField } from "../lib/keys/detail-card-types";
 import type { WorkstationDetailMessages } from "../messages/workstation-detail-types";
 
 export function resolveEditableWorkstationOverwriteFields(

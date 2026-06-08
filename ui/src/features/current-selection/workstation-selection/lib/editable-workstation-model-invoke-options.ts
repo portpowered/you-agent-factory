@@ -4,7 +4,7 @@ import {
   resolveModelOperationByName,
   resolveModelOperationInputSlots,
 } from "../../../current-factory-definition/lib/workstation-model-invoke";
-import type { EditableWorkstationOperationOptionsState } from "./detail-card-types";
+import type { EditableWorkstationOperationOptionsState } from "./keys/detail-card-types";
 
 export function resolveModelInvokeOperationOptionsState(
   draft: EditableWorkstationDraft,

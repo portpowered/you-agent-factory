@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
-} from "./editable-workstation-configuration-validation";
+} from "./validation/editable-workstation-configuration-validation";
 import {
   baseEditableWorkstationDraft,
   editableWorkstationValidationMessages,

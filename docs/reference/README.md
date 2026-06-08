@@ -81,7 +81,8 @@ filesystem work around that invocation.
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
 - [Workers](workers.md) owns worker types, worker-scoped runtime fields,
-  model/script backend fields, and split `workers/<name>/AGENTS.md` placement.
+  model/script/hosted backend fields, hosted `auth.secretRef` guidance, and
+  split `workers/<name>/AGENTS.md` placement.
 
 Use these canonical concept owners when you need the current contract.
 

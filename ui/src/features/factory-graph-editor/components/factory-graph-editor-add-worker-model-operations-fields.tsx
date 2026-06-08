@@ -12,7 +12,7 @@ import { getFactoryGraphEditorMessages } from "../messages/editor";
 import {
   FactoryGraphEditorAddField,
   FactoryGraphEditorTextField,
-} from "./factory-graph-editor-add-dialog-fields";
+} from "./add-dialog/factory-graph-editor-add-dialog-fields";
 
 export function FactoryGraphEditorAddWorkerModelOperationsFields({
   errors,

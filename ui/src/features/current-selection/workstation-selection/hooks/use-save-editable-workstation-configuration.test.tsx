@@ -9,7 +9,7 @@ import { staleFactoryVersionTarget } from "../../../../testing/factory-validatio
 import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { DashboardSessionProvider } from "../../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
-import type { EditableWorkstationConfigurationState } from "../lib/detail-card-types";
+import type { EditableWorkstationConfigurationState } from "../lib/keys/detail-card-types";
 import { useSaveEditableWorkstationConfiguration } from "./use-save-editable-workstation-configuration";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused save-hook regressions share one mocked mutation seam to keep re-entrant action behavior readable.

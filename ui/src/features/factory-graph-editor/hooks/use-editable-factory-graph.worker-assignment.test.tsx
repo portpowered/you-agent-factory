@@ -9,7 +9,7 @@ import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
-} from "../lib/factory-graph-draft.test-helpers";
+} from "../lib/draft/factory-graph-draft.test-helpers";
 import type { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
 const logicalMoveFactoryDocument: CurrentFactoryDocument = {

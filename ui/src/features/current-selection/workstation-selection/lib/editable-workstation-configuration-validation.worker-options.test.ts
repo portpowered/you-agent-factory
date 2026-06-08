@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { resolveEditableWorkstationValues } from "../../../current-factory-definition/lib/workstation-editable-values";
-import { resolveWorkerOptionsState } from "./editable-workstation-configuration-validation";
+import { resolveWorkerOptionsState } from "./validation/editable-workstation-configuration-validation";
 import {
   baseEditableWorkstationDraft,
   editableWorkstationValidationMessages,

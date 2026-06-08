@@ -18,16 +18,13 @@ describe("AUTHORED_BODY_TEXT_CLASS color roles", () => {
     expect(AUTHORED_BODY_TEXT_CLASS).toContain("border-outline");
     expect(AUTHORED_BODY_TEXT_CLASS).toContain("bg-surface-container-high");
     expect(AUTHORED_BODY_TEXT_CLASS).toContain("bg-surface-container-low");
-    expect(AUTHORED_BODY_TEXT_CLASS).toContain(
-      "[&_code]:bg-surface-container",
-    );
+    expect(AUTHORED_BODY_TEXT_CLASS).toContain("[&_code]:bg-surface-container");
   });
 
-  it.each(FORBIDDEN_TRANSITIONAL_PATTERNS.map((pattern) => [pattern.source]))(
-    "does not include transitional token %s",
-    (patternSource) => {
-      const pattern = new RegExp(patternSource);
-      expect(AUTHORED_BODY_TEXT_CLASS).not.toMatch(pattern);
-    },
-  );
+  it.each(
+    FORBIDDEN_TRANSITIONAL_PATTERNS.map((pattern) => [pattern.source]),
+  )("does not include transitional token %s", (patternSource) => {
+    const pattern = new RegExp(patternSource);
+    expect(AUTHORED_BODY_TEXT_CLASS).not.toMatch(pattern);
+  });
 });

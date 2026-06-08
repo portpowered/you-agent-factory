@@ -63,10 +63,7 @@ describe("feature surface color roles (US-009)", () => {
 
   it("representative graph and header surfaces use role utilities", () => {
     const nodeShell = readFileSync(
-      join(
-        FEATURES_ROOT,
-        "graphs/components/graph-node-shell.tsx",
-      ),
+      join(FEATURES_ROOT, "graphs/components/graph-node-shell.tsx"),
       "utf8",
     );
     const sessionTab = readFileSync(
