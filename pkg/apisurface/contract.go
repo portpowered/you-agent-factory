@@ -46,7 +46,7 @@ type SessionAPI interface {
 type WorkAPI interface {
 	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error)
-	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
+	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
 
@@ -119,6 +119,10 @@ var ErrCurrentFactoryNotFound = errors.New("current factory not found")
 // ErrFactorySessionNotFound reports that no live session matched the requested
 // public session identifier.
 var ErrFactorySessionNotFound = errors.New("factory session not found")
+
+// ErrInvalidEventReconnectCursor reports that the reconnect cursor did not
+// match any recorded event in the targeted stream.
+var ErrInvalidEventReconnectCursor = errors.New("invalid event reconnect cursor")
 
 // ErrFactorySessionResultUnavailable reports that the requested session does not
 // expose JavaScript result or partial-result reads.

@@ -137,7 +137,7 @@ export interface paths {
     };
     /**
      * Stream factory events
-     * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection.
+     * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
      */
     get: operations["getEvents"];
     put?: never;
@@ -157,7 +157,7 @@ export interface paths {
     };
     /**
      * Stream factory events for one session
-     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
      */
     get: operations["getEventsBySessionId"];
     put?: never;
@@ -4297,6 +4297,10 @@ export interface components {
     DispatchID: string;
     /** @description Stable factory-session artifact identifier. */
     ArtifactID: string;
+    /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+    AfterEventId: string;
+    /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+    AfterSequence: number;
   };
   requestBodies: never;
   headers: never;
@@ -4530,7 +4534,12 @@ export interface operations {
   };
   getEvents: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        after_event_id?: components["parameters"]["AfterEventId"];
+        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -4551,7 +4560,12 @@ export interface operations {
   };
   getEventsBySessionId: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        after_event_id?: components["parameters"]["AfterEventId"];
+        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+      };
       header?: never;
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */

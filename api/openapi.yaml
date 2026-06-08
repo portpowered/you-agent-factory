@@ -229,7 +229,10 @@ paths:
         - Runtime
       operationId: getEvents
       summary: Stream factory events
-      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection.
+      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+      parameters:
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
           description: Factory event stream.
@@ -247,9 +250,11 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
           description: Factory event stream for the targeted session.
@@ -1245,6 +1250,21 @@ components:
       description: Stable factory-session artifact identifier.
       schema:
         type: string
+    AfterEventId:
+      name: after_event_id
+      in: query
+      required: false
+      description: Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier.
+      schema:
+        type: string
+    AfterSequence:
+      name: after_sequence
+      in: query
+      required: false
+      description: Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
+      schema:
+        type: integer
+        minimum: 0
   responses:
     BadRequest:
       description: Request payload or parameter was invalid.

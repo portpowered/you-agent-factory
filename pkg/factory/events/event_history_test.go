@@ -60,7 +60,10 @@ func TestFactoryEventHistory_SubscribeCancelClosesStreamWithoutPanickingAppender
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
 	ctx, cancel := context.WithCancel(context.Background())
-	stream := history.Subscribe(ctx)
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
 
 	history.RecordInitialStructure()
 

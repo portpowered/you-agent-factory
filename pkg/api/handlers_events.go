@@ -8,6 +8,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -49,18 +50,37 @@ func (s *Server) getStatus(
 }
 
 // GetEvents handles GET /events as a canonical factory event SSE stream.
-func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request) {
-	s.getEvents(w, r, s.runtime.SubscribeFactoryEvents)
+func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factoryapi.GetEventsParams) {
+	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
+	s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+		return s.runtime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{})
+	})
 }
 
-func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetEventsBySessionIdParams) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
 	}
+	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
 	s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
-		return sessionRuntime.SubscribeFactoryEventsForSession(ctx, string(sessionID))
+		return sessionRuntime.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
 	})
+}
+
+func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSequence *factoryapi.AfterSequence) *interfaces.FactoryEventReconnectCursor {
+	if afterEventID == nil && afterSequence == nil {
+		return nil
+	}
+	cursor := &interfaces.FactoryEventReconnectCursor{}
+	if afterEventID != nil {
+		cursor.AfterEventID = string(*afterEventID)
+	}
+	if afterSequence != nil {
+		sequence := int(*afterSequence)
+		cursor.AfterSequence = &sequence
+	}
+	return cursor
 }
 
 func (s *Server) getEvents(
@@ -78,6 +98,10 @@ func (s *Server) getEvents(
 	if err != nil {
 		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
+		if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) || errors.Is(err, events.ErrReconnectCursorNotFound) {
+			s.writeError(w, http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST")
 			return
 		}
 		s.logger.Error("subscribe factory events failed", zap.Error(err))

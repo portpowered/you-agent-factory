@@ -53,7 +53,7 @@ type FactoryCoordinator interface {
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
 	SubmitWorkRequestForSession(context.Context, string, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 	MoveWorkForSession(context.Context, string, string, string, string) (interfaces.OperatorMoveResult, error)
-	SubscribeFactoryEventsForSession(context.Context, string) (*interfaces.FactoryEventStream, error)
+	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 	startDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error)
@@ -314,17 +314,17 @@ func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string
 	return activeFactory.MoveWork(ctx, workID, stateName, source, requestID)
 }
 
-func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
-	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID)
+func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
 }
 
-func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	fs := c.service
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	stream, err := activeFactory.SubscribeFactoryEvents(ctx)
+	stream, err := activeFactory.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
 	if err != nil {
 		return nil, fmt.Errorf("subscribe factory events: %w", err)
 	}

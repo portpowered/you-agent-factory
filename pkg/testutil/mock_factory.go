@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -206,13 +207,24 @@ func (m *MockFactory) acceptedWorkRequest(requestID string) (interfaces.WorkRequ
 	return interfaces.WorkRequestSubmitResult{}, false
 }
 
-func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	m.FactoryEventStreamCtx = ctx
+	history := m.FactoryEvents
+	if m.FactoryEventStream != nil && len(m.FactoryEventStream.History) > 0 {
+		history = m.FactoryEventStream.History
+	}
+	if reconnect != nil {
+		replayed, err := factoryevents.BuildReconnectReplay(history, *reconnect, scope)
+		if err != nil {
+			return nil, err
+		}
+		history = replayed
+	}
 	if m.FactoryEventStream != nil {
-		return m.FactoryEventStream, nil
+		return &interfaces.FactoryEventStream{History: history, Events: m.FactoryEventStream.Events}, nil
 	}
 	ch := make(chan factoryapi.FactoryEvent)
-	return &interfaces.FactoryEventStream{History: m.FactoryEvents, Events: ch}, nil
+	return &interfaces.FactoryEventStream{History: history, Events: ch}, nil
 }
 
 func (m *MockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
@@ -380,12 +392,12 @@ func (m *MockFactory) SubmitWorkRequestForSession(ctx context.Context, sessionID
 	return session.SubmitWorkRequest(ctx, request)
 }
 
-func (m *MockFactory) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+func (m *MockFactory) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	session, err := m.sessionFactory(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	return session.SubscribeFactoryEvents(ctx)
+	return session.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
 }
 
 func (m *MockFactory) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

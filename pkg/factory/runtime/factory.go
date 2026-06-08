@@ -11,6 +11,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
@@ -428,8 +429,14 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMo
 }
 
 // SubscribeFactoryEvents returns canonical history followed by live events.
-func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error) {
-	stream := f.eventHistory.Subscribe(ctx)
+func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
+	stream, err := f.eventHistory.Subscribe(ctx, reconnect, scope)
+	if err != nil {
+		if errors.Is(err, factoryevents.ErrReconnectCursorNotFound) {
+			return nil, fmt.Errorf("%w: %v", apisurface.ErrInvalidEventReconnectCursor, err)
+		}
+		return nil, err
+	}
 	return &stream, nil
 }
 

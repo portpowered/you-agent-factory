@@ -4,6 +4,21 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
+// FactoryEventReconnectCursor identifies the last acknowledged event for stream
+// reconnect. Clients may supply AfterEventID or AfterSequence; when both are
+// set, AfterEventID wins.
+type FactoryEventReconnectCursor struct {
+	AfterEventID  string
+	AfterSequence *int
+}
+
+// FactoryEventReconnectScope configures how reconnect cursors are interpreted.
+type FactoryEventReconnectScope struct {
+	// SessionID enables sessionSequence-based after_sequence matching for
+	// session-scoped event streams.
+	SessionID string
+}
+
 // FactoryEventStream carries replayed history and then live canonical events.
 type FactoryEventStream struct {
 	History []factoryapi.FactoryEvent

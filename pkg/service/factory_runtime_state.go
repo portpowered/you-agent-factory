@@ -668,12 +668,12 @@ func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfa
 
 // SubscribeFactoryEvents returns canonical factory event history followed by
 // live events from the current service-owned runtime.
-func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	activeFactory := fs.currentFactory()
 	if activeFactory == nil {
 		return nil, fmt.Errorf("factory service runtime is not available")
 	}
-	stream, err := activeFactory.SubscribeFactoryEvents(ctx)
+	stream, err := activeFactory.SubscribeFactoryEvents(ctx, reconnect, scope)
 	if err != nil {
 		return nil, fmt.Errorf("subscribe factory events: %w", err)
 	}

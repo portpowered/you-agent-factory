@@ -121,7 +121,7 @@ func TestMockFactory_SubscribeFactoryEvents_ReturnsHistoryAndCapturesContext(t *
 		},
 	}
 
-	stream, err := mf.SubscribeFactoryEvents(t.Context())
+	stream, err := mf.SubscribeFactoryEvents(t.Context(), nil, interfaces.FactoryEventReconnectScope{})
 	if err != nil {
 		t.Fatalf("SubscribeFactoryEvents: %v", err)
 	}

@@ -102,11 +102,15 @@ func (h *FactoryEventHistory) Events() []factoryapi.FactoryEvent {
 }
 
 // Subscribe returns a replay snapshot followed by live canonical events.
-func (h *FactoryEventHistory) Subscribe(ctx context.Context) interfaces.FactoryEventStream {
+func (h *FactoryEventHistory) Subscribe(
+	ctx context.Context,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) (interfaces.FactoryEventStream, error) {
 	if h == nil {
 		ch := make(chan factoryapi.FactoryEvent)
 		close(ch)
-		return interfaces.FactoryEventStream{Events: ch}
+		return interfaces.FactoryEventStream{Events: ch}, nil
 	}
 
 	h.mu.Lock()
@@ -121,6 +125,14 @@ func (h *FactoryEventHistory) Subscribe(ctx context.Context) interfaces.FactoryE
 	}
 	h.streams[id] = subscription
 	h.mu.Unlock()
+
+	if reconnect != nil {
+		replayed, err := BuildReconnectReplay(events, *reconnect, scope)
+		if err != nil {
+			return interfaces.FactoryEventStream{}, err
+		}
+		events = replayed
+	}
 
 	go func() {
 		defer close(subscription.events)
@@ -144,7 +156,7 @@ func (h *FactoryEventHistory) Subscribe(ctx context.Context) interfaces.FactoryE
 		}
 	}()
 
-	return interfaces.FactoryEventStream{History: events, Events: subscription.events}
+	return interfaces.FactoryEventStream{History: events, Events: subscription.events}, nil
 }
 
 // AddGeneratedRecorder registers a callback invoked for every future generated

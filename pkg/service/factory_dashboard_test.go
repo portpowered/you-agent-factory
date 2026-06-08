@@ -134,7 +134,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 				Payload:    json.RawMessage(`{"title":"Starter task"}`),
 			}})
 			observation.submitResult, observation.submitErr = runtime.SubmitWorkRequest(ctx, workRequest)
-			observation.stream, observation.streamErr = runtime.SubscribeFactoryEvents(ctx)
+			observation.stream, observation.streamErr = runtime.SubscribeFactoryEvents(ctx, nil, interfaces.FactoryEventReconnectScope{})
 			observation.snapshot, observation.snapshotErr = runtime.GetEngineStateSnapshot(ctx)
 			observation.current, observation.currentErr = runtime.GetCurrentFactory(ctx)
 			observedCh <- observation
