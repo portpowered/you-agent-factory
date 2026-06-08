@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { SubmitWorkAPIError } from "../../../api/work";
 import type { SubmitWorkDraft } from "../components/submit-work-card";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import {
@@ -114,6 +115,54 @@ describe("buildStatus", () => {
     ).toEqual({
       kind: "guidance",
       message: messages.statusMessages.ready,
+    });
+  });
+
+  it("prioritizes server submission failures over guidance and validation status", () => {
+    const draft = {
+      ...createDefaultDraft(),
+      requestName: "Driver review",
+      workTypeName: "story",
+    };
+
+    expect(
+      buildStatus({
+        draft,
+        error: new SubmitWorkAPIError({
+          code: "BAD_REQUEST",
+          message: "work_type_name is required",
+          status: 400,
+          statusText: "Bad Request",
+        }),
+        isSubmitting: false,
+        isSuccess: false,
+        messages,
+        showValidation: true,
+        submitWorkTypeNames: ["story"],
+      }),
+    ).toEqual({
+      kind: "error",
+      message: "work_type_name is required",
+    });
+  });
+
+  it("prioritizes successful submission status over validation state", () => {
+    const draft = createDefaultDraft();
+
+    expect(
+      buildStatus({
+        draft,
+        error: null,
+        isSubmitting: false,
+        isSuccess: true,
+        messages,
+        resultTraceID: "trace-submit-story",
+        showValidation: true,
+        submitWorkTypeNames: ["story"],
+      }),
+    ).toEqual({
+      kind: "success",
+      message: messages.statusMessages.success("trace-submit-story"),
     });
   });
 

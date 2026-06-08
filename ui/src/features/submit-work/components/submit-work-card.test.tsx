@@ -263,3 +263,147 @@ describe("SubmitWorkCard work type selector", () => {
     ).toBeNull();
   });
 });
+
+describe("SubmitWorkCard form-level status", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("keeps required-field validation on the controls without a detached status panel", () => {
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        requestName: "",
+        workTypeName: "",
+      },
+      validationErrors: {
+        requestName: messages.validationMessages.requestRequired,
+        workTypeName: messages.validationMessages.workTypeRequired,
+      },
+    });
+
+    expect(
+      screen.getByText(messages.validationMessages.requestRequired),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.getByText(messages.validationMessages.workTypeRequired),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.queryByText(messages.validationMessages.bothMissing),
+    ).toBeNull();
+    expect(screen.queryByRole("alert", { name: /before submitting/i })).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("shows server submission failures through the card status panel", () => {
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        requestName: "Driver review",
+      },
+      status: {
+        kind: "error",
+        message: "work_type_name is required",
+      },
+    });
+
+    const statusPanel = screen.getByRole("alert");
+    expect(statusPanel).toHaveTextContent("work_type_name is required");
+    expect(statusPanel.className).toContain("bg-error-container");
+    expect(
+      screen.queryByText(messages.validationMessages.requestRequired),
+    ).toBeNull();
+    expect(
+      screen.queryByText(messages.validationMessages.workTypeRequired),
+    ).toBeNull();
+    expect(
+      screen.getByRole("textbox", {
+        name: `${messages.requestNameLabel} (${messages.requestNameRequiredAffordance})`,
+      }),
+    ).not.toHaveAttribute("aria-invalid");
+  });
+
+});
+
+describe("SubmitWorkCard submission outcomes", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows successful submissions through the card status panel without stale field invalid styling", () => {
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        requestName: "",
+      },
+      status: {
+        kind: "success",
+        message: messages.statusMessages.success("trace-submit-story"),
+      },
+    });
+
+    const statusPanel = screen.getByRole("status");
+    expect(statusPanel).toHaveTextContent("trace-submit-story");
+    expect(statusPanel.className).toContain("bg-success-container");
+    expect(
+      screen.getByRole("textbox", {
+        name: `${messages.requestNameLabel} (${messages.requestNameRequiredAffordance})`,
+      }),
+    ).not.toHaveAttribute("aria-invalid");
+    expect(
+      screen.getByRole("combobox", {
+        name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+      }),
+    ).not.toHaveAttribute("aria-invalid");
+    expect(
+      screen.queryByText(messages.validationMessages.requestRequired),
+    ).toBeNull();
+    expect(
+      screen.queryByText(messages.validationMessages.workTypeRequired),
+    ).toBeNull();
+  });
+
+  it("keeps submission-item validation on the detached status channel", () => {
+    renderSubmitWorkCard({
+      draft: {
+        items: [
+          {
+            fileName: "ui.png",
+            id: "submission-item-1",
+            mediaType: "image/png",
+            stagedFileRef: "staged://submit-work/ui.png",
+            stagingStatus: "idle",
+            type: "image",
+          },
+        ],
+        requestName: "Driver review",
+        workTypeName: "story",
+      },
+      status: {
+        kind: "validation-error",
+        message: messages.validationMessages.fileItemNeedsStaging,
+      },
+      validationErrors: {
+        submissionItems: messages.validationMessages.fileItemNeedsStaging,
+      },
+    });
+
+    const statusPanel = screen.getByRole("alert");
+    expect(statusPanel).toHaveTextContent(
+      messages.validationMessages.fileItemNeedsStaging,
+    );
+    expect(
+      screen.getAllByText(messages.validationMessages.fileItemNeedsStaging),
+    ).toHaveLength(2);
+    expect(
+      screen.getByRole("textbox", {
+        name: `${messages.requestNameLabel} (${messages.requestNameRequiredAffordance})`,
+      }),
+    ).not.toHaveAttribute("aria-invalid");
+    expect(
+      screen.getByRole("combobox", {
+        name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+      }),
+    ).not.toHaveAttribute("aria-invalid");
+  });
+});

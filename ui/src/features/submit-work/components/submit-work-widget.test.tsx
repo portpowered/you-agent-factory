@@ -1469,6 +1469,88 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
   });
 
+  it("clears stale required-field invalid styling after a successful submit", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ traceId: "trace-submit-story" }), {
+        headers: {
+          "Content-Type": "application/json",
+        },
+        status: 201,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    const submitButton = screen.getByRole<HTMLButtonElement>("button", {
+      name: "Submit work",
+    });
+    const form = submitButton.closest("form");
+    if (!(form instanceof HTMLFormElement)) {
+      throw new Error(
+        "expected the submit button to be rendered inside a form",
+      );
+    }
+
+    fireEvent.submit(form);
+
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: /Request name/,
+    });
+    const workType = screen.getByRole("combobox", { name: /Work type/ });
+
+    expect(requestName.getAttribute("aria-invalid")).toBe("true");
+    expect(workType.getAttribute("aria-invalid")).toBe("true");
+    expect(screen.queryByRole("status")).toBeNull();
+
+    await selectWorkType();
+    fireEvent.change(requestName, {
+      target: { value: "Driver review" },
+    });
+    fireEvent.click(submitButton);
+
+    expect(
+      await screen.findByText(
+        "Your request was submitted. Trace ID: trace-submit-story.",
+      ),
+    ).toBeTruthy();
+    expect(requestName).not.toHaveAttribute("aria-invalid");
+    expect(workType).not.toHaveAttribute("aria-invalid");
+    expect(
+      screen.queryByText("Enter a request name before submitting."),
+    ).toBeNull();
+    expect(
+      screen.queryByText("Choose a work type before submitting."),
+    ).toBeNull();
+  });
+
+  it("shows network submission failures through the card status panel", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    await selectWorkType();
+    fireEvent.change(screen.getByRole("textbox", { name: /Request name/ }), {
+      target: { value: "Driver review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit work" }));
+
+    const statusPanel = await screen.findByRole("alert");
+    expect(statusPanel).toHaveTextContent(
+      "We couldn't submit your request. Try again in a moment.",
+    );
+    expect(statusPanel.className).toContain("bg-error-container");
+    expect(
+      screen.getByRole("textbox", { name: /Request name/ }),
+    ).not.toHaveAttribute("aria-invalid");
+    expect(screen.getByRole("combobox", { name: /Work type/ })).not.toHaveAttribute(
+      "aria-invalid",
+    );
+  });
+
   it("shows the server error inline and preserves the draft after a failed submission", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
