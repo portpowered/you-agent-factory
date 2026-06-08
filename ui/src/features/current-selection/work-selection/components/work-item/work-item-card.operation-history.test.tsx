@@ -101,7 +101,7 @@ describe("WorkItemDetailCard operation history", () => {
     });
     expect(workstationCard.className).toContain("bg-surface-container-high");
     expect(
-      within(workstationCard).getByRole("heading", { name: "Request details" }),
+      within(workstationCard).getByRole("heading", { name: "Summary" }),
     ).toBeTruthy();
     expect(
       within(workstationCard).getByRole("heading", {
@@ -135,12 +135,12 @@ describe("WorkItemDetailCard operation history", () => {
     expect(within(logicalMoveCard).getByText("Move")).toBeTruthy();
     expect(
       within(logicalMoveCard).queryByRole("heading", {
-        name: "Inference attempts",
+        name: "Summary",
       }),
     ).toBeNull();
     expect(
       within(logicalMoveCard).queryByRole("heading", {
-        name: "Request details",
+        name: "Inference attempts",
       }),
     ).toBeNull();
   });

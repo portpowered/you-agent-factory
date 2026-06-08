@@ -252,7 +252,12 @@ function expectCanonicalCurrentSelectionBody({
   expect(topLevelSections.length).toBeGreaterThan(0);
 
   for (const sectionName of sectionNames) {
-    const section = within(body).getByRole("region", { name: sectionName });
+    const section = topLevelSections.find((candidate) =>
+      within(candidate).queryByRole("heading", { name: sectionName }),
+    );
+    if (!(section instanceof HTMLElement)) {
+      throw new Error(`expected top-level current selection section ${sectionName}`);
+    }
     expect(topLevelSections).toContain(section);
 
     const toggle = within(section)
@@ -276,14 +281,9 @@ function getDispatchHistoryCard(
   container: HTMLElement,
   dispatchId: string,
 ): HTMLElement {
-  const dispatchBadge = within(container).getAllByText(dispatchId)[0];
-  const card = dispatchBadge.closest("article");
-
-  if (!(card instanceof HTMLElement)) {
-    throw new Error(`expected dispatch history card for ${dispatchId}`);
-  }
-
-  return card;
+  return within(container).getByRole("article", {
+    name: new RegExp(dispatchId),
+  });
 }
 
 function expandDispatchAttemptSection(
@@ -635,7 +635,7 @@ describe("App current selection", () => {
       dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
     );
     const pendingRequestDetails = within(pendingCard).getByRole("region", {
-      name: "Request details",
+      name: "Summary",
     });
     const pendingInferenceAttempts = expandDispatchAttemptSection(
       pendingCard,
@@ -663,7 +663,7 @@ describe("App current selection", () => {
       dashboardWorkstationRequestFixtures.ready.dispatch_id,
     );
     expect(readyCard.className).toContain("bg-surface-container-high");
-    const readyRequestDetails = expandCardSection(readyCard, "Request details");
+    const readyRequestDetails = expandCardSection(readyCard, "Summary");
     const readyInferenceAttempts = expandDispatchAttemptSection(
       readyCard,
       "Inference attempts",
@@ -795,7 +795,7 @@ describe("App current selection", () => {
       dashboardWorkstationRequestFixtures.errored.dispatch_id,
     );
     const erroredRequestDetails = within(erroredCard).getByRole("region", {
-      name: "Request details",
+      name: "Summary",
     });
     const erroredInferenceAttempts = expandDispatchAttemptSection(
       erroredCard,

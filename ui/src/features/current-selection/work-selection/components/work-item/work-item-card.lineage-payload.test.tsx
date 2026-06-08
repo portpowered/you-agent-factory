@@ -40,29 +40,29 @@ function renderWorkItemDetailCard({
   );
 }
 
-function requestDetailsRegion() {
+function requestSummaryRegion() {
   const dispatchCard = within(
     screen.getByRole("region", { name: "Workstation dispatches" }),
-  ).getAllByRole("article")[0];
+  ).getByRole("article", { name: /dispatch-review-active/ });
 
   if (!(dispatchCard instanceof HTMLElement)) {
     throw new Error("expected selected-work dispatch history card");
   }
 
   return within(
-    within(dispatchCard).getByRole("region", { name: "Request details" }),
+    within(dispatchCard).getByRole("region", { name: "Summary" }),
   );
 }
 
-function expandRequestDetails() {
-  const requestDetails = requestDetailsRegion();
-  const toggle = requestDetails.getByRole("button", { name: "Expand" });
+function expandRequestSummary() {
+  const requestSummary = requestSummaryRegion();
+  const toggle = requestSummary.getByRole("button", { name: "Expand" });
 
   expect(toggle.getAttribute("aria-expanded")).toBe("false");
   fireEvent.click(toggle);
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
 
-  return requestDetailsRegion();
+  return requestSummaryRegion();
 }
 
 describe("WorkItemDetailCard lineage payload rendering", () => {
@@ -98,7 +98,7 @@ describe("WorkItemDetailCard lineage payload rendering", () => {
       }),
     });
 
-    const requestDetails = expandRequestDetails();
+    const requestDetails = expandRequestSummary();
 
     expect(requestDetails.getByText("Consumed payload")).toBeTruthy();
     expect(
@@ -144,7 +144,7 @@ describe("WorkItemDetailCard lineage payload selection", () => {
       }),
     });
 
-    const requestDetails = expandRequestDetails();
+    const requestDetails = expandRequestSummary();
 
     expect(
       requestDetails.getByText(
