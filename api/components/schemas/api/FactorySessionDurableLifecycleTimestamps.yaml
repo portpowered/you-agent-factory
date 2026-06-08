@@ -1,0 +1,39 @@
+type: object
+additionalProperties: false
+properties:
+  queuedAt:
+    type: string
+    format: date-time
+    description: When the durable session entered the queued state.
+  awaitingApprovalAt:
+    type: string
+    format: date-time
+    description: When the durable session began awaiting approval.
+  startedAt:
+    type: string
+    format: date-time
+    description: When durable execution started.
+  pausedAt:
+    type: string
+    format: date-time
+    description: When the durable session was most recently paused.
+  resumedAt:
+    type: string
+    format: date-time
+    description: When the durable session was most recently resumed.
+  finishedAt:
+    type: string
+    format: date-time
+    description: When the durable session reached a terminal finished state.
+  updatedAt:
+    type: string
+    format: date-time
+    description: When the durable session projection was last refreshed.
+  interruptedAt:
+    type: string
+    format: date-time
+    description: When the durable session was interrupted.
+  terminatedAt:
+    type: string
+    format: date-time
+    description: When the durable session was explicitly terminated.

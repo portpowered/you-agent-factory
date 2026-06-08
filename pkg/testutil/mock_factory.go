@@ -59,7 +59,7 @@ type MockFactory struct {
 	ListFactorySessionsErr   error
 	FactorySession               factoryapi.FactorySession
 	GetFactorySessionErr         error
-	FactorySessionResult         factoryapi.FactorySessionResult
+	FactorySessionLiveResult     factoryapi.FactorySessionLiveResult
 	GetFactorySessionResultErr   error
 	FactorySessionPartialResult  factoryapi.FactorySessionPartialResult
 	GetFactorySessionPartialResultErr error
@@ -337,11 +337,11 @@ func (m *MockFactory) GetFactorySession(_ context.Context, _ string) (factoryapi
 	return m.FactorySession, nil
 }
 
-func (m *MockFactory) GetFactorySessionResult(_ context.Context, _ string) (factoryapi.FactorySessionResult, error) {
+func (m *MockFactory) GetFactorySessionResult(_ context.Context, _ string) (factoryapi.FactorySessionLiveResult, error) {
 	if m.GetFactorySessionResultErr != nil {
-		return factoryapi.FactorySessionResult{}, m.GetFactorySessionResultErr
+		return factoryapi.FactorySessionLiveResult{}, m.GetFactorySessionResultErr
 	}
-	return m.FactorySessionResult, nil
+	return m.FactorySessionLiveResult, nil
 }
 
 func (m *MockFactory) GetFactorySessionPartialResult(_ context.Context, _ string) (factoryapi.FactorySessionPartialResult, error) {

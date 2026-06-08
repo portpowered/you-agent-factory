@@ -94,7 +94,7 @@ func TestFactorySessionsAPI_GetFactorySessionResult_OmitsRawCheckpointBody(t *te
 		},
 	}}
 	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
-		FactorySessionResult: factoryapi.FactorySessionResult{
+		FactorySessionLiveResult: factoryapi.FactorySessionLiveResult{
 			SessionId: "session-js",
 			Status:    factoryapi.FactorySessionStatusIDLE,
 			ResultArtifactRef: &factoryapi.FactoryArtifactRef{
@@ -118,7 +118,7 @@ func TestFactorySessionsAPI_GetFactorySessionResult_OmitsRawCheckpointBody(t *te
 			t.Fatalf("session result leaked %q: %s", forbidden, body)
 		}
 	}
-	var response factoryapi.FactorySessionResult
+	var response factoryapi.FactorySessionLiveResult
 	if err := json.NewDecoder(strings.NewReader(body)).Decode(&response); err != nil {
 		t.Fatalf("decode session result: %v", err)
 	}

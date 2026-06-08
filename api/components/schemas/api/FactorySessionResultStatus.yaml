@@ -1,0 +1,16 @@
+type: string
+description: >-
+  Customer-visible durable session result availability for session read models and
+  result retrieval endpoints.
+enum:
+  - NOT_READY
+  - PARTIAL
+  - FINAL
+  - FAILED_WITH_PARTIAL
+  - UNAVAILABLE
+x-enum-varnames:
+  - FactorySessionResultStatusNotReady
+  - FactorySessionResultStatusPartial
+  - FactorySessionResultStatusFinal
+  - FactorySessionResultStatusFailedWithPartial
+  - FactorySessionResultStatusUnavailable

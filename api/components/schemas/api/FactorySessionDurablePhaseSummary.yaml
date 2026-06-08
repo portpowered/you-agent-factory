@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+required:
+  - phase
+properties:
+  phase:
+    type: string
+    description: Workflow phase name for this summary row.
+  label:
+    type: string
+    description: Customer-visible phase label when different from the phase name.
+  dispatchCount:
+    type: integer
+    minimum: 0
+    description: Total dispatches attributed to this phase.
+  completedDispatchCount:
+    type: integer
+    minimum: 0
+    description: Dispatches that reached a terminal success state in this phase.
+  failedDispatchCount:
+    type: integer
+    minimum: 0
+    description: Dispatches that failed in this phase.

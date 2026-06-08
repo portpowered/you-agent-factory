@@ -2,6 +2,9 @@ import { factorySessionFieldTarget } from "../../testing/factory-validation-targ
 import {
   closeFactorySession,
   FactorySessionsAPIError,
+  getFactorySession,
+  getFactorySessionPartialResult,
+  getFactorySessionResult,
   listFactorySessions,
   openFactorySession,
 } from "./api";
@@ -477,6 +480,94 @@ describe("factory sessions API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/factory-sessions/session-beta",
       expect.objectContaining({ method: "DELETE" }),
+    );
+  });
+
+  it("loads one live factory session from the typed API surface", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: "session-beta",
+          runtime: {
+            orchestratorKind: "JAVASCRIPT",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getFactorySession("session-beta")).resolves.toEqual({
+      id: "session-beta",
+      runtime: {
+        orchestratorKind: "JAVASCRIPT",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("loads live terminal and partial result surfaces from the typed API", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessionId: "session-beta",
+            status: "SUCCEEDED",
+            result: [{ type: "text", text: "done" }],
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            sessionId: "session-beta",
+            status: "RUNNING",
+            result: [{ type: "text", text: "partial" }],
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+          },
+        ),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getFactorySessionResult("session-beta")).resolves.toEqual({
+      sessionId: "session-beta",
+      status: "SUCCEEDED",
+      result: [{ type: "text", text: "done" }],
+    });
+    await expect(getFactorySessionPartialResult("session-beta")).resolves.toEqual({
+      sessionId: "session-beta",
+      status: "RUNNING",
+      result: [{ type: "text", text: "partial" }],
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/factory-sessions/session-beta/result",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/factory-sessions/session-beta/partial-result",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 

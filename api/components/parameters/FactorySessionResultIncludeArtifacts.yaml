@@ -1,0 +1,9 @@
+name: includeArtifacts
+in: query
+required: false
+description: >-
+  When true, include artifact metadata refs for materialized outputs. Defaults
+  to false and may return artifact ids only.
+schema:
+  type: boolean
+  default: false

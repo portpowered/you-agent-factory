@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+description: >-
+  Optional wait and timeout controls for durable execution. Sync routes use these
+  options to bound how long the server waits for a terminal result. Async routes
+  may accept them for future compatibility but do not block on terminal completion.
+properties:
+  timeoutMillis:
+    type: integer
+    format: int64
+    minimum: 1
+    description: Maximum wait budget in milliseconds for sync execution.
+  cancelOnTimeout:
+    type: boolean
+    default: false
+    description: >-
+      When true and a sync wait ends by timeout, the server may cancel the
+      session. When false or omitted, timeout responses must not imply the
+      session was canceled.

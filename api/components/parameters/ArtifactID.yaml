@@ -1,0 +1,6 @@
+name: artifact_id
+in: path
+required: true
+description: Stable factory-session artifact identifier.
+schema:
+  type: string

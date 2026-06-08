@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+description: Optional metadata shared by durable session lifecycle control requests.
+properties:
+  requestId:
+    type: string
+    description: >-
+      Optional idempotency key for one lifecycle control request. Replaying the
+      same requestId with the same operation and target must return the prior
+      control outcome instead of applying a second mutation.
+  reason:
+    type: string
+    description: Optional operator-provided reason for audit and diagnostics.

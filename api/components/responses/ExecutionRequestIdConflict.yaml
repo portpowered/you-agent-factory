@@ -1,0 +1,14 @@
+description: >-
+  The supplied requestId was already used with materially different source, args,
+  orchestrator, or requested policy.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      requestIdConflict:
+        summary: Durable execution requestId conflict.
+        value:
+          message: requestId was already used with different execution inputs.
+          family: CONFLICT
+          code: EXECUTION_REQUEST_ID_CONFLICT

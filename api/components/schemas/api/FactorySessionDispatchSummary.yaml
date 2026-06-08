@@ -1,0 +1,55 @@
+type: object
+additionalProperties: false
+required:
+  - id
+  - status
+  - dispatchKind
+description: >-
+  Durable factory-session dispatch summary for list responses. Exposes neutral
+  dispatch fields without requiring orchestrator-specific projections.
+properties:
+  id:
+    type: string
+    description: Stable dispatch identifier.
+  status:
+    $ref: '../data-models/FactoryDispatchStatus.yaml'
+  dispatchKind:
+    $ref: '../data-models/FactoryDispatchKind.yaml'
+  phase:
+    type: string
+    description: Workflow phase when the dispatch was created or observed.
+  label:
+    type: string
+    description: Customer-visible dispatch label.
+  attempt:
+    type: integer
+    format: int32
+    minimum: 1
+    description: One-based attempt number for retried dispatches.
+  runnerId:
+    type: string
+    description: Selected runner identifier when applicable.
+  model:
+    type: string
+    description: Selected model identifier when applicable.
+  provider:
+    type: string
+    description: Selected provider identifier when applicable.
+  providerSessionRefs:
+    type: array
+    items:
+      $ref: './LoadableProviderSessionRef.yaml'
+    description: Provider-session correlation refs for model-backed dispatches.
+  usage:
+    $ref: '../data-models/FactoryDispatchUsage.yaml'
+  warnings:
+    type: array
+    items:
+      $ref: '../data-models/FactoryDispatchWarning.yaml'
+  outputArtifactIds:
+    type: array
+    items:
+      type: string
+    description: Artifact identifiers produced by the dispatch.
+  failureDetail:
+    $ref: '../data-models/FactoryDispatchFailureDetail.yaml'

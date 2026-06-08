@@ -1,0 +1,29 @@
+type: string
+description: >-
+  Documented workflow and factory source resolution order for durable execution.
+  WORKFLOW_FILE and WORKFLOW_NAME sources are resolved in this order: (1) project
+  `.claude/workflows`, (2) user `~/.you-agent-factory/workflows`, (3)
+  package-relative workflow directories for the active project or package,
+  (4) built-in/global JavaScript factories, (5) explicit named factory lookup when
+  `source.kind` is FACTORY_ID or when a workflow reference requires factory
+  fallback. FACTORY_ID resolves a stored named factory directly. FACTORY_INLINE
+  and INLINE_WORKFLOW use the inline payload from the request without filesystem
+  search.
+enum:
+  - PROJECT_CLAUDE_WORKFLOWS
+  - USER_YOU_AGENT_FACTORY_WORKFLOWS
+  - PACKAGE_RELATIVE_WORKFLOW_DIRECTORIES
+  - BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES
+  - EXPLICIT_FACTORY_LOOKUP
+x-enum-varnames:
+  - FactorySessionWorkflowSourceResolutionOrderProjectClaudeWorkflows
+  - FactorySessionWorkflowSourceResolutionOrderUserYouAgentFactoryWorkflows
+  - FactorySessionWorkflowSourceResolutionOrderPackageRelativeWorkflowDirectories
+  - FactorySessionWorkflowSourceResolutionOrderBuiltinGlobalJavaScriptFactories
+  - FactorySessionWorkflowSourceResolutionOrderExplicitFactoryLookup
+x-enum-descriptions:
+  - Search project-local `.claude/workflows` first for workflow file and name sources.
+  - Search user-local `~/.you-agent-factory/workflows` when project-local search misses.
+  - Search package-relative workflow directories for the active project or package.
+  - Search built-in/global JavaScript factories when no authored workflow file matches.
+  - Resolve an explicit named factory when requested or when workflow resolution requires factory fallback.

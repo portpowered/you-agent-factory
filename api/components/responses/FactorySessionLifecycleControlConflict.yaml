@@ -1,0 +1,9 @@
+description: >-
+  Lifecycle control request conflicts with current session state, another
+  in-flight control, or a previously applied control requestId.
+content:
+  application/json:
+    schema:
+      oneOf:
+        - $ref: '../schemas/api/FactorySessionLifecycleControlResponse.yaml'
+        - $ref: '../schemas/api/ErrorResponse.yaml'

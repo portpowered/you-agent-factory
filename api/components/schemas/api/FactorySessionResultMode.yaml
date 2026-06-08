@@ -1,0 +1,8 @@
+type: string
+description: Durable session result retrieval mode.
+enum:
+  - final
+  - partial
+x-enum-varnames:
+  - FactorySessionResultModeFinal
+  - FactorySessionResultModePartial

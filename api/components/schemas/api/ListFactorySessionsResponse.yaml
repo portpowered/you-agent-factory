@@ -3,7 +3,16 @@ additionalProperties: false
 required:
   - sessions
 properties:
+  scope:
+    $ref: './FactorySessionListScope.yaml'
+    description: Applied list scope echoed in the response when provided by the server.
   sessions:
     type: array
     items:
       $ref: './FactorySessionSummary.yaml'
+    description: Live workspace session summaries when scope is LIVE or ALL.
+  durableSessions:
+    type: array
+    items:
+      $ref: './FactorySessionDurableSummary.yaml'
+    description: Persisted durable session summaries when scope is PERSISTED or ALL.

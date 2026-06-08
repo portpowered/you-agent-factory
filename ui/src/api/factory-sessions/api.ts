@@ -9,8 +9,8 @@ import {
 export type FactorySessionSummary =
   components["schemas"]["FactorySessionSummary"];
 export type FactorySession = components["schemas"]["FactorySession"];
-export type FactorySessionResult =
-  components["schemas"]["FactorySessionResult"];
+export type FactorySessionLiveResult =
+  components["schemas"]["FactorySessionLiveResult"];
 export type FactorySessionPartialResult =
   components["schemas"]["FactorySessionPartialResult"];
 export type FactorySessionTarget =
@@ -271,7 +271,7 @@ export async function getFactorySession(
 export async function getFactorySessionResult(
   sessionID: string,
   options: GetFactorySessionResultOptions = {},
-): Promise<FactorySessionResult> {
+): Promise<FactorySessionLiveResult> {
   return readFactorySessionResultSurface(
     sessionID,
     "result",
@@ -396,7 +396,7 @@ function isFactorySessionsAPIErrorTarget(
   return true;
 }
 
-async function readFactorySessionResultSurface<T extends FactorySessionResult | FactorySessionPartialResult>(
+async function readFactorySessionResultSurface<T extends FactorySessionLiveResult | FactorySessionPartialResult>(
   sessionID: string,
   surface: "result" | "partial-result",
   fetchImplementation: typeof globalThis.fetch | undefined,

@@ -1,0 +1,31 @@
+type: string
+description: >-
+  Durable factory-session lifecycle status returned by execution start routes and
+  later session read models. Live-session runtime statuses remain separate on the
+  existing FactorySessionStatus schema.
+enum:
+  - QUEUED
+  - AWAITING_APPROVAL
+  - RUNNING
+  - PAUSED
+  - RESUMING
+  - SUCCEEDED
+  - FAILED
+  - CANCELING
+  - CANCELED
+  - TIMED_OUT
+  - INTERRUPTED
+  - TERMINATED
+x-enum-varnames:
+  - FactorySessionDurableLifecycleStatusQueued
+  - FactorySessionDurableLifecycleStatusAwaitingApproval
+  - FactorySessionDurableLifecycleStatusRunning
+  - FactorySessionDurableLifecycleStatusPaused
+  - FactorySessionDurableLifecycleStatusResuming
+  - FactorySessionDurableLifecycleStatusSucceeded
+  - FactorySessionDurableLifecycleStatusFailed
+  - FactorySessionDurableLifecycleStatusCanceling
+  - FactorySessionDurableLifecycleStatusCanceled
+  - FactorySessionDurableLifecycleStatusTimedOut
+  - FactorySessionDurableLifecycleStatusInterrupted
+  - FactorySessionDurableLifecycleStatusTerminated

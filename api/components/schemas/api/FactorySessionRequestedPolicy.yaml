@@ -1,0 +1,12 @@
+type: object
+additionalProperties: true
+description: >-
+  Caller-requested orchestrator policy for one durable execution before approval.
+  Runtimes may require approval before this payload becomes effective. Responses
+  return the approved policy separately as FactorySessionEffectivePolicy.
+properties:
+  policyHash:
+    type: string
+    description: >-
+      Optional stable hash of the requested policy object when the caller already
+      computed one for idempotency comparisons.

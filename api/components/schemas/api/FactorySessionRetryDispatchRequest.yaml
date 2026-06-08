@@ -1,0 +1,30 @@
+type: object
+additionalProperties: false
+description: Retry request for one durable factory-session dispatch.
+required:
+  - dispatchId
+properties:
+  requestId:
+    type: string
+    description: >-
+      Optional idempotency key for one lifecycle control request. Replaying the
+      same requestId with the same operation and target must return the prior
+      control outcome instead of applying a second mutation.
+  reason:
+    type: string
+    description: Optional operator-provided reason for audit and diagnostics.
+  dispatchId:
+    type: string
+    description: Stable dispatch identifier to retry within the targeted session.
+  forceNewAttempt:
+    type: boolean
+    description: >-
+      When true, request a new retry attempt even if the dispatch already has a
+      successful or in-flight retry.
+    default: false
+  resetAttemptCount:
+    type: boolean
+    description: >-
+      When true, reset the dispatch attempt counter before retrying. Runtimes may
+      ignore this when policy forbids attempt resets.
+    default: false

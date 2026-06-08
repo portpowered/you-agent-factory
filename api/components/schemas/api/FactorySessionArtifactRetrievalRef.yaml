@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+required:
+  - href
+description: >-
+  Safe API retrieval reference for one factory-session artifact. Identifiers and
+  href values are API-relative and must not expose unrestricted host filesystem
+  paths by default.
+properties:
+  href:
+    type: string
+    description: API-relative retrieval path for the artifact payload.
+  method:
+    type: string
+    enum:
+      - GET
+    description: HTTP method clients should use to retrieve the referenced payload.

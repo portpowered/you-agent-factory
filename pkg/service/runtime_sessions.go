@@ -46,7 +46,7 @@ type FactoryCoordinator interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
-	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionResult, error)
+	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	CloseFactorySession(context.Context, string) error
@@ -974,22 +974,22 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	return projectionCtx, nil
 }
 
-func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionResult, error) {
+func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
 	return fs.requireCoordinator().GetFactorySessionResult(ctx, sessionID)
 }
 
-func (c *runtimeFactoryCoordinator) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionResult, error) {
+func (c *runtimeFactoryCoordinator) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
 	fs := c.service
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
-		return factoryapi.FactorySessionResult{}, err
+		return factoryapi.FactorySessionLiveResult{}, err
 	}
 	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
 	if err != nil {
-		return factoryapi.FactorySessionResult{}, err
+		return factoryapi.FactorySessionLiveResult{}, err
 	}
 	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
-		return factoryapi.FactorySessionResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
+		return factoryapi.FactorySessionLiveResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
 	}
 	return factorysessions.ProjectSessionResult(sessionID, projectionCtx, fs.javascriptCheckpointStore(session)), nil
 }

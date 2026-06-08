@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+description: Approval request for one durable factory session awaiting policy approval.
+properties:
+  requestId:
+    type: string
+    description: >-
+      Optional idempotency key for one lifecycle control request. Replaying the
+      same requestId with the same operation and target must return the prior
+      control outcome instead of applying a second mutation.
+  reason:
+    type: string
+    description: Optional operator-provided reason for audit and diagnostics.
+  approvalPreviewId:
+    type: string
+    description: >-
+      Optional approval preview identity when the caller reviewed a server-side
+      approval preview before submitting approval.
+  approvedPolicy:
+    $ref: './FactorySessionRequestedPolicy.yaml'
+    description: >-
+      Optional approved policy payload when the caller explicitly approves a
+      policy object distinct from the originally requested policy.
