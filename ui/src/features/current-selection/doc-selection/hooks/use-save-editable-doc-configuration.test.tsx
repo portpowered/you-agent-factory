@@ -64,6 +64,29 @@ describe("useSaveEditableDocConfiguration", () => {
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
     expect(onDocRenamed).toHaveBeenCalledWith("factory/docs/guide.md");
   });
+
+  it("no-ops when save is invoked without a ready editable configuration", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.spyOn(
+      factoryDocumentSaveHooks,
+      "useFactoryDocumentSave",
+    ).mockReturnValue(saveMutation as never);
+
+    const { result } = renderHook(
+      () =>
+        useSaveEditableDocConfiguration({
+          editableConfigurationState: { status: "loading" },
+          scopeKey: "factory/docs/overview.md",
+        }),
+      { wrapper: createQueryClientWrapper() },
+    );
+
+    await act(async () => {
+      await result.current.save();
+    });
+
+    expect(saveMutation.saveAsync).not.toHaveBeenCalled();
+  });
 });
 
 function buildReadyEditableConfigurationState(

@@ -59,4 +59,28 @@ describe("validateEditableDocDraft", () => {
       ),
     ).toEqual({});
   });
+
+  it("rejects invalid doc target paths", () => {
+    expect(
+      validateEditableDocDraft(
+        {
+          fileName: "../escape.md",
+          inlineContent: "body",
+          originalExtension: ".md",
+        },
+        messages,
+      ).fileName,
+    ).toBe(messages.editableConfigurationFileNameDotSegments);
+
+    expect(
+      validateEditableDocDraft(
+        {
+          fileName: "folder/",
+          inlineContent: "body",
+          originalExtension: "",
+        },
+        messages,
+      ).fileName,
+    ).toBe(messages.editableConfigurationFileNameMustBeFile);
+  });
 });

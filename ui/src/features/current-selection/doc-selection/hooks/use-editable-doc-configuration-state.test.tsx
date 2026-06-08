@@ -42,6 +42,7 @@ function buildFactoryDocument(
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: editable doc session regressions stay in one suite.
 describe("useEditableDocConfigurationState", () => {
   const docSelection: DashboardSelection = {
     kind: "doc",
@@ -78,6 +79,141 @@ describe("useEditableDocConfigurationState", () => {
         hasValidationErrors: false,
         pendingTargetPath: "factory/docs/overview.md",
       });
+    });
+  });
+
+  it("returns undefined for non-doc selections and explicit loading, error, and empty states", async () => {
+    expect(
+      renderHook(() =>
+        useEditableDocConfigurationState(
+          { kind: "workstation", workstationName: "review" },
+          "factory/docs/overview.md",
+        ),
+      ).result.current,
+    ).toBeUndefined();
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      isError: false,
+      isPending: true,
+      status: "pending",
+    } as never);
+    const { result: loadingResult } = renderHook(() =>
+      useEditableDocConfigurationState(
+        docSelection,
+        "factory/docs/overview.md",
+      ),
+    );
+    expect(loadingResult.current).toEqual({ status: "loading" });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: new Error("Network dropped"),
+      isError: true,
+      isPending: false,
+      status: "error",
+    } as never);
+    const { result: errorResult } = renderHook(() =>
+      useEditableDocConfigurationState(
+        docSelection,
+        "factory/docs/overview.md",
+      ),
+    );
+    expect(errorResult.current).toEqual({
+      errorMessage: "Network dropped",
+      status: "error",
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: undefined,
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+    const { result: emptyResult } = renderHook(() =>
+      useEditableDocConfigurationState(
+        docSelection,
+        "factory/docs/overview.md",
+      ),
+    );
+    expect(emptyResult.current).toEqual({
+      message:
+        "This doc is no longer attached to the current factory.",
+      status: "empty",
+    });
+  });
+
+  it("resets local drafts and tracks overwrite fields when server values change", async () => {
+    const { result, rerender } = renderHook(() =>
+      useEditableDocConfigurationState(
+        docSelection,
+        "factory/docs/overview.md",
+      ),
+    );
+
+    await waitFor(() => {
+      expect(result.current?.status).toBe("ready");
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable doc state");
+      }
+      result.current.onInlineContentChange("# Draft\n");
+    });
+    expect(result.current).toMatchObject({
+      status: "ready",
+      isDirty: true,
+    });
+
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
+      data: buildFactoryDocument({
+        supportingFiles: {
+          bundledFiles: [
+            {
+              content: { encoding: "utf-8", inline: "# Server\n" },
+              targetPath: "factory/docs/overview.md",
+              type: "DOC",
+            },
+          ],
+        },
+      }),
+      error: null,
+      isError: false,
+      isPending: false,
+      status: "success",
+    } as never);
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current).toMatchObject({
+        status: "ready",
+        draft: {
+          fileName: "overview.md",
+          inlineContent: "# Draft\n",
+        },
+        overwriteFieldNames: ["inlineContent"],
+      });
+    });
+
+    act(() => {
+      if (result.current?.status !== "ready") {
+        throw new Error("Expected ready editable doc state");
+      }
+      result.current.onResetToLatest();
+      result.current.markChangesSaved();
+    });
+
+    expect(result.current).toMatchObject({
+      status: "ready",
+      isDirty: false,
+      overwriteFieldNames: [],
+      draft: {
+        fileName: "overview.md",
+        inlineContent: "# Server\n",
+      },
     });
   });
 

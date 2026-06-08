@@ -5,6 +5,9 @@ import {
   applyEditableDocDraft,
   buildDocTargetPathFromFileName,
   editableDocDraftFromValues,
+  extractDocFileNameFromTargetPath,
+  extractFileExtension,
+  listFactoryDocTargetPaths,
   resolveDocTargetPathFromDraft,
   resolveEditableDocValues,
   resolveFileNameWithExtensionPreserved,
@@ -110,5 +113,53 @@ describe("doc-editable-values", () => {
         targetPath: "factory/docs/notes.md",
       }).originalExtension,
     ).toBe(".md");
+  });
+
+  it("handles non-doc paths and extension edge cases", () => {
+    expect(extractDocFileNameFromTargetPath("factory/scripts/setup.py")).toBe(
+      "factory/scripts/setup.py",
+    );
+    expect(extractFileExtension("README")).toBeNull();
+    expect(extractFileExtension("notes.")).toBeNull();
+    expect(resolveEditableDocValues(factoryWithBundledFiles(undefined), "factory/docs/missing.md")).toBeNull();
+  });
+
+  it("lists doc target paths and rejects invalid apply targets", () => {
+    const factory = factoryWithBundledFiles({
+      bundledFiles: [
+        {
+          content: { encoding: "utf-8", inline: "# Overview\n" },
+          targetPath: "factory/docs/overview.md",
+          type: "DOC",
+        },
+        {
+          content: { encoding: "utf-8", inline: "ignored" },
+          targetPath: "factory/scripts/setup.py",
+          type: "SCRIPT",
+        },
+      ],
+    });
+
+    expect(listFactoryDocTargetPaths(factory)).toEqual([
+      "factory/docs/overview.md",
+    ]);
+    expect(
+      applyEditableDocDraft(factory, "factory/docs/missing.md", {
+        fileName: "guide.md",
+        inlineContent: "body",
+        originalExtension: ".md",
+      }),
+    ).toBeNull();
+    expect(
+      applyEditableDocDraft(
+        { ...factory, supportingFiles: undefined },
+        "factory/docs/overview.md",
+        {
+          fileName: "guide.md",
+          inlineContent: "body",
+          originalExtension: ".md",
+        },
+      ),
+    ).toBeNull();
   });
 });
