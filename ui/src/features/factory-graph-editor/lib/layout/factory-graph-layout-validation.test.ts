@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout validation scenarios stay grouped around shared topology fixtures.
 import { describe, expect, it } from "vitest";
 
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
@@ -8,6 +9,8 @@ import {
   collectFactoryLayoutEdgeValidationTargets,
   FACTORY_LAYOUT_VALIDATION_CODE,
   factoryLayoutTopologyEdgeIds,
+  preparePendingFactoryLayoutForSave,
+  projectFactoryLayoutValidationTargets,
   pruneFactoryLayoutEdgesForTopology,
   resolveFactoryLayoutEdgeWaypointsForRendering,
 } from "./factory-graph-layout-validation";
@@ -117,6 +120,77 @@ describe("factory-graph-layout-validation", () => {
           { x: 240, y: 260 },
         ],
       },
+    ]);
+  });
+
+  it("projects recoverable layout validation targets for editor and save flows", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      edges: [
+        {
+          id: VALID_EDGE_ID,
+          waypoints: [{ x: Number.NaN, y: 10 }],
+        },
+        {
+          id: STALE_EDGE_ID,
+          waypoints: [{ x: 10, y: 20 }],
+        },
+      ],
+    };
+
+    expect(projectFactoryLayoutValidationTargets(layout, validEdgeIds)).toEqual([
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
+        severity: "warning",
+        subject: {
+          id: VALID_EDGE_ID,
+          location: "REFERENCE",
+          type: "FACTORY",
+        },
+      }),
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
+        severity: "warning",
+        subject: {
+          id: STALE_EDGE_ID,
+          location: "REFERENCE",
+          type: "FACTORY",
+        },
+      }),
+    ]);
+  });
+
+  it("prepares pending layout for save by pruning stale edge waypoints and reporting outcomes", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      edges: [
+        {
+          id: STALE_EDGE_ID,
+          waypoints: [{ x: 10, y: 20 }],
+        },
+      ],
+    };
+
+    const prepared = preparePendingFactoryLayoutForSave(layout, validEdgeIds);
+
+    expect(prepared.layout.edges).toBeUndefined();
+    expect(prepared.layoutOutcomes).toEqual([
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
+        subject: {
+          id: STALE_EDGE_ID,
+          location: "REFERENCE",
+          type: "FACTORY",
+        },
+      }),
     ]);
   });
 

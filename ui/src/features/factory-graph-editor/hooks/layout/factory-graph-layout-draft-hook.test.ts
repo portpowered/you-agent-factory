@@ -352,9 +352,14 @@ describe("useFactoryGraphLayoutDraftState edge waypoint edits", () => {
       }),
     );
 
+    const savedLayout = savedLayoutDocument.layout;
+    if (!savedLayout) {
+      throw new Error("Expected saved layout fixture.");
+    }
+
     act(() => {
       result.current.addEdgeWaypoint(EDGE_ID, { x: 10, y: 20 });
-      result.current.adoptSavedLayout(savedLayoutDocument.layout!);
+      result.current.adoptSavedLayout(savedLayout);
     });
 
     expect(result.current.layoutDirty).toBe(false);

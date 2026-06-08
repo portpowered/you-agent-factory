@@ -45,6 +45,7 @@ export function useCurrentActivityGraphEditor(
   const draftState = editableGraph.draftState;
   const structuralValidation = useDraftAppliedFactoryValidation(
     draftState,
+    editableGraph.layoutDraftState.layout,
     editorMode,
   );
   const session = useGraphEditorSession({

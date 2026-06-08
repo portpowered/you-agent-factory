@@ -1,3 +1,4 @@
+import type { FactoryValidationTarget } from "../../../../api/factory-validation";
 import type { FactoryGraphTopology } from "../draft/factory-graph-draft-types";
 import {
   factoryLayoutEdgeWaypoints,
@@ -133,4 +134,108 @@ export function resolveFactoryLayoutEdgeWaypointsForRendering(
   edgeId: string,
 ): ReturnType<typeof factoryLayoutEdgeWaypoints> {
   return factoryLayoutEdgeWaypoints(layout, edgeId);
+}
+
+export function projectFactoryLayoutValidationTargets(
+  layout: FactoryLayout,
+  validEdgeIds: ReadonlySet<string>,
+): FactoryValidationTarget[] {
+  return collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds).map(
+    (target) => toFactoryValidationTarget(target, layout),
+  );
+}
+
+export function preparePendingFactoryLayoutForSave(
+  layout: FactoryLayout,
+  validEdgeIds: ReadonlySet<string>,
+): {
+  layout: FactoryLayout;
+  layoutOutcomes: FactoryValidationTarget[];
+} {
+  const layoutOutcomes = projectFactoryLayoutValidationTargets(
+    layout,
+    validEdgeIds,
+  );
+  const { layout: prunedLayout } = pruneFactoryLayoutEdgesForTopology(
+    layout,
+    validEdgeIds,
+  );
+
+  return {
+    layout: prunedLayout,
+    layoutOutcomes,
+  };
+}
+
+export function preparePendingFactoryLayoutForTopology(
+  layout: FactoryLayout,
+  topology: FactoryGraphTopology,
+): {
+  layout: FactoryLayout;
+  layoutOutcomes: FactoryValidationTarget[];
+} {
+  return preparePendingFactoryLayoutForSave(
+    layout,
+    factoryLayoutTopologyEdgeIds(topology),
+  );
+}
+
+function toFactoryValidationTarget(
+  target: FactoryLayoutValidationTarget,
+  layout: FactoryLayout,
+): FactoryValidationTarget {
+  const edgeId = resolveEdgeIdFromValidationPath(layout, target.path);
+
+  return {
+    code: target.code,
+    message: buildLayoutValidationMessage(target.code, edgeId, target.path),
+    severity: "warning",
+    subject: {
+      id: edgeId ?? layoutGeometrySubjectId(target.path),
+      location: "REFERENCE",
+      type: "FACTORY",
+    },
+  };
+}
+
+function resolveEdgeIdFromValidationPath(
+  layout: FactoryLayout,
+  path: string,
+): string | undefined {
+  const match = /^factory\.layout\.edges\[(\d+)\]/.exec(path);
+  if (!match) {
+    return undefined;
+  }
+
+  const index = Number(match[1]);
+  return layout.edges?.[index]?.id;
+}
+
+function layoutGeometrySubjectId(path: string): string {
+  const trimmed = path.replace(/^factory\.layout\./, "");
+  return trimmed.length > 0 ? trimmed : "layout";
+}
+
+function buildLayoutValidationMessage(
+  code: (typeof FACTORY_LAYOUT_VALIDATION_CODE)[keyof typeof FACTORY_LAYOUT_VALIDATION_CODE],
+  edgeId: string | undefined,
+  path: string,
+): string {
+  switch (code) {
+    case FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference:
+      return edgeId
+        ? // hardcoded-ui-copy-exception: non-product-diagnostic
+          `Layout edge "${edgeId}" references a graph edge that is no longer present.`
+        : // hardcoded-ui-copy-exception: non-product-diagnostic
+          "Layout edge references a graph edge that is no longer present.";
+    case FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry:
+      return edgeId
+        ? // hardcoded-ui-copy-exception: non-product-diagnostic
+          `Layout edge "${edgeId}" contains non-finite geometry and will use generated routing.`
+        : // hardcoded-ui-copy-exception: non-product-diagnostic
+          "Layout contains non-finite geometry and will use generated routing.";
+    default:
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      return `Recoverable layout issue at ${path}.`;
+  }
 }

@@ -1379,6 +1379,9 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
       "../../factory-graph-editor/hooks/validation/use-factory-validation",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-apply",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-validation",
+      "../../factory-graph-editor/lib/projection/factory-validation-graph-projection",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",

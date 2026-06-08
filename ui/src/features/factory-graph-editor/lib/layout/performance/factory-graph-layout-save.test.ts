@@ -1,8 +1,13 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout save scenarios share one factory fixture.
 import { describe, expect, it } from "vitest";
 
 import { baseFactoryDefinition } from "../../draft/factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "../../draft/factory-graph-draft-types";
-import { applyFactoryGraphPendingEdits } from "../../operations/factory-graph-operations";
+import {
+  applyFactoryGraphPendingEdits,
+  connectFactoryGraphNodes,
+  disconnectFactoryGraphEdge,
+} from "../../operations/factory-graph-operations";
 import { factoryDefinitionSavePayloadHasGraphLayoutFields } from "../../document-save/factory-graph-save-layout-boundary";
 import { setFactoryLayoutEdgeWaypoints } from "../factory-graph-layout-edge-waypoints";
 import {
@@ -11,9 +16,12 @@ import {
   moveFactoryLayoutNode,
 } from "../factory-graph-layout-operations";
 import { buildFactoryGraphSaveSummary } from "../../editor-runtime/factory-graph-editor-save-summary";
+import { FACTORY_LAYOUT_VALIDATION_CODE } from "../factory-graph-layout-validation";
 
 const EDGE_ID =
   "workstation-output:workstation:draft->work-state:story:done";
+const FAILURE_EDGE_ID =
+  "workstation-on-failure:workstation:draft->work-state:story:done";
 
 describe("factory graph layout save", () => {
   it("persists layout-only edits without topology draft changes", () => {
@@ -106,5 +114,59 @@ describe("factory graph layout save", () => {
     expect(summary.kind).toBe("layout-only");
     expect(summary.dirtyState.topologyDirty).toBe(false);
     expect(summary.dirtyState.layoutDirty).toBe(true);
+  });
+
+  it("prunes stale edge waypoint layout when a topology edge is removed before save", () => {
+    const connected = connectFactoryGraphNodes({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      sourceAnchorId: "workstation-on-failure-source",
+      sourceNodeId: "workstation:draft",
+      targetAnchorId: "work-state-input-target",
+      targetNodeId: "work-state:story:done",
+    });
+    expect(connected.ok).toBe(true);
+    if (!connected.ok) {
+      return;
+    }
+
+    const disconnected = disconnectFactoryGraphEdge({
+      baseFactoryDefinition,
+      draft: connected.value,
+      edgeId: FAILURE_EDGE_ID,
+    });
+    expect(disconnected.ok).toBe(true);
+    if (!disconnected.ok) {
+      return;
+    }
+
+    const pendingLayout = setFactoryLayoutEdgeWaypoints(
+      createDefaultFactoryLayout(),
+      FAILURE_EDGE_ID,
+      [{ x: 180, y: 220 }],
+    );
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition,
+      draft: disconnected.value,
+      pendingLayout,
+    });
+
+    expect(saveInput.ok).toBe(true);
+    if (!saveInput.ok) {
+      return;
+    }
+
+    expect(saveInput.value.layout?.edges).toBeUndefined();
+    expect(saveInput.layoutOutcomes).toEqual([
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
+        severity: "warning",
+        subject: {
+          id: FAILURE_EDGE_ID,
+          location: "REFERENCE",
+          type: "FACTORY",
+        },
+      }),
+    ]);
   });
 });

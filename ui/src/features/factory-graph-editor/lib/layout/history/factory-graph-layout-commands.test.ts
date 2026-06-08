@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout command inverse scenarios stay grouped around shared fixtures.
 import { describe, expect, it } from "vitest";
 
 import {
