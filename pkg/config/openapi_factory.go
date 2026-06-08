@@ -204,7 +204,18 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if err := normalizeFactoryWorkstationEntries(root); err != nil {
 		return nil, err
 	}
+	if err := normalizeFactoryOrchestratorEntry(root); err != nil {
+		return nil, err
+	}
 	return v, nil
+}
+
+func normalizeFactoryOrchestratorEntry(root map[string]any) error {
+	orchestrator, ok := root["orchestrator"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	return normalizeFactoryEnumObjectFieldWithNormalizer(orchestrator, "kind", "orchestrator.kind", interfaces.StrictPublicFactoryOrchestratorKind)
 }
 
 func normalizeFactoryResourceEntries(root map[string]any) error {

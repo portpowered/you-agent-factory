@@ -1,0 +1,241 @@
+package factorysessions
+
+import (
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+// JavaScriptCheckpointStore keeps orchestrator-owned checkpoint bundles for one
+// live JavaScript workflow session.
+type JavaScriptCheckpointStore struct {
+	mu      sync.RWMutex
+	records map[string]interfaces.JavaScriptCheckpointRecord
+}
+
+// NewJavaScriptCheckpointStore allocates an empty checkpoint store.
+func NewJavaScriptCheckpointStore() *JavaScriptCheckpointStore {
+	return &JavaScriptCheckpointStore{
+		records: make(map[string]interfaces.JavaScriptCheckpointRecord),
+	}
+}
+
+// Put stores or replaces one checkpoint record for the session.
+func (s *JavaScriptCheckpointStore) Put(record interfaces.JavaScriptCheckpointRecord) {
+	if s == nil || strings.TrimSpace(record.ID) == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.records == nil {
+		s.records = make(map[string]interfaces.JavaScriptCheckpointRecord)
+	}
+	s.records[record.ID] = record
+}
+
+// List returns checkpoint records in stable id order.
+func (s *JavaScriptCheckpointStore) List() []interfaces.JavaScriptCheckpointRecord {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if len(s.records) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(s.records))
+	for id := range s.records {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	records := make([]interfaces.JavaScriptCheckpointRecord, 0, len(ids))
+	for _, id := range ids {
+		records = append(records, s.records[id])
+	}
+	return records
+}
+
+// Get returns one checkpoint record when present.
+func (s *JavaScriptCheckpointStore) Get(id string) (interfaces.JavaScriptCheckpointRecord, bool) {
+	if s == nil {
+		return interfaces.JavaScriptCheckpointRecord{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	record, ok := s.records[id]
+	return record, ok
+}
+
+// ProjectCheckpointArtifactRef maps one internal checkpoint record to public
+// artifact metadata without raw VM state or host paths.
+func ProjectCheckpointArtifactRef(record interfaces.JavaScriptCheckpointRecord) factoryapi.FactoryArtifactRef {
+	artifactID := strings.TrimSpace(record.ArtifactID)
+	if artifactID == "" {
+		artifactID = record.ID
+	}
+	ref := factoryapi.FactoryArtifactRef{
+		Id:         artifactID,
+		Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
+		Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+	}
+	if hash := strings.TrimSpace(record.ContentHash); hash != "" {
+		ref.ContentHash = &hash
+	}
+	if record.SizeBytes > 0 {
+		size := record.SizeBytes
+		ref.SizeBytes = &size
+	}
+	return ref
+}
+
+// ProjectCheckpointRef maps one internal checkpoint record to the public
+// session/event checkpoint ref shape.
+func ProjectCheckpointRef(record interfaces.JavaScriptCheckpointRecord) factoryapi.FactorySessionJavaScriptCheckpointRef {
+	ref := factoryapi.FactorySessionJavaScriptCheckpointRef{
+		Id:          record.ID,
+		ArtifactRef: artifactRefPointer(ProjectCheckpointArtifactRef(record)),
+	}
+	if label := strings.TrimSpace(record.Label); label != "" {
+		ref.Label = &label
+	}
+	if summary := strings.TrimSpace(record.Summary); summary != "" {
+		ref.Summary = &summary
+	}
+	if !record.Timestamp.IsZero() {
+		timestamp := record.Timestamp.UTC()
+		ref.Timestamp = &timestamp
+	}
+	return ref
+}
+
+// ProjectCheckpointRefs maps internal checkpoint records to public refs.
+func ProjectCheckpointRefs(records []interfaces.JavaScriptCheckpointRecord) []factoryapi.FactorySessionJavaScriptCheckpointRef {
+	if len(records) == 0 {
+		return nil
+	}
+	projected := make([]factoryapi.FactorySessionJavaScriptCheckpointRef, 0, len(records))
+	for _, record := range records {
+		projected = append(projected, ProjectCheckpointRef(record))
+	}
+	return projected
+}
+
+// JavaScriptRuntimeStateFromCheckpoints builds the JavaScript runtime projection
+// input from checkpoint store records and optional runtime overrides.
+func JavaScriptRuntimeStateFromCheckpoints(
+	store *JavaScriptCheckpointStore,
+	override *interfaces.FactorySessionJavaScriptRuntimeState,
+) *interfaces.FactorySessionJavaScriptRuntimeState {
+	state := override
+	if state == nil {
+		state = &interfaces.FactorySessionJavaScriptRuntimeState{}
+	}
+	if store == nil {
+		return state
+	}
+	records := store.List()
+	if len(records) == 0 {
+		return state
+	}
+	state.Checkpoints = make([]interfaces.FactorySessionJavaScriptCheckpointRef, 0, len(records))
+	for _, record := range records {
+		projected := ProjectCheckpointRef(record)
+		state.Checkpoints = append(state.Checkpoints, interfaces.FactorySessionJavaScriptCheckpointRef{
+			ID:        projected.Id,
+			Label:     stringValue(projected.Label),
+			Summary:   stringValue(projected.Summary),
+			Timestamp: timeValue(projected.Timestamp),
+			ArtifactRef: projectInterfaceArtifactRef(projected.ArtifactRef),
+		})
+	}
+	return state
+}
+
+func projectInterfaceArtifactRef(ref *factoryapi.FactoryArtifactRef) *interfaces.JavaScriptCheckpointArtifactRef {
+	if ref == nil {
+		return nil
+	}
+	artifact := &interfaces.JavaScriptCheckpointArtifactRef{
+		ID:         ref.Id,
+		Kind:       string(ref.Kind),
+		Visibility: string(ref.Visibility),
+	}
+	if ref.ContentHash != nil {
+		artifact.ContentHash = *ref.ContentHash
+	}
+	if ref.SizeBytes != nil {
+		artifact.SizeBytes = *ref.SizeBytes
+	}
+	return artifact
+}
+
+func artifactRefPointer(ref factoryapi.FactoryArtifactRef) *factoryapi.FactoryArtifactRef {
+	copied := ref
+	return &copied
+}
+
+func stringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func timeValue(value *time.Time) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return value.UTC()
+}
+
+// ProjectSessionResult maps one JavaScript session runtime to the terminal result
+// read shape without raw checkpoint bodies or host paths.
+func ProjectSessionResult(
+	sessionID string,
+	ctx ProjectionContext,
+	store *JavaScriptCheckpointStore,
+) factoryapi.FactorySessionResult {
+	runtime := ProjectRuntime(ctx)
+	result := factoryapi.FactorySessionResult{
+		SessionId: sessionID,
+		Status:    runtime.Status,
+	}
+	if checkpointRefs := ProjectCheckpointRefs(store.List()); len(checkpointRefs) > 0 {
+		result.CheckpointRefs = &checkpointRefs
+		if latest := checkpointRefs[len(checkpointRefs)-1]; latest.ArtifactRef != nil {
+			artifactRef := *latest.ArtifactRef
+			result.ResultArtifactRef = &artifactRef
+		}
+	}
+	return result
+}
+
+// ProjectSessionPartialResult maps one JavaScript session runtime to the partial
+// result read shape without raw checkpoint bodies or host paths.
+func ProjectSessionPartialResult(
+	sessionID string,
+	ctx ProjectionContext,
+	store *JavaScriptCheckpointStore,
+) factoryapi.FactorySessionPartialResult {
+	runtime := ProjectRuntime(ctx)
+	phase := ""
+	if runtime.Javascript != nil && runtime.Javascript.Phase != nil {
+		phase = strings.TrimSpace(*runtime.Javascript.Phase)
+	}
+	result := factoryapi.FactorySessionPartialResult{
+		SessionId: sessionID,
+		Phase:     phase,
+	}
+	if checkpointRefs := ProjectCheckpointRefs(store.List()); len(checkpointRefs) > 0 {
+		result.CheckpointRefs = &checkpointRefs
+		if latest := checkpointRefs[len(checkpointRefs)-1]; latest.ArtifactRef != nil {
+			artifactRef := *latest.ArtifactRef
+			result.PartialResultArtifactRef = &artifactRef
+		}
+	}
+	return result
+}

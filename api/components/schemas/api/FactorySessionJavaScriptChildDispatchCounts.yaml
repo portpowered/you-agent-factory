@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - queued
+  - running
+  - completed
+properties:
+  queued:
+    type: integer
+    minimum: 0
+    description: Child dispatches waiting to start.
+  running:
+    type: integer
+    minimum: 0
+    description: Child dispatches currently executing.
+  completed:
+    type: integer
+    minimum: 0
+    description: Child dispatches that have completed.

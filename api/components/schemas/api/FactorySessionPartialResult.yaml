@@ -1,0 +1,20 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - phase
+properties:
+  sessionId:
+    type: string
+    description: Live factory session identifier for this partial-result read.
+  phase:
+    type: string
+    description: Current JavaScript workflow phase for the partial result.
+  partialResultArtifactRef:
+    $ref: '../data-models/FactoryArtifactRef.yaml'
+    description: Partial-result artifact reference without raw checkpoint bodies.
+  checkpointRefs:
+    type: array
+    items:
+      $ref: './FactorySessionJavaScriptCheckpointRef.yaml'
+    description: Checkpoint refs associated with the current partial result.

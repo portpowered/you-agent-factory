@@ -2,7 +2,6 @@ package apicontract_test
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"sort"
 	"strings"
@@ -29,6 +28,9 @@ var canonicalFactoryEventTypeValues = []string{
 	"WORK_STATE_CHANGE",
 	"FACTORY_STATE_RESPONSE",
 	"RUN_RESPONSE",
+	"JAVASCRIPT_CHECKPOINT_REF",
+	"JAVASCRIPT_PHASE_CHANGE",
+	"ARTIFACT_CREATED",
 }
 
 var retiredFactoryEventTypeValues = []string{
@@ -80,6 +82,9 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"WorkStateChangeSource",
 	"FactoryStateResponseEventPayload",
 	"RunResponseEventPayload",
+	"JavaScriptCheckpointRefEventPayload",
+	"JavaScriptPhaseChangeEventPayload",
+	"ArtifactCreatedEventPayload",
 }
 
 var bundledFactoryEventPayloadRefs = []string{
@@ -99,6 +104,9 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/WorkStateChangeEventPayload",
 	"#/components/schemas/FactoryStateResponseEventPayload",
 	"#/components/schemas/RunResponseEventPayload",
+	"#/components/schemas/JavaScriptCheckpointRefEventPayload",
+	"#/components/schemas/JavaScriptPhaseChangeEventPayload",
+	"#/components/schemas/ArtifactCreatedEventPayload",
 }
 
 var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
@@ -118,6 +126,9 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"WORK_STATE_CHANGE":           "WorkStateChangeEventPayload",
 	"FACTORY_STATE_RESPONSE":      "FactoryStateResponseEventPayload",
 	"RUN_RESPONSE":                "RunResponseEventPayload",
+	"JAVASCRIPT_CHECKPOINT_REF":   "JavaScriptCheckpointRefEventPayload",
+	"JAVASCRIPT_PHASE_CHANGE":     "JavaScriptPhaseChangeEventPayload",
+	"ARTIFACT_CREATED":            "ArtifactCreatedEventPayload",
 }
 
 const openAPISchemaRefPrefix = "#/components/schemas/"
@@ -967,22 +978,4 @@ func assertJSONKeysPresent(t *testing.T, object map[string]any, name string, key
 			t.Fatalf("%s.%s is missing", name, key)
 		}
 	}
-}
-
-func loadCanonicalFactoryEventVocabularyFixture(t *testing.T) []map[string]any {
-	t.Helper()
-	fixtureBytes, err := os.ReadFile("../testdata/canonical-event-vocabulary-stream.json")
-	if err != nil {
-		t.Fatalf("read canonical event vocabulary fixture: %v", err)
-	}
-	assertJSONStringLiteralMissing(t, string(fixtureBytes), retiredFactoryEventTypeValues...)
-
-	var fixture []map[string]any
-	if err := json.Unmarshal(fixtureBytes, &fixture); err != nil {
-		t.Fatalf("parse canonical event vocabulary fixture: %v", err)
-	}
-	if len(fixture) != len(canonicalFactoryEventTypeValues) {
-		t.Fatalf("canonical event vocabulary fixture length = %d, want %d", len(fixture), len(canonicalFactoryEventTypeValues))
-	}
-	return fixture
 }

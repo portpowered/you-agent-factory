@@ -44,3 +44,6 @@ properties:
       - $ref: ./payloads/WorkStateChangeEventPayload.yaml
       - $ref: ./payloads/FactoryStateResponseEventPayload.yaml
       - $ref: ./payloads/RunResponseEventPayload.yaml
+      - $ref: ./payloads/JavaScriptCheckpointRefEventPayload.yaml
+      - $ref: ./payloads/JavaScriptPhaseChangeEventPayload.yaml
+      - $ref: ./payloads/ArtifactCreatedEventPayload.yaml

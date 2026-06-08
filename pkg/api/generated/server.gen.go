@@ -24,7 +24,7 @@ const (
 
 // Defines values for BundledFileContentEncoding.
 const (
-	Utf8 BundledFileContentEncoding = "utf-8"
+	BundledFileContentEncodingUtf8 BundledFileContentEncoding = "utf-8"
 )
 
 // Defines values for ErrorFamily.
@@ -48,6 +48,60 @@ const (
 	STALEFACTORYVERSION           ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
+// Defines values for FactoryArtifactAuditMode.
+const (
+	FactoryArtifactAuditModeFULL     FactoryArtifactAuditMode = "FULL"
+	FactoryArtifactAuditModeNONE     FactoryArtifactAuditMode = "NONE"
+	FactoryArtifactAuditModeREDACTED FactoryArtifactAuditMode = "REDACTED"
+)
+
+// Defines values for FactoryArtifactKind.
+const (
+	FactoryArtifactKindCHECKPOINT      FactoryArtifactKind = "CHECKPOINT"
+	FactoryArtifactKindCHILDRESULT     FactoryArtifactKind = "CHILD_RESULT"
+	FactoryArtifactKindDATASET         FactoryArtifactKind = "DATASET"
+	FactoryArtifactKindFINALRESULT     FactoryArtifactKind = "FINAL_RESULT"
+	FactoryArtifactKindFINDING         FactoryArtifactKind = "FINDING"
+	FactoryArtifactKindLOG             FactoryArtifactKind = "LOG"
+	FactoryArtifactKindPATCH           FactoryArtifactKind = "PATCH"
+	FactoryArtifactKindWORKTREESUMMARY FactoryArtifactKind = "WORKTREE_SUMMARY"
+)
+
+// Defines values for FactoryArtifactVisibility.
+const (
+	FactoryArtifactVisibilityINTERNALCHECKPOINT FactoryArtifactVisibility = "INTERNAL_CHECKPOINT"
+	FactoryArtifactVisibilityPUBLIC             FactoryArtifactVisibility = "PUBLIC"
+)
+
+// Defines values for FactoryDispatchJavaScriptTaskKind.
+const (
+	FactoryDispatchJavaScriptTaskKindAGENT      FactoryDispatchJavaScriptTaskKind = "AGENT"
+	FactoryDispatchJavaScriptTaskKindSCRIPT     FactoryDispatchJavaScriptTaskKind = "SCRIPT"
+	FactoryDispatchJavaScriptTaskKindSYNTHESIZE FactoryDispatchJavaScriptTaskKind = "SYNTHESIZE"
+	FactoryDispatchJavaScriptTaskKindSYSTEM     FactoryDispatchJavaScriptTaskKind = "SYSTEM"
+	FactoryDispatchJavaScriptTaskKindTOOL       FactoryDispatchJavaScriptTaskKind = "TOOL"
+	FactoryDispatchJavaScriptTaskKindVERIFY     FactoryDispatchJavaScriptTaskKind = "VERIFY"
+)
+
+// Defines values for FactoryDispatchKind.
+const (
+	FactoryDispatchKindJAVASCRIPTAGENT      FactoryDispatchKind = "JAVASCRIPT_AGENT"
+	FactoryDispatchKindJAVASCRIPTSCRIPT     FactoryDispatchKind = "JAVASCRIPT_SCRIPT"
+	FactoryDispatchKindJAVASCRIPTSYNTHESIZE FactoryDispatchKind = "JAVASCRIPT_SYNTHESIZE"
+	FactoryDispatchKindJAVASCRIPTSYSTEM     FactoryDispatchKind = "JAVASCRIPT_SYSTEM"
+	FactoryDispatchKindJAVASCRIPTTOOL       FactoryDispatchKind = "JAVASCRIPT_TOOL"
+	FactoryDispatchKindJAVASCRIPTVERIFY     FactoryDispatchKind = "JAVASCRIPT_VERIFY"
+	FactoryDispatchKindPETRITRANSITION      FactoryDispatchKind = "PETRI_TRANSITION"
+)
+
+// Defines values for FactoryDispatchStatus.
+const (
+	FactoryDispatchStatusCOMPLETED FactoryDispatchStatus = "COMPLETED"
+	FactoryDispatchStatusFAILED    FactoryDispatchStatus = "FAILED"
+	FactoryDispatchStatusQUEUED    FactoryDispatchStatus = "QUEUED"
+	FactoryDispatchStatusRUNNING   FactoryDispatchStatus = "RUNNING"
+)
+
 // Defines values for FactoryEventSchemaVersion.
 const (
 	AgentFactoryEventV1 FactoryEventSchemaVersion = "agent-factory.event.v1"
@@ -55,6 +109,7 @@ const (
 
 // Defines values for FactoryEventType.
 const (
+	FactoryEventTypeArtifactCreated           FactoryEventType = "ARTIFACT_CREATED"
 	FactoryEventTypeDispatchRequest           FactoryEventType = "DISPATCH_REQUEST"
 	FactoryEventTypeDispatchResponse          FactoryEventType = "DISPATCH_RESPONSE"
 	FactoryEventTypeFactoryChange             FactoryEventType = "FACTORY_CHANGE"
@@ -62,6 +117,8 @@ const (
 	FactoryEventTypeInferenceRequest          FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse         FactoryEventType = "INFERENCE_RESPONSE"
 	FactoryEventTypeInitialStructureRequest   FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
+	FactoryEventTypeJavaScriptCheckpointRef   FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
+	FactoryEventTypeJavaScriptPhaseChange     FactoryEventType = "JAVASCRIPT_PHASE_CHANGE"
 	FactoryEventTypeModelRequest              FactoryEventType = "MODEL_REQUEST"
 	FactoryEventTypeModelResponse             FactoryEventType = "MODEL_RESPONSE"
 	FactoryEventTypeRelationshipChangeRequest FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
@@ -81,10 +138,37 @@ const (
 	UP    FactoryLayoutPreferencesDirection = "UP"
 )
 
+// Defines values for FactoryOrchestratorJavaScriptInlineSourceEncoding.
+const (
+	FactoryOrchestratorJavaScriptInlineSourceEncodingUtf8 FactoryOrchestratorJavaScriptInlineSourceEncoding = "utf-8"
+)
+
+// Defines values for FactoryOrchestratorKind.
+const (
+	JAVASCRIPT FactoryOrchestratorKind = "JAVASCRIPT"
+	PETRI      FactoryOrchestratorKind = "PETRI"
+)
+
 // Defines values for FactorySaveMode.
 const (
 	FactorySaveModeReplaceCurrent         FactorySaveMode = "REPLACE_CURRENT"
 	FactorySaveModeUpsertNamedAndActivate FactorySaveMode = "UPSERT_NAMED_AND_ACTIVATE"
+)
+
+// Defines values for FactorySessionJavaScriptScriptStatus.
+const (
+	FactorySessionJavaScriptScriptStatusFAILED   FactorySessionJavaScriptScriptStatus = "FAILED"
+	FactorySessionJavaScriptScriptStatusFINISHED FactorySessionJavaScriptScriptStatus = "FINISHED"
+	FactorySessionJavaScriptScriptStatusIDLE     FactorySessionJavaScriptScriptStatus = "IDLE"
+	FactorySessionJavaScriptScriptStatusPAUSED   FactorySessionJavaScriptScriptStatus = "PAUSED"
+	FactorySessionJavaScriptScriptStatusRUNNING  FactorySessionJavaScriptScriptStatus = "RUNNING"
+)
+
+// Defines values for FactorySessionStatus.
+const (
+	FactorySessionStatusACTIVE   FactorySessionStatus = "ACTIVE"
+	FactorySessionStatusFINISHED FactorySessionStatus = "FINISHED"
+	FactorySessionStatusIDLE     FactorySessionStatus = "IDLE"
 )
 
 // Defines values for FactorySessionTargetRefKind.
@@ -511,6 +595,14 @@ const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
 
+// ArtifactCreatedEventPayload Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload.
+type ArtifactCreatedEventPayload struct {
+	Artifact FactoryArtifact `json:"artifact"`
+
+	// CapturedAt When the artifact payload was captured.
+	CapturedAt *time.Time `json:"capturedAt,omitempty"`
+}
+
 // BundledFile One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work.
 type BundledFile struct {
 	// Content Inline content payload for a portable bundled file.
@@ -689,6 +781,9 @@ type Factory struct {
 	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
+	// Orchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+	Orchestrator *FactoryOrchestrator `json:"orchestrator,omitempty"`
+
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
 
@@ -712,12 +807,198 @@ type Factory struct {
 	Workstations *[]Workstation `json:"workstations,omitempty"`
 }
 
+// FactoryArtifact defines model for FactoryArtifact.
+type FactoryArtifact struct {
+	// AuditMode Audit mode applied when one factory artifact was captured.
+	AuditMode       *FactoryArtifactAuditMode       `json:"auditMode,omitempty"`
+	CaptureMetadata *FactoryArtifactCaptureMetadata `json:"captureMetadata,omitempty"`
+
+	// ContentHash Stable hash of the stored artifact payload.
+	ContentHash *string `json:"contentHash,omitempty"`
+
+	// Id Stable artifact identifier referenced by session projections.
+	Id string `json:"id"`
+
+	// Kind Canonical factory artifact kind for session-owned outputs.
+	Kind FactoryArtifactKind `json:"kind"`
+
+	// Label Customer-visible artifact label.
+	Label           *string                         `json:"label,omitempty"`
+	RedactionCounts *FactoryArtifactRedactionCounts `json:"redactionCounts,omitempty"`
+
+	// SizeBytes Stored artifact payload size in bytes.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+
+	// Summary Customer-visible artifact summary.
+	Summary *string `json:"summary,omitempty"`
+
+	// Visibility Visibility boundary for one factory artifact projection.
+	Visibility FactoryArtifactVisibility `json:"visibility"`
+}
+
+// FactoryArtifactAuditMode Audit mode applied when one factory artifact was captured.
+type FactoryArtifactAuditMode string
+
+// FactoryArtifactCaptureMetadata defines model for FactoryArtifactCaptureMetadata.
+type FactoryArtifactCaptureMetadata struct {
+	// CapturedAt Timestamp when the artifact payload was captured.
+	CapturedAt *time.Time `json:"capturedAt,omitempty"`
+
+	// MimeType MIME type of the stored artifact payload when known.
+	MimeType *string `json:"mimeType,omitempty"`
+
+	// SourceDispatchId Dispatch identifier that produced the artifact when applicable.
+	SourceDispatchId *string `json:"sourceDispatchId,omitempty"`
+}
+
+// FactoryArtifactKind Canonical factory artifact kind for session-owned outputs.
+type FactoryArtifactKind string
+
+// FactoryArtifactRedactionCounts defines model for FactoryArtifactRedactionCounts.
+type FactoryArtifactRedactionCounts struct {
+	Paths   *int32 `json:"paths,omitempty"`
+	Secrets *int32 `json:"secrets,omitempty"`
+	Tokens  *int32 `json:"tokens,omitempty"`
+}
+
+// FactoryArtifactRef defines model for FactoryArtifactRef.
+type FactoryArtifactRef struct {
+	// ContentHash Stable hash of the stored artifact payload.
+	ContentHash *string `json:"contentHash,omitempty"`
+
+	// Id Stable artifact identifier referenced by session projections.
+	Id string `json:"id"`
+
+	// Kind Canonical factory artifact kind for session-owned outputs.
+	Kind FactoryArtifactKind `json:"kind"`
+
+	// SizeBytes Stored artifact payload size in bytes.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+
+	// Visibility Visibility boundary for one factory artifact projection.
+	Visibility FactoryArtifactVisibility `json:"visibility"`
+}
+
+// FactoryArtifactVisibility Visibility boundary for one factory artifact projection.
+type FactoryArtifactVisibility string
+
 // FactoryChangeEventPayload Runtime topology snapshot after a live factory definition change replaces the running factory.
 type FactoryChangeEventPayload struct {
 	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 	Factory         Factory    `json:"factory"`
 	Metadata        *StringMap `json:"metadata,omitempty"`
 	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
+}
+
+// FactoryDispatch defines model for FactoryDispatch.
+type FactoryDispatch struct {
+	// ArtifactIds Artifact identifiers produced by the dispatch.
+	ArtifactIds *[]string `json:"artifactIds,omitempty"`
+
+	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+	DispatchKind  FactoryDispatchKind           `json:"dispatchKind"`
+	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+
+	// Id Stable dispatch identifier.
+	Id         string                               `json:"id"`
+	Javascript *FactoryDispatchJavaScriptProjection `json:"javascript,omitempty"`
+
+	// Label Customer-visible dispatch label.
+	Label *string `json:"label,omitempty"`
+
+	// Model Selected model identifier when applicable.
+	Model *string `json:"model,omitempty"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind         `json:"orchestratorKind"`
+	Petri            *FactoryDispatchPetriProjection `json:"petri,omitempty"`
+
+	// Phase JavaScript workflow phase when the dispatch was created or observed.
+	Phase *string `json:"phase,omitempty"`
+
+	// PromptDigest Stable digest of rendered prompt material.
+	PromptDigest *string `json:"promptDigest,omitempty"`
+
+	// Provider Selected provider identifier when applicable.
+	Provider *string `json:"provider,omitempty"`
+
+	// RelatedWorkIds Related work identifiers consumed or produced by the dispatch.
+	RelatedWorkIds *[]string `json:"relatedWorkIds,omitempty"`
+
+	// RunnerId Selected runner identifier when applicable.
+	RunnerId *string `json:"runnerId,omitempty"`
+
+	// SchemaDigest Stable digest of the output schema when applicable.
+	SchemaDigest *string `json:"schemaDigest,omitempty"`
+
+	// SessionId Factory session that owns this dispatch.
+	SessionId string `json:"sessionId"`
+
+	// Status Canonical dispatch lifecycle status shared across orchestrators.
+	Status   FactoryDispatchStatus     `json:"status"`
+	Usage    *FactoryDispatchUsage     `json:"usage,omitempty"`
+	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
+}
+
+// FactoryDispatchFailureDetail defines model for FactoryDispatchFailureDetail.
+type FactoryDispatchFailureDetail struct {
+	// ErrorClass Provider or runtime error class when available.
+	ErrorClass *string `json:"errorClass,omitempty"`
+
+	// Message Customer-visible failure message.
+	Message *string `json:"message,omitempty"`
+
+	// Reason Stable failure reason code when the dispatch failed.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// FactoryDispatchJavaScriptProjection defines model for FactoryDispatchJavaScriptProjection.
+type FactoryDispatchJavaScriptProjection struct {
+	// TaskKind JavaScript workflow task kind for one child dispatch.
+	TaskKind FactoryDispatchJavaScriptTaskKind `json:"taskKind"`
+
+	// TaskLabel Customer-visible label for the JavaScript workflow task.
+	TaskLabel *string `json:"taskLabel,omitempty"`
+}
+
+// FactoryDispatchJavaScriptTaskKind JavaScript workflow task kind for one child dispatch.
+type FactoryDispatchJavaScriptTaskKind string
+
+// FactoryDispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+type FactoryDispatchKind string
+
+// FactoryDispatchPetriProjection defines model for FactoryDispatchPetriProjection.
+type FactoryDispatchPetriProjection struct {
+	// TransitionId Petri transition identifier for this dispatch.
+	TransitionId string `json:"transitionId"`
+
+	// WorkerType Worker type selected for the transition dispatch.
+	WorkerType *string `json:"workerType,omitempty"`
+
+	// WorkstationName Workstation name that owns the transition.
+	WorkstationName *string `json:"workstationName,omitempty"`
+}
+
+// FactoryDispatchStatus Canonical dispatch lifecycle status shared across orchestrators.
+type FactoryDispatchStatus string
+
+// FactoryDispatchUsage defines model for FactoryDispatchUsage.
+type FactoryDispatchUsage struct {
+	CostUsd        *float64 `json:"costUsd,omitempty"`
+	DurationMillis *int64   `json:"durationMillis,omitempty"`
+	InputTokens    *int64   `json:"inputTokens,omitempty"`
+	OutputTokens   *int64   `json:"outputTokens,omitempty"`
+	RetryCount     *int32   `json:"retryCount,omitempty"`
+	TotalTokens    *int64   `json:"totalTokens,omitempty"`
+}
+
+// FactoryDispatchWarning defines model for FactoryDispatchWarning.
+type FactoryDispatchWarning struct {
+	// Code Stable warning code for the dispatch projection.
+	Code string `json:"code"`
+
+	// Message Customer-visible warning message.
+	Message string `json:"message"`
 }
 
 // FactoryEvent Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.
@@ -923,8 +1204,239 @@ type FactoryLayoutViewport struct {
 // FactoryName Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 type FactoryName = string
 
+// FactoryOrchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+type FactoryOrchestrator struct {
+	// Javascript JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
+	Javascript *FactoryOrchestratorJavaScriptConfig `json:"javascript,omitempty"`
+
+	// Kind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	Kind FactoryOrchestratorKind `json:"kind"`
+
+	// Petri Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
+	Petri *FactoryOrchestratorPetriConfig `json:"petri,omitempty"`
+}
+
+// FactoryOrchestratorJavaScriptConfig JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
+type FactoryOrchestratorJavaScriptConfig struct {
+	// ArgsSchema JSON Schema object describing workflow invocation arguments.
+	ArgsSchema *map[string]interface{} `json:"argsSchema,omitempty"`
+
+	// DefaultPolicy Default JavaScript workflow policy object applied when no runtime override exists.
+	DefaultPolicy *map[string]interface{} `json:"defaultPolicy,omitempty"`
+
+	// Dialect Optional JavaScript dialect label for the authored workflow source.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// Entrypoint Optional exported entrypoint or phase name used to start the workflow.
+	Entrypoint *string `json:"entrypoint,omitempty"`
+
+	// InlineSource Inline JavaScript workflow source carried directly in the factory definition.
+	InlineSource *FactoryOrchestratorJavaScriptInlineSource `json:"inlineSource,omitempty"`
+	Metadata     *StringMap                                 `json:"metadata,omitempty"`
+
+	// SourceHash Optional content hash for the resolved workflow source.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// SourceRef Factory-relative or authored reference to the workflow source file.
+	SourceRef *string `json:"sourceRef,omitempty"`
+}
+
+// FactoryOrchestratorJavaScriptInlineSource Inline JavaScript workflow source carried directly in the factory definition.
+type FactoryOrchestratorJavaScriptInlineSource struct {
+	// Encoding Declared content encoding for the inline workflow source.
+	Encoding FactoryOrchestratorJavaScriptInlineSourceEncoding `json:"encoding"`
+
+	// Inline Inline JavaScript workflow source text.
+	Inline string `json:"inline"`
+}
+
+// FactoryOrchestratorJavaScriptInlineSourceEncoding Declared content encoding for the inline workflow source.
+type FactoryOrchestratorJavaScriptInlineSourceEncoding string
+
+// FactoryOrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+type FactoryOrchestratorKind string
+
+// FactoryOrchestratorPetriConfig Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
+type FactoryOrchestratorPetriConfig = map[string]interface{}
+
 // FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
 type FactorySaveMode string
+
+// FactorySession defines model for FactorySession.
+type FactorySession struct {
+	FactoryDir string                  `json:"factoryDir"`
+	FolderPath string                  `json:"folderPath"`
+	Id         string                  `json:"id"`
+	IsDefault  bool                    `json:"isDefault"`
+	Project    string                  `json:"project"`
+	Runtime    FactorySessionRuntime   `json:"runtime"`
+	Target     FactorySessionTargetRef `json:"target"`
+}
+
+// FactorySessionBudgets Effective orchestrator policy budgets projected for one factory session.
+type FactorySessionBudgets struct {
+	// MaxAgents Maximum concurrent child-agent dispatches allowed by the effective JavaScript policy.
+	MaxAgents *int `json:"maxAgents,omitempty"`
+}
+
+// FactorySessionJavaScriptCheckpointRef defines model for FactorySessionJavaScriptCheckpointRef.
+type FactorySessionJavaScriptCheckpointRef struct {
+	ArtifactRef *FactoryArtifactRef `json:"artifactRef,omitempty"`
+
+	// Id Stable checkpoint identifier referenced by the session runtime.
+	Id string `json:"id"`
+
+	// Label Customer-visible checkpoint label.
+	Label *string `json:"label,omitempty"`
+
+	// Summary Short customer-visible checkpoint summary without raw VM state.
+	Summary *string `json:"summary,omitempty"`
+
+	// Timestamp When the checkpoint was recorded.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+}
+
+// FactorySessionJavaScriptChildDispatchCounts defines model for FactorySessionJavaScriptChildDispatchCounts.
+type FactorySessionJavaScriptChildDispatchCounts struct {
+	// Completed Child dispatches that have completed.
+	Completed int `json:"completed"`
+
+	// Queued Child dispatches waiting to start.
+	Queued int `json:"queued"`
+
+	// Running Child dispatches currently executing.
+	Running int `json:"running"`
+}
+
+// FactorySessionJavaScriptProjection defines model for FactorySessionJavaScriptProjection.
+type FactorySessionJavaScriptProjection struct {
+	// ArgsDigest Stable digest of the effective workflow arguments.
+	ArgsDigest *string `json:"argsDigest,omitempty"`
+
+	// Checkpoints Checkpoint refs and summaries without raw VM checkpoint bodies.
+	Checkpoints         *[]FactorySessionJavaScriptCheckpointRef    `json:"checkpoints,omitempty"`
+	ChildDispatchCounts FactorySessionJavaScriptChildDispatchCounts `json:"childDispatchCounts"`
+
+	// Phase Current JavaScript workflow phase name.
+	Phase *string `json:"phase,omitempty"`
+
+	// Phases Ordered phase names visible in the session runtime.
+	Phases []string `json:"phases"`
+
+	// ScriptStatus JavaScript workflow script runtime status for one factory session.
+	ScriptStatus FactorySessionJavaScriptScriptStatus `json:"scriptStatus"`
+}
+
+// FactorySessionJavaScriptScriptStatus JavaScript workflow script runtime status for one factory session.
+type FactorySessionJavaScriptScriptStatus string
+
+// FactorySessionLifecycle defines model for FactorySessionLifecycle.
+type FactorySessionLifecycle struct {
+	// FinishedAt When the session runtime reached a terminal finished state.
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+
+	// StartedAt When the live session runtime started.
+	StartedAt time.Time `json:"startedAt"`
+
+	// UpdatedAt When the session projection was last refreshed.
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// FactorySessionPartialResult defines model for FactorySessionPartialResult.
+type FactorySessionPartialResult struct {
+	// CheckpointRefs Checkpoint refs associated with the current partial result.
+	CheckpointRefs           *[]FactorySessionJavaScriptCheckpointRef `json:"checkpointRefs,omitempty"`
+	PartialResultArtifactRef *FactoryArtifactRef                      `json:"partialResultArtifactRef,omitempty"`
+
+	// Phase Current JavaScript workflow phase for the partial result.
+	Phase string `json:"phase"`
+
+	// SessionId Live factory session identifier for this partial-result read.
+	SessionId string `json:"sessionId"`
+}
+
+// FactorySessionPetriEnabledTransition defines model for FactorySessionPetriEnabledTransition.
+type FactorySessionPetriEnabledTransition struct {
+	// TransitionId Enabled Petri transition identifier.
+	TransitionId string `json:"transitionId"`
+
+	// WorkerType Worker type bound to the enabled transition.
+	WorkerType string `json:"workerType"`
+}
+
+// FactorySessionPetriProjection defines model for FactorySessionPetriProjection.
+type FactorySessionPetriProjection struct {
+	// EnabledTransitions Transitions currently enabled in the Petri marking.
+	EnabledTransitions []FactorySessionPetriEnabledTransition `json:"enabledTransitions"`
+
+	// Marking Current Petri marking tokens for the session runtime.
+	Marking []TokenResponse `json:"marking"`
+}
+
+// FactorySessionProgress defines model for FactorySessionProgress.
+type FactorySessionProgress struct {
+	Categories StatusCategories `json:"categories"`
+
+	// FactoryState Factory lifecycle state from the aggregate engine snapshot.
+	FactoryState string `json:"factoryState"`
+
+	// InFlightCount Number of dispatches currently in flight for the session.
+	InFlightCount int `json:"inFlightCount"`
+
+	// TotalTokens Number of customer-visible work tokens in the current marking.
+	TotalTokens int `json:"totalTokens"`
+}
+
+// FactorySessionResult defines model for FactorySessionResult.
+type FactorySessionResult struct {
+	// CheckpointRefs Checkpoint refs associated with the terminal session result.
+	CheckpointRefs    *[]FactorySessionJavaScriptCheckpointRef `json:"checkpointRefs,omitempty"`
+	ResultArtifactRef *FactoryArtifactRef                      `json:"resultArtifactRef,omitempty"`
+
+	// SessionId Live factory session identifier for this result read.
+	SessionId string `json:"sessionId"`
+
+	// Status Canonical lifecycle status for one live factory session runtime.
+	Status FactorySessionStatus `json:"status"`
+}
+
+// FactorySessionRuntime defines model for FactorySessionRuntime.
+type FactorySessionRuntime struct {
+	// Artifacts Shared artifact projections for the session runtime.
+	Artifacts *[]FactoryArtifact `json:"artifacts,omitempty"`
+
+	// Budgets Effective orchestrator policy budgets projected for one factory session.
+	Budgets *FactorySessionBudgets `json:"budgets,omitempty"`
+
+	// Dialect JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// Dispatches Shared dispatch projections for the session runtime.
+	Dispatches *[]FactoryDispatch                  `json:"dispatches,omitempty"`
+	Javascript *FactorySessionJavaScriptProjection `json:"javascript,omitempty"`
+	Lifecycle  FactorySessionLifecycle             `json:"lifecycle"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind        `json:"orchestratorKind"`
+	Petri            *FactorySessionPetriProjection `json:"petri,omitempty"`
+
+	// PolicyHash Stable hash of the effective orchestrator policy.
+	PolicyHash *string                `json:"policyHash,omitempty"`
+	Progress   FactorySessionProgress `json:"progress"`
+
+	// SourceHash Stable hash of the authored JavaScript workflow source.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// SourceRef Authored JavaScript workflow source reference when applicable.
+	SourceRef *string `json:"sourceRef,omitempty"`
+
+	// Status Canonical lifecycle status for one live factory session runtime.
+	Status FactorySessionStatus `json:"status"`
+	Usage  FactorySessionUsage  `json:"usage"`
+}
+
+// FactorySessionStatus Canonical lifecycle status for one live factory session runtime.
+type FactorySessionStatus string
 
 // FactorySessionSummary defines model for FactorySessionSummary.
 type FactorySessionSummary struct {
@@ -933,6 +1445,7 @@ type FactorySessionSummary struct {
 	Id         string                  `json:"id"`
 	IsDefault  bool                    `json:"isDefault"`
 	Project    string                  `json:"project"`
+	Runtime    *FactorySessionRuntime  `json:"runtime,omitempty"`
 	Target     FactorySessionTargetRef `json:"target"`
 }
 
@@ -953,6 +1466,12 @@ type FactorySessionTargetRef struct {
 
 // FactorySessionTargetRefKind defines model for FactorySessionTargetRef.Kind.
 type FactorySessionTargetRefKind string
+
+// FactorySessionUsage defines model for FactorySessionUsage.
+type FactorySessionUsage struct {
+	// Resources Resource availability and consumption for the session runtime.
+	Resources []ResourceUsage `json:"resources"`
+}
 
 // FactoryState Lifecycle state of the running factory.
 type FactoryState string
@@ -1426,6 +1945,39 @@ type InvocationReturnPolicy string
 
 // InvocationTerminalStatus Terminal status for a factory-session invocation.
 type InvocationTerminalStatus string
+
+// JavaScriptCheckpointRefEventPayload Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload.
+type JavaScriptCheckpointRefEventPayload struct {
+	ArtifactRef FactoryArtifactRef `json:"artifactRef"`
+
+	// CheckpointId Stable checkpoint identifier referenced by the session runtime.
+	CheckpointId string `json:"checkpointId"`
+
+	// Label Customer-visible checkpoint label.
+	Label *string `json:"label,omitempty"`
+
+	// Summary Short customer-visible checkpoint summary without raw VM state.
+	Summary *string `json:"summary,omitempty"`
+
+	// Timestamp When the checkpoint was recorded.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+}
+
+// JavaScriptPhaseChangeEventPayload JavaScript workflow phase transition recorded on the canonical factory event stream. JavaScript workflow progress is represented through phase changes, not Petri WORK_STATE_CHANGE marking events.
+type JavaScriptPhaseChangeEventPayload struct {
+	// ArgsDigest Stable digest of the effective workflow arguments.
+	ArgsDigest          *string                                     `json:"argsDigest,omitempty"`
+	ChildDispatchCounts FactorySessionJavaScriptChildDispatchCounts `json:"childDispatchCounts"`
+
+	// Phase Current JavaScript workflow phase name after this event.
+	Phase string `json:"phase"`
+
+	// Phases Ordered phase names visible in the session runtime.
+	Phases []string `json:"phases"`
+
+	// ScriptStatus JavaScript workflow script runtime status for one factory session.
+	ScriptStatus FactorySessionJavaScriptScriptStatus `json:"scriptStatus"`
+}
 
 // ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
 type ListFactorySessionsResponse struct {
@@ -2924,7 +3476,7 @@ type WorkState struct {
 	Type WorkStateType `json:"type"`
 }
 
-// WorkStateChangeEventPayload Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
+// WorkStateChangeEventPayload Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency.
 type WorkStateChangeEventPayload struct {
 	// FromPlaceId Marking place identifier before the move.
 	FromPlaceId string `json:"fromPlaceId"`
@@ -3770,6 +4322,84 @@ func (t *FactoryEvent_Payload) MergeRunResponseEventPayload(v RunResponseEventPa
 	return err
 }
 
+// AsJavaScriptCheckpointRefEventPayload returns the union data inside the FactoryEvent_Payload as a JavaScriptCheckpointRefEventPayload
+func (t FactoryEvent_Payload) AsJavaScriptCheckpointRefEventPayload() (JavaScriptCheckpointRefEventPayload, error) {
+	var body JavaScriptCheckpointRefEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromJavaScriptCheckpointRefEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided JavaScriptCheckpointRefEventPayload
+func (t *FactoryEvent_Payload) FromJavaScriptCheckpointRefEventPayload(v JavaScriptCheckpointRefEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeJavaScriptCheckpointRefEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided JavaScriptCheckpointRefEventPayload
+func (t *FactoryEvent_Payload) MergeJavaScriptCheckpointRefEventPayload(v JavaScriptCheckpointRefEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsJavaScriptPhaseChangeEventPayload returns the union data inside the FactoryEvent_Payload as a JavaScriptPhaseChangeEventPayload
+func (t FactoryEvent_Payload) AsJavaScriptPhaseChangeEventPayload() (JavaScriptPhaseChangeEventPayload, error) {
+	var body JavaScriptPhaseChangeEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromJavaScriptPhaseChangeEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided JavaScriptPhaseChangeEventPayload
+func (t *FactoryEvent_Payload) FromJavaScriptPhaseChangeEventPayload(v JavaScriptPhaseChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeJavaScriptPhaseChangeEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided JavaScriptPhaseChangeEventPayload
+func (t *FactoryEvent_Payload) MergeJavaScriptPhaseChangeEventPayload(v JavaScriptPhaseChangeEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsArtifactCreatedEventPayload returns the union data inside the FactoryEvent_Payload as a ArtifactCreatedEventPayload
+func (t FactoryEvent_Payload) AsArtifactCreatedEventPayload() (ArtifactCreatedEventPayload, error) {
+	var body ArtifactCreatedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromArtifactCreatedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided ArtifactCreatedEventPayload
+func (t *FactoryEvent_Payload) FromArtifactCreatedEventPayload(v ArtifactCreatedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeArtifactCreatedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided ArtifactCreatedEventPayload
+func (t *FactoryEvent_Payload) MergeArtifactCreatedEventPayload(v ArtifactCreatedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
@@ -4074,6 +4704,9 @@ type ServerInterface interface {
 	// Close one live factory session
 	// (DELETE /factory-sessions/{session_id})
 	CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionId string)
+	// Get one live factory session
+	// (GET /factory-sessions/{session_id})
+	GetFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Stream factory events for one session
 	// (GET /factory-sessions/{session_id}/events)
 	GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -4092,6 +4725,12 @@ type ServerInterface interface {
 	// Invoke one factory session and return its primary result
 	// (POST /factory-sessions/{session_id}/invocations)
 	InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get one factory session partial result
+	// (GET /factory-sessions/{session_id}/partial-result)
+	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get one factory session result
+	// (GET /factory-sessions/{session_id}/result)
+	GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -4203,6 +4842,31 @@ func (siw *ServerInterfaceWrapper) CloseFactorySession(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CloseFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySession operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySession(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySession(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4371,6 +5035,56 @@ func (siw *ServerInterfaceWrapper) InvokeFactorySessionBySessionId(w http.Respon
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.InvokeFactorySessionBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionPartialResult operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionPartialResult(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionResult operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionResult(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionResult(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4951,6 +5665,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.CloseFactorySession).Methods("DELETE")
 
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.GetFactorySession).Methods("GET")
+
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/events", wrapper.GetEventsBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory", wrapper.GetCurrentFactoryBySessionId).Methods("GET")
@@ -4962,6 +5678,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/invocations", wrapper.InvokeFactorySessionBySessionId).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/partial-result", wrapper.GetFactorySessionPartialResult).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/result", wrapper.GetFactorySessionResult).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
 

@@ -821,6 +821,7 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 		Guards:           cloneFactoryGuardConfigs(cfg.Guards),
 		InputTypes:       cloneInputTypeConfigs(cfg.InputTypes),
 		InvocationReturn: cloneInvocationReturnConfig(cfg.InvocationReturn),
+		Orchestrator:     cloneFactoryOrchestratorConfig(cfg.Orchestrator),
 		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),
 		Resources:        cloneResourceConfigs(cfg.Resources),
 		ResourceManifest: clonePortableResourceManifestConfig(cfg.ResourceManifest),

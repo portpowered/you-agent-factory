@@ -285,7 +285,7 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 	pausedState := factoryapi.FactoryState("PAUSED")
 	completedState := factoryapi.FactoryState("COMPLETED")
 
-	return []factoryapi.FactoryEvent{
+	events := []factoryapi.FactoryEvent{
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
 			Id:            "event-run-started",
@@ -334,6 +334,64 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 			Payload: factoryEventPayload(t, factoryapi.RunResponseEventPayload{
 				Reason: stringPtr("all work finished"),
 				State:  &completedState,
+			}),
+		},
+	}
+	events = append(events, generatedFactoryOrchestratorLifecycleEvents(t, eventTime)...)
+	return events
+}
+
+func generatedFactoryOrchestratorLifecycleEvents(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-javascript-checkpoint-ref",
+			Type:          factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+			Context:       factoryapi.FactoryEventContext{Sequence: 10, Tick: 5, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.JavaScriptCheckpointRefEventPayload{
+				CheckpointId: "ckpt-1",
+				Label:        stringPtr("after-plan"),
+				Summary:      stringPtr("Completed planning phase"),
+				Timestamp:    &eventTime,
+				ArtifactRef: factoryapi.FactoryArtifactRef{
+					Id:         "artifact-ckpt-1",
+					Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
+					Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+				},
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-javascript-phase-change",
+			Type:          factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+			Context:       factoryapi.FactoryEventContext{Sequence: 11, Tick: 6, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.JavaScriptPhaseChangeEventPayload{
+				Phase:      "execute",
+				Phases:     []string{"plan", "execute"},
+				ArgsDigest: stringPtr("sha256:args"),
+				ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusRUNNING,
+				ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
+					Queued:    1,
+					Running:   2,
+					Completed: 3,
+				},
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-artifact-created",
+			Type:          factoryapi.FactoryEventTypeArtifactCreated,
+			Context:       factoryapi.FactoryEventContext{Sequence: 12, Tick: 6, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.ArtifactCreatedEventPayload{
+				Artifact: factoryapi.FactoryArtifact{
+					Id:         "artifact-result-1",
+					Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
+					Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+					Label:      stringPtr("Review summary"),
+					Summary:    stringPtr("Completed review findings"),
+				},
+				CapturedAt: &eventTime,
 			}),
 		},
 	}

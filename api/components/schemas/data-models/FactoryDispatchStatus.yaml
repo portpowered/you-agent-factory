@@ -1,0 +1,17 @@
+type: string
+description: Canonical dispatch lifecycle status shared across orchestrators.
+enum:
+  - QUEUED
+  - RUNNING
+  - COMPLETED
+  - FAILED
+x-enum-varnames:
+  - FactoryDispatchStatusQUEUED
+  - FactoryDispatchStatusRUNNING
+  - FactoryDispatchStatusCOMPLETED
+  - FactoryDispatchStatusFAILED
+x-enum-descriptions:
+  - Dispatch is waiting to start.
+  - Dispatch is currently executing.
+  - Dispatch completed successfully.
+  - Dispatch failed or was rejected.

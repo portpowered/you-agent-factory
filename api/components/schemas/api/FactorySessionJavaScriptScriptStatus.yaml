@@ -1,0 +1,14 @@
+type: string
+description: JavaScript workflow script runtime status for one factory session.
+enum:
+  - IDLE
+  - RUNNING
+  - PAUSED
+  - FINISHED
+  - FAILED
+x-enum-descriptions:
+  - The script runtime is loaded but not executing.
+  - The script runtime is actively executing workflow logic.
+  - The script runtime is paused and not scheduling new work.
+  - The script runtime finished successfully.
+  - The script runtime failed and is not scheduling new work.

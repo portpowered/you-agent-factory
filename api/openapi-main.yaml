@@ -519,7 +519,66 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionResult
+      summary: Get one factory session result
+      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Terminal session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/partial-result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionPartialResult
+      summary: Get one factory session partial result
+      description: Returns the current partial result for one live JavaScript workflow session. Checkpoint artifact refs and summaries are returned without raw checkpoint bodies or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Partial session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionPartialResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySession
+      summary: Get one live factory session
+      description: Returns the canonical factory session projection for one live session, including orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Canonical factory session projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       tags:
         - Factory
@@ -879,6 +938,74 @@ components:
       $ref: './components/schemas/api/FactorySessionTarget.yaml'
     FactorySessionSummary:
       $ref: './components/schemas/api/FactorySessionSummary.yaml'
+    FactorySession:
+      $ref: './components/schemas/api/FactorySession.yaml'
+    FactorySessionRuntime:
+      $ref: './components/schemas/api/FactorySessionRuntime.yaml'
+    FactorySessionStatus:
+      $ref: './components/schemas/api/FactorySessionStatus.yaml'
+    FactorySessionProgress:
+      $ref: './components/schemas/api/FactorySessionProgress.yaml'
+    FactorySessionBudgets:
+      $ref: './components/schemas/api/FactorySessionBudgets.yaml'
+    FactorySessionUsage:
+      $ref: './components/schemas/api/FactorySessionUsage.yaml'
+    FactorySessionLifecycle:
+      $ref: './components/schemas/api/FactorySessionLifecycle.yaml'
+    FactorySessionPetriProjection:
+      $ref: './components/schemas/api/FactorySessionPetriProjection.yaml'
+    FactorySessionPetriEnabledTransition:
+      $ref: './components/schemas/api/FactorySessionPetriEnabledTransition.yaml'
+    FactorySessionJavaScriptProjection:
+      $ref: './components/schemas/api/FactorySessionJavaScriptProjection.yaml'
+    FactorySessionJavaScriptCheckpointRef:
+      $ref: './components/schemas/api/FactorySessionJavaScriptCheckpointRef.yaml'
+    FactorySessionJavaScriptScriptStatus:
+      $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
+    FactorySessionJavaScriptChildDispatchCounts:
+      $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    FactorySessionResult:
+      $ref: './components/schemas/api/FactorySessionResult.yaml'
+    FactorySessionPartialResult:
+      $ref: './components/schemas/api/FactorySessionPartialResult.yaml'
+    FactoryDispatch:
+      $ref: './components/schemas/data-models/FactoryDispatch.yaml'
+    FactoryDispatchKind:
+      $ref: './components/schemas/data-models/FactoryDispatchKind.yaml'
+    FactoryDispatchStatus:
+      $ref: './components/schemas/data-models/FactoryDispatchStatus.yaml'
+    FactoryDispatchJavaScriptTaskKind:
+      $ref: './components/schemas/data-models/FactoryDispatchJavaScriptTaskKind.yaml'
+    FactoryDispatchPetriProjection:
+      $ref: './components/schemas/data-models/FactoryDispatchPetriProjection.yaml'
+    FactoryDispatchJavaScriptProjection:
+      $ref: './components/schemas/data-models/FactoryDispatchJavaScriptProjection.yaml'
+    FactoryDispatchUsage:
+      $ref: './components/schemas/data-models/FactoryDispatchUsage.yaml'
+    FactoryDispatchWarning:
+      $ref: './components/schemas/data-models/FactoryDispatchWarning.yaml'
+    FactoryDispatchFailureDetail:
+      $ref: './components/schemas/data-models/FactoryDispatchFailureDetail.yaml'
+    FactoryArtifact:
+      $ref: './components/schemas/data-models/FactoryArtifact.yaml'
+    FactoryArtifactRef:
+      $ref: './components/schemas/data-models/FactoryArtifactRef.yaml'
+    FactoryArtifactKind:
+      $ref: './components/schemas/data-models/FactoryArtifactKind.yaml'
+    FactoryArtifactVisibility:
+      $ref: './components/schemas/data-models/FactoryArtifactVisibility.yaml'
+    FactoryArtifactAuditMode:
+      $ref: './components/schemas/data-models/FactoryArtifactAuditMode.yaml'
+    FactoryArtifactRedactionCounts:
+      $ref: './components/schemas/data-models/FactoryArtifactRedactionCounts.yaml'
+    FactoryArtifactCaptureMetadata:
+      $ref: './components/schemas/data-models/FactoryArtifactCaptureMetadata.yaml'
+    JavaScriptCheckpointRefEventPayload:
+      $ref: './components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml'
+    JavaScriptPhaseChangeEventPayload:
+      $ref: './components/schemas/events/payloads/JavaScriptPhaseChangeEventPayload.yaml'
+    ArtifactCreatedEventPayload:
+      $ref: './components/schemas/events/payloads/ArtifactCreatedEventPayload.yaml'
     ListFactorySessionsResponse:
       $ref: './components/schemas/api/ListFactorySessionsResponse.yaml'
     OpenFactorySessionRequest:
@@ -1049,6 +1176,16 @@ components:
       $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    FactoryOrchestrator:
+      $ref: './components/schemas/data-models/FactoryOrchestrator.yaml'
+    FactoryOrchestratorKind:
+      $ref: './components/schemas/data-models/FactoryOrchestratorKind.yaml'
+    FactoryOrchestratorPetriConfig:
+      $ref: './components/schemas/data-models/FactoryOrchestratorPetriConfig.yaml'
+    FactoryOrchestratorJavaScriptConfig:
+      $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptConfig.yaml'
+    FactoryOrchestratorJavaScriptInlineSource:
+      $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptInlineSource.yaml'
     InvocationReturn:
       $ref: './components/schemas/data-models/InvocationReturn.yaml'
     InvocationReturnPolicy:

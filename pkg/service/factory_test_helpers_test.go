@@ -67,8 +67,8 @@ func assertServiceBundledFactoryEntry(t *testing.T, bundledFile factoryapi.Bundl
 	if bundledFile.TargetPath != wantPath {
 		t.Fatalf("bundled file targetPath = %q, want %q", bundledFile.TargetPath, wantPath)
 	}
-	if bundledFile.Content.Encoding != factoryapi.Utf8 {
-		t.Fatalf("bundled file %q encoding = %q, want %q", wantPath, bundledFile.Content.Encoding, factoryapi.Utf8)
+	if bundledFile.Content.Encoding != factoryapi.BundledFileContentEncodingUtf8 {
+		t.Fatalf("bundled file %q encoding = %q, want %q", wantPath, bundledFile.Content.Encoding, factoryapi.BundledFileContentEncodingUtf8)
 	}
 	if bundledFile.Content.Inline != wantContent {
 		t.Fatalf("bundled file %q content = %q, want %q", wantPath, bundledFile.Content.Inline, wantContent)
@@ -83,8 +83,8 @@ func assertServiceBundledFactoryEntryWithoutInline(t *testing.T, bundledFile fac
 	if bundledFile.TargetPath != wantPath {
 		t.Fatalf("bundled file targetPath = %q, want %q", bundledFile.TargetPath, wantPath)
 	}
-	if bundledFile.Content.Encoding != factoryapi.Utf8 {
-		t.Fatalf("bundled file %q encoding = %q, want %q", wantPath, bundledFile.Content.Encoding, factoryapi.Utf8)
+	if bundledFile.Content.Encoding != factoryapi.BundledFileContentEncodingUtf8 {
+		t.Fatalf("bundled file %q encoding = %q, want %q", wantPath, bundledFile.Content.Encoding, factoryapi.BundledFileContentEncodingUtf8)
 	}
 	if bundledFile.Content.Inline != "" {
 		t.Fatalf("bundled file %q content = %q, want omitted inline content", wantPath, bundledFile.Content.Inline)

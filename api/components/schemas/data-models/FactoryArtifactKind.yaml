@@ -1,0 +1,29 @@
+type: string
+description: Canonical factory artifact kind for session-owned outputs.
+enum:
+  - FINAL_RESULT
+  - CHILD_RESULT
+  - FINDING
+  - PATCH
+  - LOG
+  - DATASET
+  - CHECKPOINT
+  - WORKTREE_SUMMARY
+x-enum-varnames:
+  - FactoryArtifactKindFINALRESULT
+  - FactoryArtifactKindCHILDRESULT
+  - FactoryArtifactKindFINDING
+  - FactoryArtifactKindPATCH
+  - FactoryArtifactKindLOG
+  - FactoryArtifactKindDATASET
+  - FactoryArtifactKindCHECKPOINT
+  - FactoryArtifactKindWORKTREESUMMARY
+x-enum-descriptions:
+  - Final session result artifact.
+  - Child dispatch result artifact.
+  - Finding artifact produced by a workflow task.
+  - Patch artifact produced by a workflow task.
+  - Log artifact produced by a workflow task.
+  - Dataset artifact produced by a workflow task.
+  - JavaScript workflow checkpoint bundle owned by the orchestrator runtime.
+  - Worktree summary artifact produced by a workflow task.

@@ -92,7 +92,7 @@ func serviceNamedFactoryPayloadWithBundledInput(t *testing.T, project string) []
 				"type":       "INPUT",
 				"targetPath": "factory/inputs/task/default/stale.md",
 				"content": map[string]any{
-					"encoding": string(factoryapi.Utf8),
+					"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 					"inline":   "stale starter\n",
 				},
 			},
@@ -144,7 +144,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "ROOT_HELPER",
 					"targetPath": "Makefile",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   "test:\n\tgo test ./...\n",
 					},
 				},
@@ -152,7 +152,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "DOC",
 					"targetPath": "factory/docs/README.md",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   "# Portable factory\n",
 					},
 				},
@@ -160,7 +160,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "SCRIPT",
 					"targetPath": "factory/scripts/execute-story.ps1",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   servicePortableBundledScriptBody,
 					},
 				},
@@ -168,7 +168,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "INPUT",
 					"targetPath": "factory/inputs/task/default/starter.md",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   "starter work\n",
 					},
 				},

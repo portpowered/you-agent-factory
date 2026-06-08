@@ -1,0 +1,8 @@
+type: object
+additionalProperties: false
+description: Effective orchestrator policy budgets projected for one factory session.
+properties:
+  maxAgents:
+    type: integer
+    minimum: 0
+    description: Maximum concurrent child-agent dispatches allowed by the effective JavaScript policy.

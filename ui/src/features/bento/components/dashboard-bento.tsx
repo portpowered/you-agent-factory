@@ -105,6 +105,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     now,
     onRemoveDashboardWidget: removeDashboardWidget,
     providerSessionState,
+    selectedSessionID: rawSessionID,
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,
@@ -152,6 +153,7 @@ function buildDashboardCardLayouts({
   now,
   onRemoveDashboardWidget,
   providerSessionState,
+  selectedSessionID,
   selectedTrace,
   selectedTraceID,
   selectedWorkExecutionDetails,
@@ -176,6 +178,7 @@ function buildDashboardCardLayouts({
       addDashboardWidget(widgetType);
     },
     providerSessionState,
+    selectedSessionID,
     selectedTrace,
     selectedTraceID,
     selectedWorkExecutionDetails,

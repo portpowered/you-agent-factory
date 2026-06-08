@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+properties:
+  inputTokens:
+    type: integer
+    format: int64
+    minimum: 0
+  outputTokens:
+    type: integer
+    format: int64
+    minimum: 0
+  totalTokens:
+    type: integer
+    format: int64
+    minimum: 0
+  costUsd:
+    type: number
+    format: double
+    minimum: 0
+  durationMillis:
+    type: integer
+    format: int64
+    minimum: 0
+  retryCount:
+    type: integer
+    format: int32
+    minimum: 0

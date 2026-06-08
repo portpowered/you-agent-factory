@@ -1,0 +1,23 @@
+type: string
+description: JavaScript workflow task kind for one child dispatch.
+enum:
+  - AGENT
+  - VERIFY
+  - SYNTHESIZE
+  - TOOL
+  - SCRIPT
+  - SYSTEM
+x-enum-varnames:
+  - FactoryDispatchJavaScriptTaskKindAGENT
+  - FactoryDispatchJavaScriptTaskKindVERIFY
+  - FactoryDispatchJavaScriptTaskKindSYNTHESIZE
+  - FactoryDispatchJavaScriptTaskKindTOOL
+  - FactoryDispatchJavaScriptTaskKindSCRIPT
+  - FactoryDispatchJavaScriptTaskKindSYSTEM
+x-enum-descriptions:
+  - Child-agent task dispatch.
+  - Verify task dispatch.
+  - Synthesize task dispatch.
+  - Tool task dispatch.
+  - Script task dispatch.
+  - System task dispatch.

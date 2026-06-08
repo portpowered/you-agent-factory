@@ -8,6 +8,7 @@ export const DASHBOARD_LAYOUT_STORAGE_KEY = "agent-factory.dashboard.layout.v2";
 export const DASHBOARD_WIDGET_IDS = {
   addWidget: "add-widget",
   currentSelection: "current-selection",
+  factorySession: "factory-session",
   providerSession: "provider-session",
   submitWork: "submit-work",
   terminalWork: "terminal-work",
@@ -31,6 +32,10 @@ export const LEGACY_WORK_OUTCOME_WIDGET_IDS = [
 export const DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS = {
   currentSelection: createDashboardWidgetInstanceID(
     DASHBOARD_WIDGET_IDS.currentSelection,
+    PRIMARY_WIDGET_INSTANCE_SLOT,
+  ),
+  factorySession: createDashboardWidgetInstanceID(
+    DASHBOARD_WIDGET_IDS.factorySession,
     PRIMARY_WIDGET_INSTANCE_SLOT,
   ),
   providerSession: createDashboardWidgetInstanceID(
@@ -208,6 +213,8 @@ export function getPrimaryInstanceIDForWidgetType(widgetType: string): string {
   switch (widgetType) {
     case DASHBOARD_WIDGET_IDS.currentSelection:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.currentSelection;
+    case DASHBOARD_WIDGET_IDS.factorySession:
+      return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.factorySession;
     case DASHBOARD_WIDGET_IDS.providerSession:
       return DASHBOARD_PRIMARY_WIDGET_INSTANCE_IDS.providerSession;
     case DASHBOARD_WIDGET_IDS.submitWork:

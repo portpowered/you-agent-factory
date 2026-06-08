@@ -5,6 +5,7 @@ export const DASHBOARD_WIDGET_PICKER_WIDGET_TYPES = [
   DASHBOARD_WIDGET_IDS.workTotals,
   DASHBOARD_WIDGET_IDS.workGraph,
   DASHBOARD_WIDGET_IDS.currentSelection,
+  DASHBOARD_WIDGET_IDS.factorySession,
   DASHBOARD_WIDGET_IDS.providerSession,
   DASHBOARD_WIDGET_IDS.terminalWork,
   DASHBOARD_WIDGET_IDS.workOutcomeChart,

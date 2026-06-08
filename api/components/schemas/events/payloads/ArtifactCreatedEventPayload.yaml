@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+description: >-
+  Customer-visible artifact creation recorded on the canonical factory event
+  stream. Artifact bodies remain orchestrator-owned and are not included in
+  this payload.
+required:
+  - artifact
+properties:
+  artifact:
+    $ref: '../../data-models/FactoryArtifact.yaml'
+  capturedAt:
+    type: string
+    format: date-time
+    description: When the artifact payload was captured.

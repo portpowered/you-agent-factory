@@ -352,6 +352,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/result": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get one factory session result
+     * @description Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+     */
+    get: operations["getFactorySessionResult"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/partial-result": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get one factory session partial result
+     * @description Returns the current partial result for one live JavaScript workflow session. Checkpoint artifact refs and summaries are returned without raw checkpoint bodies or unrestricted host paths.
+     */
+    get: operations["getFactorySessionPartialResult"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}": {
     parameters: {
       query?: never;
@@ -359,7 +399,11 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /**
+     * Get one live factory session
+     * @description Returns the canonical factory session projection for one live session, including orchestrator identity, lifecycle status, progress, budgets, usage, and kind-specific runtime projections.
+     */
+    get: operations["getFactorySession"];
     put?: never;
     post?: never;
     /**
@@ -918,6 +962,341 @@ export interface components {
       factoryDir: string;
       project: string;
       isDefault: boolean;
+      runtime?: components["schemas"]["FactorySessionRuntime"];
+    };
+    FactorySession: {
+      id: string;
+      target: components["schemas"]["FactorySessionTargetRef"];
+      folderPath: string;
+      factoryDir: string;
+      project: string;
+      isDefault: boolean;
+      runtime: components["schemas"]["FactorySessionRuntime"];
+    };
+    FactorySessionRuntime: {
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT. */
+      dialect?: string;
+      /** @description Authored JavaScript workflow source reference when applicable. */
+      sourceRef?: string;
+      /** @description Stable hash of the authored JavaScript workflow source. */
+      sourceHash?: string;
+      /** @description Stable hash of the effective orchestrator policy. */
+      policyHash?: string;
+      status: components["schemas"]["FactorySessionStatus"];
+      progress: components["schemas"]["FactorySessionProgress"];
+      budgets?: components["schemas"]["FactorySessionBudgets"];
+      usage: components["schemas"]["FactorySessionUsage"];
+      lifecycle: components["schemas"]["FactorySessionLifecycle"];
+      petri?: components["schemas"]["FactorySessionPetriProjection"];
+      javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
+      /** @description Shared dispatch projections for the session runtime. */
+      dispatches?: components["schemas"]["FactoryDispatch"][];
+      /** @description Shared artifact projections for the session runtime. */
+      artifacts?: components["schemas"]["FactoryArtifact"][];
+    };
+    /**
+     * @description Canonical lifecycle status for one live factory session runtime.
+     * @enum {string}
+     */
+    FactorySessionStatus: FactorySessionStatus;
+    FactorySessionProgress: {
+      /** @description Factory lifecycle state from the aggregate engine snapshot. */
+      factoryState: string;
+      categories: components["schemas"]["StatusCategories"];
+      /** @description Number of dispatches currently in flight for the session. */
+      inFlightCount: number;
+      /** @description Number of customer-visible work tokens in the current marking. */
+      totalTokens: number;
+    };
+    /** @description Effective orchestrator policy budgets projected for one factory session. */
+    FactorySessionBudgets: {
+      /** @description Maximum concurrent child-agent dispatches allowed by the effective JavaScript policy. */
+      maxAgents?: number;
+    };
+    FactorySessionUsage: {
+      /** @description Resource availability and consumption for the session runtime. */
+      resources: components["schemas"]["ResourceUsage"][];
+    };
+    FactorySessionLifecycle: {
+      /**
+       * Format: date-time
+       * @description When the live session runtime started.
+       */
+      startedAt: string;
+      /**
+       * Format: date-time
+       * @description When the session projection was last refreshed.
+       */
+      updatedAt: string;
+      /**
+       * Format: date-time
+       * @description When the session runtime reached a terminal finished state.
+       */
+      finishedAt?: string;
+    };
+    FactorySessionPetriProjection: {
+      /** @description Current Petri marking tokens for the session runtime. */
+      marking: components["schemas"]["TokenResponse"][];
+      /** @description Transitions currently enabled in the Petri marking. */
+      enabledTransitions: components["schemas"]["FactorySessionPetriEnabledTransition"][];
+    };
+    FactorySessionPetriEnabledTransition: {
+      /** @description Enabled Petri transition identifier. */
+      transitionId: string;
+      /** @description Worker type bound to the enabled transition. */
+      workerType: string;
+    };
+    FactorySessionJavaScriptProjection: {
+      /** @description Current JavaScript workflow phase name. */
+      phase?: string;
+      /** @description Ordered phase names visible in the session runtime. */
+      phases: string[];
+      /** @description Stable digest of the effective workflow arguments. */
+      argsDigest?: string;
+      /** @description Checkpoint refs and summaries without raw VM checkpoint bodies. */
+      checkpoints?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
+      scriptStatus: components["schemas"]["FactorySessionJavaScriptScriptStatus"];
+      childDispatchCounts: components["schemas"]["FactorySessionJavaScriptChildDispatchCounts"];
+    };
+    FactorySessionJavaScriptCheckpointRef: {
+      /** @description Stable checkpoint identifier referenced by the session runtime. */
+      id: string;
+      /** @description Customer-visible checkpoint label. */
+      label?: string;
+      /**
+       * Format: date-time
+       * @description When the checkpoint was recorded.
+       */
+      timestamp?: string;
+      /** @description Short customer-visible checkpoint summary without raw VM state. */
+      summary?: string;
+      /** @description Orchestrator-owned checkpoint artifact metadata without raw VM state. */
+      artifactRef?: components["schemas"]["FactoryArtifactRef"];
+    };
+    /**
+     * @description JavaScript workflow script runtime status for one factory session.
+     * @enum {string}
+     */
+    FactorySessionJavaScriptScriptStatus: FactorySessionJavaScriptScriptStatus;
+    FactorySessionJavaScriptChildDispatchCounts: {
+      /** @description Child dispatches waiting to start. */
+      queued: number;
+      /** @description Child dispatches currently executing. */
+      running: number;
+      /** @description Child dispatches that have completed. */
+      completed: number;
+    };
+    FactorySessionResult: {
+      /** @description Live factory session identifier for this result read. */
+      sessionId: string;
+      status: components["schemas"]["FactorySessionStatus"];
+      /** @description Final result artifact reference without raw checkpoint bodies. */
+      resultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
+      /** @description Checkpoint refs associated with the terminal session result. */
+      checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
+    };
+    FactorySessionPartialResult: {
+      /** @description Live factory session identifier for this partial-result read. */
+      sessionId: string;
+      /** @description Current JavaScript workflow phase for the partial result. */
+      phase: string;
+      /** @description Partial-result artifact reference without raw checkpoint bodies. */
+      partialResultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
+      /** @description Checkpoint refs associated with the current partial result. */
+      checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
+    };
+    FactoryDispatch: {
+      /** @description Stable dispatch identifier. */
+      id: string;
+      /** @description Factory session that owns this dispatch. */
+      sessionId: string;
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      dispatchKind: components["schemas"]["FactoryDispatchKind"];
+      /** @description JavaScript workflow phase when the dispatch was created or observed. */
+      phase?: string;
+      status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Customer-visible dispatch label. */
+      label?: string;
+      /** @description Selected runner identifier when applicable. */
+      runnerId?: string;
+      /** @description Selected model identifier when applicable. */
+      model?: string;
+      /** @description Selected provider identifier when applicable. */
+      provider?: string;
+      /** @description Stable digest of rendered prompt material. */
+      promptDigest?: string;
+      /** @description Stable digest of the output schema when applicable. */
+      schemaDigest?: string;
+      /** @description Related work identifiers consumed or produced by the dispatch. */
+      relatedWorkIds?: string[];
+      /** @description Artifact identifiers produced by the dispatch. */
+      artifactIds?: string[];
+      usage?: components["schemas"]["FactoryDispatchUsage"];
+      warnings?: components["schemas"]["FactoryDispatchWarning"][];
+      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      /** @description Petri-specific dispatch projection. Present for Petri transition dispatches. */
+      petri?: components["schemas"]["FactoryDispatchPetriProjection"];
+      /** @description JavaScript-specific dispatch projection. Present for JavaScript workflow task dispatches. */
+      javascript?: components["schemas"]["FactoryDispatchJavaScriptProjection"];
+    };
+    /**
+     * @description Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+     * @enum {string}
+     */
+    FactoryDispatchKind: FactoryDispatchKind;
+    /**
+     * @description Canonical dispatch lifecycle status shared across orchestrators.
+     * @enum {string}
+     */
+    FactoryDispatchStatus: FactoryDispatchStatus;
+    /**
+     * @description JavaScript workflow task kind for one child dispatch.
+     * @enum {string}
+     */
+    FactoryDispatchJavaScriptTaskKind: FactoryDispatchJavaScriptTaskKind;
+    FactoryDispatchPetriProjection: {
+      /** @description Petri transition identifier for this dispatch. */
+      transitionId: string;
+      /** @description Workstation name that owns the transition. */
+      workstationName?: string;
+      /** @description Worker type selected for the transition dispatch. */
+      workerType?: string;
+    };
+    FactoryDispatchJavaScriptProjection: {
+      taskKind: components["schemas"]["FactoryDispatchJavaScriptTaskKind"];
+      /** @description Customer-visible label for the JavaScript workflow task. */
+      taskLabel?: string;
+    };
+    FactoryDispatchUsage: {
+      /** Format: int64 */
+      inputTokens?: number;
+      /** Format: int64 */
+      outputTokens?: number;
+      /** Format: int64 */
+      totalTokens?: number;
+      /** Format: double */
+      costUsd?: number;
+      /** Format: int64 */
+      durationMillis?: number;
+      /** Format: int32 */
+      retryCount?: number;
+    };
+    FactoryDispatchWarning: {
+      /** @description Stable warning code for the dispatch projection. */
+      code: string;
+      /** @description Customer-visible warning message. */
+      message: string;
+    };
+    FactoryDispatchFailureDetail: {
+      /** @description Stable failure reason code when the dispatch failed. */
+      reason?: string;
+      /** @description Customer-visible failure message. */
+      message?: string;
+      /** @description Provider or runtime error class when available. */
+      errorClass?: string;
+    };
+    FactoryArtifact: {
+      /** @description Stable artifact identifier referenced by session projections. */
+      id: string;
+      kind: components["schemas"]["FactoryArtifactKind"];
+      visibility: components["schemas"]["FactoryArtifactVisibility"];
+      /** @description Customer-visible artifact label. */
+      label?: string;
+      /** @description Customer-visible artifact summary. */
+      summary?: string;
+      auditMode?: components["schemas"]["FactoryArtifactAuditMode"];
+      redactionCounts?: components["schemas"]["FactoryArtifactRedactionCounts"];
+      captureMetadata?: components["schemas"]["FactoryArtifactCaptureMetadata"];
+      /** @description Stable hash of the stored artifact payload. */
+      contentHash?: string;
+      /**
+       * Format: int64
+       * @description Stored artifact payload size in bytes.
+       */
+      sizeBytes?: number;
+    };
+    FactoryArtifactRef: {
+      /** @description Stable artifact identifier referenced by session projections. */
+      id: string;
+      kind: components["schemas"]["FactoryArtifactKind"];
+      visibility: components["schemas"]["FactoryArtifactVisibility"];
+      /** @description Stable hash of the stored artifact payload. */
+      contentHash?: string;
+      /**
+       * Format: int64
+       * @description Stored artifact payload size in bytes.
+       */
+      sizeBytes?: number;
+    };
+    /**
+     * @description Canonical factory artifact kind for session-owned outputs.
+     * @enum {string}
+     */
+    FactoryArtifactKind: FactoryArtifactKind;
+    /**
+     * @description Visibility boundary for one factory artifact projection.
+     * @enum {string}
+     */
+    FactoryArtifactVisibility: FactoryArtifactVisibility;
+    /**
+     * @description Audit mode applied when one factory artifact was captured.
+     * @enum {string}
+     */
+    FactoryArtifactAuditMode: FactoryArtifactAuditMode;
+    FactoryArtifactRedactionCounts: {
+      /** Format: int32 */
+      secrets?: number;
+      /** Format: int32 */
+      paths?: number;
+      /** Format: int32 */
+      tokens?: number;
+    };
+    FactoryArtifactCaptureMetadata: {
+      /**
+       * Format: date-time
+       * @description Timestamp when the artifact payload was captured.
+       */
+      capturedAt?: string;
+      /** @description Dispatch identifier that produced the artifact when applicable. */
+      sourceDispatchId?: string;
+      /** @description MIME type of the stored artifact payload when known. */
+      mimeType?: string;
+    };
+    /** @description Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload. */
+    JavaScriptCheckpointRefEventPayload: {
+      /** @description Stable checkpoint identifier referenced by the session runtime. */
+      checkpointId: string;
+      /** @description Customer-visible checkpoint label. */
+      label?: string;
+      /**
+       * Format: date-time
+       * @description When the checkpoint was recorded.
+       */
+      timestamp?: string;
+      /** @description Short customer-visible checkpoint summary without raw VM state. */
+      summary?: string;
+      artifactRef: components["schemas"]["FactoryArtifactRef"];
+    };
+    /** @description JavaScript workflow phase transition recorded on the canonical factory event stream. JavaScript workflow progress is represented through phase changes, not Petri WORK_STATE_CHANGE marking events. */
+    JavaScriptPhaseChangeEventPayload: {
+      /** @description Current JavaScript workflow phase name after this event. */
+      phase: string;
+      /** @description Ordered phase names visible in the session runtime. */
+      phases: string[];
+      /** @description Stable digest of the effective workflow arguments. */
+      argsDigest?: string;
+      scriptStatus: components["schemas"]["FactorySessionJavaScriptScriptStatus"];
+      childDispatchCounts: components["schemas"]["FactorySessionJavaScriptChildDispatchCounts"];
+    };
+    /** @description Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload. */
+    ArtifactCreatedEventPayload: {
+      artifact: components["schemas"]["FactoryArtifact"];
+      /**
+       * Format: date-time
+       * @description When the artifact payload was captured.
+       */
+      capturedAt?: string;
     };
     ListFactorySessionsResponse: {
       sessions: components["schemas"]["FactorySessionSummary"][];
@@ -1302,7 +1681,10 @@ export interface components {
         | components["schemas"]["DispatchResponseEventPayload"]
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
-        | components["schemas"]["RunResponseEventPayload"];
+        | components["schemas"]["RunResponseEventPayload"]
+        | components["schemas"]["JavaScriptCheckpointRefEventPayload"]
+        | components["schemas"]["JavaScriptPhaseChangeEventPayload"]
+        | components["schemas"]["ArtifactCreatedEventPayload"];
     };
     /**
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -1566,7 +1948,7 @@ export interface components {
       outputResources?: components["schemas"]["Resource"][];
       metadata?: components["schemas"]["StringMap"];
     };
-    /** @description Canonical work marking position change. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
+    /** @description Canonical Petri marking position change for work items in Petri-backed factories. JavaScript workflow progress is represented by JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves use source api or cli; automatic cascade propagation uses cascading-failure. FactoryEvent.context carries workIds and optional requestId for operator idempotency. */
     WorkStateChangeEventPayload: {
       workId: string;
       workTypeName: string;
@@ -1944,6 +2326,8 @@ export interface components {
       version?: components["schemas"]["HybridLogicalTimestamp"];
       /** @description Free-form factory-level metadata carried through runtime serialization and replay diagnostics. */
       metadata?: components["schemas"]["StringMap"];
+      /** @description Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
+      orchestrator?: components["schemas"]["FactoryOrchestrator"];
       /** @description Named input kinds accepted by the factory. The default input type is implicit and must not be declared. */
       inputTypes?: components["schemas"]["InputType"][];
       /** @description Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation. */
@@ -1964,6 +2348,54 @@ export interface components {
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */
       workstations?: components["schemas"]["Workstation"][];
+    };
+    /** @description Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI. */
+    FactoryOrchestrator: {
+      kind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored. */
+      petri?: components["schemas"]["FactoryOrchestratorPetriConfig"];
+      /** @description JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT. */
+      javascript?: components["schemas"]["FactoryOrchestratorJavaScriptConfig"];
+    };
+    /**
+     * @description Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+     * @enum {string}
+     */
+    FactoryOrchestratorKind: FactoryOrchestratorKind;
+    /** @description Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI. */
+    FactoryOrchestratorPetriConfig: Record<string, never>;
+    /** @description JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here. */
+    FactoryOrchestratorJavaScriptConfig: {
+      /** @description Optional JavaScript dialect label for the authored workflow source. */
+      dialect?: string;
+      /** @description Factory-relative or authored reference to the workflow source file. */
+      sourceRef?: string;
+      /** @description Inline workflow source when the factory carries source text directly. */
+      inlineSource?: components["schemas"]["FactoryOrchestratorJavaScriptInlineSource"];
+      /** @description Optional content hash for the resolved workflow source. */
+      sourceHash?: string;
+      /** @description Optional exported entrypoint or phase name used to start the workflow. */
+      entrypoint?: string;
+      /** @description Free-form JavaScript orchestrator metadata for authoring and diagnostics. */
+      metadata?: components["schemas"]["StringMap"];
+      /** @description JSON Schema object describing workflow invocation arguments. */
+      argsSchema?: {
+        [key: string]: unknown;
+      };
+      /** @description Default JavaScript workflow policy object applied when no runtime override exists. */
+      defaultPolicy?: {
+        [key: string]: unknown;
+      };
+    };
+    /** @description Inline JavaScript workflow source carried directly in the factory definition. */
+    FactoryOrchestratorJavaScriptInlineSource: {
+      /**
+       * @description Declared content encoding for the inline workflow source.
+       * @enum {string}
+       */
+      encoding: FactoryOrchestratorJavaScriptInlineSourceEncoding;
+      /** @description Inline JavaScript workflow source text. */
+      inline: string;
     };
     /** @description Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. */
     InvocationReturn: {
@@ -3356,6 +3788,81 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  getFactorySessionResult: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Terminal session result projection for the targeted live session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionResult"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySessionPartialResult: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Partial session result projection for the targeted live session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionPartialResult"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySession: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Canonical factory session projection for the targeted live session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySession"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   closeFactorySession: {
     parameters: {
       query?: never;
@@ -3678,6 +4185,114 @@ export const FactorySessionTargetRefKind = {
 } as const;
 export type FactorySessionTargetRefKind =
   (typeof FactorySessionTargetRefKind)[keyof typeof FactorySessionTargetRefKind];
+export const FactorySessionStatus = {
+  // The session runtime is actively processing work.
+  ACTIVE: "ACTIVE",
+  // The session runtime is available but not currently processing work.
+  IDLE: "IDLE",
+  // The session runtime has reached a terminal finished state.
+  FINISHED: "FINISHED",
+} as const;
+export type FactorySessionStatus =
+  (typeof FactorySessionStatus)[keyof typeof FactorySessionStatus];
+export const FactorySessionJavaScriptScriptStatus = {
+  // The script runtime is loaded but not executing.
+  IDLE: "IDLE",
+  // The script runtime is actively executing workflow logic.
+  RUNNING: "RUNNING",
+  // The script runtime is paused and not scheduling new work.
+  PAUSED: "PAUSED",
+  // The script runtime finished successfully.
+  FINISHED: "FINISHED",
+  // The script runtime failed and is not scheduling new work.
+  FAILED: "FAILED",
+} as const;
+export type FactorySessionJavaScriptScriptStatus =
+  (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
+export const FactoryDispatchKind = {
+  // Petri transition dispatch owned by the factory engine.
+  FactoryDispatchKindPETRITRANSITION: "PETRI_TRANSITION",
+  // JavaScript workflow child-agent dispatch.
+  FactoryDispatchKindJAVASCRIPTAGENT: "JAVASCRIPT_AGENT",
+  // JavaScript workflow verify task dispatch.
+  FactoryDispatchKindJAVASCRIPTVERIFY: "JAVASCRIPT_VERIFY",
+  // JavaScript workflow synthesize task dispatch.
+  FactoryDispatchKindJAVASCRIPTSYNTHESIZE: "JAVASCRIPT_SYNTHESIZE",
+  // JavaScript workflow tool task dispatch.
+  FactoryDispatchKindJAVASCRIPTTOOL: "JAVASCRIPT_TOOL",
+  // JavaScript workflow script task dispatch.
+  FactoryDispatchKindJAVASCRIPTSCRIPT: "JAVASCRIPT_SCRIPT",
+  // JavaScript workflow system task dispatch.
+  FactoryDispatchKindJAVASCRIPTSYSTEM: "JAVASCRIPT_SYSTEM",
+} as const;
+export type FactoryDispatchKind =
+  (typeof FactoryDispatchKind)[keyof typeof FactoryDispatchKind];
+export const FactoryDispatchStatus = {
+  // Dispatch is waiting to start.
+  FactoryDispatchStatusQUEUED: "QUEUED",
+  // Dispatch is currently executing.
+  FactoryDispatchStatusRUNNING: "RUNNING",
+  // Dispatch completed successfully.
+  FactoryDispatchStatusCOMPLETED: "COMPLETED",
+  // Dispatch failed or was rejected.
+  FactoryDispatchStatusFAILED: "FAILED",
+} as const;
+export type FactoryDispatchStatus =
+  (typeof FactoryDispatchStatus)[keyof typeof FactoryDispatchStatus];
+export const FactoryDispatchJavaScriptTaskKind = {
+  // Child-agent task dispatch.
+  FactoryDispatchJavaScriptTaskKindAGENT: "AGENT",
+  // Verify task dispatch.
+  FactoryDispatchJavaScriptTaskKindVERIFY: "VERIFY",
+  // Synthesize task dispatch.
+  FactoryDispatchJavaScriptTaskKindSYNTHESIZE: "SYNTHESIZE",
+  // Tool task dispatch.
+  FactoryDispatchJavaScriptTaskKindTOOL: "TOOL",
+  // Script task dispatch.
+  FactoryDispatchJavaScriptTaskKindSCRIPT: "SCRIPT",
+  // System task dispatch.
+  FactoryDispatchJavaScriptTaskKindSYSTEM: "SYSTEM",
+} as const;
+export type FactoryDispatchJavaScriptTaskKind =
+  (typeof FactoryDispatchJavaScriptTaskKind)[keyof typeof FactoryDispatchJavaScriptTaskKind];
+export const FactoryArtifactKind = {
+  // Final session result artifact.
+  FactoryArtifactKindFINALRESULT: "FINAL_RESULT",
+  // Child dispatch result artifact.
+  FactoryArtifactKindCHILDRESULT: "CHILD_RESULT",
+  // Finding artifact produced by a workflow task.
+  FactoryArtifactKindFINDING: "FINDING",
+  // Patch artifact produced by a workflow task.
+  FactoryArtifactKindPATCH: "PATCH",
+  // Log artifact produced by a workflow task.
+  FactoryArtifactKindLOG: "LOG",
+  // Dataset artifact produced by a workflow task.
+  FactoryArtifactKindDATASET: "DATASET",
+  // JavaScript workflow checkpoint bundle owned by the orchestrator runtime.
+  FactoryArtifactKindCHECKPOINT: "CHECKPOINT",
+  // Worktree summary artifact produced by a workflow task.
+  FactoryArtifactKindWORKTREESUMMARY: "WORKTREE_SUMMARY",
+} as const;
+export type FactoryArtifactKind =
+  (typeof FactoryArtifactKind)[keyof typeof FactoryArtifactKind];
+export const FactoryArtifactVisibility = {
+  // Customer-visible artifact metadata and authorized content access.
+  FactoryArtifactVisibilityPUBLIC: "PUBLIC",
+  // Orchestrator-owned checkpoint payload kept behind refs and internal store records.
+  FactoryArtifactVisibilityINTERNALCHECKPOINT: "INTERNAL_CHECKPOINT",
+} as const;
+export type FactoryArtifactVisibility =
+  (typeof FactoryArtifactVisibility)[keyof typeof FactoryArtifactVisibility];
+export const FactoryArtifactAuditMode = {
+  // Artifact was captured without additional audit processing.
+  FactoryArtifactAuditModeNONE: "NONE",
+  // Artifact content was redacted before storage.
+  FactoryArtifactAuditModeREDACTED: "REDACTED",
+  // Artifact content was captured in full for authorized inspection.
+  FactoryArtifactAuditModeFULL: "FULL",
+} as const;
+export type FactoryArtifactAuditMode =
+  (typeof FactoryArtifactAuditMode)[keyof typeof FactoryArtifactAuditMode];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",
@@ -3780,6 +4395,12 @@ export const FactoryEventType = {
   FactoryEventTypeFactoryStateResponse: "FACTORY_STATE_RESPONSE",
   // A factory run response ended and final metadata is available.
   FactoryEventTypeRunResponse: "RUN_RESPONSE",
+  // A JavaScript workflow checkpoint reference was recorded without exposing raw VM state.
+  FactoryEventTypeJavaScriptCheckpointRef: "JAVASCRIPT_CHECKPOINT_REF",
+  // A JavaScript workflow phase transition was recorded without using Petri marking terminology.
+  FactoryEventTypeJavaScriptPhaseChange: "JAVASCRIPT_PHASE_CHANGE",
+  // A customer-visible factory artifact was created without exposing raw artifact bodies.
+  FactoryEventTypeArtifactCreated: "ARTIFACT_CREATED",
 } as const;
 export type FactoryEventType =
   (typeof FactoryEventType)[keyof typeof FactoryEventType];
@@ -3881,6 +4502,19 @@ export const FactorySaveMode = {
 } as const;
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
+export const FactoryOrchestratorKind = {
+  // Petri-net orchestration backed by work types, workers, and workstations.
+  PETRI: "PETRI",
+  // JavaScript workflow orchestration backed by authored source identity and policy.
+  JAVASCRIPT: "JAVASCRIPT",
+} as const;
+export type FactoryOrchestratorKind =
+  (typeof FactoryOrchestratorKind)[keyof typeof FactoryOrchestratorKind];
+export const FactoryOrchestratorJavaScriptInlineSourceEncoding = {
+  utf_8: "utf-8",
+} as const;
+export type FactoryOrchestratorJavaScriptInlineSourceEncoding =
+  (typeof FactoryOrchestratorJavaScriptInlineSourceEncoding)[keyof typeof FactoryOrchestratorJavaScriptInlineSourceEncoding];
 export const InvocationReturnPolicy = {
   // Use the invocation-submitted work item terminal content as the primary result.
   InvocationReturnPolicySubmittedWorkTerminal: "SUBMITTED_WORK_TERMINAL",

@@ -1,0 +1,11 @@
+type: string
+description: >-
+  Authored orchestration engine for one factory. PETRI factories use the existing
+  Petri graph semantics. JAVASCRIPT factories use workflow source identity and
+  policy instead of Petri graph fields.
+enum:
+  - PETRI
+  - JAVASCRIPT
+x-enum-descriptions:
+  - Petri-net orchestration backed by work types, workers, and workstations.
+  - JavaScript workflow orchestration backed by authored source identity and policy.
