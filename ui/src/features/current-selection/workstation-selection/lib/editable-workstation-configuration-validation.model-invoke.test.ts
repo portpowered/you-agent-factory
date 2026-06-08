@@ -80,6 +80,58 @@ describe("validateEditableWorkstationDraft model invoke", () => {
     expect(hasEditableWorkstationValidationErrors(errors)).toBe(true);
   });
 
+  it("requires a model worker before saving MODEL_INVOKE drafts", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...modelInvokeDraft,
+        workerName: "",
+        operation: "TTS",
+        prompt: "",
+      },
+      modelInvokeValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+
+    expect(errors.workerName).toBe(
+      editableWorkstationValidationMessages.editableConfigurationWorkerRequired,
+    );
+  });
+
+  it("blocks duplicate model-invoke binding slots", () => {
+    const errors = validateEditableWorkstationDraft(
+      {
+        ...modelInvokeDraft,
+        workerName: "tts-worker",
+        operation: "TTS",
+        operationBindings: [
+          {
+            slot: "text",
+            configText: "one",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+          {
+            slot: "text",
+            configText: "two",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+        ],
+        prompt: "",
+      },
+      modelInvokeValues,
+      { status: "idle" },
+      editableWorkstationValidationMessages,
+    );
+
+    expect(errors["operationBindings[text]"]).toBe(
+      editableWorkstationValidationMessages.editableConfigurationModelInvokeBindingDuplicate(
+        "text",
+      ),
+    );
+  });
+
   it("allows optional model-invoke bindings to remain omitted", () => {
     const valuesWithOptionalSlot = {
       ...modelInvokeValues,

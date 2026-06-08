@@ -179,6 +179,41 @@ describe("workstation model invoke binding validation", () => {
     );
   });
 
+  it("accepts valid model-invoke bindings without validation errors", () => {
+    const operation = resolveModelWorkerOperations(
+      modelInvokeFactory,
+      "tts-worker",
+    )[0];
+    const messages = {
+      bindingDuplicate: (slotName: string) => `duplicate ${slotName}`,
+      bindingRequired: (slotName: string) => `required ${slotName}`,
+      bindingSummary: "fix bindings",
+    };
+
+    expect(
+      validateEditableModelInvokeBindings(
+        [
+          {
+            slot: "text",
+            configText: "hello",
+            defaultContentText: "",
+            selector: { label: "", role: "", slot: "", type: "" },
+          },
+        ],
+        operation,
+        messages,
+      ),
+    ).toEqual({});
+    expect(
+      modelInvokeBindingDraftHasContent({
+        slot: "text",
+        configText: "",
+        defaultContentText: "",
+        selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
+      }),
+    ).toBe(true);
+  });
+
   it("validates required slots and duplicate bindings", () => {
     const operation = resolveModelWorkerOperations(
       modelInvokeFactory,
