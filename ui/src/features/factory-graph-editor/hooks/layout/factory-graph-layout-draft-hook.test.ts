@@ -270,6 +270,68 @@ describe("useFactoryGraphLayoutDraftState edge waypoint edits", () => {
     expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
   });
 
+  it("records waypoint add, move, and remove commands with undo and redo", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-waypoint-history",
+      }),
+    );
+
+    act(() => {
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 10, y: 20 });
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 30, y: 40 });
+      result.current.moveEdgeWaypoint(EDGE_ID, 1, { x: 35, y: 45 });
+    });
+
+    expect(result.current.layoutDirty).toBe(true);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 35, y: 45 },
+    ]);
+    expect(result.current.canUndoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+    expect(result.current.canRedoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
+    expect(result.current.layoutDirty).toBe(false);
+
+    act(() => {
+      result.current.redoLayout();
+      result.current.redoLayout();
+      result.current.redoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 35, y: 45 },
+    ]);
+    expect(result.current.layoutDirty).toBe(true);
+
+    act(() => {
+      result.current.removeEdgeWaypoint(EDGE_ID, 0);
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 35, y: 45 },
+    ]);
+  });
+
   it("adopts saved waypoint layout after reload without topology dirty state", () => {
     const savedLayoutDocument = {
       ...baseFactoryDefinition,

@@ -15,6 +15,8 @@ export interface FactoryGraphLayoutPerformanceBudget {
   dragSingleNodeMs: number;
   initialProjectionMs: number;
   saveLayoutRecomputationMs: number;
+  waypointHistoryMs: number;
+  waypointEditMs: number;
 }
 
 export const FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS: Record<
@@ -26,18 +28,24 @@ export const FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS: Record<
     dragSingleNodeMs: 5,
     dragMultiNodeMs: 25,
     saveLayoutRecomputationMs: 25,
+    waypointEditMs: 5,
+    waypointHistoryMs: 5,
   },
   fiveHundred: {
     initialProjectionMs: 35_000,
     dragSingleNodeMs: 5,
     dragMultiNodeMs: 50,
     saveLayoutRecomputationMs: 50,
+    waypointEditMs: 5,
+    waypointHistoryMs: 10,
   },
   stressThousand: {
     initialProjectionMs: 90_000,
     dragSingleNodeMs: 10,
     dragMultiNodeMs: 100,
     saveLayoutRecomputationMs: 100,
+    waypointEditMs: 10,
+    waypointHistoryMs: 15,
   },
 };
 

@@ -18,6 +18,7 @@ For the 500 node fixture:
 
 - initial projection: 35000 ms via `projectFactoryGraphWithCanonicalLayout`
 - drag response: 5 ms single-node move, 50 ms 20-node delta move
+- waypoint edit and undo/redo: 5 ms add/move/remove cycle, 10 ms command apply plus inverse
 - save-related layout recomputation: 50 ms median for dirty checks plus pending layout application
 
 The 1000 node stress fixture uses a 90000 ms projection budget plus looser drag thresholds so severe regressions are caught without blocking ordinary CI on the same thresholds as the 500 node case.

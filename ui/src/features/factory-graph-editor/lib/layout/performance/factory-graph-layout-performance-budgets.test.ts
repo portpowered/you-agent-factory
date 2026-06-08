@@ -12,6 +12,8 @@ describe("factory graph layout performance budgets", () => {
       dragSingleNodeMs: 5,
       dragMultiNodeMs: 25,
       saveLayoutRecomputationMs: 25,
+      waypointEditMs: 5,
+      waypointHistoryMs: 5,
     });
     expect(FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS.fiveHundred.initialProjectionMs).toBe(
       35_000,

@@ -5,6 +5,7 @@ import {
   createMoveFactoryLayoutNodeCommand,
   createMoveFactoryLayoutNodesCommand,
   createResetFactoryLayoutCommand,
+  createUpdateFactoryLayoutEdgeWaypointsCommand,
   createUpdateFactoryLayoutViewportCommand,
   factoryLayoutCommandAffectedNodeIds,
   factoryLayoutCommandReferencesDeletedNodeIds,
@@ -12,10 +13,20 @@ import {
   type FactoryLayoutCommand,
 } from "./factory-graph-layout-commands";
 import {
+  addFactoryLayoutEdgeWaypoint,
+  factoryLayoutEdgeWaypoints,
+  moveFactoryLayoutEdgeWaypoint,
+  removeFactoryLayoutEdgeWaypoint,
+  setFactoryLayoutEdgeWaypoints,
+} from "../factory-graph-layout-edge-waypoints";
+import {
   createDefaultFactoryLayout,
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
 } from "../factory-graph-layout-operations";
+
+const EDGE_ID =
+  "workstation-output:workstation:draft->work-state:story:done";
 
 function requireCommand(command: FactoryLayoutCommand | null): FactoryLayoutCommand {
   expect(command).not.toBeNull();
@@ -141,6 +152,126 @@ describe("factory graph layout commands", () => {
       x: 40,
       y: 80,
     });
+  });
+
+  it("creates and inverts edge waypoint updates without whole-document snapshots", () => {
+    const layout = addFactoryLayoutEdgeWaypoint(
+      addFactoryLayoutEdgeWaypoint(createDefaultFactoryLayout(), EDGE_ID, {
+        x: 10,
+        y: 20,
+      }),
+      EDGE_ID,
+      { x: 30, y: 40 },
+    );
+    const command = requireCommand(
+      createUpdateFactoryLayoutEdgeWaypointsCommand({
+        edgeId: EDGE_ID,
+        layout,
+        to: [{ x: 10, y: 20 }, { x: 50, y: 60 }],
+      }),
+    );
+
+    expect(command).toEqual({
+      type: "update-edge-waypoints",
+      edgeId: EDGE_ID,
+      from: [
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ],
+      to: [
+        { x: 10, y: 20 },
+        { x: 50, y: 60 },
+      ],
+    });
+
+    const nextLayout = applyFactoryLayoutCommand(layout, command);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command),
+    );
+
+    expect(factoryLayoutEdgeWaypoints(nextLayout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 50, y: 60 },
+    ]);
+    expect(factoryLayoutEdgeWaypoints(undoneLayout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+    ]);
+  });
+
+  it("restores generated routing when undoing the first authored waypoint", () => {
+    const layout = createDefaultFactoryLayout();
+    const command = requireCommand(
+      createUpdateFactoryLayoutEdgeWaypointsCommand({
+        edgeId: EDGE_ID,
+        layout,
+        to: [{ x: 120, y: 160 }],
+      }),
+    );
+
+    const nextLayout = applyFactoryLayoutCommand(layout, command);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command),
+    );
+
+    expect(factoryLayoutEdgeWaypoints(nextLayout, EDGE_ID)).toEqual([
+      { x: 120, y: 160 },
+    ]);
+    expect(factoryLayoutEdgeWaypoints(undoneLayout, EDGE_ID)).toBeUndefined();
+  });
+
+  it("creates waypoint removal commands that preserve remaining waypoint order", () => {
+    const layout = setFactoryLayoutEdgeWaypoints(createDefaultFactoryLayout(), EDGE_ID, [
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+      { x: 50, y: 60 },
+    ]);
+    const nextLayout = removeFactoryLayoutEdgeWaypoint(layout, EDGE_ID, 1);
+    const command = requireCommand(
+      createUpdateFactoryLayoutEdgeWaypointsCommand({
+        edgeId: EDGE_ID,
+        layout,
+        to: factoryLayoutEdgeWaypoints(nextLayout, EDGE_ID) ?? null,
+      }),
+    );
+
+    const appliedLayout = applyFactoryLayoutCommand(layout, command);
+    const undoneLayout = applyFactoryLayoutCommand(
+      appliedLayout,
+      invertFactoryLayoutCommand(command),
+    );
+
+    expect(factoryLayoutEdgeWaypoints(appliedLayout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 50, y: 60 },
+    ]);
+    expect(factoryLayoutEdgeWaypoints(undoneLayout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+      { x: 50, y: 60 },
+    ]);
+  });
+
+  it("skips waypoint commands when the target matches the current layout", () => {
+    const layout = moveFactoryLayoutEdgeWaypoint(
+      addFactoryLayoutEdgeWaypoint(createDefaultFactoryLayout(), EDGE_ID, {
+        x: 10,
+        y: 20,
+      }),
+      EDGE_ID,
+      0,
+      { x: 30, y: 40 },
+    );
+
+    expect(
+      createUpdateFactoryLayoutEdgeWaypointsCommand({
+        edgeId: EDGE_ID,
+        layout,
+        to: factoryLayoutEdgeWaypoints(layout, EDGE_ID) ?? null,
+      }),
+    ).toBeNull();
   });
 
   it("flags commands that reference deleted graph ids", () => {
