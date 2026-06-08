@@ -239,6 +239,45 @@ describe("EditableConfigurationModelInvokeFields", () => {
     ).toBeInTheDocument();
   });
 
+  it("surfaces operation validation and field-level errors", () => {
+    render(
+      <EditableConfigurationModelInvokeFields
+        messages={editableConfigurationSectionMessages}
+        state={buildEditableConfigurationSectionReadyState({
+          workstationType: "MODEL_INVOKE",
+          draft: {
+            operation: "TTS",
+            workerName: "tts-worker",
+          },
+          operationOptionsState: {
+            operations: [
+              {
+                name: "TTS",
+                inputs: [
+                  { name: "text", contentTypes: ["TEXT"], required: true },
+                ],
+                outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+              },
+            ],
+            options: ["TTS"],
+            status: "ready",
+          },
+          workerOptionsState: {
+            options: ["tts-worker"],
+            status: "ready",
+          },
+        })}
+        validationErrors={{
+          operation: "Operation is required.",
+          workerName: "Worker is required.",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Operation is required.")).toBeInTheDocument();
+    expect(screen.getByText("Worker is required.")).toBeInTheDocument();
+  });
+
   it("surfaces operation option empty and error states", () => {
     const { rerender } = render(
       <EditableConfigurationModelInvokeFields

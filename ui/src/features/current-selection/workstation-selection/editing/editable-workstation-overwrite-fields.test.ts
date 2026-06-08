@@ -100,6 +100,36 @@ describe("editable workstation overwrite fields", () => {
     ).toEqual([]);
   });
 
+  it("flags behavior and runner drift for prompt-oriented workstations", () => {
+    const sessionStartDraft: EditableWorkstationDraft = {
+      ...baseDraft,
+      behavior: "STANDARD",
+      runnerName: "codex",
+      workstationType: "MODEL_WORKSTATION",
+      operation: "",
+      operationBindings: [],
+      prompt: "Review the story.",
+    };
+    const latestDefinitionDraft: EditableWorkstationDraft = {
+      ...sessionStartDraft,
+      behavior: "CRON",
+      runnerName: "reviewer",
+    };
+    const draft: EditableWorkstationDraft = {
+      ...sessionStartDraft,
+      behavior: "STANDARD",
+      runnerName: "codex",
+    };
+
+    expect(
+      resolveEditableWorkstationOverwriteFields(
+        sessionStartDraft,
+        draft,
+        latestDefinitionDraft,
+      ),
+    ).toEqual(expect.arrayContaining(["behavior", "runner"]));
+  });
+
   it("formats model-invoke overwrite labels for the warning banner", () => {
     expect(
       formatEditableOverwriteFieldLabels(
