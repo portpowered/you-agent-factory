@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+description: Relative links for polling and inspecting one durable factory session.
+properties:
+  session:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}.
+  events:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}/events.
+  results:
+    type: string
+    description: Relative URL for GET /factory-sessions/{session_id}/results.
+  status:
+    type: string
+    description: Relative URL for polling durable session status.

@@ -1,0 +1,29 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - status
+  - orchestratorKind
+  - resolvedSource
+properties:
+  sessionId:
+    type: string
+    description: Stable durable factory-session identifier.
+  status:
+    $ref: './FactorySessionDurableLifecycleStatus.yaml'
+  orchestratorKind:
+    $ref: '../data-models/FactoryOrchestratorKind.yaml'
+  dialect:
+    type: string
+    description: Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
+  resolvedSource:
+    $ref: './FactorySessionResolvedSourceIdentity.yaml'
+  sourceHash:
+    type: string
+    description: Stable hash of the resolved workflow or factory source when available.
+  effectivePolicyHash:
+    type: string
+    description: Stable hash of the effective approved orchestrator policy when available.
+  links:
+    $ref: './FactorySessionExecutionLinks.yaml'
+    description: Polling and inspection links for async clients.

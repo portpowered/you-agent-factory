@@ -123,6 +123,14 @@ func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.R
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
+	s.writeError(w, http.StatusNotImplemented, "durable factory session execution is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
+	s.writeError(w, http.StatusNotImplemented, "durable factory session execution is not implemented", "INTERNAL_ERROR")
+}
+
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {

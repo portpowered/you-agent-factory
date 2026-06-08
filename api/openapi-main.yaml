@@ -88,6 +88,10 @@ paths:
       operationId: invokeFactorySessionBySessionId
       summary: Invoke one factory session and return its primary result
       description: >-
+        Live-session compatibility API for text-first invocations against an
+        already-open factory session. This route is not the primary durable
+        workflow execution entrypoint; use POST /factory-sessions/async or POST
+        /factory-sessions/sync for dynamic workflow-backed durable execution.
         Resolves one text-first invocation input, submits it to the selected live
         factory session, waits for terminal primary-result selection, and returns
         the result using the factory's invocationReturn policy. When
@@ -480,6 +484,72 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/async:
+    post:
+      tags:
+        - Factory
+      operationId: startDurableFactorySessionAsync
+      summary: Start durable factory session execution asynchronously
+      description: >-
+        Primary durable execution entrypoint for dynamic workflow-backed factory
+        sessions. Accepts the normalized FactorySessionExecutionRequest, resolves
+        the requested source, and returns session identity plus polling links
+        without waiting for terminal completion. Replaying the same requestId with
+        the same normalized source, args, orchestrator, and requested policy
+        returns the existing session instead of starting duplicate work. Reusing
+        requestId with materially different inputs returns 409 Conflict.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionExecutionRequest'
+      responses:
+        '202':
+          description: Durable session execution was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/ExecutionRequestIdConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/sync:
+    post:
+      tags:
+        - Factory
+      operationId: startDurableFactorySessionSync
+      summary: Start durable factory session execution synchronously
+      description: >-
+        Durable execution entrypoint that waits for terminal completion or a sync
+        timeout before returning. Accepts the same normalized
+        FactorySessionExecutionRequest as POST /factory-sessions/async. When the
+        session reaches a terminal result before timeout, the response includes
+        FactorySessionResult. Timeout responses use syncOutcome = TIMED_OUT and
+        must not imply the session was canceled unless wait.cancelOnTimeout was
+        explicitly true in the request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionExecutionRequest'
+      responses:
+        '200':
+          description: Sync durable execution completed, timed out, or returned while still running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionSyncExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/ExecutionRequestIdConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions:
     get:
       tags:
@@ -501,7 +571,15 @@ paths:
         - Factory
       operationId: openFactorySession
       summary: Open another live factory session
-      description: Opens another live factory session from a folder path and optional target selection. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+      description: >-
+        Live-session compatibility API for opening workspace tabs from a folder
+        path and optional target selection. This route is not the primary durable
+        workflow execution entrypoint; use POST /factory-sessions/async or POST
+        /factory-sessions/sync for dynamic workflow-backed durable execution.
+        When `validateOnly` is true, the request validates the folder and optional
+        target selection without creating a session. When the folder exposes more
+        than one runnable target and no explicit target was provided, the response
+        returns typed target metadata instead of creating a session yet.
       requestBody:
         required: true
         content:
@@ -817,6 +895,8 @@ components:
       $ref: './components/responses/SaveCurrentFactoryConflict.yaml'
     MoveWorkConflict:
       $ref: './components/responses/MoveWorkConflict.yaml'
+    ExecutionRequestIdConflict:
+      $ref: './components/responses/ExecutionRequestIdConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
   schemas:
@@ -1012,6 +1092,30 @@ components:
       $ref: './components/schemas/api/OpenFactorySessionRequest.yaml'
     OpenFactorySessionResponse:
       $ref: './components/schemas/api/OpenFactorySessionResponse.yaml'
+    FactorySessionExecutionRequest:
+      $ref: './components/schemas/api/FactorySessionExecutionRequest.yaml'
+    FactorySessionExecutionSource:
+      $ref: './components/schemas/api/FactorySessionExecutionSource.yaml'
+    FactorySessionExecutionSourceKind:
+      $ref: './components/schemas/api/FactorySessionExecutionSourceKind.yaml'
+    FactorySessionExecutionInlineWorkflow:
+      $ref: './components/schemas/api/FactorySessionExecutionInlineWorkflow.yaml'
+    FactorySessionRequestedPolicy:
+      $ref: './components/schemas/api/FactorySessionRequestedPolicy.yaml'
+    FactorySessionExecutionWaitOptions:
+      $ref: './components/schemas/api/FactorySessionExecutionWaitOptions.yaml'
+    FactorySessionResolvedSourceIdentity:
+      $ref: './components/schemas/api/FactorySessionResolvedSourceIdentity.yaml'
+    FactorySessionDurableLifecycleStatus:
+      $ref: './components/schemas/api/FactorySessionDurableLifecycleStatus.yaml'
+    FactorySessionExecutionLinks:
+      $ref: './components/schemas/api/FactorySessionExecutionLinks.yaml'
+    FactorySessionExecutionResponse:
+      $ref: './components/schemas/api/FactorySessionExecutionResponse.yaml'
+    FactorySessionSyncExecutionOutcome:
+      $ref: './components/schemas/api/FactorySessionSyncExecutionOutcome.yaml'
+    FactorySessionSyncExecutionResponse:
+      $ref: './components/schemas/api/FactorySessionSyncExecutionResponse.yaml'
     LoadableProviderSessionRef:
       $ref: './components/schemas/api/LoadableProviderSessionRef.yaml'
     LoadableProviderSessionProvider:

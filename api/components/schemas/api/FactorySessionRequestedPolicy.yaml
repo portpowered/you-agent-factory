@@ -1,0 +1,12 @@
+type: object
+additionalProperties: true
+description: >-
+  Caller-requested orchestrator policy for one durable execution. Runtimes may
+  require approval before the requested policy becomes effective. The effective
+  approved policy hash is returned separately from this requested payload.
+properties:
+  policyHash:
+    type: string
+    description: >-
+      Optional stable hash of the requested policy object when the caller already
+      computed one for idempotency comparisons.

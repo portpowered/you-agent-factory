@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+required:
+  - inlineSource
+description: Inline workflow source carried directly in a durable execution request.
+properties:
+  dialect:
+    type: string
+    description: Optional JavaScript workflow dialect label for the inline source.
+  inlineSource:
+    $ref: '../data-models/FactoryOrchestratorJavaScriptInlineSource.yaml'
+  entrypoint:
+    type: string
+    description: Optional exported entrypoint or phase name used to start the workflow.
+  metadata:
+    $ref: '../shared/StringMap.yaml'
+    description: Free-form workflow metadata for authoring and diagnostics.

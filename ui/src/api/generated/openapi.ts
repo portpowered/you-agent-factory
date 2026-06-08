@@ -39,7 +39,7 @@ export interface paths {
     put?: never;
     /**
      * Invoke one factory session and return its primary result
-     * @description Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+     * @description Live-session compatibility API for text-first invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
      */
     post: operations["invokeFactorySessionBySessionId"];
     delete?: never;
@@ -328,6 +328,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/async": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start durable factory session execution asynchronously
+     * @description Primary durable execution entrypoint for dynamic workflow-backed factory sessions. Accepts the normalized FactorySessionExecutionRequest, resolves the requested source, and returns session identity plus polling links without waiting for terminal completion. Replaying the same requestId with the same normalized source, args, orchestrator, and requested policy returns the existing session instead of starting duplicate work. Reusing requestId with materially different inputs returns 409 Conflict.
+     */
+    post: operations["startDurableFactorySessionAsync"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/sync": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Start durable factory session execution synchronously
+     * @description Durable execution entrypoint that waits for terminal completion or a sync timeout before returning. Accepts the same normalized FactorySessionExecutionRequest as POST /factory-sessions/async. When the session reaches a terminal result before timeout, the response includes FactorySessionResult. Timeout responses use syncOutcome = TIMED_OUT and must not imply the session was canceled unless wait.cancelOnTimeout was explicitly true in the request.
+     */
+    post: operations["startDurableFactorySessionSync"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions": {
     parameters: {
       query?: never;
@@ -343,7 +383,7 @@ export interface paths {
     put?: never;
     /**
      * Open another live factory session
-     * @description Opens another live factory session from a folder path and optional target selection. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+     * @description Live-session compatibility API for opening workspace tabs from a folder path and optional target selection. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
      */
     post: operations["openFactorySession"];
     delete?: never;
@@ -1316,6 +1356,140 @@ export interface components {
       initsNewFactory?: boolean;
       /** @description Absolute resolved session folder path when initsNewFactory is true. */
       folderPath?: string;
+    };
+    /** @description Normalized durable factory-session execution request shared by async and sync start routes. Replaying the same requestId with materially different source, args, orchestrator, or requested policy is rejected with an idempotency conflict. */
+    FactorySessionExecutionRequest: {
+      /** @description Caller-supplied idempotency key. Replays with the same normalized source, args, orchestrator, and requested policy return the existing session instead of starting duplicate work. */
+      requestId: string;
+      source: components["schemas"]["FactorySessionExecutionSource"];
+      /** @description Structured workflow invocation arguments validated by the resolved source. */
+      args?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional orchestrator override when the resolved source does not fully determine orchestration. */
+      orchestrator?: components["schemas"]["FactoryOrchestrator"];
+      /** @description Caller-requested orchestrator policy before approval, if required. */
+      requestedPolicy?: components["schemas"]["FactorySessionRequestedPolicy"];
+      /** @description Optional timeout and cancel-on-timeout behavior, primarily for sync execution. */
+      wait?: components["schemas"]["FactorySessionExecutionWaitOptions"];
+    };
+    /** @description Durable execution source selector. Exactly one payload field matching `kind` must be supplied. Resolution order for workflow file and workflow name sources is documented on the durable execution routes. */
+    FactorySessionExecutionSource: {
+      kind: components["schemas"]["FactorySessionExecutionSourceKind"];
+      /** @description Stored named factory identifier when kind = FACTORY_ID. */
+      factoryId?: string;
+      /** @description Inline factory definition when kind = FACTORY_INLINE. */
+      factoryInline?: components["schemas"]["Factory"];
+      /** @description Workflow file path or reference when kind = WORKFLOW_FILE. */
+      workflowFile?: string;
+      /** @description Authored workflow name when kind = WORKFLOW_NAME. */
+      workflowName?: string;
+      /** @description Inline workflow source when kind = INLINE_WORKFLOW. */
+      inlineWorkflow?: components["schemas"]["FactorySessionExecutionInlineWorkflow"];
+    };
+    /**
+     * @description Durable execution source category. Each kind selects which source field on FactorySessionExecutionSource is authoritative for workflow resolution.
+     * @enum {string}
+     */
+    FactorySessionExecutionSourceKind: FactorySessionExecutionSourceKind;
+    /** @description Inline workflow source carried directly in a durable execution request. */
+    FactorySessionExecutionInlineWorkflow: {
+      /** @description Optional JavaScript workflow dialect label for the inline source. */
+      dialect?: string;
+      inlineSource: components["schemas"]["FactoryOrchestratorJavaScriptInlineSource"];
+      /** @description Optional exported entrypoint or phase name used to start the workflow. */
+      entrypoint?: string;
+      /** @description Free-form workflow metadata for authoring and diagnostics. */
+      metadata?: components["schemas"]["StringMap"];
+    };
+    /** @description Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload. */
+    FactorySessionRequestedPolicy: {
+      /** @description Optional stable hash of the requested policy object when the caller already computed one for idempotency comparisons. */
+      policyHash?: string;
+    } & {
+      [key: string]: unknown;
+    };
+    /** @description Optional wait and timeout controls for durable execution. Sync routes use these options to bound how long the server waits for a terminal result. Async routes may accept them for future compatibility but do not block on terminal completion. */
+    FactorySessionExecutionWaitOptions: {
+      /**
+       * Format: int64
+       * @description Maximum wait budget in milliseconds for sync execution.
+       */
+      timeoutMillis?: number;
+      /**
+       * @description When true and a sync wait ends by timeout, the server may cancel the session. When false or omitted, timeout responses must not imply the session was canceled.
+       * @default false
+       */
+      cancelOnTimeout: boolean;
+    };
+    /** @description Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts. */
+    FactorySessionResolvedSourceIdentity: {
+      kind: components["schemas"]["FactorySessionExecutionSourceKind"];
+      /** @description Safe customer-facing source reference after resolution. */
+      sourceRef?: string;
+      /** @description Resolved workflow dialect when applicable. */
+      dialect?: string;
+      /** @description Safe resolved source metadata for clients and dashboards. */
+      metadata?: components["schemas"]["StringMap"];
+    };
+    /**
+     * @description Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+     * @enum {string}
+     */
+    FactorySessionDurableLifecycleStatus: FactorySessionDurableLifecycleStatus;
+    /** @description Relative links for polling and inspecting one durable factory session. */
+    FactorySessionExecutionLinks: {
+      /** @description Relative URL for GET /factory-sessions/{session_id}. */
+      session?: string;
+      /** @description Relative URL for GET /factory-sessions/{session_id}/events. */
+      events?: string;
+      /** @description Relative URL for GET /factory-sessions/{session_id}/results. */
+      results?: string;
+      /** @description Relative URL for polling durable session status. */
+      status?: string;
+    };
+    FactorySessionExecutionResponse: {
+      /** @description Stable durable factory-session identifier. */
+      sessionId: string;
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT. */
+      dialect?: string;
+      resolvedSource: components["schemas"]["FactorySessionResolvedSourceIdentity"];
+      /** @description Stable hash of the resolved workflow or factory source when available. */
+      sourceHash?: string;
+      /** @description Stable hash of the effective approved orchestrator policy when available. */
+      effectivePolicyHash?: string;
+      /** @description Polling and inspection links for async clients. */
+      links?: components["schemas"]["FactorySessionExecutionLinks"];
+    };
+    /**
+     * @description Sync durable execution wait outcome. TIMED_OUT does not imply the session was canceled unless the request set wait.cancelOnTimeout to true.
+     * @enum {string}
+     */
+    FactorySessionSyncExecutionOutcome: FactorySessionSyncExecutionOutcome;
+    /** @description Sync durable execution response. Returns the normalized execution identity plus sync wait outcome and, when available before timeout, the terminal FactorySessionResult. */
+    FactorySessionSyncExecutionResponse: {
+      /** @description Stable durable factory-session identifier. */
+      sessionId: string;
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT. */
+      dialect?: string;
+      resolvedSource: components["schemas"]["FactorySessionResolvedSourceIdentity"];
+      /** @description Stable hash of the resolved workflow or factory source when available. */
+      sourceHash?: string;
+      /** @description Stable hash of the effective approved orchestrator policy when available. */
+      effectivePolicyHash?: string;
+      /** @description Inspection links for the started session. */
+      links?: components["schemas"]["FactorySessionExecutionLinks"];
+      syncOutcome: components["schemas"]["FactorySessionSyncExecutionOutcome"];
+      /** @description Terminal session result when syncOutcome = COMPLETED. */
+      result?: components["schemas"]["FactorySessionResult"];
+      /** @description True when syncOutcome = TIMED_OUT. */
+      timedOut?: boolean;
+      /** @description True only when timedOut is true and the request explicitly set wait.cancelOnTimeout to true. */
+      sessionCanceledByTimeout?: boolean;
     };
     LoadableProviderSessionRef: {
       provider: components["schemas"]["LoadableProviderSessionProvider"];
@@ -3228,6 +3402,15 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description The supplied requestId was already used with materially different source, args, orchestrator, or requested policy. */
+    ExecutionRequestIdConflict: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
     /** @description Server failed while reading or building runtime state. */
     InternalError: {
       headers: {
@@ -3741,6 +3924,60 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  startDurableFactorySessionAsync: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionExecutionRequest"];
+      };
+    };
+    responses: {
+      /** @description Durable session execution was accepted. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionExecutionResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      409: components["responses"]["ExecutionRequestIdConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  startDurableFactorySessionSync: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionExecutionRequest"];
+      };
+    };
+    responses: {
+      /** @description Sync durable execution completed, timed out, or returned while still running. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionSyncExecutionResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      409: components["responses"]["ExecutionRequestIdConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   listFactorySessions: {
     parameters: {
       query?: never;
@@ -4172,6 +4409,8 @@ export const ErrorResponseCode = {
   STALE_FACTORY_VERSION: "STALE_FACTORY_VERSION",
   // Operator move requestId was already applied for this session.
   MOVE_WORK_REQUEST_ALREADY_APPLIED: "MOVE_WORK_REQUEST_ALREADY_APPLIED",
+  // Durable execution requestId was reused with materially different inputs.
+  EXECUTION_REQUEST_ID_CONFLICT: "EXECUTION_REQUEST_ID_CONFLICT",
   // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
   // The server failed while handling an otherwise valid request.
@@ -4293,6 +4532,46 @@ export const FactoryArtifactAuditMode = {
 } as const;
 export type FactoryArtifactAuditMode =
   (typeof FactoryArtifactAuditMode)[keyof typeof FactoryArtifactAuditMode];
+export const FactorySessionExecutionSourceKind = {
+  // Resolve a stored named factory by customer-facing factory id.
+  FactorySessionExecutionSourceKindFactoryId: "FACTORY_ID",
+  // Resolve an inline factory definition supplied in the execution request.
+  FactorySessionExecutionSourceKindFactoryInline: "FACTORY_INLINE",
+  // Resolve a workflow file using documented workflow search order.
+  FactorySessionExecutionSourceKindWorkflowFile: "WORKFLOW_FILE",
+  // Resolve a workflow by authored workflow name using documented search order.
+  FactorySessionExecutionSourceKindWorkflowName: "WORKFLOW_NAME",
+  // Resolve inline workflow source supplied directly in the execution request.
+  FactorySessionExecutionSourceKindInlineWorkflow: "INLINE_WORKFLOW",
+} as const;
+export type FactorySessionExecutionSourceKind =
+  (typeof FactorySessionExecutionSourceKind)[keyof typeof FactorySessionExecutionSourceKind];
+export const FactorySessionDurableLifecycleStatus = {
+  FactorySessionDurableLifecycleStatusQueued: "QUEUED",
+  FactorySessionDurableLifecycleStatusAwaitingApproval: "AWAITING_APPROVAL",
+  FactorySessionDurableLifecycleStatusRunning: "RUNNING",
+  FactorySessionDurableLifecycleStatusPaused: "PAUSED",
+  FactorySessionDurableLifecycleStatusResuming: "RESUMING",
+  FactorySessionDurableLifecycleStatusSucceeded: "SUCCEEDED",
+  FactorySessionDurableLifecycleStatusFailed: "FAILED",
+  FactorySessionDurableLifecycleStatusCanceling: "CANCELING",
+  FactorySessionDurableLifecycleStatusCanceled: "CANCELED",
+  FactorySessionDurableLifecycleStatusTimedOut: "TIMED_OUT",
+  FactorySessionDurableLifecycleStatusInterrupted: "INTERRUPTED",
+  FactorySessionDurableLifecycleStatusTerminated: "TERMINATED",
+} as const;
+export type FactorySessionDurableLifecycleStatus =
+  (typeof FactorySessionDurableLifecycleStatus)[keyof typeof FactorySessionDurableLifecycleStatus];
+export const FactorySessionSyncExecutionOutcome = {
+  // The session reached a terminal result before the sync wait timeout.
+  FactorySessionSyncExecutionOutcomeCompleted: "COMPLETED",
+  // The sync wait ended by timeout before a terminal result was available.
+  FactorySessionSyncExecutionOutcomeTimedOut: "TIMED_OUT",
+  // The sync wait ended while the session was still non-terminal and no timeout occurred.
+  FactorySessionSyncExecutionOutcomeStillRunning: "STILL_RUNNING",
+} as const;
+export type FactorySessionSyncExecutionOutcome =
+  (typeof FactorySessionSyncExecutionOutcome)[keyof typeof FactorySessionSyncExecutionOutcome];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",

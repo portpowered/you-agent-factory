@@ -38,6 +38,7 @@ const (
 // Defines values for ErrorResponseCode.
 const (
 	BADREQUEST                    ErrorResponseCode = "BAD_REQUEST"
+	EXECUTIONREQUESTIDCONFLICT    ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
 	FACTORYALREADYEXISTS          ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
 	FACTORYNOTIDLE                ErrorResponseCode = "FACTORY_NOT_IDLE"
 	INTERNALERROR                 ErrorResponseCode = "INTERNAL_ERROR"
@@ -155,6 +156,31 @@ const (
 	FactorySaveModeUpsertNamedAndActivate FactorySaveMode = "UPSERT_NAMED_AND_ACTIVATE"
 )
 
+// Defines values for FactorySessionDurableLifecycleStatus.
+const (
+	FactorySessionDurableLifecycleStatusAwaitingApproval FactorySessionDurableLifecycleStatus = "AWAITING_APPROVAL"
+	FactorySessionDurableLifecycleStatusCanceled         FactorySessionDurableLifecycleStatus = "CANCELED"
+	FactorySessionDurableLifecycleStatusCanceling        FactorySessionDurableLifecycleStatus = "CANCELING"
+	FactorySessionDurableLifecycleStatusFailed           FactorySessionDurableLifecycleStatus = "FAILED"
+	FactorySessionDurableLifecycleStatusInterrupted      FactorySessionDurableLifecycleStatus = "INTERRUPTED"
+	FactorySessionDurableLifecycleStatusPaused           FactorySessionDurableLifecycleStatus = "PAUSED"
+	FactorySessionDurableLifecycleStatusQueued           FactorySessionDurableLifecycleStatus = "QUEUED"
+	FactorySessionDurableLifecycleStatusResuming         FactorySessionDurableLifecycleStatus = "RESUMING"
+	FactorySessionDurableLifecycleStatusRunning          FactorySessionDurableLifecycleStatus = "RUNNING"
+	FactorySessionDurableLifecycleStatusSucceeded        FactorySessionDurableLifecycleStatus = "SUCCEEDED"
+	FactorySessionDurableLifecycleStatusTerminated       FactorySessionDurableLifecycleStatus = "TERMINATED"
+	FactorySessionDurableLifecycleStatusTimedOut         FactorySessionDurableLifecycleStatus = "TIMED_OUT"
+)
+
+// Defines values for FactorySessionExecutionSourceKind.
+const (
+	FactorySessionExecutionSourceKindFactoryId      FactorySessionExecutionSourceKind = "FACTORY_ID"
+	FactorySessionExecutionSourceKindFactoryInline  FactorySessionExecutionSourceKind = "FACTORY_INLINE"
+	FactorySessionExecutionSourceKindInlineWorkflow FactorySessionExecutionSourceKind = "INLINE_WORKFLOW"
+	FactorySessionExecutionSourceKindWorkflowFile   FactorySessionExecutionSourceKind = "WORKFLOW_FILE"
+	FactorySessionExecutionSourceKindWorkflowName   FactorySessionExecutionSourceKind = "WORKFLOW_NAME"
+)
+
 // Defines values for FactorySessionJavaScriptScriptStatus.
 const (
 	FactorySessionJavaScriptScriptStatusFAILED   FactorySessionJavaScriptScriptStatus = "FAILED"
@@ -169,6 +195,13 @@ const (
 	FactorySessionStatusACTIVE   FactorySessionStatus = "ACTIVE"
 	FactorySessionStatusFINISHED FactorySessionStatus = "FINISHED"
 	FactorySessionStatusIDLE     FactorySessionStatus = "IDLE"
+)
+
+// Defines values for FactorySessionSyncExecutionOutcome.
+const (
+	FactorySessionSyncExecutionOutcomeCompleted    FactorySessionSyncExecutionOutcome = "COMPLETED"
+	FactorySessionSyncExecutionOutcomeStillRunning FactorySessionSyncExecutionOutcome = "STILL_RUNNING"
+	FactorySessionSyncExecutionOutcomeTimedOut     FactorySessionSyncExecutionOutcome = "TIMED_OUT"
 )
 
 // Defines values for FactorySessionTargetRefKind.
@@ -1279,6 +1312,118 @@ type FactorySessionBudgets struct {
 	MaxAgents *int `json:"maxAgents,omitempty"`
 }
 
+// FactorySessionDurableLifecycleStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+type FactorySessionDurableLifecycleStatus string
+
+// FactorySessionExecutionInlineWorkflow Inline workflow source carried directly in a durable execution request.
+type FactorySessionExecutionInlineWorkflow struct {
+	// Dialect Optional JavaScript workflow dialect label for the inline source.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// Entrypoint Optional exported entrypoint or phase name used to start the workflow.
+	Entrypoint *string `json:"entrypoint,omitempty"`
+
+	// InlineSource Inline JavaScript workflow source carried directly in the factory definition.
+	InlineSource FactoryOrchestratorJavaScriptInlineSource `json:"inlineSource"`
+	Metadata     *StringMap                                `json:"metadata,omitempty"`
+}
+
+// FactorySessionExecutionLinks Relative links for polling and inspecting one durable factory session.
+type FactorySessionExecutionLinks struct {
+	// Events Relative URL for GET /factory-sessions/{session_id}/events.
+	Events *string `json:"events,omitempty"`
+
+	// Results Relative URL for GET /factory-sessions/{session_id}/results.
+	Results *string `json:"results,omitempty"`
+
+	// Session Relative URL for GET /factory-sessions/{session_id}.
+	Session *string `json:"session,omitempty"`
+
+	// Status Relative URL for polling durable session status.
+	Status *string `json:"status,omitempty"`
+}
+
+// FactorySessionExecutionRequest Normalized durable factory-session execution request shared by async and sync start routes. Replaying the same requestId with materially different source, args, orchestrator, or requested policy is rejected with an idempotency conflict.
+type FactorySessionExecutionRequest struct {
+	// Args Structured workflow invocation arguments validated by the resolved source.
+	Args *map[string]interface{} `json:"args,omitempty"`
+
+	// Orchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+	Orchestrator *FactoryOrchestrator `json:"orchestrator,omitempty"`
+
+	// RequestId Caller-supplied idempotency key. Replays with the same normalized source, args, orchestrator, and requested policy return the existing session instead of starting duplicate work.
+	RequestId string `json:"requestId"`
+
+	// RequestedPolicy Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload.
+	RequestedPolicy *FactorySessionRequestedPolicy `json:"requestedPolicy,omitempty"`
+
+	// Source Durable execution source selector. Exactly one payload field matching `kind` must be supplied. Resolution order for workflow file and workflow name sources is documented on the durable execution routes.
+	Source FactorySessionExecutionSource `json:"source"`
+
+	// Wait Optional wait and timeout controls for durable execution. Sync routes use these options to bound how long the server waits for a terminal result. Async routes may accept them for future compatibility but do not block on terminal completion.
+	Wait *FactorySessionExecutionWaitOptions `json:"wait,omitempty"`
+}
+
+// FactorySessionExecutionResponse defines model for FactorySessionExecutionResponse.
+type FactorySessionExecutionResponse struct {
+	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	EffectivePolicyHash *string `json:"effectivePolicyHash,omitempty"`
+
+	// Links Relative links for polling and inspecting one durable factory session.
+	Links *FactorySessionExecutionLinks `json:"links,omitempty"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
+	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
+
+	// SessionId Stable durable factory-session identifier.
+	SessionId string `json:"sessionId"`
+
+	// SourceHash Stable hash of the resolved workflow or factory source when available.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+}
+
+// FactorySessionExecutionSource Durable execution source selector. Exactly one payload field matching `kind` must be supplied. Resolution order for workflow file and workflow name sources is documented on the durable execution routes.
+type FactorySessionExecutionSource struct {
+	// FactoryId Stored named factory identifier when kind = FACTORY_ID.
+	FactoryId *string `json:"factoryId,omitempty"`
+
+	// FactoryInline Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
+	FactoryInline *Factory `json:"factoryInline,omitempty"`
+
+	// InlineWorkflow Inline workflow source carried directly in a durable execution request.
+	InlineWorkflow *FactorySessionExecutionInlineWorkflow `json:"inlineWorkflow,omitempty"`
+
+	// Kind Durable execution source category. Each kind selects which source field on FactorySessionExecutionSource is authoritative for workflow resolution.
+	Kind FactorySessionExecutionSourceKind `json:"kind"`
+
+	// WorkflowFile Workflow file path or reference when kind = WORKFLOW_FILE.
+	WorkflowFile *string `json:"workflowFile,omitempty"`
+
+	// WorkflowName Authored workflow name when kind = WORKFLOW_NAME.
+	WorkflowName *string `json:"workflowName,omitempty"`
+}
+
+// FactorySessionExecutionSourceKind Durable execution source category. Each kind selects which source field on FactorySessionExecutionSource is authoritative for workflow resolution.
+type FactorySessionExecutionSourceKind string
+
+// FactorySessionExecutionWaitOptions Optional wait and timeout controls for durable execution. Sync routes use these options to bound how long the server waits for a terminal result. Async routes may accept them for future compatibility but do not block on terminal completion.
+type FactorySessionExecutionWaitOptions struct {
+	// CancelOnTimeout When true and a sync wait ends by timeout, the server may cancel the session. When false or omitted, timeout responses must not imply the session was canceled.
+	CancelOnTimeout *bool `json:"cancelOnTimeout,omitempty"`
+
+	// TimeoutMillis Maximum wait budget in milliseconds for sync execution.
+	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
+}
+
 // FactorySessionJavaScriptCheckpointRef defines model for FactorySessionJavaScriptCheckpointRef.
 type FactorySessionJavaScriptCheckpointRef struct {
 	ArtifactRef *FactoryArtifactRef `json:"artifactRef,omitempty"`
@@ -1387,6 +1532,26 @@ type FactorySessionProgress struct {
 	TotalTokens int `json:"totalTokens"`
 }
 
+// FactorySessionRequestedPolicy Caller-requested orchestrator policy for one durable execution. Runtimes may require approval before the requested policy becomes effective. The effective approved policy hash is returned separately from this requested payload.
+type FactorySessionRequestedPolicy struct {
+	// PolicyHash Optional stable hash of the requested policy object when the caller already computed one for idempotency comparisons.
+	PolicyHash           *string                `json:"policyHash,omitempty"`
+	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// FactorySessionResolvedSourceIdentity Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
+type FactorySessionResolvedSourceIdentity struct {
+	// Dialect Resolved workflow dialect when applicable.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// Kind Durable execution source category. Each kind selects which source field on FactorySessionExecutionSource is authoritative for workflow resolution.
+	Kind     FactorySessionExecutionSourceKind `json:"kind"`
+	Metadata *StringMap                        `json:"metadata,omitempty"`
+
+	// SourceRef Safe customer-facing source reference after resolution.
+	SourceRef *string `json:"sourceRef,omitempty"`
+}
+
 // FactorySessionResult defines model for FactorySessionResult.
 type FactorySessionResult struct {
 	// CheckpointRefs Checkpoint refs associated with the terminal session result.
@@ -1447,6 +1612,46 @@ type FactorySessionSummary struct {
 	Project    string                  `json:"project"`
 	Runtime    *FactorySessionRuntime  `json:"runtime,omitempty"`
 	Target     FactorySessionTargetRef `json:"target"`
+}
+
+// FactorySessionSyncExecutionOutcome Sync durable execution wait outcome. TIMED_OUT does not imply the session was canceled unless the request set wait.cancelOnTimeout to true.
+type FactorySessionSyncExecutionOutcome string
+
+// FactorySessionSyncExecutionResponse Sync durable execution response. Returns the normalized execution identity plus sync wait outcome and, when available before timeout, the terminal FactorySessionResult.
+type FactorySessionSyncExecutionResponse struct {
+	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// EffectivePolicyHash Stable hash of the effective approved orchestrator policy when available.
+	EffectivePolicyHash *string `json:"effectivePolicyHash,omitempty"`
+
+	// Links Relative links for polling and inspecting one durable factory session.
+	Links *FactorySessionExecutionLinks `json:"links,omitempty"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
+
+	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
+	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
+	Result         *FactorySessionResult                `json:"result,omitempty"`
+
+	// SessionCanceledByTimeout True only when timedOut is true and the request explicitly set wait.cancelOnTimeout to true.
+	SessionCanceledByTimeout *bool `json:"sessionCanceledByTimeout,omitempty"`
+
+	// SessionId Stable durable factory-session identifier.
+	SessionId string `json:"sessionId"`
+
+	// SourceHash Stable hash of the resolved workflow or factory source when available.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+
+	// SyncOutcome Sync durable execution wait outcome. TIMED_OUT does not imply the session was canceled unless the request set wait.cancelOnTimeout to true.
+	SyncOutcome FactorySessionSyncExecutionOutcome `json:"syncOutcome"`
+
+	// TimedOut True when syncOutcome = TIMED_OUT.
+	TimedOut *bool `json:"timedOut,omitempty"`
 }
 
 // FactorySessionTarget defines model for FactorySessionTarget.
@@ -3819,6 +4024,9 @@ type CreateFactoryConflict = ErrorResponse
 // CurrentFactoryNotFound defines model for CurrentFactoryNotFound.
 type CurrentFactoryNotFound = ErrorResponse
 
+// ExecutionRequestIdConflict defines model for ExecutionRequestIdConflict.
+type ExecutionRequestIdConflict = ErrorResponse
+
 // InternalError defines model for InternalError.
 type InternalError = ErrorResponse
 
@@ -3879,6 +4087,12 @@ type GetProviderSessionDetailsParams struct {
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
 
+// StartDurableFactorySessionAsyncJSONRequestBody defines body for StartDurableFactorySessionAsync for application/json ContentType.
+type StartDurableFactorySessionAsyncJSONRequestBody = FactorySessionExecutionRequest
+
+// StartDurableFactorySessionSyncJSONRequestBody defines body for StartDurableFactorySessionSync for application/json ContentType.
+type StartDurableFactorySessionSyncJSONRequestBody = FactorySessionExecutionRequest
+
 // SaveCurrentFactoryBySessionIdJSONRequestBody defines body for SaveCurrentFactoryBySessionId for application/json ContentType.
 type SaveCurrentFactoryBySessionIdJSONRequestBody = SaveFactoryForSessionRequest
 
@@ -3905,6 +4119,74 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
+
+// Getter for additional properties for FactorySessionRequestedPolicy. Returns the specified
+// element and whether it was found
+func (a FactorySessionRequestedPolicy) Get(fieldName string) (value interface{}, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for FactorySessionRequestedPolicy
+func (a *FactorySessionRequestedPolicy) Set(fieldName string, value interface{}) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]interface{})
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for FactorySessionRequestedPolicy to handle AdditionalProperties
+func (a *FactorySessionRequestedPolicy) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["policyHash"]; found {
+		err = json.Unmarshal(raw, &a.PolicyHash)
+		if err != nil {
+			return fmt.Errorf("error reading 'policyHash': %w", err)
+		}
+		delete(object, "policyHash")
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]interface{})
+		for fieldName, fieldBuf := range object {
+			var fieldVal interface{}
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for FactorySessionRequestedPolicy to handle AdditionalProperties
+func (a FactorySessionRequestedPolicy) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	if a.PolicyHash != nil {
+		object["policyHash"], err = json.Marshal(a.PolicyHash)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'policyHash': %w", err)
+		}
+	}
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
 
 // AsRunRequestEventPayload returns the union data inside the FactoryEvent_Payload as a RunRequestEventPayload
 func (t FactoryEvent_Payload) AsRunRequestEventPayload() (RunRequestEventPayload, error) {
@@ -4701,6 +4983,12 @@ type ServerInterface interface {
 	// Open another live factory session
 	// (POST /factory-sessions)
 	OpenFactorySession(w http.ResponseWriter, r *http.Request)
+	// Start durable factory session execution asynchronously
+	// (POST /factory-sessions/async)
+	StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request)
+	// Start durable factory session execution synchronously
+	// (POST /factory-sessions/sync)
+	StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request)
 	// Close one live factory session
 	// (DELETE /factory-sessions/{session_id})
 	CloseFactorySession(w http.ResponseWriter, r *http.Request, sessionId string)
@@ -4817,6 +5105,34 @@ func (siw *ServerInterfaceWrapper) OpenFactorySession(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.OpenFactorySession(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartDurableFactorySessionAsync operation middleware
+func (siw *ServerInterfaceWrapper) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartDurableFactorySessionAsync(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// StartDurableFactorySessionSync operation middleware
+func (siw *ServerInterfaceWrapper) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.StartDurableFactorySessionSync(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5662,6 +5978,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.OpenFactorySession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/async", wrapper.StartDurableFactorySessionAsync).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/sync", wrapper.StartDurableFactorySessionSync).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.CloseFactorySession).Methods("DELETE")
 

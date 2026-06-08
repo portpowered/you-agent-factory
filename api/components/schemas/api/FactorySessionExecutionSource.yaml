@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+description: >-
+  Durable execution source selector. Exactly one payload field matching `kind`
+  must be supplied. Resolution order for workflow file and workflow name sources
+  is documented on the durable execution routes.
+properties:
+  kind:
+    $ref: './FactorySessionExecutionSourceKind.yaml'
+  factoryId:
+    type: string
+    description: Stored named factory identifier when kind = FACTORY_ID.
+  factoryInline:
+    $ref: '../data-models/Factory.yaml'
+    description: Inline factory definition when kind = FACTORY_INLINE.
+  workflowFile:
+    type: string
+    description: Workflow file path or reference when kind = WORKFLOW_FILE.
+  workflowName:
+    type: string
+    description: Authored workflow name when kind = WORKFLOW_NAME.
+  inlineWorkflow:
+    $ref: './FactorySessionExecutionInlineWorkflow.yaml'
+    description: Inline workflow source when kind = INLINE_WORKFLOW.

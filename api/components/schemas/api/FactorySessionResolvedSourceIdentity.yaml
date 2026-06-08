@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+description: >-
+  Resolved durable execution source identity exposed to API clients without raw
+  workflow source, unrestricted host paths, or diagnostic artifacts.
+properties:
+  kind:
+    $ref: './FactorySessionExecutionSourceKind.yaml'
+  sourceRef:
+    type: string
+    description: Safe customer-facing source reference after resolution.
+  dialect:
+    type: string
+    description: Resolved workflow dialect when applicable.
+  metadata:
+    $ref: '../shared/StringMap.yaml'
+    description: Safe resolved source metadata for clients and dashboards.

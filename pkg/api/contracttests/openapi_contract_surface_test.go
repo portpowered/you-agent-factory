@@ -21,6 +21,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertPublishedSurfaceSchemas(t, schemas)
 	assertSubmitWorkSurfaceSchemas(t, schemas)
 	assertInvocationSurfaceSchemas(t, schemas, paths)
+	assertDurableExecutionSurfaceSchemas(t, schemas, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
@@ -435,6 +436,78 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
 	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType", "url")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType", "url")
+}
+
+func assertDurableExecutionSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	asyncOperation := pathOperation(t, paths, "/factory-sessions/async", "post")
+	if got, _ := asyncOperation["operationId"].(string); got != "startDurableFactorySessionAsync" {
+		t.Fatalf("paths./factory-sessions/async.post.operationId = %q, want startDurableFactorySessionAsync", got)
+	}
+	assertRequestSchemaRef(t, asyncOperation, "#/components/schemas/FactorySessionExecutionRequest")
+	assertResponseSchemaRef(t, asyncOperation, "202", "#/components/schemas/FactorySessionExecutionResponse")
+	assertResponseRef(t, asyncOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, asyncOperation, "409", "#/components/responses/ExecutionRequestIdConflict")
+
+	syncOperation := pathOperation(t, paths, "/factory-sessions/sync", "post")
+	if got, _ := syncOperation["operationId"].(string); got != "startDurableFactorySessionSync" {
+		t.Fatalf("paths./factory-sessions/sync.post.operationId = %q, want startDurableFactorySessionSync", got)
+	}
+	assertRequestSchemaRef(t, syncOperation, "#/components/schemas/FactorySessionExecutionRequest")
+	assertResponseSchemaRef(t, syncOperation, "200", "#/components/schemas/FactorySessionSyncExecutionResponse")
+	assertResponseRef(t, syncOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, syncOperation, "409", "#/components/responses/ExecutionRequestIdConflict")
+
+	requestSchema := schemaObject(t, schemas, "FactorySessionExecutionRequest")
+	assertRequiredFields(t, requestSchema, "requestId", "source")
+	requestProperties := schemaProperties(t, requestSchema, "FactorySessionExecutionRequest")
+	assertPropertyRef(t, requestProperties, "source", "#/components/schemas/FactorySessionExecutionSource")
+	assertPropertyRef(t, requestProperties, "orchestrator", "#/components/schemas/FactoryOrchestrator")
+	assertPropertyRef(t, requestProperties, "requestedPolicy", "#/components/schemas/FactorySessionRequestedPolicy")
+	assertPropertyRef(t, requestProperties, "wait", "#/components/schemas/FactorySessionExecutionWaitOptions")
+	assertSchemaPropertiesPresent(t, requestProperties, "FactorySessionExecutionRequest", "requestId", "source", "args", "orchestrator", "requestedPolicy", "wait")
+
+	sourceSchema := schemaObject(t, schemas, "FactorySessionExecutionSource")
+	assertRequiredFields(t, sourceSchema, "kind")
+	sourceProperties := schemaProperties(t, sourceSchema, "FactorySessionExecutionSource")
+	assertPropertyRef(t, sourceProperties, "kind", "#/components/schemas/FactorySessionExecutionSourceKind")
+	assertSchemaPropertiesPresent(t, sourceProperties, "FactorySessionExecutionSource", "factoryId", "factoryInline", "workflowFile", "workflowName", "inlineWorkflow")
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionExecutionSourceKind"), "FactorySessionExecutionSourceKind", []string{
+		"FACTORY_ID", "FACTORY_INLINE", "WORKFLOW_FILE", "WORKFLOW_NAME", "INLINE_WORKFLOW",
+	})
+
+	asyncResponseSchema := schemaObject(t, schemas, "FactorySessionExecutionResponse")
+	assertRequiredFields(t, asyncResponseSchema, "sessionId", "status", "orchestratorKind", "resolvedSource")
+	asyncResponseProperties := schemaProperties(t, asyncResponseSchema, "FactorySessionExecutionResponse")
+	assertPropertyRef(t, asyncResponseProperties, "status", "#/components/schemas/FactorySessionDurableLifecycleStatus")
+	assertPropertyRef(t, asyncResponseProperties, "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
+	assertPropertyRef(t, asyncResponseProperties, "resolvedSource", "#/components/schemas/FactorySessionResolvedSourceIdentity")
+	assertPropertyRef(t, asyncResponseProperties, "links", "#/components/schemas/FactorySessionExecutionLinks")
+	assertSchemaPropertiesPresent(t, asyncResponseProperties, "FactorySessionExecutionResponse", "sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash", "effectivePolicyHash", "links")
+
+	syncResponseSchema := schemaObject(t, schemas, "FactorySessionSyncExecutionResponse")
+	assertRequiredFields(t, syncResponseSchema, "sessionId", "status", "orchestratorKind", "resolvedSource", "syncOutcome")
+	syncResponseProperties := schemaProperties(t, syncResponseSchema, "FactorySessionSyncExecutionResponse")
+	assertPropertyRef(t, syncResponseProperties, "syncOutcome", "#/components/schemas/FactorySessionSyncExecutionOutcome")
+	assertPropertyRef(t, syncResponseProperties, "result", "#/components/schemas/FactorySessionResult")
+	assertSchemaPropertiesPresent(t, syncResponseProperties, "FactorySessionSyncExecutionResponse", "syncOutcome", "result", "timedOut", "sessionCanceledByTimeout")
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionSyncExecutionOutcome"), "FactorySessionSyncExecutionOutcome", []string{"COMPLETED", "TIMED_OUT", "STILL_RUNNING"})
+
+	waitOptions := schemaObject(t, schemas, "FactorySessionExecutionWaitOptions")
+	waitProperties := schemaProperties(t, waitOptions, "FactorySessionExecutionWaitOptions")
+	assertSchemaPropertiesPresent(t, waitProperties, "FactorySessionExecutionWaitOptions", "timeoutMillis", "cancelOnTimeout")
+
+	openFactorySession := pathOperation(t, paths, "/factory-sessions", "post")
+	openDescription, _ := openFactorySession["description"].(string)
+	if !strings.Contains(strings.ToLower(openDescription), "not the primary durable") {
+		t.Fatalf("paths./factory-sessions.post.description must document live-session compatibility, got %q", openDescription)
+	}
+	invokeOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/invocations", "post")
+	invokeDescription, _ := invokeOperation["description"].(string)
+	if !strings.Contains(strings.ToLower(invokeDescription), "not the primary durable") {
+		t.Fatalf("paths./factory-sessions/{session_id}/invocations.post.description must document live-session compatibility, got %q", invokeDescription)
+	}
 }
 
 func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {

@@ -1,0 +1,32 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - source
+description: >-
+  Normalized durable factory-session execution request shared by async and sync
+  start routes. Replaying the same requestId with materially different source,
+  args, orchestrator, or requested policy is rejected with an idempotency conflict.
+properties:
+  requestId:
+    type: string
+    minLength: 1
+    description: >-
+      Caller-supplied idempotency key. Replays with the same normalized source,
+      args, orchestrator, and requested policy return the existing session instead
+      of starting duplicate work.
+  source:
+    $ref: './FactorySessionExecutionSource.yaml'
+  args:
+    type: object
+    additionalProperties: true
+    description: Structured workflow invocation arguments validated by the resolved source.
+  orchestrator:
+    $ref: '../data-models/FactoryOrchestrator.yaml'
+    description: Optional orchestrator override when the resolved source does not fully determine orchestration.
+  requestedPolicy:
+    $ref: './FactorySessionRequestedPolicy.yaml'
+    description: Caller-requested orchestrator policy before approval, if required.
+  wait:
+    $ref: './FactorySessionExecutionWaitOptions.yaml'
+    description: Optional timeout and cancel-on-timeout behavior, primarily for sync execution.
