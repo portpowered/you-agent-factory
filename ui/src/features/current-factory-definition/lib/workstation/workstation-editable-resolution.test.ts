@@ -12,7 +12,7 @@ import {
   resolveWorkerTypeByName,
 } from "./workstation-editable-resolution";
 
-describe("workstation editable resolution edge cases", () => {
+describe("workstation editable resolution lookups", () => {
   it("resolves canonical workstations by transition id or workstation name", () => {
     const factory = {
       name: "Factory",
@@ -110,7 +110,9 @@ describe("workstation editable resolution edge cases", () => {
       writer: ["shared"],
     });
   });
+});
 
+describe("workstation editable resolution projections", () => {
   it("projects editable guards, inputs, and worker type lookups", () => {
     const workstation = {
       name: "Review",
