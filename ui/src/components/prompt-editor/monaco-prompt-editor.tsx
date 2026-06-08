@@ -4,9 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import "monaco-editor/esm/vs/editor/editor.all.js";
 import type { editor as MonacoEditorAPI } from "monaco-editor";
 import * as monaco from "monaco-editor/esm/vs/editor/editor.api.js";
-import { DashboardCode, DashboardText } from "../ui";
 import { cn } from "../../lib/cn";
-import { configureMonacoReactLoader } from "./monaco-react-loader";
+import { DashboardCode, DashboardText } from "../ui";
 import {
   applyWorkstationPromptTheme,
   buildWorkstationPromptMarkers,
@@ -16,6 +15,7 @@ import {
   WORKSTATION_PROMPT_LANGUAGE_ID,
   WORKSTATION_PROMPT_THEME_ID,
 } from "./monaco-prompt-setup";
+import { configureMonacoReactLoader } from "./monaco-react-loader";
 import type {
   PromptEditorAutocompleteState,
   PromptEditorDiagnostic,
@@ -351,7 +351,10 @@ function PromptEditorFallbackState({
       role={status}
       style={{ height }}
     >
-      <DashboardText className="m-0 text-on-surface-variant" variant="supporting">
+      <DashboardText
+        className="m-0 text-on-surface-variant"
+        variant="supporting"
+      >
         {message}
       </DashboardText>
       <DashboardCode

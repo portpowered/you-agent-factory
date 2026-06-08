@@ -4,4 +4,4 @@ export type {
   DashboardWorkstationRequestSelection,
   StatePositionWorkItem,
 } from "../base/public";
-export * from "../components/current-selection-widget";
+export * from "../components/widget/current-selection-widget";

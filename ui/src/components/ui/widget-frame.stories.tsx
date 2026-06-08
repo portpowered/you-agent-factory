@@ -2,7 +2,7 @@ import { expect, within } from "storybook/test";
 
 import { NoSelectionDetailCard } from "../../features/current-selection/base/public";
 import "../../styles.css";
-import { DashboardWidgetFrame } from "./widget-frame";
+import { DashboardWidgetFrame } from "../../features/bento/public";
 
 export default {
   title: "Agent Factory/Widget Frame",

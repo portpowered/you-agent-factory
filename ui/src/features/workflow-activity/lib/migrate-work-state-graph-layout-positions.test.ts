@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
+import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { buildCurrentActivityGraphLayoutFromFactory } from "./current-activity-factory-graph-layout";
 import {
   migrateWorkStateGraphLayoutPositions,

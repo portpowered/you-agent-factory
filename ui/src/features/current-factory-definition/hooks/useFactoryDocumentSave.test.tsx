@@ -39,6 +39,160 @@ beforeEach(() => {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: cache and transport cases share one query-client harness.
 describe("useFactoryDocumentSave", () => {
+  it("preserves the canonical factory name across back-to-back saves after cache readback", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: 0,
+          retry: false,
+        },
+      },
+    });
+    const cachedDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      name: "alpha",
+      version: {
+        logical: "7",
+        physical: "2026-05-27T07:59:00Z",
+      },
+    };
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey("session-2"),
+      cachedDocument,
+    );
+    vi.mocked(saveFactoryForSessionDocument)
+      .mockResolvedValueOnce({
+        ...cachedDocument,
+        version: {
+          logical: "8",
+          physical: "2026-05-27T08:00:00Z",
+        },
+      })
+      .mockResolvedValueOnce({
+        ...cachedDocument,
+        version: {
+          logical: "9",
+          physical: "2026-05-27T08:01:00Z",
+        },
+      });
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+
+    const { result } = renderHook(() => useFactoryDocumentSave(), {
+      wrapper: createFactoryDocumentSaveQueryClientWrapper(queryClient),
+    });
+
+    const driftedFactory = {
+      ...editableFactoryDefinition,
+      name: "imported-factory",
+    };
+
+    await result.current.saveAsync({
+      baseVersion: cachedDocument.version,
+      factory: driftedFactory,
+    });
+    await result.current.saveAsync({
+      baseVersion: {
+        logical: "8",
+        physical: "2026-05-27T08:00:00Z",
+      },
+      factory: driftedFactory,
+    });
+
+    expect(saveFactoryForSessionDocument).toHaveBeenNthCalledWith(
+      1,
+      {
+        baseVersion: cachedDocument.version,
+        canonicalFactoryName: "alpha",
+        factoryDefinition: driftedFactory,
+        mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+      },
+      {
+        sessionID: "session-2",
+      },
+    );
+    expect(saveFactoryForSessionDocument).toHaveBeenNthCalledWith(
+      2,
+      {
+        baseVersion: {
+          logical: "8",
+          physical: "2026-05-27T08:00:00Z",
+        },
+        canonicalFactoryName: "alpha",
+        factoryDefinition: driftedFactory,
+        mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+      },
+      {
+        sessionID: "session-2",
+      },
+    );
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey("session-2")),
+    ).toMatchObject({
+      name: "alpha",
+      version: {
+        logical: "9",
+        physical: "2026-05-27T08:01:00Z",
+      },
+    });
+  });
+
+  it("preserves the cached canonical factory name when the editable payload name drifted", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: 0,
+          retry: false,
+        },
+      },
+    });
+    const cachedDocument: CurrentFactoryDocument = {
+      ...editableFactoryDefinition,
+      name: "alpha",
+      version: {
+        logical: "7",
+        physical: "2026-05-27T07:59:00Z",
+      },
+    };
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey("session-2"),
+      cachedDocument,
+    );
+    vi.mocked(saveFactoryForSessionDocument).mockResolvedValue({
+      ...cachedDocument,
+      version: {
+        logical: "8",
+        physical: "2026-05-27T08:00:00Z",
+      },
+    });
+    useDashboardSessionStore.setState({ selectedSessionID: "session-2" });
+
+    const { result } = renderHook(() => useFactoryDocumentSave(), {
+      wrapper: createFactoryDocumentSaveQueryClientWrapper(queryClient),
+    });
+
+    await result.current.saveAsync({
+      factory: {
+        ...editableFactoryDefinition,
+        name: "imported-factory",
+      },
+    });
+
+    expect(saveFactoryForSessionDocument).toHaveBeenCalledWith(
+      {
+        baseVersion: undefined,
+        canonicalFactoryName: "alpha",
+        factoryDefinition: {
+          ...editableFactoryDefinition,
+          name: "imported-factory",
+        },
+        mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
+      },
+      {
+        sessionID: "session-2",
+      },
+    );
+  });
+
   it("saves with REPLACE_CURRENT by default and updates both query caches", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -83,6 +237,7 @@ describe("useFactoryDocumentSave", () => {
           logical: "7",
           physical: "2026-05-27T07:59:00Z",
         },
+        canonicalFactoryName: undefined,
         factoryDefinition: editableFactoryDefinition,
         mode: CURRENT_FACTORY_EDITOR_SAVE_MODE,
       },

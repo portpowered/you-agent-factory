@@ -174,22 +174,26 @@ describe("applyEditableWorkerDraft runtime fields", () => {
       throw new Error("expected updated factory");
     }
 
-    const clearedFactory = applyEditableWorkerDraft(updatedFactory, "reviewer", {
-      argsText: "",
-      body: "",
-      command: "",
-      executorProvider: null,
-      model: "gpt-5.5",
-      modelLocality: null,
-      modelProvider: "CURSOR",
-      name: "reviewer",
-      provider: null,
-      skipPermissions: false,
-      stopToken: "   ",
-      timeoutAmount: "",
-      timeoutUnit: "m",
-      type: "MODEL_WORKER",
-    });
+    const clearedFactory = applyEditableWorkerDraft(
+      updatedFactory,
+      "reviewer",
+      {
+        argsText: "",
+        body: "",
+        command: "",
+        executorProvider: null,
+        model: "gpt-5.5",
+        modelLocality: null,
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        provider: null,
+        skipPermissions: false,
+        stopToken: "   ",
+        timeoutAmount: "",
+        timeoutUnit: "m",
+        type: "MODEL_WORKER",
+      },
+    );
 
     expect(clearedFactory?.workers?.[0]).not.toHaveProperty("stopToken");
     expect(clearedFactory?.workstations?.[0]?.stopWords).toEqual(["DONE"]);

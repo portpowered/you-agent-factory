@@ -896,6 +896,52 @@ func TestFactoryConfigMapper_FlattenRoundTripsWorkTypeHandlingBehavior(t *testin
 	}
 }
 
+func TestFactoryConfigMapper_FlattenRoundTripsInvocationReturn(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	cfg := &interfaces.FactoryConfig{
+		Name: "invocation-return-roundtrip",
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        "EXPLICIT",
+			WorkTypeName:  "story",
+			TerminalState: "complete",
+			WorkName:      "summary",
+		},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+		}},
+	}
+
+	flattened, err := mapper.Flatten(cfg)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+	if !strings.Contains(string(flattened), `"invocationReturn":{"policy":"EXPLICIT","terminalState":"complete","workName":"summary","workTypeName":"story"}`) {
+		t.Fatalf("flattened = %s, want canonical invocationReturn payload", flattened)
+	}
+
+	expanded, err := mapper.Expand(flattened)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+	if expanded.InvocationReturn == nil {
+		t.Fatal("expanded InvocationReturn = nil, want round-tripped policy")
+	}
+	if *expanded.InvocationReturn != *cfg.InvocationReturn {
+		t.Fatalf("expanded InvocationReturn = %#v, want %#v", expanded.InvocationReturn, cfg.InvocationReturn)
+	}
+}
+
 func assertMissingKey(t *testing.T, payload map[string]any, key string) {
 	t.Helper()
 	if _, ok := payload[key]; ok {

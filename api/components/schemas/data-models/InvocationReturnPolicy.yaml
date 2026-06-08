@@ -1,0 +1,15 @@
+type: string
+description: >-
+  Primary-result selection policy for factory invocation responses.
+  SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it
+  reaches its first terminal output. EXPLICIT selects configured work content
+  from the invocation submit scope.
+enum:
+  - SUBMITTED_WORK_TERMINAL
+  - EXPLICIT
+x-enum-varnames:
+  - InvocationReturnPolicySubmittedWorkTerminal
+  - InvocationReturnPolicyExplicit
+x-enum-descriptions:
+  - Use the invocation-submitted work item terminal content as the primary result.
+  - Use the configured work type, terminal state, and optional work name as the primary result.

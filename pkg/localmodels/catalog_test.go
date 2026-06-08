@@ -132,6 +132,10 @@ func (p *recordingCatalogAssetPuller) ResolveModelCache(context.Context, *factor
 	return CacheLayout{}, nil
 }
 
+func (p *recordingCatalogAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (RuntimeCacheInspection, error) {
+	return RuntimeCacheInspection{}, nil
+}
+
 func mustLoadedCatalogConfig(t *testing.T, factoryCfg *interfaces.FactoryConfig) *factoryconfig.LoadedFactoryConfig {
 	t.Helper()
 	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), factoryCfg, nil)

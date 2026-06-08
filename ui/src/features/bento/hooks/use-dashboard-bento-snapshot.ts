@@ -1,6 +1,6 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { useCurrentSelection } from "../../current-selection/hooks/useCurrentSelection";
+import { useCurrentSelection } from "../../current-selection/hooks/core/useCurrentSelection";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 
 const EMPTY_DASHBOARD_SNAPSHOT: DashboardSnapshot = {

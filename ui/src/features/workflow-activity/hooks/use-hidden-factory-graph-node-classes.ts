@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 
 export function useHiddenFactoryGraphNodeClasses() {
   const [hiddenNodeClasses, setHiddenNodeClasses] = useState<

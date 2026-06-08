@@ -5,7 +5,7 @@ import {
   providerSessionSelectionKey,
 } from "../../../provider-session-detail/lib/provider-session-ref";
 import { requestInferenceAttempts } from "../../dispatch-selection/dispatch-history/selected-work-dispatch-history-helpers";
-import type { CurrentSelectionState } from "../../hooks/useCurrentSelection";
+import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";
 
 type CurrentSelectionVisibleProviderSessions = Pick<
   CurrentSelectionState,

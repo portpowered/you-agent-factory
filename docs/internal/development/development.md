@@ -164,6 +164,7 @@ Treat those lanes as the stable contributor mental model:
 | `UI Coverage` | CI: ten parallel `ui-coverage-shard` jobs (main covered Bun shards via `run-bun-coverage-main.mjs`) plus `ui-coverage-merge` (isolated React Flow pass, Bun lcov merge/thresholds, Vitest-only standalone `ui/scripts/dashboard-shell-storybook-responsive.test.mjs`, replay metadata guard). Local: same contract via unsharded `make test-ui-coverage`. | `make test-ui-coverage` | Keeps unit and app-shell regressions, coverage thresholds, and replay fixture coverage in one dashboard-only lane without rerunning browser-backed integration. CI shards only the main covered pass; local `make test-ui-coverage` remains the canonical full phased lane via `ui/package.json`'s `test:coverage` flow plus replay check. Use `UI_COVERAGE_SHARD=<i>/10 make ui-test-coverage` or `make test-ui-coverage-merge` only when reproducing a CI shard or merge failure. |
 | `UI Browser Integration` | the canonical browser-backed `ui/integration/*.integration.test.mjs` lane with Playwright provisioning plus build and preview owned by the shared browser harness | `make ui-integration-test` | Keeps real-browser dashboard workflows isolated so failures map cleanly to preview startup, API-origin wiring, or browser-visible behavior instead of the jsdom suite. |
 | `Backend Verification` | `cmd/gocoveragecheck` over `./cmd/factory`, maintained backend `./pkg/...` packages, and the maintained short functional packages under `tests/functional/...` | `make test-backend-verification` | Merges backend coverage with the maintained short functional corpus because the covered command already executes the same supported backend packages and short functional packages in one lane. |
+| `PR Inference Approval` | one named OMNIVOICE long regression (`TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio`) through `make verify-pr-inference` after Linux OMNIVOICE runtime and managed-model cache provisioning | `make verify-pr-inference` | Keeps real local inference merge-blocking without folding the expensive runtime setup into Backend Verification or the classifier-skipped short functional corpus. Narrow regression rerun: `make pr-inference-approval`. |
 
 UI Coverage orchestration is owned by `ui/scripts/ui-coverage-runner.mjs` behind `ui/package.json`'s `test:coverage` script. Main, isolated React Flow, and merge/threshold covered phases run on Bun; the standalone Storybook script phase remains Vitest-only. Keep the main covered Bun pass as the only parallelized covered phase in this rollout; it defaults to two workers and can be tuned for comparison runs with `UI_COVERAGE_MAIN_MAX_WORKERS`. **US-004 (2026-05-30):** a three-worker trial on a comparable local runner regressed main-pass time and failed a graph suite timeout—keep the default at two unless new green `make test-ui-coverage` timing on `ubuntu-latest` justifies a change (see `docs/internal/development/ui-coverage-speed-closeout.md` **Main-pass worker trial**). Keep `src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx` in its separate covered React Flow pass with single-worker isolation unless later CI timing evidence proves that changing that isolation boundary is both faster and stable. **US-005 (2026-05-30):** do not add a parallel isolated pass for `src/App.*.test.tsx`—local trials showed main-pass wall time unchanged within noise when app-shell files are excluded, while a bundled single-worker app-shell phase adds ~500s serial cost (~46% lane regression); see `docs/internal/development/ui-coverage-speed-closeout.md` **App shell megatest isolation trial**. **CI sharding (2026-05-30):** pull-request UI Coverage runs `ui-coverage-shard` (matrix `1`–`10`) plus `ui-coverage-merge` instead of one runner invoking `make test-ui-coverage`. Each shard job defaults to one Bun worker (`UI_COVERAGE_MAIN_MAX_WORKERS` still overrides); merged coverage thresholds are enforced in the merge job via `merge-bun-coverage-thresholds.mjs` and `bun-coverage-config.mjs`. See `docs/internal/development/ui-coverage-speed-closeout.md` **CI ten-shard rollout** for before/after timing and the first green proof run.
 
@@ -180,16 +181,74 @@ When a required lane fails, GitHub Actions keeps the lane-owned failure evidence
 | `UI Coverage` | `ui-coverage-merge-failure-artifacts` (merge lane) and per-shard `ui-coverage-shard-<index>` artifacts when a matrix leg fails | merge `command.log` under `.artifacts/ui-coverage-merge/`; shard `command.log` under `.artifacts/ui-coverage-shard-<index>/` |
 | `UI Browser Integration` | `ui-browser-integration-failure-artifacts` | lane `command.log` plus the shared harness browser evidence: Playwright trace, final screenshot, page HTML snapshot, and diagnostics JSON |
 | `Backend Verification` | `backend-verification-failure-artifacts` | lane `command.log` with the covered Go test and maintained short functional output |
+| `PR Inference Approval` | `pr-inference-approval-failure-artifacts` | lane `command.log` under `.artifacts/pr-inference-approval/` plus `runtime-setup.log` with platform, backend path, and cache path |
 
 Backend verification failure summaries are rendered by `go run ./cmd/backendverificationsummary -log .artifacts/backend-verification/command.log`. Keep that helper covered with `go test ./cmd/backendverificationsummary`, and keep the summary output focused on the first actionable failure block before falling back to a bounded command-log excerpt.
 
-Treat `Long Local Inference` as the maintainer-owned follow-up lane for expensive real-runtime coverage rather than as part of merge-blocking pull-request CI. In GitHub Actions, its run names distinguish `post-merge verification`, `scheduled verification`, and `manual verification` so maintainers can tell why it ran from the workflow list. Reach for it after merging runtime-sensitive local-model changes, before a risky runtime release, or when you need to confirm that OMNIVOICE-specific setup and long-running inference still work outside the required short PR checks.
+### PR Inference Approval
+
+Required pull-request CI runs one explicit inference approval lane named `PR Inference Approval`. It is **not** folded into Backend Verification and is **not** gated by `Classify PR Impact`; every pull request and main push runs it after `verify-build-contracts`.
+
+**Local rerun commands**
+
+- `make verify-pr-inference` — canonical PR-gated inference approval lane. Prints prerequisite guidance, then runs the single merge-blocking regression.
+- `make pr-inference-approval` — narrow rerun for only the named regression without the wrapper messaging.
+
+**Named regression and observable contract**
+
+The PR lane runs `TestRealLocalInference_OMNIVOICEModelInvokeAndDirectAPIProduceAudio` in `tests/functional/runtime_api` (built with the `functionallong` tag). On a healthy branch it proves end-to-end OMNIVOICE local inference:
+
+- `POST /models/OMNIVOICE_Q4_K_M/pull` succeeds with model identity, cache path, revision, and downloaded files.
+- Direct `POST /models/OMNIVOICE_Q4_K_M/invocations` returns local TTS metadata and a valid `audio/wav` file output.
+- Streamed invocation returns `audio/wav` bytes.
+- Factory `MODEL_INVOKE` through submitted work reaches `speech:complete` and emits recorded audio in factory events.
+
+Required Go tests also include `TestRuntimeAPI_CompilesWithFunctionalLongTag`, which guards the `functionallong` compile surface without running OMNIVOICE.
+
+**Environment and runtime prerequisites**
+
+| Input | Required | Purpose |
+| --- | --- | --- |
+| `INFINITE_YOU_RUN_OMNIVOICE_LONG_TESTS=1` | yes | Opt-in gate for real OMNIVOICE long inference tests |
+| `omnivoice-llamacpp` on `PATH` or `INFINITE_YOU_OMNIVOICE_COMMAND` | yes | Local OMNIVOICE runtime executable |
+| `INFINITE_YOU_OMNIVOICE_CACHE_DIR` | optional | Reuse managed model cache; omit to use a temp cache locally |
+
+CI provisions Linux `omnivoice-llamacpp` through `scripts/ci/install-omnivoice-command.sh`, sets `INFINITE_YOU_OMNIVOICE_COMMAND` to the installed binary, and caches `.cache/managed-models` plus `.cache/omnivoice-command` under a PR-lane-specific cache key.
+
+**Why this lane is required in PR CI**
+
+Inference-specific code can regress in ways the short Backend Verification corpus does not exercise: compile failures in `functionallong` tests, broken model pull or invocation routes, or factory-level `MODEL_INVOKE` wiring. The PR lane catches that class with one stable long regression before merge. It intentionally runs only the single sentinel test rather than the full specialty sweep so required PR feedback stays bounded.
+
+**How this differs from Long Local Inference**
+
+| Surface | PR Inference Approval | Long Local Inference |
+| --- | --- | --- |
+| Workflow | required job in `.github/workflows/ci.yml` | separate `.github/workflows/long-local-inference.yml` |
+| Trigger | every pull request and main push | post-merge push to `main`, daily schedule, manual dispatch |
+| Platforms | Linux only | Linux, macOS, and Windows matrix |
+| Command | `make verify-pr-inference` | `make long-tests` (managed runtime + functional runtime aggregate) |
+| Scope | one named OMNIVOICE regression | broader opt-in specialty sweep |
+
+Treat `Long Local Inference` as the maintainer-owned follow-up lane for deeper multi-platform coverage rather than as a substitute for merge-blocking PR inference approval. In GitHub Actions, its run names distinguish `post-merge verification`, `scheduled verification`, and `manual verification` so maintainers can tell why it ran from the workflow list. Reach for it after merging runtime-sensitive local-model changes, before a risky runtime release, or when you need cross-platform OMNIVOICE confirmation outside the narrower PR lane.
+
+**Failure surfaces and diagnostics**
+
+Distinguish setup failures from inference behavior failures when triaging a red `PR Inference Approval` job:
+
+| Failure class | Typical symptoms | Where to look |
+| --- | --- | --- |
+| Runtime setup | `platform or backend failure`, install script errors, missing `INFINITE_YOU_OMNIVOICE_COMMAND` | job step `Install OMNIVOICE runtime`, `.artifacts/pr-inference-approval/runtime-setup.log`, failure-step cache listing |
+| Compile or test wiring | `go test` compile errors before OMNIVOICE runs, duplicate helper symbols in `runtime_api` | `command.log` head; locally run `go test -tags=functionallong ./tests/functional/runtime_api -run '^$' -count=0` |
+| Inference behavior | `asset pull failure`, `invocation failure`, `output validation failure`, factory wait timeouts | `command.log` test output; rerun `make pr-inference-approval` with the same env |
+
+Lane summaries name `PR Inference Approval` explicitly and point to `make verify-pr-inference` and `make pr-inference-approval` on failure. Download `pr-inference-approval-failure-artifacts` for the retained `command.log` and `runtime-setup.log`.
 
 Use the lane-specific targets below when you need to rerun one required CI lane locally without replaying the full suite:
 
 - `make test-ui-coverage` for the jsdom-oriented dashboard coverage lane.
 - `make ui-integration-test` for the browser-backed dashboard integration lane.
 - `make test-backend-verification` for the merged backend coverage plus maintained short functional lane.
+- `make verify-pr-inference` for the required PR inference approval lane (requires OMNIVOICE runtime prerequisites above).
 
 `make verify-pr` is the canonical full review-ready local pass once dependencies and browser prerequisites are already installed. It does not install packages or browsers itself, so routine verification stays network-free after setup.
 
@@ -219,12 +278,13 @@ Reviewers should block new product copy that bypasses message catalogs, concaten
 
 Treat the opt-in long and specialty commands as a separate maintainer tier rather than hidden follow-on work inside `make verify-fast` or `make verify-pr`:
 
+- `make verify-pr-inference` is the required merge-blocking PR inference approval lane. It runs only the named OMNIVOICE regression and is separate from `make verify-pr`.
 - `make verify-extended` is the canonical "everything above plus the deeper safety nets" pass. Use it after `make verify-pr` when a change may have touched managed-local runtime behavior or the real local inference path and you want one aggregate command that still preserves exact rerun hints.
 - `make long-tests-managed-runtime` is the narrow specialty rerun for the package-level managed-runtime lane in `pkg/service`. It protects the subprocess adapter, managed local model loading, and handle-reuse behavior without requiring the full end-to-end API flow.
-- `make long-tests-functional-runtime` is the narrow specialty rerun for the real OMNIVOICE functional lane in `tests/functional/runtime_api`. It protects the end-to-end `POST /models/{model_name}/pull`, direct invocation, and factory `MODEL_INVOKE` path against regressions that only appear with a real local runtime.
+- `make long-tests-functional-runtime` is the narrow specialty rerun for the real OMNIVOICE functional lane in `tests/functional/runtime_api`. It delegates to `make pr-inference-approval` so the PR regression and specialty functional lane share one test invocation without changing the broader `make long-tests` meaning.
 - `make long-tests` is the explicit aggregate over those two opt-in specialty lanes. It prints the owned specialty lane before each nested step and reports the direct `make long-tests-...` rerun command on failure.
 
-Those long and specialty commands are intentionally excluded from `make verify-fast` and `make verify-pr`. Keep them opt-in so routine author and PR-equivalent feedback stays short and deterministic unless a maintainer explicitly asks for the deeper runtime coverage.
+`make verify-pr-inference` is required in CI but intentionally excluded from `make verify-fast` and `make verify-pr` because it needs the OMNIVOICE runtime. The broader `make long-tests` aggregate remains opt-in for deeper specialty coverage beyond the single PR sentinel. Keep both distinctions explicit so contributors do not confuse merge-blocking PR inference approval with the broader Long Local Inference workflow.
 
 When extending the workflow, change the repository-owned command surface before editing GitHub Actions orchestration. Add or adjust the relevant `make test-*` target first, keep the lane name aligned with the owned command, and document any cache, artifact, or deduplication decision here in the same change. Contributors should be able to answer "which lane owns this check?" and "what do I rerun locally?" from this section alone without reverse-engineering `.github/workflows/ci.yml`.
 
@@ -514,6 +574,7 @@ behavior explicit inside the test that needs it.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
 - Runtime log policy is service-configured, but each live session should own its own runtime log sink and emitted records. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
+- Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
 - Multi-session runtime ownership should follow `docs/architecture/session-runtime-ownership.md`: the service is the coordinator and router, while session runtime config, execution base, event history, and active runtime state belong to the addressed live session rather than mutable service-global config.
 - Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
 - Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/api`, `pkg/config`, or `pkg/replay` behavior tests.

@@ -43,10 +43,7 @@ export function SectionMetricPreview({
       {items.map((item) => (
         <div className="grid gap-1" key={item.label}>
           <DashboardLabel as="dt">{item.label}</DashboardLabel>
-          <DashboardText
-            as="dd"
-            className="m-0 [overflow-wrap:anywhere]"
-          >
+          <DashboardText as="dd" className="m-0 [overflow-wrap:anywhere]">
             {item.value}
           </DashboardText>
         </div>

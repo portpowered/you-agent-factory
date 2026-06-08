@@ -35,6 +35,10 @@ in `you docs workers`, workstation-only routing and prompt fields in
 - Use typed resources such as `MODEL`, `PROVIDER_QUOTA`, and
   `INVOCATION_SLOT` when you need scheduling to enforce local cache capacity,
   shared cloud quota, or per-invocation concurrency.
+- Packaged factories and authored factories declare local managed runtime
+  dependencies through the same `MODEL` resource contract documented in
+  `you docs resources`. Factory validation and `/models` readiness use the
+  same managed-runtime identity and `managedRuntime` vocabulary.
 
 ## WorkContent For Model Operations
 

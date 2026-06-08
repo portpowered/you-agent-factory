@@ -11,8 +11,8 @@ import {
 } from "../../../../components/ui";
 import { formatList } from "../../../../components/ui/formatters";
 import { EDITABLE_RESOURCE_TYPES } from "../../../current-factory-definition/lib/resource-editable-values";
-import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
-import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
 import {
   CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,

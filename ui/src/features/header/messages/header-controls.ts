@@ -119,7 +119,7 @@ const headerControlsMessagesByLocale = {
     openSessionCreateFactoryPendingLabel: "Creating factory...",
     openSessionDialogTitle: "Factory Session",
     openSessionInitNewFactoryDescriptionTemplate:
-      "No runnable factory was found at {{folderPath}}. Create a new factory here using the default scaffold?",
+      "No runnable factory was found at {{folderPath}}. Create a new factory under {{folderPath}}/factory using the default scaffold?",
     openSessionSubmitLabel: "Start Factory",
     openSessionSubmitPendingLabel: "Checking folder...",
     openSessionTargetLabel: "Open selected target",
@@ -206,7 +206,7 @@ const headerControlsMessagesByLocale = {
     openSessionCreateFactoryPendingLabel: "ファクトリーを作成しています...",
     openSessionDialogTitle: "ファクトリーフォルダーを開く",
     openSessionInitNewFactoryDescriptionTemplate:
-      "{{folderPath}} には実行可能なファクトリーがありません。既定のスキャフォールドで新しいファクトリーを作成しますか？",
+      "{{folderPath}} には実行可能なファクトリーがありません。既定のスキャフォールドで {{folderPath}}/factory に新しいファクトリーを作成しますか？",
     openSessionSubmitLabel: "フォルダーを確認する",
     openSessionSubmitPendingLabel: "フォルダーを確認しています...",
     openSessionTargetLabel: "選択したターゲットを開く",
@@ -294,7 +294,7 @@ const headerControlsMessagesByLocale = {
     openSessionCreateFactoryPendingLabel: "팩토리를 만드는 중...",
     openSessionDialogTitle: "팩토리 폴더 열기",
     openSessionInitNewFactoryDescriptionTemplate:
-      "{{folderPath}}에 실행 가능한 팩토리가 없습니다. 기본 스캐폴드로 새 팩토리를 만드시겠습니까?",
+      "{{folderPath}}에 실행 가능한 팩토리가 없습니다. 기본 스캐폴드로 {{folderPath}}/factory에 새 팩토리를 만드시겠습니까?",
     openSessionSubmitLabel: "폴더 확인",
     openSessionSubmitPendingLabel: "폴더 확인 중...",
     openSessionTargetLabel: "선택한 대상 열기",
@@ -381,7 +381,7 @@ const headerControlsMessagesByLocale = {
     openSessionCreateFactoryPendingLabel: "正在创建工厂...",
     openSessionDialogTitle: "打开工厂文件夹",
     openSessionInitNewFactoryDescriptionTemplate:
-      "在 {{folderPath}} 未找到可运行的工厂。是否使用默认脚手架在此创建新工厂？",
+      "在 {{folderPath}} 未找到可运行的工厂。是否使用默认脚手架在 {{folderPath}}/factory 下创建新工厂？",
     openSessionSubmitLabel: "检查文件夹",
     openSessionSubmitPendingLabel: "正在检查文件夹...",
     openSessionTargetLabel: "打开所选目标",

@@ -1,4 +1,5 @@
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
+import { EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS } from "../../../current-factory-definition/lib/worker-editable-values";
 import { getWorkerDetailMessages } from "../messages/worker-detail";
 import {
   formatEditableWorkerOverwriteFieldLabels,
@@ -23,6 +24,7 @@ function buildDraft(
     timeoutAmount: "30",
     timeoutUnit: "s",
     type: "MODEL_WORKER",
+    ...EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
     ...overrides,
   };
 }
@@ -84,6 +86,35 @@ describe("resolveEditableWorkerOverwriteFields", () => {
     expect(
       resolveEditableWorkerOverwriteFields(sessionStart, current, latest),
     ).toEqual(expect.arrayContaining(["command", "args", "body", "provider"]));
+  });
+
+  it("flags hosted Linear poller fields when both sides changed", () => {
+    const sessionStart = buildDraft({
+      authSecretRef: "secrets/old-key",
+      linearPollInterval: "30s",
+      type: "HOSTED_WORKER",
+    });
+    const current = buildDraft({
+      authSecretRef: "secrets/new-key",
+      linearPollInterval: "45s",
+      type: "HOSTED_WORKER",
+    });
+    const latest = buildDraft({
+      authSecretRef: "secrets/server-key",
+      linearMappingWorkType: "task",
+      linearPollInterval: "1m",
+      type: "HOSTED_WORKER",
+    });
+
+    expect(
+      resolveEditableWorkerOverwriteFields(sessionStart, current, latest),
+    ).toEqual(
+      expect.arrayContaining([
+        "authSecretRef",
+        "linearPollInterval",
+        "linearMappingWorkType",
+      ]),
+    );
   });
 
   it("flags fields when session start and draft both differ from the latest server draft", () => {

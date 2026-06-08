@@ -40,9 +40,16 @@ export type EditableWorkerSaveValidationErrors = {
 
 export type EditableWorkerOverwriteField =
   | "args"
+  | "authSecretRef"
   | "body"
   | "command"
   | "executorProvider"
+  | "linearClaimAssigneeField"
+  | "linearMappingState"
+  | "linearMappingWorkType"
+  | "linearPollInterval"
+  | "linearStateIds"
+  | "linearTeamIds"
   | "model"
   | "modelLocality"
   | "modelProvider"
@@ -68,11 +75,18 @@ export type EditableWorkerConfigurationState =
       initialValues: EditableWorkerValues;
       isDirty: boolean;
       onArgsTextChange: (value: string) => void;
+      onAuthSecretRefChange: (value: string) => void;
       onBodyChange: (value: string) => void;
       onCommandChange: (value: string) => void;
       onExecutorProviderChange: (
         value: EditableWorkerDraft["executorProvider"],
       ) => void;
+      onLinearClaimAssigneeFieldChange: (value: string) => void;
+      onLinearMappingStateChange: (value: string) => void;
+      onLinearMappingWorkTypeChange: (value: string) => void;
+      onLinearPollIntervalChange: (value: string) => void;
+      onLinearStateIdsTextChange: (value: string) => void;
+      onLinearTeamIdsTextChange: (value: string) => void;
       onModelChange: (value: string) => void;
       onModelLocalityChange: (
         value: EditableWorkerDraft["modelLocality"],
@@ -85,9 +99,7 @@ export type EditableWorkerConfigurationState =
       onSkipPermissionsChange: (value: boolean) => void;
       onStopTokenChange: (value: string) => void;
       onTimeoutAmountChange: (value: string) => void;
-      onTimeoutUnitChange: (
-        value: EditableWorkerDraft["timeoutUnit"],
-      ) => void;
+      onTimeoutUnitChange: (value: EditableWorkerDraft["timeoutUnit"]) => void;
       markChangesSaved: () => void;
       onResetToLatest: () => void;
       onTypeChange: (value: EditableWorkerDraft["type"]) => void;

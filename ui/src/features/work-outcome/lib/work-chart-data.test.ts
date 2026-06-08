@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { WorkChartModel } from "./trends";
-import { buildWorkChartData, type WorkChartSeriesDefinition } from "./work-chart-data";
+import {
+  buildWorkChartData,
+  type WorkChartSeriesDefinition,
+} from "./work-chart-data";
 
 const SERIES: readonly WorkChartSeriesDefinition[] = [
   {

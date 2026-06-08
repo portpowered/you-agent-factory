@@ -1,7 +1,7 @@
 import { DashboardText, SurfacePanel } from "../../../components/ui";
 import {
+  AUTHORED_BODY_TEXT_CLASS,
   AuthoredBodyText,
-  REQUEST_AUTHORED_TEXT_CLASS,
 } from "../../../lib/authored-body-text";
 import { cn } from "../../../lib/cn";
 import { describeWorkContentPart } from "../lib/describe-work-content-part";
@@ -35,7 +35,7 @@ function renderWorkContentPart(part: WorkContentPart, index: number) {
         : JSON.stringify(part.json ?? null, null, 2);
     return (
       <pre
-        className={REQUEST_AUTHORED_TEXT_CLASS}
+        className={AUTHORED_BODY_TEXT_CLASS}
         key={`work-content-part-${index}`}
       >
         <code>{value}</code>
@@ -46,7 +46,7 @@ function renderWorkContentPart(part: WorkContentPart, index: number) {
   return (
     <SurfacePanel asChild key={`work-content-part-${index}`} radius="lg">
       <DashboardText className="text-on-surface-variant" variant="supporting">
-      {describeWorkContentPart(part)}
+        {describeWorkContentPart(part)}
       </DashboardText>
     </SurfacePanel>
   );

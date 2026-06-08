@@ -20,6 +20,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertRemovedPaths(t, paths)
 	assertPublishedSurfaceSchemas(t, schemas)
 	assertSubmitWorkSurfaceSchemas(t, schemas)
+	assertInvocationSurfaceSchemas(t, schemas, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
@@ -125,6 +126,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 
 	requiredOperations := map[string][]string{
 		"/factory-sessions/{session_id}/work":                       {"get", "post"},
+		"/factory-sessions/{session_id}/invocations":                {"post"},
 		"/factory-sessions/{session_id}/work/staged-files":          {"post"},
 		"/factory-sessions/{session_id}/work-requests/{request_id}": {"put"},
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
@@ -356,9 +358,9 @@ func assertRemovedPaths(t *testing.T, paths map[string]any) {
 func assertPublishedSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	t.Helper()
 	for _, schema := range []string{
-		"SubmitWorkRequest", "SubmitWorkResponse", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "Work", "WorkContent",
+		"SubmitWorkRequest", "SubmitWorkResponse", "InvocationInputSourceKind", "InvocationRequest", "InvocationResponse", "InvocationTerminalStatus", "StageSubmitWorkFileRequest", "StageSubmitWorkFileResponse", "UpsertWorkRequestResponse", "UpsertWorkRequestSubmittedWork", "WorkRequest", "Work", "WorkContent",
 		"WorkContentPart", "WorkContentPartType", "WorkTextContentPart", "WorkImageContentPart", "Relation", "ListWorkResponse",
-		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
+		"TokenResponse", "ErrorFamily", "ErrorResponse", "FactoryName", "StatusCategories", "StatusResponse", "ListModelsResponse", "ManagedRuntime", "ManagedRuntimeLifecycleState", "ManagedRuntimePullOutcome", "ManagedRuntimePullResult", "ManagedRuntimeReadinessState", "ManagedRuntimeSourceDiagnostics", "ModelSummary", "ModelDetail", "ModelInvocationRequest", "ModelInvocationOptions", "ModelInvocationResponseMode", "ModelInvocationResponse", "ModelPullResponse", "ModelPullOutcome", "ModelPullDownloadedFile", "ResolvedModelOperationBinding", "ResolvedModelOperationBindingSource", "ModelCapability", "ModelResourceSummary", "ModelStatus", "ModelLoadState", "Factory", "InvocationReturn", "InvocationReturnPolicy", "FactoryValidationResult", "FactoryValidationTarget", "FactoryValidationSubject", "FactoryValidationSeverity", "FactoryValidationSubjectType", "FactoryValidationSubjectLocation", "Workstation", "WorkstationKind",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -433,6 +435,51 @@ func assertSubmitWorkSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	stageSubmitWorkFileResponse := schemaObject(t, schemas, "StageSubmitWorkFileResponse")
 	assertRequiredFields(t, stageSubmitWorkFileResponse, "stagedFileRef", "fileName", "mediaType", "url")
 	assertSchemaPropertiesPresent(t, schemaProperties(t, stageSubmitWorkFileResponse, "StageSubmitWorkFileResponse"), "StageSubmitWorkFileResponse", "stagedFileRef", "fileName", "mediaType", "url")
+}
+
+func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	invokeOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/invocations", "post")
+	if got, _ := invokeOperation["operationId"].(string); got != "invokeFactorySessionBySessionId" {
+		t.Fatalf("paths./factory-sessions/{session_id}/invocations.post.operationId = %q, want invokeFactorySessionBySessionId", got)
+	}
+	assertRequestSchemaRef(t, invokeOperation, "#/components/schemas/InvocationRequest")
+	assertResponseSchemaRef(t, invokeOperation, "200", "#/components/schemas/InvocationResponse")
+	assertResponseRef(t, invokeOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, invokeOperation, "404", "#/components/responses/NotFound")
+
+	requestSchema := schemaObject(t, schemas, "InvocationRequest")
+	assertRequiredFields(t, requestSchema, "sourceKind", "content")
+	requestProperties := schemaProperties(t, requestSchema, "InvocationRequest")
+	assertPropertyRef(t, requestProperties, "sourceKind", "#/components/schemas/InvocationInputSourceKind")
+	assertPropertyRef(t, requestProperties, "content", "#/components/schemas/WorkContent")
+	assertSchemaPropertiesPresent(t, requestProperties, "InvocationRequest", "sourceKind", "content", "requestId", "timeoutMillis")
+
+	assertEnumValues(t, schemaObject(t, schemas, "InvocationInputSourceKind"), "InvocationInputSourceKind", []string{"text", "fileRef", "audioStream"})
+	assertEnumValues(t, schemaObject(t, schemas, "InvocationTerminalStatus"), "InvocationTerminalStatus", []string{"COMPLETED", "FAILED", "CANCELED", "TIMED_OUT"})
+
+	responseSchema := schemaObject(t, schemas, "InvocationResponse")
+	assertRequiredFields(t, responseSchema, "requestId", "traceId", "status")
+	responseProperties := schemaProperties(t, responseSchema, "InvocationResponse")
+	assertPropertyRef(t, responseProperties, "status", "#/components/schemas/InvocationTerminalStatus")
+	assertPropertyRef(t, responseProperties, "primaryResult", "#/components/schemas/WorkContent")
+	assertSchemaPropertiesPresent(t, responseProperties, "InvocationResponse", "requestId", "traceId", "status", "primaryResult", "errorCode", "message")
+
+	factorySchema := schemaObject(t, schemas, "Factory")
+	factoryProperties := schemaProperties(t, factorySchema, "Factory")
+	assertPropertyRef(t, factoryProperties, "invocationReturn", "#/components/schemas/InvocationReturn")
+	description, _ := factoryProperties["invocationReturn"].(map[string]any)["description"].(string)
+	if !strings.Contains(strings.ToLower(description), "submitted_work_terminal fallback") {
+		t.Fatalf("Factory.properties.invocationReturn.description must document SUBMITTED_WORK_TERMINAL fallback, got %q", description)
+	}
+
+	invocationReturn := schemaObject(t, schemas, "InvocationReturn")
+	assertRequiredFields(t, invocationReturn, "policy")
+	invocationReturnProperties := schemaProperties(t, invocationReturn, "InvocationReturn")
+	assertPropertyRef(t, invocationReturnProperties, "policy", "#/components/schemas/InvocationReturnPolicy")
+	assertSchemaPropertiesPresent(t, invocationReturnProperties, "InvocationReturn", "policy", "workTypeName", "terminalState", "workName")
+	assertEnumValues(t, schemaObject(t, schemas, "InvocationReturnPolicy"), "InvocationReturnPolicy", []string{"SUBMITTED_WORK_TERMINAL", "EXPLICIT"})
 }
 
 func TestOpenAPIContract_MoveWorkRequestSchema(t *testing.T) {

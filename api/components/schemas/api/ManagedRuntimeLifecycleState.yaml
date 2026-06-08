@@ -1,0 +1,19 @@
+type: string
+description: >
+  Customer-facing lifecycle position for one managed runtime. Lifecycle state
+  tracks install, cache, and load progression independently from short-lived
+  readiness used by invocation surfaces.
+enum:
+  - NOT_APPLICABLE
+  - NOT_INSTALLED
+  - INSTALLING
+  - INSTALLED
+  - LOADING
+  - LOADED
+x-enum-descriptions:
+  - Managed install and cache lifecycle does not apply, such as for cloud-backed runtimes.
+  - Required managed runtime assets are not installed in the managed cache.
+  - Managed runtime assets are being pulled or installed into the managed cache.
+  - Required managed runtime assets are installed in the managed cache but not loaded for invocation.
+  - Managed runtime assets are being loaded into an invocation-ready runtime handle.
+  - Managed runtime assets are loaded and available for invocation subject to readiness checks.

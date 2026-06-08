@@ -41,9 +41,7 @@ export function WorkContentReadOnlyList({
 
   const contentBody = (
     <>
-      {showHeading ? (
-        <DashboardLabel>{messages.heading}</DashboardLabel>
-      ) : null}
+      {showHeading ? <DashboardLabel>{messages.heading}</DashboardLabel> : null}
       {body}
     </>
   );

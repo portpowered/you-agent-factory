@@ -59,8 +59,14 @@ func (s *Server) InvokeModel(w http.ResponseWriter, r *http.Request, modelName s
 		switch {
 		case errors.Is(err, apisurface.ErrModelNotFound):
 			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
-		case errors.Is(err, apisurface.ErrModelNotAvailable):
+		case apisurface.IsManagedRuntimeMissing(err), errors.Is(err, apisurface.ErrModelNotAvailable):
 			s.writeError(w, http.StatusNotFound, err.Error(), "MODEL_NOT_AVAILABLE")
+		case errors.Is(err, apisurface.ErrManagedRuntimeLoading):
+			s.writeError(w, http.StatusConflict, err.Error(), "MODEL_RUNTIME_LOADING")
+		case errors.Is(err, apisurface.ErrManagedRuntimeFailed):
+			s.writeError(w, http.StatusServiceUnavailable, err.Error(), "MODEL_RUNTIME_FAILED")
+		case errors.Is(err, apisurface.ErrManagedRuntimeUnsupported):
+			s.writeError(w, http.StatusBadRequest, err.Error(), "MODEL_RUNTIME_UNSUPPORTED")
 		case errors.Is(err, apisurface.ErrModelInvocationUnsupportedOperation), errors.Is(err, apisurface.ErrModelInvocationUnsupportedMode):
 			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		default:
@@ -100,30 +106,16 @@ func (s *Server) PullModel(w http.ResponseWriter, r *http.Request, modelName str
 			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
 		case errors.Is(err, apisurface.ErrModelPullUnsupported):
 			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		case apisurface.IsManagedRuntimePullError(err):
+			pullErr, _ := apisurface.AsManagedRuntimePullError(err)
+			s.writeJSON(w, apisurface.ManagedRuntimePullHTTPStatus(pullErr.Result), apisurface.ModelPullResponseFromService(pullErr.Result))
+			return
 		default:
 			s.writeError(w, http.StatusInternalServerError, strings.TrimSpace(err.Error()), "INTERNAL_ERROR")
 		}
 		return
 	}
-	files := make([]factoryapi.ModelPullDownloadedFile, 0, len(result.DownloadedFiles))
-	for _, file := range result.DownloadedFiles {
-		current := factoryapi.ModelPullDownloadedFile{
-			Path:  file.Path,
-			Bytes: file.Bytes,
-		}
-		if sha := strings.TrimSpace(file.SHA256); sha != "" {
-			current.Sha256 = &sha
-		}
-		files = append(files, current)
-	}
-	s.writeJSON(w, http.StatusOK, factoryapi.ModelPullResponse{
-		ModelName:        result.ModelName,
-		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Outcome:          factoryapi.ModelPullOutcome(result.Outcome),
-		CachePath:        result.CachePath,
-		Revision:         result.Revision,
-		DownloadedFiles:  files,
-	})
+	s.writeJSON(w, http.StatusOK, apisurface.ModelPullResponseFromService(result))
 }
 
 func decodeModelInvocationRequestBody(body io.Reader) (factoryapi.ModelInvocationRequest, error) {
