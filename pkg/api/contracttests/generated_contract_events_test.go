@@ -285,7 +285,7 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 	pausedState := factoryapi.FactoryState("PAUSED")
 	completedState := factoryapi.FactoryState("COMPLETED")
 
-	return []factoryapi.FactoryEvent{
+	events := []factoryapi.FactoryEvent{
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
 			Id:            "event-run-started",
@@ -336,6 +336,14 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 				State:  &completedState,
 			}),
 		},
+	}
+	events = append(events, generatedFactoryOrchestratorLifecycleEvents(t, eventTime)...)
+	return events
+}
+
+func generatedFactoryOrchestratorLifecycleEvents(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
 			Id:            "event-javascript-checkpoint-ref",
