@@ -146,6 +146,7 @@ Shared controls:
 - New bespoke buttons, pills, toggles, segmented controls, dialogs, or toolbar shells **SHOULD NOT** be introduced inside a feature when an existing shared primitive can express the interaction with props or a small reusable extension.
 - If a new action/control pattern is needed in more than one place, authors **SHOULD** promote it to a shared component with tests and, where useful, a Storybook story instead of copying Tailwind class clusters across features.
 - New button tones or accent treatments **SHOULD NOT** be invented ad hoc. Use existing shared tones and reserve high-emphasis/default or accent styling for the primary action in a local region. Routine actions should generally use outline, secondary, or ghost treatments; destructive tone is only for destructive operations.
+- Feature component dropdowns **MUST** compose shared select helpers (`EnumSelect`, `OptionalEnumSelect`, `ResetEnumSelect`, or `SelectField`) instead of raw `<select>`, `NativeSelect`, or direct Radix select primitives. `ui/scripts/check-feature-form-control-usage.mjs` (wired into `bun run lint` / `bun run check`) guards `ui/src/features/**/components/`; add narrow exceptions to `feature-form-control-usage-allowlist.mjs` only when a feature-specific wrapper cannot reuse the shared helpers.
 
 Inline panel expand versus full-screen dialog expand:
 

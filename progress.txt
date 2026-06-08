@@ -1,28 +1,67 @@
 ## Codebase Patterns
-- Website structure guards live in `ui/scripts/check-*.mjs` with companion `*.test.mjs` vitest files and optional `*-allowlist.mjs` debt inventories; wire new guards into both `check` and `lint` scripts in `ui/package.json`.
-- Shared UI boundary scans use TypeScript AST import collection on production files under `ui/src/components/ui` only (skip `*.test.*` and `*.stories.tsx`); derive `src/` and repo root paths from the scan root directory so temp-dir tests resolve imports correctly.
-- Staged guard debt uses per-violation allowlist entries keyed by `relativeFilePath#importSpecifier`, with stale-entry detection when allowlisted imports disappear without removing the allowlist row.
-- Feature shape guards split root topology (`check-feature-root-files.mjs`: no root files, approved root subdirectories only) from cross-feature reuse (`check-feature-boundary.mjs`: production imports under `ui/src/features` must reach other features through a `/public/` path segment).
-- Large guard allowlist inventories belong in `scripts/*-allowlist.mjs`; disable Biome `noExcessiveLinesPerFile` for that glob via `biome.jsonc` overrides.
+- Radix UI primitives (Select, Popover, Dialog) follow the shadcn pattern: re-export Radix Root/Trigger/Value, wrap Content/Item with dashboard semantic tokens via `cn()` and `inputVariants()`.
+- Legacy native `<select>` styling lives in `NativeSelect` (`ui/src/components/ui/native-select.tsx`); new dashboard dropdown work should use the Radix `Select` primitives from `ui/src/components/ui/select.tsx`.
+- Feature migrations should prefer `EnumSelect`, `OptionalEnumSelect`, and `ResetEnumSelect` from `ui/src/components/ui/enum-select.tsx` instead of hand-rolling Radix wiring for each field.
+- Radix Select tests in jsdom need `installDashboardBrowserTestShims()` plus pointer-capture and `scrollIntoView` shims (included in `test-browser-shims.ts`).
+- Use `selectLabeledComboboxOption` / `selectComboboxOption` from `ui/src/testing/select-test-helpers.ts` instead of `userEvent.selectOptions` or `fireEvent.change` when asserting migrated dropdown behavior.
+- Radix popper sizing CSS variables (`--radix-select-trigger-width`, etc.) require `// tailwind-exception: intrinsic-sizing` comments to pass the spacing-token lint guard.
+- `SelectField` composes label, description, and error layout; pass `aria-describedby`, `aria-invalid`, and `id` to `SelectTrigger` for accessible form wiring.
+- `SelectContent` prevents default `onCloseAutoFocus` so Radix selects inside dialogs do not fight the dialog focus trap.
+- Factory graph add-dialog tests mock `components/ui/dialog` without focus trapping so combobox interactions stay stable in jsdom.
+- `EnumSelect` / `OptionalEnumSelect` accept optional `className` on the trigger for surface-specific styling (for example submit-work header density or trend-range emphasis).
+- When verifying combobox options in App-shell tests, assert list items before opening the listbox, or close with Escape before querying other regions.
+- Feature component dropdowns are guarded by `ui/scripts/check-feature-form-control-usage.mjs`; compose `EnumSelect` / `OptionalEnumSelect` / `ResetEnumSelect` / `SelectField` instead of raw `<select>`, `NativeSelect`, or direct Radix select primitives under `ui/src/features/**/components/`.
 
-## 2026-06-07T20:07:28Z - website-structure-separation-lints-001
-- Implemented `check-shared-ui-boundary.mjs` to block production `ui/src/components/ui` files from importing `ui/src/features`, feature `state/` or `hooks/` lanes, or runtime state/network modules (`zustand`, `@tanstack/react-query`).
-- Added `shared-ui-boundary-allowlist.mjs` with legacy debt for `widget-frame.tsx` → `AgentBentoCard` feature import; wired guard into `check` and `lint` via `check:shared-ui-boundary`.
-- Added vitest coverage for scanner behavior, allowlist debt vs hard-fail violations, stale allowlist detection, and CLI output.
-- Files changed: `ui/scripts/check-shared-ui-boundary.mjs`, `ui/scripts/check-shared-ui-boundary.test.mjs`, `ui/scripts/shared-ui-boundary-allowlist.mjs`, `ui/package.json`
+## 2026-06-08T03:30:00Z - you-ui-select-dropdown-001
+- Implemented shared Radix/shadcn-style select primitives (`Select`, `SelectTrigger`, `SelectValue`, `SelectContent`, `SelectItem`, `SelectGroup`, `SelectLabel`, `SelectSeparator`, `SelectField`) with dashboard token styling and keyboard interaction.
+- Moved the legacy native wrapper to `NativeSelect` and updated existing feature imports so the new `Select` export is reserved for the Radix primitive.
+- Updated `UIFoundationShowcase` to demonstrate the new select; added `select.test.tsx` covering open/close, keyboard selection, disabled state, placeholder, and validation labeling.
+- Extended `installDashboardBrowserTestShims()` with pointer-capture and `scrollIntoView` shims required by `@radix-ui/react-select` in jsdom.
+- Added `@radix-ui/react-select` dependency.
+- Files changed: `ui/src/components/ui/select.tsx`, `ui/src/components/ui/native-select.tsx`, `ui/src/components/ui/select.test.tsx`, `ui/src/components/ui/index.ts`, `ui/src/components/ui/ui-foundation-showcase.tsx`, `ui/src/components/ui/input.test.tsx`, `ui/src/components/dashboard/test-browser-shims.ts`, `ui/package.json`, `ui/bun.lock`, and NativeSelect import updates across current-selection, factory-graph, submit-work, work-outcome, and dashboard-add-card feature files.
 - **Learnings for future iterations:**
-  - Patterns discovered: follow `check-feature-root-files.mjs` for staged allowlist debt reporting and `check-button-usage.mjs` for TypeScript AST scanning in website guards.
-  - Gotchas encountered: `scanSharedUiBoundary` must compute `src/` relative paths from the passed scan root, not module-level defaults, or temp-dir tests silently miss feature imports.
-  - Useful context: current shared-ui debt hotspot is `ui/src/components/ui/widget-frame.tsx` importing `../../features/bento/components/agent-bento`; stories may import features without tripping the production-only scan.
+  - Patterns discovered: Match existing Radix wrappers (`popover.tsx`, `dialog.tsx`) — thin re-exports plus styled Content/Item components using semantic color roles.
+  - Gotchas encountered: Radix Select controlled mode should use `undefined` (not `""`) for empty/unselected values; empty string can break option rendering.
+  - Useful context: Feature migrations (stories 002–004) should replace `NativeSelect` + `<option>` with `Select` + `SelectItem` and switch `onChange`/`value` to `onValueChange`/`value` Radix APIs.
 ---
 
-## 2026-06-08T08:11:30Z - website-structure-separation-lints-002
-- Extended `check-feature-root-files.mjs` to enforce approved feature-root subdirectory lanes (`components/`, `hooks/`, `lib/`, `messages/`, `state/`, `selectors/`, `public/`) with staged allowlist debt for `current-selection` domain folders and `dashboard/session`.
-- Added `check-feature-boundary.mjs` to block new cross-feature internal imports in production feature files unless the import path crosses a target `public/` boundary; seeded `feature-cross-import-allowlist.mjs` with 160 legacy file entries.
-- Wired `check:feature-boundary` into `ui/package.json` `check` and `lint`; added vitest coverage and a Biome override for large `scripts/*-allowlist.mjs` inventories.
-- Files changed: `ui/scripts/check-feature-boundary.mjs`, `ui/scripts/check-feature-boundary.test.mjs`, `ui/scripts/check-feature-root-files.mjs`, `ui/scripts/check-feature-root-files.test.mjs`, `ui/scripts/feature-cross-import-allowlist.mjs`, `ui/scripts/feature-root-subdirectory-allowlist.mjs`, `ui/package.json`, `ui/biome.jsonc`
+## 2026-06-08T04:35:00Z - you-ui-select-dropdown-002
+- Migrated current-selection editable configuration dropdowns (resource type, worker type/timeout/enums, workstation worker/kind/runner, guard add/type/peer selectors) from `NativeSelect` to shared Radix helpers (`EnumSelect`, `OptionalEnumSelect`, `ResetEnumSelect`).
+- Added `enum-select.tsx` and `select-test-helpers.ts`; updated affected component, widget, and detail-card tests to use combobox interactions with browser shims.
+- Files changed: `ui/src/components/ui/enum-select.tsx`, `ui/src/components/ui/enum-select.test.tsx`, `ui/src/components/ui/index.ts`, `ui/src/testing/select-test-helpers.ts`, resource/worker/workstation editable configuration components and tests under `ui/src/features/current-selection/`.
 - **Learnings for future iterations:**
-  - Patterns discovered: cross-feature boundary classification treats any resolved import under `features/<other>/...` without a `/public/` segment as a violation; nested domain `public/` folders (for example `current-selection/base/public`) satisfy the rule.
-  - Gotchas encountered: guard env overrides must distinguish `undefined` from empty string so tests can disable production subdirectory allowlists without inheriting repo debt entries.
-  - Useful context: current feature-shape debt is concentrated in `current-selection` root domain folders and cross-feature imports across bento, dashboard, workflow-activity, and factory-graph-editor hotspots.
+  - Patterns discovered: Use `OptionalEnumSelect` for nullable enums with a clear option, `ResetEnumSelect` for add-row pickers that should return to placeholder, and `EnumSelect` for required enum fields.
+  - Gotchas encountered: Migrated tests need `@testing-library/jest-dom/vitest` when using `toHaveTextContent` on combobox triggers; `userEvent.selectOptions` no longer works on Radix selects.
+  - Useful context: Pass `aria-label` on `EnumSelect` triggers when the visible label is rendered outside the trigger via `DashboardLabel htmlFor`.
+---
+
+## 2026-06-08T05:00:00Z - you-ui-select-dropdown-003
+- Migrated factory graph add-dialog `FactoryGraphEditorSelectField` from `NativeSelect` to shared `EnumSelect` / `OptionalEnumSelect`, including worker type/provider, work type/state type, and workstation type/kind/assigned-worker fields.
+- Wired accessible `aria-describedby` / `aria-invalid` ids on add-dialog fields; prevented default Radix select close auto-focus to keep modal selects usable.
+- Updated add-dialog field and dialog tests to use combobox helpers with browser shims; mocked dialog focus trapping in dialog integration tests.
+- Files changed: `ui/src/components/ui/select.tsx`, `ui/src/features/factory-graph-editor/components/factory-graph-editor-add-dialog-fields.tsx`, `ui/src/features/factory-graph-editor/components/factory-graph-editor-add-dialog-fields.test.tsx`, `ui/src/features/factory-graph-editor/components/factory-graph-editor-add-dialog.test.tsx`.
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `OptionalEnumSelect` when the legacy field exposed a `value: ""` placeholder option; required enum fields can stay on `EnumSelect`.
+  - Gotchas encountered: Opening Radix `Select` inside a Radix `Dialog` in jsdom can recurse through nested focus scopes—mock dialog primitives in tests or exercise selects at the field-component level.
+  - Useful context: Factory graph add-dialog selects are centralized in `factory-graph-editor-add-dialog-fields.tsx`; entity-specific option wiring remains in `factory-graph-editor-add-dialog.tsx` and `factory-graph-editor-add-workstation-fields.tsx`.
+---
+
+## 2026-06-08T06:05:00Z - you-ui-select-dropdown-004
+- Migrated submit-work work-type selection, inline add-widget selector, and failure-trend range selector from `NativeSelect` to shared `OptionalEnumSelect` / `EnumSelect`.
+- Extended enum-select helpers with optional trigger `className`; updated submit-work, add-widget, trend-card, App-shell, and storybook tests/stories to use combobox helpers and text-content assertions.
+- Files changed: `ui/src/components/ui/enum-select.tsx`, `ui/src/features/submit-work/components/submit-work-card.tsx`, `ui/src/features/dashboard-add-card/components/inline-add-widget-selector.tsx`, `ui/src/features/dashboard-add-card/components/inline-add-widget-card.tsx`, `ui/src/features/work-outcome/components/trend-cards.tsx`, related tests/stories under submit-work, dashboard-add-card, work-outcome, bento, and App shells, plus `ui/src/testing/submit-work-card-queries.ts` and `ui/src/stories/dashboardStoryTestUtils.ts`.
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `OptionalEnumSelect` for nullable submit-work work types; `EnumSelect` covers required enum/range selectors and add-widget pickers with per-option `disabled`.
+  - Gotchas encountered: Storybook `userEvent` is not type-compatible with `@testing-library/user-event` helpers—inline combobox clicks in story utilities or cast carefully.
+  - Useful context: No feature files under `ui/src/features/` still import `NativeSelect`; remaining usage is the legacy wrapper itself and foundation tests.
+---
+
+## 2026-06-08T07:22:00Z - you-ui-select-dropdown-005
+- Added `check-feature-form-control-usage.mjs` guard that scans `ui/src/features/**/components/` and blocks raw `<select>`/`<option>`, `NativeSelect`, direct Radix select primitive imports/JSX, and `@radix-ui/react-select` usage in feature component code.
+- Wired the guard into `bun run lint` and `bun run check`; documented the rule in general website standards; added guard tests and an empty allowlist module for narrow future exceptions.
+- Files changed: `ui/scripts/check-feature-form-control-usage.mjs`, `ui/scripts/check-feature-form-control-usage.test.mjs`, `ui/scripts/feature-form-control-usage-allowlist.mjs`, `ui/package.json`, `docs/internal/standards/code/general-website-standards.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: Follow the existing repo-owned guard pattern (`check-button-usage.mjs`) — TypeScript AST scan, env-overridable allowlist, vitest coverage for pass/fail/CLI output, wired into both lint and check.
+  - Gotchas encountered: A single violating file can produce multiple violation kinds (import + JSX); tests should use `expect.arrayContaining` rather than exact violation lists.
+  - Useful context: Approved feature select helpers are `EnumSelect`, `OptionalEnumSelect`, `ResetEnumSelect`, and `SelectField`; feature-specific wrappers like `FactoryGraphEditorSelectField` should compose those helpers internally.
 ---

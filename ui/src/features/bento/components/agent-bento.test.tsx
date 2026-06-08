@@ -500,10 +500,9 @@ describe("AgentBentoLayout", () => {
       latestLayout?.filter((item) => item.widgetType === "add-widget"),
     ).toHaveLength(1);
     expect(
-      within(addWidgetItem).getByRole("option", {
-        name: "No widgets available",
-      }),
-    ).toBeTruthy();
+      within(addWidgetItem).getByRole("combobox", { name: "Browse widgets" })
+        .textContent,
+    ).toContain("No widgets available");
   });
 
   it("renders real dashboard feature cards through the shared bento seam", () => {

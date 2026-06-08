@@ -152,6 +152,41 @@ function installElementMeasurementShims() {
       };
     },
   });
+  const hasPointerCaptureDescriptor = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "hasPointerCapture",
+  );
+  const setPointerCaptureDescriptor = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "setPointerCapture",
+  );
+  const releasePointerCaptureDescriptor = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "releasePointerCapture",
+  );
+  const scrollIntoViewDescriptor = Object.getOwnPropertyDescriptor(
+    Element.prototype,
+    "scrollIntoView",
+  );
+
+  Object.defineProperty(Element.prototype, "hasPointerCapture", {
+    configurable: true,
+    value() {
+      return false;
+    },
+  });
+  Object.defineProperty(Element.prototype, "setPointerCapture", {
+    configurable: true,
+    value() {},
+  });
+  Object.defineProperty(Element.prototype, "releasePointerCapture", {
+    configurable: true,
+    value() {},
+  });
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value() {},
+  });
 
   return () => {
     globalThis.ResizeObserver = resizeObserver;
@@ -216,6 +251,42 @@ function installElementMeasurementShims() {
       );
     } else {
       Reflect.deleteProperty(SVGElement.prototype, "getBBox");
+    }
+    if (hasPointerCaptureDescriptor) {
+      Object.defineProperty(
+        Element.prototype,
+        "hasPointerCapture",
+        hasPointerCaptureDescriptor,
+      );
+    } else {
+      Reflect.deleteProperty(Element.prototype, "hasPointerCapture");
+    }
+    if (setPointerCaptureDescriptor) {
+      Object.defineProperty(
+        Element.prototype,
+        "setPointerCapture",
+        setPointerCaptureDescriptor,
+      );
+    } else {
+      Reflect.deleteProperty(Element.prototype, "setPointerCapture");
+    }
+    if (releasePointerCaptureDescriptor) {
+      Object.defineProperty(
+        Element.prototype,
+        "releasePointerCapture",
+        releasePointerCaptureDescriptor,
+      );
+    } else {
+      Reflect.deleteProperty(Element.prototype, "releasePointerCapture");
+    }
+    if (scrollIntoViewDescriptor) {
+      Object.defineProperty(
+        Element.prototype,
+        "scrollIntoView",
+        scrollIntoViewDescriptor,
+      );
+    } else {
+      Reflect.deleteProperty(Element.prototype, "scrollIntoView");
     }
   };
 }

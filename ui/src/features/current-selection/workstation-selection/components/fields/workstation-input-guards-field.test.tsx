@@ -1,10 +1,26 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach } from "vitest";
+
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+import { selectComboboxOption } from "../../../../../testing/select-test-helpers";
 
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 import { EditableConfigurationWorkstationInputGuardsField } from "./workstation-input-guards-field";
 
 const messages = getWorkstationDetailMessages("en");
+
+let restoreBrowserShims: (() => void) | undefined;
+
+beforeEach(() => {
+  restoreBrowserShims = installDashboardBrowserTestShims();
+});
+
+afterEach(() => {
+  cleanup();
+  restoreBrowserShims?.();
+  restoreBrowserShims = undefined;
+});
 
 describe("EditableConfigurationWorkstationInputGuardsField", () => {
   it("renders each input slot with work type, state, and guard summary", () => {
@@ -50,9 +66,10 @@ describe("EditableConfigurationWorkstationInputGuardsField", () => {
     );
 
     const slotArticles = screen.getAllByRole("article");
-    await user.selectOptions(
+    await selectComboboxOption(
+      user,
       within(slotArticles[1]).getByLabelText("Input guard"),
-      "SAME_NAME",
+      "Same name",
     );
 
     expect(onInputsChange).toHaveBeenCalledWith([
@@ -81,9 +98,10 @@ describe("EditableConfigurationWorkstationInputGuardsField", () => {
     );
 
     const updatedSlotArticles = screen.getAllByRole("article");
-    await user.selectOptions(
+    await selectComboboxOption(
+      user,
       within(updatedSlotArticles[1]).getByLabelText("Input guard"),
-      "",
+      messages.workstationInputGuardNoneOption,
     );
 
     expect(onInputsChange).toHaveBeenCalledWith([
@@ -108,9 +126,10 @@ describe("EditableConfigurationWorkstationInputGuardsField", () => {
     );
 
     const slotArticles = screen.getAllByRole("article");
-    await user.selectOptions(
+    await selectComboboxOption(
+      user,
       within(slotArticles[1]).getByLabelText("Input guard"),
-      "ALL_CHILDREN_COMPLETE",
+      "All children complete",
     );
 
     expect(onInputsChange).toHaveBeenCalledWith([
