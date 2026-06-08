@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DashboardWorkRelation } from "../../../api/dashboard/types";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-relation-factory-graph-node";
+import { WORK_RELATION_NODE_TYPES } from "../../graphs/public";
 import { buildTraceRelationFactoryGraphFlow } from "./trace-relation-factory-graph-flow";
 
 const RELATIONS: DashboardWorkRelation[] = [
@@ -81,7 +81,7 @@ describe("buildTraceRelationFactoryGraphFlow", () => {
   it("registers only shared work graph React Flow node types", () => {
     const flow = buildTraceRelationFactoryGraphFlow(RELATIONS);
 
-    expect(Object.keys(TRACE_RELATION_FACTORY_GRAPH_NODE_TYPES)).toEqual([
+    expect(Object.keys(WORK_RELATION_NODE_TYPES)).toEqual([
       "workRelation",
     ]);
     expect(flow.nodes.every((node) => node.type === "workRelation")).toBe(true);
