@@ -993,6 +993,22 @@ describe("factory graph React Flow projection waypoint semantics", () => {
     }
   });
 
+  it("returns edges unchanged when waypoint decoration receives edges without data", () => {
+    const edgeWithoutData = {
+      id: WAYPOINT_EDGE_ID,
+      source: "workstation:draft",
+      target: "work-state:story:done",
+    };
+
+    const decorated = decorateProjectedEdgesWithWaypoints({
+      edges: [edgeWithoutData as (typeof edgeWithoutData & { data?: undefined })],
+      editorMode: true,
+      layout: createDefaultFactoryLayout(),
+    });
+
+    expect(decorated).toEqual([edgeWithoutData]);
+  });
+
   it("leaves graph topology unchanged through add, move, and remove waypoint layout operations", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
