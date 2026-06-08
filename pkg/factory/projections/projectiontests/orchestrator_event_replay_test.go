@@ -7,8 +7,11 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workflowresult"
 )
 
 func TestReconstructFactoryWorldState_PetriFixtureReconstructsMarkingWithoutJavaScriptProjection(t *testing.T) {
@@ -37,6 +40,73 @@ func TestReconstructFactoryWorldState_PetriFixtureReconstructsMarkingWithoutJava
 	}
 	if len(view.Runtime.PlaceTokenCounts) == 0 && len(view.Runtime.CurrentWorkItemsByPlaceID) == 0 {
 		t.Fatalf("petri runtime projection = %#v, want marking occupancy", view.Runtime)
+	}
+}
+
+func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultProjection(t *testing.T) {
+	t0 := time.Date(2026, 6, 8, 17, 10, 0, 0, time.UTC)
+	sessionID := "session-js"
+	primaryJSON, err := json.Marshal(map[string]any{"ok": true, "count": 2})
+	if err != nil {
+		t.Fatalf("marshal primary result: %v", err)
+	}
+	var primaryResult factoryapi.WorkContent
+	if err := json.Unmarshal([]byte(`[{"type":"JSON","json":{"ok":true,"count":2}}]`), &primaryResult); err != nil {
+		t.Fatalf("unmarshal primary result content: %v", err)
+	}
+	resultArtifact := factoryapi.FactoryArtifactRef{
+		Id:         "artifact-final-1",
+		Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
+		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+	}
+	input := workflowresult.SessionResultInput{
+		SessionID:    sessionID,
+		Status:       factoryapi.FactorySessionStatusFINISHED,
+		PrimaryValue: workflowresult.TypedValue{JSON: primaryJSON},
+		ResultArtifact: &resultArtifact,
+		Artifacts: []interfaces.FactorySessionArtifactState{{
+			ID:         "artifact-final-1",
+			Kind:       "FINAL_RESULT",
+			Visibility: "PUBLIC",
+		}},
+	}
+	eventPayload := workflowresult.BuildSessionResultUpdatedPayload(input)
+	events := []factoryapi.FactoryEvent{
+		javascriptRunRequestEvent(t0),
+		javascriptSessionResultUpdatedEvent(1, t0.Add(2*time.Second), eventPayload),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 1)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	ctx := factorysessions.ProjectionContext{
+		Session: &factorysessions.LiveSession{ID: sessionID},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Orchestrator: &interfaces.FactoryOrchestratorConfig{
+				Kind: interfaces.OrchestratorKindJavaScript,
+			},
+		},
+		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
+			ScriptStatus:  "FINISHED",
+			PrimaryResult: worldState.JavaScriptRuntime.PrimaryResult,
+			Artifacts:     worldState.JavaScriptRuntime.Artifacts,
+		},
+		Now: t0.Add(2 * time.Second),
+	}
+	durableResult := apisurface.BuildWorkflowSessionResult(input)
+	if durableResult.PrimaryResult == nil || eventPayload.PrimaryResult == nil {
+		t.Fatalf("primary results = session %#v event %#v", durableResult.PrimaryResult, eventPayload.PrimaryResult)
+	}
+	if durableResult.ArtifactIds == nil || len(*durableResult.ArtifactIds) == 0 || eventPayload.ResultArtifactRef == nil {
+		t.Fatal("expected matching result artifact ids")
+	}
+	if (*durableResult.ArtifactIds)[0] != eventPayload.ResultArtifactRef.Id {
+		t.Fatalf("artifact ids differ: %q vs %q", (*durableResult.ArtifactIds)[0], eventPayload.ResultArtifactRef.Id)
+	}
+	liveResult := factorysessions.ProjectSessionResult(sessionID, ctx, factorysessions.NewJavaScriptCheckpointStore())
+	if liveResult.ResultArtifactRef == nil || liveResult.ResultArtifactRef.Id != eventPayload.ResultArtifactRef.Id {
+		t.Fatalf("live result artifact = %#v, want id %q", liveResult.ResultArtifactRef, eventPayload.ResultArtifactRef.Id)
 	}
 }
 
@@ -165,6 +235,10 @@ func javascriptCheckpointRefEvent(tick int, eventTime time.Time) factoryapi.Fact
 		},
 	}
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeJavaScriptCheckpointRef, "javascript-checkpoint-ref", tick, eventTime, factoryapi.FactoryEventContext{}, payload)
+}
+
+func javascriptSessionResultUpdatedEvent(tick int, eventTime time.Time, payload factoryapi.SessionResultUpdatedEventPayload) factoryapi.FactoryEvent {
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeSessionResultUpdated, "session-result-updated", tick, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
 func javascriptArtifactCreatedEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {

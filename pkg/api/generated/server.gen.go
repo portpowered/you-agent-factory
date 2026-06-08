@@ -128,6 +128,7 @@ const (
 	FactoryEventTypeRunResponse               FactoryEventType = "RUN_RESPONSE"
 	FactoryEventTypeScriptRequest             FactoryEventType = "SCRIPT_REQUEST"
 	FactoryEventTypeScriptResponse            FactoryEventType = "SCRIPT_RESPONSE"
+	FactoryEventTypeSessionResultUpdated      FactoryEventType = "SESSION_RESULT_UPDATED"
 	FactoryEventTypeWorkRequest               FactoryEventType = "WORK_REQUEST"
 	FactoryEventTypeWorkStateChange           FactoryEventType = "WORK_STATE_CHANGE"
 )
@@ -3737,6 +3738,22 @@ type ScriptResponseEventPayload struct {
 	TransitionId string `json:"transitionId"`
 }
 
+// SessionResultUpdatedEventPayload JavaScript workflow terminal result recorded on the canonical factory event stream. Result bodies remain orchestrator-owned and are projected through structured WorkContent parts and artifact refs.
+type SessionResultUpdatedEventPayload struct {
+	// CheckpointRefs Checkpoint refs associated with the terminal session result.
+	CheckpointRefs *[]FactorySessionJavaScriptCheckpointRef `json:"checkpointRefs,omitempty"`
+
+	// PrimaryResult Ordered canonical content parts for one work item.
+	PrimaryResult     *WorkContent        `json:"primaryResult,omitempty"`
+	ResultArtifactRef *FactoryArtifactRef `json:"resultArtifactRef,omitempty"`
+
+	// SessionId Live factory session identifier for this result update.
+	SessionId string `json:"sessionId"`
+
+	// Status Canonical lifecycle status for one live factory session runtime.
+	Status FactorySessionStatus `json:"status"`
+}
+
 // StageSubmitWorkFileRequest defines model for StageSubmitWorkFileRequest.
 type StageSubmitWorkFileRequest struct {
 	// ContentBase64 Base64-encoded file payload to stage behind a backend-owned reference.
@@ -4073,7 +4090,7 @@ type WorkAudioContentPart struct {
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 
-	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 	Url WorkContentURLProperty `json:"url"`
 }
 
@@ -4102,7 +4119,7 @@ type WorkBinaryContentPart struct {
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 
-	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 	Url WorkContentURLProperty `json:"url"`
 }
 
@@ -4144,7 +4161,7 @@ type WorkContentPart struct {
 // WorkContentPartType Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
 type WorkContentPartType string
 
-// WorkContentURLProperty Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+// WorkContentURLProperty Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 type WorkContentURLProperty = string
 
 // WorkDiagnostics defines model for WorkDiagnostics.
@@ -4187,7 +4204,7 @@ type WorkImageContentPart struct {
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 
-	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 	Url WorkContentURLProperty `json:"url"`
 }
 
@@ -5376,6 +5393,32 @@ func (t *FactoryEvent_Payload) FromArtifactCreatedEventPayload(v ArtifactCreated
 
 // MergeArtifactCreatedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided ArtifactCreatedEventPayload
 func (t *FactoryEvent_Payload) MergeArtifactCreatedEventPayload(v ArtifactCreatedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionResultUpdatedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionResultUpdatedEventPayload
+func (t FactoryEvent_Payload) AsSessionResultUpdatedEventPayload() (SessionResultUpdatedEventPayload, error) {
+	var body SessionResultUpdatedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionResultUpdatedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionResultUpdatedEventPayload
+func (t *FactoryEvent_Payload) FromSessionResultUpdatedEventPayload(v SessionResultUpdatedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionResultUpdatedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionResultUpdatedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionResultUpdatedEventPayload(v SessionResultUpdatedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

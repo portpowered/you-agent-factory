@@ -394,6 +394,24 @@ func generatedFactoryOrchestratorLifecycleEvents(t *testing.T, eventTime time.Ti
 				CapturedAt: &eventTime,
 			}),
 		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-result-updated",
+			Type:          factoryapi.FactoryEventTypeSessionResultUpdated,
+			Context:       factoryapi.FactoryEventContext{Sequence: 13, Tick: 7, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.SessionResultUpdatedEventPayload{
+				SessionId: "session-js",
+				Status:    factoryapi.FactorySessionStatusFINISHED,
+				PrimaryResult: &factoryapi.WorkContent{
+					mustGeneratedJSONPart(t, map[string]any{"ok": true}),
+				},
+				ResultArtifactRef: &factoryapi.FactoryArtifactRef{
+					Id:         "artifact-result-1",
+					Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
+					Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+				},
+			}),
+		},
 	}
 }
 
@@ -848,6 +866,18 @@ func assertGeneratedWorkRequestEventContext(t *testing.T, event factoryapi.Facto
 	if payload.Works == nil || len(*payload.Works) != 1 || (*payload.Works)[0].Name != "draft release notes" {
 		t.Fatalf("payload.works = %#v, want one preserved work item", payload.Works)
 	}
+}
+
+func mustGeneratedJSONPart(t *testing.T, value map[string]any) factoryapi.WorkContentPart {
+	t.Helper()
+	var part factoryapi.WorkContentPart
+	if err := part.FromWorkJsonContentPart(factoryapi.WorkJsonContentPart{
+		Type: factoryapi.WorkContentPartTypeJSON,
+		Json: value,
+	}); err != nil {
+		t.Fatalf("build generated json part: %v", err)
+	}
+	return part
 }
 
 func mustGeneratedModelAudioPart(t *testing.T, file string) factoryapi.WorkContentPart {

@@ -47,3 +47,4 @@ properties:
       - $ref: ./payloads/JavaScriptCheckpointRefEventPayload.yaml
       - $ref: ./payloads/JavaScriptPhaseChangeEventPayload.yaml
       - $ref: ./payloads/ArtifactCreatedEventPayload.yaml
+      - $ref: ./payloads/SessionResultUpdatedEventPayload.yaml

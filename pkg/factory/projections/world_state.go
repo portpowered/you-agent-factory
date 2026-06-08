@@ -11,6 +11,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 const (
@@ -984,6 +985,8 @@ func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event factoryapi.F
 		return true, r.applyJavaScriptPhaseChangeEvent(event)
 	case factoryapi.FactoryEventTypeArtifactCreated:
 		return true, r.applyArtifactCreatedEvent(event)
+	case factoryapi.FactoryEventTypeSessionResultUpdated:
+		return true, r.applySessionResultUpdatedEvent(event)
 	default:
 		return false, nil
 	}
@@ -1051,6 +1054,57 @@ func (r *factoryWorldReducer) applyArtifactCreatedEvent(event factoryapi.Factory
 	r.stateValue.Artifacts = append(r.stateValue.Artifacts, artifact)
 	if runtime := r.ensureJavaScriptRuntime(); runtime != nil {
 		runtime.Artifacts = append(runtime.Artifacts, artifact)
+	}
+	return nil
+}
+
+func (r *factoryWorldReducer) applySessionResultUpdatedEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsSessionResultUpdatedEventPayload()
+	if err != nil {
+		return err
+	}
+	runtime := r.ensureJavaScriptRuntime()
+	if payload.PrimaryResult != nil {
+		runtime.PrimaryResult = workcontent.PartsFromGenerated(payload.PrimaryResult)
+	}
+	runtime.ResultStatus = string(payload.Status)
+	if payload.ResultArtifactRef != nil {
+		artifact := interfaces.FactorySessionArtifactState{
+			ID:         payload.ResultArtifactRef.Id,
+			Kind:       string(payload.ResultArtifactRef.Kind),
+			Visibility: string(payload.ResultArtifactRef.Visibility),
+		}
+		if payload.ResultArtifactRef.ContentHash != nil {
+			artifact.ContentHash = *payload.ResultArtifactRef.ContentHash
+		}
+		if payload.ResultArtifactRef.SizeBytes != nil {
+			artifact.SizeBytes = *payload.ResultArtifactRef.SizeBytes
+		}
+		r.stateValue.Artifacts = append(r.stateValue.Artifacts, artifact)
+		runtime.Artifacts = append(runtime.Artifacts, artifact)
+	}
+	if payload.CheckpointRefs != nil {
+		for _, checkpoint := range *payload.CheckpointRefs {
+			projected := interfaces.FactorySessionJavaScriptCheckpointRef{ID: checkpoint.Id}
+			if checkpoint.Label != nil {
+				projected.Label = *checkpoint.Label
+			}
+			if checkpoint.Summary != nil {
+				projected.Summary = *checkpoint.Summary
+			}
+			if checkpoint.Timestamp != nil {
+				projected.Timestamp = checkpoint.Timestamp.UTC()
+			}
+			if checkpoint.ArtifactRef != nil {
+				projected.ArtifactRef = &interfaces.JavaScriptCheckpointArtifactRef{
+					ID:         checkpoint.ArtifactRef.Id,
+					Kind:       string(checkpoint.ArtifactRef.Kind),
+					Visibility: string(checkpoint.ArtifactRef.Visibility),
+				}
+			}
+			r.stateValue.JavaScriptCheckpoints = append(r.stateValue.JavaScriptCheckpoints, projected)
+			runtime.Checkpoints = append(runtime.Checkpoints, projected)
+		}
 	}
 	return nil
 }

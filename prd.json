@@ -1,0 +1,122 @@
+{
+  "project": "Contract Validation Policy Stub",
+  "branchName": "ralph/contract-validation-policy-stub",
+  "description": "Define the first-pass dynamic workflow contract for source validation, JavaScript and TypeScript loader expectations, safe read-only policy defaults, source lookup order, artifact URI conventions, structured JSON result constraints, and bounded read-only MVP behavior.",
+  "context": {
+    "customerAsk": "Refer to docs/temp/dynamic-workflows-plan.md for Dynamic workflows Batch 001: define first-pass workflow source validation, JavaScript/TypeScript loader expectations, policy defaults, source lookup order, artifact URI conventions, structured JSON result constraints, and bounded read-only MVP defaults.",
+    "problem": "Later dynamic workflow API, CLI, MCP, website, fake-service, and runtime work needs one stable contract for accepting, resolving, validating, previewing, and projecting workflow sources. Without this, JavaScript and TypeScript workflow behavior, policy denial, artifact refs, and structured results can drift across interfaces or accidentally grant unsafe host access.",
+    "solution": "Define validation behavior for inline and file-backed workflow sources, explicit JavaScript and TypeScript loader expectations, a shared ordered source resolver, safe read-only effective policy defaults with stable hashes and preview diagnostics, scoped artifact URI rules, and structured JSON-compatible result projection through FactorySessionResult and WorkContent."
+  },
+  "acceptanceCriteria": [
+    "Workflow validation rejects invalid JavaScript source, invalid meta, unsupported globals, unsupported primitive calls, invalid schemas, forbidden host access, and incompatible policy requests before session creation or preview approval.",
+    ".js and .ts workflow source handling has explicit MVP behavior, including successful JavaScript loading, bounded TypeScript loader/transpile expectations, and clear diagnostics for unsupported TypeScript or module features.",
+    "API, CLI, MCP, and website normalization use the same source lookup order for workflow names and file refs: project .claude/workflows, user workflows, package-relative workflows, built-in/global JavaScript factories, then explicit factory lookup when requested.",
+    "The effective default policy is read-only, bounded, stable-hashable, included in previews/session creation responses, and rejects denied capabilities before runtime execution.",
+    "Workflow results are structured JSON-compatible values; large, non-text, image, audio, binary, and diagnostic outputs are represented through WorkContent artifact refs or you-artifact://sessions/{session_id}/artifacts/{artifact_id} URIs.",
+    "Generated contracts are refreshed where required, typecheck passes, lint passes, and focused backend/frontend/contract tests pass."
+  ],
+  "userStories": [
+    {
+      "id": "contract-validation-policy-stub-001",
+      "title": "Reject invalid or unsafe workflow source before session creation",
+      "description": "As a workflow author, I want invalid or unsafe workflow source rejected with actionable diagnostics before a run starts so that runtime failures and unsafe host access are prevented early.",
+      "acceptanceCriteria": [
+        "Inline and file-backed JavaScript workflow validation rejects syntax errors before a factory session is created.",
+        "Invalid meta, invalid args schema, unsupported globals, unsupported primitive call shapes, and forbidden direct filesystem/process/network access each produce path-aware or source-location-aware validation diagnostics.",
+        "Validation accepts the supported MVP workflow globals and primitives: meta, global structured args, phase, log, workflow.log, workflow.artifact, workflow.final, agent, agent.run, parallel, and pipeline.",
+        "Validation does not execute workflow source or invoke child agents while producing diagnostics.",
+        "Focused backend or contract tests cover one valid source, one syntax error, one invalid metadata/schema case, and one forbidden host-access case.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "contract-validation-policy-stub-002",
+      "title": "Define JavaScript and TypeScript loader expectations",
+      "description": "As a workflow author, I want .js and .ts workflow files to have explicit loading behavior so that Claude-compatible examples either run through supported syntax or fail with clear guidance.",
+      "acceptanceCriteria": [
+        ".js workflow files load as the MVP executable source format and preserve source refs and source hashes in validation or preview responses.",
+        ".ts workflow files are accepted only through the defined MVP TypeScript loader path, such as syntax-stripping/transpile placeholder behavior for supported TypeScript syntax, or rejected with a structured unsupported-loader diagnostic when the loader is not available.",
+        "Unsupported Node/Bun module loading, package-manager access, arbitrary imports, and direct host APIs fail before runtime execution with diagnostics that name the unsupported capability.",
+        "Source-map or wrapper line offsets are remapped so diagnostics refer to the customer-authored workflow file when practical.",
+        "Tests cover a supported .js workflow, the defined .ts loader behavior, an unsupported import/module case, and source hash stability for unchanged source.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "contract-validation-policy-stub-003",
+      "title": "Resolve workflow sources through one ordered lookup contract",
+      "description": "As an API, CLI, MCP, or website user, I want workflow names and file references to resolve consistently so that the same request runs the same source from every interface.",
+      "acceptanceCriteria": [
+        "Source requests support the contract kinds FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, and INLINE_WORKFLOW.",
+        "Workflow name/file resolution uses this order unless an explicit source kind bypasses lookup: project .claude/workflows, ~/.you-agent-factory/workflows, package-relative workflow directories, built-in/global named JavaScript factories, then explicit factory lookup when requested.",
+        "Resolution responses expose resolved source kind, safe source ref, source hash, orchestrator kind/dialect, and a diagnostic when no source is found or multiple sources conflict.",
+        "Artifact roots supplied with source requests are absolute, policy-checked, and outside the target repository by default.",
+        "API, CLI, MCP, and website request normalization share the same observable lookup behavior and conflict diagnostics.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "contract-validation-policy-stub-004",
+      "title": "Apply bounded read-only policy defaults and preview diagnostics",
+      "description": "As an operator, I want dynamic workflow previews and session starts to apply a safe default policy so that workflow fan-out and host effects are bounded unless explicitly permitted later.",
+      "acceptanceCriteria": [
+        "Effective policy defaults to mode READ_ONLY, maxAgents 16, concurrency min(4, maxAgents), maxDepth 1, maxRetries 0, network disabled, connectors disabled, danger-full-access denied, empty writable roots, and output audit mode AUTO.",
+        "Policy validation rejects zero or negative concurrency, concurrency above maxAgents, unbounded or excessive child limits above the deployment cap, unknown runners/models/reasoning efforts/route profiles/commands/sandbox modes, and writable roots under read-only mode.",
+        "Read-only policy denies workspace-write workers, direct workflow filesystem writes, direct shell/process access, direct network access, connectors, and danger-full-access before runtime execution.",
+        "Preview/session creation responses include effective policy, stable policy hash, max child count, max concurrency, runner/model/profile decisions, timeout/budget decisions, and denied capability diagnostics.",
+        "Tests prove policy hashes are stable across map ordering and that denied capabilities fail closed before any runtime or dispatch side effect.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "contract-validation-policy-stub-005",
+      "title": "Constrain workflow results and artifact URI projections",
+      "description": "As a result consumer, I want workflow outputs to be structured and artifact-backed so that API, CLI, MCP, events, and UI can safely render final and partial results.",
+      "acceptanceCriteria": [
+        "Workflow return values and workflow.final values must be structured-cloneable JSON-compatible values; unresolved promises, functions, cyclic values, host handles, and unsupported binary blobs fail with clear diagnostics.",
+        "A structured workflow result maps to FactorySessionResult.primaryResult using existing WorkContent JSON parts.",
+        "Large, image, audio, binary, patch, log, checkpoint, and diagnostic outputs are represented as artifact refs or you-artifact://sessions/{session_id}/artifacts/{artifact_id} URIs instead of embedded raw bytes in JSON.",
+        "Artifact URI parsing rejects malformed session ids, artifact ids, path traversal, host paths, and URIs that do not belong to the requested session.",
+        "SESSION_RESULT_UPDATED events and GET /factory-sessions/{session_id}/results project the same result and artifact ids for a fixture workflow result.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "contract-validation-policy-stub-006",
+      "title": "Surface validation and policy outcomes consistently across public interfaces",
+      "description": "As a maintainer, I want validation, preview, and policy outcomes to appear consistently across API, CLI, MCP, and website surfaces so that later runtime work can plug into a stable contract.",
+      "acceptanceCriteria": [
+        "API validation/preview/start responses expose the same validation issues, source resolution metadata, effective policy hash, artifact-root decisions, and structured-result constraints as the shared service contract.",
+        "CLI validation/preview/session-start output shows actionable source, loader, policy, and result-shape diagnostics without requiring users to inspect logs.",
+        "MCP validation/start tools return structured errors for unsupported source, loader, policy, artifact-root, or result capabilities.",
+        "Website run/preview flows have explicit loading, empty, error, and success states for validation and policy preview data, and display source resolution and denied capability diagnostics accessibly.",
+        "Direct browser verification covers the website validation/preview error and success states when browser-visible behavior changes.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}

@@ -31,6 +31,7 @@ var canonicalFactoryEventTypeValues = []string{
 	"JAVASCRIPT_CHECKPOINT_REF",
 	"JAVASCRIPT_PHASE_CHANGE",
 	"ARTIFACT_CREATED",
+	"SESSION_RESULT_UPDATED",
 }
 
 var retiredFactoryEventTypeValues = []string{
@@ -85,6 +86,7 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"JavaScriptCheckpointRefEventPayload",
 	"JavaScriptPhaseChangeEventPayload",
 	"ArtifactCreatedEventPayload",
+	"SessionResultUpdatedEventPayload",
 }
 
 var bundledFactoryEventPayloadRefs = []string{
@@ -107,6 +109,7 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/JavaScriptCheckpointRefEventPayload",
 	"#/components/schemas/JavaScriptPhaseChangeEventPayload",
 	"#/components/schemas/ArtifactCreatedEventPayload",
+	"#/components/schemas/SessionResultUpdatedEventPayload",
 }
 
 var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
@@ -129,6 +132,7 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"JAVASCRIPT_CHECKPOINT_REF":   "JavaScriptCheckpointRefEventPayload",
 	"JAVASCRIPT_PHASE_CHANGE":     "JavaScriptPhaseChangeEventPayload",
 	"ARTIFACT_CREATED":            "ArtifactCreatedEventPayload",
+	"SESSION_RESULT_UPDATED":      "SessionResultUpdatedEventPayload",
 }
 
 const openAPISchemaRefPrefix = "#/components/schemas/"

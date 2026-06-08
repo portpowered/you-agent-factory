@@ -2504,7 +2504,8 @@ export interface components {
         | components["schemas"]["RunResponseEventPayload"]
         | components["schemas"]["JavaScriptCheckpointRefEventPayload"]
         | components["schemas"]["JavaScriptPhaseChangeEventPayload"]
-        | components["schemas"]["ArtifactCreatedEventPayload"];
+        | components["schemas"]["ArtifactCreatedEventPayload"]
+        | components["schemas"]["SessionResultUpdatedEventPayload"];
     };
     /**
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -3810,7 +3811,7 @@ export interface components {
      * @enum {string}
      */
     RelationType: RelationType;
-    /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:. */
+    /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs. */
     WorkContentURLProperty: string;
     /**
      * @deprecated
@@ -3973,6 +3974,18 @@ export interface components {
       mapping?: components["schemas"]["HostedLinearWorkerMapping"];
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
+    };
+    /** @description JavaScript workflow terminal result recorded on the canonical factory event stream. Result bodies remain orchestrator-owned and are projected through structured WorkContent parts and artifact refs. */
+    SessionResultUpdatedEventPayload: {
+      /** @description Live factory session identifier for this result update. */
+      sessionId: string;
+      status: components["schemas"]["FactorySessionStatus"];
+      /** @description Structured JSON-compatible workflow result projected through WorkContent parts. */
+      primaryResult?: components["schemas"]["WorkContent"];
+      /** @description Final result artifact reference without raw artifact bodies. */
+      resultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
+      /** @description Checkpoint refs associated with the terminal session result. */
+      checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
     };
   };
   responses: {
@@ -5804,6 +5817,8 @@ export const FactoryEventType = {
   FactoryEventTypeJavaScriptPhaseChange: "JAVASCRIPT_PHASE_CHANGE",
   // A customer-visible factory artifact was created without exposing raw artifact bodies.
   FactoryEventTypeArtifactCreated: "ARTIFACT_CREATED",
+  // A JavaScript workflow terminal result was recorded with structured primaryResult and artifact refs.
+  FactoryEventTypeSessionResultUpdated: "SESSION_RESULT_UPDATED",
 } as const;
 export type FactoryEventType =
   (typeof FactoryEventType)[keyof typeof FactoryEventType];

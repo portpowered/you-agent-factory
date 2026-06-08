@@ -29,6 +29,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
 	factoryapi.FactoryEventTypeJavaScriptPhaseChange,
 	factoryapi.FactoryEventTypeArtifactCreated,
+	factoryapi.FactoryEventTypeSessionResultUpdated,
 }
 
 var retiredFactoryEventTypeStrings = []string{
@@ -118,6 +119,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 		_, err := payload.AsArtifactCreatedEventPayload()
 		return err
 	},
+	factoryapi.FactoryEventTypeSessionResultUpdated: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionResultUpdatedEventPayload()
+		return err
+	},
 }
 
 var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.FactoryEvent_Payload, any) error{
@@ -177,6 +182,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.ArtifactCreatedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromArtifactCreatedEventPayload(value.(factoryapi.ArtifactCreatedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.SessionResultUpdatedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionResultUpdatedEventPayload(value.(factoryapi.SessionResultUpdatedEventPayload))
 	},
 }
 

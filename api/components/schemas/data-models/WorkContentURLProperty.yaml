@@ -2,4 +2,5 @@ type: string
 minLength: 1
 description: >-
   Canonical content reference for file-backed parts. Supported schemes are
-  file://, http://, https://, and data:.
+  file://, http://, https://, data:, and you-artifact:// for session-scoped
+  factory artifact refs.

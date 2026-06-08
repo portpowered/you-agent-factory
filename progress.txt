@@ -1,0 +1,89 @@
+## Codebase Patterns
+- JavaScript workflow source validation belongs in `pkg/workflowvalidation/` using `github.com/tdewolff/parse/v2/js` for syntax/AST checks without executing workflow code.
+- File-backed `.js` and supported `.ts` workflow sources load through `workflowvalidation.Load` (stable `SourceHash`, TypeScript syntax stripping, authored-line remapping) before `ValidateLoaded`; integrate from `factoryvalidation.WorkflowSourceTargets`.
+- Wire inline workflow validation through `pkg/factory/validation/validate.go` (`javascriptWorkflowConfigAndInlineTargets`); wire file-backed `sourceRef` validation through `validation.Options.WorkflowSourceReader` and `WorkflowSourceTargets`.
+- Workflow source lookup and artifact-root validation belong in `pkg/workflowsource/`; normalize API, CLI, MCP, and website requests through `pkg/apisurface/workflow_source.go` (CLI re-export in `pkg/cli/workflowsource/normalize.go`). Lookup order: project `.claude/workflows`, `~/.you-agent-factory/workflows`, package-relative `factory/workflows`, named JavaScript factories, then explicit factory lookup when requested.
+- Workflow policy defaults, validation, stable hashing, capability denial, and preview projection belong in `pkg/workflowpolicy/`; normalize API, CLI, MCP, and website policy preview/session-start requests through `pkg/apisurface/workflow_policy.go`. Integrate factory `defaultPolicy` validation through `pkg/factory/validation/validate.go` and session runtime policy hash/budget projection through `pkg/factorysessions/projection.go`.
+- Workflow result validation, `you-artifact://sessions/{session_id}/artifacts/{artifact_id}` URI parsing, and `FactorySessionResult.primaryResult` / `SESSION_RESULT_UPDATED` projection belong in `pkg/workflowresult/`; normalize API, CLI, MCP, and website result-shape checks through `pkg/apisurface/workflow_result.go`. Integrate terminal session result reads through `pkg/factorysessions/checkpoints.go` and replay through `pkg/factory/projections/world_state.go`.
+- Workflow validation, source resolution, policy preview, and structured-result constraint projection belong in `pkg/workflowpreview/`; normalize through `pkg/apisurface/workflow_preview.go` (`POST /workflow-previews`), CLI `you workflow preview`, MCP `pkg/mcp/workflow/preview.go`, and website `ui/src/api/workflow-preview/` + `ui/src/features/workflow-preview/`.
+- `pkg/factory/validation` is at the 15-file pkg-file-count cap; add new validation logic in sibling packages rather than new files in that directory. Do not import `pkg/apisurface` from `pkg/factory/validation` (import cycle via `pkg/config`).
+- Artifact-root inside-repo checks should compare `resolvedComparablePath` values so macOS `/var` vs `/private/var` paths and not-yet-created trailing path segments still fail closed.
+- Workflow validation issue codes use the `workflow.source.*` prefix and map to `factory.javascript.*` validation target paths.
+
+## 2026-06-08T18:35:54Z - contract-validation-policy-stub-001
+- Implemented static JavaScript workflow source validation for inline and file-backed sources: syntax errors, invalid metadata/argsSchema, unsupported globals/primitives, and forbidden host-access patterns are rejected before session creation semantics apply.
+- Added `pkg/workflowvalidation/` with parser-backed AST analysis, file reader helper, and focused tests; integrated with `pkg/factory/validation` and `pkg/factory/validationentry`.
+- Files changed: `pkg/workflowvalidation/*`, `pkg/factory/validation/validate.go`, `pkg/factory/validation/profile.go`, `pkg/factory/validationentry/api.go`, `docs/internal/processes/api-relevant-files.md`, `go.mod`, `go.sum`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `tdewolff/parse/v2/js` AST `Var.Decl == js.NoDecl` to distinguish workflow globals from locally declared bindings.
+  - Gotchas encountered: Top-level `return` is a syntax error for the MVP parser fixture; keep valid workflow examples as statement lists.
+  - Useful context: File-backed workflow validation requires an explicit `WorkflowSourceReader`; `sourceRef`-only factories still pass structural validation until a reader is supplied.
+---
+
+## 2026-06-08T18:43:06Z - contract-validation-policy-stub-002
+- Implemented workflow source loading for `.js` and supported `.ts` files: stable `sha256:` source hashes, MVP TypeScript syntax stripping, unsupported loader diagnostics, authored-line remapping for validation issues, and source-hash mismatch checks during file-backed validation.
+- Files changed: `pkg/workflowvalidation/{hash,loader,loader_test,typescript}.go`, `pkg/workflowvalidation/{codes,globals,validate}.go`, `pkg/factory/validation/validate.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `workflowvalidation.Load` + `ValidateLoaded` for file-backed sources; hash the authored bytes, validate the stripped executable JavaScript.
+  - Gotchas encountered: MVP TypeScript stripping is regex-based and rejects `import`/`export`/`enum`/`namespace` before strip/transpile; `.tsx`/`.jsx` return `workflow.source.unsupportedLoader`.
+  - Useful context: `LoadedSource` exposes `SourceRef`, `SourceHash`, `Format`, and `RemapLine` for preview/validation surfaces; package-manager globals (`npm`, `pnpm`, `yarn`, `bun`) are forbidden host access.
+---
+
+## 2026-06-08T18:51:37Z - contract-validation-policy-stub-003
+- Implemented shared workflow source resolution for `FACTORY_ID`, `FACTORY_INLINE`, `WORKFLOW_FILE`, `WORKFLOW_NAME`, and `INLINE_WORKFLOW` with ordered lookup across project `.claude/workflows`, global `~/.you-agent-factory/workflows`, package-relative `factory/workflows`, named JavaScript factories, and optional explicit factory lookup.
+- Resolution responses expose lookup stage, safe source ref, source hash, orchestrator kind/dialect, not-found/conflict diagnostics, and artifact-root policy decisions (absolute paths outside the target repository).
+- Wired shared normalization through `pkg/apisurface/workflow_source.go` and CLI re-export `pkg/cli/workflowsource/normalize.go`; added `config.GlobalWorkflowRootForHome`.
+- Files changed: `pkg/workflowsource/*`, `pkg/apisurface/workflow_source.go`, `pkg/cli/workflowsource/normalize.go`, `pkg/config/layout_expansion.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `workflowsource.Resolve` as the single lookup contract; `WORKFLOW_FILE` bypasses ordered name lookup via explicit project/factory-relative reads before stage scanning.
+  - Gotchas encountered: Named-factory persistence uses the project `factory/` root, not the repository root; JavaScript `sourceRef` values are factory-relative (`workflows/review.js`), not `factory/workflows/...` on disk.
+  - Useful context: Workflow-name conflicts arise only when multiple JavaScript factories match the same workflow basename; project `.claude/workflows` wins over global and package-relative paths without emitting conflict diagnostics.
+---
+
+## 2026-06-08T19:00:01Z - contract-validation-policy-stub-004
+- Implemented bounded read-only workflow policy defaults with effective-policy resolution, validation, stable hashing, read-only capability denial, and preview/session-start projection metadata (policy hash, child/concurrency budgets, runner/model/profile decisions, timeout decisions, denied capability diagnostics).
+- Added `pkg/workflowpolicy/` and wired factory `defaultPolicy` validation plus JavaScript session runtime policy hash/budget projection; exposed shared preview entrypoints through `pkg/apisurface/workflow_policy.go`.
+- Files changed: `pkg/workflowpolicy/*`, `pkg/apisurface/workflow_policy.go`, `pkg/factory/validation/validate.go`, `pkg/factorysessions/projection.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Resolve policy through layered map merge (`defaultPolicy` + request overrides) and validate explicit zero/negative numeric overrides from the merged map before normalization fills defaults.
+  - Gotchas encountered: Hashing raw `defaultPolicy` JSON is not stable across map ordering; use `workflowpolicy.Hash`/`HashDocument` on the resolved `EffectivePolicy` struct instead.
+  - Useful context: Read-only policy denies workspace-write, filesystem-write, shell/process, network, connectors, and danger-full-access capabilities via `workflowpolicy.ValidateCapability` before runtime side effects.
+---
+
+## 2026-06-09T00:00:00Z - contract-validation-policy-stub-005
+- Implemented workflow result-shape validation, session-scoped `you-artifact://` URI parsing, structured `primaryResult` projection to `WorkContent`, and aligned `SESSION_RESULT_UPDATED` event payloads with `GET /factory-sessions/{session_id}/result`.
+- Added `pkg/workflowresult/` plus OpenAPI `primaryResult`, `SESSION_RESULT_UPDATED`, and `you-artifact` URL scheme updates; wired shared entrypoints through `pkg/apisurface/workflow_result.go`, session reads through `pkg/factorysessions/checkpoints.go`, and replay through `pkg/factory/projections/world_state.go`.
+- Files changed: `pkg/workflowresult/*`, `pkg/apisurface/workflow_result.go`, `pkg/factorysessions/checkpoints.go`, `pkg/factory/projections/world_state.go`, `pkg/interfaces/factory_runtime.go`, `api/components/schemas/**`, `pkg/api/contracttests/*`, `pkg/api/testdata/canonical-event-vocabulary-stream.json`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `workflowresult.BuildSessionResult` and `BuildSessionResultUpdatedPayload` from the same `SessionResultInput` so API reads and event replay stay aligned on `primaryResult` and artifact ids.
+  - Gotchas encountered: `FactorySessionResult` previously exposed only checkpoint artifact refs; terminal `FINAL_RESULT` artifacts on JavaScript runtime state also need projection when no checkpoint ref is present.
+  - Useful context: Large or non-JSON workflow outputs should project through artifact-backed `WorkContent` parts with `you-artifact://sessions/{session_id}/artifacts/{artifact_id}` URLs rather than embedded bytes.
+---
+
+## 2026-06-09T07:20:00Z - contract-validation-policy-stub-006
+- Implemented shared workflow preview contract across API (`POST /workflow-previews`), CLI (`you workflow preview`), MCP validation/start tools, and website preview panel with loading, empty, error, and success states.
+- Added `pkg/workflowpreview/` plus `pkg/apisurface/workflow_preview.go` mapping; wired human/JSON CLI diagnostics, structured MCP tool errors, and website API/hook/panel coverage for source, policy, artifact-root, and result-shape outcomes.
+- Files changed: `pkg/workflowpreview/*`, `pkg/apisurface/workflow_preview.go`, `pkg/api/handlers_factory.go`, `pkg/cli/workflow/*`, `pkg/mcp/workflow/*`, `pkg/workflowsource/artifact_root.go`, `api/components/schemas/api/Workflow*.yaml`, `api/openapi-main.yaml`, `ui/src/api/workflow-preview/*`, `ui/src/features/workflow-preview/*`, `docs/internal/processes/api-relevant-files.md`, `docs/internal/development/deadcode-baseline.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered: Use `workflowpreview.BuildPreview` as the single service contract, then map through `apisurface.WorkflowPreviewResultFromPreview` for API/CLI/MCP/website parity on source hash and policy hash.
+  - Gotchas encountered: `pkg/api` is at the 15-file cap—add new handlers to an existing handler file instead of creating `handlers_workflow.go`; artifact-root inside-repo checks must use cleaned paths before `EvalSymlinks` to avoid `/var` vs `/private/var` mismatches on macOS.
+  - Useful context: Website preview copy belongs under `ui/src/features/workflow-preview/messages/` to satisfy localized-copy scanning; MCP hosts consume `StructuredErrorFromPreview` for unsupported source, loader, policy, artifact-root, or result capabilities.
+---
+
+## 2026-06-09T12:00:00Z - mergeability (PR #773 feedback)
+- Addressed blocking PR conversation feedback on head `cfd5ec30`: removed generated API type aliases from MCP workflow tools, fail-closed policy mode/capability overlays, symlink-aware artifact-root rejection, dead-code baseline cleanup with production wiring through `apisurface.BuildWorkflowSessionResult` / `ResolveWorkflowPolicy` / `BuildWorkflowSessionResultUpdatedPayload`, and stabilized `TestBarrierZeroChildren` polling.
+- Files changed: `pkg/mcp/workflow/*`, `pkg/workflowpolicy/*`, `pkg/workflowsource/artifact_root.go`, `pkg/factorysessions/{checkpoints,projection}.go`, `pkg/apisurface/workflow_{policy,preview,result}.go`, `pkg/workflowpreview/build.go`, `tests/stress/barrier_limits_test.go`, `docs/internal/development/deadcode-baseline.txt`
+- **Learnings for future iterations:**
+  - Patterns discovered: Reject non-`READ_ONLY` `policy.mode` and explicit denied capability flags in `validatePolicyMap` before effective-policy normalization hides read-only diagnostics.
+  - Gotchas encountered: `pkg/factory/validation` cannot call `apisurface.ResolveWorkflowPolicy` because `apisurface` imports `pkg/config`, which imports validation.
+  - Useful context: `make test` and `make deadcode` must pass without expanding `deadcode-baseline.txt`; wire shared apisurface helpers from `factorysessions` and projection tests instead of baselining new unreachable helpers.
+---
+
+## 2026-06-09T00:06:35Z - mergeability (PR #773 CI)
+- Follow-up mergeability only: fixed UI lint (`biome-ignore-all` / describe-level ignores for expanded workflow-preview and dashboard-bento tests), expanded workflow-preview API/panel/hook coverage, exported `workflowPreviewQueryOptions` for direct query-option testing, and added small coverage tests (`prompt-editor-diagnostic-message`, `dashboard-bento` missing snapshot, `submit-work-card-queries`) to clear the global `93.04%`/`93.05%` UI coverage thresholds.
+- Files changed: `ui/src/api/{factory-validation,workflow-preview}/*.test.ts`, `ui/src/features/workflow-preview/**`, `ui/src/features/bento/**`, `ui/src/components/prompt-editor/prompt-editor-diagnostic-message.test.ts`, `ui/src/testing/submit-work-card-queries.test.ts`, plus related UI test touch-ups in choose-file/export/dashboard hooks.
+- **Learnings for future iterations:**
+  - Patterns discovered: Export React Query option builders (e.g. `workflowPreviewQueryOptions`) when hook branches need coverage without mocking `useQuery` internals.
+  - Gotchas encountered: File-level `biome-ignore-all` must be present on committed test files before CI `ui-lint`; local-only changes do not fix PR head checks. Global UI coverage can fail by a single uncovered statement even when feature files are at 100%.
+  - Useful context: `make test-ui-coverage` locally matches CI merge thresholds; when near the line, inspect `ui/coverage/coverage-final.json` miss counts before adding broad tests.
+---

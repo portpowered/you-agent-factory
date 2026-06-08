@@ -441,5 +441,32 @@
       },
       "capturedAt": "2026-04-21T12:00:12Z"
     }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-result-updated",
+    "type": "SESSION_RESULT_UPDATED",
+    "context": {
+      "sequence": 18,
+      "tick": 7,
+      "eventTime": "2026-04-21T12:00:13Z"
+    },
+    "payload": {
+      "sessionId": "session-js",
+      "status": "FINISHED",
+      "primaryResult": [
+        {
+          "type": "JSON",
+          "json": {
+            "ok": true
+          }
+        }
+      ],
+      "resultArtifactRef": {
+        "id": "artifact-result-1",
+        "kind": "FINAL_RESULT",
+        "visibility": "PUBLIC"
+      }
+    }
   }
 ]

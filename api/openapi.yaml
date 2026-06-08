@@ -5129,6 +5129,7 @@ components:
             - $ref: '#/components/schemas/JavaScriptCheckpointRefEventPayload'
             - $ref: '#/components/schemas/JavaScriptPhaseChangeEventPayload'
             - $ref: '#/components/schemas/ArtifactCreatedEventPayload'
+            - $ref: '#/components/schemas/SessionResultUpdatedEventPayload'
     FactoryEventType:
       type: string
       description: Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -5152,6 +5153,7 @@ components:
         - FactoryEventTypeJavaScriptCheckpointRef
         - FactoryEventTypeJavaScriptPhaseChange
         - FactoryEventTypeArtifactCreated
+        - FactoryEventTypeSessionResultUpdated
       enum:
         - RUN_REQUEST
         - INITIAL_STRUCTURE_REQUEST
@@ -5172,6 +5174,7 @@ components:
         - JAVASCRIPT_CHECKPOINT_REF
         - JAVASCRIPT_PHASE_CHANGE
         - ARTIFACT_CREATED
+        - SESSION_RESULT_UPDATED
       x-enum-descriptions:
         - A factory run request was recorded and its effective runtime configuration is known.
         - The static factory topology and configured resources are available before work moves.
@@ -5192,6 +5195,7 @@ components:
         - A JavaScript workflow checkpoint reference was recorded without exposing raw VM state.
         - A JavaScript workflow phase transition was recorded without using Petri marking terminology.
         - A customer-visible factory artifact was created without exposing raw artifact bodies.
+        - A JavaScript workflow terminal result was recorded with structured primaryResult and artifact refs.
     FactoryEventContext:
       type: object
       additionalProperties: false
@@ -7602,7 +7606,7 @@ components:
     WorkContentURLProperty:
       type: string
       minLength: 1
-      description: Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+      description: Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
     WorkContentDeprecatedFileProperty:
       type: string
       deprecated: true
@@ -7899,3 +7903,27 @@ components:
         claim:
           $ref: '#/components/schemas/HostedLinearWorkerClaim'
           description: Optional claim-related configuration that v1 hosted Linear polling allows.
+    SessionResultUpdatedEventPayload:
+      type: object
+      additionalProperties: false
+      description: JavaScript workflow terminal result recorded on the canonical factory event stream. Result bodies remain orchestrator-owned and are projected through structured WorkContent parts and artifact refs.
+      required:
+        - sessionId
+        - status
+      properties:
+        sessionId:
+          type: string
+          description: Live factory session identifier for this result update.
+        status:
+          $ref: '#/components/schemas/FactorySessionStatus'
+        primaryResult:
+          $ref: '#/components/schemas/WorkContent'
+          description: Structured JSON-compatible workflow result projected through WorkContent parts.
+        resultArtifactRef:
+          $ref: '#/components/schemas/FactoryArtifactRef'
+          description: Final result artifact reference without raw artifact bodies.
+        checkpointRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionJavaScriptCheckpointRef'
+          description: Checkpoint refs associated with the terminal session result.

@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+description: >-
+  JavaScript workflow terminal result recorded on the canonical factory event
+  stream. Result bodies remain orchestrator-owned and are projected through
+  structured WorkContent parts and artifact refs.
+required:
+  - sessionId
+  - status
+properties:
+  sessionId:
+    type: string
+    description: Live factory session identifier for this result update.
+  status:
+    $ref: '../../api/FactorySessionStatus.yaml'
+  primaryResult:
+    $ref: '../../data-models/WorkContent.yaml'
+    description: Structured JSON-compatible workflow result projected through WorkContent parts.
+  resultArtifactRef:
+    $ref: '../../data-models/FactoryArtifactRef.yaml'
+    description: Final result artifact reference without raw artifact bodies.
+  checkpointRefs:
+    type: array
+    items:
+      $ref: '../../api/FactorySessionJavaScriptCheckpointRef.yaml'
+    description: Checkpoint refs associated with the terminal session result.
