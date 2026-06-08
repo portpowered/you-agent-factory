@@ -519,6 +519,46 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionResult
+      summary: Get one factory session result
+      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Terminal session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/partial-result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionPartialResult
+      summary: Get one factory session partial result
+      description: Returns the current partial result for one live JavaScript workflow session. Checkpoint artifact refs and summaries are returned without raw checkpoint bodies or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Partial session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionPartialResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}:
     get:
       tags:
@@ -924,6 +964,18 @@ components:
       $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
     FactorySessionJavaScriptChildDispatchCounts:
       $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    FactorySessionResult:
+      $ref: './components/schemas/api/FactorySessionResult.yaml'
+    FactorySessionPartialResult:
+      $ref: './components/schemas/api/FactorySessionPartialResult.yaml'
+    FactoryArtifactRef:
+      $ref: './components/schemas/data-models/FactoryArtifactRef.yaml'
+    FactoryArtifactKind:
+      $ref: './components/schemas/data-models/FactoryArtifactKind.yaml'
+    FactoryArtifactVisibility:
+      $ref: './components/schemas/data-models/FactoryArtifactVisibility.yaml'
+    JavaScriptCheckpointRefEventPayload:
+      $ref: './components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml'
     ListFactorySessionsResponse:
       $ref: './components/schemas/api/ListFactorySessionsResponse.yaml'
     OpenFactorySessionRequest:

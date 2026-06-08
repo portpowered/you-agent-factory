@@ -67,6 +67,7 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkStateChangeSource":                 "./components/schemas/events/WorkStateChangeSource.yaml",
 		"FactoryStateResponseEventPayload":      "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
 		"RunResponseEventPayload":               "./components/schemas/events/payloads/RunResponseEventPayload.yaml",
+		"JavaScriptCheckpointRefEventPayload":   "./components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml",
 		"InferenceOutcome":                      "./components/schemas/events/InferenceOutcome.yaml",
 		"ScriptExecutionOutcome":                "./components/schemas/events/ScriptExecutionOutcome.yaml",
 		"ScriptFailureType":                     "./components/schemas/events/ScriptFailureType.yaml",

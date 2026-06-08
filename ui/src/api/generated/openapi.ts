@@ -352,6 +352,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/result": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get one factory session result
+     * @description Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+     */
+    get: operations["getFactorySessionResult"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/partial-result": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get one factory session partial result
+     * @description Returns the current partial result for one live JavaScript workflow session. Checkpoint artifact refs and summaries are returned without raw checkpoint bodies or unrestricted host paths.
+     */
+    get: operations["getFactorySessionPartialResult"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}": {
     parameters: {
       query?: never;
@@ -1027,6 +1067,8 @@ export interface components {
       timestamp?: string;
       /** @description Short customer-visible checkpoint summary without raw VM state. */
       summary?: string;
+      /** @description Orchestrator-owned checkpoint artifact metadata without raw VM state. */
+      artifactRef?: components["schemas"]["FactoryArtifactRef"];
     };
     /**
      * @description JavaScript workflow script runtime status for one factory session.
@@ -1040,6 +1082,63 @@ export interface components {
       running: number;
       /** @description Child dispatches that have completed. */
       completed: number;
+    };
+    FactorySessionResult: {
+      /** @description Live factory session identifier for this result read. */
+      sessionId: string;
+      status: components["schemas"]["FactorySessionStatus"];
+      /** @description Final result artifact reference without raw checkpoint bodies. */
+      resultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
+      /** @description Checkpoint refs associated with the terminal session result. */
+      checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
+    };
+    FactorySessionPartialResult: {
+      /** @description Live factory session identifier for this partial-result read. */
+      sessionId: string;
+      /** @description Current JavaScript workflow phase for the partial result. */
+      phase: string;
+      /** @description Partial-result artifact reference without raw checkpoint bodies. */
+      partialResultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
+      /** @description Checkpoint refs associated with the current partial result. */
+      checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
+    };
+    FactoryArtifactRef: {
+      /** @description Stable artifact identifier referenced by session projections. */
+      id: string;
+      kind: components["schemas"]["FactoryArtifactKind"];
+      visibility: components["schemas"]["FactoryArtifactVisibility"];
+      /** @description Stable hash of the stored artifact payload. */
+      contentHash?: string;
+      /**
+       * Format: int64
+       * @description Stored artifact payload size in bytes.
+       */
+      sizeBytes?: number;
+    };
+    /**
+     * @description Canonical factory artifact kind for session-owned outputs.
+     * @enum {string}
+     */
+    FactoryArtifactKind: FactoryArtifactKind;
+    /**
+     * @description Visibility boundary for one factory artifact projection.
+     * @enum {string}
+     */
+    FactoryArtifactVisibility: FactoryArtifactVisibility;
+    /** @description Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload. */
+    JavaScriptCheckpointRefEventPayload: {
+      /** @description Stable checkpoint identifier referenced by the session runtime. */
+      checkpointId: string;
+      /** @description Customer-visible checkpoint label. */
+      label?: string;
+      /**
+       * Format: date-time
+       * @description When the checkpoint was recorded.
+       */
+      timestamp?: string;
+      /** @description Short customer-visible checkpoint summary without raw VM state. */
+      summary?: string;
+      artifactRef: components["schemas"]["FactoryArtifactRef"];
     };
     ListFactorySessionsResponse: {
       sessions: components["schemas"]["FactorySessionSummary"][];
@@ -1424,7 +1523,8 @@ export interface components {
         | components["schemas"]["DispatchResponseEventPayload"]
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
-        | components["schemas"]["RunResponseEventPayload"];
+        | components["schemas"]["RunResponseEventPayload"]
+        | components["schemas"]["JavaScriptCheckpointRefEventPayload"];
     };
     /**
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -3528,6 +3628,56 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  getFactorySessionResult: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Terminal session result projection for the targeted live session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionResult"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySessionPartialResult: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Partial session result projection for the targeted live session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionPartialResult"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   getFactorySession: {
     parameters: {
       query?: never;
@@ -3899,6 +4049,20 @@ export const FactorySessionJavaScriptScriptStatus = {
 } as const;
 export type FactorySessionJavaScriptScriptStatus =
   (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
+export const FactoryArtifactKind = {
+  // JavaScript workflow checkpoint bundle owned by the orchestrator runtime.
+  FactoryArtifactKindCHECKPOINT: "CHECKPOINT",
+} as const;
+export type FactoryArtifactKind =
+  (typeof FactoryArtifactKind)[keyof typeof FactoryArtifactKind];
+export const FactoryArtifactVisibility = {
+  // Customer-visible artifact metadata and authorized content access.
+  FactoryArtifactVisibilityPUBLIC: "PUBLIC",
+  // Orchestrator-owned checkpoint payload kept behind refs and internal store records.
+  FactoryArtifactVisibilityINTERNALCHECKPOINT: "INTERNAL_CHECKPOINT",
+} as const;
+export type FactoryArtifactVisibility =
+  (typeof FactoryArtifactVisibility)[keyof typeof FactoryArtifactVisibility];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",
@@ -4001,6 +4165,8 @@ export const FactoryEventType = {
   FactoryEventTypeFactoryStateResponse: "FACTORY_STATE_RESPONSE",
   // A factory run response ended and final metadata is available.
   FactoryEventTypeRunResponse: "RUN_RESPONSE",
+  // A JavaScript workflow checkpoint reference was recorded without exposing raw VM state.
+  FactoryEventTypeJavaScriptCheckpointRef: "JAVASCRIPT_CHECKPOINT_REF",
 } as const;
 export type FactoryEventType =
   (typeof FactoryEventType)[keyof typeof FactoryEventType];

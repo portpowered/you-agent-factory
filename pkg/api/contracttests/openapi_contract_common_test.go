@@ -29,6 +29,7 @@ var canonicalFactoryEventTypeValues = []string{
 	"WORK_STATE_CHANGE",
 	"FACTORY_STATE_RESPONSE",
 	"RUN_RESPONSE",
+	"JAVASCRIPT_CHECKPOINT_REF",
 }
 
 var retiredFactoryEventTypeValues = []string{
@@ -80,6 +81,7 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"WorkStateChangeSource",
 	"FactoryStateResponseEventPayload",
 	"RunResponseEventPayload",
+	"JavaScriptCheckpointRefEventPayload",
 }
 
 var bundledFactoryEventPayloadRefs = []string{
@@ -99,6 +101,7 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/WorkStateChangeEventPayload",
 	"#/components/schemas/FactoryStateResponseEventPayload",
 	"#/components/schemas/RunResponseEventPayload",
+	"#/components/schemas/JavaScriptCheckpointRefEventPayload",
 }
 
 var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
@@ -118,6 +121,7 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"WORK_STATE_CHANGE":           "WorkStateChangeEventPayload",
 	"FACTORY_STATE_RESPONSE":      "FactoryStateResponseEventPayload",
 	"RUN_RESPONSE":                "RunResponseEventPayload",
+	"JAVASCRIPT_CHECKPOINT_REF":   "JavaScriptCheckpointRefEventPayload",
 }
 
 const openAPISchemaRefPrefix = "#/components/schemas/"

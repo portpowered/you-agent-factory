@@ -26,6 +26,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeWorkStateChange,
 	factoryapi.FactoryEventTypeFactoryStateResponse,
 	factoryapi.FactoryEventTypeRunResponse,
+	factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
 }
 
 var retiredFactoryEventTypeStrings = []string{
@@ -103,6 +104,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 		_, err := payload.AsRunResponseEventPayload()
 		return err
 	},
+	factoryapi.FactoryEventTypeJavaScriptCheckpointRef: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsJavaScriptCheckpointRefEventPayload()
+		return err
+	},
 }
 
 var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.FactoryEvent_Payload, any) error{
@@ -153,6 +158,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.RunResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromRunResponseEventPayload(value.(factoryapi.RunResponseEventPayload))
+	},
+	reflect.TypeOf(factoryapi.JavaScriptCheckpointRefEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromJavaScriptCheckpointRefEventPayload(value.(factoryapi.JavaScriptCheckpointRefEventPayload))
 	},
 }
 

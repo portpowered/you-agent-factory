@@ -34,6 +34,7 @@ type FactoryWorldState struct {
 	FactoryState                  string                                             `json:"factory_state,omitempty"`
 	FactoryStateReason            string                                             `json:"factory_state_reason,omitempty"`
 	FactoryStatePrevious          string                                             `json:"factory_state_previous,omitempty"`
+	JavaScriptCheckpoints         []FactorySessionJavaScriptCheckpointRef            `json:"javascript_checkpoints,omitempty"`
 }
 
 // FactoryPlaceOccupancy describes work and resource tokens reconstructed at a

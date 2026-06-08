@@ -1,0 +1,8 @@
+type: string
+description: Canonical factory artifact kind for session-owned outputs.
+enum:
+  - CHECKPOINT
+x-enum-varnames:
+  - FactoryArtifactKindCHECKPOINT
+x-enum-descriptions:
+  - JavaScript workflow checkpoint bundle owned by the orchestrator runtime.

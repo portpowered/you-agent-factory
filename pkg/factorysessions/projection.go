@@ -231,7 +231,36 @@ func projectedJavaScriptCheckpoints(
 			timestamp := checkpoint.Timestamp.UTC()
 			item.Timestamp = &timestamp
 		}
+		if checkpoint.ArtifactRef != nil {
+			artifactRef := projectedCheckpointArtifactRef(*checkpoint.ArtifactRef)
+			item.ArtifactRef = &artifactRef
+		}
 		projected = append(projected, item)
+	}
+	return projected
+}
+
+func projectedCheckpointArtifactRef(ref interfaces.JavaScriptCheckpointArtifactRef) factoryapi.FactoryArtifactRef {
+	artifactID := strings.TrimSpace(ref.ID)
+	kind := factoryapi.FactoryArtifactKind(strings.TrimSpace(ref.Kind))
+	if kind == "" {
+		kind = factoryapi.FactoryArtifactKindCHECKPOINT
+	}
+	visibility := factoryapi.FactoryArtifactVisibility(strings.TrimSpace(ref.Visibility))
+	if visibility == "" {
+		visibility = factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT
+	}
+	projected := factoryapi.FactoryArtifactRef{
+		Id:         artifactID,
+		Kind:       kind,
+		Visibility: visibility,
+	}
+	if hash := strings.TrimSpace(ref.ContentHash); hash != "" {
+		projected.ContentHash = &hash
+	}
+	if ref.SizeBytes > 0 {
+		size := ref.SizeBytes
+		projected.SizeBytes = &size
 	}
 	return projected
 }

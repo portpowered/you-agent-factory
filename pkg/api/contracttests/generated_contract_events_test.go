@@ -336,6 +336,23 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 				State:  &completedState,
 			}),
 		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-javascript-checkpoint-ref",
+			Type:          factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+			Context:       factoryapi.FactoryEventContext{Sequence: 10, Tick: 5, EventTime: eventTime},
+			Payload: factoryEventPayload(t, factoryapi.JavaScriptCheckpointRefEventPayload{
+				CheckpointId: "ckpt-1",
+				Label:        stringPtr("after-plan"),
+				Summary:      stringPtr("Completed planning phase"),
+				Timestamp:    &eventTime,
+				ArtifactRef: factoryapi.FactoryArtifactRef{
+					Id:         "artifact-ckpt-1",
+					Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
+					Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+				},
+			}),
+		},
 	}
 }
 

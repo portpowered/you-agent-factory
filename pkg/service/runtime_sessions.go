@@ -44,6 +44,8 @@ type FactoryCoordinator interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
+	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionResult, error)
+	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	CloseFactorySession(context.Context, string) error
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
@@ -445,6 +447,10 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		Now:        time.Now().UTC(),
 	}
 	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
+		projectionCtx.JavaScript = factorysessions.JavaScriptRuntimeStateFromCheckpoints(
+			fs.javascriptCheckpointStore(session),
+			projectionCtx.JavaScript,
+		)
 		return projectionCtx, nil
 	}
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
@@ -454,6 +460,57 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	projectionCtx.Snapshot = snapshot
 	projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
 	return projectionCtx, nil
+}
+
+func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionResult, error) {
+	return fs.requireCoordinator().GetFactorySessionResult(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionResult, error) {
+	fs := c.service
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
+		return factoryapi.FactorySessionResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
+	}
+	return factorysessions.ProjectSessionResult(sessionID, projectionCtx, fs.javascriptCheckpointStore(session)), nil
+}
+
+func (fs *FactoryService) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+	return fs.requireCoordinator().GetFactorySessionPartialResult(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+	fs := c.service
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionPartialResult{}, err
+	}
+	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
+	if err != nil {
+		return factoryapi.FactorySessionPartialResult{}, err
+	}
+	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
+		return factoryapi.FactorySessionPartialResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
+	}
+	return factorysessions.ProjectSessionPartialResult(sessionID, projectionCtx, fs.javascriptCheckpointStore(session)), nil
+}
+
+func (fs *FactoryService) javascriptCheckpointStore(session *factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
+	state := liveSessionRuntimeState(session)
+	if state == nil {
+		return nil
+	}
+	if state.javascriptCheckpoints == nil {
+		state.javascriptCheckpoints = factorysessions.NewJavaScriptCheckpointStore()
+	}
+	return state.javascriptCheckpoints
 }
 
 func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {

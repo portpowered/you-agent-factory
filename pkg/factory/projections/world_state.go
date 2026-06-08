@@ -116,7 +116,41 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		return r.applyWorkStateChangeEvent(event)
 	case factoryapi.FactoryEventTypeRunResponse:
 		return nil
+	case factoryapi.FactoryEventTypeJavaScriptCheckpointRef:
+		return r.applyJavaScriptCheckpointRefEvent(event)
 	}
+	return nil
+}
+
+func (r *factoryWorldReducer) applyJavaScriptCheckpointRefEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsJavaScriptCheckpointRefEventPayload()
+	if err != nil {
+		return err
+	}
+	checkpoint := interfaces.FactorySessionJavaScriptCheckpointRef{
+		ID: payload.CheckpointId,
+		ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{
+			ID:         payload.ArtifactRef.Id,
+			Kind:       string(payload.ArtifactRef.Kind),
+			Visibility: string(payload.ArtifactRef.Visibility),
+		},
+	}
+	if payload.ArtifactRef.ContentHash != nil {
+		checkpoint.ArtifactRef.ContentHash = *payload.ArtifactRef.ContentHash
+	}
+	if payload.ArtifactRef.SizeBytes != nil {
+		checkpoint.ArtifactRef.SizeBytes = *payload.ArtifactRef.SizeBytes
+	}
+	if payload.Label != nil {
+		checkpoint.Label = *payload.Label
+	}
+	if payload.Summary != nil {
+		checkpoint.Summary = *payload.Summary
+	}
+	if payload.Timestamp != nil {
+		checkpoint.Timestamp = payload.Timestamp.UTC()
+	}
+	r.stateValue.JavaScriptCheckpoints = append(r.stateValue.JavaScriptCheckpoints, checkpoint)
 	return nil
 }
 

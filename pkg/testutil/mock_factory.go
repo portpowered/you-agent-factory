@@ -57,8 +57,12 @@ type MockFactory struct {
 	SessionFactories         map[string]*MockFactory
 	FactorySessions          factoryapi.ListFactorySessionsResponse
 	ListFactorySessionsErr   error
-	FactorySession           factoryapi.FactorySession
-	GetFactorySessionErr     error
+	FactorySession               factoryapi.FactorySession
+	GetFactorySessionErr         error
+	FactorySessionResult         factoryapi.FactorySessionResult
+	GetFactorySessionResultErr   error
+	FactorySessionPartialResult  factoryapi.FactorySessionPartialResult
+	GetFactorySessionPartialResultErr error
 	OpenFactorySessionResult factoryapi.OpenFactorySessionResponse
 	OpenFactorySessionErr    error
 	OpenedFactorySessions    []factoryapi.OpenFactorySessionRequest
@@ -331,6 +335,20 @@ func (m *MockFactory) GetFactorySession(_ context.Context, _ string) (factoryapi
 		return factoryapi.FactorySession{}, m.GetFactorySessionErr
 	}
 	return m.FactorySession, nil
+}
+
+func (m *MockFactory) GetFactorySessionResult(_ context.Context, _ string) (factoryapi.FactorySessionResult, error) {
+	if m.GetFactorySessionResultErr != nil {
+		return factoryapi.FactorySessionResult{}, m.GetFactorySessionResultErr
+	}
+	return m.FactorySessionResult, nil
+}
+
+func (m *MockFactory) GetFactorySessionPartialResult(_ context.Context, _ string) (factoryapi.FactorySessionPartialResult, error) {
+	if m.GetFactorySessionPartialResultErr != nil {
+		return factoryapi.FactorySessionPartialResult{}, m.GetFactorySessionPartialResultErr
+	}
+	return m.FactorySessionPartialResult, nil
 }
 
 func (m *MockFactory) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {

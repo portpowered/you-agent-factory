@@ -87,6 +87,42 @@ func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessi
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.GetFactorySessionResult(r.Context(), string(sessionID))
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrFactorySessionResultUnavailable) {
+			s.writeError(w, http.StatusNotFound, "factory session result not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("get factory session result failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session result", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.GetFactorySessionPartialResult(r.Context(), string(sessionID))
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrFactorySessionResultUnavailable) {
+			s.writeError(w, http.StatusNotFound, "factory session partial result not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("get factory session partial result failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session partial result", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {

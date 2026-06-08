@@ -507,6 +507,46 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionResult
+      summary: Get one factory session result
+      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Terminal session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/partial-result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionPartialResult
+      summary: Get one factory session partial result
+      description: Returns the current partial result for one live JavaScript workflow session. Checkpoint artifact refs and summaries are returned without raw checkpoint bodies or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Partial session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionPartialResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}:
     get:
       tags:
@@ -2328,6 +2368,9 @@ components:
         summary:
           type: string
           description: Short customer-visible checkpoint summary without raw VM state.
+        artifactRef:
+          $ref: '#/components/schemas/FactoryArtifactRef'
+          description: Orchestrator-owned checkpoint artifact metadata without raw VM state.
     FactorySessionJavaScriptScriptStatus:
       type: string
       description: JavaScript workflow script runtime status for one factory session.
@@ -2363,6 +2406,113 @@ components:
           type: integer
           minimum: 0
           description: Child dispatches that have completed.
+    FactorySessionResult:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - status
+      properties:
+        sessionId:
+          type: string
+          description: Live factory session identifier for this result read.
+        status:
+          $ref: '#/components/schemas/FactorySessionStatus'
+        resultArtifactRef:
+          $ref: '#/components/schemas/FactoryArtifactRef'
+          description: Final result artifact reference without raw checkpoint bodies.
+        checkpointRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionJavaScriptCheckpointRef'
+          description: Checkpoint refs associated with the terminal session result.
+    FactorySessionPartialResult:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - phase
+      properties:
+        sessionId:
+          type: string
+          description: Live factory session identifier for this partial-result read.
+        phase:
+          type: string
+          description: Current JavaScript workflow phase for the partial result.
+        partialResultArtifactRef:
+          $ref: '#/components/schemas/FactoryArtifactRef'
+          description: Partial-result artifact reference without raw checkpoint bodies.
+        checkpointRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionJavaScriptCheckpointRef'
+          description: Checkpoint refs associated with the current partial result.
+    FactoryArtifactRef:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - visibility
+      properties:
+        id:
+          type: string
+          description: Stable artifact identifier referenced by session projections.
+        kind:
+          $ref: '#/components/schemas/FactoryArtifactKind'
+        visibility:
+          $ref: '#/components/schemas/FactoryArtifactVisibility'
+        contentHash:
+          type: string
+          description: Stable hash of the stored artifact payload.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Stored artifact payload size in bytes.
+    FactoryArtifactKind:
+      type: string
+      description: Canonical factory artifact kind for session-owned outputs.
+      enum:
+        - CHECKPOINT
+      x-enum-varnames:
+        - FactoryArtifactKindCHECKPOINT
+      x-enum-descriptions:
+        - JavaScript workflow checkpoint bundle owned by the orchestrator runtime.
+    FactoryArtifactVisibility:
+      type: string
+      description: Visibility boundary for one factory artifact projection.
+      enum:
+        - PUBLIC
+        - INTERNAL_CHECKPOINT
+      x-enum-varnames:
+        - FactoryArtifactVisibilityPUBLIC
+        - FactoryArtifactVisibilityINTERNALCHECKPOINT
+      x-enum-descriptions:
+        - Customer-visible artifact metadata and authorized content access.
+        - Orchestrator-owned checkpoint payload kept behind refs and internal store records.
+    JavaScriptCheckpointRefEventPayload:
+      type: object
+      additionalProperties: false
+      description: Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload.
+      required:
+        - checkpointId
+        - artifactRef
+      properties:
+        checkpointId:
+          type: string
+          description: Stable checkpoint identifier referenced by the session runtime.
+        label:
+          type: string
+          description: Customer-visible checkpoint label.
+        timestamp:
+          type: string
+          format: date-time
+          description: When the checkpoint was recorded.
+        summary:
+          type: string
+          description: Short customer-visible checkpoint summary without raw VM state.
+        artifactRef:
+          $ref: '#/components/schemas/FactoryArtifactRef'
     ListFactorySessionsResponse:
       type: object
       additionalProperties: false
@@ -3171,6 +3321,7 @@ components:
             - $ref: '#/components/schemas/WorkStateChangeEventPayload'
             - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
             - $ref: '#/components/schemas/RunResponseEventPayload'
+            - $ref: '#/components/schemas/JavaScriptCheckpointRefEventPayload'
     FactoryEventType:
       type: string
       description: Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -3191,6 +3342,7 @@ components:
         - FactoryEventTypeWorkStateChange
         - FactoryEventTypeFactoryStateResponse
         - FactoryEventTypeRunResponse
+        - FactoryEventTypeJavaScriptCheckpointRef
       enum:
         - RUN_REQUEST
         - INITIAL_STRUCTURE_REQUEST
@@ -3208,6 +3360,7 @@ components:
         - WORK_STATE_CHANGE
         - FACTORY_STATE_RESPONSE
         - RUN_RESPONSE
+        - JAVASCRIPT_CHECKPOINT_REF
       x-enum-descriptions:
         - A factory run request was recorded and its effective runtime configuration is known.
         - The static factory topology and configured resources are available before work moves.
@@ -3225,6 +3378,7 @@ components:
         - A work item moved between authored marking states.
         - The factory lifecycle state response was recorded.
         - A factory run response ended and final metadata is available.
+        - A JavaScript workflow checkpoint reference was recorded without exposing raw VM state.
     FactoryEventContext:
       type: object
       additionalProperties: false

@@ -375,5 +375,28 @@
       "state": "COMPLETED",
       "reason": "all work finished"
     }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-javascript-checkpoint-ref",
+    "type": "JAVASCRIPT_CHECKPOINT_REF",
+    "context": {
+      "sequence": 15,
+      "tick": 5,
+      "eventTime": "2026-04-21T12:00:10Z"
+    },
+    "payload": {
+      "checkpointId": "ckpt-1",
+      "label": "after-plan",
+      "summary": "Completed planning phase",
+      "timestamp": "2026-04-21T12:00:10Z",
+      "artifactRef": {
+        "id": "artifact-ckpt-1",
+        "kind": "CHECKPOINT",
+        "visibility": "INTERNAL_CHECKPOINT",
+        "contentHash": "sha256:checkpoint-body",
+        "sizeBytes": 128
+      }
+    }
   }
 ]

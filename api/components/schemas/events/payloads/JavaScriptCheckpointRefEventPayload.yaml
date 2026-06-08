@@ -1,9 +1,14 @@
 type: object
 additionalProperties: false
+description: >-
+  Customer-visible JavaScript checkpoint reference recorded on the canonical
+  factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and
+  are not included in this payload.
 required:
-  - id
+  - checkpointId
+  - artifactRef
 properties:
-  id:
+  checkpointId:
     type: string
     description: Stable checkpoint identifier referenced by the session runtime.
   label:
@@ -17,5 +22,4 @@ properties:
     type: string
     description: Short customer-visible checkpoint summary without raw VM state.
   artifactRef:
-    $ref: '../data-models/FactoryArtifactRef.yaml'
-    description: Orchestrator-owned checkpoint artifact metadata without raw VM state.
+    $ref: '../../data-models/FactoryArtifactRef.yaml'

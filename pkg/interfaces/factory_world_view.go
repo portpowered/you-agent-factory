@@ -61,7 +61,12 @@ type FactoryWorldWorkstationEdge struct {
 	OutcomeKind   string `json:"outcome_kind,omitempty"`
 }
 
+type FactoryWorldJavaScriptProjection struct {
+	Checkpoints []FactorySessionJavaScriptCheckpointRef `json:"checkpoints,omitempty"`
+}
+
 type FactoryWorldRuntimeView struct {
+	JavaScript                       *FactoryWorldJavaScriptProjection                  `json:"javascript,omitempty"`
 	InFlightDispatchCount            int                                                `json:"in_flight_dispatch_count"`
 	ActiveDispatchIDs                []string                                           `json:"active_dispatch_ids,omitempty"`
 	ActiveExecutionsByDispatchID     map[string]FactoryWorldActiveExecution             `json:"active_executions_by_dispatch_id,omitempty"`

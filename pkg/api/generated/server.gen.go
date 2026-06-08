@@ -48,6 +48,17 @@ const (
 	STALEFACTORYVERSION           ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
+// Defines values for FactoryArtifactKind.
+const (
+	FactoryArtifactKindCHECKPOINT FactoryArtifactKind = "CHECKPOINT"
+)
+
+// Defines values for FactoryArtifactVisibility.
+const (
+	FactoryArtifactVisibilityINTERNALCHECKPOINT FactoryArtifactVisibility = "INTERNAL_CHECKPOINT"
+	FactoryArtifactVisibilityPUBLIC             FactoryArtifactVisibility = "PUBLIC"
+)
+
 // Defines values for FactoryEventSchemaVersion.
 const (
 	AgentFactoryEventV1 FactoryEventSchemaVersion = "agent-factory.event.v1"
@@ -62,6 +73,7 @@ const (
 	FactoryEventTypeInferenceRequest          FactoryEventType = "INFERENCE_REQUEST"
 	FactoryEventTypeInferenceResponse         FactoryEventType = "INFERENCE_RESPONSE"
 	FactoryEventTypeInitialStructureRequest   FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
+	FactoryEventTypeJavaScriptCheckpointRef   FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
 	FactoryEventTypeModelRequest              FactoryEventType = "MODEL_REQUEST"
 	FactoryEventTypeModelResponse             FactoryEventType = "MODEL_RESPONSE"
 	FactoryEventTypeRelationshipChangeRequest FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
@@ -742,6 +754,30 @@ type Factory struct {
 	Workstations *[]Workstation `json:"workstations,omitempty"`
 }
 
+// FactoryArtifactKind Canonical factory artifact kind for session-owned outputs.
+type FactoryArtifactKind string
+
+// FactoryArtifactRef defines model for FactoryArtifactRef.
+type FactoryArtifactRef struct {
+	// ContentHash Stable hash of the stored artifact payload.
+	ContentHash *string `json:"contentHash,omitempty"`
+
+	// Id Stable artifact identifier referenced by session projections.
+	Id string `json:"id"`
+
+	// Kind Canonical factory artifact kind for session-owned outputs.
+	Kind FactoryArtifactKind `json:"kind"`
+
+	// SizeBytes Stored artifact payload size in bytes.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+
+	// Visibility Visibility boundary for one factory artifact projection.
+	Visibility FactoryArtifactVisibility `json:"visibility"`
+}
+
+// FactoryArtifactVisibility Visibility boundary for one factory artifact projection.
+type FactoryArtifactVisibility string
+
 // FactoryChangeEventPayload Runtime topology snapshot after a live factory definition change replaces the running factory.
 type FactoryChangeEventPayload struct {
 	// Factory Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
@@ -1030,6 +1066,8 @@ type FactorySessionBudgets struct {
 
 // FactorySessionJavaScriptCheckpointRef defines model for FactorySessionJavaScriptCheckpointRef.
 type FactorySessionJavaScriptCheckpointRef struct {
+	ArtifactRef *FactoryArtifactRef `json:"artifactRef,omitempty"`
+
 	// Id Stable checkpoint identifier referenced by the session runtime.
 	Id string `json:"id"`
 
@@ -1089,6 +1127,19 @@ type FactorySessionLifecycle struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
+// FactorySessionPartialResult defines model for FactorySessionPartialResult.
+type FactorySessionPartialResult struct {
+	// CheckpointRefs Checkpoint refs associated with the current partial result.
+	CheckpointRefs           *[]FactorySessionJavaScriptCheckpointRef `json:"checkpointRefs,omitempty"`
+	PartialResultArtifactRef *FactoryArtifactRef                      `json:"partialResultArtifactRef,omitempty"`
+
+	// Phase Current JavaScript workflow phase for the partial result.
+	Phase string `json:"phase"`
+
+	// SessionId Live factory session identifier for this partial-result read.
+	SessionId string `json:"sessionId"`
+}
+
 // FactorySessionPetriEnabledTransition defines model for FactorySessionPetriEnabledTransition.
 type FactorySessionPetriEnabledTransition struct {
 	// TransitionId Enabled Petri transition identifier.
@@ -1119,6 +1170,19 @@ type FactorySessionProgress struct {
 
 	// TotalTokens Number of customer-visible work tokens in the current marking.
 	TotalTokens int `json:"totalTokens"`
+}
+
+// FactorySessionResult defines model for FactorySessionResult.
+type FactorySessionResult struct {
+	// CheckpointRefs Checkpoint refs associated with the terminal session result.
+	CheckpointRefs    *[]FactorySessionJavaScriptCheckpointRef `json:"checkpointRefs,omitempty"`
+	ResultArtifactRef *FactoryArtifactRef                      `json:"resultArtifactRef,omitempty"`
+
+	// SessionId Live factory session identifier for this result read.
+	SessionId string `json:"sessionId"`
+
+	// Status Canonical lifecycle status for one live factory session runtime.
+	Status FactorySessionStatus `json:"status"`
 }
 
 // FactorySessionRuntime defines model for FactorySessionRuntime.
@@ -1660,6 +1724,23 @@ type InvocationReturnPolicy string
 
 // InvocationTerminalStatus Terminal status for a factory-session invocation.
 type InvocationTerminalStatus string
+
+// JavaScriptCheckpointRefEventPayload Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload.
+type JavaScriptCheckpointRefEventPayload struct {
+	ArtifactRef FactoryArtifactRef `json:"artifactRef"`
+
+	// CheckpointId Stable checkpoint identifier referenced by the session runtime.
+	CheckpointId string `json:"checkpointId"`
+
+	// Label Customer-visible checkpoint label.
+	Label *string `json:"label,omitempty"`
+
+	// Summary Short customer-visible checkpoint summary without raw VM state.
+	Summary *string `json:"summary,omitempty"`
+
+	// Timestamp When the checkpoint was recorded.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+}
 
 // ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
 type ListFactorySessionsResponse struct {
@@ -4004,6 +4085,32 @@ func (t *FactoryEvent_Payload) MergeRunResponseEventPayload(v RunResponseEventPa
 	return err
 }
 
+// AsJavaScriptCheckpointRefEventPayload returns the union data inside the FactoryEvent_Payload as a JavaScriptCheckpointRefEventPayload
+func (t FactoryEvent_Payload) AsJavaScriptCheckpointRefEventPayload() (JavaScriptCheckpointRefEventPayload, error) {
+	var body JavaScriptCheckpointRefEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromJavaScriptCheckpointRefEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided JavaScriptCheckpointRefEventPayload
+func (t *FactoryEvent_Payload) FromJavaScriptCheckpointRefEventPayload(v JavaScriptCheckpointRefEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeJavaScriptCheckpointRefEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided JavaScriptCheckpointRefEventPayload
+func (t *FactoryEvent_Payload) MergeJavaScriptCheckpointRefEventPayload(v JavaScriptCheckpointRefEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 func (t FactoryEvent_Payload) MarshalJSON() ([]byte, error) {
 	b, err := t.union.MarshalJSON()
 	return b, err
@@ -4329,6 +4436,12 @@ type ServerInterface interface {
 	// Invoke one factory session and return its primary result
 	// (POST /factory-sessions/{session_id}/invocations)
 	InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get one factory session partial result
+	// (GET /factory-sessions/{session_id}/partial-result)
+	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get one factory session result
+	// (GET /factory-sessions/{session_id}/result)
+	GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -4633,6 +4746,56 @@ func (siw *ServerInterfaceWrapper) InvokeFactorySessionBySessionId(w http.Respon
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.InvokeFactorySessionBySessionId(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionPartialResult operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionPartialResult(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionResult operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionResult(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionResult(w, r, sessionId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -5226,6 +5389,10 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/factory/workstations/{workstation_name}/prompt-template-validation", wrapper.ValidateCurrentFactoryWorkstationPromptTemplateBySessionId).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/invocations", wrapper.InvokeFactorySessionBySessionId).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/partial-result", wrapper.GetFactorySessionPartialResult).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/result", wrapper.GetFactorySessionResult).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
 

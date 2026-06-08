@@ -12,7 +12,7 @@ func buildFactoryWorldRuntimeView(
 ) interfaces.FactoryWorldRuntimeView {
 	activeIDs := customerActiveDispatchIDs(state)
 
-	return interfaces.FactoryWorldRuntimeView{
+	runtime := interfaces.FactoryWorldRuntimeView{
 		InFlightDispatchCount:            simpleDashboardRuntime.InFlightDispatchCount,
 		ActiveDispatchIDs:                activeIDs,
 		ActiveExecutionsByDispatchID:     simpleDashboardRuntime.ActiveExecutionsByDispatchID,
@@ -24,6 +24,12 @@ func buildFactoryWorldRuntimeView(
 		PlaceOccupancyWorkItemsByPlaceID: simpleDashboardRuntime.PlaceOccupancyWorkItemsByPlaceID,
 		Session:                          simpleDashboardRuntime.Session,
 	}
+	if len(state.JavaScriptCheckpoints) > 0 {
+		runtime.JavaScript = &interfaces.FactoryWorldJavaScriptProjection{
+			Checkpoints: append([]interfaces.FactorySessionJavaScriptCheckpointRef(nil), state.JavaScriptCheckpoints...),
+		}
+	}
+	return runtime
 }
 
 func buildFactoryWorldActiveExecutions(state interfaces.FactoryWorldState, activeIDs []string) map[string]interfaces.FactoryWorldActiveExecution {

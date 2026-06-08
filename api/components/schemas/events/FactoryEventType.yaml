@@ -20,6 +20,7 @@ x-enum-varnames:
   - FactoryEventTypeWorkStateChange
   - FactoryEventTypeFactoryStateResponse
   - FactoryEventTypeRunResponse
+  - FactoryEventTypeJavaScriptCheckpointRef
 enum:
   - RUN_REQUEST
   - INITIAL_STRUCTURE_REQUEST
@@ -37,6 +38,7 @@ enum:
   - WORK_STATE_CHANGE
   - FACTORY_STATE_RESPONSE
   - RUN_RESPONSE
+  - JAVASCRIPT_CHECKPOINT_REF
 x-enum-descriptions:
   - A factory run request was recorded and its effective runtime configuration is known.
   - The static factory topology and configured resources are available before work moves.
@@ -54,3 +56,4 @@ x-enum-descriptions:
   - A work item moved between authored marking states.
   - The factory lifecycle state response was recorded.
   - A factory run response ended and final metadata is available.
+  - A JavaScript workflow checkpoint reference was recorded without exposing raw VM state.

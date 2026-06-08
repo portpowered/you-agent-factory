@@ -78,7 +78,7 @@ func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 		"RelationshipChangeRequestEventPayload", "DispatchRequestEventPayload", "ModelRequestEventPayload", "ModelResponseEventPayload", "InferenceRequestEventPayload", "InferenceResponseEventPayload",
 		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
 		"DispatchResponseEventPayload", "WorkStateChangeEventPayload", "WorkStateChangeSource",
-		"FactoryStateResponseEventPayload", "RunResponseEventPayload",
+		"FactoryStateResponseEventPayload", "RunResponseEventPayload", "JavaScriptCheckpointRefEventPayload",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)

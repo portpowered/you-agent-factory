@@ -1532,6 +1532,16 @@ func (s *stubFactoryCoordinator) GetFactorySession(_ context.Context, sessionID 
 	return s.getSessionResult, nil
 }
 
+func (s *stubFactoryCoordinator) GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionResult, error) {
+	s.calls = append(s.calls, "get-session-result")
+	return factoryapi.FactorySessionResult{}, nil
+}
+
+func (s *stubFactoryCoordinator) GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error) {
+	s.calls = append(s.calls, "get-session-partial-result")
+	return factoryapi.FactorySessionPartialResult{}, nil
+}
+
 func (s *stubFactoryCoordinator) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
 	s.calls = append(s.calls, "open-session")
 	if request.FolderPath != "" {

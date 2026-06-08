@@ -36,6 +36,8 @@ type FactorySaveAPI interface {
 type SessionAPI interface {
 	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error)
+	GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionResult, error)
+	GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	CloseFactorySession(ctx context.Context, sessionID string) error
 }
@@ -117,6 +119,10 @@ var ErrCurrentFactoryNotFound = errors.New("current factory not found")
 // ErrFactorySessionNotFound reports that no live session matched the requested
 // public session identifier.
 var ErrFactorySessionNotFound = errors.New("factory session not found")
+
+// ErrFactorySessionResultUnavailable reports that the requested session does not
+// expose JavaScript result or partial-result reads.
+var ErrFactorySessionResultUnavailable = errors.New("factory session result unavailable")
 
 // ErrFactoryVersionStale reports that a complete current-factory
 // save was based on an older factory definition version than the current one.
