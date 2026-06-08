@@ -6,15 +6,40 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueInterruptReconcileAndArtifactSequence(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 14, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	recordDispatchLifecycleSequence(t, history, t0)
+
+	events := history.Events()
+	if len(events) != 4 {
+		t.Fatalf("events = %d, want queued, interrupted, reconciled, artifact", len(events))
+	}
+	assertDispatchLifecycleEventType(t, events[0], factoryapi.FactoryEventTypeDispatchQueued)
+	assertDispatchLifecycleEventType(t, events[1], factoryapi.FactoryEventTypeDispatchInterrupted)
+	assertDispatchLifecycleEventType(t, events[2], factoryapi.FactoryEventTypeDispatchReconciled)
+	assertDispatchLifecycleEventType(t, events[3], factoryapi.FactoryEventTypeArtifactCreated)
+
+	worldState, err := projections.ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	assertDispatchLifecycleWorldState(t, worldState)
+}
+
+func recordDispatchLifecycleSequence(
+	t *testing.T,
+	history *FactoryEventHistory,
+	t0 time.Time,
+) {
+	t.Helper()
 	queuedAt := t0.Add(2 * time.Second)
 	interruptedAt := t0.Add(3 * time.Second)
 	reconciledAt := t0.Add(4 * time.Second)
 	artifactAt := t0.Add(5 * time.Second)
-	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
 	kind := factoryapi.JAVASCRIPT
 	queuePosition := 0
 	hash := "sha256:result-body"
@@ -84,20 +109,13 @@ func TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueIn
 		},
 		CapturedAt: &artifactAt,
 	}, artifactAt)
+}
 
-	events := history.Events()
-	if len(events) != 4 {
-		t.Fatalf("events = %d, want queued, interrupted, reconciled, artifact", len(events))
-	}
-	assertDispatchLifecycleEventType(t, events[0], factoryapi.FactoryEventTypeDispatchQueued)
-	assertDispatchLifecycleEventType(t, events[1], factoryapi.FactoryEventTypeDispatchInterrupted)
-	assertDispatchLifecycleEventType(t, events[2], factoryapi.FactoryEventTypeDispatchReconciled)
-	assertDispatchLifecycleEventType(t, events[3], factoryapi.FactoryEventTypeArtifactCreated)
-
-	worldState, err := projections.ReconstructFactoryWorldState(events, 3)
-	if err != nil {
-		t.Fatalf("ReconstructFactoryWorldState: %v", err)
-	}
+func assertDispatchLifecycleWorldState(
+	t *testing.T,
+	worldState interfaces.FactoryWorldState,
+) {
+	t.Helper()
 	if worldState.JavaScriptRuntime == nil {
 		t.Fatal("javascript runtime = nil, want dispatch lifecycle projection")
 	}

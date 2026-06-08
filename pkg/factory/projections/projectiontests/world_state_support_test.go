@@ -587,6 +587,11 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          eventType,
 	}
+	assignGeneratedProjectionPayload(&event, payload)
+	return event
+}
+
+func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload any) {
 	switch typed := payload.(type) {
 	case factoryapi.RunRequestEventPayload:
 		if err := event.Payload.FromRunRequestEventPayload(typed); err != nil {
@@ -652,6 +657,13 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		if err := event.Payload.FromJavaScriptPhaseChangeEventPayload(typed); err != nil {
 			panic(err)
 		}
+	default:
+		assignGeneratedProjectionSessionLifecyclePayload(event, payload)
+	}
+}
+
+func assignGeneratedProjectionSessionLifecyclePayload(event *factoryapi.FactoryEvent, payload any) {
+	switch typed := payload.(type) {
 	case factoryapi.ArtifactCreatedEventPayload:
 		if err := event.Payload.FromArtifactCreatedEventPayload(typed); err != nil {
 			panic(err)
@@ -691,7 +703,6 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 	default:
 		panic("unsupported projection test payload")
 	}
-	return event
 }
 
 func inferenceRequestEvent(tick int, eventTime time.Time, payload factoryapi.InferenceRequestEventPayload) factoryapi.FactoryEvent {
