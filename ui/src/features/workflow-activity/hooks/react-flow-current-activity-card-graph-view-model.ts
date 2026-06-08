@@ -6,9 +6,9 @@ import {
 } from "@xyflow/react";
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -50,6 +50,7 @@ import {
 } from "./react-flow-current-activity-card-active-executions";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
+import { mergeBaseNodesWithPresentationPositions } from "../lib/merge-base-nodes-with-presentation-positions";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 export type CurrentActivityGraphViewModelInput = {
@@ -233,16 +234,17 @@ function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
 ) {
   const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
+  const previousBaseNodesRef = useRef<CurrentActivityNode[]>([]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
+      const mergedNodes = mergeBaseNodesWithPresentationPositions(
+        baseNodes,
+        previousBaseNodesRef.current,
+        currentNodes,
       );
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
+      previousBaseNodesRef.current = baseNodes;
+      return mergedNodes;
     });
   }, [baseNodes]);
 
@@ -252,16 +254,15 @@ function useCurrentActivityGraphNodePresentation(
         applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
     );
   }, []);
-  const displayNodes = useMemo(() => {
-    const positionOverrides = new Map(
-      nodes.map((node) => [node.id, node.position] as const),
-    );
-
-    return baseNodes.map((node) => ({
-      ...node,
-      position: positionOverrides.get(node.id) ?? node.position,
-    }));
-  }, [baseNodes, nodes]);
+  const displayNodes = useMemo(
+    () =>
+      mergeBaseNodesWithPresentationPositions(
+        baseNodes,
+        previousBaseNodesRef.current,
+        nodes,
+      ),
+    [baseNodes, nodes],
+  );
 
   return { displayNodes, handleNodesChange };
 }

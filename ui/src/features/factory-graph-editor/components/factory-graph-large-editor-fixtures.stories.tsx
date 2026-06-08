@@ -1,6 +1,6 @@
 import { Background, ReactFlow } from "@xyflow/react";
 import { useEffect, useState } from "react";
-import { expect, within } from "storybook/test";
+import { expect, waitFor, within } from "storybook/test";
 
 import "../../../styles.css";
 import { factoryGraphLargeEditorFixtures } from "../lib/fixtures/factory-graph-large-editor-fixtures";
@@ -17,6 +17,7 @@ function FiveHundredNodeEditorFixtureStory() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const [viewportReady, setViewportReady] = useState(false);
   const [flowModel, setFlowModel] = useState<ReturnType<
     typeof buildFactoryGraphEditorFlowModel
   > | null>(null);
@@ -69,6 +70,7 @@ function FiveHundredNodeEditorFixtureStory() {
     <div
       className="h-[640px] w-full rounded-[1.5rem] border border-outline bg-surface-container-high p-4"
       data-factory-graph-editor-canvas="true"
+      data-large-fixture-viewport-ready={viewportReady ? "true" : "false"}
     >
       {status === "loading" ? (
         <p role="status">Loading 500 node factory graph fixture…</p>
@@ -81,10 +83,21 @@ function FiveHundredNodeEditorFixtureStory() {
           defaultEdgeOptions={{ selectable: false }}
           edgeTypes={FACTORY_GRAPH_EDITOR_EDGE_TYPES}
           edges={flowModel.edges}
-          fitView={true}
+          fitView={false}
           nodeTypes={FACTORY_GRAPH_EDITOR_NODE_TYPES}
           nodes={flowModel.nodes}
           nodesDraggable={false}
+          onInit={(instance) => {
+            void instance
+              .fitView({
+                maxZoom: 1.25,
+                nodes: [{ id: "workstation:ws-0" }],
+                padding: 0.2,
+              })
+              .then(() => {
+                setViewportReady(true);
+              });
+          }}
         >
           <Background />
         </ReactFlow>
@@ -103,6 +116,16 @@ export const FiveHundredNodeCanonicalProjection = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
+    await waitFor(
+      () => {
+        expect(
+          canvasElement.querySelector(
+            '[data-large-fixture-viewport-ready="true"]',
+          ),
+        ).toBeTruthy();
+      },
+      { timeout: 60_000 },
+    );
     await expect(
       canvas.findByText("ws-0", undefined, { timeout: 60_000 }),
     ).resolves.toBeVisible();
