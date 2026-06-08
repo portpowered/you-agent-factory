@@ -126,6 +126,9 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 	if handled, err := r.applySessionLifecycleEvent(event); handled {
 		return err
 	}
+	if handled, err := r.applyDispatchLifecycleEvent(event); handled {
+		return err
+	}
 	return nil
 }
 
