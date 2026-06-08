@@ -27,7 +27,10 @@ import {
   Select,
   SelectContent,
   SelectField,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
   Skeleton,
@@ -129,12 +132,20 @@ export function UIFoundationShowcase({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="story">
-                {messages.workTypeStoryOption}
-              </SelectItem>
-              <SelectItem value="task">
-                {messages.workTypeTaskOption}
-              </SelectItem>
+              <SelectGroup>
+                <SelectLabel>{messages.workTypeLabel}</SelectLabel>
+                <SelectItem value="story">
+                  {messages.workTypeStoryOption}
+                </SelectItem>
+                <SelectItem value="task">
+                  {messages.workTypeTaskOption}
+                </SelectItem>
+              </SelectGroup>
+              <SelectSeparator />
+              <SelectGroup>
+                <SelectLabel>{messages.workTypeTaskOption}</SelectLabel>
+                <SelectItem value="incident">incident</SelectItem>
+              </SelectGroup>
             </SelectContent>
           </Select>
         </SelectField>
