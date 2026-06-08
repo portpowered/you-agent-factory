@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
+import { currentFactoryDocument } from "../features/factory-graph-editor/lib/factory-graph-draft.test-helpers";
 import { mockFactoryDocumentSave } from "./factory-document-save-mocks";
 import {
   baseFactoryDefinitionDocument,
   createHookTestGraphEditorDraftState,
   createMockEditableFactoryGraph,
   createMockGraphEditorDraftState,
-  draftWorkstationFactoryDocument,
   type MockEditableFactoryGraphHooks,
   wireMockEditableFactoryGraph,
 } from "./graph-editor-harness";
@@ -103,7 +103,7 @@ describe("graph-editor-harness", () => {
 
   it("createHookTestGraphEditorDraftState seeds draft workstation topology", () => {
     const draftState = createHookTestGraphEditorDraftState();
-    expect(draftState.baseDocument).toEqual(draftWorkstationFactoryDocument);
+    expect(draftState.baseDocument).toEqual(currentFactoryDocument);
     expect(draftState.graph.nodes.map((node) => node.id)).toContain(
       "workstation:draft",
     );

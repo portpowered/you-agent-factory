@@ -10,9 +10,9 @@ import {
   defaultGraphDocumentScopeKey,
   renderEditableFactoryGraphHook,
 } from "../../../testing/editable-factory-graph-hook-test-helpers";
+import { currentFactoryDocument } from "../lib/factory-graph-draft.test-helpers";
 import {
   createHookTestGraphEditorDraftState,
-  draftWorkstationFactoryDocument,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
 import { currentFactoryDocumentQueryKey } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
@@ -67,9 +67,9 @@ describe("useEditableFactoryGraph save query cache", () => {
     });
     const documentQueryKey = currentFactoryDocumentQueryKey("~default");
     const savedDocument: CurrentFactoryDocument = {
-      ...draftWorkstationFactoryDocument,
+      ...currentFactoryDocument,
       resources: [
-        ...(draftWorkstationFactoryDocument.resources ?? []),
+        ...(currentFactoryDocument.resources ?? []),
         {
           capacity: 1,
           name: "review-slot",
@@ -85,7 +85,7 @@ describe("useEditableFactoryGraph save query cache", () => {
     const setQueryData = vi.spyOn(queryClient, "setQueryData");
     const { result } = renderEditableFactoryGraphHook(
       {
-        currentFactoryDocument: draftWorkstationFactoryDocument,
+        currentFactoryDocument: currentFactoryDocument,
         factoryDocumentScopeKey: defaultGraphDocumentScopeKey,
       },
       queryClient,

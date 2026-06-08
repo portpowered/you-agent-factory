@@ -23,8 +23,6 @@ export {
   createMockEditableFactoryGraph,
   createMockGraphEditorDraftState,
   divergentDocumentPlaneFactoryDocument,
-  draftWorkstationFactoryDefinition,
-  draftWorkstationFactoryDocument,
   type MockEditableFactoryGraphHooks,
   type MockGraphEditorDraftState,
   wireMockEditableFactoryGraph,
