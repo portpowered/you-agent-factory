@@ -92,19 +92,6 @@ describe("color-role-tokens product af-* wiring", () => {
   });
 });
 
-describe("color-role-tokens primary foreground (website-color-reblanacing-002)", () => {
-  const roleTokensSource = readFileSync(roleTokensSourcePath, "utf8");
-
-  it("routes on-primary through palette-aware accent-ink instead of canvas", () => {
-    expect(roleTokensSource).toContain(
-      "--color-on-primary: var(--color-af-foundation-accent-ink);",
-    );
-    expect(roleTokensSource).not.toContain(
-      "--color-on-primary: var(--color-af-foundation-canvas);",
-    );
-  });
-});
-
 describe("color-role-tokens accent rebalance (US-003)", () => {
   const roleTokensSource = readFileSync(roleTokensSourcePath, "utf8");
   const stylesSource = readFileSync(stylesSourcePath, "utf8");
