@@ -208,4 +208,72 @@ describe("factory-graph-layout-validation", () => {
       resolveFactoryLayoutEdgeWaypointsForRendering(layout, VALID_EDGE_ID),
     ).toBeUndefined();
   });
+
+  it("ignores layout edge entries without ids when collecting validation targets", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      edges: [{ waypoints: [{ x: 1, y: 2 }] } as { id?: string; waypoints: { x: number; y: number }[] }],
+    };
+
+    expect(collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds)).toEqual(
+      [],
+    );
+  });
+
+  it("returns the original layout when there are no edge layout entries to prune", () => {
+    const layout = createDefaultFactoryLayout();
+
+    expect(pruneFactoryLayoutEdgesForTopology(layout, new Set())).toEqual({
+      layout,
+      prunedEdgeIds: [],
+    });
+  });
+
+  it("preserves valid label positions without authored waypoints", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      edges: [
+        {
+          id: VALID_EDGE_ID,
+          labelPosition: { x: 140, y: 160 },
+        },
+      ],
+    };
+
+    const { layout: prunedLayout, prunedEdgeIds } =
+      pruneFactoryLayoutEdgesForTopology(layout, validEdgeIds);
+
+    expect(prunedEdgeIds).toEqual([]);
+    expect(prunedLayout.edges).toEqual([
+      {
+        id: VALID_EDGE_ID,
+        labelPosition: { x: 140, y: 160 },
+      },
+    ]);
+  });
+
+  it("prunes topology edges that only retain empty layout metadata", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      edges: [{ id: VALID_EDGE_ID }],
+    };
+
+    const { layout: prunedLayout, prunedEdgeIds } =
+      pruneFactoryLayoutEdgesForTopology(layout, validEdgeIds);
+
+    expect(prunedEdgeIds).toEqual([VALID_EDGE_ID]);
+    expect(prunedLayout.edges).toBeUndefined();
+  });
 });
