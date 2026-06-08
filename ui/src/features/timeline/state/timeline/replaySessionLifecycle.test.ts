@@ -145,6 +145,40 @@ describe("reconstructWorldState session lifecycle replay", () => {
     ]);
   });
 
+  it("maps artifact content type from contentType when captureMetadata mimeType is absent", () => {
+    const events = [
+      {
+        context: {
+          eventTime: "2026-06-09T12:00:05Z",
+          sequence: 5,
+          sessionSequence: 5,
+          tick: 5,
+        },
+        id: "artifact-legacy-content-type",
+        payload: {
+          artifact: {
+            contentType: "text/plain",
+            id: "artifact-legacy-content-type",
+            kind: "LOG",
+            visibility: "OPERATOR",
+          },
+          capturedAt: "2026-06-09T12:00:05Z",
+        },
+        type: FACTORY_EVENT_TYPES.artifactCreated,
+      },
+    ];
+
+    const state = reconstructWorldState(events, 5);
+    expect(state.sessionArtifacts).toEqual([
+      expect.objectContaining({
+        content_type: "text/plain",
+        id: "artifact-legacy-content-type",
+        kind: "LOG",
+        visibility: "OPERATOR",
+      }),
+    ]);
+  });
+
 });
 
 describe("reconstructWorldState dispatch interruption replay", () => {
