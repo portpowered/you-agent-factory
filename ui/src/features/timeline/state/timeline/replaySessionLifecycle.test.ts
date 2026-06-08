@@ -1,5 +1,8 @@
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
+import { applyDispatchLifecycleEvent } from "./replayDispatchLifecycle";
+import { applyOrchestratorProgressEvent } from "./replayOrchestratorProgress";
 import { reconstructWorldState } from "./replayWorldState";
+import { emptyReplayWorldState } from "./replayWorldStateSupport";
 
 function lifecycleEvent(
   type: string,
@@ -324,6 +327,72 @@ describe("reconstructWorldState dispatch interruption replay", () => {
     });
   });
 
+});
+
+describe("lifecycle replay edge cases", () => {
+  it("ignores artifact created events without nested artifact payloads", () => {
+    const state = emptyReplayWorldState(1);
+    const handled = applyDispatchLifecycleEvent(state, {
+      context: {
+        eventTime: "2026-06-09T12:00:01Z",
+        sequence: 1,
+        tick: 1,
+      },
+      id: "artifact-empty",
+      payload: {},
+      type: FACTORY_EVENT_TYPES.artifactCreated,
+    });
+    expect(handled).toBe(true);
+    expect(state.sessionArtifacts).toEqual([]);
+  });
+
+  it("deduplicates repeated orchestrator phase history entries", () => {
+    const events = [
+      {
+        context: {
+          eventTime: "2026-06-09T12:00:01Z",
+          phaseName: "review",
+          sequence: 1,
+          sessionSequence: 1,
+          tick: 1,
+        },
+        id: "phase-review-1",
+        payload: { phaseStatus: "ACTIVE" },
+        type: FACTORY_EVENT_TYPES.orchestratorPhaseChanged,
+      },
+      {
+        context: {
+          eventTime: "2026-06-09T12:00:02Z",
+          phaseName: "review",
+          sequence: 2,
+          sessionSequence: 2,
+          tick: 2,
+        },
+        id: "phase-review-2",
+        payload: { phaseStatus: "ACTIVE" },
+        type: FACTORY_EVENT_TYPES.orchestratorPhaseChanged,
+      },
+    ];
+
+    const state = reconstructWorldState(events, 2);
+    expect(state.javascriptRuntime?.phases).toEqual(["review"]);
+  });
+
+  it("returns false for unrecognized lifecycle reducer events", () => {
+    const state = emptyReplayWorldState(1);
+    const unknownEvent = {
+      context: {
+        eventTime: "2026-06-09T12:00:01Z",
+        sequence: 1,
+        tick: 1,
+      },
+      id: "unknown",
+      payload: {},
+      type: FACTORY_EVENT_TYPES.runRequest,
+    };
+    expect(applyDispatchLifecycleEvent(state, unknownEvent)).toBe(false);
+    expect(applyOrchestratorProgressEvent(state, unknownEvent)).toBe(false);
+  });
 });
 
 describe("reconstructWorldState failed session replay", () => {
