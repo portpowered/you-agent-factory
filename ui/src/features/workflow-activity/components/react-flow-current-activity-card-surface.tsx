@@ -5,7 +5,7 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AlertPanel } from "../../../components/ui";
 import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
+import { NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
@@ -197,7 +197,7 @@ export function CurrentActivityGraphSurface({
         initialFitViewOptions={graph.initialFitViewOptions}
         isSavingDraft={editor.saveEditableDefinition.isPending}
         locale={locale}
-        nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
+        nodeTypes={NODE_TYPES}
         nodes={graph.nodes}
         onAddAction={editor.handleAddEntityAction}
         onAddMenuOpenChange={editor.setAddMenuOpen}
