@@ -6,7 +6,6 @@ import {
   DashboardEmptyStateTitle,
   WidgetSubtitle,
 } from "./widget-frame";
-
 describe("DashboardEmptyState", () => {
   it("renders compact dashboard empty states through the component contract", () => {
     render(

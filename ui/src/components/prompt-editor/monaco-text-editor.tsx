@@ -88,12 +88,53 @@ export function MonacoTextEditor({
   value,
 }: MonacoTextEditorProps) {
   const onChangeRef = useRef(onChange);
+  const editorRef = useRef<MonacoEditorAPI.IStandaloneCodeEditor | null>(null);
   const startupState = monacoSetupState;
   const options = useMemo(() => TEXT_EDITOR_OPTIONS, []);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    const editorInstance = editorRef.current;
+    const model = editorInstance?.getModel();
+    if (!editorInstance || !model || model.getValue() === value) {
+      return;
+    }
+
+    if (
+      typeof editorInstance.getSelection !== "function" ||
+      typeof editorInstance.getScrollTop !== "function" ||
+      typeof editorInstance.getScrollLeft !== "function" ||
+      typeof editorInstance.setScrollPosition !== "function" ||
+      typeof model.pushEditOperations !== "function"
+    ) {
+      if (typeof model.setValue === "function") {
+        model.setValue(value);
+      }
+      return;
+    }
+
+    const selection = editorInstance.getSelection();
+    const scrollTop = editorInstance.getScrollTop();
+    const scrollLeft = editorInstance.getScrollLeft();
+
+    model.pushEditOperations(
+      [],
+      [
+        {
+          range: model.getFullModelRange(),
+          text: value,
+        },
+      ],
+      () => (selection ? [selection] : null),
+    );
+    if (selection) {
+      editorInstance.setSelection(selection);
+    }
+    editorInstance.setScrollPosition({ scrollLeft, scrollTop });
+  }, [value]);
 
   if (startupState !== "ready") {
     return (
@@ -122,13 +163,12 @@ export function MonacoTextEditor({
         className,
       )}
       height={height}
+      defaultValue={value}
       language="plaintext"
-      onChange={(nextValue) => onChange(nextValue ?? "")}
-      onMount={createTextEditorMountHandler({ onChangeRef })}
+      onMount={createTextEditorMountHandler({ editorRef, onChangeRef })}
       options={{ ...options, ariaLabel }}
       path={modelPath}
       theme={WORKSTATION_PROMPT_THEME_ID}
-      value={value}
       width="100%"
       wrapperProps={{
         "aria-describedby": ariaDescribedBy,
@@ -141,11 +181,14 @@ export function MonacoTextEditor({
 }
 
 function createTextEditorMountHandler({
+  editorRef,
   onChangeRef,
 }: {
+  editorRef: RefObject<MonacoEditorAPI.IStandaloneCodeEditor | null>;
   onChangeRef: RefObject<(value: string) => void>;
 }) {
   return (editorInstance: MonacoEditorAPI.IStandaloneCodeEditor) => {
+    editorRef.current = editorInstance;
     const themeObserver =
       typeof MutationObserver === "undefined" || typeof document === "undefined"
         ? null
@@ -155,6 +198,7 @@ function createTextEditorMountHandler({
     });
 
     editorInstance.onDidDispose(() => {
+      editorRef.current = null;
       themeObserver?.disconnect();
       contentChangeListener.dispose();
     });

@@ -94,9 +94,22 @@ describe("DashboardWidgetFrame chrome", () => {
     expect(body?.className).toContain("custom-widget-body");
   });
 
-  it("uses page-flow bodies by default through the shared bento card", () => {
+  it("uses scrollable bodies by default through the shared bento card", () => {
     render(
       <DashboardWidgetFrame title="Trace" widgetId="trace">
+        <p>Trace content</p>
+      </DashboardWidgetFrame>,
+    );
+
+    const card = screen.getByRole("article", { name: "Trace" });
+
+    expect(card.querySelector("[data-radix-scroll-area-viewport]")).toBeTruthy();
+    expect(card.className).toContain("overflow-hidden");
+  });
+
+  it("supports opting out of the internal scroll body when a card needs page-flow layout", () => {
+    render(
+      <DashboardWidgetFrame bodyScroll={false} title="Trace" widgetId="trace">
         <p>Trace content</p>
       </DashboardWidgetFrame>,
     );

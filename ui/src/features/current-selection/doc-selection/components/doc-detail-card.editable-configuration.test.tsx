@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 
 import * as useDocDetailStateModule from "../hooks/use-doc-detail-state";
 import type { DocDetailCardProps } from "../lib/detail-card-types";
@@ -94,6 +95,43 @@ describe("DocDetailCard editable configuration", () => {
 
     expect(onFileNameChange).toHaveBeenCalledWith("guide.md");
     expect(onInlineContentChange).toHaveBeenCalledWith("# Guide\n");
+  });
+
+  it("keeps focus in the inline content editor while local draft text changes", () => {
+    function FocusRetentionHarness() {
+      const [draft, setDraft] = useState("# Overview\n");
+
+      return (
+        <DocDetailCard
+          editableConfigurationState={buildReadyEditableState({
+            draft: {
+              fileName: "overview.md",
+              inlineContent: draft,
+              originalExtension: ".md",
+            },
+            onInlineContentChange: setDraft,
+          })}
+          saveState={{ status: "idle" }}
+          targetPath="factory/docs/overview.md"
+        />
+      );
+    }
+
+    render(<FocusRetentionHarness />);
+
+    const editorTextarea = document.querySelector(
+      '[data-monaco-editor="factory-doc-text"] textarea',
+    ) as HTMLTextAreaElement;
+
+    editorTextarea.focus();
+    fireEvent.change(editorTextarea, {
+      target: { value: "# Overview updated\n" },
+    });
+
+    expect(document.activeElement).toBe(editorTextarea);
+    expect(
+      document.querySelector('[data-monaco-editor="factory-doc-text"] textarea'),
+    ).toBe(editorTextarea);
   });
 
   it("renders loading, error, and empty detail states before editable configuration is ready", () => {
