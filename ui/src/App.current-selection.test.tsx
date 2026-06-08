@@ -1,3 +1,5 @@
+import "@testing-library/jest-dom/vitest";
+
 import {
   act,
   fireEvent,
@@ -5,7 +7,10 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { selectLabeledComboboxOption } from "./testing/select-test-helpers";
 import type {
   DashboardSnapshot,
   DashboardTrace,
@@ -1570,24 +1575,18 @@ describe("App current selection", () => {
       }),
     );
 
-    const kindSelect = within(currentSelection).getByLabelText(
-      "类型",
-    ) as HTMLSelectElement;
-    expect(
-      Array.from(kindSelect.options).map((option) => ({
-        label: option.textContent,
-        value: option.value,
-      })),
-    ).toEqual([
-      { label: "标准", value: "STANDARD" },
-      { label: "重复器", value: "REPEATER" },
-      { label: "轮询器", value: "POLLER" },
-    ]);
+    const user = userEvent.setup();
+    const kindSelect = within(currentSelection).getByLabelText("类型");
 
-    fireEvent.change(kindSelect, {
-      target: { value: "REPEATER" },
-    });
-    expect(kindSelect.value).toBe("REPEATER");
+    await user.click(kindSelect);
+    const listbox = await screen.findByRole("listbox");
+    expect(
+      within(listbox).getAllByRole("option").map((option) => option.textContent),
+    ).toEqual(["标准", "重复器", "轮询器"]);
+    await user.keyboard("{Escape}");
+
+    await selectLabeledComboboxOption(user, "类型", "重复器");
+    expect(kindSelect).toHaveTextContent("重复器");
     const footerSaveButton =
       within(currentSelection)
         .getAllByRole("button", { name: "保存更改" })

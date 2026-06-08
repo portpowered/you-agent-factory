@@ -13,6 +13,7 @@ import {
 import { reloadDashboardLayoutFromStorage } from "./features/bento/hooks/useDashboardLayout";
 import { useDashboardSessionStore } from "./features/dashboard/state/dashboardSessionStore";
 import { submitWorkCardControls } from "./stories/dashboardStoryTestUtils";
+import { selectComboboxOption } from "./testing/select-test-helpers";
 
 const SESSION_SWITCHING_DASHBOARD_LAYOUT = DEFAULT_DASHBOARD_LAYOUT.map(
   (item) =>
@@ -112,7 +113,7 @@ export const Verification = {
 
     const { requestField, requestNameField, workTypeField } =
       await submitWorkCardControls(canvasElement);
-    await userEvent.selectOptions(workTypeField, "story");
+    await selectComboboxOption(userEvent, workTypeField, "story");
     await userEvent.type(requestNameField, "Root session request");
     await userEvent.type(requestField, "Keep the default session isolated.");
 
@@ -149,7 +150,9 @@ export const Verification = {
     } = await submitWorkCardControls(canvasElement);
     await expect(refreshedRequestNameField).toHaveValue("");
     await expect(refreshedRequestField).toHaveValue("");
-    await expect(refreshedWorkTypeField).toHaveValue("");
+    await expect(refreshedWorkTypeField).toHaveTextContent(
+      "Select a work type",
+    );
   },
 };
 

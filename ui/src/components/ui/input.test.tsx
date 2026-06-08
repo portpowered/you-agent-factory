@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { Input, inputVariants } from "./input";
-import { Select } from "./select";
+import { NativeSelect } from "./native-select";
 import { Textarea } from "./textarea";
 
 describe("Input primitives", () => {
@@ -17,9 +17,9 @@ describe("Input primitives", () => {
   it("shares input variants with select and textarea controls", () => {
     render(
       <>
-        <Select aria-label="Factory mode">
+        <NativeSelect aria-label="Factory mode">
           <option>Automatic</option>
-        </Select>
+        </NativeSelect>
         <Textarea aria-label="Factory notes" />
       </>,
     );
