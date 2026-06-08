@@ -124,26 +124,6 @@ func ProjectCheckpointRefs(records []interfaces.JavaScriptCheckpointRecord) []fa
 	return projected
 }
 
-// ProjectJavaScriptCheckpointEventPayload maps one internal checkpoint record
-// to the canonical event payload shape.
-func ProjectJavaScriptCheckpointEventPayload(record interfaces.JavaScriptCheckpointRecord) factoryapi.JavaScriptCheckpointRefEventPayload {
-	payload := factoryapi.JavaScriptCheckpointRefEventPayload{
-		CheckpointId: record.ID,
-		ArtifactRef:  ProjectCheckpointArtifactRef(record),
-	}
-	if label := strings.TrimSpace(record.Label); label != "" {
-		payload.Label = &label
-	}
-	if summary := strings.TrimSpace(record.Summary); summary != "" {
-		payload.Summary = &summary
-	}
-	if !record.Timestamp.IsZero() {
-		timestamp := record.Timestamp.UTC()
-		payload.Timestamp = &timestamp
-	}
-	return payload
-}
-
 // JavaScriptRuntimeStateFromCheckpoints builds the JavaScript runtime projection
 // input from checkpoint store records and optional runtime overrides.
 func JavaScriptRuntimeStateFromCheckpoints(
