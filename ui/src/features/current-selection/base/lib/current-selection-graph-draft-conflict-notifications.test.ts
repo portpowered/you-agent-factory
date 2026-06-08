@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getCurrentSelectionGraphDraftConflictMessages } from "../messages/current-selection-graph-draft-conflict";
+import { getCurrentSelectionGraphDraftConflictMessages } from "../messages/operational/current-selection-graph-draft-conflict";
 import {
   CURRENT_SELECTION_GRAPH_DRAFT_CONFLICT_WARNING_KEY,
   resolveCurrentSelectionGraphDraftConflictNotification,

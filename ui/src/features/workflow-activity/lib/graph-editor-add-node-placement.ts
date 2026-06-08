@@ -2,8 +2,8 @@ import type { Node, ReactFlowInstance } from "@xyflow/react";
 import {
   type FactoryGraphNodeKind,
   nodeKeyId,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/factory-graph-editor-additions";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import type { GraphNodePosition } from "../state/currentActivityGraphStore";
 import {
   axisAlignedRectFromTopLeft,

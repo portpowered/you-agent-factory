@@ -7,17 +7,17 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
-import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/factory-graph-customer-display";
-import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-graph";
+import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
   type FactoryGraphEdge,
   type FactoryGraphNode,
   type FactoryGraphNodeKind,
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
-import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/factory-graph-editor-layout";
-import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/factory-graph-node-class-visibility";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
+import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
+import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";

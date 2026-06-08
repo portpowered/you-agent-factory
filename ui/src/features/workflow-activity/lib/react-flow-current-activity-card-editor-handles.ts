@@ -9,7 +9,7 @@ import type {
   FactoryGraphEdgeKind,
   FactoryGraphNodeKind,
   WorkstationToWorkStateRouteKind,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   type FactoryGraphConnectionAnchorContext,
   type FactoryGraphConnectionEndpoint,
@@ -18,13 +18,13 @@ import {
   getLocalizedFactoryGraphConnectionAnchors,
   mergeAuthoredProgressOutcomeConnectionAnchors,
   PROGRESS_OUTCOME_SOURCE_ANCHOR_IDS,
-} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+} from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import {
   workstationRendersProgressOutcomeHandleValidation,
   workstationRendersProgressOutcomeZAxisHintAnchors,
-} from "../../factory-graph-editor/lib/factory-graph-progress-outcome-handle-visibility";
-import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
-import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/factory-validation-graph-projection";
+} from "../../factory-graph-editor/lib/projection/factory-graph-progress-outcome-handle-visibility";
+import type { FactoryValidationGraphProjection } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
+import { validationHandleErrorsForNode } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type {
   ActivityGraphNodeHandle,

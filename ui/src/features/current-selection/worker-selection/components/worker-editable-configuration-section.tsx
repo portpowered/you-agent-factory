@@ -22,8 +22,8 @@ import {
   EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
 import { WORKER_TIMEOUT_UNITS } from "../../../current-factory-definition/lib/worker-timeout-duration";
-import { CurrentSelectionExpandableSection } from "../../base/components/current-selection-expandable-section";
-import { mergeDetailCardSaveFieldErrors } from "../../base/components/detail-card-factory-save-feedback";
+import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
+import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
 import {
   CurrentSelectionDetailFeedback,
   CurrentSelectionFormField,

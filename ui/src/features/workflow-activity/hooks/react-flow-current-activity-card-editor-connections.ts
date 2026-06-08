@@ -7,16 +7,16 @@ import {
   useMemo,
   useState,
 } from "react";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/factory-graph-editor-controls";
+import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   createFactoryGraphWorkstationResolver,
   type FactoryGraphConnectionEndpoint,
   type FactoryGraphConnectionResolver,
   getFactoryGraphConnectionAnchor,
   resolveFactoryGraphConnectionAnchorContext,
-} from "../../factory-graph-editor/lib/factory-graph-editor-connections";
+} from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 
 type FactoryGraphConnectionCommit = (connection: {

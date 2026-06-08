@@ -1,4 +1,4 @@
-import { SelectionDetailLayout } from "../../base/components/current-selection-detail-layout";
+import { SelectionDetailLayout } from "../../base/components/layout/current-selection-detail-layout";
 import {
   CurrentSelectionBodyLayout,
   CurrentSelectionDetailFeedback,

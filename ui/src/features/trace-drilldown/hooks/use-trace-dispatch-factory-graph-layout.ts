@@ -1,4 +1,4 @@
-import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   createWorkflowTopologyAsyncCache,
   useWorkflowTopologyAsyncCache,

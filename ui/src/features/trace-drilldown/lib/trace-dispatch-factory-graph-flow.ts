@@ -3,11 +3,11 @@ import type {
   DashboardTraceDispatch,
   DashboardWorkstationNode,
 } from "../../../api/dashboard/types";
-import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/factory-graph-draft-types";
+import type { FactoryGraphTopology } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   type FactoryGraphReactFlowEdge,
   projectFactoryGraphToReactFlow,
-} from "../../factory-graph-editor/lib/factory-graph-react-flow-projection";
+} from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
 import { STANDARD_WORKSTATION_KIND } from "../../flowchart/lib/workstation-icon-metadata";
 import type { WorkstationNodeData } from "../../graphs/public";
 import {

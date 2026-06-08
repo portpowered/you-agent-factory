@@ -288,7 +288,9 @@ async function expectConsolidatedCleanGraphEditorChrome(page) {
         const toolbar = graphCard.getByRole("region", {
           name: "Factory graph editor tools",
         });
-        const toolbarStatusCount = await toolbar.locator('[role="status"]').count();
+        const toolbarStatusCount = await toolbar
+          .locator('[role="status"]')
+          .count();
 
         return toggleClassName?.includes("border-af-warning-border") !== true &&
           toolbarStatusCount === 0

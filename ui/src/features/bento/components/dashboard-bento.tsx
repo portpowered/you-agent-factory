@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 import { useAppLocale } from "../../../i18n";
-import { useCurrentSelectionDetails } from "../../current-selection/hooks/useCurrentSelectionDetails";
+import { useCurrentSelectionDetails } from "../../current-selection/hooks/core/useCurrentSelectionDetails";
 import { useSelectedProviderSessionState } from "../../current-selection/work-selection/hooks/useSelectedProviderSessionState";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { FactoryImportConfirmInput } from "../../import/lib/factory-import-save-choice";

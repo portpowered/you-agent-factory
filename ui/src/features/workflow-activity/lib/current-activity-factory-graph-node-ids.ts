@@ -3,7 +3,7 @@ import {
   type FactoryGraphNodeKey,
   type FactoryGraphNodeKind,
   nodeKeyId,
-} from "../../factory-graph-editor/lib/factory-graph-draft-types";
+} from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 
 export function resolveFactoryGraphPlaceNode(
   place: DashboardPlaceRef,

@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FactoryValidationResult } from "../../../api/factory-validation";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
-import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/use-factory-validation";
-import { baseFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft.test-helpers";
-import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/factory-graph-draft-apply";
-import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/factory-graph-operations";
+import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks/validation/use-factory-validation";
+import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
+import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-apply";
+import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/operations/factory-graph-operations";
 import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 
 const validationFixtures = vi.hoisted(() => {
@@ -217,14 +217,14 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
 }));
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-additions",
+  "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
   () => ({
     buildFactoryGraphAddEntityMenuActions: () => [],
   }),
 );
 
 vi.mock(
-  "../../factory-graph-editor/lib/factory-graph-editor-save-summary",
+  "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
   () => ({
     buildFactoryGraphSaveSummary: () => ({
       additions: [],

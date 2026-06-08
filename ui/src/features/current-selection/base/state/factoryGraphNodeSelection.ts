@@ -3,7 +3,7 @@ import {
   parseFactoryGraphWorkStateNodeId,
   parseFactoryGraphWorkstationNodeId,
   parseFactoryGraphWorkTypeNodeId,
-} from "../../../factory-graph-editor/lib/factory-graph-draft-types";
+} from "../../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 
 type DashboardNodeSelection = {
   kind: "node";

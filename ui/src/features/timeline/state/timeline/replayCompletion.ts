@@ -150,7 +150,9 @@ export function responseCompletion(
   const latestAttempt = latestWorkstationAttempt(
     state.inferenceAttemptsByDispatchID[dispatchID],
   );
-  const terminalRefs = terminalWork ? [workItemRef(terminalWork.work_item)] : [];
+  const terminalRefs = terminalWork
+    ? [workItemRef(terminalWork.work_item)]
+    : [];
   const workItemsByID = new Map(
     [...(active?.workItems ?? []), ...outputRefs, ...terminalRefs].map(
       (item) => [item.work_id, item],

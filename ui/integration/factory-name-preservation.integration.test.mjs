@@ -62,7 +62,9 @@ describe.sequential("factory name preservation browser integration", () => {
           preview.previewURL,
           server,
         );
-        await browserPage.page.getByRole("button", { name: "Edit mode" }).click();
+        await browserPage.page
+          .getByRole("button", { name: "Edit mode" })
+          .click();
         await saveGraphEditorTopology(browserPage.page);
 
         await expect
@@ -248,7 +250,9 @@ describe.sequential("factory name preservation browser integration", () => {
         expect(sessionFactoryPutRequests[0]?.mode).toBe(
           "UPSERT_NAMED_AND_ACTIVATE",
         );
-        expect(sessionFactoryPutRequests[0]?.body?.name).toBe(resolvedCreateName);
+        expect(sessionFactoryPutRequests[0]?.body?.name).toBe(
+          resolvedCreateName,
+        );
         expect(sessionFactoryPutRequests[0]?.body?.name).not.toBe(
           exportFactoryDefinition.name,
         );

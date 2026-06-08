@@ -17,14 +17,14 @@ import type {
   CurrentFactoryDocument,
   FactoryGraphDraft,
   FactoryGraphDraftValidationError,
-} from "../lib/factory-graph-draft-types";
-import type { FactoryGraphAddEntityDraft } from "../lib/factory-graph-editor-additions";
-import type { FactoryGraphNodeFieldUpdate } from "../lib/factory-graph-field-operations";
+} from "../lib/draft/factory-graph-draft-types";
+import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
+import type { FactoryGraphNodeFieldUpdate } from "../lib/editor-runtime/factory-graph-field-operations";
 import type {
   FactoryGraphOperationResult,
   FactoryGraphReactFlowProjection,
   FactoryGraphState,
-} from "../lib/factory-graph-operations";
+} from "../lib/operations/factory-graph-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 
 export interface UseEditableFactoryGraphOptions {

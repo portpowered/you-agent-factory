@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../../components/dashboard/test-fixtures";
 import { formatLocalDateTime } from "../../../../components/ui/formatters";
-import { CurrentSelectionLocaleProvider } from "../../base/components/current-selection-locale";
+import { CurrentSelectionLocaleProvider } from "../../base/components/presentation/current-selection-locale";
 import type {
   EditableWorkStateConfigurationState,
   EditableWorkStateSaveState,

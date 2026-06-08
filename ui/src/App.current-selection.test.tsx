@@ -745,9 +745,7 @@ describe("App current selection", () => {
     expect(
       within(readyRequestDetails).queryByText("Worktree", { selector: "dt" }),
     ).toBeNull();
-    expect(
-      within(readyCard).getByText("Trace IDs"),
-    ).toBeTruthy();
+    expect(within(readyCard).getByText("Trace IDs")).toBeTruthy();
     expect(
       within(readyCard).getByRole("button", {
         name: "trace-active-story (selected)",
@@ -2241,7 +2239,10 @@ describe("App current selection", () => {
         .getByRole("heading", { name: "Failed" })
         .closest("section");
 
-      if (!(completedRow instanceof HTMLElement) || !(failedRow instanceof HTMLElement)) {
+      if (
+        !(completedRow instanceof HTMLElement) ||
+        !(failedRow instanceof HTMLElement)
+      ) {
         throw new Error("expected terminal work sections");
       }
 
