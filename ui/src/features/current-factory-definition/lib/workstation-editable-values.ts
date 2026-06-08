@@ -1,10 +1,8 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
 import type { components } from "../../../api/generated/openapi";
-import {
-  BUILT_IN_RUNNER_IDS,
-  type RunnerID,
-} from "../../current-selection/workstation-selection/public";
+import { BUILT_IN_RUNNER_IDS } from "../../current-selection/workstation-selection/public";
+import type { ApiRunnerID } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
 import {
   type ResolvedRunnerSelection,
   type RunnerSelectionSource,
@@ -81,8 +79,8 @@ export interface EditableWorkstationValues {
   behavior: EditableWorkstationBehavior;
   behaviorOptions: EditableWorkstationBehavior[];
   cron: EditableWorkstationCronDraft | null;
-  effectiveRunnerName: RunnerID;
-  factoryRunnerName: RunnerID | null;
+  effectiveRunnerName: ApiRunnerID;
+  factoryRunnerName: ApiRunnerID | null;
   modelInvokeWorkerOptions: string[];
   modelOperationsByWorkerName: ReturnType<
     typeof resolveModelOperationsByWorkerName
@@ -91,8 +89,8 @@ export interface EditableWorkstationValues {
   operationBindings: EditableModelInvokeBindingDraft[];
   prompt: string | null;
   resolvedRunnerSelection: ResolvedRunnerSelection;
-  runnerName: RunnerID | null;
-  runnerOptions: RunnerID[];
+  runnerName: ApiRunnerID | null;
+  runnerOptions: ApiRunnerID[];
   runnerSelectionSource: RunnerSelectionSource;
   sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
   sharedWorkerWorkstationNames: string[];
@@ -117,7 +115,7 @@ export interface EditableWorkstationDraft {
   operation: string;
   operationBindings: EditableModelInvokeBindingDraft[];
   prompt: string;
-  runnerName: RunnerID | null;
+  runnerName: ApiRunnerID | null;
   workerName: string;
   workstationType: EditableWorkstationType;
 }

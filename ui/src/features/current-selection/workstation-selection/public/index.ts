@@ -11,7 +11,6 @@ export {
 export {
   BUILT_IN_RUNNER_IDS,
   getRunnerMetadata,
-  type RunnerID,
   type RunnerMetadata,
 } from "../editing/runner-metadata";
 export type {

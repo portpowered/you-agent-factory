@@ -27,7 +27,7 @@ import {
 import { resolveDraftForWorkstationTypeChange } from "../editing/type/editable-workstation-type-mutators";
 import { resolveEditableWorkstationOverwriteFields } from "../editing/editable-workstation-overwrite-fields";
 import { resolveModelInvokeOperationOptionsState } from "../lib/editable-workstation-model-invoke-options";
-import type { RunnerID } from "../editing/runner-metadata";
+import type { ApiRunnerID } from "../messages/runner-openapi-enums";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import type {
   EditableWorkstationPromptHelpState,
@@ -135,7 +135,7 @@ function createEditableWorkstationDraftHandlers(
     onInputsChange: (inputs: EditableWorkstationDraft["inputs"]) => {
       updateDraft((draft) => ({ ...draft, inputs }));
     },
-    onRunnerChange: (value: RunnerID | null) => {
+    onRunnerChange: (value: ApiRunnerID | null) => {
       updateDraft((draft) => ({ ...draft, runnerName: value }));
     },
     onWorkstationTypeChange: (value: EditableWorkstationType) => {

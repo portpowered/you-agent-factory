@@ -102,6 +102,15 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
   {
+    relativeFilePath:
+      "src/features/current-factory-definition/lib/workstation-editable-values.ts",
+    importSpecifiers: [
+      "../../current-selection/workstation-selection/messages/runner-openapi-enums",
+    ],
+    reason:
+      "Canonical OpenAPI runner identifier type lives in workstation-selection runner-openapi-enums; cross-feature type import is allowlisted instead of re-exporting through public/.",
+  },
+  {
     relativeFilePath: "src/features/current-factory-definition/public/index.ts",
     importSpecifiers: [
       "../../current-selection/base/hooks/factory-document-save-types",
