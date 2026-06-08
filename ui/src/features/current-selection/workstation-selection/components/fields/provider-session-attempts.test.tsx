@@ -93,7 +93,7 @@ describe("ProviderSessionAttempts", () => {
 
     expect(screen.getByText("Current dispatch")).toBeTruthy();
     expect(screen.getByText("Current dispatch").className).toContain(
-      "text-on-surface",
+      "text-on-primary",
     );
     expect(
       screen.getByRole("button", { name: "Select work item Active Story" }),
@@ -120,10 +120,10 @@ describe("ProviderSessionAttempts", () => {
     expect(screen.getByText("Session selected")).toBeTruthy();
     expect(
       screen.getByText("Session selected").closest("button")?.className,
-    ).toContain("bg-secondary-container");
+    ).toContain("bg-primary-container");
     expect(
       screen.getByText("Session selected").closest("button")?.className,
-    ).toContain("text-on-secondary-container");
+    ).toContain("text-on-primary");
     expect(screen.getByText("Session details unavailable")).toBeTruthy();
     expect(screen.getAllByText("Session log unavailable")).toHaveLength(2);
     expect(
