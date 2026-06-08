@@ -183,7 +183,7 @@ describe("SubmitWorkWidget form behavior", () => {
     ).toBe(true);
   });
 
-  it("enables submission only after a configured work type and non-blank request name are present", async () => {
+  it("keeps submit reachable for validation and uses primary styling when required fields are complete", async () => {
     renderSubmitWorkWidget(
       <SubmitWorkWidget
         submitWorkTypes={[
@@ -203,7 +203,8 @@ describe("SubmitWorkWidget form behavior", () => {
       name: "Submit work",
     });
 
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).not.toContain("bg-primary");
     expect(
       screen.queryByText(
         "Choose a work type and enter a request name to continue.",
@@ -211,14 +212,17 @@ describe("SubmitWorkWidget form behavior", () => {
     ).toBeNull();
 
     await selectWorkType();
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).not.toContain("bg-primary");
     expect(screen.getByText("(required)")).toBeTruthy();
 
     fireEvent.change(requestName, { target: { value: "   " } });
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).not.toContain("bg-primary");
 
     fireEvent.change(requestName, { target: { value: "Driver review" } });
     expect(submitButton.disabled).toBe(false);
+    expect(submitButton.className).toContain("bg-primary");
 
     fireEvent.change(requestText, {
       target: { value: "Review the failed driver trace." },
@@ -242,15 +246,8 @@ describe("SubmitWorkWidget form behavior", () => {
     const submitButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Submit work",
     });
-    const form = submitButton.closest("form");
 
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error(
-        "expected the submit button to be rendered inside a form",
-      );
-    }
-
-    fireEvent.submit(form);
+    await user.click(submitButton);
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
@@ -266,6 +263,30 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(workType.getAttribute("aria-invalid")).toBe("true");
     expect(
       screen.getByText("Enter a request name before submitting."),
+    ).toHaveAttribute("role", "alert");
+  });
+
+  it("shows field validation when pressing Enter in the request name field", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    const requestName = screen.getByRole<HTMLInputElement>("textbox", {
+      name: /Request name/,
+    });
+
+    requestName.focus();
+    await user.keyboard("{Enter}");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(requestName.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      screen.getByText("Enter a request name before submitting."),
+    ).toHaveAttribute("role", "alert");
+    expect(
+      screen.getByText("Choose a work type before submitting."),
     ).toHaveAttribute("role", "alert");
   });
 
@@ -1337,19 +1358,12 @@ describe("SubmitWorkWidget submission behavior", () => {
     });
 
     await selectWorkType();
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
 
     fireEvent.change(requestName, { target: { value: "   " } });
-    expect(submitButton.disabled).toBe(true);
+    expect(submitButton.disabled).toBe(false);
 
-    const form = submitButton.closest("form");
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error(
-        "expected the submit button to be rendered inside a form",
-      );
-    }
-
-    fireEvent.submit(form);
+    await user.click(submitButton);
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(
@@ -1486,14 +1500,8 @@ describe("SubmitWorkWidget submission behavior", () => {
     const submitButton = screen.getByRole<HTMLButtonElement>("button", {
       name: "Submit work",
     });
-    const form = submitButton.closest("form");
-    if (!(form instanceof HTMLFormElement)) {
-      throw new Error(
-        "expected the submit button to be rendered inside a form",
-      );
-    }
 
-    fireEvent.submit(form);
+    await user.click(submitButton);
 
     const requestName = screen.getByRole<HTMLInputElement>("textbox", {
       name: /Request name/,
@@ -1508,7 +1516,7 @@ describe("SubmitWorkWidget submission behavior", () => {
     fireEvent.change(requestName, {
       target: { value: "Driver review" },
     });
-    fireEvent.click(submitButton);
+    await user.click(submitButton);
 
     expect(
       await screen.findByText(

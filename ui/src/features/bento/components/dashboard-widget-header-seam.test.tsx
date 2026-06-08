@@ -200,7 +200,9 @@ describe("dashboard widget header seam", () => {
       title: messages.cardTitle,
     });
     expect(
-      within(card).getByRole("combobox", { name: messages.workTypeLabel }),
+      within(card).getByRole("combobox", {
+        name: `${messages.workTypeLabel} (${messages.workTypeRequiredAffordance})`,
+      }),
     ).toBeTruthy();
   });
 });

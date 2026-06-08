@@ -109,12 +109,10 @@ export function SubmitWorkCard({
   const hasSelectedWorkType = draft.workTypeName.length > 0;
   const hasValidRequestName = draft.requestName.trim().length > 0;
   const controlsDisabled = !hasConfiguredWorkTypes || isSubmitting;
-  const canSubmit =
-    hasConfiguredWorkTypes &&
-    !hasIncompleteFileItems &&
-    hasSelectedWorkType &&
-    hasValidRequestName &&
-    !isSubmitting;
+  const canAttemptSubmit =
+    hasConfiguredWorkTypes && !hasIncompleteFileItems && !isSubmitting;
+  const isFormReady =
+    canAttemptSubmit && hasSelectedWorkType && hasValidRequestName;
   const requestNameID = `${widgetId}-request-name`;
   const requestNameErrorID = `${widgetId}-request-name-error`;
   const submissionItemsID = `${widgetId}-submission-items`;
@@ -182,7 +180,6 @@ export function SubmitWorkCard({
               id={requestNameID}
               onChange={(event) => onRequestNameChange(event.target.value)}
               placeholder={messages.requestNamePlaceholder}
-              required
               type="text"
               value={draft.requestName}
             />
@@ -226,8 +223,8 @@ export function SubmitWorkCard({
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
             className="w-full justify-center"
-            disabled={!canSubmit}
-            tone={canSubmit ? "default" : "outline"}
+            disabled={!canAttemptSubmit}
+            tone={isFormReady ? "default" : "outline"}
             type="submit"
           >
             {isSubmitting ? messages.submittingAction : messages.submitAction}

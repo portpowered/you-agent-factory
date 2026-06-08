@@ -955,10 +955,10 @@ export const DashboardImprovementsSmoke = {
       within(graphCard).queryByRole("heading", { name: "Current activity" }),
     ).toBeNull();
     await expect(
-      within(submitWorkCard).getByRole("combobox", { name: "Work type" }),
+      within(submitWorkCard).getByRole("combobox", { name: /Work type/ }),
     ).toBeVisible();
     await expect(
-      within(submitWorkCard).getByRole("textbox", { name: "Request name" }),
+      within(submitWorkCard).getByRole("textbox", { name: /Request name/ }),
     ).toBeVisible();
     await expect(
       within(submitWorkCard).getByRole("list", {
@@ -972,7 +972,7 @@ export const DashboardImprovementsSmoke = {
     ).toBeVisible();
     await expect(
       within(submitWorkCard).getByRole("button", { name: "Submit work" }),
-    ).toBeDisabled();
+    ).toBeEnabled();
     expect(
       within(submitWorkCard).queryByText(
         "Ready to submit. Request details are optional.",
@@ -1388,24 +1388,24 @@ export const DashboardSubmitWorkIntegrationSmoke = {
       submitButton,
       workTypeField,
     } = await submitWorkCardControls(canvasElement);
-    const disabledSubmitStyle = buttonVisibleStyle(submitButton);
+    const outlineSubmitStyle = buttonVisibleStyle(submitButton);
 
     await userEvent.click(workTypeField);
     await expect(
       await screen.findByRole("option", { name: "story" }),
     ).toBeVisible();
-    await expect(submitButton).toBeDisabled();
+    await expect(submitButton).toBeEnabled();
     await userEvent.type(requestNameField, "Dashboard smoke request");
-    await expect(submitButton).toBeDisabled();
+    await expect(submitButton).toBeEnabled();
     await userEvent.type(
       requestField,
       "Review the failed dashboard submission smoke.",
     );
-    await expect(submitButton).toBeDisabled();
+    await expect(submitButton).toBeEnabled();
     await selectComboboxOption(userEvent, workTypeField, "story");
     await expect(submitButton).toBeEnabled();
     await waitFor(() => {
-      expect(buttonVisibleStyle(submitButton)).not.toEqual(disabledSubmitStyle);
+      expect(buttonVisibleStyle(submitButton)).not.toEqual(outlineSubmitStyle);
     });
     await userEvent.click(submitButton);
     await expect(
@@ -1416,9 +1416,9 @@ export const DashboardSubmitWorkIntegrationSmoke = {
     await expect(requestNameField).toHaveValue("");
     await expect(requestField).toHaveValue("");
     await expect(workTypeField).toHaveTextContent("story");
-    await expect(submitButton).toBeDisabled();
+    await expect(submitButton).toBeEnabled();
     await waitFor(() => {
-      expect(buttonVisibleStyle(submitButton)).toEqual(disabledSubmitStyle);
+      expect(buttonVisibleStyle(submitButton)).toEqual(outlineSubmitStyle);
     });
   },
 };

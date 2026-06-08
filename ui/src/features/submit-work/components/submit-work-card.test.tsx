@@ -50,8 +50,35 @@ function renderSubmitWorkCard(
 }
 
 describe("SubmitWorkCard request name field", () => {
+  let user: ReturnType<typeof userEvent.setup>;
+
+  beforeEach(() => {
+    user = userEvent.setup();
+  });
+
   afterEach(() => {
     cleanup();
+  });
+
+  it("keeps submit enabled so validation can be triggered through user interaction", async () => {
+    const onSubmit = vi.fn();
+
+    renderSubmitWorkCard({
+      draft: {
+        ...defaultDraft,
+        requestName: "",
+        workTypeName: "",
+      },
+      onSubmit,
+    });
+
+    const submitButton = screen.getByRole("button", {
+      name: messages.submitAction,
+    });
+
+    expect(submitButton).toBeEnabled();
+    await user.click(submitButton);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
   it("communicates that the request name is required before submission", () => {
