@@ -93,6 +93,19 @@ describe("resolveDraftForWorkstationTypeChange", () => {
     });
   });
 
+  it("keeps a compatible invoke worker when converting to MODEL_INVOKE", () => {
+    expect(
+      resolveDraftForWorkstationTypeChange(
+        {
+          ...baseDraft,
+          workerName: "tts-worker",
+        },
+        "MODEL_INVOKE",
+        baseValues,
+      ).workerName,
+    ).toBe("tts-worker");
+  });
+
   it("falls back to the first compatible model worker when converting to MODEL_INVOKE", () => {
     expect(
       resolveDraftForWorkstationTypeChange(
@@ -104,6 +117,32 @@ describe("resolveDraftForWorkstationTypeChange", () => {
         baseValues,
       ).workerName,
     ).toBe("tts-worker");
+  });
+
+  it("falls back to the first prompt worker when returning to MODEL_WORKSTATION", () => {
+    expect(
+      resolveDraftForWorkstationTypeChange(
+        {
+          ...baseDraft,
+          workstationType: "MODEL_INVOKE",
+          workerName: "tts-worker",
+          operation: "TTS",
+          operationBindings: [],
+          prompt: "",
+        },
+        "MODEL_WORKSTATION",
+        {
+          ...baseValues,
+          workerOptions: ["reviewer"],
+        },
+      ),
+    ).toMatchObject({
+      workstationType: "MODEL_WORKSTATION",
+      workerName: "reviewer",
+      operation: "",
+      operationBindings: [],
+      prompt: "Loaded prompt",
+    });
   });
 
   it("clears model-invoke fields and restores prompt when returning to MODEL_WORKSTATION", () => {

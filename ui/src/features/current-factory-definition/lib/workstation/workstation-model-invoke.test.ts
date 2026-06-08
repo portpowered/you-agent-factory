@@ -8,6 +8,8 @@ import {
   modelInvokeBindingDraftHasContent,
   resolveCompatibleModelWorkerNames,
   resolveEditableModelInvokeBindings,
+  resolveModelOperationByName,
+  resolveModelOperationsByWorkerName,
   resolveModelWorkerOperations,
   syncEditableModelInvokeBindingsForOperation,
   validateEditableModelInvokeBindings,
@@ -78,6 +80,25 @@ describe("workstation model invoke type helpers", () => {
     expect(resolveModelWorkerOperations(modelInvokeFactory, "reviewer")).toEqual(
       [],
     );
+    expect(resolveModelOperationsByWorkerName(modelInvokeFactory)).toEqual({
+      "tts-worker": resolveModelWorkerOperations(
+        modelInvokeFactory,
+        "tts-worker",
+      ),
+      reviewer: [],
+    });
+    expect(
+      resolveModelOperationByName(
+        resolveModelWorkerOperations(modelInvokeFactory, "tts-worker"),
+        "TTS",
+      )?.name,
+    ).toBe("TTS");
+    expect(
+      resolveModelOperationByName(
+        resolveModelWorkerOperations(modelInvokeFactory, "tts-worker"),
+        "MISSING",
+      ),
+    ).toBeUndefined();
   });
 
 });

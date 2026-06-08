@@ -46,6 +46,15 @@ describe("workstation editable resolution edge cases", () => {
       workstation: factory.workstations?.[1],
       workstationIndex: 1,
     });
+
+    expect(
+      resolveCanonicalWorkstation(factory, {
+        node_id: "missing",
+        transition_id: "missing",
+        workstation_kind: "MODEL_WORKSTATION",
+        workstation_name: "Missing",
+      }),
+    ).toBeNull();
   });
 
   it("exposes worker catalog helpers for editable workstation forms", () => {
@@ -132,6 +141,20 @@ describe("workstation editable resolution edge cases", () => {
         state: "queued",
         workType: "story",
         guards: [{ expression: "ready" }],
+      },
+    ]);
+    expect(
+      applyEditableWorkstationInputs([
+        {
+          state: "queued",
+          workType: "story",
+          guards: [],
+        },
+      ]),
+    ).toEqual([
+      {
+        state: "queued",
+        workType: "story",
       },
     ]);
     expect(

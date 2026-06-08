@@ -79,6 +79,20 @@ describe("editable workstation model invoke options", () => {
     });
   });
 
+  it("returns ready operation options when the draft operation is blank", () => {
+    expect(
+      resolveModelInvokeOperationOptionsState(
+        { ...baseDraft, operation: "" },
+        selectedEditableValues,
+        messages,
+      ),
+    ).toEqual({
+      operations: selectedEditableValues.modelOperationsByWorkerName["tts-worker"],
+      options: ["TTS"],
+      status: "ready",
+    });
+  });
+
   it("returns ready operation options and binding slots for valid selections", () => {
     expect(
       resolveModelInvokeOperationOptionsState(
