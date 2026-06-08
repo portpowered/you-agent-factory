@@ -41,7 +41,7 @@ const NODE_TYPES = {
   workstation: WorkstationNodeView,
 };
 
-export { NODE_TYPES as CURRENT_ACTIVITY_NODE_TYPES };
+export { NODE_TYPES };
 export type CurrentActivityNode =
   | CurrentActivityWorkstationNode
   | CurrentActivityPlaceNode
