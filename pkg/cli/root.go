@@ -23,10 +23,12 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
+	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workflowsource"
 	"github.com/spf13/cobra"
 )
 
@@ -105,6 +107,7 @@ func NewRootCommand() *cobra.Command {
 		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(globals, diagnostics),
 		newWorkCommand(globals, diagnostics),
+		newWorkflowCommand(globals, diagnostics),
 	)
 
 	return root
@@ -858,4 +861,37 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	}
 	cfg.CleanInvocationInputSource = input.Source
 	return nil
+}
+
+func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := workflowcli.PreviewConfig{Dir: defaultcmd.FactoryDir}
+
+	cmd := &cobra.Command{
+		Use:   "workflow",
+		Short: "Validate and preview JavaScript workflow sources",
+		Long: "Validate and preview JavaScript or TypeScript workflow sources using the shared workflow preview contract.\n\n" +
+			"Subcommands:\n" +
+			"  preview  resolve workflow source, validate it without execution, and project policy and result constraints",
+	}
+	previewCmd := &cobra.Command{
+		Use:   "preview",
+		Short: "Preview workflow validation and policy",
+		Long:  "Resolve workflow source, validate it without execution, and print source, loader, policy, and result-shape diagnostics.",
+		Example: "  # Preview a project workflow by name.\n" +
+			"  " + cliBinaryName + " workflow preview --kind WORKFLOW_NAME --value review\n\n" +
+			"  # Preview inline workflow source.\n" +
+			"  " + cliBinaryName + " workflow preview --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			return workflowcli.Preview(cfg)
+		},
+	}
+	previewCmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "project root used for ordered workflow source lookup")
+	previewCmd.Flags().StringVar(&cfg.SourceKind, "kind", string(workflowsource.KindWorkflowName), "workflow source kind")
+	previewCmd.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
+	previewCmd.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
+	previewCmd.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
+	cmd.AddCommand(previewCmd)
+	return cmd
 }

@@ -30,6 +30,18 @@ func resolveArtifactRoot(projectRoot, requested string) ArtifactRootDecision {
 		}
 	}
 
+	if strings.TrimSpace(projectRoot) != "" && pathWithinRoot(projectRoot, cleaned) {
+		return ArtifactRootDecision{
+			Requested: requested,
+			Effective: cleaned,
+			Allowed:   false,
+			Diagnostic: &Diagnostic{
+				Code:    CodeArtifactRootInsideRepo,
+				Message: fmt.Sprintf("artifact root %q must be outside the target repository %q", cleaned, projectRoot),
+			},
+		}
+	}
+
 	resolved, err := filepath.EvalSymlinks(cleaned)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -43,18 +55,6 @@ func resolveArtifactRoot(projectRoot, requested string) ArtifactRootDecision {
 			}
 		}
 		resolved = cleaned
-	}
-
-	if strings.TrimSpace(projectRoot) != "" && pathWithinRoot(projectRoot, resolved) {
-		return ArtifactRootDecision{
-			Requested: requested,
-			Effective: resolved,
-			Allowed:   false,
-			Diagnostic: &Diagnostic{
-				Code:    CodeArtifactRootInsideRepo,
-				Message: fmt.Sprintf("artifact root %q must be outside the target repository %q", resolved, projectRoot),
-			},
-		}
 	}
 
 	return ArtifactRootDecision{

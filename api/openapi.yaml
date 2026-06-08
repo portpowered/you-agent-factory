@@ -444,6 +444,30 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /workflow-previews:
+    post:
+      tags:
+        - Workflows
+      operationId: previewWorkflow
+      summary: Preview workflow validation and policy
+      description: Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowPreviewRequest'
+      responses:
+        '200':
+          description: Shared workflow validation, source resolution, and policy preview contract.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowPreviewResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-validations:
     post:
       tags:
@@ -7216,6 +7240,250 @@ components:
         startOffset:
           type: integer
           description: Inclusive 1-based byte offset where the diagnostic source span starts when available.
+    WorkflowDiagnostic:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Stable workflow diagnostic code.
+        message:
+          type: string
+          description: Customer-readable diagnostic message.
+        path:
+          type: string
+          description: Optional source or config path for the diagnostic.
+        line:
+          type: integer
+          description: Optional 1-based source line number.
+        column:
+          type: integer
+          description: Optional 1-based source column number.
+    WorkflowArtifactRootDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - requested
+        - allowed
+      properties:
+        requested:
+          type: string
+          description: Artifact root requested with the workflow source.
+        effective:
+          type: string
+          description: Normalized artifact root when allowed.
+        allowed:
+          type: boolean
+          description: True when the artifact root satisfies policy checks.
+        diagnostic:
+          $ref: '#/components/schemas/WorkflowDiagnostic'
+          description: Diagnostic explaining artifact-root rejection when present.
+    WorkflowSourceResolution:
+      type: object
+      additionalProperties: false
+      required:
+        - requestKind
+        - found
+      properties:
+        requestKind:
+          type: string
+          description: Requested workflow source kind.
+        requestValue:
+          type: string
+          description: Original requested workflow source value.
+        resolvedKind:
+          type: string
+          description: Resolved workflow source kind.
+        lookupStage:
+          type: string
+          description: Ordered lookup stage that supplied the resolved source.
+        sourceRef:
+          type: string
+          description: Safe resolved workflow source reference.
+        sourceHash:
+          type: string
+          description: Stable hash of the authored workflow source.
+        orchestratorKind:
+          type: string
+          description: Resolved orchestrator kind for the workflow source.
+        dialect:
+          type: string
+          description: Resolved workflow dialect label.
+        found:
+          type: boolean
+          description: True when a workflow source was resolved.
+        diagnostics:
+          type: array
+          description: Lookup or conflict diagnostics when source resolution fails or conflicts.
+          items:
+            $ref: '#/components/schemas/WorkflowDiagnostic'
+        artifactRoot:
+          $ref: '#/components/schemas/WorkflowArtifactRootDecision'
+    WorkflowResultConstraints:
+      type: object
+      additionalProperties: false
+      required:
+        - requiresStructuredCloneableJson
+        - artifactUriScheme
+        - maxEmbeddedBytes
+        - rejectedValueKinds
+      properties:
+        requiresStructuredCloneableJson:
+          type: boolean
+          description: True when workflow return values must be structured-cloneable JSON-compatible values.
+        artifactUriScheme:
+          type: string
+          description: URI scheme used for session-scoped artifact references.
+        maxEmbeddedBytes:
+          type: integer
+          format: int64
+          description: Maximum embedded JSON payload size before artifact refs are required.
+        rejectedValueKinds:
+          type: array
+          description: Non-JSON workflow result kinds rejected by the shared contract.
+          items:
+            type: string
+    WorkflowPolicyPreview:
+      type: object
+      additionalProperties: false
+      required:
+        - effectivePolicy
+        - policyHash
+        - maxChildCount
+        - maxConcurrency
+        - deniedCapabilities
+        - validationIssues
+      properties:
+        effectivePolicy:
+          type: object
+          additionalProperties: true
+          description: Effective bounded workflow policy for preview or session start.
+        policyHash:
+          type: string
+          description: Stable hash of the effective policy document.
+        maxChildCount:
+          type: integer
+          description: Maximum child agent count allowed by effective policy.
+        maxConcurrency:
+          type: integer
+          description: Maximum concurrent child dispatches allowed by effective policy.
+        deniedCapabilities:
+          type: array
+          description: Capabilities denied by the effective policy before runtime execution.
+          items:
+            $ref: '#/components/schemas/WorkflowDiagnostic'
+        validationIssues:
+          type: array
+          description: Policy validation issues for the requested or factory default policy.
+          items:
+            $ref: '#/components/schemas/WorkflowDiagnostic'
+        runnerDecision:
+          type: object
+          additionalProperties: true
+          description: Optional runner allowlist decision for preview surfaces.
+        modelDecision:
+          type: object
+          additionalProperties: true
+          description: Optional model allowlist decision for preview surfaces.
+        profileDecision:
+          type: object
+          additionalProperties: true
+          description: Optional route profile allowlist decision for preview surfaces.
+        timeoutDecisions:
+          type: object
+          additionalProperties: true
+          description: Timeout and budget decisions for preview surfaces.
+        budgetDecisions:
+          type: object
+          additionalProperties: true
+          description: Child and concurrency budget decisions for preview surfaces.
+    WorkflowPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceKind
+      properties:
+        sourceKind:
+          type: string
+          description: Workflow source request kind.
+          enum:
+            - FACTORY_ID
+            - FACTORY_INLINE
+            - WORKFLOW_FILE
+            - WORKFLOW_NAME
+            - INLINE_WORKFLOW
+        sourceValue:
+          type: string
+          description: Requested workflow name, file ref, factory id, or inline label.
+        inlineSource:
+          type: string
+          description: Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
+        artifactRoot:
+          type: string
+          description: Optional absolute artifact root requested with the workflow source.
+        allowFactoryLookup:
+          type: boolean
+          description: When true, explicit factory lookup is attempted after ordered workflow lookup.
+        projectRoot:
+          type: string
+          description: Project root used for ordered workflow source lookup.
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional JavaScript orchestrator metadata to validate with the source.
+        argsSchema:
+          type: object
+          additionalProperties: true
+          description: Optional JSON Schema object describing workflow invocation arguments.
+        defaultPolicy:
+          type: object
+          additionalProperties: true
+          description: Optional factory default policy layer merged into the effective policy preview.
+        requestedPolicy:
+          type: object
+          additionalProperties: true
+          description: Optional request policy overrides merged into the effective policy preview.
+        requestedRunner:
+          type: string
+          description: Optional runner requested for preview decision projection.
+        requestedModel:
+          type: string
+          description: Optional model requested for preview decision projection.
+        requestedProfile:
+          type: string
+          description: Optional route profile requested for preview decision projection.
+        timeoutMillis:
+          type: integer
+          format: int64
+          description: Optional requested timeout in milliseconds for preview decision projection.
+    WorkflowPreviewResult:
+      type: object
+      additionalProperties: false
+      required:
+        - valid
+        - sourceResolution
+        - sourceValidationIssues
+        - policyPreview
+        - resultConstraints
+      properties:
+        valid:
+          type: boolean
+          description: True when source resolution, validation, policy, and artifact-root checks pass.
+        sourceResolution:
+          $ref: '#/components/schemas/WorkflowSourceResolution'
+        sourceValidationIssues:
+          type: array
+          description: Workflow source, loader, and orchestrator validation diagnostics.
+          items:
+            $ref: '#/components/schemas/WorkflowDiagnostic'
+        policyPreview:
+          $ref: '#/components/schemas/WorkflowPolicyPreview'
+        resultConstraints:
+          $ref: '#/components/schemas/WorkflowResultConstraints'
     FactoryValidationSeverity:
       type: string
       description: Validation severity for one factory validation target.
