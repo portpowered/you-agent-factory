@@ -24,6 +24,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertDurableExecutionSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionReadSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionResultSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionDispatchArtifactSurfaceSchemas(t, schemas, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
@@ -630,6 +631,99 @@ func assertDurableSessionResultSurfaceSchemas(t *testing.T, schemas map[string]a
 	liveResultProperties := schemaProperties(t, liveResultSchema, "FactorySessionLiveResult")
 	assertPropertyRef(t, liveResultProperties, "status", "#/components/schemas/FactorySessionStatus")
 	assertPropertyRef(t, liveResultProperties, "resultArtifactRef", "#/components/schemas/FactoryArtifactRef")
+}
+
+func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	dispatchesOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/dispatches", "get")
+	if got, _ := dispatchesOperation["operationId"].(string); got != "listFactorySessionDispatches" {
+		t.Fatalf("paths./factory-sessions/{session_id}/dispatches.get.operationId = %q, want listFactorySessionDispatches", got)
+	}
+	assertResponseSchemaRef(t, dispatchesOperation, "200", "#/components/schemas/ListFactorySessionDispatchesResponse")
+	assertResponseRef(t, dispatchesOperation, "404", "#/components/responses/NotFound")
+
+	dispatchOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/dispatches/{dispatch_id}", "get")
+	if got, _ := dispatchOperation["operationId"].(string); got != "getFactorySessionDispatch" {
+		t.Fatalf("paths./factory-sessions/{session_id}/dispatches/{dispatch_id}.get.operationId = %q, want getFactorySessionDispatch", got)
+	}
+	assertResponseSchemaRef(t, dispatchOperation, "200", "#/components/schemas/FactoryDispatch")
+	assertResponseRef(t, dispatchOperation, "404", "#/components/responses/NotFound")
+	dispatchParameters, ok := dispatchOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions/{session_id}/dispatches/{dispatch_id}.get.parameters is missing")
+	}
+	assertParameterRef(t, dispatchParameters, "#/components/parameters/DispatchID")
+
+	artifactsOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/artifacts", "get")
+	if got, _ := artifactsOperation["operationId"].(string); got != "listFactorySessionArtifacts" {
+		t.Fatalf("paths./factory-sessions/{session_id}/artifacts.get.operationId = %q, want listFactorySessionArtifacts", got)
+	}
+	assertResponseSchemaRef(t, artifactsOperation, "200", "#/components/schemas/ListFactorySessionArtifactsResponse")
+	assertResponseRef(t, artifactsOperation, "404", "#/components/responses/NotFound")
+
+	artifactOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/artifacts/{artifact_id}", "get")
+	if got, _ := artifactOperation["operationId"].(string); got != "getFactorySessionArtifact" {
+		t.Fatalf("paths./factory-sessions/{session_id}/artifacts/{artifact_id}.get.operationId = %q, want getFactorySessionArtifact", got)
+	}
+	assertResponseSchemaRef(t, artifactOperation, "200", "#/components/schemas/FactorySessionArtifactDetail")
+	assertResponseRef(t, artifactOperation, "404", "#/components/responses/NotFound")
+	artifactParameters, ok := artifactOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions/{session_id}/artifacts/{artifact_id}.get.parameters is missing")
+	}
+	assertParameterRef(t, artifactParameters, "#/components/parameters/ArtifactID")
+
+	listDispatchesSchema := schemaObject(t, schemas, "ListFactorySessionDispatchesResponse")
+	assertRequiredFields(t, listDispatchesSchema, "sessionId", "dispatches")
+	listDispatchesProperties := schemaProperties(t, listDispatchesSchema, "ListFactorySessionDispatchesResponse")
+	assertArrayItemRef(t, listDispatchesProperties, "dispatches", "#/components/schemas/FactorySessionDispatchSummary")
+
+	dispatchSummarySchema := schemaObject(t, schemas, "FactorySessionDispatchSummary")
+	assertRequiredFields(t, dispatchSummarySchema, "id", "status", "dispatchKind")
+	dispatchSummaryProperties := schemaProperties(t, dispatchSummarySchema, "FactorySessionDispatchSummary")
+	assertPropertyRef(t, dispatchSummaryProperties, "status", "#/components/schemas/FactoryDispatchStatus")
+	assertPropertyRef(t, dispatchSummaryProperties, "dispatchKind", "#/components/schemas/FactoryDispatchKind")
+	assertPropertyRef(t, dispatchSummaryProperties, "usage", "#/components/schemas/FactoryDispatchUsage")
+	assertPropertyRef(t, dispatchSummaryProperties, "failureDetail", "#/components/schemas/FactoryDispatchFailureDetail")
+	assertArrayItemRef(t, dispatchSummaryProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
+	assertArrayItemRef(t, dispatchSummaryProperties, "warnings", "#/components/schemas/FactoryDispatchWarning")
+	assertSchemaPropertiesPresent(t, dispatchSummaryProperties, "FactorySessionDispatchSummary",
+		"id", "status", "dispatchKind", "phase", "label", "attempt", "runnerId", "model", "provider",
+		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail")
+
+	dispatchDetailSchema := schemaObject(t, schemas, "FactoryDispatch")
+	dispatchDetailProperties := schemaProperties(t, dispatchDetailSchema, "FactoryDispatch")
+	assertPropertyRef(t, dispatchDetailProperties, "petri", "#/components/schemas/FactoryDispatchPetriProjection")
+	assertPropertyRef(t, dispatchDetailProperties, "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
+	assertArrayItemRef(t, dispatchDetailProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
+	assertSchemaPropertiesPresent(t, dispatchDetailProperties, "FactoryDispatch", "attempt", "providerSessionRefs")
+
+	listArtifactsSchema := schemaObject(t, schemas, "ListFactorySessionArtifactsResponse")
+	assertRequiredFields(t, listArtifactsSchema, "sessionId", "artifacts")
+	listArtifactsProperties := schemaProperties(t, listArtifactsSchema, "ListFactorySessionArtifactsResponse")
+	assertArrayItemRef(t, listArtifactsProperties, "artifacts", "#/components/schemas/FactorySessionArtifactSummary")
+
+	artifactSummarySchema := schemaObject(t, schemas, "FactorySessionArtifactSummary")
+	assertRequiredFields(t, artifactSummarySchema, "id", "kind", "visibility")
+	artifactSummaryProperties := schemaProperties(t, artifactSummarySchema, "FactorySessionArtifactSummary")
+	assertPropertyRef(t, artifactSummaryProperties, "kind", "#/components/schemas/FactoryArtifactKind")
+	assertPropertyRef(t, artifactSummaryProperties, "visibility", "#/components/schemas/FactoryArtifactVisibility")
+	assertPropertyRef(t, artifactSummaryProperties, "auditMode", "#/components/schemas/FactoryArtifactAuditMode")
+	assertPropertyRef(t, artifactSummaryProperties, "redactionCounts", "#/components/schemas/FactoryArtifactRedactionCounts")
+	assertPropertyRef(t, artifactSummaryProperties, "retrievalRef", "#/components/schemas/FactorySessionArtifactRetrievalRef")
+	assertSchemaPropertiesPresent(t, artifactSummaryProperties, "FactorySessionArtifactSummary",
+		"id", "kind", "visibility", "contentHash", "sizeBytes", "createdAt", "dispatchId",
+		"auditMode", "redactionCounts", "retrievalRef")
+
+	artifactDetailSchema := schemaObject(t, schemas, "FactorySessionArtifactDetail")
+	assertRequiredFields(t, artifactDetailSchema, "sessionId", "id", "kind", "visibility")
+	artifactDetailProperties := schemaProperties(t, artifactDetailSchema, "FactorySessionArtifactDetail")
+	assertPropertyRef(t, artifactDetailProperties, "content", "#/components/schemas/WorkContent")
+	assertPropertyRef(t, artifactDetailProperties, "contentRef", "#/components/schemas/FactorySessionArtifactRetrievalRef")
+	assertSchemaPropertiesPresent(t, artifactDetailProperties, "FactorySessionArtifactDetail",
+		"sessionId", "id", "kind", "visibility", "contentHash", "sizeBytes", "createdAt", "dispatchId",
+		"auditMode", "redactionCounts", "captureMetadata", "content", "contentRef")
 }
 
 func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {

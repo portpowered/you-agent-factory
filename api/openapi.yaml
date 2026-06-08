@@ -605,6 +605,88 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/dispatches:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessionDispatches
+      summary: List durable factory session dispatches
+      description: Returns dispatch summaries for one factory session with dispatch id, status, dispatch kind, phase, label, attempt, runner/model metadata when available, provider-session correlation refs, usage, warnings, output artifact ids, and failure details. Petri and JavaScript dispatches share the neutral summary shape; orchestrator-specific detail is available on GET /factory-sessions/{session_id}/dispatches/{dispatch_id}.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Dispatch summaries for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionDispatchesResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/dispatches/{dispatch_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionDispatch
+      summary: Get one durable factory session dispatch
+      description: Returns one dispatch detail for the targeted session. Petri transition dispatches expose optional petri projections and JavaScript workflow dispatches expose optional javascript projections without forcing orchestrator-specific fields on neutral clients.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/DispatchID'
+      responses:
+        '200':
+          description: Dispatch detail for the targeted session and dispatch id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryDispatch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/artifacts:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessionArtifacts
+      summary: List durable factory session artifacts
+      description: Returns artifact metadata for one factory session with artifact id, kind, visibility, content hash, size, created time, dispatch relation, secret-redaction counts, audit mode, and safe retrieval refs without exposing unrestricted host filesystem paths by default.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Artifact metadata rows for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionArtifactsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/artifacts/{artifact_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionArtifact
+      summary: Get one durable factory session artifact
+      description: Returns artifact metadata plus inlined content or a safe content ref according to artifact visibility and payload size. Responses must not expose unrestricted host filesystem paths by default.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ArtifactID'
+      responses:
+        '200':
+          description: Artifact detail for the targeted session and artifact id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionArtifactDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/partial-result:
     get:
       tags:
@@ -933,6 +1015,20 @@ components:
       schema:
         type: boolean
         default: false
+    DispatchID:
+      name: dispatch_id
+      in: path
+      required: true
+      description: Stable factory-session dispatch identifier.
+      schema:
+        type: string
+    ArtifactID:
+      name: artifact_id
+      in: path
+      required: true
+      description: Stable factory-session artifact identifier.
+      schema:
+        type: string
   responses:
     BadRequest:
       description: Request payload or parameter was invalid.
@@ -2614,6 +2710,197 @@ components:
         retryable:
           type: boolean
           description: Whether polling or a later retry may return a ready result.
+    FactorySessionDispatchSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - status
+        - dispatchKind
+      description: Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections.
+      properties:
+        id:
+          type: string
+          description: Stable dispatch identifier.
+        status:
+          $ref: '#/components/schemas/FactoryDispatchStatus'
+        dispatchKind:
+          $ref: '#/components/schemas/FactoryDispatchKind'
+        phase:
+          type: string
+          description: Workflow phase when the dispatch was created or observed.
+        label:
+          type: string
+          description: Customer-visible dispatch label.
+        attempt:
+          type: integer
+          format: int32
+          minimum: 1
+          description: One-based attempt number for retried dispatches.
+        runnerId:
+          type: string
+          description: Selected runner identifier when applicable.
+        model:
+          type: string
+          description: Selected model identifier when applicable.
+        provider:
+          type: string
+          description: Selected provider identifier when applicable.
+        providerSessionRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoadableProviderSessionRef'
+          description: Provider-session correlation refs for model-backed dispatches.
+        usage:
+          $ref: '#/components/schemas/FactoryDispatchUsage'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryDispatchWarning'
+        outputArtifactIds:
+          type: array
+          items:
+            type: string
+          description: Artifact identifiers produced by the dispatch.
+        failureDetail:
+          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+    ListFactorySessionDispatchesResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - dispatches
+      properties:
+        sessionId:
+          type: string
+          description: Stable factory-session identifier that owns the listed dispatches.
+        dispatches:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionDispatchSummary'
+          description: Dispatch summaries for the targeted session.
+    FactorySessionArtifactRetrievalRef:
+      type: object
+      additionalProperties: false
+      required:
+        - href
+      description: Safe API retrieval reference for one factory-session artifact. Identifiers and href values are API-relative and must not expose unrestricted host filesystem paths by default.
+      properties:
+        href:
+          type: string
+          description: API-relative retrieval path for the artifact payload.
+        method:
+          type: string
+          enum:
+            - GET
+          description: HTTP method clients should use to retrieve the referenced payload.
+    FactorySessionArtifactSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - visibility
+      description: Durable factory-session artifact metadata for list responses without raw artifact bodies or unrestricted host filesystem paths.
+      properties:
+        id:
+          type: string
+          description: Stable artifact identifier.
+        kind:
+          $ref: '#/components/schemas/FactoryArtifactKind'
+        visibility:
+          $ref: '#/components/schemas/FactoryArtifactVisibility'
+        label:
+          type: string
+          description: Customer-visible artifact label.
+        contentHash:
+          type: string
+          description: Stable hash of the stored artifact payload.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Stored artifact payload size in bytes.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the artifact was created or captured.
+        dispatchId:
+          type: string
+          description: Dispatch identifier that produced the artifact when applicable.
+        auditMode:
+          $ref: '#/components/schemas/FactoryArtifactAuditMode'
+        redactionCounts:
+          $ref: '#/components/schemas/FactoryArtifactRedactionCounts'
+        retrievalRef:
+          $ref: '#/components/schemas/FactorySessionArtifactRetrievalRef'
+          description: Safe retrieval reference when artifact content is not inlined.
+    FactorySessionArtifactDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - id
+        - kind
+        - visibility
+      description: Durable factory-session artifact detail with metadata and either inlined content or a safe retrieval ref according to visibility and payload size.
+      properties:
+        sessionId:
+          type: string
+          description: Stable factory-session identifier that owns the artifact.
+        id:
+          type: string
+          description: Stable artifact identifier.
+        kind:
+          $ref: '#/components/schemas/FactoryArtifactKind'
+        visibility:
+          $ref: '#/components/schemas/FactoryArtifactVisibility'
+        label:
+          type: string
+          description: Customer-visible artifact label.
+        summary:
+          type: string
+          description: Customer-visible artifact summary.
+        contentHash:
+          type: string
+          description: Stable hash of the stored artifact payload.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Stored artifact payload size in bytes.
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the artifact was created or captured.
+        dispatchId:
+          type: string
+          description: Dispatch identifier that produced the artifact when applicable.
+        auditMode:
+          $ref: '#/components/schemas/FactoryArtifactAuditMode'
+        redactionCounts:
+          $ref: '#/components/schemas/FactoryArtifactRedactionCounts'
+        captureMetadata:
+          $ref: '#/components/schemas/FactoryArtifactCaptureMetadata'
+        content:
+          $ref: '#/components/schemas/WorkContent'
+          description: Inlined artifact content when visibility and size allow direct return.
+        contentRef:
+          $ref: '#/components/schemas/FactorySessionArtifactRetrievalRef'
+          description: Safe retrieval reference when content is omitted from the response body.
+    ListFactorySessionArtifactsResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - sessionId
+        - artifacts
+      properties:
+        sessionId:
+          type: string
+          description: Stable factory-session identifier that owns the listed artifacts.
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorySessionArtifactSummary'
+          description: Artifact metadata rows for the targeted session.
     FactorySessionPartialResult:
       type: object
       additionalProperties: false
@@ -2663,6 +2950,11 @@ components:
         label:
           type: string
           description: Customer-visible dispatch label.
+        attempt:
+          type: integer
+          format: int32
+          minimum: 1
+          description: One-based attempt number for retried dispatches.
         runnerId:
           type: string
           description: Selected runner identifier when applicable.
@@ -2672,6 +2964,11 @@ components:
         provider:
           type: string
           description: Selected provider identifier when applicable.
+        providerSessionRefs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoadableProviderSessionRef'
+          description: Provider-session correlation refs for model-backed dispatches.
         promptDigest:
           type: string
           description: Stable digest of rendered prompt material.

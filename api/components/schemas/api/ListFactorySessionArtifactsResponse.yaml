@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - artifacts
+properties:
+  sessionId:
+    type: string
+    description: Stable factory-session identifier that owns the listed artifacts.
+  artifacts:
+    type: array
+    items:
+      $ref: './FactorySessionArtifactSummary.yaml'
+    description: Artifact metadata rows for the targeted session.

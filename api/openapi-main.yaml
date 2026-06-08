@@ -655,6 +655,105 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/dispatches:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessionDispatches
+      summary: List durable factory session dispatches
+      description: >-
+        Returns dispatch summaries for one factory session with dispatch id,
+        status, dispatch kind, phase, label, attempt, runner/model metadata when
+        available, provider-session correlation refs, usage, warnings, output
+        artifact ids, and failure details. Petri and JavaScript dispatches share
+        the neutral summary shape; orchestrator-specific detail is available on
+        GET /factory-sessions/{session_id}/dispatches/{dispatch_id}.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Dispatch summaries for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionDispatchesResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/dispatches/{dispatch_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionDispatch
+      summary: Get one durable factory session dispatch
+      description: >-
+        Returns one dispatch detail for the targeted session. Petri transition
+        dispatches expose optional petri projections and JavaScript workflow
+        dispatches expose optional javascript projections without forcing
+        orchestrator-specific fields on neutral clients.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/DispatchID'
+      responses:
+        '200':
+          description: Dispatch detail for the targeted session and dispatch id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryDispatch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/artifacts:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessionArtifacts
+      summary: List durable factory session artifacts
+      description: >-
+        Returns artifact metadata for one factory session with artifact id, kind,
+        visibility, content hash, size, created time, dispatch relation,
+        secret-redaction counts, audit mode, and safe retrieval refs without
+        exposing unrestricted host filesystem paths by default.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Artifact metadata rows for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionArtifactsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/artifacts/{artifact_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionArtifact
+      summary: Get one durable factory session artifact
+      description: >-
+        Returns artifact metadata plus inlined content or a safe content ref
+        according to artifact visibility and payload size. Responses must not
+        expose unrestricted host filesystem paths by default.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ArtifactID'
+      responses:
+        '200':
+          description: Artifact detail for the targeted session and artifact id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionArtifactDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/partial-result:
     get:
       tags:
@@ -931,6 +1030,10 @@ components:
       $ref: './components/parameters/FactorySessionResultMode.yaml'
     FactorySessionResultIncludeArtifacts:
       $ref: './components/parameters/FactorySessionResultIncludeArtifacts.yaml'
+    DispatchID:
+      $ref: './components/parameters/DispatchID.yaml'
+    ArtifactID:
+      $ref: './components/parameters/ArtifactID.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'
@@ -1105,6 +1208,18 @@ components:
       $ref: './components/schemas/api/FactorySessionResultMode.yaml'
     FactorySessionResultAvailabilityDetail:
       $ref: './components/schemas/api/FactorySessionResultAvailabilityDetail.yaml'
+    FactorySessionDispatchSummary:
+      $ref: './components/schemas/api/FactorySessionDispatchSummary.yaml'
+    ListFactorySessionDispatchesResponse:
+      $ref: './components/schemas/api/ListFactorySessionDispatchesResponse.yaml'
+    FactorySessionArtifactRetrievalRef:
+      $ref: './components/schemas/api/FactorySessionArtifactRetrievalRef.yaml'
+    FactorySessionArtifactSummary:
+      $ref: './components/schemas/api/FactorySessionArtifactSummary.yaml'
+    FactorySessionArtifactDetail:
+      $ref: './components/schemas/api/FactorySessionArtifactDetail.yaml'
+    ListFactorySessionArtifactsResponse:
+      $ref: './components/schemas/api/ListFactorySessionArtifactsResponse.yaml'
     FactorySessionPartialResult:
       $ref: './components/schemas/api/FactorySessionPartialResult.yaml'
     FactoryDispatch:

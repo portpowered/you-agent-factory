@@ -138,6 +138,28 @@ func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request
 	s.writeError(w, http.StatusNotImplemented, "durable factory session result retrieval is not implemented", "INTERNAL_ERROR")
 }
 
+func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch listing is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, dispatchID factoryapi.DispatchID) {
+	_ = sessionID
+	_ = dispatchID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch retrieval is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact listing is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, artifactID factoryapi.ArtifactID) {
+	_ = sessionID
+	_ = artifactID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact retrieval is not implemented", "INTERNAL_ERROR")
+}
+
 func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {

@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - dispatches
+properties:
+  sessionId:
+    type: string
+    description: Stable factory-session identifier that owns the listed dispatches.
+  dispatches:
+    type: array
+    items:
+      $ref: './FactorySessionDispatchSummary.yaml'
+    description: Dispatch summaries for the targeted session.

@@ -432,6 +432,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/dispatches": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List durable factory session dispatches
+     * @description Returns dispatch summaries for one factory session with dispatch id, status, dispatch kind, phase, label, attempt, runner/model metadata when available, provider-session correlation refs, usage, warnings, output artifact ids, and failure details. Petri and JavaScript dispatches share the neutral summary shape; orchestrator-specific detail is available on GET /factory-sessions/{session_id}/dispatches/{dispatch_id}.
+     */
+    get: operations["listFactorySessionDispatches"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/dispatches/{dispatch_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get one durable factory session dispatch
+     * @description Returns one dispatch detail for the targeted session. Petri transition dispatches expose optional petri projections and JavaScript workflow dispatches expose optional javascript projections without forcing orchestrator-specific fields on neutral clients.
+     */
+    get: operations["getFactorySessionDispatch"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/artifacts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List durable factory session artifacts
+     * @description Returns artifact metadata for one factory session with artifact id, kind, visibility, content hash, size, created time, dispatch relation, secret-redaction counts, audit mode, and safe retrieval refs without exposing unrestricted host filesystem paths by default.
+     */
+    get: operations["listFactorySessionArtifacts"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/artifacts/{artifact_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get one durable factory session artifact
+     * @description Returns artifact metadata plus inlined content or a safe content ref according to artifact visibility and payload size. Responses must not expose unrestricted host filesystem paths by default.
+     */
+    get: operations["getFactorySessionArtifact"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/partial-result": {
     parameters: {
       query?: never;
@@ -1191,6 +1271,118 @@ export interface components {
       /** @description Whether polling or a later retry may return a ready result. */
       retryable?: boolean;
     };
+    /** @description Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections. */
+    FactorySessionDispatchSummary: {
+      /** @description Stable dispatch identifier. */
+      id: string;
+      status: components["schemas"]["FactoryDispatchStatus"];
+      dispatchKind: components["schemas"]["FactoryDispatchKind"];
+      /** @description Workflow phase when the dispatch was created or observed. */
+      phase?: string;
+      /** @description Customer-visible dispatch label. */
+      label?: string;
+      /**
+       * Format: int32
+       * @description One-based attempt number for retried dispatches.
+       */
+      attempt?: number;
+      /** @description Selected runner identifier when applicable. */
+      runnerId?: string;
+      /** @description Selected model identifier when applicable. */
+      model?: string;
+      /** @description Selected provider identifier when applicable. */
+      provider?: string;
+      /** @description Provider-session correlation refs for model-backed dispatches. */
+      providerSessionRefs?: components["schemas"]["LoadableProviderSessionRef"][];
+      usage?: components["schemas"]["FactoryDispatchUsage"];
+      warnings?: components["schemas"]["FactoryDispatchWarning"][];
+      /** @description Artifact identifiers produced by the dispatch. */
+      outputArtifactIds?: string[];
+      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+    };
+    ListFactorySessionDispatchesResponse: {
+      /** @description Stable factory-session identifier that owns the listed dispatches. */
+      sessionId: string;
+      /** @description Dispatch summaries for the targeted session. */
+      dispatches: components["schemas"]["FactorySessionDispatchSummary"][];
+    };
+    /** @description Safe API retrieval reference for one factory-session artifact. Identifiers and href values are API-relative and must not expose unrestricted host filesystem paths by default. */
+    FactorySessionArtifactRetrievalRef: {
+      /** @description API-relative retrieval path for the artifact payload. */
+      href: string;
+      /**
+       * @description HTTP method clients should use to retrieve the referenced payload.
+       * @enum {string}
+       */
+      method?: FactorySessionArtifactRetrievalRefMethod;
+    };
+    /** @description Durable factory-session artifact metadata for list responses without raw artifact bodies or unrestricted host filesystem paths. */
+    FactorySessionArtifactSummary: {
+      /** @description Stable artifact identifier. */
+      id: string;
+      kind: components["schemas"]["FactoryArtifactKind"];
+      visibility: components["schemas"]["FactoryArtifactVisibility"];
+      /** @description Customer-visible artifact label. */
+      label?: string;
+      /** @description Stable hash of the stored artifact payload. */
+      contentHash?: string;
+      /**
+       * Format: int64
+       * @description Stored artifact payload size in bytes.
+       */
+      sizeBytes?: number;
+      /**
+       * Format: date-time
+       * @description Timestamp when the artifact was created or captured.
+       */
+      createdAt?: string;
+      /** @description Dispatch identifier that produced the artifact when applicable. */
+      dispatchId?: string;
+      auditMode?: components["schemas"]["FactoryArtifactAuditMode"];
+      redactionCounts?: components["schemas"]["FactoryArtifactRedactionCounts"];
+      /** @description Safe retrieval reference when artifact content is not inlined. */
+      retrievalRef?: components["schemas"]["FactorySessionArtifactRetrievalRef"];
+    };
+    /** @description Durable factory-session artifact detail with metadata and either inlined content or a safe retrieval ref according to visibility and payload size. */
+    FactorySessionArtifactDetail: {
+      /** @description Stable factory-session identifier that owns the artifact. */
+      sessionId: string;
+      /** @description Stable artifact identifier. */
+      id: string;
+      kind: components["schemas"]["FactoryArtifactKind"];
+      visibility: components["schemas"]["FactoryArtifactVisibility"];
+      /** @description Customer-visible artifact label. */
+      label?: string;
+      /** @description Customer-visible artifact summary. */
+      summary?: string;
+      /** @description Stable hash of the stored artifact payload. */
+      contentHash?: string;
+      /**
+       * Format: int64
+       * @description Stored artifact payload size in bytes.
+       */
+      sizeBytes?: number;
+      /**
+       * Format: date-time
+       * @description Timestamp when the artifact was created or captured.
+       */
+      createdAt?: string;
+      /** @description Dispatch identifier that produced the artifact when applicable. */
+      dispatchId?: string;
+      auditMode?: components["schemas"]["FactoryArtifactAuditMode"];
+      redactionCounts?: components["schemas"]["FactoryArtifactRedactionCounts"];
+      captureMetadata?: components["schemas"]["FactoryArtifactCaptureMetadata"];
+      /** @description Inlined artifact content when visibility and size allow direct return. */
+      content?: components["schemas"]["WorkContent"];
+      /** @description Safe retrieval reference when content is omitted from the response body. */
+      contentRef?: components["schemas"]["FactorySessionArtifactRetrievalRef"];
+    };
+    ListFactorySessionArtifactsResponse: {
+      /** @description Stable factory-session identifier that owns the listed artifacts. */
+      sessionId: string;
+      /** @description Artifact metadata rows for the targeted session. */
+      artifacts: components["schemas"]["FactorySessionArtifactSummary"][];
+    };
     FactorySessionPartialResult: {
       /** @description Live factory session identifier for this partial-result read. */
       sessionId: string;
@@ -1213,12 +1405,19 @@ export interface components {
       status: components["schemas"]["FactoryDispatchStatus"];
       /** @description Customer-visible dispatch label. */
       label?: string;
+      /**
+       * Format: int32
+       * @description One-based attempt number for retried dispatches.
+       */
+      attempt?: number;
       /** @description Selected runner identifier when applicable. */
       runnerId?: string;
       /** @description Selected model identifier when applicable. */
       model?: string;
       /** @description Selected provider identifier when applicable. */
       provider?: string;
+      /** @description Provider-session correlation refs for model-backed dispatches. */
+      providerSessionRefs?: components["schemas"]["LoadableProviderSessionRef"][];
       /** @description Stable digest of rendered prompt material. */
       promptDigest?: string;
       /** @description Stable digest of the output schema when applicable. */
@@ -3659,6 +3858,10 @@ export interface components {
     FactorySessionResultMode: components["schemas"]["FactorySessionResultMode"];
     /** @description When true, include artifact metadata refs for materialized outputs. Defaults to false and may return artifact ids only. */
     FactorySessionResultIncludeArtifacts: boolean;
+    /** @description Stable factory-session dispatch identifier. */
+    DispatchID: string;
+    /** @description Stable factory-session artifact identifier. */
+    ArtifactID: string;
   };
   requestBodies: never;
   headers: never;
@@ -4301,6 +4504,110 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  listFactorySessionDispatches: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Dispatch summaries for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListFactorySessionDispatchesResponse"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySessionDispatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable factory-session dispatch identifier. */
+        dispatch_id: components["parameters"]["DispatchID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Dispatch detail for the targeted session and dispatch id. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactoryDispatch"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  listFactorySessionArtifacts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Artifact metadata rows for the targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListFactorySessionArtifactsResponse"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySessionArtifact: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+        /** @description Stable factory-session artifact identifier. */
+        artifact_id: components["parameters"]["ArtifactID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Artifact detail for the targeted session and artifact id. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionArtifactDetail"];
+        };
+      };
+      404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   getFactorySessionPartialResult: {
     parameters: {
       query?: never;
@@ -4705,6 +5012,11 @@ export const FactorySessionResultMode = {
 } as const;
 export type FactorySessionResultMode =
   (typeof FactorySessionResultMode)[keyof typeof FactorySessionResultMode];
+export const FactorySessionArtifactRetrievalRefMethod = {
+  GET: "GET",
+} as const;
+export type FactorySessionArtifactRetrievalRefMethod =
+  (typeof FactorySessionArtifactRetrievalRefMethod)[keyof typeof FactorySessionArtifactRetrievalRefMethod];
 export const FactoryDispatchKind = {
   // Petri transition dispatch owned by the factory engine.
   FactoryDispatchKindPETRITRANSITION: "PETRI_TRANSITION",

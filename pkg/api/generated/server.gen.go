@@ -156,6 +156,11 @@ const (
 	FactorySaveModeUpsertNamedAndActivate FactorySaveMode = "UPSERT_NAMED_AND_ACTIVATE"
 )
 
+// Defines values for FactorySessionArtifactRetrievalRefMethod.
+const (
+	GET FactorySessionArtifactRetrievalRefMethod = "GET"
+)
+
 // Defines values for FactorySessionDurableLifecycleStatus.
 const (
 	FactorySessionDurableLifecycleStatusAwaitingApproval FactorySessionDurableLifecycleStatus = "AWAITING_APPROVAL"
@@ -950,6 +955,9 @@ type FactoryDispatch struct {
 	// ArtifactIds Artifact identifiers produced by the dispatch.
 	ArtifactIds *[]string `json:"artifactIds,omitempty"`
 
+	// Attempt One-based attempt number for retried dispatches.
+	Attempt *int32 `json:"attempt,omitempty"`
+
 	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
 	DispatchKind  FactoryDispatchKind           `json:"dispatchKind"`
 	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
@@ -976,6 +984,9 @@ type FactoryDispatch struct {
 
 	// Provider Selected provider identifier when applicable.
 	Provider *string `json:"provider,omitempty"`
+
+	// ProviderSessionRefs Provider-session correlation refs for model-backed dispatches.
+	ProviderSessionRefs *[]LoadableProviderSessionRef `json:"providerSessionRefs,omitempty"`
 
 	// RelatedWorkIds Related work identifiers consumed or produced by the dispatch.
 	RelatedWorkIds *[]string `json:"relatedWorkIds,omitempty"`
@@ -1328,10 +1339,139 @@ type FactorySession struct {
 	Target     FactorySessionTargetRef `json:"target"`
 }
 
+// FactorySessionArtifactDetail Durable factory-session artifact detail with metadata and either inlined content or a safe retrieval ref according to visibility and payload size.
+type FactorySessionArtifactDetail struct {
+	// AuditMode Audit mode applied when one factory artifact was captured.
+	AuditMode       *FactoryArtifactAuditMode       `json:"auditMode,omitempty"`
+	CaptureMetadata *FactoryArtifactCaptureMetadata `json:"captureMetadata,omitempty"`
+
+	// Content Ordered canonical content parts for one work item.
+	Content *WorkContent `json:"content,omitempty"`
+
+	// ContentHash Stable hash of the stored artifact payload.
+	ContentHash *string `json:"contentHash,omitempty"`
+
+	// ContentRef Safe API retrieval reference for one factory-session artifact. Identifiers and href values are API-relative and must not expose unrestricted host filesystem paths by default.
+	ContentRef *FactorySessionArtifactRetrievalRef `json:"contentRef,omitempty"`
+
+	// CreatedAt Timestamp when the artifact was created or captured.
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
+
+	// DispatchId Dispatch identifier that produced the artifact when applicable.
+	DispatchId *string `json:"dispatchId,omitempty"`
+
+	// Id Stable artifact identifier.
+	Id string `json:"id"`
+
+	// Kind Canonical factory artifact kind for session-owned outputs.
+	Kind FactoryArtifactKind `json:"kind"`
+
+	// Label Customer-visible artifact label.
+	Label           *string                         `json:"label,omitempty"`
+	RedactionCounts *FactoryArtifactRedactionCounts `json:"redactionCounts,omitempty"`
+
+	// SessionId Stable factory-session identifier that owns the artifact.
+	SessionId string `json:"sessionId"`
+
+	// SizeBytes Stored artifact payload size in bytes.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+
+	// Summary Customer-visible artifact summary.
+	Summary *string `json:"summary,omitempty"`
+
+	// Visibility Visibility boundary for one factory artifact projection.
+	Visibility FactoryArtifactVisibility `json:"visibility"`
+}
+
+// FactorySessionArtifactRetrievalRef Safe API retrieval reference for one factory-session artifact. Identifiers and href values are API-relative and must not expose unrestricted host filesystem paths by default.
+type FactorySessionArtifactRetrievalRef struct {
+	// Href API-relative retrieval path for the artifact payload.
+	Href string `json:"href"`
+
+	// Method HTTP method clients should use to retrieve the referenced payload.
+	Method *FactorySessionArtifactRetrievalRefMethod `json:"method,omitempty"`
+}
+
+// FactorySessionArtifactRetrievalRefMethod HTTP method clients should use to retrieve the referenced payload.
+type FactorySessionArtifactRetrievalRefMethod string
+
+// FactorySessionArtifactSummary Durable factory-session artifact metadata for list responses without raw artifact bodies or unrestricted host filesystem paths.
+type FactorySessionArtifactSummary struct {
+	// AuditMode Audit mode applied when one factory artifact was captured.
+	AuditMode *FactoryArtifactAuditMode `json:"auditMode,omitempty"`
+
+	// ContentHash Stable hash of the stored artifact payload.
+	ContentHash *string `json:"contentHash,omitempty"`
+
+	// CreatedAt Timestamp when the artifact was created or captured.
+	CreatedAt *time.Time `json:"createdAt,omitempty"`
+
+	// DispatchId Dispatch identifier that produced the artifact when applicable.
+	DispatchId *string `json:"dispatchId,omitempty"`
+
+	// Id Stable artifact identifier.
+	Id string `json:"id"`
+
+	// Kind Canonical factory artifact kind for session-owned outputs.
+	Kind FactoryArtifactKind `json:"kind"`
+
+	// Label Customer-visible artifact label.
+	Label           *string                         `json:"label,omitempty"`
+	RedactionCounts *FactoryArtifactRedactionCounts `json:"redactionCounts,omitempty"`
+
+	// RetrievalRef Safe API retrieval reference for one factory-session artifact. Identifiers and href values are API-relative and must not expose unrestricted host filesystem paths by default.
+	RetrievalRef *FactorySessionArtifactRetrievalRef `json:"retrievalRef,omitempty"`
+
+	// SizeBytes Stored artifact payload size in bytes.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+
+	// Visibility Visibility boundary for one factory artifact projection.
+	Visibility FactoryArtifactVisibility `json:"visibility"`
+}
+
 // FactorySessionBudgets Effective orchestrator policy budgets projected for one factory session.
 type FactorySessionBudgets struct {
 	// MaxAgents Maximum concurrent child-agent dispatches allowed by the effective JavaScript policy.
 	MaxAgents *int `json:"maxAgents,omitempty"`
+}
+
+// FactorySessionDispatchSummary Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections.
+type FactorySessionDispatchSummary struct {
+	// Attempt One-based attempt number for retried dispatches.
+	Attempt *int32 `json:"attempt,omitempty"`
+
+	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+	DispatchKind  FactoryDispatchKind           `json:"dispatchKind"`
+	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+
+	// Id Stable dispatch identifier.
+	Id string `json:"id"`
+
+	// Label Customer-visible dispatch label.
+	Label *string `json:"label,omitempty"`
+
+	// Model Selected model identifier when applicable.
+	Model *string `json:"model,omitempty"`
+
+	// OutputArtifactIds Artifact identifiers produced by the dispatch.
+	OutputArtifactIds *[]string `json:"outputArtifactIds,omitempty"`
+
+	// Phase Workflow phase when the dispatch was created or observed.
+	Phase *string `json:"phase,omitempty"`
+
+	// Provider Selected provider identifier when applicable.
+	Provider *string `json:"provider,omitempty"`
+
+	// ProviderSessionRefs Provider-session correlation refs for model-backed dispatches.
+	ProviderSessionRefs *[]LoadableProviderSessionRef `json:"providerSessionRefs,omitempty"`
+
+	// RunnerId Selected runner identifier when applicable.
+	RunnerId *string `json:"runnerId,omitempty"`
+
+	// Status Canonical dispatch lifecycle status shared across orchestrators.
+	Status   FactoryDispatchStatus     `json:"status"`
+	Usage    *FactoryDispatchUsage     `json:"usage,omitempty"`
+	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
 }
 
 // FactorySessionDurableFailureDetail defines model for FactorySessionDurableFailureDetail.
@@ -2432,6 +2572,24 @@ type JavaScriptPhaseChangeEventPayload struct {
 
 	// ScriptStatus JavaScript workflow script runtime status for one factory session.
 	ScriptStatus FactorySessionJavaScriptScriptStatus `json:"scriptStatus"`
+}
+
+// ListFactorySessionArtifactsResponse defines model for ListFactorySessionArtifactsResponse.
+type ListFactorySessionArtifactsResponse struct {
+	// Artifacts Artifact metadata rows for the targeted session.
+	Artifacts []FactorySessionArtifactSummary `json:"artifacts"`
+
+	// SessionId Stable factory-session identifier that owns the listed artifacts.
+	SessionId string `json:"sessionId"`
+}
+
+// ListFactorySessionDispatchesResponse defines model for ListFactorySessionDispatchesResponse.
+type ListFactorySessionDispatchesResponse struct {
+	// Dispatches Dispatch summaries for the targeted session.
+	Dispatches []FactorySessionDispatchSummary `json:"dispatches"`
+
+	// SessionId Stable factory-session identifier that owns the listed dispatches.
+	SessionId string `json:"sessionId"`
 }
 
 // ListFactorySessionsResponse defines model for ListFactorySessionsResponse.
@@ -4239,6 +4397,12 @@ type WorkstationOperationBindingSelector struct {
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string
 
+// ArtifactID defines model for ArtifactID.
+type ArtifactID = string
+
+// DispatchID defines model for DispatchID.
+type DispatchID = string
+
 // FactorySessionResultIncludeArtifacts defines model for FactorySessionResultIncludeArtifacts.
 type FactorySessionResultIncludeArtifacts = bool
 
@@ -5332,6 +5496,18 @@ type ServerInterface interface {
 	// Get one factory session
 	// (GET /factory-sessions/{session_id})
 	GetFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// List durable factory session artifacts
+	// (GET /factory-sessions/{session_id}/artifacts)
+	ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get one durable factory session artifact
+	// (GET /factory-sessions/{session_id}/artifacts/{artifact_id})
+	GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionId SessionID, artifactId ArtifactID)
+	// List durable factory session dispatches
+	// (GET /factory-sessions/{session_id}/dispatches)
+	ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Get one durable factory session dispatch
+	// (GET /factory-sessions/{session_id}/dispatches/{dispatch_id})
+	GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionId SessionID, dispatchId DispatchID)
 	// Stream factory events for one session
 	// (GET /factory-sessions/{session_id}/events)
 	GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -5536,6 +5712,124 @@ func (siw *ServerInterfaceWrapper) GetFactorySession(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFactorySessionArtifacts operation middleware
+func (siw *ServerInterfaceWrapper) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFactorySessionArtifacts(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionArtifact operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "artifact_id" -------------
+	var artifactId ArtifactID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "artifact_id", mux.Vars(r)["artifact_id"], &artifactId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "artifact_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionArtifact(w, r, sessionId, artifactId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListFactorySessionDispatches operation middleware
+func (siw *ServerInterfaceWrapper) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListFactorySessionDispatches(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactorySessionDispatch operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "dispatch_id" -------------
+	var dispatchId DispatchID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "dispatch_id", mux.Vars(r)["dispatch_id"], &dispatchId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "dispatch_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionDispatch(w, r, sessionId, dispatchId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6383,6 +6677,14 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.CloseFactorySession).Methods("DELETE")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}", wrapper.GetFactorySession).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/artifacts", wrapper.ListFactorySessionArtifacts).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/artifacts/{artifact_id}", wrapper.GetFactorySessionArtifact).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/dispatches", wrapper.ListFactorySessionDispatches).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/dispatches/{dispatch_id}", wrapper.GetFactorySessionDispatch).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/events", wrapper.GetEventsBySessionId).Methods("GET")
 
