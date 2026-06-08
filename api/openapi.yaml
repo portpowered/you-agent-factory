@@ -2219,6 +2219,16 @@ components:
           $ref: '#/components/schemas/FactorySessionPetriProjection'
         javascript:
           $ref: '#/components/schemas/FactorySessionJavaScriptProjection'
+        dispatches:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryDispatch'
+          description: Shared dispatch projections for the session runtime.
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryArtifact'
+          description: Shared artifact projections for the session runtime.
     FactorySessionStatus:
       type: string
       description: Canonical lifecycle status for one live factory session runtime.
@@ -2447,6 +2457,256 @@ components:
           items:
             $ref: '#/components/schemas/FactorySessionJavaScriptCheckpointRef'
           description: Checkpoint refs associated with the current partial result.
+    FactoryDispatch:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - sessionId
+        - orchestratorKind
+        - dispatchKind
+        - status
+      properties:
+        id:
+          type: string
+          description: Stable dispatch identifier.
+        sessionId:
+          type: string
+          description: Factory session that owns this dispatch.
+        orchestratorKind:
+          $ref: '#/components/schemas/FactoryOrchestratorKind'
+        dispatchKind:
+          $ref: '#/components/schemas/FactoryDispatchKind'
+        phase:
+          type: string
+          description: JavaScript workflow phase when the dispatch was created or observed.
+        status:
+          $ref: '#/components/schemas/FactoryDispatchStatus'
+        label:
+          type: string
+          description: Customer-visible dispatch label.
+        runnerId:
+          type: string
+          description: Selected runner identifier when applicable.
+        model:
+          type: string
+          description: Selected model identifier when applicable.
+        provider:
+          type: string
+          description: Selected provider identifier when applicable.
+        promptDigest:
+          type: string
+          description: Stable digest of rendered prompt material.
+        schemaDigest:
+          type: string
+          description: Stable digest of the output schema when applicable.
+        relatedWorkIds:
+          type: array
+          items:
+            type: string
+          description: Related work identifiers consumed or produced by the dispatch.
+        artifactIds:
+          type: array
+          items:
+            type: string
+          description: Artifact identifiers produced by the dispatch.
+        usage:
+          $ref: '#/components/schemas/FactoryDispatchUsage'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryDispatchWarning'
+        failureDetail:
+          $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+        petri:
+          $ref: '#/components/schemas/FactoryDispatchPetriProjection'
+          description: Petri-specific dispatch projection. Present for Petri transition dispatches.
+        javascript:
+          $ref: '#/components/schemas/FactoryDispatchJavaScriptProjection'
+          description: JavaScript-specific dispatch projection. Present for JavaScript workflow task dispatches.
+    FactoryDispatchKind:
+      type: string
+      description: Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+      enum:
+        - PETRI_TRANSITION
+        - JAVASCRIPT_AGENT
+        - JAVASCRIPT_VERIFY
+        - JAVASCRIPT_SYNTHESIZE
+        - JAVASCRIPT_TOOL
+        - JAVASCRIPT_SCRIPT
+        - JAVASCRIPT_SYSTEM
+      x-enum-varnames:
+        - FactoryDispatchKindPETRITRANSITION
+        - FactoryDispatchKindJAVASCRIPTAGENT
+        - FactoryDispatchKindJAVASCRIPTVERIFY
+        - FactoryDispatchKindJAVASCRIPTSYNTHESIZE
+        - FactoryDispatchKindJAVASCRIPTTOOL
+        - FactoryDispatchKindJAVASCRIPTSCRIPT
+        - FactoryDispatchKindJAVASCRIPTSYSTEM
+      x-enum-descriptions:
+        - Petri transition dispatch owned by the factory engine.
+        - JavaScript workflow child-agent dispatch.
+        - JavaScript workflow verify task dispatch.
+        - JavaScript workflow synthesize task dispatch.
+        - JavaScript workflow tool task dispatch.
+        - JavaScript workflow script task dispatch.
+        - JavaScript workflow system task dispatch.
+    FactoryDispatchStatus:
+      type: string
+      description: Canonical dispatch lifecycle status shared across orchestrators.
+      enum:
+        - QUEUED
+        - RUNNING
+        - COMPLETED
+        - FAILED
+      x-enum-varnames:
+        - FactoryDispatchStatusQUEUED
+        - FactoryDispatchStatusRUNNING
+        - FactoryDispatchStatusCOMPLETED
+        - FactoryDispatchStatusFAILED
+      x-enum-descriptions:
+        - Dispatch is waiting to start.
+        - Dispatch is currently executing.
+        - Dispatch completed successfully.
+        - Dispatch failed or was rejected.
+    FactoryDispatchJavaScriptTaskKind:
+      type: string
+      description: JavaScript workflow task kind for one child dispatch.
+      enum:
+        - AGENT
+        - VERIFY
+        - SYNTHESIZE
+        - TOOL
+        - SCRIPT
+        - SYSTEM
+      x-enum-varnames:
+        - FactoryDispatchJavaScriptTaskKindAGENT
+        - FactoryDispatchJavaScriptTaskKindVERIFY
+        - FactoryDispatchJavaScriptTaskKindSYNTHESIZE
+        - FactoryDispatchJavaScriptTaskKindTOOL
+        - FactoryDispatchJavaScriptTaskKindSCRIPT
+        - FactoryDispatchJavaScriptTaskKindSYSTEM
+      x-enum-descriptions:
+        - Child-agent task dispatch.
+        - Verify task dispatch.
+        - Synthesize task dispatch.
+        - Tool task dispatch.
+        - Script task dispatch.
+        - System task dispatch.
+    FactoryDispatchPetriProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - transitionId
+      properties:
+        transitionId:
+          type: string
+          description: Petri transition identifier for this dispatch.
+        workstationName:
+          type: string
+          description: Workstation name that owns the transition.
+        workerType:
+          type: string
+          description: Worker type selected for the transition dispatch.
+    FactoryDispatchJavaScriptProjection:
+      type: object
+      additionalProperties: false
+      required:
+        - taskKind
+      properties:
+        taskKind:
+          $ref: '#/components/schemas/FactoryDispatchJavaScriptTaskKind'
+        taskLabel:
+          type: string
+          description: Customer-visible label for the JavaScript workflow task.
+    FactoryDispatchUsage:
+      type: object
+      additionalProperties: false
+      properties:
+        inputTokens:
+          type: integer
+          format: int64
+          minimum: 0
+        outputTokens:
+          type: integer
+          format: int64
+          minimum: 0
+        totalTokens:
+          type: integer
+          format: int64
+          minimum: 0
+        costUsd:
+          type: number
+          format: double
+          minimum: 0
+        durationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+        retryCount:
+          type: integer
+          format: int32
+          minimum: 0
+    FactoryDispatchWarning:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Stable warning code for the dispatch projection.
+        message:
+          type: string
+          description: Customer-visible warning message.
+    FactoryDispatchFailureDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          description: Stable failure reason code when the dispatch failed.
+        message:
+          type: string
+          description: Customer-visible failure message.
+        errorClass:
+          type: string
+          description: Provider or runtime error class when available.
+    FactoryArtifact:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - kind
+        - visibility
+      properties:
+        id:
+          type: string
+          description: Stable artifact identifier referenced by session projections.
+        kind:
+          $ref: '#/components/schemas/FactoryArtifactKind'
+        visibility:
+          $ref: '#/components/schemas/FactoryArtifactVisibility'
+        label:
+          type: string
+          description: Customer-visible artifact label.
+        summary:
+          type: string
+          description: Customer-visible artifact summary.
+        auditMode:
+          $ref: '#/components/schemas/FactoryArtifactAuditMode'
+        redactionCounts:
+          $ref: '#/components/schemas/FactoryArtifactRedactionCounts'
+        captureMetadata:
+          $ref: '#/components/schemas/FactoryArtifactCaptureMetadata'
+        contentHash:
+          type: string
+          description: Stable hash of the stored artifact payload.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: Stored artifact payload size in bytes.
     FactoryArtifactRef:
       type: object
       additionalProperties: false
@@ -2473,11 +2733,32 @@ components:
       type: string
       description: Canonical factory artifact kind for session-owned outputs.
       enum:
+        - FINAL_RESULT
+        - CHILD_RESULT
+        - FINDING
+        - PATCH
+        - LOG
+        - DATASET
         - CHECKPOINT
+        - WORKTREE_SUMMARY
       x-enum-varnames:
+        - FactoryArtifactKindFINALRESULT
+        - FactoryArtifactKindCHILDRESULT
+        - FactoryArtifactKindFINDING
+        - FactoryArtifactKindPATCH
+        - FactoryArtifactKindLOG
+        - FactoryArtifactKindDATASET
         - FactoryArtifactKindCHECKPOINT
+        - FactoryArtifactKindWORKTREESUMMARY
       x-enum-descriptions:
+        - Final session result artifact.
+        - Child dispatch result artifact.
+        - Finding artifact produced by a workflow task.
+        - Patch artifact produced by a workflow task.
+        - Log artifact produced by a workflow task.
+        - Dataset artifact produced by a workflow task.
         - JavaScript workflow checkpoint bundle owned by the orchestrator runtime.
+        - Worktree summary artifact produced by a workflow task.
     FactoryArtifactVisibility:
       type: string
       description: Visibility boundary for one factory artifact projection.
@@ -2490,6 +2771,51 @@ components:
       x-enum-descriptions:
         - Customer-visible artifact metadata and authorized content access.
         - Orchestrator-owned checkpoint payload kept behind refs and internal store records.
+    FactoryArtifactAuditMode:
+      type: string
+      description: Audit mode applied when one factory artifact was captured.
+      enum:
+        - NONE
+        - REDACTED
+        - FULL
+      x-enum-varnames:
+        - FactoryArtifactAuditModeNONE
+        - FactoryArtifactAuditModeREDACTED
+        - FactoryArtifactAuditModeFULL
+      x-enum-descriptions:
+        - Artifact was captured without additional audit processing.
+        - Artifact content was redacted before storage.
+        - Artifact content was captured in full for authorized inspection.
+    FactoryArtifactRedactionCounts:
+      type: object
+      additionalProperties: false
+      properties:
+        secrets:
+          type: integer
+          format: int32
+          minimum: 0
+        paths:
+          type: integer
+          format: int32
+          minimum: 0
+        tokens:
+          type: integer
+          format: int32
+          minimum: 0
+    FactoryArtifactCaptureMetadata:
+      type: object
+      additionalProperties: false
+      properties:
+        capturedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the artifact payload was captured.
+        sourceDispatchId:
+          type: string
+          description: Dispatch identifier that produced the artifact when applicable.
+        mimeType:
+          type: string
+          description: MIME type of the stored artifact payload when known.
     JavaScriptCheckpointRefEventPayload:
       type: object
       additionalProperties: false

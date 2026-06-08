@@ -990,6 +990,10 @@ export interface components {
       lifecycle: components["schemas"]["FactorySessionLifecycle"];
       petri?: components["schemas"]["FactorySessionPetriProjection"];
       javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
+      /** @description Shared dispatch projections for the session runtime. */
+      dispatches?: components["schemas"]["FactoryDispatch"][];
+      /** @description Shared artifact projections for the session runtime. */
+      artifacts?: components["schemas"]["FactoryArtifact"][];
     };
     /**
      * @description Canonical lifecycle status for one live factory session runtime.
@@ -1102,6 +1106,116 @@ export interface components {
       /** @description Checkpoint refs associated with the current partial result. */
       checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
     };
+    FactoryDispatch: {
+      /** @description Stable dispatch identifier. */
+      id: string;
+      /** @description Factory session that owns this dispatch. */
+      sessionId: string;
+      orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      dispatchKind: components["schemas"]["FactoryDispatchKind"];
+      /** @description JavaScript workflow phase when the dispatch was created or observed. */
+      phase?: string;
+      status: components["schemas"]["FactoryDispatchStatus"];
+      /** @description Customer-visible dispatch label. */
+      label?: string;
+      /** @description Selected runner identifier when applicable. */
+      runnerId?: string;
+      /** @description Selected model identifier when applicable. */
+      model?: string;
+      /** @description Selected provider identifier when applicable. */
+      provider?: string;
+      /** @description Stable digest of rendered prompt material. */
+      promptDigest?: string;
+      /** @description Stable digest of the output schema when applicable. */
+      schemaDigest?: string;
+      /** @description Related work identifiers consumed or produced by the dispatch. */
+      relatedWorkIds?: string[];
+      /** @description Artifact identifiers produced by the dispatch. */
+      artifactIds?: string[];
+      usage?: components["schemas"]["FactoryDispatchUsage"];
+      warnings?: components["schemas"]["FactoryDispatchWarning"][];
+      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      /** @description Petri-specific dispatch projection. Present for Petri transition dispatches. */
+      petri?: components["schemas"]["FactoryDispatchPetriProjection"];
+      /** @description JavaScript-specific dispatch projection. Present for JavaScript workflow task dispatches. */
+      javascript?: components["schemas"]["FactoryDispatchJavaScriptProjection"];
+    };
+    /**
+     * @description Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+     * @enum {string}
+     */
+    FactoryDispatchKind: FactoryDispatchKind;
+    /**
+     * @description Canonical dispatch lifecycle status shared across orchestrators.
+     * @enum {string}
+     */
+    FactoryDispatchStatus: FactoryDispatchStatus;
+    /**
+     * @description JavaScript workflow task kind for one child dispatch.
+     * @enum {string}
+     */
+    FactoryDispatchJavaScriptTaskKind: FactoryDispatchJavaScriptTaskKind;
+    FactoryDispatchPetriProjection: {
+      /** @description Petri transition identifier for this dispatch. */
+      transitionId: string;
+      /** @description Workstation name that owns the transition. */
+      workstationName?: string;
+      /** @description Worker type selected for the transition dispatch. */
+      workerType?: string;
+    };
+    FactoryDispatchJavaScriptProjection: {
+      taskKind: components["schemas"]["FactoryDispatchJavaScriptTaskKind"];
+      /** @description Customer-visible label for the JavaScript workflow task. */
+      taskLabel?: string;
+    };
+    FactoryDispatchUsage: {
+      /** Format: int64 */
+      inputTokens?: number;
+      /** Format: int64 */
+      outputTokens?: number;
+      /** Format: int64 */
+      totalTokens?: number;
+      /** Format: double */
+      costUsd?: number;
+      /** Format: int64 */
+      durationMillis?: number;
+      /** Format: int32 */
+      retryCount?: number;
+    };
+    FactoryDispatchWarning: {
+      /** @description Stable warning code for the dispatch projection. */
+      code: string;
+      /** @description Customer-visible warning message. */
+      message: string;
+    };
+    FactoryDispatchFailureDetail: {
+      /** @description Stable failure reason code when the dispatch failed. */
+      reason?: string;
+      /** @description Customer-visible failure message. */
+      message?: string;
+      /** @description Provider or runtime error class when available. */
+      errorClass?: string;
+    };
+    FactoryArtifact: {
+      /** @description Stable artifact identifier referenced by session projections. */
+      id: string;
+      kind: components["schemas"]["FactoryArtifactKind"];
+      visibility: components["schemas"]["FactoryArtifactVisibility"];
+      /** @description Customer-visible artifact label. */
+      label?: string;
+      /** @description Customer-visible artifact summary. */
+      summary?: string;
+      auditMode?: components["schemas"]["FactoryArtifactAuditMode"];
+      redactionCounts?: components["schemas"]["FactoryArtifactRedactionCounts"];
+      captureMetadata?: components["schemas"]["FactoryArtifactCaptureMetadata"];
+      /** @description Stable hash of the stored artifact payload. */
+      contentHash?: string;
+      /**
+       * Format: int64
+       * @description Stored artifact payload size in bytes.
+       */
+      sizeBytes?: number;
+    };
     FactoryArtifactRef: {
       /** @description Stable artifact identifier referenced by session projections. */
       id: string;
@@ -1125,6 +1239,30 @@ export interface components {
      * @enum {string}
      */
     FactoryArtifactVisibility: FactoryArtifactVisibility;
+    /**
+     * @description Audit mode applied when one factory artifact was captured.
+     * @enum {string}
+     */
+    FactoryArtifactAuditMode: FactoryArtifactAuditMode;
+    FactoryArtifactRedactionCounts: {
+      /** Format: int32 */
+      secrets?: number;
+      /** Format: int32 */
+      paths?: number;
+      /** Format: int32 */
+      tokens?: number;
+    };
+    FactoryArtifactCaptureMetadata: {
+      /**
+       * Format: date-time
+       * @description Timestamp when the artifact payload was captured.
+       */
+      capturedAt?: string;
+      /** @description Dispatch identifier that produced the artifact when applicable. */
+      sourceDispatchId?: string;
+      /** @description MIME type of the stored artifact payload when known. */
+      mimeType?: string;
+    };
     /** @description Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload. */
     JavaScriptCheckpointRefEventPayload: {
       /** @description Stable checkpoint identifier referenced by the session runtime. */
@@ -4049,9 +4187,69 @@ export const FactorySessionJavaScriptScriptStatus = {
 } as const;
 export type FactorySessionJavaScriptScriptStatus =
   (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
+export const FactoryDispatchKind = {
+  // Petri transition dispatch owned by the factory engine.
+  FactoryDispatchKindPETRITRANSITION: "PETRI_TRANSITION",
+  // JavaScript workflow child-agent dispatch.
+  FactoryDispatchKindJAVASCRIPTAGENT: "JAVASCRIPT_AGENT",
+  // JavaScript workflow verify task dispatch.
+  FactoryDispatchKindJAVASCRIPTVERIFY: "JAVASCRIPT_VERIFY",
+  // JavaScript workflow synthesize task dispatch.
+  FactoryDispatchKindJAVASCRIPTSYNTHESIZE: "JAVASCRIPT_SYNTHESIZE",
+  // JavaScript workflow tool task dispatch.
+  FactoryDispatchKindJAVASCRIPTTOOL: "JAVASCRIPT_TOOL",
+  // JavaScript workflow script task dispatch.
+  FactoryDispatchKindJAVASCRIPTSCRIPT: "JAVASCRIPT_SCRIPT",
+  // JavaScript workflow system task dispatch.
+  FactoryDispatchKindJAVASCRIPTSYSTEM: "JAVASCRIPT_SYSTEM",
+} as const;
+export type FactoryDispatchKind =
+  (typeof FactoryDispatchKind)[keyof typeof FactoryDispatchKind];
+export const FactoryDispatchStatus = {
+  // Dispatch is waiting to start.
+  FactoryDispatchStatusQUEUED: "QUEUED",
+  // Dispatch is currently executing.
+  FactoryDispatchStatusRUNNING: "RUNNING",
+  // Dispatch completed successfully.
+  FactoryDispatchStatusCOMPLETED: "COMPLETED",
+  // Dispatch failed or was rejected.
+  FactoryDispatchStatusFAILED: "FAILED",
+} as const;
+export type FactoryDispatchStatus =
+  (typeof FactoryDispatchStatus)[keyof typeof FactoryDispatchStatus];
+export const FactoryDispatchJavaScriptTaskKind = {
+  // Child-agent task dispatch.
+  FactoryDispatchJavaScriptTaskKindAGENT: "AGENT",
+  // Verify task dispatch.
+  FactoryDispatchJavaScriptTaskKindVERIFY: "VERIFY",
+  // Synthesize task dispatch.
+  FactoryDispatchJavaScriptTaskKindSYNTHESIZE: "SYNTHESIZE",
+  // Tool task dispatch.
+  FactoryDispatchJavaScriptTaskKindTOOL: "TOOL",
+  // Script task dispatch.
+  FactoryDispatchJavaScriptTaskKindSCRIPT: "SCRIPT",
+  // System task dispatch.
+  FactoryDispatchJavaScriptTaskKindSYSTEM: "SYSTEM",
+} as const;
+export type FactoryDispatchJavaScriptTaskKind =
+  (typeof FactoryDispatchJavaScriptTaskKind)[keyof typeof FactoryDispatchJavaScriptTaskKind];
 export const FactoryArtifactKind = {
+  // Final session result artifact.
+  FactoryArtifactKindFINALRESULT: "FINAL_RESULT",
+  // Child dispatch result artifact.
+  FactoryArtifactKindCHILDRESULT: "CHILD_RESULT",
+  // Finding artifact produced by a workflow task.
+  FactoryArtifactKindFINDING: "FINDING",
+  // Patch artifact produced by a workflow task.
+  FactoryArtifactKindPATCH: "PATCH",
+  // Log artifact produced by a workflow task.
+  FactoryArtifactKindLOG: "LOG",
+  // Dataset artifact produced by a workflow task.
+  FactoryArtifactKindDATASET: "DATASET",
   // JavaScript workflow checkpoint bundle owned by the orchestrator runtime.
   FactoryArtifactKindCHECKPOINT: "CHECKPOINT",
+  // Worktree summary artifact produced by a workflow task.
+  FactoryArtifactKindWORKTREESUMMARY: "WORKTREE_SUMMARY",
 } as const;
 export type FactoryArtifactKind =
   (typeof FactoryArtifactKind)[keyof typeof FactoryArtifactKind];
@@ -4063,6 +4261,16 @@ export const FactoryArtifactVisibility = {
 } as const;
 export type FactoryArtifactVisibility =
   (typeof FactoryArtifactVisibility)[keyof typeof FactoryArtifactVisibility];
+export const FactoryArtifactAuditMode = {
+  // Artifact was captured without additional audit processing.
+  FactoryArtifactAuditModeNONE: "NONE",
+  // Artifact content was redacted before storage.
+  FactoryArtifactAuditModeREDACTED: "REDACTED",
+  // Artifact content was captured in full for authorized inspection.
+  FactoryArtifactAuditModeFULL: "FULL",
+} as const;
+export type FactoryArtifactAuditMode =
+  (typeof FactoryArtifactAuditMode)[keyof typeof FactoryArtifactAuditMode];
 export const LoadableProviderSessionProvider = {
   Codex: "codex",
   Cursor: "cursor",

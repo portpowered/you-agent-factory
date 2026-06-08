@@ -48,15 +48,58 @@ const (
 	STALEFACTORYVERSION           ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
+// Defines values for FactoryArtifactAuditMode.
+const (
+	FactoryArtifactAuditModeFULL     FactoryArtifactAuditMode = "FULL"
+	FactoryArtifactAuditModeNONE     FactoryArtifactAuditMode = "NONE"
+	FactoryArtifactAuditModeREDACTED FactoryArtifactAuditMode = "REDACTED"
+)
+
 // Defines values for FactoryArtifactKind.
 const (
-	FactoryArtifactKindCHECKPOINT FactoryArtifactKind = "CHECKPOINT"
+	FactoryArtifactKindCHECKPOINT      FactoryArtifactKind = "CHECKPOINT"
+	FactoryArtifactKindCHILDRESULT     FactoryArtifactKind = "CHILD_RESULT"
+	FactoryArtifactKindDATASET         FactoryArtifactKind = "DATASET"
+	FactoryArtifactKindFINALRESULT     FactoryArtifactKind = "FINAL_RESULT"
+	FactoryArtifactKindFINDING         FactoryArtifactKind = "FINDING"
+	FactoryArtifactKindLOG             FactoryArtifactKind = "LOG"
+	FactoryArtifactKindPATCH           FactoryArtifactKind = "PATCH"
+	FactoryArtifactKindWORKTREESUMMARY FactoryArtifactKind = "WORKTREE_SUMMARY"
 )
 
 // Defines values for FactoryArtifactVisibility.
 const (
 	FactoryArtifactVisibilityINTERNALCHECKPOINT FactoryArtifactVisibility = "INTERNAL_CHECKPOINT"
 	FactoryArtifactVisibilityPUBLIC             FactoryArtifactVisibility = "PUBLIC"
+)
+
+// Defines values for FactoryDispatchJavaScriptTaskKind.
+const (
+	FactoryDispatchJavaScriptTaskKindAGENT      FactoryDispatchJavaScriptTaskKind = "AGENT"
+	FactoryDispatchJavaScriptTaskKindSCRIPT     FactoryDispatchJavaScriptTaskKind = "SCRIPT"
+	FactoryDispatchJavaScriptTaskKindSYNTHESIZE FactoryDispatchJavaScriptTaskKind = "SYNTHESIZE"
+	FactoryDispatchJavaScriptTaskKindSYSTEM     FactoryDispatchJavaScriptTaskKind = "SYSTEM"
+	FactoryDispatchJavaScriptTaskKindTOOL       FactoryDispatchJavaScriptTaskKind = "TOOL"
+	FactoryDispatchJavaScriptTaskKindVERIFY     FactoryDispatchJavaScriptTaskKind = "VERIFY"
+)
+
+// Defines values for FactoryDispatchKind.
+const (
+	FactoryDispatchKindJAVASCRIPTAGENT      FactoryDispatchKind = "JAVASCRIPT_AGENT"
+	FactoryDispatchKindJAVASCRIPTSCRIPT     FactoryDispatchKind = "JAVASCRIPT_SCRIPT"
+	FactoryDispatchKindJAVASCRIPTSYNTHESIZE FactoryDispatchKind = "JAVASCRIPT_SYNTHESIZE"
+	FactoryDispatchKindJAVASCRIPTSYSTEM     FactoryDispatchKind = "JAVASCRIPT_SYSTEM"
+	FactoryDispatchKindJAVASCRIPTTOOL       FactoryDispatchKind = "JAVASCRIPT_TOOL"
+	FactoryDispatchKindJAVASCRIPTVERIFY     FactoryDispatchKind = "JAVASCRIPT_VERIFY"
+	FactoryDispatchKindPETRITRANSITION      FactoryDispatchKind = "PETRI_TRANSITION"
+)
+
+// Defines values for FactoryDispatchStatus.
+const (
+	FactoryDispatchStatusCOMPLETED FactoryDispatchStatus = "COMPLETED"
+	FactoryDispatchStatusFAILED    FactoryDispatchStatus = "FAILED"
+	FactoryDispatchStatusQUEUED    FactoryDispatchStatus = "QUEUED"
+	FactoryDispatchStatusRUNNING   FactoryDispatchStatus = "RUNNING"
 )
 
 // Defines values for FactoryEventSchemaVersion.
@@ -754,8 +797,59 @@ type Factory struct {
 	Workstations *[]Workstation `json:"workstations,omitempty"`
 }
 
+// FactoryArtifact defines model for FactoryArtifact.
+type FactoryArtifact struct {
+	// AuditMode Audit mode applied when one factory artifact was captured.
+	AuditMode       *FactoryArtifactAuditMode       `json:"auditMode,omitempty"`
+	CaptureMetadata *FactoryArtifactCaptureMetadata `json:"captureMetadata,omitempty"`
+
+	// ContentHash Stable hash of the stored artifact payload.
+	ContentHash *string `json:"contentHash,omitempty"`
+
+	// Id Stable artifact identifier referenced by session projections.
+	Id string `json:"id"`
+
+	// Kind Canonical factory artifact kind for session-owned outputs.
+	Kind FactoryArtifactKind `json:"kind"`
+
+	// Label Customer-visible artifact label.
+	Label           *string                         `json:"label,omitempty"`
+	RedactionCounts *FactoryArtifactRedactionCounts `json:"redactionCounts,omitempty"`
+
+	// SizeBytes Stored artifact payload size in bytes.
+	SizeBytes *int64 `json:"sizeBytes,omitempty"`
+
+	// Summary Customer-visible artifact summary.
+	Summary *string `json:"summary,omitempty"`
+
+	// Visibility Visibility boundary for one factory artifact projection.
+	Visibility FactoryArtifactVisibility `json:"visibility"`
+}
+
+// FactoryArtifactAuditMode Audit mode applied when one factory artifact was captured.
+type FactoryArtifactAuditMode string
+
+// FactoryArtifactCaptureMetadata defines model for FactoryArtifactCaptureMetadata.
+type FactoryArtifactCaptureMetadata struct {
+	// CapturedAt Timestamp when the artifact payload was captured.
+	CapturedAt *time.Time `json:"capturedAt,omitempty"`
+
+	// MimeType MIME type of the stored artifact payload when known.
+	MimeType *string `json:"mimeType,omitempty"`
+
+	// SourceDispatchId Dispatch identifier that produced the artifact when applicable.
+	SourceDispatchId *string `json:"sourceDispatchId,omitempty"`
+}
+
 // FactoryArtifactKind Canonical factory artifact kind for session-owned outputs.
 type FactoryArtifactKind string
+
+// FactoryArtifactRedactionCounts defines model for FactoryArtifactRedactionCounts.
+type FactoryArtifactRedactionCounts struct {
+	Paths   *int32 `json:"paths,omitempty"`
+	Secrets *int32 `json:"secrets,omitempty"`
+	Tokens  *int32 `json:"tokens,omitempty"`
+}
 
 // FactoryArtifactRef defines model for FactoryArtifactRef.
 type FactoryArtifactRef struct {
@@ -784,6 +878,117 @@ type FactoryChangeEventPayload struct {
 	Factory         Factory    `json:"factory"`
 	Metadata        *StringMap `json:"metadata,omitempty"`
 	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
+}
+
+// FactoryDispatch defines model for FactoryDispatch.
+type FactoryDispatch struct {
+	// ArtifactIds Artifact identifiers produced by the dispatch.
+	ArtifactIds *[]string `json:"artifactIds,omitempty"`
+
+	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+	DispatchKind  FactoryDispatchKind           `json:"dispatchKind"`
+	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+
+	// Id Stable dispatch identifier.
+	Id         string                               `json:"id"`
+	Javascript *FactoryDispatchJavaScriptProjection `json:"javascript,omitempty"`
+
+	// Label Customer-visible dispatch label.
+	Label *string `json:"label,omitempty"`
+
+	// Model Selected model identifier when applicable.
+	Model *string `json:"model,omitempty"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind FactoryOrchestratorKind         `json:"orchestratorKind"`
+	Petri            *FactoryDispatchPetriProjection `json:"petri,omitempty"`
+
+	// Phase JavaScript workflow phase when the dispatch was created or observed.
+	Phase *string `json:"phase,omitempty"`
+
+	// PromptDigest Stable digest of rendered prompt material.
+	PromptDigest *string `json:"promptDigest,omitempty"`
+
+	// Provider Selected provider identifier when applicable.
+	Provider *string `json:"provider,omitempty"`
+
+	// RelatedWorkIds Related work identifiers consumed or produced by the dispatch.
+	RelatedWorkIds *[]string `json:"relatedWorkIds,omitempty"`
+
+	// RunnerId Selected runner identifier when applicable.
+	RunnerId *string `json:"runnerId,omitempty"`
+
+	// SchemaDigest Stable digest of the output schema when applicable.
+	SchemaDigest *string `json:"schemaDigest,omitempty"`
+
+	// SessionId Factory session that owns this dispatch.
+	SessionId string `json:"sessionId"`
+
+	// Status Canonical dispatch lifecycle status shared across orchestrators.
+	Status   FactoryDispatchStatus     `json:"status"`
+	Usage    *FactoryDispatchUsage     `json:"usage,omitempty"`
+	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
+}
+
+// FactoryDispatchFailureDetail defines model for FactoryDispatchFailureDetail.
+type FactoryDispatchFailureDetail struct {
+	// ErrorClass Provider or runtime error class when available.
+	ErrorClass *string `json:"errorClass,omitempty"`
+
+	// Message Customer-visible failure message.
+	Message *string `json:"message,omitempty"`
+
+	// Reason Stable failure reason code when the dispatch failed.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// FactoryDispatchJavaScriptProjection defines model for FactoryDispatchJavaScriptProjection.
+type FactoryDispatchJavaScriptProjection struct {
+	// TaskKind JavaScript workflow task kind for one child dispatch.
+	TaskKind FactoryDispatchJavaScriptTaskKind `json:"taskKind"`
+
+	// TaskLabel Customer-visible label for the JavaScript workflow task.
+	TaskLabel *string `json:"taskLabel,omitempty"`
+}
+
+// FactoryDispatchJavaScriptTaskKind JavaScript workflow task kind for one child dispatch.
+type FactoryDispatchJavaScriptTaskKind string
+
+// FactoryDispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+type FactoryDispatchKind string
+
+// FactoryDispatchPetriProjection defines model for FactoryDispatchPetriProjection.
+type FactoryDispatchPetriProjection struct {
+	// TransitionId Petri transition identifier for this dispatch.
+	TransitionId string `json:"transitionId"`
+
+	// WorkerType Worker type selected for the transition dispatch.
+	WorkerType *string `json:"workerType,omitempty"`
+
+	// WorkstationName Workstation name that owns the transition.
+	WorkstationName *string `json:"workstationName,omitempty"`
+}
+
+// FactoryDispatchStatus Canonical dispatch lifecycle status shared across orchestrators.
+type FactoryDispatchStatus string
+
+// FactoryDispatchUsage defines model for FactoryDispatchUsage.
+type FactoryDispatchUsage struct {
+	CostUsd        *float64 `json:"costUsd,omitempty"`
+	DurationMillis *int64   `json:"durationMillis,omitempty"`
+	InputTokens    *int64   `json:"inputTokens,omitempty"`
+	OutputTokens   *int64   `json:"outputTokens,omitempty"`
+	RetryCount     *int32   `json:"retryCount,omitempty"`
+	TotalTokens    *int64   `json:"totalTokens,omitempty"`
+}
+
+// FactoryDispatchWarning defines model for FactoryDispatchWarning.
+type FactoryDispatchWarning struct {
+	// Code Stable warning code for the dispatch projection.
+	Code string `json:"code"`
+
+	// Message Customer-visible warning message.
+	Message string `json:"message"`
 }
 
 // FactoryEvent Versioned Agent Factory event message. This is the intended canonical schema for customer event streams, history projection, record/replay artifacts, and runtime diagnostics. New fields use camelCase even when older REST resource schemas still contain legacy snake_case fields.
@@ -1187,11 +1392,17 @@ type FactorySessionResult struct {
 
 // FactorySessionRuntime defines model for FactorySessionRuntime.
 type FactorySessionRuntime struct {
+	// Artifacts Shared artifact projections for the session runtime.
+	Artifacts *[]FactoryArtifact `json:"artifacts,omitempty"`
+
 	// Budgets Effective orchestrator policy budgets projected for one factory session.
 	Budgets *FactorySessionBudgets `json:"budgets,omitempty"`
 
 	// Dialect JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
-	Dialect    *string                             `json:"dialect,omitempty"`
+	Dialect *string `json:"dialect,omitempty"`
+
+	// Dispatches Shared dispatch projections for the session runtime.
+	Dispatches *[]FactoryDispatch                  `json:"dispatches,omitempty"`
 	Javascript *FactorySessionJavaScriptProjection `json:"javascript,omitempty"`
 	Lifecycle  FactorySessionLifecycle             `json:"lifecycle"`
 

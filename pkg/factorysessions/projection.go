@@ -16,12 +16,13 @@ import (
 
 // ProjectionContext carries the runtime inputs needed to project one live session.
 type ProjectionContext struct {
-	Session    *LiveSession
-	FactoryCfg *interfaces.FactoryConfig
-	Snapshot   *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
-	Enabled    []interfaces.EnabledTransition
-	JavaScript *interfaces.FactorySessionJavaScriptRuntimeState
-	Now        time.Time
+	Session               *LiveSession
+	FactoryCfg            *interfaces.FactoryConfig
+	Snapshot              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	Enabled               []interfaces.EnabledTransition
+	JavaScript            *interfaces.FactorySessionJavaScriptRuntimeState
+	JavaScriptCheckpoints []interfaces.JavaScriptCheckpointRecord
+	Now                   time.Time
 }
 
 // SessionResponse maps a live session and runtime projection to the API detail shape.
@@ -68,7 +69,38 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 	default:
 		runtime.Petri = projectedPetriRuntime(ctx)
 	}
+	dispatches, artifacts := projectedSessionDispatchArtifacts(ctx, kind)
+	if dispatches != nil {
+		runtime.Dispatches = dispatches
+	}
+	if artifacts != nil {
+		runtime.Artifacts = artifacts
+	}
 	return runtime
+}
+
+func projectedSessionDispatchArtifacts(
+	ctx ProjectionContext,
+	kind string,
+) (*[]factoryapi.FactoryDispatch, *[]factoryapi.FactoryArtifact) {
+	sessionID := ""
+	if ctx.Session != nil {
+		sessionID = strings.TrimSpace(ctx.Session.ID)
+	}
+	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(kind)
+	switch kind {
+	case interfaces.OrchestratorKindJavaScript:
+		if ctx.JavaScript == nil {
+			return nil, nil
+		}
+		dispatchStates := projectedJavaScriptDispatchStates(ctx.JavaScript.Dispatches)
+		artifactStates := ArtifactStatesFromJavaScriptRuntime(ctx.JavaScriptCheckpoints, ctx.JavaScript.Artifacts)
+		return projectedDispatches(sessionID, orchestratorKind, dispatchStates),
+			projectedArtifacts(artifactStates)
+	default:
+		dispatchStates := PetriDispatchStatesFromSnapshot(ctx.Snapshot)
+		return projectedDispatches(sessionID, orchestratorKind, dispatchStates), nil
+	}
 }
 
 func projectOrchestratorIdentity(runtime *factoryapi.FactorySessionRuntime, cfg *interfaces.FactoryConfig) {

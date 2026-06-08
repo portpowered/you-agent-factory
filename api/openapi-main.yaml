@@ -968,12 +968,38 @@ components:
       $ref: './components/schemas/api/FactorySessionResult.yaml'
     FactorySessionPartialResult:
       $ref: './components/schemas/api/FactorySessionPartialResult.yaml'
+    FactoryDispatch:
+      $ref: './components/schemas/data-models/FactoryDispatch.yaml'
+    FactoryDispatchKind:
+      $ref: './components/schemas/data-models/FactoryDispatchKind.yaml'
+    FactoryDispatchStatus:
+      $ref: './components/schemas/data-models/FactoryDispatchStatus.yaml'
+    FactoryDispatchJavaScriptTaskKind:
+      $ref: './components/schemas/data-models/FactoryDispatchJavaScriptTaskKind.yaml'
+    FactoryDispatchPetriProjection:
+      $ref: './components/schemas/data-models/FactoryDispatchPetriProjection.yaml'
+    FactoryDispatchJavaScriptProjection:
+      $ref: './components/schemas/data-models/FactoryDispatchJavaScriptProjection.yaml'
+    FactoryDispatchUsage:
+      $ref: './components/schemas/data-models/FactoryDispatchUsage.yaml'
+    FactoryDispatchWarning:
+      $ref: './components/schemas/data-models/FactoryDispatchWarning.yaml'
+    FactoryDispatchFailureDetail:
+      $ref: './components/schemas/data-models/FactoryDispatchFailureDetail.yaml'
+    FactoryArtifact:
+      $ref: './components/schemas/data-models/FactoryArtifact.yaml'
     FactoryArtifactRef:
       $ref: './components/schemas/data-models/FactoryArtifactRef.yaml'
     FactoryArtifactKind:
       $ref: './components/schemas/data-models/FactoryArtifactKind.yaml'
     FactoryArtifactVisibility:
       $ref: './components/schemas/data-models/FactoryArtifactVisibility.yaml'
+    FactoryArtifactAuditMode:
+      $ref: './components/schemas/data-models/FactoryArtifactAuditMode.yaml'
+    FactoryArtifactRedactionCounts:
+      $ref: './components/schemas/data-models/FactoryArtifactRedactionCounts.yaml'
+    FactoryArtifactCaptureMetadata:
+      $ref: './components/schemas/data-models/FactoryArtifactCaptureMetadata.yaml'
     JavaScriptCheckpointRefEventPayload:
       $ref: './components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml'
     ListFactorySessionsResponse:

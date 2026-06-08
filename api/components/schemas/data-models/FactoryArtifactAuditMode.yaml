@@ -1,0 +1,14 @@
+type: string
+description: Audit mode applied when one factory artifact was captured.
+enum:
+  - NONE
+  - REDACTED
+  - FULL
+x-enum-varnames:
+  - FactoryArtifactAuditModeNONE
+  - FactoryArtifactAuditModeREDACTED
+  - FactoryArtifactAuditModeFULL
+x-enum-descriptions:
+  - Artifact was captured without additional audit processing.
+  - Artifact content was redacted before storage.
+  - Artifact content was captured in full for authorized inspection.

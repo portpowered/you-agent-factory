@@ -14,7 +14,16 @@ func TestOpenAPIContract_CheckpointSchemasExposeArtifactMetadataOnly(t *testing.
 	assertSchemaPropertyRef(t, schemas, "FactorySessionPartialResult", "partialResultArtifactRef", "#/components/schemas/FactoryArtifactRef")
 	assertSchemaPropertyRef(t, schemas, "JavaScriptCheckpointRefEventPayload", "artifactRef", "#/components/schemas/FactoryArtifactRef")
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactVisibility"), "FactoryArtifactVisibility", []string{"PUBLIC", "INTERNAL_CHECKPOINT"})
-	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactKind"), "FactoryArtifactKind", []string{"CHECKPOINT"})
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactKind"), "FactoryArtifactKind", []string{
+		"FINAL_RESULT",
+		"CHILD_RESULT",
+		"FINDING",
+		"PATCH",
+		"LOG",
+		"DATASET",
+		"CHECKPOINT",
+		"WORKTREE_SUMMARY",
+	})
 }
 
 func TestGeneratedCheckpointContracts_ArtifactTypesAgreeWithOpenAPI(t *testing.T) {

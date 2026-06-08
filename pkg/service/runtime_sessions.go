@@ -447,10 +447,12 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		Now:        time.Now().UTC(),
 	}
 	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
+		checkpointStore := fs.javascriptCheckpointStore(session)
 		projectionCtx.JavaScript = factorysessions.JavaScriptRuntimeStateFromCheckpoints(
-			fs.javascriptCheckpointStore(session),
+			checkpointStore,
 			projectionCtx.JavaScript,
 		)
+		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
 		return projectionCtx, nil
 	}
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)

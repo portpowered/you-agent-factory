@@ -1,0 +1,26 @@
+type: string
+description: Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+enum:
+  - PETRI_TRANSITION
+  - JAVASCRIPT_AGENT
+  - JAVASCRIPT_VERIFY
+  - JAVASCRIPT_SYNTHESIZE
+  - JAVASCRIPT_TOOL
+  - JAVASCRIPT_SCRIPT
+  - JAVASCRIPT_SYSTEM
+x-enum-varnames:
+  - FactoryDispatchKindPETRITRANSITION
+  - FactoryDispatchKindJAVASCRIPTAGENT
+  - FactoryDispatchKindJAVASCRIPTVERIFY
+  - FactoryDispatchKindJAVASCRIPTSYNTHESIZE
+  - FactoryDispatchKindJAVASCRIPTTOOL
+  - FactoryDispatchKindJAVASCRIPTSCRIPT
+  - FactoryDispatchKindJAVASCRIPTSYSTEM
+x-enum-descriptions:
+  - Petri transition dispatch owned by the factory engine.
+  - JavaScript workflow child-agent dispatch.
+  - JavaScript workflow verify task dispatch.
+  - JavaScript workflow synthesize task dispatch.
+  - JavaScript workflow tool task dispatch.
+  - JavaScript workflow script task dispatch.
+  - JavaScript workflow system task dispatch.

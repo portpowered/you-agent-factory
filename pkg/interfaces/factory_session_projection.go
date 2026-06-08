@@ -23,4 +23,6 @@ type FactorySessionJavaScriptRuntimeState struct {
 	QueuedDispatches    int                                   `json:"queuedDispatches"`
 	RunningDispatches   int                                   `json:"runningDispatches"`
 	CompletedDispatches int                                   `json:"completedDispatches"`
+	Dispatches          []FactorySessionDispatchState           `json:"dispatches,omitempty"`
+	Artifacts           []FactorySessionArtifactState           `json:"artifacts,omitempty"`
 }
