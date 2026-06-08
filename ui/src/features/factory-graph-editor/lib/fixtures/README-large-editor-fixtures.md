@@ -22,4 +22,4 @@ For the 500 node fixture:
 
 The 1000 node stress fixture uses a 90000 ms projection budget plus looser drag thresholds so severe regressions are caught without blocking ordinary CI on the same thresholds as the 500 node case.
 
-Browser verification for the 500 node fixture is covered by the `FiveHundredNodeCanonicalProjection` Storybook story.
+Browser verification for the 500 node fixture is covered by the `FiveHundredNodeCanonicalProjection` Storybook story. That story uses synchronous grid auto-layout plus canonical `layout.nodes` resolution, `onlyRenderVisibleElements={false}`, and a fixed `defaultViewport` (avoiding imperative `fitView`, which hangs the Vitest browser runner on 500-node graphs). ELK-backed projection budgets remain enforced in `factory-graph-layout-performance.test.ts`.

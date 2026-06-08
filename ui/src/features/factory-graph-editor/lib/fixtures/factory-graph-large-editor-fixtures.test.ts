@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildGridAutoLayoutPositionsByNodeId,
   buildLargeFactoryEditorFixture,
   FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS,
   factoryGraphLargeEditorFixtures,
@@ -33,6 +34,18 @@ describe("factory graph large editor fixtures", () => {
     expect(fixture.graphNodeCount).toBeGreaterThanOrEqual(12);
     expect(fixture.layout.nodes?.length).toBeGreaterThan(0);
     expect(fixture.topology.nodes.length).toBe(fixture.graphNodeCount);
+  });
+
+  it("builds deterministic grid auto-layout positions for browser verification", () => {
+    const positions = buildGridAutoLayoutPositionsByNodeId([
+      "workstation:ws-0",
+      "worker:processor",
+      "workstation:ws-1",
+    ]);
+
+    expect(positions.get("workstation:ws-0")).toEqual({ x: 0, y: 0 });
+    expect(positions.get("worker:processor")).toEqual({ x: 180, y: 0 });
+    expect(positions.get("workstation:ws-1")).toEqual({ x: 360, y: 0 });
   });
 
   it("includes representative shared layout metadata without mutating topology", () => {

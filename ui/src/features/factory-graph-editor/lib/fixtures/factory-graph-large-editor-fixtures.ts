@@ -106,6 +106,33 @@ export function buildLargeFactoryEditorFixture(
   };
 }
 
+const GRID_AUTO_LAYOUT_COLUMNS = 25;
+const GRID_AUTO_LAYOUT_X_STEP = 180;
+const GRID_AUTO_LAYOUT_Y_STEP = 120;
+
+export function buildGridAutoLayoutPositionsByNodeId(
+  nodeIds: readonly string[],
+): Map<string, NonNullable<FactoryLayout["nodes"]>[number]["position"]> {
+  const positions = new Map<
+    string,
+    NonNullable<FactoryLayout["nodes"]>[number]["position"]
+  >();
+
+  for (let index = 0; index < nodeIds.length; index += 1) {
+    const nodeId = nodeIds[index];
+    if (!nodeId) {
+      continue;
+    }
+
+    positions.set(nodeId, {
+      x: (index % GRID_AUTO_LAYOUT_COLUMNS) * GRID_AUTO_LAYOUT_X_STEP,
+      y: Math.floor(index / GRID_AUTO_LAYOUT_COLUMNS) * GRID_AUTO_LAYOUT_Y_STEP,
+    });
+  }
+
+  return positions;
+}
+
 export const factoryGraphLargeEditorFixtures = {
   hundred: buildLargeFactoryEditorFixture(
     FACTORY_GRAPH_LARGE_EDITOR_FIXTURE_TARGETS.hundred,

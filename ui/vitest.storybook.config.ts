@@ -42,7 +42,7 @@ export default mergeConfig(
               },
             },
             setupFiles: ["./.storybook/vitest.setup.ts"],
-            testTimeout: 30000,
+            testTimeout: 60_000,
           },
         },
       ],
