@@ -218,6 +218,79 @@ describe("syncCurrentFactoryDefinition", () => {
     });
   });
 
+  it("re-reads the document cache before writing so a concurrent factory GET cannot be overwritten", () => {
+    const queryClient = new QueryClient();
+    const existingDocument = {
+      name: "factory",
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+        ],
+      },
+      version: {
+        logical: "8",
+        physical: "2026-05-31T11:00:00Z",
+      },
+    };
+
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:00Z", sequence: 1, tick: 1 },
+        id: "event-0",
+        payload: {
+          factory: {
+            ...validFactory,
+            version: {
+              logical: "8",
+              physical: "2026-05-31T11:00:00Z",
+            },
+          },
+        },
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      },
+      sessionID,
+    );
+
+    queryClient.setQueryData(
+      currentFactoryDocumentQueryKey(sessionID),
+      existingDocument,
+    );
+
+    syncCurrentFactoryDefinition(
+      queryClient,
+      {
+        context: { eventTime: "2026-04-25T20:00:01Z", sequence: 2, tick: 1 },
+        id: "event-1",
+        payload: {
+          factory: {
+            ...validFactory,
+            version: {
+              logical: "9",
+              physical: "2026-05-31T12:00:00Z",
+            },
+          },
+        },
+        type: FACTORY_EVENT_TYPES.factoryChange,
+      },
+      sessionID,
+    );
+
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
+    ).toMatchObject({
+      supportingFiles: existingDocument.supportingFiles,
+      version: {
+        logical: "9",
+        physical: "2026-05-31T12:00:00Z",
+      },
+    });
+  });
+
   it("preserves bundled docs when FACTORY_CHANGE omits supportingFiles", () => {
     const queryClient = new QueryClient();
     const existingDocument = {

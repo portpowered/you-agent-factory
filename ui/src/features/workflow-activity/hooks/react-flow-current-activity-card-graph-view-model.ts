@@ -179,14 +179,28 @@ function useActiveGraphHighlights({
   );
 }
 
+function observeModeFactoryWithBundledDocs(
+  factory: DashboardSnapshot["factory"] | null | undefined,
+  document: ReturnType<
+    typeof useCurrentActivityGraphEditor
+  >["editableDefinitionQuery"]["data"],
+) {
+  if (!document) {
+    return factory ?? undefined;
+  }
+
+  return preserveExistingBundledFilesWhenAbsent(factory ?? document, document);
+}
+
 export function currentActivityCardFactoryDefinition(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
   snapshot: DashboardSnapshot,
   timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
 ): DashboardSnapshot["factory"] | null | undefined {
   if (!editor.editorMode) {
+    const document = editor.editableDefinitionQuery?.data;
     if (editor.editableDefinitionQuery?.status !== "success") {
-      return snapshot.factory ?? null;
+      return observeModeFactoryWithBundledDocs(snapshot.factory, document) ?? null;
     }
 
     return observeModeFactoryDefinition(editor, snapshot, timelineMode);
@@ -271,11 +285,15 @@ function useStableCurrentActivityGraphLayout(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
   const timelineMode = useFactoryTimelineStore((state) => state.mode);
-  const displayFactoryDefinition = currentActivityCardFactoryDefinition(
-    editor,
-    snapshot,
-    timelineMode,
-  );
+  const document = editor.editableDefinitionQuery?.data;
+  const displayFactoryDefinition = useMemo(() => {
+    const resolvedFactory = currentActivityCardFactoryDefinition(
+      editor,
+      snapshot,
+      timelineMode,
+    );
+    return observeModeFactoryWithBundledDocs(resolvedFactory, document);
+  }, [document, editor, snapshot, timelineMode]);
   const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
     displayFactoryDefinition,
   );

@@ -62,6 +62,20 @@ export function pausedDashboardStreamState() {
   };
 }
 
+function cachedFactoryWithBundledFiles(
+  queryClient: QueryClient,
+  sessionID: string,
+): CanonicalFactoryDefinition | null | undefined {
+  return (
+    queryClient.getQueryData<CurrentFactoryDocument>(
+      currentFactoryDocumentQueryKey(sessionID),
+    ) ??
+    queryClient.getQueryData<CanonicalFactoryDefinition>(
+      currentFactoryDefinitionQueryKey(sessionID),
+    )
+  );
+}
+
 export function syncCurrentFactoryDefinition(
   queryClient: QueryClient,
   event: FactoryEvent,
@@ -76,22 +90,21 @@ export function syncCurrentFactoryDefinition(
   }
   try {
     const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
-    const existingDefinition = queryClient.getQueryData<CanonicalFactoryDefinition>(
-      currentFactoryDefinitionQueryKey(sessionID),
-    );
-    const existingDocument = queryClient.getQueryData<CurrentFactoryDocument>(
-      currentFactoryDocumentQueryKey(sessionID),
-    );
     const factoryWithBundledFiles = preserveExistingBundledFilesWhenAbsent(
       normalizedFactory,
-      existingDocument ?? existingDefinition,
+      cachedFactoryWithBundledFiles(queryClient, sessionID),
     );
     queryClient.setQueryData(
       currentFactoryDefinitionQueryKey(sessionID),
       factoryWithBundledFiles,
     );
-    const document =
-      toCurrentFactoryDocumentFromNormalizedFactory(factoryWithBundledFiles);
+    const factoryForDocumentCache = preserveExistingBundledFilesWhenAbsent(
+      factoryWithBundledFiles,
+      cachedFactoryWithBundledFiles(queryClient, sessionID),
+    );
+    const document = toCurrentFactoryDocumentFromNormalizedFactory(
+      factoryForDocumentCache,
+    );
     if (document) {
       queryClient.setQueryData(
         currentFactoryDocumentQueryKey(sessionID),
