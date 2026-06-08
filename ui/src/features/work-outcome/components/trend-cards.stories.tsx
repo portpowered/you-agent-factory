@@ -140,8 +140,11 @@ export const TypographyScale = {
     const failureScope = within(resolvedFailureCard);
     const timingScope = within(resolvedTimingCard);
 
-    expect(failureScope.getByText("Time range").tagName).toBe("SPAN");
-    expect(failureScope.getByLabelText("Time range").tagName).toBe("SELECT");
+    expect(failureScope.getByText("Time range").tagName).toBe("LABEL");
+    expect(failureScope.getByLabelText("Time range").tagName).toBe("BUTTON");
+    await expect(
+      failureScope.getByRole("combobox", { name: "Time range" }),
+    ).toHaveTextContent("15m");
     expect(
       failureScope.getByText("Failed in range").closest("dl")?.className,
     ).toContain("md:grid-cols-3");

@@ -488,7 +488,7 @@ async function prepareEditableConfigurationReadyToSave(
   });
 
   await expect(expandButton).toHaveAttribute("aria-expanded", "true");
-  await expect(workerField).toHaveValue("reviewer");
+  await expect(workerField).toHaveTextContent("reviewer");
   expect(
     canvasElement.querySelector('[data-monaco-editor="workstation-prompt"]'),
   ).not.toBeNull();
