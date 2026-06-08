@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { baseFactoryDefinition } from "./factory-graph-draft.test-helpers";
+import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
 import {
   createDefaultFactoryLayout,
   factoryLayoutFromDefinition,

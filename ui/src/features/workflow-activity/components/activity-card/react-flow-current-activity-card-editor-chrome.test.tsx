@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { getFactoryGraphEditorMessages } from "../../../factory-graph-editor/messages/editor";
 import { CurrentActivityGraphHeaderActions } from "../react-flow-current-activity-card-editor-chrome";
 
 describe("CurrentActivityGraphHeaderActions", () => {

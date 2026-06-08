@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { FactoryGraphEditorToolbar } from "./factory-graph-editor-controls";
+import { FactoryGraphEditorToolbar } from "./controls/factory-graph-editor-controls";
 import {
   ConnectIcon,
   RedoIcon,
