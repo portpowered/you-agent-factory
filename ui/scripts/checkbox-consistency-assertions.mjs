@@ -33,7 +33,7 @@ export async function assertStyledCheckboxTreatment(checkboxLocator, label) {
   }
 
   const indicatorClassName = await readCheckboxIndicatorClassName(checkboxLocator);
-  for (const marker of ["peer-checked:bg-primary", "border-outline"]) {
+  for (const marker of STYLED_CHECKBOX_INDICATOR_MARKERS) {
     if (!indicatorClassName.includes(marker)) {
       throw new Error(
         `${label}: checkbox indicator is missing ${marker} styling.`,
