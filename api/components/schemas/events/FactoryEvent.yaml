@@ -44,6 +44,14 @@ properties:
       - $ref: ./payloads/WorkStateChangeEventPayload.yaml
       - $ref: ./payloads/FactoryStateResponseEventPayload.yaml
       - $ref: ./payloads/RunResponseEventPayload.yaml
+      - $ref: ./payloads/SessionStartedEventPayload.yaml
+      - $ref: ./payloads/SessionResultUpdatedEventPayload.yaml
+      - $ref: ./payloads/SessionCompletedEventPayload.yaml
+      - $ref: ./payloads/OrchestratorPhaseChangedEventPayload.yaml
+      - $ref: ./payloads/OrchestratorCheckpointWrittenEventPayload.yaml
+      - $ref: ./payloads/DispatchQueuedEventPayload.yaml
+      - $ref: ./payloads/DispatchInterruptedEventPayload.yaml
+      - $ref: ./payloads/DispatchReconciledEventPayload.yaml
       - $ref: ./payloads/JavaScriptCheckpointRefEventPayload.yaml
       - $ref: ./payloads/JavaScriptPhaseChangeEventPayload.yaml
       - $ref: ./payloads/ArtifactCreatedEventPayload.yaml

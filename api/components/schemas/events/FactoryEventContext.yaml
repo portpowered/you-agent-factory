@@ -17,6 +17,28 @@ properties:
     type: string
     format: date-time
     description: Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.
+  sessionId:
+    type: string
+    description: Canonical factory session identity for session-scoped events; payloads must not restate it.
+  sessionSequence:
+    type: integer
+    minimum: 0
+    description: Monotonic per-session ordering used for replay deduplication within one session.
+  orchestratorKind:
+    $ref: '../data-models/FactoryOrchestratorKind.yaml'
+    description: Canonical orchestrator kind for session-scoped events; payloads must not restate it.
+  orchestratorDialect:
+    type: string
+    description: Optional JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
+  phaseId:
+    type: string
+    description: Canonical workflow phase identifier; payloads must not restate it.
+  phaseName:
+    type: string
+    description: Canonical workflow phase name for customer-visible diagnostics.
+  checkpointId:
+    type: string
+    description: Canonical checkpoint identifier for checkpoint-scoped events; payloads must not restate it.
   requestId:
     type: string
     description: Canonical request identity for all request-scoped events; payload metadata must not restate it.

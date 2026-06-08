@@ -1,0 +1,10 @@
+type: string
+description: Customer-visible session result availability for result update events.
+enum:
+  - PARTIAL
+  - FINAL
+  - FAILED_WITH_PARTIAL
+x-enum-descriptions:
+  - A partial customer-visible result is available before terminal completion.
+  - The final customer-visible result is available.
+  - Terminal failure occurred after partial customer-visible results were recorded.

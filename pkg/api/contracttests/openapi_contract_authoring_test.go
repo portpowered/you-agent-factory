@@ -36,7 +36,25 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryEventType"), "FactoryEventType", canonicalFactoryEventTypeValues)
 
 	contextProperties := schemaProperties(t, schemaObject(t, schemas, "FactoryEventContext"), "FactoryEventContext")
-	assertSchemaPropertiesPresent(t, contextProperties, "FactoryEventContext", "eventTime", "requestId", "traceIds", "workIds", "dispatchId", "currentChainingTraceId")
+	assertSchemaPropertiesPresent(
+		t,
+		contextProperties,
+		"FactoryEventContext",
+		"eventTime",
+		"sessionId",
+		"sessionSequence",
+		"orchestratorKind",
+		"orchestratorDialect",
+		"phaseId",
+		"phaseName",
+		"checkpointId",
+		"requestId",
+		"traceIds",
+		"workIds",
+		"dispatchId",
+		"currentChainingTraceId",
+		"source",
+	)
 	assertStringArrayProperty(t, contextProperties, "previousChainingTraceIds")
 
 	assertBundledEventPayloadRefs(t, schemas)
@@ -69,6 +87,18 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkStateChangeSource":                 "./components/schemas/events/WorkStateChangeSource.yaml",
 		"FactoryStateResponseEventPayload":      "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
 		"RunResponseEventPayload":               "./components/schemas/events/payloads/RunResponseEventPayload.yaml",
+		"FactoryEventSessionResultStatus":       "./components/schemas/events/FactoryEventSessionResultStatus.yaml",
+		"OrchestratorPhaseStatus":               "./components/schemas/events/OrchestratorPhaseStatus.yaml",
+		"CheckpointResumabilityStatus":          "./components/schemas/events/CheckpointResumabilityStatus.yaml",
+		"DispatchReconciliationSource":          "./components/schemas/events/DispatchReconciliationSource.yaml",
+		"SessionStartedEventPayload":            "./components/schemas/events/payloads/SessionStartedEventPayload.yaml",
+		"SessionResultUpdatedEventPayload":      "./components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml",
+		"SessionCompletedEventPayload":          "./components/schemas/events/payloads/SessionCompletedEventPayload.yaml",
+		"OrchestratorPhaseChangedEventPayload":  "./components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml",
+		"OrchestratorCheckpointWrittenEventPayload": "./components/schemas/events/payloads/OrchestratorCheckpointWrittenEventPayload.yaml",
+		"DispatchQueuedEventPayload":            "./components/schemas/events/payloads/DispatchQueuedEventPayload.yaml",
+		"DispatchInterruptedEventPayload":       "./components/schemas/events/payloads/DispatchInterruptedEventPayload.yaml",
+		"DispatchReconciledEventPayload":        "./components/schemas/events/payloads/DispatchReconciledEventPayload.yaml",
 		"JavaScriptCheckpointRefEventPayload":   "./components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml",
 		"InferenceOutcome":                      "./components/schemas/events/InferenceOutcome.yaml",
 		"ScriptExecutionOutcome":                "./components/schemas/events/ScriptExecutionOutcome.yaml",

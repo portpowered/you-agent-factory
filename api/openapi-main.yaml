@@ -1503,6 +1503,30 @@ components:
       $ref: './components/schemas/data-models/FactoryArtifactRedactionCounts.yaml'
     FactoryArtifactCaptureMetadata:
       $ref: './components/schemas/data-models/FactoryArtifactCaptureMetadata.yaml'
+    FactoryEventSessionResultStatus:
+      $ref: './components/schemas/events/FactoryEventSessionResultStatus.yaml'
+    OrchestratorPhaseStatus:
+      $ref: './components/schemas/events/OrchestratorPhaseStatus.yaml'
+    CheckpointResumabilityStatus:
+      $ref: './components/schemas/events/CheckpointResumabilityStatus.yaml'
+    DispatchReconciliationSource:
+      $ref: './components/schemas/events/DispatchReconciliationSource.yaml'
+    SessionStartedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionStartedEventPayload.yaml'
+    SessionResultUpdatedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml'
+    SessionCompletedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionCompletedEventPayload.yaml'
+    OrchestratorPhaseChangedEventPayload:
+      $ref: './components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml'
+    OrchestratorCheckpointWrittenEventPayload:
+      $ref: './components/schemas/events/payloads/OrchestratorCheckpointWrittenEventPayload.yaml'
+    DispatchQueuedEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchQueuedEventPayload.yaml'
+    DispatchInterruptedEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchInterruptedEventPayload.yaml'
+    DispatchReconciledEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchReconciledEventPayload.yaml'
     JavaScriptCheckpointRefEventPayload:
       $ref: './components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml'
     JavaScriptPhaseChangeEventPayload:

@@ -17,6 +17,14 @@ export const FACTORY_EVENT_TYPES = {
   scriptResponse: "SCRIPT_RESPONSE",
   workRequest: "WORK_REQUEST",
   workStateChange: "WORK_STATE_CHANGE",
+  sessionStarted: "SESSION_STARTED",
+  sessionResultUpdated: "SESSION_RESULT_UPDATED",
+  sessionCompleted: "SESSION_COMPLETED",
+  orchestratorPhaseChanged: "ORCHESTRATOR_PHASE_CHANGED",
+  orchestratorCheckpointWritten: "ORCHESTRATOR_CHECKPOINT_WRITTEN",
+  dispatchQueued: "DISPATCH_QUEUED",
+  dispatchInterrupted: "DISPATCH_INTERRUPTED",
+  dispatchReconciled: "DISPATCH_RECONCILED",
 } as const satisfies Record<string, FactoryEventType>;
 
 type FactorySchemas = components["schemas"];
