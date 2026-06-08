@@ -1,5 +1,5 @@
 import type { FactoryWorkItem } from "../../../../api/events";
-import type { WorkContent } from "../../../work-content/lib/work-content-types";
+import type { WorkContent } from "../../../work-content/public";
 
 export type WorkPayloadSnapshotKind =
   | "WORK_REQUEST"
