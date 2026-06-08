@@ -10,7 +10,7 @@ import {
 } from "../../lib/layout/factory-graph-layout-operations";
 
 const EDGE_ID =
-  "workstation-output:workstation:review->work-state:story:done";
+  "workstation-output:workstation:draft->work-state:story:done";
 
 describe("useFactoryGraphLayoutDraftState movement history", () => {
   it("records layout commands and supports undo and redo", () => {
@@ -268,6 +268,37 @@ describe("useFactoryGraphLayoutDraftState edge waypoint edits", () => {
 
     expect(result.current.layoutDirty).toBe(false);
     expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toBeUndefined();
+  });
+
+  it("adopts saved waypoint layout after reload without topology dirty state", () => {
+    const savedLayoutDocument = {
+      ...baseFactoryDefinition,
+      layout: {
+        schemaVersion: 1,
+        edges: [
+          {
+            id: EDGE_ID,
+            waypoints: [{ x: 180, y: 220 }],
+          },
+        ],
+      },
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-waypoint-reload",
+      }),
+    );
+
+    act(() => {
+      result.current.addEdgeWaypoint(EDGE_ID, { x: 10, y: 20 });
+      result.current.adoptSavedLayout(savedLayoutDocument.layout!);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(factoryLayoutEdgeWaypoints(result.current.layout, EDGE_ID)).toEqual([
+      { x: 180, y: 220 },
+    ]);
   });
 });
 

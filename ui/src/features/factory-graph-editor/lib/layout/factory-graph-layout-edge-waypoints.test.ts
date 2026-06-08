@@ -10,7 +10,7 @@ import {
 } from "./factory-graph-layout-edge-waypoints";
 
 const EDGE_ID =
-  "workstation-output:workstation:review->work-state:story:done";
+  "workstation-output:workstation:draft->work-state:story:done";
 
 describe("factory-graph-layout-edge-waypoints", () => {
   it("adds and moves waypoints in canonical layout state", () => {
@@ -68,5 +68,40 @@ describe("factory-graph-layout-edge-waypoints", () => {
 
     expect(factoryLayoutEdgeWaypoints(cleared, EDGE_ID)).toBeUndefined();
     expect(cleared.edges).toBeUndefined();
+  });
+
+  it("filters invalid waypoint geometry when reading authored routes", () => {
+    const layout = {
+      ...createDefaultFactoryLayout(),
+      edges: [
+        {
+          id: EDGE_ID,
+          waypoints: [
+            { x: 10, y: 20 },
+            { x: Number.NaN, y: 40 },
+            { x: 30, y: 60 },
+          ],
+        },
+      ],
+    };
+
+    expect(factoryLayoutEdgeWaypoints(layout, EDGE_ID)).toEqual([
+      { x: 10, y: 20 },
+      { x: 30, y: 60 },
+    ]);
+  });
+
+  it("drops authored routes when every stored waypoint is invalid", () => {
+    const layout = {
+      ...createDefaultFactoryLayout(),
+      edges: [
+        {
+          id: EDGE_ID,
+          waypoints: [{ x: Number.POSITIVE_INFINITY, y: 10 }],
+        },
+      ],
+    };
+
+    expect(factoryLayoutEdgeWaypoints(layout, EDGE_ID)).toBeUndefined();
   });
 });

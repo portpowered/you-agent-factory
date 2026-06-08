@@ -1,0 +1,136 @@
+import type { FactoryGraphTopology } from "../draft/factory-graph-draft-types";
+import {
+  factoryLayoutEdgeWaypoints,
+  isValidFactoryLayoutPoint,
+  type FactoryLayoutEdge,
+} from "./factory-graph-layout-edge-waypoints";
+import {
+  type FactoryLayout,
+  FACTORY_LAYOUT_SCHEMA_VERSION,
+} from "./factory-graph-layout-operations";
+
+export const FACTORY_LAYOUT_VALIDATION_CODE = {
+  invalidGeometry: "factory.layout.invalidGeometry",
+  unknownEdgeReference: "factory.layout.unknownEdgeReference",
+} as const;
+
+export type FactoryLayoutValidationTarget = {
+  code: (typeof FACTORY_LAYOUT_VALIDATION_CODE)[keyof typeof FACTORY_LAYOUT_VALIDATION_CODE];
+  path: string;
+};
+
+export function factoryLayoutTopologyEdgeIds(
+  topology: FactoryGraphTopology,
+): Set<string> {
+  return new Set(topology.edges.map((edge) => edge.id));
+}
+
+export function collectFactoryLayoutEdgeValidationTargets(
+  layout: FactoryLayout,
+  validEdgeIds: ReadonlySet<string>,
+): FactoryLayoutValidationTarget[] {
+  const targets: FactoryLayoutValidationTarget[] = [];
+
+  for (const [index, edge] of (layout.edges ?? []).entries()) {
+    const path = `factory.layout.edges[${index}]`;
+    if (!edge.id) {
+      continue;
+    }
+
+    if (!validEdgeIds.has(edge.id)) {
+      targets.push({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
+        path: `${path}.id`,
+      });
+      continue;
+    }
+
+    for (const [waypointIndex, waypoint] of (edge.waypoints ?? []).entries()) {
+      if (!isValidFactoryLayoutPoint(waypoint)) {
+        targets.push({
+          code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
+          path: `${path}.waypoints[${waypointIndex}]`,
+        });
+      }
+    }
+  }
+
+  return targets;
+}
+
+function edgeLayoutEntryHasInvalidWaypointGeometry(
+  edge: FactoryLayoutEdge,
+): boolean {
+  return (edge.waypoints ?? []).some(
+    (waypoint) => !isValidFactoryLayoutPoint(waypoint),
+  );
+}
+
+export function pruneFactoryLayoutEdgesForTopology(
+  layout: FactoryLayout,
+  validEdgeIds: ReadonlySet<string>,
+): {
+  layout: FactoryLayout;
+  prunedEdgeIds: string[];
+} {
+  const edges = layout.edges ?? [];
+  if (edges.length === 0) {
+    return { layout, prunedEdgeIds: [] };
+  }
+
+  const prunedEdgeIds: string[] = [];
+  const keptEdges: FactoryLayoutEdge[] = [];
+
+  for (const edge of edges) {
+    if (!edge.id || !validEdgeIds.has(edge.id)) {
+      if (edge.id) {
+        prunedEdgeIds.push(edge.id);
+      }
+      continue;
+    }
+
+    if (edgeLayoutEntryHasInvalidWaypointGeometry(edge)) {
+      prunedEdgeIds.push(edge.id);
+      continue;
+    }
+
+    const nextEdge: FactoryLayoutEdge = { id: edge.id };
+    const validWaypoints = (edge.waypoints ?? []).filter(isValidFactoryLayoutPoint);
+    if (validWaypoints.length > 0) {
+      nextEdge.waypoints = validWaypoints;
+    }
+    if (
+      edge.labelPosition &&
+      isValidFactoryLayoutPoint(edge.labelPosition)
+    ) {
+      nextEdge.labelPosition = edge.labelPosition;
+    }
+
+    if (!nextEdge.waypoints?.length && !nextEdge.labelPosition) {
+      prunedEdgeIds.push(edge.id);
+      continue;
+    }
+
+    keptEdges.push(nextEdge);
+  }
+
+  if (keptEdges.length === edges.length && prunedEdgeIds.length === 0) {
+    return { layout, prunedEdgeIds };
+  }
+
+  return {
+    layout: {
+      ...layout,
+      edges: keptEdges.length > 0 ? keptEdges : undefined,
+      schemaVersion: layout.schemaVersion ?? FACTORY_LAYOUT_SCHEMA_VERSION,
+    },
+    prunedEdgeIds,
+  };
+}
+
+export function resolveFactoryLayoutEdgeWaypointsForRendering(
+  layout: FactoryLayout,
+  edgeId: string,
+): ReturnType<typeof factoryLayoutEdgeWaypoints> {
+  return factoryLayoutEdgeWaypoints(layout, edgeId);
+}

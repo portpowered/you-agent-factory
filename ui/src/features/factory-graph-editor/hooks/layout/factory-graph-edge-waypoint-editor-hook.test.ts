@@ -9,7 +9,7 @@ import { createDefaultFactoryLayout } from "../../lib/layout/factory-graph-layou
 import { useFactoryGraphEdgeWaypointEditor } from "./factory-graph-edge-waypoint-editor-hook";
 
 const EDGE_ID =
-  "workstation-output:workstation:review->work-state:story:done";
+  "workstation-output:workstation:draft->work-state:story:done";
 
 describe("useFactoryGraphEdgeWaypointEditor", () => {
   it("selects edges for waypoint editing and adds waypoints through layout actions", () => {
