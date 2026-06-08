@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  applyEditableWorkstationInputs,
   resolveCanonicalWorkstation,
+  resolveEditableWorkstationGuards,
+  resolveEditableWorkstationInputs,
   resolveSharedWorkerWorkstationNames,
   resolveSharedWorkerWorkstationNamesByWorkerName,
   resolveWorkerModelProvider,
   resolveWorkerOptions,
+  resolveWorkerTypeByName,
 } from "./workstation-editable-resolution";
 
 describe("workstation editable resolution edge cases", () => {
@@ -95,6 +99,48 @@ describe("workstation editable resolution edge cases", () => {
       ),
     ).toEqual({
       writer: ["shared"],
+    });
+  });
+
+  it("projects editable guards, inputs, and worker type lookups", () => {
+    const workstation = {
+      name: "Review",
+      guards: [{ expression: "true" }],
+      inputs: [
+        {
+          state: "queued",
+          workType: "story",
+          guards: [{ expression: "ready" }],
+        },
+      ],
+    };
+
+    expect(resolveEditableWorkstationGuards(workstation)).toEqual([
+      { expression: "true" },
+    ]);
+    expect(resolveEditableWorkstationInputs(workstation)).toEqual([
+      {
+        state: "queued",
+        workType: "story",
+        guards: [{ expression: "ready" }],
+      },
+    ]);
+    expect(
+      applyEditableWorkstationInputs(resolveEditableWorkstationInputs(workstation)),
+    ).toEqual([
+      {
+        state: "queued",
+        workType: "story",
+        guards: [{ expression: "ready" }],
+      },
+    ]);
+    expect(
+      resolveWorkerTypeByName({
+        name: "Factory",
+        workers: [{ name: "writer", model: "gpt-5", type: "MODEL_WORKER" }],
+      }),
+    ).toEqual({
+      writer: "MODEL_WORKER",
     });
   });
 });

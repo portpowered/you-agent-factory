@@ -73,6 +73,18 @@ describe("editable workstation model invoke mutators", () => {
     });
   });
 
+  it("clears operation bindings when the worker has no declared operations", () => {
+    expect(
+      resolveModelInvokeDraftForWorkerChange(baseDraft, "missing-worker", {
+        modelOperationsByWorkerName: {},
+      } as typeof selectedEditableValues),
+    ).toMatchObject({
+      workerName: "missing-worker",
+      operation: "",
+      operationBindings: [],
+    });
+  });
+
   it("updates only the targeted binding slot", () => {
     const updater = vi.fn((binding: (typeof baseDraft.operationBindings)[number]) => ({
       ...binding,
