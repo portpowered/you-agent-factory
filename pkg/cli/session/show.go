@@ -98,11 +98,11 @@ func Show(cfg ShowConfig) error {
 		encoder := json.NewEncoder(cfg.Output)
 		return encoder.Encode(result)
 	}
-	partialResult, sessionResult, err := fetchSessionResultProjections(cfg)
+	partialResult, liveResult, err := fetchSessionResultProjections(cfg)
 	if err != nil {
 		return err
 	}
-	return renderShowResult(cfg.Output, result, partialResult, sessionResult)
+	return renderShowResult(cfg.Output, result, partialResult, liveResult)
 }
 
 func showEndpoint(cfg ShowConfig) (url.URL, error) {
@@ -120,7 +120,7 @@ func showEndpoint(cfg ShowConfig) (url.URL, error) {
 
 func fetchSessionResultProjections(
 	cfg ShowConfig,
-) (*factoryapi.FactorySessionPartialResult, *factoryapi.FactorySessionResult, error) {
+) (*factoryapi.FactorySessionPartialResult, *factoryapi.FactorySessionLiveResult, error) {
 	partialPath := sessionpath.ScopedPath("/partial-result", cfg.SessionID)
 	partialEndpoint, err := cliserver.RequestURL(cfg.Server, partialPath)
 	if err != nil {
@@ -133,7 +133,7 @@ func fetchSessionResultProjections(
 	}
 	client := &http.Client{Timeout: showRequestTimeout}
 	var partialResult *factoryapi.FactorySessionPartialResult
-	var sessionResult *factoryapi.FactorySessionResult
+	var liveResult *factoryapi.FactorySessionLiveResult
 	var decodedPartial factoryapi.FactorySessionPartialResult
 	if resp, err := clihttp.GetJSON(
 		context.Background(),
@@ -147,7 +147,7 @@ func fetchSessionResultProjections(
 			partialResult = &decodedPartial
 		}
 	}
-	var decodedResult factoryapi.FactorySessionResult
+	var decodedResult factoryapi.FactorySessionLiveResult
 	if resp, err := clihttp.GetJSON(
 		context.Background(),
 		client,
@@ -157,17 +157,17 @@ func fetchSessionResultProjections(
 	); err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode == http.StatusOK {
-			sessionResult = &decodedResult
+			liveResult = &decodedResult
 		}
 	}
-	return partialResult, sessionResult, nil
+	return partialResult, liveResult, nil
 }
 
 func renderShowResult(
 	output io.Writer,
 	session factoryapi.FactorySession,
 	partialResult *factoryapi.FactorySessionPartialResult,
-	sessionResult *factoryapi.FactorySessionResult,
+	liveResult *factoryapi.FactorySessionLiveResult,
 ) error {
 	rows := []struct {
 		label string
@@ -219,7 +219,7 @@ func renderShowResult(
 	if err := writeSessionArtifactLines(output, session.Runtime.Artifacts); err != nil {
 		return err
 	}
-	if err := writeSessionResultLines(output, partialResult, sessionResult); err != nil {
+	if err := writeSessionResultLines(output, partialResult, liveResult); err != nil {
 		return err
 	}
 
@@ -302,7 +302,7 @@ func writeSessionArtifactLines(
 func writeSessionResultLines(
 	output io.Writer,
 	partialResult *factoryapi.FactorySessionPartialResult,
-	sessionResult *factoryapi.FactorySessionResult,
+	liveResult *factoryapi.FactorySessionLiveResult,
 ) error {
 	if partialResult != nil && partialResult.PartialResultArtifactRef != nil {
 		if _, err := fmt.Fprintf(
@@ -314,12 +314,12 @@ func writeSessionResultLines(
 			return err
 		}
 	}
-	if sessionResult != nil && sessionResult.ResultArtifactRef != nil {
+	if liveResult != nil && liveResult.ResultArtifactRef != nil {
 		if _, err := fmt.Fprintf(
 			output,
 			"Final result ref:\t%s (%s)\n",
-			sessionResult.ResultArtifactRef.Id,
-			sessionResult.ResultArtifactRef.Kind,
+			liveResult.ResultArtifactRef.Id,
+			liveResult.ResultArtifactRef.Kind,
 		); err != nil {
 			return err
 		}

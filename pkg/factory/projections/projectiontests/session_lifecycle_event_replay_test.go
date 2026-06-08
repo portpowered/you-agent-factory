@@ -119,7 +119,7 @@ func successfulSessionBracketEvents(t *testing.T, t0 time.Time) []factoryapi.Fac
 			FinalStatus:    factoryapi.FactorySessionStatusFINISHED,
 			CompletedAt:    t0.Add(2 * time.Second),
 			DurationMillis: int64PtrForProjectionTest(2000),
-			ResultStatus:   factorySessionResultStatusPtr(factoryapi.FINAL),
+			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FINAL),
 			ArtifactIds:    &[]string{"artifact-result-1"},
 			DispatchCounts: &factoryapi.FactorySessionJavaScriptChildDispatchCounts{
 				Queued:    0,
@@ -186,7 +186,7 @@ func failedWithPartialSessionBracketEvents(t *testing.T, t0 time.Time) []factory
 			FinalStatus:    factoryapi.FactorySessionStatusFINISHED,
 			CompletedAt:    t0.Add(3 * time.Second),
 			DurationMillis: int64PtrForProjectionTest(3000),
-			ResultStatus:   factorySessionResultStatusPtr(factoryapi.FAILEDWITHPARTIAL),
+			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FAILEDWITHPARTIAL),
 			FailureDetail: &factoryapi.FactoryDispatchFailureDetail{
 				Reason:  stringPointer("session_failed"),
 				Message: stringPointer("workflow execution failed after partial results"),
@@ -195,6 +195,6 @@ func failedWithPartialSessionBracketEvents(t *testing.T, t0 time.Time) []factory
 	}
 }
 
-func factorySessionResultStatusPtr(value factoryapi.FactorySessionResultStatus) *factoryapi.FactorySessionResultStatus {
+func factoryEventSessionResultStatusPtr(value factoryapi.FactoryEventSessionResultStatus) *factoryapi.FactoryEventSessionResultStatus {
 	return &value
 }

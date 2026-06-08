@@ -41,7 +41,7 @@ type SessionLifecycleResultInput struct {
 	PhaseName        string
 	Source           string
 	Tick             int
-	ResultStatus     factoryapi.FactorySessionResultStatus
+	ResultStatus     factoryapi.FactoryEventSessionResultStatus
 	ResultSummary    []interfaces.WorkContentPart
 	ArtifactIDs      []string
 }
@@ -53,7 +53,7 @@ type SessionLifecycleCompleteInput struct {
 	Source           string
 	Tick             int
 	FinalStatus      factoryapi.FactorySessionStatus
-	ResultStatus     *factoryapi.FactorySessionResultStatus
+	ResultStatus     *factoryapi.FactoryEventSessionResultStatus
 	ArtifactIDs      []string
 	DispatchCounts   *factoryapi.FactorySessionJavaScriptChildDispatchCounts
 	FailureDetail    *factoryapi.FactoryDispatchFailureDetail

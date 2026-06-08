@@ -169,7 +169,7 @@ func sessionShowTestHandler(t *testing.T, gotPaths *[]string) http.HandlerFunc {
 				t.Fatalf("encode partial result: %v", err)
 			}
 		case "/factory-sessions/session-beta/result":
-			if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionResult{
+			if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLiveResult{
 				ResultArtifactRef: &factoryapi.FactoryArtifactRef{
 					Id:   "artifact-final",
 					Kind: factoryapi.FactoryArtifactKindFINALRESULT,
