@@ -3971,6 +3971,22 @@ components:
         effectivePolicyHash:
           type: string
           description: Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present.
+        phase:
+          type: string
+          description: Current workflow phase when execution is in progress.
+        progress:
+          $ref: '#/components/schemas/FactorySessionDurableProgressCounts'
+        resultSummary:
+          $ref: '#/components/schemas/FactorySessionDurableResultSummary'
+        artifactCount:
+          type: integer
+          minimum: 0
+          description: Number of customer-visible artifacts associated with the session.
+        recoverable:
+          type: boolean
+          description: True when the durable session is interrupted or has a stale lease while still appearing active.
+        actions:
+          $ref: '#/components/schemas/FactorySessionDurableActionAvailability'
         staleLease:
           type: boolean
           description: True when the durable session lease is stale or interrupted while status still appears active.
@@ -4097,6 +4113,29 @@ components:
           type: integer
           minimum: 0
           description: Number of workflow phases represented in phase summaries.
+    FactorySessionDurableActionAvailability:
+      type: object
+      additionalProperties: false
+      description: Lifecycle controls currently available for one listed durable factory session.
+      properties:
+        canPause:
+          type: boolean
+          description: True when pause is currently valid for the session status.
+        canResume:
+          type: boolean
+          description: True when resume is currently valid for the session status.
+        canCancel:
+          type: boolean
+          description: True when cancel is currently valid for the session status.
+        canTerminate:
+          type: boolean
+          description: True when terminate is currently valid for the session status.
+        canApprove:
+          type: boolean
+          description: True when approval is currently required and available.
+        canRetryDispatch:
+          type: boolean
+          description: True when retry-dispatch is currently valid for the session status.
     FactorySessionDurableResultSummary:
       type: object
       additionalProperties: false

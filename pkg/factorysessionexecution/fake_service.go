@@ -91,13 +91,16 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if replay, ok := s.startReplay[normalized.RequestID]; ok {
 		if err := CheckRequestIDReplay(normalized.RequestID, replay.tupleHash, tupleHash); err != nil {
 			return AsyncStartResult{}, err
 		}
-		state, err := s.sessionState(replay.sessionID)
-		if err != nil {
-			return AsyncStartResult{}, err
+		state, ok := s.sessions[replay.sessionID]
+		if !ok {
+			return AsyncStartResult{}, ErrSessionNotFound
 		}
 		return s.asyncStartFromState(state), nil
 	}
@@ -107,8 +110,6 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 		return AsyncStartResult{}, NewValidationError("requestId", fmt.Sprintf("unknown fake scenario for requestId %q", normalized.RequestID))
 	}
 	state := fakeSessionStateFromScenario(scenario)
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.sessions[state.session.SessionID] = state
 	s.startReplay[normalized.RequestID] = startReplayRecord{
 		sessionID: state.session.SessionID,
@@ -129,13 +130,16 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 	if err != nil {
 		return SyncStartResult{}, err
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if replay, ok := s.startReplay[normalized.RequestID]; ok {
 		if err := CheckRequestIDReplay(normalized.RequestID, replay.tupleHash, tupleHash); err != nil {
 			return SyncStartResult{}, err
 		}
-		state, err := s.sessionState(replay.sessionID)
-		if err != nil {
-			return SyncStartResult{}, err
+		state, ok := s.sessions[replay.sessionID]
+		if !ok {
+			return SyncStartResult{}, ErrSessionNotFound
 		}
 		return s.syncStartFromState(state), nil
 	}
@@ -145,8 +149,6 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 		return SyncStartResult{}, NewValidationError("requestId", fmt.Sprintf("unknown fake scenario for requestId %q", normalized.RequestID))
 	}
 	state := fakeSessionStateFromScenario(scenario)
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.sessions[state.session.SessionID] = state
 	s.startReplay[normalized.RequestID] = startReplayRecord{
 		sessionID: state.session.SessionID,
@@ -332,22 +334,29 @@ func (s *FakeService) ListSessions(ctx context.Context, req ListSessionsRequest)
 	defer s.mu.RUnlock()
 
 	durable := append([]DurableSessionListSummary(nil), s.persistedSeeds...)
-	seen := make(map[string]struct{}, len(durable))
+	live := make([]LiveSessionSummary, 0, len(s.sessions))
+	seenDurable := make(map[string]struct{}, len(durable))
 	for _, summary := range durable {
-		seen[summary.SessionID] = struct{}{}
+		seenDurable[summary.SessionID] = struct{}{}
 	}
 	for _, state := range s.sessions {
-		summary := DurableListSummaryFromSessionRead(state.session)
-		if _, exists := seen[summary.SessionID]; exists {
+		read := cloneSessionRead(state.session)
+		live = append(live, LiveListSummaryFromSessionRead(read))
+		summary := DurableListSummaryFromSessionRead(read)
+		if !IsPersistedListCandidate(summary) {
+			continue
+		}
+		if _, exists := seenDurable[summary.SessionID]; exists {
 			continue
 		}
 		durable = append(durable, summary)
-		seen[summary.SessionID] = struct{}{}
+		seenDurable[summary.SessionID] = struct{}{}
 	}
 
 	return ApplySessionListScope(ListSessionsResult{
 		Scope:           normalized.Scope,
-		DurableSessions: SortDurableSessionSummaries(durable),
+		LiveSessions:    live,
+		DurableSessions: durable,
 	}, normalized), nil
 }
 

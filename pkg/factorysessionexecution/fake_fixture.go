@@ -360,6 +360,9 @@ func durableListSummaryFromFixtureMap(summary map[string]any) DurableSessionList
 			Summary:      fixtureStringValue(resultSummary, "summary"),
 		}
 	}
+	if artifactCount, ok := summary["artifactCount"].(float64); ok {
+		row.ArtifactCount = int(artifactCount)
+	}
 	row.Recoverable = IsRecoverableSession(row.Status, row.StaleLease)
 	row.Actions = DeriveSessionActionAvailability(row.Status)
 	if row.SessionID != "" {

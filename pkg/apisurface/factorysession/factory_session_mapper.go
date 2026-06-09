@@ -350,6 +350,8 @@ func ArtifactDetailFromAPI(response factoryapi.FactorySessionArtifactDetail) (fa
 
 // DurableSessionListSummaryFromAPI maps one public durable list row into the shared
 // service contract.
+//
+// pkgmaintcheck:ignore-cyclomatic-complexity this inverse mapper keeps durable list summary fields together for API round-trip coverage.
 func DurableSessionListSummaryFromAPI(response factoryapi.FactorySessionDurableSummary) factorysessionexecution.DurableSessionListSummary {
 	summary := factorysessionexecution.DurableSessionListSummary{
 		SessionID:        response.SessionId,
@@ -372,6 +374,29 @@ func DurableSessionListSummaryFromAPI(response factoryapi.FactorySessionDurableS
 	if response.EffectivePolicyHash != nil {
 		summary.Policy.EffectiveHash = strings.TrimSpace(*response.EffectivePolicyHash)
 	}
+	if response.Phase != nil {
+		summary.Phase = strings.TrimSpace(*response.Phase)
+	}
+	if response.Progress != nil {
+		summary.Progress = progressCountsFromAPI(*response.Progress)
+	}
+	if response.ResultSummary != nil {
+		summary.ResultSummary = &factorysessionexecution.ResultSummary{
+			ResultStatus: string(response.ResultSummary.ResultStatus),
+		}
+		if response.ResultSummary.Summary != nil {
+			summary.ResultSummary.Summary = strings.TrimSpace(*response.ResultSummary.Summary)
+		}
+	}
+	if response.ArtifactCount != nil {
+		summary.ArtifactCount = int(*response.ArtifactCount)
+	}
+	if response.Recoverable != nil {
+		summary.Recoverable = *response.Recoverable
+	}
+	if response.Actions != nil {
+		summary.Actions = sessionActionAvailabilityFromAPI(*response.Actions)
+	}
 	if response.StaleLease != nil && *response.StaleLease {
 		summary.StaleLease = true
 	}
@@ -380,6 +405,12 @@ func DurableSessionListSummaryFromAPI(response factoryapi.FactorySessionDurableS
 	}
 	if response.Links != nil {
 		summary.Links = executionLinksFromAPI(*response.Links)
+	}
+	if !summary.Recoverable {
+		summary.Recoverable = factorysessionexecution.IsRecoverableSession(summary.Status, summary.StaleLease)
+	}
+	if summary.Actions == (factorysessionexecution.SessionActionAvailability{}) {
+		summary.Actions = factorysessionexecution.DeriveSessionActionAvailability(summary.Status)
 	}
 	return summary
 }

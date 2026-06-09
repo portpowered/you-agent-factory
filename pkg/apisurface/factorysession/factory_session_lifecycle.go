@@ -218,6 +218,46 @@ func resultSummaryToAPI(summary *factorysessionexecution.ResultSummary) *factory
 	return out
 }
 
+func sessionActionAvailabilityToAPI(actions factorysessionexecution.SessionActionAvailability) *factoryapi.FactorySessionDurableActionAvailability {
+	canPause := actions.CanPause
+	canResume := actions.CanResume
+	canCancel := actions.CanCancel
+	canTerminate := actions.CanTerminate
+	canApprove := actions.CanApprove
+	canRetryDispatch := actions.CanRetryDispatch
+	return &factoryapi.FactorySessionDurableActionAvailability{
+		CanPause:         &canPause,
+		CanResume:        &canResume,
+		CanCancel:        &canCancel,
+		CanTerminate:     &canTerminate,
+		CanApprove:       &canApprove,
+		CanRetryDispatch: &canRetryDispatch,
+	}
+}
+
+func sessionActionAvailabilityFromAPI(actions factoryapi.FactorySessionDurableActionAvailability) factorysessionexecution.SessionActionAvailability {
+	out := factorysessionexecution.SessionActionAvailability{}
+	if actions.CanPause != nil {
+		out.CanPause = *actions.CanPause
+	}
+	if actions.CanResume != nil {
+		out.CanResume = *actions.CanResume
+	}
+	if actions.CanCancel != nil {
+		out.CanCancel = *actions.CanCancel
+	}
+	if actions.CanTerminate != nil {
+		out.CanTerminate = *actions.CanTerminate
+	}
+	if actions.CanApprove != nil {
+		out.CanApprove = *actions.CanApprove
+	}
+	if actions.CanRetryDispatch != nil {
+		out.CanRetryDispatch = *actions.CanRetryDispatch
+	}
+	return out
+}
+
 func failureSummaryToAPI(failure *factorysessionexecution.FailureSummary) *factoryapi.FactorySessionDurableFailureDetail {
 	if failure == nil {
 		return nil

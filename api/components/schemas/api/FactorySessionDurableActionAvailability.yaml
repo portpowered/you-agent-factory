@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+description: >-
+  Lifecycle controls currently available for one listed durable factory session.
+properties:
+  canPause:
+    type: boolean
+    description: True when pause is currently valid for the session status.
+  canResume:
+    type: boolean
+    description: True when resume is currently valid for the session status.
+  canCancel:
+    type: boolean
+    description: True when cancel is currently valid for the session status.
+  canTerminate:
+    type: boolean
+    description: True when terminate is currently valid for the session status.
+  canApprove:
+    type: boolean
+    description: True when approval is currently required and available.
+  canRetryDispatch:
+    type: boolean
+    description: True when retry-dispatch is currently valid for the session status.

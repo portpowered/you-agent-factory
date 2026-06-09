@@ -43,6 +43,16 @@ func DeriveSessionActionAvailability(status LifecycleStatus) SessionActionAvaila
 	}
 }
 
+// LiveListSummaryFromSessionRead projects one in-process durable session into a
+// live-scope row owned by the current service instance.
+func LiveListSummaryFromSessionRead(read SessionReadResult) LiveSessionSummary {
+	project := strings.TrimSpace(read.ResolvedSource.Metadata["project"])
+	return LiveSessionSummary{
+		ID:      read.SessionID,
+		Project: project,
+	}
+}
+
 // DurableListSummaryFromSessionRead projects one durable session read model into
 // a list row with action availability and recoverability metadata.
 func DurableListSummaryFromSessionRead(read SessionReadResult) DurableSessionListSummary {

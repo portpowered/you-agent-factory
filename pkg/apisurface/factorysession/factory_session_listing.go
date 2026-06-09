@@ -74,6 +74,24 @@ func DurableSessionSummaryToAPI(summary factorysessionexecution.DurableSessionLi
 	if effectiveHash := strings.TrimSpace(summary.Policy.EffectiveHash); effectiveHash != "" {
 		response.EffectivePolicyHash = &effectiveHash
 	}
+	if phase := strings.TrimSpace(summary.Phase); phase != "" {
+		response.Phase = &phase
+	}
+	if progress := progressCountsToAPI(summary.Progress); progress != nil {
+		response.Progress = progress
+	}
+	if resultSummary := resultSummaryToAPI(summary.ResultSummary); resultSummary != nil {
+		response.ResultSummary = resultSummary
+	}
+	if summary.ArtifactCount > 0 {
+		count := summary.ArtifactCount
+		response.ArtifactCount = &count
+	}
+	if summary.Recoverable {
+		recoverable := true
+		response.Recoverable = &recoverable
+	}
+	response.Actions = sessionActionAvailabilityToAPI(summary.Actions)
 	if summary.StaleLease {
 		stale := true
 		response.StaleLease = &stale

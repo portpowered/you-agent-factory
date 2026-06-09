@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/workflowsource"
@@ -234,6 +235,26 @@ func TestFakeService_ListSessions_ScopedPersistedAndLive(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-petri-run-001")
 
+	live, err := service.ListSessions(context.Background(), ListSessionsRequest{
+		Scope: SessionListScopeLive,
+	})
+	if err != nil {
+		t.Fatalf("ListSessions live: %v", err)
+	}
+	foundLiveRunning := false
+	for _, session := range live.LiveSessions {
+		if session.ID == "dur-sess-petri-run-001" {
+			foundLiveRunning = true
+			break
+		}
+	}
+	if !foundLiveRunning {
+		t.Fatalf("live sessions = %#v, want current-process running row", live.LiveSessions)
+	}
+	if len(live.DurableSessions) != 0 {
+		t.Fatalf("live durable sessions = %#v, want none", live.DurableSessions)
+	}
+
 	persisted, err := service.ListSessions(context.Background(), ListSessionsRequest{
 		Scope: SessionListScopePersisted,
 	})
@@ -243,6 +264,11 @@ func TestFakeService_ListSessions_ScopedPersistedAndLive(t *testing.T) {
 	if len(persisted.DurableSessions) == 0 {
 		t.Fatal("persisted sessions missing seeded terminal rows")
 	}
+	for _, summary := range persisted.DurableSessions {
+		if summary.SessionID == "dur-sess-petri-run-001" {
+			t.Fatalf("persisted scope unexpectedly contains running session %#v", summary)
+		}
+	}
 
 	all, err := service.ListSessions(context.Background(), ListSessionsRequest{
 		Scope: SessionListScopeAll,
@@ -250,15 +276,44 @@ func TestFakeService_ListSessions_ScopedPersistedAndLive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSessions all: %v", err)
 	}
-	foundRunning := false
-	for _, summary := range all.DurableSessions {
-		if summary.SessionID == "dur-sess-petri-run-001" {
-			foundRunning = true
+	foundAllLiveRunning := false
+	for _, session := range all.LiveSessions {
+		if session.ID == "dur-sess-petri-run-001" {
+			foundAllLiveRunning = true
 			break
 		}
 	}
-	if !foundRunning {
-		t.Fatalf("all durable sessions = %#v", all.DurableSessions)
+	if !foundAllLiveRunning {
+		t.Fatalf("all live sessions = %#v, want current-process running row", all.LiveSessions)
+	}
+}
+
+func TestFakeService_StartAsync_ConcurrentIdempotentStarts(t *testing.T) {
+	service := newContractFakeService(t)
+	const workers = 12
+	var wg sync.WaitGroup
+	results := make([]AsyncStartResult, workers)
+	errs := make([]error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			results[index], errs[index] = service.StartAsync(context.Background(), StartRequest{
+				RequestID: "req-petri-run-001",
+				Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+			})
+		}(i)
+	}
+	wg.Wait()
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("StartAsync worker %d: %v", i, err)
+		}
+	}
+	for i := 1; i < workers; i++ {
+		if results[i].SessionID != results[0].SessionID {
+			t.Fatalf("sessionId[%d] = %q, want %q", i, results[i].SessionID, results[0].SessionID)
+		}
 	}
 }
 

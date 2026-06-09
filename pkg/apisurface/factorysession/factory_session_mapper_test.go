@@ -432,6 +432,7 @@ func assertSessionReadFieldsPreserved(t *testing.T, fixture map[string]any, mapp
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this assertion keeps durable list summary fixture field checks together on one contract test seam.
 func assertListSummaryFieldsPreserved(t *testing.T, fixture map[string]any, mapped factoryapi.FactorySessionDurableSummary) {
 	t.Helper()
 	if mapped.SessionId != stringValue(fixture, "sessionId") {
@@ -439,6 +440,54 @@ func assertListSummaryFieldsPreserved(t *testing.T, fixture map[string]any, mapp
 	}
 	if string(mapped.Status) != stringValue(fixture, "status") {
 		t.Fatalf("status = %q, want %q", mapped.Status, stringValue(fixture, "status"))
+	}
+	if phase := stringValue(fixture, "phase"); phase != "" {
+		if mapped.Phase == nil || *mapped.Phase != phase {
+			t.Fatalf("phase = %#v, want %q", mapped.Phase, phase)
+		}
+	}
+	if progress, ok := fixture["progress"].(map[string]any); ok {
+		if mapped.Progress == nil {
+			t.Fatal("progress lost during round trip")
+		}
+		if want := intValue(progress, "totalDispatches"); want > 0 {
+			if mapped.Progress.TotalDispatches == nil || int(*mapped.Progress.TotalDispatches) != want {
+				t.Fatalf("totalDispatches = %#v, want %d", mapped.Progress.TotalDispatches, want)
+			}
+		}
+	}
+	if resultSummary, ok := fixture["resultSummary"].(map[string]any); ok {
+		if mapped.ResultSummary == nil {
+			t.Fatal("resultSummary lost during round trip")
+		}
+		if string(mapped.ResultSummary.ResultStatus) != stringValue(resultSummary, "resultStatus") {
+			t.Fatalf("resultStatus = %q, want %q", mapped.ResultSummary.ResultStatus, stringValue(resultSummary, "resultStatus"))
+		}
+	}
+	if artifactCount, ok := fixture["artifactCount"].(float64); ok && int(artifactCount) > 0 {
+		if mapped.ArtifactCount == nil || *mapped.ArtifactCount != int(artifactCount) {
+			t.Fatalf("artifactCount = %#v, want %d", mapped.ArtifactCount, int(artifactCount))
+		}
+	}
+	if recoverable, ok := fixture["recoverable"].(bool); ok && recoverable {
+		if mapped.Recoverable == nil || !*mapped.Recoverable {
+			t.Fatal("recoverable lost during round trip")
+		}
+	}
+	if actions, ok := fixture["actions"].(map[string]any); ok {
+		if mapped.Actions == nil {
+			t.Fatal("actions lost during round trip")
+		}
+		if want, ok := actions["canPause"].(bool); ok && want {
+			if mapped.Actions.CanPause == nil || !*mapped.Actions.CanPause {
+				t.Fatal("canPause lost during round trip")
+			}
+		}
+		if want, ok := actions["canRetryDispatch"].(bool); ok && !want {
+			if mapped.Actions.CanRetryDispatch != nil && *mapped.Actions.CanRetryDispatch {
+				t.Fatal("canRetryDispatch should remain false")
+			}
+		}
 	}
 }
 

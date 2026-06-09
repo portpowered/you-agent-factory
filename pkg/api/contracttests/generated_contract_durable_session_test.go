@@ -562,7 +562,8 @@ func assertDurableSessionReadSurfaceSchemas(t *testing.T, schemas map[string]any
 	assertPropertyRef(t, durableSummaryProperties, "effectivePolicy", "#/components/schemas/FactorySessionEffectivePolicy")
 	assertSchemaPropertiesPresent(t, durableSummaryProperties, "FactorySessionDurableSummary",
 		"sessionId", "status", "orchestratorKind", "dialect", "resolvedSource", "sourceHash",
-		"requestedPolicy", "effectivePolicy", "effectivePolicyHash", "staleLease", "lifecycle", "links")
+		"requestedPolicy", "effectivePolicy", "effectivePolicyHash", "phase", "progress",
+		"resultSummary", "artifactCount", "recoverable", "actions", "staleLease", "lifecycle", "links")
 
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionDurableLifecycleStatus"), "FactorySessionDurableLifecycleStatus", []string{
 		"QUEUED", "AWAITING_APPROVAL", "RUNNING", "PAUSED", "RESUMING", "SUCCEEDED", "FAILED",

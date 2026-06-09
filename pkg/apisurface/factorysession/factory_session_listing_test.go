@@ -53,6 +53,15 @@ func TestDurableSessionSummaryToAPI_MapsListSummaryFixtures(t *testing.T) {
 	if mapped.ResolvedSource.SourceRef == nil || *mapped.ResolvedSource.SourceRef != "factory/customer-support-triage" {
 		t.Fatalf("resolvedSource = %#v", mapped.ResolvedSource)
 	}
+	if mapped.ResultSummary == nil || mapped.ResultSummary.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultSummary = %#v, want FINAL", mapped.ResultSummary)
+	}
+	if mapped.Progress == nil || mapped.Progress.CompletedDispatches == nil || *mapped.Progress.CompletedDispatches != 1 {
+		t.Fatalf("progress = %#v, want one completed dispatch", mapped.Progress)
+	}
+	if mapped.ArtifactCount == nil || *mapped.ArtifactCount != 1 {
+		t.Fatalf("artifactCount = %#v, want 1", mapped.ArtifactCount)
+	}
 }
 
 func TestListSessionsResponseToAPI_ScopedPersistedAndAll(t *testing.T) {
@@ -135,7 +144,45 @@ func durableListSummaryFromFixture(summary map[string]any) factorysessionexecuti
 	if links, ok := summary["links"].(map[string]any); ok {
 		row.Links = inspectionLinksFromFixture(links)
 	}
-	row.Actions = factorysessionexecution.DeriveSessionActionAvailability(row.Status)
-	row.Recoverable = factorysessionexecution.IsRecoverableSession(row.Status, row.StaleLease)
+	if progress, ok := summary["progress"].(map[string]any); ok {
+		row.Progress = &factorysessionexecution.ProgressCounts{
+			TotalDispatches:     intValue(progress, "totalDispatches"),
+			CompletedDispatches: intValue(progress, "completedDispatches"),
+			FailedDispatches:    intValue(progress, "failedDispatches"),
+			InFlightDispatches:  intValue(progress, "inFlightDispatches"),
+			PhaseCount:          intValue(progress, "phaseCount"),
+		}
+	}
+	if resultSummary, ok := summary["resultSummary"].(map[string]any); ok {
+		row.ResultSummary = &factorysessionexecution.ResultSummary{
+			ResultStatus: stringValue(resultSummary, "resultStatus"),
+			Summary:      stringValue(resultSummary, "summary"),
+		}
+	}
+	if artifactCount, ok := summary["artifactCount"].(float64); ok {
+		row.ArtifactCount = int(artifactCount)
+	}
+	if recoverable, ok := summary["recoverable"].(bool); ok {
+		row.Recoverable = recoverable
+	}
+	if actions, ok := summary["actions"].(map[string]any); ok {
+		row.Actions = sessionActionsFromFixture(actions)
+	} else {
+		row.Actions = factorysessionexecution.DeriveSessionActionAvailability(row.Status)
+	}
+	if !row.Recoverable {
+		row.Recoverable = factorysessionexecution.IsRecoverableSession(row.Status, row.StaleLease)
+	}
 	return row
+}
+
+func sessionActionsFromFixture(actions map[string]any) factorysessionexecution.SessionActionAvailability {
+	return factorysessionexecution.SessionActionAvailability{
+		CanPause:         boolValue(actions, "canPause"),
+		CanResume:        boolValue(actions, "canResume"),
+		CanCancel:        boolValue(actions, "canCancel"),
+		CanTerminate:     boolValue(actions, "canTerminate"),
+		CanApprove:       boolValue(actions, "canApprove"),
+		CanRetryDispatch: boolValue(actions, "canRetryDispatch"),
+	}
 }
