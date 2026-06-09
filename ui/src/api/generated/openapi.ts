@@ -3496,6 +3496,8 @@ export interface components {
     };
     /** @description One explicit portable bundled file entry carried by the factory portability manifest. SCRIPT files target factory/scripts/..., DOC files target factory/docs/..., INPUT files target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER files target supported project-root helper paths such as Makefile only when declared explicitly in bundledFiles. Export and flatten do not auto-discover project-root helpers. In v1 shared-factory exports, INPUT entries encode a share-time snapshot of starter work that is copied into the recipient factory as detached seeded work. */
     BundledFile: {
+      /** @description Durable bundled-file identifier used by portable layout and graph editor references. When omitted on input, the canonical targetPath is materialized as the stable identifier. */
+      id?: string;
       /**
        * @description Portable file class. SCRIPT entries target factory/scripts/..., DOC entries target factory/docs/..., INPUT entries target factory/inputs/<work-type>/<channel>/..., and ROOT_HELPER entries target supported project-root helper files such as Makefile only when explicitly declared in bundledFiles. Shared-factory INPUT entries snapshot current source inputs at share time instead of creating a live link.
        * @enum {string}

@@ -75,11 +75,7 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
       <DashboardHeader locale={locale} />
-      <DashboardSessionLifecycleBanner
-        bracket={snapshot.runtime?.session?.bracket}
-        locale={resolvedLocale}
-        streamState={streamState}
-      />
+
       <DashboardBento locale={locale} />
       <DashboardExportDialog locale={locale} />
     </main>

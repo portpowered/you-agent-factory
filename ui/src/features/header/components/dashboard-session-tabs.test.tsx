@@ -290,12 +290,18 @@ describe("DashboardSessionTabs", () => {
       name: messages.sessionTabsLabel,
     });
     const tablist = screen.getByRole("tablist");
+    const tabStripRow = navigation.parentElement;
+    const tabStripShell = tabStripRow?.parentElement;
     const shells = screen
       .getAllByRole("tab")
       .map((tab) => sessionTabShell(tab as HTMLElement));
 
+    expect(tabStripShell?.className).not.toContain("flex-1");
+    expect(tabStripRow?.className).not.toContain("flex-1");
     expect(navigation.className).toContain("overflow-hidden");
+    expect(navigation.className).not.toContain("flex-1");
     expect(tablist.className).toContain("overflow-hidden");
+    expect(tablist.className).toContain("inline-flex");
     for (const shell of shells) {
       expect(shell.className).toContain("flex-1");
       expect(shell.className).toContain("basis-0");
