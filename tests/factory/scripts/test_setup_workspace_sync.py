@@ -124,6 +124,45 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         self.assertTrue(any(args[:2] == ("fetch", "origin") for args in recorded))
         self.assertFalse(self.module.origin_main_ref_exists(self.repo_path))
 
+    def test_sync_main_does_not_fast_forward_from_stale_origin_main_after_remote_deleted(self):
+        local_repo = self.repo_path / "local"
+        bare_remote = setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+
+        origin_main_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+        local_main_sha_before = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertNotEqual(local_main_sha_before, origin_main_sha)
+        self.assertTrue(self.module.origin_main_ref_exists(local_repo))
+
+        git(["update-ref", "-d", "refs/heads/main"], bare_remote)
+        plain_fetch = git(["fetch", "origin"], local_repo, check=False)
+        self.assertEqual(plain_fetch.returncode, 0)
+        self.assertTrue(self.module.origin_main_ref_exists(local_repo))
+
+        recorded, original_run_git = self.record_git_commands()
+        try:
+            self.module.sync_main(local_repo)
+        finally:
+            self.module.run_git = original_run_git
+
+        local_main_sha_after = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertEqual(local_main_sha_after, local_main_sha_before)
+        self.assertNotEqual(local_main_sha_after, origin_main_sha)
+        self.assertFalse(
+            any(
+                args[:3] == ("update-ref", "refs/heads/main", origin_main_sha)
+                for args in recorded
+            )
+        )
+
     def test_sync_main_does_not_fast_forward_after_failed_fetch(self):
         local_repo = self.repo_path / "local"
         setup_repo_with_origin_main_ahead(local_repo, self.repo_path)

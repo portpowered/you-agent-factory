@@ -91,7 +91,10 @@ def sync_main(repo_root):
     if not origin_remote_exists(repo_root):
         return
 
-    fetch_result = run_git("fetch", "origin", cwd=repo_root, check=False)
+    fetch_result = run_git(
+        "fetch", "origin", "refs/heads/main:refs/remotes/origin/main",
+        cwd=repo_root, check=False,
+    )
     if fetch_result.returncode != 0:
         return
 
