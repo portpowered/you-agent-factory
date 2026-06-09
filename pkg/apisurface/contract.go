@@ -56,6 +56,14 @@ type InvocationAPI interface {
 	InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (FactoryInvocationResult, error)
 }
 
+// DurableSessionExecutionAPI is the shared durable factory-session execution start
+// seam for async and sync dynamic workflow sessions. Live-session open and
+// invocation remain on SessionAPI and InvocationAPI.
+type DurableSessionExecutionAPI interface {
+	StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error)
+	StartDurableFactorySessionSync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionSyncExecutionResponse, error)
+}
+
 // APISurface is the runtime seam consumed by the Agent Factory API server.
 // It resolves requests against the service-owned current runtime so activation
 // can swap the active runtime without leaving API reads pinned to startup
