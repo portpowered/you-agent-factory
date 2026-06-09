@@ -76,6 +76,12 @@ type DurableSessionExecutionAPI interface {
 	StartDurableFactorySessionSync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionSyncExecutionResponse, error)
 }
 
+// DurableSessionListingAPI is the shared scoped session listing seam for live and
+// persisted durable execution sessions.
+type DurableSessionListingAPI interface {
+	ListDurableFactorySessions(ctx context.Context, params factoryapi.ListFactorySessionsParams) (factoryapi.ListFactorySessionsResponse, error)
+}
+
 // DurableSessionProjectionAPI is the shared durable session result, dispatch,
 // artifact, and event replay seam for dynamic workflow inspection.
 type DurableSessionProjectionAPI interface {

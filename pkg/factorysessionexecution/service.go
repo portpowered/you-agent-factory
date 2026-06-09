@@ -22,4 +22,5 @@ type Service interface {
 	ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error)
 	GetArtifact(ctx context.Context, sessionID, artifactID string) (ArtifactDetail, error)
 	ReadEvents(ctx context.Context, sessionID string, req EventReconnectRequest) (EventReadResult, error)
+	ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error)
 }
