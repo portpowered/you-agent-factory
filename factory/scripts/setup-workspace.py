@@ -60,6 +60,20 @@ def origin_main_ref_exists(repo_root):
     return result.returncode == 0
 
 
+def local_main_is_ancestor_of_origin_main(repo_root):
+    """Return True when local main can be fast-forwarded to origin/main."""
+    result = run_git(
+        "merge-base", "--is-ancestor", "refs/heads/main", "refs/remotes/origin/main",
+        cwd=repo_root, check=False,
+    )
+    return result.returncode == 0
+
+
+def fast_forward_local_main(repo_root, origin_main_sha):
+    """Update refs/heads/main to origin/main without checking out main."""
+    run_git("update-ref", "refs/heads/main", origin_main_sha, cwd=repo_root)
+
+
 def sync_main(repo_root):
     """Fetch origin and sync local main when remote tracking is available."""
     if not origin_remote_exists(repo_root):
@@ -69,6 +83,23 @@ def sync_main(repo_root):
 
     if not origin_main_ref_exists(repo_root):
         return
+
+    if not branch_exists_locally(repo_root, "main"):
+        return
+
+    local_main_sha = run_git(
+        "rev-parse", "refs/heads/main", cwd=repo_root,
+    ).stdout.strip()
+    origin_main_sha = run_git(
+        "rev-parse", "refs/remotes/origin/main", cwd=repo_root,
+    ).stdout.strip()
+    if local_main_sha == origin_main_sha:
+        return
+
+    if not local_main_is_ancestor_of_origin_main(repo_root):
+        return
+
+    fast_forward_local_main(repo_root, origin_main_sha)
 
 
 def prune_worktrees(repo_root):

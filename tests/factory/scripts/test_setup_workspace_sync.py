@@ -38,14 +38,40 @@ def init_local_repo(repo_path):
     subprocess.run(["git", "commit", "-m", "init"], cwd=repo_path, check=True)
 
 
-def git(args, cwd):
+def git(args, cwd, check=True):
     return subprocess.run(
         ["git", *args],
         cwd=cwd,
-        check=True,
+        check=check,
         capture_output=True,
         text=True,
     )
+
+
+def setup_repo_with_origin_main_ahead(local_repo, repo_root):
+    """Create a bare remote ahead of local main; local repo on a feature branch."""
+    bare_remote = repo_root / "remote.git"
+    bare_remote.mkdir()
+    git(["init", "--bare", "-b", "main"], bare_remote)
+
+    upstream = repo_root / "upstream"
+    upstream.mkdir()
+    init_local_repo(upstream)
+    git(["remote", "add", "origin", str(bare_remote)], upstream)
+    git(["push", "-u", "origin", "main"], upstream)
+
+    (upstream / "ahead.txt").write_text("origin is ahead\n", encoding="utf-8")
+    git(["add", "ahead.txt"], upstream)
+    git(["commit", "-m", "advance origin main"], upstream)
+    git(["push", "origin", "main"], upstream)
+
+    git(["clone", str(bare_remote), str(local_repo.name)], repo_root)
+    git(["reset", "--hard", "HEAD~1"], local_repo)
+    git(["checkout", "-b", "feature-branch"], local_repo)
+    (local_repo / "dirty.txt").write_text("unstaged change\n", encoding="utf-8")
+    git(["fetch", "origin"], local_repo)
+
+    return bare_remote
 
 
 class SetupWorkspaceSyncTest(unittest.TestCase):
@@ -97,6 +123,89 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         self.assertFalse(any(args and args[0] == "pull" for args in recorded))
         self.assertTrue(any(args[:2] == ("fetch", "origin") for args in recorded))
         self.assertFalse(self.module.origin_main_ref_exists(self.repo_path))
+
+    def test_sync_main_fast_forwards_main_without_pull_on_dirty_tree(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+
+        origin_main_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+        local_main_sha_before = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertNotEqual(local_main_sha_before, origin_main_sha)
+
+        recorded, original_run_git = self.record_git_commands()
+        try:
+            self.module.sync_main(local_repo)
+        finally:
+            self.module.run_git = original_run_git
+
+        local_main_sha_after = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertEqual(local_main_sha_after, origin_main_sha)
+        self.assertEqual(
+            git(["branch", "--show-current"], local_repo).stdout.strip(),
+            "feature-branch",
+        )
+        self.assertEqual(
+            (local_repo / "dirty.txt").read_text(encoding="utf-8"),
+            "unstaged change\n",
+        )
+        status = git(["status", "--porcelain"], local_repo).stdout
+        self.assertIn("?? dirty.txt", status)
+
+        self.assertFalse(any(args and args[0] == "pull" for args in recorded))
+        self.assertTrue(any(args[:2] == ("fetch", "origin") for args in recorded))
+        self.assertTrue(
+            any(
+                args[:3] == ("update-ref", "refs/heads/main", origin_main_sha)
+                for args in recorded
+            )
+        )
+        self.assertFalse(any(args and args[0] == "checkout" for args in recorded))
+
+    def test_setup_workspace_exits_zero_through_sync_on_dirty_tree(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+
+        prd_name = "dirty-tree-prd"
+        tasks_dir = local_repo / "tasks" / "todo"
+        tasks_dir.mkdir(parents=True)
+        prd_json = tasks_dir / f"{prd_name}.json"
+        prd_json.write_text(
+            json.dumps({"branchName": prd_name}),
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["python3", str(SCRIPT_PATH), prd_name],
+            cwd=local_repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        origin_main_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+        local_main_sha = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertEqual(local_main_sha, origin_main_sha)
+        self.assertEqual(
+            git(["branch", "--show-current"], local_repo).stdout.strip(),
+            "feature-branch",
+        )
+        self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
 
     def test_setup_workspace_continues_after_sync_skip(self):
         init_local_repo(self.repo_path)
