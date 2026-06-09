@@ -17,6 +17,10 @@ var ErrSessionNotFound = errors.New("factory session not found")
 // the targeted durable session.
 var ErrDispatchNotFound = errors.New("dispatch not found")
 
+// ErrArtifactNotFound reports that no artifact matched the requested id within
+// the targeted durable session.
+var ErrArtifactNotFound = errors.New("artifact not found")
+
 // ErrUnsupportedControl reports that the requested control is not supported by
 // the active durable session runtime.
 var ErrUnsupportedControl = errors.New("unsupported lifecycle control")

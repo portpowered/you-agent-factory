@@ -76,6 +76,17 @@ type DurableSessionExecutionAPI interface {
 	StartDurableFactorySessionSync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionSyncExecutionResponse, error)
 }
 
+// DurableSessionProjectionAPI is the shared durable session result, dispatch,
+// artifact, and event replay seam for dynamic workflow inspection.
+type DurableSessionProjectionAPI interface {
+	GetDurableFactorySessionResult(ctx context.Context, sessionID string, params factoryapi.GetFactorySessionResultsParams) (factoryapi.FactorySessionResult, error)
+	ListDurableFactorySessionDispatches(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	GetDurableFactorySessionDispatch(ctx context.Context, sessionID, dispatchID string) (factoryapi.FactoryDispatch, error)
+	ListDurableFactorySessionArtifacts(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error)
+	GetDurableFactorySessionArtifact(ctx context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error)
+	ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, params factoryapi.GetEventsBySessionIdParams) (*interfaces.FactoryEventStream, error)
+}
+
 // APISurface is the runtime seam consumed by the Agent Factory API server.
 // It resolves requests against the service-owned current runtime so activation
 // can swap the active runtime without leaving API reads pinned to startup

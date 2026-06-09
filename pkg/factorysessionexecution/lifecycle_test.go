@@ -156,3 +156,21 @@ func (stubCancelAwareService) Approve(context.Context, string, ApproveRequest) (
 func (stubCancelAwareService) RetryDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error) {
 	return LifecycleControlResult{}, nil
 }
+func (stubCancelAwareService) GetResult(context.Context, string, ResultRequest) (ResultReadResult, error) {
+	return ResultReadResult{}, nil
+}
+func (stubCancelAwareService) ListDispatches(context.Context, string) (ListDispatchesResult, error) {
+	return ListDispatchesResult{}, nil
+}
+func (stubCancelAwareService) GetDispatch(context.Context, string, string) (DispatchDetail, error) {
+	return DispatchDetail{}, nil
+}
+func (stubCancelAwareService) ListArtifacts(context.Context, string) (ListArtifactsResult, error) {
+	return ListArtifactsResult{}, nil
+}
+func (stubCancelAwareService) GetArtifact(context.Context, string, string) (ArtifactDetail, error) {
+	return ArtifactDetail{}, nil
+}
+func (stubCancelAwareService) ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error) {
+	return EventReadResult{}, nil
+}
