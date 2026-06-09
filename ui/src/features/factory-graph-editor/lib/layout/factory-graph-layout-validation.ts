@@ -150,12 +150,7 @@ export function preparePendingFactoryLayoutForSave(
   validEdgeIds: ReadonlySet<string>,
 ): {
   layout: FactoryLayout;
-  layoutOutcomes: FactoryValidationTarget[];
 } {
-  const layoutOutcomes = projectFactoryLayoutValidationTargets(
-    layout,
-    validEdgeIds,
-  );
   const { layout: prunedLayout } = pruneFactoryLayoutEdgesForTopology(
     layout,
     validEdgeIds,
@@ -163,7 +158,6 @@ export function preparePendingFactoryLayoutForSave(
 
   return {
     layout: prunedLayout,
-    layoutOutcomes,
   };
 }
 

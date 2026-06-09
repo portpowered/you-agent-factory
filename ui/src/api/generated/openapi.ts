@@ -3394,8 +3394,6 @@ export interface components {
       supportingFiles?: components["schemas"]["ResourceManifest"];
       /** @description Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids. */
       layout?: components["schemas"]["FactoryLayout"];
-      /** @description Ephemeral save-response metadata listing layout pruning or validation outcomes. Omitted from persisted factory documents, ignored on save requests, and cleared before split-layout writes. */
-      layoutOutcomes?: components["schemas"]["FactoryValidationTarget"][];
       /** @description Reusable worker definitions that workstations reference by name when dispatching work. */
       workers?: components["schemas"]["Worker"][];
       /** @description Processing steps that consume work, invoke workers, and emit the next work states. */

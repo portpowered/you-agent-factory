@@ -217,9 +217,7 @@ export function SubmitWorkCard({
         </div>
 
         <div className="grid gap-3">
-          {shouldRenderStatus ? (
-            <SubmitWorkStatusPanel id={statusID} status={status} />
-          ) : null}
+
           <Button
             aria-busy={isSubmitting ? "true" : undefined}
             className="w-full justify-center"

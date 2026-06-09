@@ -127,3 +127,40 @@ export function bridgeGraphLayoutPositions({
     [targetGraphKey]: targetPositions,
   };
 }
+
+export function clearStoredNodePositionsForNodeIds(
+  positionsByGraphKey: Record<string, GraphNodePositions>,
+  nodeIds: readonly string[],
+): Record<string, GraphNodePositions> | null {
+  if (nodeIds.length === 0) {
+    return null;
+  }
+
+  const nodeIdSet = new Set(nodeIds);
+  let changed = false;
+  const nextPositionsByGraphKey: Record<string, GraphNodePositions> = {};
+
+  for (const [graphKey, positions] of Object.entries(positionsByGraphKey)) {
+    let nextPositions = positions;
+
+    for (const nodeId of Object.keys(positions)) {
+      if (!nodeIdSet.has(nodeId)) {
+        continue;
+      }
+
+      if (nextPositions === positions) {
+        nextPositions = { ...positions };
+      }
+      delete nextPositions[nodeId];
+      changed = true;
+    }
+
+    if (Object.keys(nextPositions).length > 0) {
+      nextPositionsByGraphKey[graphKey] = nextPositions;
+    } else if (graphKey in positionsByGraphKey) {
+      changed = true;
+    }
+  }
+
+  return changed ? nextPositionsByGraphKey : null;
+}

@@ -52,6 +52,7 @@ import {
   GraphDropOverlay,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
+import type { GraphViewportPosition } from "../state/currentActivityGraphStore";
 
 function CurrentActivityGraphEditorChrome(props: {
   activeTool: "add" | "connect" | "delete" | null;
@@ -286,6 +287,7 @@ export function CurrentActivityGraphViewport({
   moveLayoutNodesByDelta,
   updateLayoutViewport,
   setStoredNodePosition,
+  setStoredViewport,
   flowContainerRef,
   flowInstanceRef,
 }: {
@@ -371,6 +373,10 @@ export function CurrentActivityGraphViewport({
     graphKey: string,
     nodeId: string,
     position: XYPosition,
+  ) => void;
+  setStoredViewport: (
+    graphKey: string,
+    viewport: GraphViewportPosition,
   ) => void;
   flowContainerRef?: MutableRefObject<HTMLElement | null>;
   flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
@@ -539,16 +545,15 @@ export function CurrentActivityGraphViewport({
                 }
               }}
               onMoveEnd={(_, viewport) => {
-                if (!editorMode || !updateLayoutViewport) {
-                  return;
-                }
-
                 if (skipNextViewportMoveEndRef.current) {
                   skipNextViewportMoveEndRef.current = false;
-                  return;
+                } else {
+                  setStoredViewport(graphKey, viewport);
                 }
 
-                updateLayoutViewport(viewport);
+                if (editorMode && updateLayoutViewport) {
+                  updateLayoutViewport(viewport);
+                }
               }}
               onNodeDragStart={(_, node) => {
                 if (!editorMode) {

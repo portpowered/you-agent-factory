@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bridgeGraphLayoutPositions,
+  clearStoredNodePositionsForNodeIds,
   findBridgedNodePosition,
   nodeIdsFromGraphKey,
   resolveStoredNodePositionsForGraphKey,
@@ -274,6 +275,65 @@ describe("bridgeGraphLayoutPositions", () => {
         },
         targetGraphKey: graphKey,
       }),
+    ).toBeNull();
+  });
+});
+
+describe("clearStoredNodePositionsForNodeIds", () => {
+  it("removes consumed temporary positions and drops emptied graph keys", () => {
+    const firstGraphKey = currentActivityGraphKey({
+      ...baseLayout,
+      edges: [{ edgeId: "edge-a", fromNodeId: "a", toNodeId: "b" }],
+    });
+    const secondGraphKey = currentActivityGraphKey({
+      ...baseLayout,
+      edges: [{ edgeId: "edge-b", fromNodeId: "a", toNodeId: "b" }],
+      nodes: [
+        ...baseLayout.nodes,
+        {
+          column: 2,
+          height: 196,
+          nodeId: "doc:factory/docs/guide.md",
+          nodeKind: "doc",
+          row: 0,
+          targetPath: "factory/docs/guide.md",
+          width: 168,
+          x: 420,
+          y: 0,
+        },
+      ],
+    });
+
+    expect(
+      clearStoredNodePositionsForNodeIds(
+        {
+          [firstGraphKey]: {
+            "worker:writer": { x: 12, y: 24 },
+          },
+          [secondGraphKey]: {
+            "doc:factory/docs/guide.md": { x: 640, y: 180 },
+            "workstation:draft": { x: 240, y: 32 },
+          },
+        },
+        ["doc:factory/docs/guide.md", "worker:writer"],
+      ),
+    ).toEqual({
+      [secondGraphKey]: {
+        "workstation:draft": { x: 240, y: 32 },
+      },
+    });
+  });
+
+  it("returns null when none of the requested node ids are stored", () => {
+    expect(
+      clearStoredNodePositionsForNodeIds(
+        {
+          graph: {
+            "workstation:draft": { x: 20, y: 40 },
+          },
+        },
+        ["doc:factory/docs/guide.md"],
+      ),
     ).toBeNull();
   });
 });

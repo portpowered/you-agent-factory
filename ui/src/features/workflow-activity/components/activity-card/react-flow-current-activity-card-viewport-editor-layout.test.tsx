@@ -190,16 +190,40 @@ describe("CurrentActivityGraphViewport canonical viewport sync", () => {
   });
 
   it("persists viewport panning into canonical layout in editor mode", () => {
+    const setStoredViewport = vi.fn();
     const updateLayoutViewport = vi.fn();
 
     renderViewport({
       editorMode: true,
+      setStoredViewport,
       updateLayoutViewport,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "pan-viewport" }));
 
     expect(updateLayoutViewport).toHaveBeenCalledWith({
+      x: 12,
+      y: 34,
+      zoom: 1.25,
+    });
+    expect(setStoredViewport).toHaveBeenCalledWith("test-graph", {
+      x: 12,
+      y: 34,
+      zoom: 1.25,
+    });
+  });
+
+  it("persists viewport panning in observe mode for editor handoff", () => {
+    const setStoredViewport = vi.fn();
+
+    renderViewport({
+      editorMode: false,
+      setStoredViewport,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "pan-viewport" }));
+
+    expect(setStoredViewport).toHaveBeenCalledWith("test-graph", {
       x: 12,
       y: 34,
       zoom: 1.25,
@@ -358,6 +382,7 @@ function renderViewport({
   onRedoLayout = vi.fn(),
   onUndoLayout = vi.fn(),
   setStoredNodePosition = vi.fn(),
+  setStoredViewport = vi.fn(),
   updateLayoutViewport = vi.fn(),
 }: {
   canRedoLayout?: boolean;
@@ -381,6 +406,11 @@ function renderViewport({
     nodeId: string,
     position: { x: number; y: number },
   ) => void;
+  setStoredViewport?: (graphKey: string, viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  }) => void;
   updateLayoutViewport?: (viewport: {
     x: number;
     y: number;
@@ -439,6 +469,7 @@ function renderViewport({
       onUndoLayout={onUndoLayout}
       onSelectTool={vi.fn()}
       setStoredNodePosition={setStoredNodePosition}
+      setStoredViewport={setStoredViewport}
       updateLayoutViewport={updateLayoutViewport}
     />,
   );

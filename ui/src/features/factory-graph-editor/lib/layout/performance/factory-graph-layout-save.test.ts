@@ -157,16 +157,5 @@ describe("factory graph layout save", () => {
     }
 
     expect(saveInput.value.layout?.edges).toBeUndefined();
-    expect(saveInput.layoutOutcomes).toEqual([
-      expect.objectContaining({
-        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
-        severity: "warning",
-        subject: {
-          id: FAILURE_EDGE_ID,
-          location: "REFERENCE",
-          type: "FACTORY",
-        },
-      }),
-    ]);
   });
 });

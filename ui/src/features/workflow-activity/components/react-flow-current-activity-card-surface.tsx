@@ -21,6 +21,7 @@ import { useFactoryGraphEdgeWaypointEditor } from "../../factory-graph-editor/ho
 import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
+import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph surface keeps editor notices, validation, and viewport wiring together.
 export function CurrentActivityGraphSurface({
@@ -103,6 +104,12 @@ export function CurrentActivityGraphSurface({
     nodes: graph.nodes,
   });
   const viewportEdges = waypointEditor.decorateEditorEdges(graph.edges);
+  const clearStoredViewport = useCurrentActivityGraphStore(
+    (state) => state.clearViewport,
+  );
+  const setStoredViewport = useCurrentActivityGraphStore(
+    (state) => state.setViewport,
+  );
 
   if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
@@ -243,10 +250,14 @@ export function CurrentActivityGraphSurface({
         moveLayoutNode={editor.moveLayoutNode}
         moveLayoutNodesByDelta={editor.moveLayoutNodesByDelta}
         onRedoLayout={editor.redoLayout}
-        onResetLayout={editor.resetLayout}
+        onResetLayout={() => {
+          clearStoredViewport(graph.graphKey);
+          editor.resetLayout();
+        }}
         onUndoLayout={editor.undoLayout}
         updateLayoutViewport={editor.updateLayoutViewport}
         setStoredNodePosition={graph.setStoredNodePosition}
+        setStoredViewport={setStoredViewport}
       />
     </div>
   );

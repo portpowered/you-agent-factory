@@ -36,10 +36,14 @@ import {
 import {
   createDefaultFactoryLayout,
   factoryLayoutFromDefinition,
+  updateFactoryLayoutViewport,
 } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   graphNodePositionsFromCanonicalLayout,
+  mergeFactoryLayoutWithNodePositions,
   mergeLegacyStoredGraphNodePositions,
+  overlayGraphNodePositions,
+  selectHydratableGraphNodePositions,
 } from "../lib/layout/factory-graph-canonical-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
@@ -333,8 +337,14 @@ export function useCurrentActivityGraphViewModel({
   const positionsByGraphKey = useCurrentActivityGraphStore(
     (state) => state.positionsByGraphKey,
   );
+  const viewportByGraphKey = useCurrentActivityGraphStore(
+    (state) => state.viewportByGraphKey,
+  );
   const bridgePositionsToGraphKey = useCurrentActivityGraphStore(
     (state) => state.bridgePositionsToGraphKey,
+  );
+  const clearNodePositions = useCurrentActivityGraphStore(
+    (state) => state.clearNodePositions,
   );
   const legacyStoredNodePositions = useMemo(
     () =>
@@ -347,17 +357,44 @@ export function useCurrentActivityGraphViewModel({
         : EMPTY_NODE_POSITIONS,
     [graphKey, layoutNodeIds, positionsByGraphKey],
   );
-  const storedNodePositions = useMemo(() => {
-    const canonicalLayout = editor.editorMode
-      ? (editor.layoutDraftState?.layout ?? createDefaultFactoryLayout())
-      : factoryLayoutFromDefinition(displayFactoryDefinition);
-    const canonicalPositions = graphNodePositionsFromCanonicalLayout(
-      graphLayout,
-      canonicalLayout,
-    );
+  const storedViewport = useMemo(() => {
+    if (!graphKey) {
+      return null;
+    }
 
+    return viewportByGraphKey[graphKey] ?? null;
+  }, [graphKey, viewportByGraphKey]);
+  const canonicalLayout = useMemo(
+    () =>
+      editor.editorMode
+        ? (editor.layoutDraftState?.layout ?? createDefaultFactoryLayout())
+        : factoryLayoutFromDefinition(displayFactoryDefinition),
+    [
+      displayFactoryDefinition,
+      editor.editorMode,
+      editor.layoutDraftState?.layout,
+    ],
+  );
+  const canonicalPositions = useMemo(
+    () => graphNodePositionsFromCanonicalLayout(graphLayout, canonicalLayout),
+    [canonicalLayout, graphLayout],
+  );
+  const hydratableLegacyPositions = useMemo(
+    () =>
+      editor.editorMode
+        ? selectHydratableGraphNodePositions(
+            canonicalPositions,
+            legacyStoredNodePositions,
+          )
+        : EMPTY_NODE_POSITIONS,
+    [canonicalPositions, editor.editorMode, legacyStoredNodePositions],
+  );
+  const storedNodePositions = useMemo(() => {
     if (editor.editorMode) {
-      return canonicalPositions;
+      return overlayGraphNodePositions(
+        canonicalPositions,
+        hydratableLegacyPositions,
+      );
     }
 
     return mergeLegacyStoredGraphNodePositions(
@@ -365,10 +402,9 @@ export function useCurrentActivityGraphViewModel({
       legacyStoredNodePositions,
     );
   }, [
-    displayFactoryDefinition,
+    hydratableLegacyPositions,
     editor.editorMode,
-    editor.layoutDraftState?.layout,
-    graphLayout,
+    canonicalPositions,
     legacyStoredNodePositions,
   ]);
   const setStoredNodePosition = useCurrentActivityGraphStore(
@@ -382,6 +418,48 @@ export function useCurrentActivityGraphViewModel({
 
     bridgePositionsToGraphKey(graphKey, layoutNodeIds);
   }, [bridgePositionsToGraphKey, graphKey, layoutNodeIds]);
+  useEffect(() => {
+    if (!editor.editorMode) {
+      return;
+    }
+
+    const nodeIds = Object.keys(hydratableLegacyPositions);
+    if (nodeIds.length === 0) {
+      return;
+    }
+
+    editor.layoutDraftState.replaceLayout(
+      mergeFactoryLayoutWithNodePositions(
+        editor.layoutDraftState.layout,
+        hydratableLegacyPositions,
+      ),
+    );
+    clearNodePositions(nodeIds);
+  }, [
+    clearNodePositions,
+    editor.editorMode,
+    editor.layoutDraftState,
+    hydratableLegacyPositions,
+  ]);
+  useEffect(() => {
+    if (!editor.editorMode || !storedViewport) {
+      return;
+    }
+
+    const currentViewport = editor.layoutDraftState.layout.viewport;
+    if (
+      currentViewport &&
+      currentViewport.x === storedViewport.x &&
+      currentViewport.y === storedViewport.y &&
+      currentViewport.zoom === storedViewport.zoom
+    ) {
+      return;
+    }
+
+    editor.layoutDraftState.replaceLayout(
+      updateFactoryLayoutViewport(editor.layoutDraftState.layout, storedViewport),
+    );
+  }, [editor.editorMode, editor.layoutDraftState, storedViewport]);
   const { pendingAdditionEdgeIds, visibleGraphEdges } = useMemo(
     () =>
       buildVisibleGraphEdgesWithDraft({
@@ -434,8 +512,9 @@ export function useCurrentActivityGraphViewModel({
   });
   const initialFitViewOptions = useInitialFitViewOptions(graphLayout);
   const canonicalLayoutViewport = editor.editorMode
-    ? editor.layoutDraftState?.layout.viewport
-    : factoryLayoutFromDefinition(displayFactoryDefinition).viewport;
+    ? (editor.layoutDraftState?.layout.viewport ?? storedViewport)
+    : (storedViewport ??
+      factoryLayoutFromDefinition(displayFactoryDefinition).viewport);
 
   return {
     canonicalLayoutViewport,

@@ -1,4 +1,3 @@
-import type { FactoryValidationTarget } from "../../../../api/factory-validation";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import {
   buildDraftAppliedFactoryDefinition,
@@ -74,7 +73,6 @@ export type FactoryGraphOperationResult<T> =
   | {
       ok: true;
       value: T;
-      layoutOutcomes?: FactoryValidationTarget[];
     }
   | {
       message: string;
@@ -393,7 +391,6 @@ export function applyFactoryGraphPendingEdits(options: {
       ? null
       : preparePendingFactoryLayoutForSave(options.pendingLayout, validEdgeIds);
   const preparedPendingLayout = preparedPendingLayoutResult?.layout ?? null;
-  const layoutOutcomes = preparedPendingLayoutResult?.layoutOutcomes;
   const nextDefinition =
     preparedPendingLayout &&
     hasFactoryLayoutChanges(baseLayout, preparedPendingLayout)
@@ -406,9 +403,6 @@ export function applyFactoryGraphPendingEdits(options: {
   return {
     ok: true,
     value: materializeFactoryGraphEntityIdsForSave(nextDefinition),
-    ...(layoutOutcomes && layoutOutcomes.length > 0
-      ? { layoutOutcomes }
-      : {}),
   };
 }
 
