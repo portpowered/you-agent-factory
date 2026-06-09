@@ -164,14 +164,6 @@ properties:
   layout:
     $ref: './FactoryLayout.yaml'
     description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
-  layoutOutcomes:
-    type: array
-    description: >-
-      Ephemeral save-response metadata listing layout pruning or validation outcomes.
-      Omitted from persisted factory documents, ignored on save requests, and cleared
-      before split-layout writes.
-    items:
-      $ref: '../api/FactoryValidationTarget.yaml'
   workers:
     type: array
     description: Reusable worker definitions that workstations reference by name when dispatching work.
