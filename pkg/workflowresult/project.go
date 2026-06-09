@@ -142,35 +142,6 @@ func projectArtifactProjection(input SessionResultInput) ([]string, []factoryapi
 	return artifactIDs, artifactRefs
 }
 
-func artifactRefForID(artifactID string, input SessionResultInput) *factoryapi.FactoryArtifactRef {
-	if input.ResultArtifact != nil && strings.TrimSpace(input.ResultArtifact.Id) == strings.TrimSpace(artifactID) {
-		copied := *input.ResultArtifact
-		return &copied
-	}
-	for _, artifact := range input.Artifacts {
-		if strings.TrimSpace(artifact.ID) != strings.TrimSpace(artifactID) {
-			continue
-		}
-		ref := factoryapi.FactoryArtifactRef{
-			Id:         strings.TrimSpace(artifact.ID),
-			Kind:       factoryapi.FactoryArtifactKind(strings.ToUpper(strings.TrimSpace(artifact.Kind))),
-			Visibility: factoryapi.FactoryArtifactVisibility(strings.TrimSpace(artifact.Visibility)),
-		}
-		if ref.Visibility == "" {
-			ref.Visibility = factoryapi.FactoryArtifactVisibilityPUBLIC
-		}
-		if hash := strings.TrimSpace(artifact.ContentHash); hash != "" {
-			ref.ContentHash = &hash
-		}
-		if artifact.SizeBytes > 0 {
-			size := artifact.SizeBytes
-			ref.SizeBytes = &size
-		}
-		return &ref
-	}
-	return nil
-}
-
 func projectDecodedValue(
 	sessionID string,
 	value any,

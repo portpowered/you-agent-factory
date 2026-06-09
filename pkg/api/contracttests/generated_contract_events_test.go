@@ -851,18 +851,6 @@ func assertGeneratedWorkRequestEventContext(t *testing.T, event factoryapi.Facto
 	}
 }
 
-func mustGeneratedJSONPart(t *testing.T, value map[string]any) factoryapi.WorkContentPart {
-	t.Helper()
-	var part factoryapi.WorkContentPart
-	if err := part.FromWorkJsonContentPart(factoryapi.WorkJsonContentPart{
-		Type: factoryapi.WorkContentPartTypeJSON,
-		Json: value,
-	}); err != nil {
-		t.Fatalf("build generated json part: %v", err)
-	}
-	return part
-}
-
 func mustGeneratedModelAudioPart(t *testing.T, file string) factoryapi.WorkContentPart {
 	t.Helper()
 	var part factoryapi.WorkContentPart
