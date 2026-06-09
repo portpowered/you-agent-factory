@@ -146,3 +146,41 @@ sequenceDiagram
 ```
 
 This split keeps the frontend lightweight and keeps the backend authoritative. The same event stream that powers execution can also power dashboards, audit history, and deterministic replay.
+
+### Editor state
+
+The graph editor state represents the website's way of managing the world state. 
+
+The event stream is cloud-backed input, but the dashboard snapshot used by current activity is client-computed from events:
+
+You can sort of see here that basically as events get streamed in, the events get streamed in. 
+
+1. from that event stream we construct snapshots of the world state at every single sample time.
+2. Then the world state at a sample time presents the factory graph. the workstations, workers, work types, states, and their projection layout. 
+3. Then from that world state,  corresponding new UI state is persisted and combined with an internal editor stream of operations. 
+4. From the editor operation stream + world state, a projected currented factory/editor state is created. 
+5. from the editor state, we map the factory/editor state into a projection that is bespoke to the view of teh "react flow library"
+6. from that flow library projection and the editor state we create a fnal state that is called the view model. 
+7. the state changes from the view model are projected out to the components, and components render and operate against changes by sending hook calls into the view model. 
+8. the view model is responsible for injecting calls into the editor state, which is then responsible for sending API calls to the backend. 
+9. the backend, as it finishes changes sends back events to the event stream denoting the world stat echanges as a consequences of API operations. 
+
+
+```mermaid
+flowchart LR
+  stream["Cloud event stream\nFactoryEvent SSE"]:::cloud
+  hook["useFactoryEventStream"]:::client
+  events["FactoryEvent[]\nuseFactoryTimelineStore"]:::client
+  replay["reconstructWorldState"]:::client
+  projected["projectSnapshot"]:::client
+  snapshot["Computed DashboardSnapshot / WorldState\nselected tick"]:::client
+  graphState["Current activity graph state"]:::client
+  flowProjection["Computed React Flow graph\nnodes + edges + viewport"]:::client
+
+  stream --> hook --> events --> replay --> projected --> snapshot
+  snapshot --> graphState --> flowProjection
+  snapshot --> flowProjection
+
+  classDef cloud fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
+  classDef client fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
+```

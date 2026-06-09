@@ -4,7 +4,7 @@ Operator-facing planning record for the Dynamic Workflows v0 program. This
 document tracks batch completion, cross-surface contract posture, and the
 recommended next batch for maintainers scheduling factory work.
 
-**Last updated:** 2026-06-09 (Batch 001 retro — Batch 002 go/no-go recommendation)
+**Last updated:** 2026-06-09 (Batch 001 retro — granular parallel execution plan)
 
 ## Program overview
 
@@ -445,23 +445,264 @@ persisted rows) is an **implementation gap**, not a license to change Batch
 001 schema or service semantics. Later stories in this retro document separate
 transport stubs from true cross-surface contract conflicts.
 
+### Granular parallel execution plan
+
+The original Batch 002 shape is too wide for maximum throughput: API handler
+wiring, MCP tools, CLI commands, website components, host integration files,
+and contract repair do not all have the same dependencies. The code comparison
+on 2026-06-09 shows:
+
+- `factorysessionexecution.Service`, deterministic fake scenarios, OpenAPI
+  durable route shapes, generated Go/TypeScript types, and mapper packages exist.
+- Durable API handlers in `pkg/api/handlers_factory.go` still return `501` for
+  async/sync start, results, dispatches, artifacts, lifecycle controls, and
+  durable events; `scope=persisted|all` returns empty durable rows.
+- `pkg/mcp/workflow/` only exposes workflow preview/start-validation helpers,
+  so session/dispatch/artifact MCP tools can be designed now but need a later
+  API/service parity pass.
+- `ui/src/api/factory-sessions/api.ts` and the current factory-session detail
+  panel are live-session oriented; generated durable types are present for
+  fixture-backed adapters and components before HTTP wiring exists.
+- `pkg/api/testdata/durable-session-contract-fixtures.json` lacks canonical
+  `events[]` arrays and an `AWAITING_APPROVAL` scenario, so event/control
+  tranches need fixture repair before cross-surface parity claims.
+
+Use the following graph to schedule smaller work items. `CR-*` closes contract
+drift; `API-*`, `MCP-*`, `UI-*`, and `CLI-*` can advance as soon as their
+specific inputs exist rather than waiting for a monolithic fake-session batch.
+
+```mermaid
+flowchart TB
+  K[Batch 001 contract kernel complete]
+
+  subgraph CR[Contract repair and fake fidelity]
+    CR1[CR-1 event enums and terminal status alignment]
+    CR2[CR-2 canonical FactoryEvent envelopes in fake service]
+    CR3[CR-3 fixture events plus AWAITING_APPROVAL scenario]
+    CR4[CR-4 service behavior: source resolution, result mode, event cursors]
+    CR5[CR-5 mapper field repair: control status, provider session refs, read-model fields]
+    CRQ[CR-Q contract round-trip gate]
+  end
+
+  subgraph API[API fake transport]
+    API0[API-0 inject factorysessionexecution.Service into server]
+    API1[API-1 async and sync start handlers with idempotency errors]
+    API2[API-2 get/list durable sessions with live and durable routing]
+    API3[API-3 result, dispatch, and artifact read handlers]
+    API4[API-4 lifecycle control handlers]
+    API5[API-5 durable session event read or stream handler]
+    APIQ[API-Q handler contract and fixture tests]
+  end
+
+  subgraph MCP[MCP and host integration]
+    MCP0[MCP-0 canonical session/dispatch/artifact tool schemas from generated contract]
+    MCP1[MCP-1 mock MCP client tests for discovery and validation]
+    MCP2[MCP-2 session start/list/status/result tools against HTTP client]
+    MCP3[MCP-3 dispatch/artifact/event/control tools]
+    MCP4[MCP-4 host integration directories and docs]
+    MCPQ[MCP-Q real API smoke against fake service]
+  end
+
+  subgraph UI[Website tranches]
+    UI0[UI-0 durable type guards, API adapter tests, fixture loaders]
+    UI1[UI-1 session list accepts live plus durable summaries]
+    UI2[UI-2 durable detail shell: status, source, policy, lifecycle]
+    UI3[UI-3 result, dispatch, artifact panels from fixtures]
+    UI4[UI-4 event timeline and lifecycle controls]
+    UIQ[UI-Q integration refresh against wired fake API]
+  end
+
+  subgraph CLI[CLI tranches]
+    CLI0[CLI-0 command contract and output shapes]
+    CLI1[CLI-1 session run/list/show/result against durable endpoints]
+    CLI2[CLI-2 dispatch/artifact/event/control commands]
+    CLIQ[CLI-Q CLI smoke against fake API]
+  end
+
+  subgraph RT[Runtime and later verticals]
+    RT0[Runtime shell and host API stubs]
+    RT1[In-memory session runner]
+    RT2[Single-agent fixture parity pass]
+    F0[Fanout phases]
+    D0[Dispatch bridge]
+    P0[Persistence inspection]
+    R0[Resume checkpoints]
+    H0[Policy and failure hygiene]
+    REL[Release hosts]
+    BETA[Customer beta readiness]
+  end
+
+  K --> CR1
+  K --> CR4
+  K --> CR5
+  CR1 --> CR2
+  CR2 --> CR3
+  CR3 --> CRQ
+  CR4 --> CRQ
+  CR5 --> CRQ
+
+  K --> API0
+  CRQ --> API1
+  API0 --> API1
+  API0 --> API2
+  CR5 --> API2
+  API1 --> API3
+  CR4 --> API3
+  CR5 --> API3
+  API2 --> API4
+  CR3 --> API5
+  API2 --> API5
+  API3 --> APIQ
+  API4 --> APIQ
+  API5 --> APIQ
+
+  K --> MCP0
+  K --> MCP1
+  K --> MCP4
+  API1 --> MCP2
+  API2 --> MCP2
+  API3 --> MCP3
+  API4 --> MCP3
+  API5 --> MCP3
+  MCP2 --> MCPQ
+  MCP3 --> MCPQ
+
+  K --> UI0
+  K --> UI1
+  K --> UI2
+  CR3 --> UI3
+  CR5 --> UI3
+  CR3 --> UI4
+  API2 --> UIQ
+  API3 --> UIQ
+  API4 --> UIQ
+  API5 --> UIQ
+  UI1 --> UIQ
+  UI3 --> UIQ
+  UI4 --> UIQ
+
+  K --> CLI0
+  API1 --> CLI1
+  API2 --> CLI1
+  API3 --> CLI2
+  API4 --> CLI2
+  API5 --> CLI2
+  CLI1 --> CLIQ
+  CLI2 --> CLIQ
+
+  APIQ --> RT0
+  MCPQ --> RT2
+  UIQ --> RT2
+  CLIQ --> RT2
+  RT0 --> RT1
+  RT1 --> RT2
+  RT2 --> F0
+  F0 --> D0
+  F0 --> P0
+  D0 --> R0
+  P0 --> R0
+  R0 --> H0
+  MCP4 --> REL
+  H0 --> REL
+  REL --> BETA
+```
+
+#### Suggested micro-batches
+
+| ID | Smallest independently testable behavior | Can start when | Primary evidence |
+|----|------------------------------------------|----------------|------------------|
+| CR-1 | Event terminal/result enums match durable REST status vocabulary. | Batch 001 complete | OpenAPI contract tests and generated type diff. |
+| CR-2 | Fake service emits canonical `FactoryEvent` envelopes with context and payload identity boundaries. | CR-1 | Fake-service event tests and `EventReadResponseToAPI` round-trip. |
+| CR-3 | Durable fixture catalog includes `events[]` and `AWAITING_APPROVAL`. | CR-2 | Fixture validation for running, approval, terminal, and failed-with-partial scenarios. |
+| CR-4 | Fake/service reads honor source resolution, result mode/includeArtifacts, and event reconnect cursors. | Batch 001 complete | Service unit tests over `workflowsource`, result projection, and cursor filtering. |
+| CR-5 | Mappers preserve required lifecycle, provider-correlation, and read-model fields. | Batch 001 complete | Mapper round-trip tests against fixtures. |
+| API-0 | Server can receive an injectable durable execution service without changing route contracts. | Batch 001 complete | Server construction tests still pass with nil/live defaults and fake injection. |
+| API-1 | Async/sync start routes return fake sessions and idempotency conflicts. | CR-Q and API-0 | Handler tests for accepted, completed, timed-out, and conflict outcomes. |
+| API-2 | `GET` and list route durable rows coexist with live-session compatibility. | CR-5 and API-0 | Handler tests for `scope=live|persisted|all` and durable id lookup. |
+| API-3 | Result, dispatch, and artifact reads map through the service. | API-1 plus CR-4/CR-5 | Handler tests for not-ready, partial, final, failed, and missing resources. |
+| API-4 | Lifecycle controls map approve/pause/resume/cancel/terminate/retry outcomes. | API-2 plus CR-5 | Handler tests for accepted, no-op, invalid-state, terminal, replay, and conflict. |
+| API-5 | Durable event reads honor reconnect cursors and canonical envelopes. | CR-3 plus API-2 | Event route tests for initial history and after-event/sequence replay. |
+| MCP-0 | Canonical MCP tool schemas exist for session, dispatch, and artifact nouns. | Batch 001 complete | Schema/discovery tests using generated OpenAPI types; no live server required. |
+| MCP-1 | Mock client validates preview/start error shape and tool discovery. | Batch 001 complete | Mock MCP tests over `pkg/mcp/workflow` and new session tool catalog. |
+| MCP-2 | MCP start/list/status/result tools call the current HTTP durable endpoints. | API-1 and API-2 | Mock HTTP tests first; real fake-server smoke after API wiring. |
+| MCP-3 | MCP dispatch/artifact/event/control tools match API behavior. | API-3, API-4, API-5 | Mock and fake-server parity tests. |
+| MCP-4 | Host integration directories and packaging manifests exist. | Batch 001 complete | File inventory tests and release-archive inclusion checks; tool implementation can follow. |
+| UI-0 | Website durable-session adapters and guards accept generated durable shapes. | Batch 001 complete | Type-level/API tests with durable fixtures; no server required. |
+| UI-1 | Session list can render live and durable summaries together. | Batch 001 complete | Component tests using `scope=all` fixture responses. |
+| UI-2 | Durable detail shell renders status, source, policy, lifecycle, and actions. | Batch 001 complete | Component tests from `FactorySessionDurableReadModel` fixtures. |
+| UI-3 | Result, dispatch, and artifact panels render fake durable data. | CR-3 and CR-5 | Component and adapter tests over repaired fixtures. |
+| UI-4 | Event timeline and lifecycle controls render canonical events/outcomes. | CR-3 | Component/hook tests with canonical event arrays and control responses. |
+| CLI-0 | Durable command names, JSON output shape, and help text stay on factory/session nouns. | Batch 001 complete | CLI command tests without HTTP execution. |
+| CLI-1 | Durable run/list/show/result commands call fake API endpoints. | API-1 and API-2 | CLI HTTP tests for start/list/show/result. |
+| CLI-2 | Dispatch/artifact/event/control commands call fake API endpoints. | API-3, API-4, API-5 | CLI HTTP tests for each inspection/control path. |
+| PAR-Q | Cross-surface parity test proves one fake session is explainable everywhere. | API-Q, MCP-Q, UI-Q, CLI-Q | API, CLI, MCP, and UI all show same session id, status, result, dispatches, artifacts, and events. |
+
+#### Tranche cadence
+
+Each tranche should converge on one fake scenario before adding a broader
+scenario matrix. This keeps website and MCP work unblocked while still forcing
+realignment after API/service implementation catches up.
+
+```mermaid
+sequenceDiagram
+  participant Contract as Contract/Fixtures
+  participant API as API Fake Transport
+  participant MCP as MCP Tools
+  participant UI as Website
+  participant CLI as CLI
+  participant Gate as Parity Gate
+
+  Contract->>MCP: generated schemas and fixture examples
+  Contract->>UI: durable generated types and fixture examples
+  Contract->>CLI: command/output contract examples
+  Contract->>API: repaired mapper/service expectations
+  API->>MCP: fake HTTP start/list/status/result paths
+  API->>UI: fake HTTP list/detail/result paths
+  API->>CLI: fake HTTP command paths
+  MCP->>Gate: tool discovery and fake-session smoke
+  UI->>Gate: fixture component tests, then fake-server integration
+  CLI->>Gate: command HTTP smoke
+  API->>Gate: handler contract tests
+  Gate-->>Contract: contract drift or missing scenario feedback
+```
+
+#### Scheduling guidance
+
+- Start **MCP-0**, **MCP-1**, **MCP-4**, **UI-0**, **UI-1**, **UI-2**,
+  **CLI-0**, and **API-0** immediately; they depend only on Batch 001 generated
+  contracts and fixtures, not on non-`501` durable handlers.
+- Treat **CR-Q** as the gate for handler claims, not for client scaffolds. Client
+  scaffolds may use fixtures, generated types, and mocked HTTP responses while
+  contract repair is in flight.
+- Split API work by route family. `API-1` and `API-2` unblock MCP/CLI start and
+  list/status work; `API-3` unblocks result/dispatch/artifact panels and tools;
+  `API-4` and `API-5` can follow independently.
+- Put a parity gate after every tranche: first running/succeeded, then
+  not-ready/partial, then failed-with-partial, then awaiting approval and
+  lifecycle controls, then interrupted/reconnect.
+- Do not start real runtime, persistence, dispatch bridge, or resume work until
+  at least one fake session vertical passes `PAR-Q`; otherwise later lanes will
+  debug transport drift and runtime behavior at the same time.
+
 ### Decision context for the next batch
 
-Maintainers use this plan to decide whether **Batch 002 fake-session skeleton**
-work can proceed or whether a **contract-repair batch** must close blocking
-gaps across OpenAPI, `factorysessionexecution.Service`, apisurface mappers,
-`FactoryEvent` payloads, and durable session fixtures first.
+Maintainers use this plan to decide which **micro-batches** can proceed in
+parallel and which require a contract-repair gate before handler or parity
+claims. The old Batch 002 label remains useful as a milestone name, but the
+actual queue should be scheduled as the granular graph above.
 
-**Current decision (2026-06-09 UTC):** **No-go** for Batch 002 skeleton now;
-schedule the **smallest contract-repair batch** described in
-[Batch 002 go/no-go recommendation](#batch-002-gono-go-recommendation) before
-fake-session handler/CLI/MCP/UI skeleton work. Transport stubs from the
-checklist remain Batch 002 wiring targets **after** repair.
+**Current decision (2026-06-09 UTC):** **No-go** for a monolithic Batch 002
+fake-session skeleton, but **go** for parallel fixture/type/client scaffolds
+that do not claim live handler parity yet. Schedule **CR-1 through CR-5** plus
+**API-0** as the contract/API foundation, and in parallel schedule **MCP-0**,
+**MCP-1**, **MCP-4**, **UI-0**, **UI-1**, **UI-2**, and **CLI-0**.
+Transport stubs from the checklist remain route-family wiring targets after
+the relevant repair gates pass.
 
 The **Batch 001 completion checklist** is the authoritative record of what
 merged in PRs #767–#776. Treat Batch 001 as **contract-complete at the
-interface-definition layer** but **not** safe for skeleton wire-up until
-blocking inventory rows B1–B12 are resolved.
+interface-definition layer** but **not** safe for handler parity claims until
+the blocking inventory is refreshed and the relevant CR gates are resolved.
 
 ### Related references
 
