@@ -178,8 +178,13 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	if len(events) != 2 || events[0].Type != factoryapi.FactoryEventTypeRunRequest || events[1].Type != factoryapi.FactoryEventTypeInitialStructureRequest {
-		t.Fatalf("events = %#v, want run-started then initial structure only", events)
+	if len(events) != runtimePreWorkEventCount {
+		t.Fatalf("events = %#v, want %d startup events", events, runtimePreWorkEventCount)
+	}
+	for i, wantType := range runtimeStartupEventTypes() {
+		if events[i].Type != wantType {
+			t.Fatalf("events[%d].Type = %q, want %q", i, events[i].Type, wantType)
+		}
 	}
 	payload, err := events[1].Payload.AsInitialStructureRequestEventPayload()
 	if err != nil {

@@ -60,6 +60,7 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
       state.workStateChangesByWorkID,
     ),
     session: {
+      bracket: state.sessionBracket,
       completed_count: customerCompletedDispatches.filter(
         (dispatch) => dispatch.outcome === "ACCEPTED",
       ).length,
@@ -81,6 +82,9 @@ export function projectRuntime(state: ReplayWorldState): DashboardRuntime {
       has_data:
         activeDispatchIDs.length > 0 ||
         customerCompletedDispatches.length > 0 ||
+        state.sessionBracket != null ||
+        (state.javascriptRuntime?.dispatches.length ?? 0) > 0 ||
+        (state.sessionArtifacts?.length ?? 0) > 0 ||
         Object.values(state.workItemsByID).some(
           (item) => !isSystemTimeWorkItem(item),
         ),

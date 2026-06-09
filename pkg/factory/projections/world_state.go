@@ -90,6 +90,7 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity world-state replay keeps canonical event routing on one reducer switch.
 func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 	r.stateValue.EventTime = event.Context.EventTime
 	switch event.Type {
@@ -121,6 +122,12 @@ func (r *factoryWorldReducer) apply(event factoryapi.FactoryEvent) error {
 		return nil
 	}
 	if handled, err := r.applyOrchestratorLifecycleEvent(event); handled {
+		return err
+	}
+	if handled, err := r.applySessionLifecycleEvent(event); handled {
+		return err
+	}
+	if handled, err := r.applyDispatchLifecycleEvent(event); handled {
 		return err
 	}
 	return nil
@@ -977,6 +984,9 @@ func (r *factoryWorldReducer) topologyPlace(placeID string) (interfaces.FactoryP
 	return interfaces.FactoryPlace{}, false
 }
 func (r *factoryWorldReducer) applyOrchestratorLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
+	if handled, err := r.applyOrchestratorProgressEvent(event); handled {
+		return true, err
+	}
 	switch event.Type {
 	case factoryapi.FactoryEventTypeJavaScriptCheckpointRef:
 		return true, r.applyJavaScriptCheckpointRefEvent(event)

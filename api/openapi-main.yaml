@@ -245,7 +245,10 @@ paths:
         - Runtime
       operationId: getEvents
       summary: Stream factory events
-      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection.
+      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+      parameters:
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
           description: Factory event stream.
@@ -263,9 +266,11 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
           description: Factory event stream for the targeted session.
@@ -1281,6 +1286,10 @@ components:
       $ref: './components/parameters/DispatchID.yaml'
     ArtifactID:
       $ref: './components/parameters/ArtifactID.yaml'
+    AfterEventId:
+      $ref: './components/parameters/AfterEventId.yaml'
+    AfterSequence:
+      $ref: './components/parameters/AfterSequence.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'
@@ -1503,6 +1512,30 @@ components:
       $ref: './components/schemas/data-models/FactoryArtifactRedactionCounts.yaml'
     FactoryArtifactCaptureMetadata:
       $ref: './components/schemas/data-models/FactoryArtifactCaptureMetadata.yaml'
+    FactoryEventSessionResultStatus:
+      $ref: './components/schemas/events/FactoryEventSessionResultStatus.yaml'
+    OrchestratorPhaseStatus:
+      $ref: './components/schemas/events/OrchestratorPhaseStatus.yaml'
+    CheckpointResumabilityStatus:
+      $ref: './components/schemas/events/CheckpointResumabilityStatus.yaml'
+    DispatchReconciliationSource:
+      $ref: './components/schemas/events/DispatchReconciliationSource.yaml'
+    SessionStartedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionStartedEventPayload.yaml'
+    SessionResultUpdatedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml'
+    SessionCompletedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionCompletedEventPayload.yaml'
+    OrchestratorPhaseChangedEventPayload:
+      $ref: './components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml'
+    OrchestratorCheckpointWrittenEventPayload:
+      $ref: './components/schemas/events/payloads/OrchestratorCheckpointWrittenEventPayload.yaml'
+    DispatchQueuedEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchQueuedEventPayload.yaml'
+    DispatchInterruptedEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchInterruptedEventPayload.yaml'
+    DispatchReconciledEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchReconciledEventPayload.yaml'
     JavaScriptCheckpointRefEventPayload:
       $ref: './components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml'
     JavaScriptPhaseChangeEventPayload:

@@ -54,9 +54,13 @@ type FactoryEventHistory struct {
 	recorders      []func(factoryapi.FactoryEvent)
 	nextID         int
 	streams        map[int]*eventHistorySubscription
-	runRecordedAt  time.Time
-	hasRunRequest  bool
-	hasRunResponse bool
+	runRecordedAt       time.Time
+	hasRunRequest       bool
+	hasRunResponse      bool
+	sessionStartedAt    time.Time
+	hasSessionStarted   bool
+	hasSessionCompleted bool
+	nextSessionSequence int
 }
 
 // NewFactoryEventHistory creates an in-memory factory event history for one
@@ -98,16 +102,28 @@ func (h *FactoryEventHistory) Events() []factoryapi.FactoryEvent {
 }
 
 // Subscribe returns a replay snapshot followed by live canonical events.
-func (h *FactoryEventHistory) Subscribe(ctx context.Context) interfaces.FactoryEventStream {
+func (h *FactoryEventHistory) Subscribe(
+	ctx context.Context,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+	scope interfaces.FactoryEventReconnectScope,
+) (interfaces.FactoryEventStream, error) {
 	if h == nil {
 		ch := make(chan factoryapi.FactoryEvent)
 		close(ch)
-		return interfaces.FactoryEventStream{Events: ch}
+		return interfaces.FactoryEventStream{Events: ch}, nil
 	}
 
 	h.mu.Lock()
 	events := make([]factoryapi.FactoryEvent, len(h.events))
 	copy(events, h.events)
+	if reconnect != nil {
+		replayed, err := BuildReconnectReplay(events, *reconnect, scope)
+		if err != nil {
+			h.mu.Unlock()
+			return interfaces.FactoryEventStream{}, err
+		}
+		events = replayed
+	}
 	id := h.nextID
 	h.nextID++
 	subscription := &eventHistorySubscription{
@@ -140,7 +156,7 @@ func (h *FactoryEventHistory) Subscribe(ctx context.Context) interfaces.FactoryE
 		}
 	}()
 
-	return interfaces.FactoryEventStream{History: events, Events: subscription.events}
+	return interfaces.FactoryEventStream{History: events, Events: subscription.events}, nil
 }
 
 // AddGeneratedRecorder registers a callback invoked for every future generated
@@ -527,6 +543,7 @@ func factoryEvent(eventType factoryapi.FactoryEventType, id string, context fact
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity canonical event payload union stays on one generated-type switch for replay-safe emission.
 func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 	var out factoryapi.FactoryEvent_Payload
 	var err error
@@ -551,6 +568,12 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromRunResponseEventPayload(typed)
 	case factoryapi.WorkStateChangeEventPayload:
 		err = out.FromWorkStateChangeEventPayload(typed)
+	case factoryapi.SessionStartedEventPayload:
+		err = out.FromSessionStartedEventPayload(typed)
+	case factoryapi.SessionResultUpdatedEventPayload:
+		err = out.FromSessionResultUpdatedEventPayload(typed)
+	case factoryapi.SessionCompletedEventPayload:
+		err = out.FromSessionCompletedEventPayload(typed)
 	default:
 		encoded, marshalErr := json.Marshal(typed)
 		if marshalErr != nil {

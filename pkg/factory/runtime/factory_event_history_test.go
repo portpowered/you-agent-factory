@@ -70,12 +70,12 @@ func TestNew_SubmitWorkRequestRecordsCanonicalWorkRequestEvent(t *testing.T) {
 	}
 
 	events := runtimeGeneratedEvents(t, f)
-	if len(events) < 3 {
-		t.Fatalf("events = %#v, want run-started, initial structure, and canonical work request", events)
+	if len(events) < runtimePreWorkEventCount+1 {
+		t.Fatalf("events = %#v, want startup events and canonical work request", events)
 	}
-	event := events[2]
+	event := events[runtimeEventIndex(0)]
 	if event.Type != factoryapi.FactoryEventTypeWorkRequest {
-		t.Fatalf("event[2] type = %q, want %q", event.Type, factoryapi.FactoryEventTypeWorkRequest)
+		t.Fatalf("work request event type = %q, want %q", event.Type, factoryapi.FactoryEventTypeWorkRequest)
 	}
 	if stringValueForRuntimeTest(event.Context.RequestId) != "request-canonical-work-event" ||
 		firstRuntimeTestString(event.Context.TraceIds) != "trace-canonical" {
@@ -113,12 +113,8 @@ func TestFactoryEventHistory_BatchRequestAndRelationshipReplay(t *testing.T) {
 	}
 
 	events := runtimeGeneratedEvents(t, f)
-	assertFactoryEventTypesPrefix(t, factoryEventTypes(events),
-		factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
-		factoryapi.FactoryEventTypeWorkRequest,
-		factoryapi.FactoryEventTypeRelationshipChangeRequest,
-	)
+	prefix := append(runtimeStartupEventTypes(), factoryapi.FactoryEventTypeWorkRequest, factoryapi.FactoryEventTypeRelationshipChangeRequest)
+	assertFactoryEventTypesPrefix(t, factoryEventTypes(events), prefix...)
 	assertBatchRequestReplayEvents(t, events)
 	assertBatchRequestReplayProjection(t, events)
 }
@@ -140,12 +136,8 @@ func TestFactoryEventHistory_GeneratedBatchPreservesMetadataAndOrdering(t *testi
 	}
 
 	events := runtimeGeneratedEvents(t, f)
-	assertFactoryEventTypesPrefix(t, factoryEventTypes(events),
-		factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
-		factoryapi.FactoryEventTypeWorkRequest,
-		factoryapi.FactoryEventTypeRelationshipChangeRequest,
-	)
+	prefix := append(runtimeStartupEventTypes(), factoryapi.FactoryEventTypeWorkRequest, factoryapi.FactoryEventTypeRelationshipChangeRequest)
+	assertFactoryEventTypesPrefix(t, factoryEventTypes(events), prefix...)
 	assertGeneratedBatchEvents(t, events)
 	assertGeneratedBatchProjection(t, events)
 }
@@ -304,15 +296,13 @@ func tickAndPauseRuntime(t *testing.T, f factory.Factory) {
 
 func assertOrderedEventSequence(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	wantTypes := []factoryapi.FactoryEventType{
-		factoryapi.FactoryEventTypeRunRequest,
-		factoryapi.FactoryEventTypeInitialStructureRequest,
+	wantTypes := append(append([]factoryapi.FactoryEventType(nil), runtimeStartupEventTypes()...), []factoryapi.FactoryEventType{
 		factoryapi.FactoryEventTypeWorkRequest,
 		factoryapi.FactoryEventTypeRelationshipChangeRequest,
 		factoryapi.FactoryEventTypeDispatchRequest,
 		factoryapi.FactoryEventTypeDispatchResponse,
 		factoryapi.FactoryEventTypeFactoryStateResponse,
-	}
+	}...)
 	if len(events) != len(wantTypes) {
 		t.Fatalf("event count = %d, want %d: %#v", len(events), len(wantTypes), events)
 	}
@@ -332,43 +322,46 @@ func assertOrderedEventSequence(t *testing.T, events []factoryapi.FactoryEvent) 
 // pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally checks the ordered event payload contract in one reviewer-readable pass.
 func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	batch, err := events[2].Payload.AsWorkRequestEventPayload()
+	batch, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
 	if err != nil {
 		t.Fatalf("work request payload: %v", err)
 	}
-	if events[2].Context.RequestId == nil || batch.Type != factoryapi.WorkRequestTypeFactoryRequestBatch || firstRuntimeTestString(events[2].Context.TraceIds) != "trace-1" {
+	workRequestEvent := events[runtimeEventIndex(0)]
+	if workRequestEvent.Context.RequestId == nil || batch.Type != factoryapi.WorkRequestTypeFactoryRequestBatch || firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-1" {
 		t.Fatalf("work request payload = %#v, want canonical batch identity", batch)
 	}
 	if batch.Works == nil || len(*batch.Works) != 1 || stringValueForRuntimeTest((*batch.Works)[0].WorkId) != "work-1" {
 		t.Fatalf("work request items = %#v, want work-1", batch.Works)
 	}
 
-	relation, err := events[3].Payload.AsRelationshipChangeRequestEventPayload()
+	relation, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
 	if err != nil {
 		t.Fatalf("relationship payload: %v", err)
 	}
+	relationEvent := events[runtimeEventIndex(1)]
 	if relation.Relation.Type != factoryapi.RelationTypeDependsOn ||
-		events[3].Context.WorkIds == nil ||
+		relationEvent.Context.WorkIds == nil ||
 		stringValueForRuntimeTest(relation.Relation.TargetWorkId) != "upstream-1" {
 		t.Fatalf("relationship payload = %#v, want submitted dependency", relation)
 	}
 
-	request, err := events[4].Payload.AsDispatchRequestEventPayload()
+	request, err := events[runtimeEventIndex(2)].Payload.AsDispatchRequestEventPayload()
 	if err != nil {
 		t.Fatalf("dispatch created payload: %v", err)
 	}
-	if stringValueForRuntimeTest(events[4].Context.DispatchId) == "" || request.TransitionId != "t-process" {
+	dispatchRequestEvent := events[runtimeEventIndex(2)]
+	if stringValueForRuntimeTest(dispatchRequestEvent.Context.DispatchId) == "" || request.TransitionId != "t-process" {
 		t.Fatalf("workstation request payload = %#v, want dispatch identity", request)
 	}
 	if len(request.Inputs) != 1 || request.Inputs[0].WorkId != "work-1" {
 		t.Fatalf("workstation request inputs = %#v, want consumed work item", request.Inputs)
 	}
 
-	response, err := events[5].Payload.AsDispatchResponseEventPayload()
+	response, err := events[runtimeEventIndex(3)].Payload.AsDispatchResponseEventPayload()
 	if err != nil {
 		t.Fatalf("dispatch completed payload: %v", err)
 	}
-	if stringValueForRuntimeTest(events[5].Context.DispatchId) != stringValueForRuntimeTest(events[4].Context.DispatchId) || response.Outcome != factoryapi.WorkOutcomeAccepted {
+	if stringValueForRuntimeTest(events[runtimeEventIndex(3)].Context.DispatchId) != stringValueForRuntimeTest(dispatchRequestEvent.Context.DispatchId) || response.Outcome != factoryapi.WorkOutcomeAccepted {
 		t.Fatalf("workstation response payload = %#v, want accepted dispatch response", response)
 	}
 	if response.OutputWork == nil || len(*response.OutputWork) == 0 || stringValueForRuntimeTest((*response.OutputWork)[0].WorkId) != "work-1" {
@@ -378,11 +371,11 @@ func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) 
 
 func assertOrderedEventProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[5].Context.Tick)
+	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(3)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
-	if len(world.CompletedDispatches) != 1 || world.CompletedDispatches[0].DispatchID != stringValueForRuntimeTest(events[4].Context.DispatchId) {
+	if len(world.CompletedDispatches) != 1 || world.CompletedDispatches[0].DispatchID != stringValueForRuntimeTest(events[runtimeEventIndex(2)].Context.DispatchId) {
 		t.Fatalf("CompletedDispatches = %#v, want completed dispatch reconstructed from canonical events", world.CompletedDispatches)
 	}
 	if got := world.PlaceOccupancyByID["task:done"].WorkItemIDs; len(got) != 1 || got[0] != "work-1" {
@@ -449,13 +442,14 @@ func assertFactoryEventTypesPrefix(t *testing.T, got []factoryapi.FactoryEventTy
 // pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the batch replay event contract visible in one assertion owner.
 func assertBatchRequestReplayEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	batch, err := events[2].Payload.AsWorkRequestEventPayload()
+	batch, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
 	if err != nil {
 		t.Fatalf("batch payload: %v", err)
 	}
-	if stringValueForRuntimeTest(events[2].Context.RequestId) != "request-batch-events" ||
+	workRequestEvent := events[runtimeEventIndex(0)]
+	if stringValueForRuntimeTest(workRequestEvent.Context.RequestId) != "request-batch-events" ||
 		stringValueForRuntimeTest(batch.Source) != "external-submit" ||
-		firstRuntimeTestString(events[2].Context.TraceIds) != "trace-batch" {
+		firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-batch" {
 		t.Fatalf("batch payload = %#v, want request/source/trace metadata", batch)
 	}
 	if batch.Works == nil || len(*batch.Works) != 2 ||
@@ -469,23 +463,24 @@ func assertBatchRequestReplayEvents(t *testing.T, events []factoryapi.FactoryEve
 		t.Fatalf("work request events = %d, want 1 after idempotent retry", workRequestEvents)
 	}
 
-	relation, err := events[3].Payload.AsRelationshipChangeRequestEventPayload()
+	relation, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
 	if err != nil {
 		t.Fatalf("relationship payload: %v", err)
 	}
+	relationEvent := events[runtimeEventIndex(1)]
 	if relation.Relation.SourceWorkName != "second" ||
 		stringValueForRuntimeTest(relation.Relation.TargetWorkId) != "work-first" ||
 		relation.Relation.TargetWorkName != "first" ||
 		stringValueForRuntimeTest(relation.Relation.RequiredState) != "done" ||
-		stringValueForRuntimeTest(events[3].Context.RequestId) != "request-batch-events" ||
-		firstRuntimeTestString(events[3].Context.TraceIds) != "trace-batch" {
+		stringValueForRuntimeTest(relationEvent.Context.RequestId) != "request-batch-events" ||
+		firstRuntimeTestString(relationEvent.Context.TraceIds) != "trace-batch" {
 		t.Fatalf("relationship payload = %#v, want named batch dependency", relation)
 	}
 }
 
 func assertBatchRequestReplayProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[3].Context.Tick)
+	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -530,13 +525,14 @@ func generatedRuntimeBatchFixture() interfaces.GeneratedSubmissionBatch {
 // pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the generated batch event contract together across request, relation, and response assertions.
 func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	requestPayload, err := events[2].Payload.AsWorkRequestEventPayload()
+	requestPayload, err := events[runtimeEventIndex(0)].Payload.AsWorkRequestEventPayload()
 	if err != nil {
 		t.Fatalf("request payload: %v", err)
 	}
-	if stringValueForRuntimeTest(events[2].Context.RequestId) != "generated-request-events" ||
+	workRequestEvent := events[runtimeEventIndex(0)]
+	if stringValueForRuntimeTest(workRequestEvent.Context.RequestId) != "generated-request-events" ||
 		stringValueForRuntimeTest(requestPayload.Source) != "worker-output:dispatch-parent" ||
-		firstRuntimeTestString(events[2].Context.TraceIds) != "trace-generated" {
+		firstRuntimeTestString(workRequestEvent.Context.TraceIds) != "trace-generated" {
 		t.Fatalf("request payload = %#v, want generated request metadata", requestPayload)
 	}
 	if got := strings.Join(sliceValueForRuntimeTest(requestPayload.ParentLineage), ","); got != "request-parent,work-parent" {
@@ -563,21 +559,22 @@ func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) 
 		}
 	}
 
-	relationPayload, err := events[3].Payload.AsRelationshipChangeRequestEventPayload()
+	relationPayload, err := events[runtimeEventIndex(1)].Payload.AsRelationshipChangeRequestEventPayload()
 	if err != nil {
 		t.Fatalf("relationship payload: %v", err)
 	}
+	relationEvent := events[runtimeEventIndex(1)]
 	if relationPayload.Relation.SourceWorkName != "review" ||
 		stringValueForRuntimeTest(relationPayload.Relation.TargetWorkId) != "work-draft" ||
-		stringValueForRuntimeTest(events[3].Context.RequestId) != "generated-request-events" ||
-		firstRuntimeTestString(events[3].Context.TraceIds) != "trace-generated" {
+		stringValueForRuntimeTest(relationEvent.Context.RequestId) != "generated-request-events" ||
+		firstRuntimeTestString(relationEvent.Context.TraceIds) != "trace-generated" {
 		t.Fatalf("relationship payload = %#v, want generated request dependency", relationPayload)
 	}
 }
 
 func assertGeneratedBatchProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[3].Context.Tick)
+	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

@@ -27,6 +27,21 @@ const (
 	BundledFileContentEncodingUtf8 BundledFileContentEncoding = "utf-8"
 )
 
+// Defines values for CheckpointResumabilityStatus.
+const (
+	NOTRESUMABLE CheckpointResumabilityStatus = "NOT_RESUMABLE"
+	RESUMABLE    CheckpointResumabilityStatus = "RESUMABLE"
+	UNKNOWN      CheckpointResumabilityStatus = "UNKNOWN"
+)
+
+// Defines values for DispatchReconciliationSource.
+const (
+	DURABLESTATE      DispatchReconciliationSource = "DURABLE_STATE"
+	PROVIDERSESSION   DispatchReconciliationSource = "PROVIDER_SESSION"
+	RUNTIMERECONCILER DispatchReconciliationSource = "RUNTIME_RECONCILER"
+	STREAMREPLAY      DispatchReconciliationSource = "STREAM_REPLAY"
+)
+
 // Defines values for ErrorFamily.
 const (
 	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
@@ -109,27 +124,42 @@ const (
 	AgentFactoryEventV1 FactoryEventSchemaVersion = "agent-factory.event.v1"
 )
 
+// Defines values for FactoryEventSessionResultStatus.
+const (
+	FAILEDWITHPARTIAL FactoryEventSessionResultStatus = "FAILED_WITH_PARTIAL"
+	FINAL             FactoryEventSessionResultStatus = "FINAL"
+	PARTIAL           FactoryEventSessionResultStatus = "PARTIAL"
+)
+
 // Defines values for FactoryEventType.
 const (
-	FactoryEventTypeArtifactCreated           FactoryEventType = "ARTIFACT_CREATED"
-	FactoryEventTypeDispatchRequest           FactoryEventType = "DISPATCH_REQUEST"
-	FactoryEventTypeDispatchResponse          FactoryEventType = "DISPATCH_RESPONSE"
-	FactoryEventTypeFactoryChange             FactoryEventType = "FACTORY_CHANGE"
-	FactoryEventTypeFactoryStateResponse      FactoryEventType = "FACTORY_STATE_RESPONSE"
-	FactoryEventTypeInferenceRequest          FactoryEventType = "INFERENCE_REQUEST"
-	FactoryEventTypeInferenceResponse         FactoryEventType = "INFERENCE_RESPONSE"
-	FactoryEventTypeInitialStructureRequest   FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
-	FactoryEventTypeJavaScriptCheckpointRef   FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
-	FactoryEventTypeJavaScriptPhaseChange     FactoryEventType = "JAVASCRIPT_PHASE_CHANGE"
-	FactoryEventTypeModelRequest              FactoryEventType = "MODEL_REQUEST"
-	FactoryEventTypeModelResponse             FactoryEventType = "MODEL_RESPONSE"
-	FactoryEventTypeRelationshipChangeRequest FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
-	FactoryEventTypeRunRequest                FactoryEventType = "RUN_REQUEST"
-	FactoryEventTypeRunResponse               FactoryEventType = "RUN_RESPONSE"
-	FactoryEventTypeScriptRequest             FactoryEventType = "SCRIPT_REQUEST"
-	FactoryEventTypeScriptResponse            FactoryEventType = "SCRIPT_RESPONSE"
-	FactoryEventTypeWorkRequest               FactoryEventType = "WORK_REQUEST"
-	FactoryEventTypeWorkStateChange           FactoryEventType = "WORK_STATE_CHANGE"
+	FactoryEventTypeArtifactCreated               FactoryEventType = "ARTIFACT_CREATED"
+	FactoryEventTypeDispatchInterrupted           FactoryEventType = "DISPATCH_INTERRUPTED"
+	FactoryEventTypeDispatchQueued                FactoryEventType = "DISPATCH_QUEUED"
+	FactoryEventTypeDispatchReconciled            FactoryEventType = "DISPATCH_RECONCILED"
+	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
+	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryStateResponse          FactoryEventType = "FACTORY_STATE_RESPONSE"
+	FactoryEventTypeInferenceRequest              FactoryEventType = "INFERENCE_REQUEST"
+	FactoryEventTypeInferenceResponse             FactoryEventType = "INFERENCE_RESPONSE"
+	FactoryEventTypeInitialStructureRequest       FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
+	FactoryEventTypeJavaScriptCheckpointRef       FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
+	FactoryEventTypeJavaScriptPhaseChange         FactoryEventType = "JAVASCRIPT_PHASE_CHANGE"
+	FactoryEventTypeModelRequest                  FactoryEventType = "MODEL_REQUEST"
+	FactoryEventTypeModelResponse                 FactoryEventType = "MODEL_RESPONSE"
+	FactoryEventTypeOrchestratorCheckpointWritten FactoryEventType = "ORCHESTRATOR_CHECKPOINT_WRITTEN"
+	FactoryEventTypeOrchestratorPhaseChanged      FactoryEventType = "ORCHESTRATOR_PHASE_CHANGED"
+	FactoryEventTypeRelationshipChangeRequest     FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
+	FactoryEventTypeRunRequest                    FactoryEventType = "RUN_REQUEST"
+	FactoryEventTypeRunResponse                   FactoryEventType = "RUN_RESPONSE"
+	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
+	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
+	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
+	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
+	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
+	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
 )
 
 // Defines values for FactoryLayoutPreferencesDirection.
@@ -479,6 +509,13 @@ const (
 	ModelStatusUNAVAILABLE ModelStatus = "UNAVAILABLE"
 )
 
+// Defines values for OrchestratorPhaseStatus.
+const (
+	ACTIVE    OrchestratorPhaseStatus = "ACTIVE"
+	COMPLETED OrchestratorPhaseStatus = "COMPLETED"
+	SKIPPED   OrchestratorPhaseStatus = "SKIPPED"
+)
+
 // Defines values for PromptTemplateDiagnosticKind.
 const (
 	INVALIDVARIABLE     PromptTemplateDiagnosticKind = "INVALID_VARIABLE"
@@ -719,6 +756,9 @@ type BundledFileContent struct {
 // BundledFileContentEncoding Declared content encoding for the inline payload. V1 bundled files use UTF-8 text content.
 type BundledFileContentEncoding string
 
+// CheckpointResumabilityStatus Whether a recorded checkpoint can be used to resume session execution.
+type CheckpointResumabilityStatus string
+
 // ClassificationRoute defines model for ClassificationRoute.
 type ClassificationRoute struct {
 	// Label Case-sensitive classifier label that must match the trimmed classifier output exactly.
@@ -753,6 +793,87 @@ type DispatchConsumedWorkRef struct {
 	// WorkId Canonical work identity for one consumed dispatch input.
 	WorkId string `json:"workId"`
 }
+
+// DispatchInterruptedEventPayload Dispatch interruption recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context.
+type DispatchInterruptedEventPayload struct {
+	CheckpointRef *FactorySessionJavaScriptCheckpointRef `json:"checkpointRef,omitempty"`
+
+	// InterruptedAt When the interruption was observed.
+	InterruptedAt time.Time `json:"interruptedAt"`
+
+	// ObservedStatus Canonical dispatch lifecycle status shared across orchestrators.
+	ObservedStatus     FactoryDispatchStatus       `json:"observedStatus"`
+	ProviderSessionRef *LoadableProviderSessionRef `json:"providerSessionRef,omitempty"`
+
+	// Reason Customer-visible interruption reason.
+	Reason string `json:"reason"`
+
+	// RetryPlanned Whether a retry dispatch is planned.
+	RetryPlanned bool `json:"retryPlanned"`
+}
+
+// DispatchQueuedEventPayload Dispatch queued for execution on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context and Petri transition fields are not required for JavaScript workflow dispatches.
+type DispatchQueuedEventPayload struct {
+	// CoordinationRef Optional coordination reference for grouped child work.
+	CoordinationRef *string `json:"coordinationRef,omitempty"`
+
+	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
+
+	// InputArtifactIds Input artifact identifiers consumed by the dispatch.
+	InputArtifactIds *[]string `json:"inputArtifactIds,omitempty"`
+
+	// InputWorkIds Input work identifiers consumed by the dispatch.
+	InputWorkIds *[]string `json:"inputWorkIds,omitempty"`
+
+	// Label Customer-visible dispatch label.
+	Label *string `json:"label,omitempty"`
+
+	// Model Selected model identifier when applicable.
+	Model *string `json:"model,omitempty"`
+
+	// ParentDispatchId Parent dispatch identifier when this dispatch was spawned from another dispatch.
+	ParentDispatchId *string `json:"parentDispatchId,omitempty"`
+
+	// PromptDigest Stable digest of rendered prompt material.
+	PromptDigest *string `json:"promptDigest,omitempty"`
+
+	// Provider Selected provider identifier when applicable.
+	Provider *string `json:"provider,omitempty"`
+
+	// QueuePosition Queue position when known.
+	QueuePosition *int `json:"queuePosition,omitempty"`
+
+	// RetryOfDispatchId Prior dispatch identifier when this dispatch is a retry.
+	RetryOfDispatchId *string `json:"retryOfDispatchId,omitempty"`
+
+	// RunnerId Selected runner identifier when applicable.
+	RunnerId *string `json:"runnerId,omitempty"`
+
+	// SchemaDigest Stable digest of the output schema when applicable.
+	SchemaDigest *string `json:"schemaDigest,omitempty"`
+}
+
+// DispatchReconciledEventPayload Dispatch reconciliation recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context.
+type DispatchReconciledEventPayload struct {
+	// ArtifactIds Artifact identifiers produced or updated by reconciliation.
+	ArtifactIds   *[]string                     `json:"artifactIds,omitempty"`
+	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+
+	// ReconciledStatus Canonical dispatch lifecycle status shared across orchestrators.
+	ReconciledStatus FactoryDispatchStatus `json:"reconciledStatus"`
+
+	// ReconciliationSource Source that produced a dispatch reconciliation fact.
+	ReconciliationSource DispatchReconciliationSource `json:"reconciliationSource"`
+
+	// Replayed Whether reconciliation facts were emitted during stream replay.
+	Replayed          bool                  `json:"replayed"`
+	ResultArtifactRef *FactoryArtifactRef   `json:"resultArtifactRef,omitempty"`
+	Usage             *FactoryDispatchUsage `json:"usage,omitempty"`
+}
+
+// DispatchReconciliationSource Source that produced a dispatch reconciliation fact.
+type DispatchReconciliationSource string
 
 // DispatchRequestEventMetadata Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here.
 type DispatchRequestEventMetadata struct {
@@ -1121,6 +1242,9 @@ type FactoryEventSchemaVersion string
 
 // FactoryEventContext defines model for FactoryEventContext.
 type FactoryEventContext struct {
+	// CheckpointId Canonical checkpoint identifier for checkpoint-scoped events; payloads must not restate it.
+	CheckpointId *string `json:"checkpointId,omitempty"`
+
 	// CurrentChainingTraceId Canonical chaining-trace identifier for the dispatch currently represented by this event context.
 	CurrentChainingTraceId *string `json:"currentChainingTraceId,omitempty"`
 
@@ -1130,6 +1254,18 @@ type FactoryEventContext struct {
 	// EventTime Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.
 	EventTime time.Time `json:"eventTime"`
 
+	// OrchestratorDialect Optional JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
+	OrchestratorDialect *string `json:"orchestratorDialect,omitempty"`
+
+	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
+	OrchestratorKind *FactoryOrchestratorKind `json:"orchestratorKind,omitempty"`
+
+	// PhaseId Canonical workflow phase identifier; payloads must not restate it.
+	PhaseId *string `json:"phaseId,omitempty"`
+
+	// PhaseName Canonical workflow phase name for customer-visible diagnostics.
+	PhaseName *string `json:"phaseName,omitempty"`
+
 	// PreviousChainingTraceIds Canonical predecessor chaining traces consumed by the dispatch in deterministic order.
 	PreviousChainingTraceIds *[]string `json:"previousChainingTraceIds,omitempty"`
 
@@ -1138,6 +1274,12 @@ type FactoryEventContext struct {
 
 	// Sequence Append-only event-log sequence number.
 	Sequence int `json:"sequence"`
+
+	// SessionId Canonical factory session identity for session-scoped events; payloads must not restate it.
+	SessionId *string `json:"sessionId,omitempty"`
+
+	// SessionSequence Monotonic per-session ordering used for replay deduplication within one session.
+	SessionSequence *int `json:"sessionSequence,omitempty"`
 
 	// Source Human-readable source such as api, filewatcher, replay, cron, or worker.
 	Source *string `json:"source,omitempty"`
@@ -1151,6 +1293,9 @@ type FactoryEventContext struct {
 	// WorkIds Canonical work identities correlated to this event; payloads must not restate them.
 	WorkIds *[]string `json:"workIds,omitempty"`
 }
+
+// FactoryEventSessionResultStatus Customer-visible session result availability for result update events.
+type FactoryEventSessionResultStatus string
 
 // FactoryEventType Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
 type FactoryEventType string
@@ -3212,6 +3357,53 @@ type OpenFactorySessionResponse struct {
 	Targets         *[]FactorySessionTarget `json:"targets,omitempty"`
 }
 
+// OrchestratorCheckpointWrittenEventPayload Orchestrator checkpoint reference recorded on the canonical factory event stream. Checkpoint identity lives in FactoryEvent.context and raw VM bodies remain orchestrator-owned.
+type OrchestratorCheckpointWrittenEventPayload struct {
+	ArtifactRef *FactoryArtifactRef `json:"artifactRef,omitempty"`
+
+	// Label Customer-visible checkpoint label.
+	Label string `json:"label"`
+
+	// ResumabilityStatus Whether a recorded checkpoint can be used to resume session execution.
+	ResumabilityStatus CheckpointResumabilityStatus `json:"resumabilityStatus"`
+
+	// RuntimeSnapshotDigest Stable digest of replay-safe runtime snapshot metadata.
+	RuntimeSnapshotDigest *string `json:"runtimeSnapshotDigest,omitempty"`
+
+	// SourceHash Stable hash of the authored workflow source at checkpoint time.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// Timestamp When the checkpoint was recorded.
+	Timestamp *time.Time `json:"timestamp,omitempty"`
+
+	// Warnings Customer-visible checkpoint warnings.
+	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
+}
+
+// OrchestratorPhaseChangedEventPayload Orchestrator workflow phase transition recorded on the canonical factory event stream. Current phase identity lives in FactoryEvent.context.
+type OrchestratorPhaseChangedEventPayload struct {
+	// CompletedAt When the previous phase completed, when applicable.
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+
+	// PhaseStatus Canonical workflow phase lifecycle status for orchestrator phase events.
+	PhaseStatus OrchestratorPhaseStatus `json:"phaseStatus"`
+
+	// PreviousPhaseId Previous workflow phase identifier when available.
+	PreviousPhaseId *string `json:"previousPhaseId,omitempty"`
+
+	// PreviousPhaseName Previous workflow phase name when available.
+	PreviousPhaseName *string `json:"previousPhaseName,omitempty"`
+
+	// ProgressSummary Bounded customer-visible phase progress summary.
+	ProgressSummary *string `json:"progressSummary,omitempty"`
+
+	// StartedAt When the current phase started, when applicable.
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+}
+
+// OrchestratorPhaseStatus Canonical workflow phase lifecycle status for orchestrator phase events.
+type OrchestratorPhaseStatus string
+
 // PaginationContext defines model for PaginationContext.
 type PaginationContext struct {
 	MaxResults int     `json:"maxResults"`
@@ -3735,6 +3927,59 @@ type ScriptResponseEventPayload struct {
 	// Stdout Captured stdout text from the script execution boundary.
 	Stdout       string `json:"stdout"`
 	TransitionId string `json:"transitionId"`
+}
+
+// SessionCompletedEventPayload Authoritative terminal session lifecycle marker on the canonical factory event stream. Session identity lives in FactoryEvent.context.
+type SessionCompletedEventPayload struct {
+	// ArtifactIds Artifact identifiers associated with the terminal session outcome.
+	ArtifactIds *[]string `json:"artifactIds,omitempty"`
+
+	// CompletedAt When durable session execution reached a terminal state.
+	CompletedAt    time.Time                                    `json:"completedAt"`
+	DispatchCounts *FactorySessionJavaScriptChildDispatchCounts `json:"dispatchCounts,omitempty"`
+
+	// DurationMillis Total session execution duration in milliseconds.
+	DurationMillis *int64                        `json:"durationMillis,omitempty"`
+	FailureDetail  *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
+
+	// FinalStatus Canonical lifecycle status for one live factory session runtime.
+	FinalStatus FactorySessionStatus `json:"finalStatus"`
+
+	// ResultStatus Customer-visible session result availability for result update events.
+	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
+}
+
+// SessionResultUpdatedEventPayload Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context.
+type SessionResultUpdatedEventPayload struct {
+	// ArtifactIds Artifact identifiers associated with this result update.
+	ArtifactIds *[]string `json:"artifactIds,omitempty"`
+
+	// ResultStatus Customer-visible session result availability for result update events.
+	ResultStatus FactoryEventSessionResultStatus `json:"resultStatus"`
+
+	// ResultSummary Ordered canonical content parts for one work item.
+	ResultSummary *WorkContent `json:"resultSummary,omitempty"`
+}
+
+// SessionStartedEventPayload Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only.
+type SessionStartedEventPayload struct {
+	// ArgsDigest Stable digest of effective session arguments.
+	ArgsDigest *string `json:"argsDigest,omitempty"`
+
+	// FactoryId Stable factory identifier for the session runtime.
+	FactoryId *string `json:"factoryId,omitempty"`
+
+	// PolicyHash Stable hash of the effective orchestrator policy.
+	PolicyHash *string `json:"policyHash,omitempty"`
+
+	// SourceHash Stable hash of the authored source material.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// SourceRef Authored workflow or factory source reference when applicable.
+	SourceRef *string `json:"sourceRef,omitempty"`
+
+	// StartedAt When durable session execution started.
+	StartedAt time.Time `json:"startedAt"`
 }
 
 // StageSubmitWorkFileRequest defines model for StageSubmitWorkFileRequest.
@@ -4571,6 +4816,12 @@ type WorkstationOperationBindingSelector struct {
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string
 
+// AfterEventId defines model for AfterEventId.
+type AfterEventId = string
+
+// AfterSequence defines model for AfterSequence.
+type AfterSequence = int
+
 // ArtifactID defines model for ArtifactID.
 type ArtifactID = string
 
@@ -4645,10 +4896,28 @@ type SaveCurrentFactoryBadRequest = ErrorResponse
 // SaveCurrentFactoryConflict defines model for SaveCurrentFactoryConflict.
 type SaveCurrentFactoryConflict = ErrorResponse
 
+// GetEventsParams defines parameters for GetEvents.
+type GetEventsParams struct {
+	// AfterEventId Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier.
+	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
+
+	// AfterSequence Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+}
+
 // ListFactorySessionsParams defines parameters for ListFactorySessions.
 type ListFactorySessionsParams struct {
 	// Scope Optional session list scope. Defaults to live for backward-compatible live workspace session listing.
 	Scope *FactorySessionListScope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
+// GetEventsBySessionIdParams defines parameters for GetEventsBySessionId.
+type GetEventsBySessionIdParams struct {
+	// AfterEventId Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier.
+	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
+
+	// AfterSequence Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
 }
 
 // GetFactorySessionResultsParams defines parameters for GetFactorySessionResults.
@@ -5308,6 +5577,214 @@ func (t *FactoryEvent_Payload) MergeRunResponseEventPayload(v RunResponseEventPa
 	return err
 }
 
+// AsSessionStartedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionStartedEventPayload
+func (t FactoryEvent_Payload) AsSessionStartedEventPayload() (SessionStartedEventPayload, error) {
+	var body SessionStartedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionStartedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionStartedEventPayload
+func (t *FactoryEvent_Payload) FromSessionStartedEventPayload(v SessionStartedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionStartedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionStartedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionStartedEventPayload(v SessionStartedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionResultUpdatedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionResultUpdatedEventPayload
+func (t FactoryEvent_Payload) AsSessionResultUpdatedEventPayload() (SessionResultUpdatedEventPayload, error) {
+	var body SessionResultUpdatedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionResultUpdatedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionResultUpdatedEventPayload
+func (t *FactoryEvent_Payload) FromSessionResultUpdatedEventPayload(v SessionResultUpdatedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionResultUpdatedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionResultUpdatedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionResultUpdatedEventPayload(v SessionResultUpdatedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionCompletedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionCompletedEventPayload
+func (t FactoryEvent_Payload) AsSessionCompletedEventPayload() (SessionCompletedEventPayload, error) {
+	var body SessionCompletedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionCompletedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionCompletedEventPayload
+func (t *FactoryEvent_Payload) FromSessionCompletedEventPayload(v SessionCompletedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionCompletedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionCompletedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionCompletedEventPayload(v SessionCompletedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsOrchestratorPhaseChangedEventPayload returns the union data inside the FactoryEvent_Payload as a OrchestratorPhaseChangedEventPayload
+func (t FactoryEvent_Payload) AsOrchestratorPhaseChangedEventPayload() (OrchestratorPhaseChangedEventPayload, error) {
+	var body OrchestratorPhaseChangedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromOrchestratorPhaseChangedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided OrchestratorPhaseChangedEventPayload
+func (t *FactoryEvent_Payload) FromOrchestratorPhaseChangedEventPayload(v OrchestratorPhaseChangedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeOrchestratorPhaseChangedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided OrchestratorPhaseChangedEventPayload
+func (t *FactoryEvent_Payload) MergeOrchestratorPhaseChangedEventPayload(v OrchestratorPhaseChangedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsOrchestratorCheckpointWrittenEventPayload returns the union data inside the FactoryEvent_Payload as a OrchestratorCheckpointWrittenEventPayload
+func (t FactoryEvent_Payload) AsOrchestratorCheckpointWrittenEventPayload() (OrchestratorCheckpointWrittenEventPayload, error) {
+	var body OrchestratorCheckpointWrittenEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromOrchestratorCheckpointWrittenEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided OrchestratorCheckpointWrittenEventPayload
+func (t *FactoryEvent_Payload) FromOrchestratorCheckpointWrittenEventPayload(v OrchestratorCheckpointWrittenEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeOrchestratorCheckpointWrittenEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided OrchestratorCheckpointWrittenEventPayload
+func (t *FactoryEvent_Payload) MergeOrchestratorCheckpointWrittenEventPayload(v OrchestratorCheckpointWrittenEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsDispatchQueuedEventPayload returns the union data inside the FactoryEvent_Payload as a DispatchQueuedEventPayload
+func (t FactoryEvent_Payload) AsDispatchQueuedEventPayload() (DispatchQueuedEventPayload, error) {
+	var body DispatchQueuedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromDispatchQueuedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided DispatchQueuedEventPayload
+func (t *FactoryEvent_Payload) FromDispatchQueuedEventPayload(v DispatchQueuedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeDispatchQueuedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchQueuedEventPayload
+func (t *FactoryEvent_Payload) MergeDispatchQueuedEventPayload(v DispatchQueuedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsDispatchInterruptedEventPayload returns the union data inside the FactoryEvent_Payload as a DispatchInterruptedEventPayload
+func (t FactoryEvent_Payload) AsDispatchInterruptedEventPayload() (DispatchInterruptedEventPayload, error) {
+	var body DispatchInterruptedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromDispatchInterruptedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided DispatchInterruptedEventPayload
+func (t *FactoryEvent_Payload) FromDispatchInterruptedEventPayload(v DispatchInterruptedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeDispatchInterruptedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchInterruptedEventPayload
+func (t *FactoryEvent_Payload) MergeDispatchInterruptedEventPayload(v DispatchInterruptedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsDispatchReconciledEventPayload returns the union data inside the FactoryEvent_Payload as a DispatchReconciledEventPayload
+func (t FactoryEvent_Payload) AsDispatchReconciledEventPayload() (DispatchReconciledEventPayload, error) {
+	var body DispatchReconciledEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromDispatchReconciledEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided DispatchReconciledEventPayload
+func (t *FactoryEvent_Payload) FromDispatchReconciledEventPayload(v DispatchReconciledEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeDispatchReconciledEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided DispatchReconciledEventPayload
+func (t *FactoryEvent_Payload) MergeDispatchReconciledEventPayload(v DispatchReconciledEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsJavaScriptCheckpointRefEventPayload returns the union data inside the FactoryEvent_Payload as a JavaScriptCheckpointRefEventPayload
 func (t FactoryEvent_Payload) AsJavaScriptCheckpointRefEventPayload() (JavaScriptCheckpointRefEventPayload, error) {
 	var body JavaScriptCheckpointRefEventPayload
@@ -5804,7 +6281,7 @@ func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
 type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
-	GetEvents(w http.ResponseWriter, r *http.Request)
+	GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams)
 	// List factory sessions
 	// (GET /factory-sessions)
 	ListFactorySessions(w http.ResponseWriter, r *http.Request, params ListFactorySessionsParams)
@@ -5843,7 +6320,7 @@ type ServerInterface interface {
 	GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionId SessionID, dispatchId DispatchID)
 	// Stream factory events for one session
 	// (GET /factory-sessions/{session_id}/events)
-	GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetEventsBySessionIdParams)
 	// Get current factory for one session
 	// (GET /factory-sessions/{session_id}/factory)
 	GetCurrentFactoryBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -5936,8 +6413,29 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // GetEvents operation middleware
 func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEventsParams
+
+	// ------------- Optional query parameter "after_event_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_event_id", r.URL.Query(), &params.AfterEventId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_event_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEvents(w, r)
+		siw.Handler.GetEvents(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -6248,8 +6746,27 @@ func (siw *ServerInterfaceWrapper) GetEventsBySessionId(w http.ResponseWriter, r
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetEventsBySessionIdParams
+
+	// ------------- Optional query parameter "after_event_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_event_id", r.URL.Query(), &params.AfterEventId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_event_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetEventsBySessionId(w, r, sessionId)
+		siw.Handler.GetEventsBySessionId(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {

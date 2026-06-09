@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+description: >-
+  Partial or final session result availability on the canonical factory event
+  stream. Identity and ordering live in FactoryEvent.context.
+required:
+  - resultStatus
+properties:
+  resultStatus:
+    $ref: '../FactoryEventSessionResultStatus.yaml'
+  artifactIds:
+    type: array
+    items:
+      type: string
+    description: Artifact identifiers associated with this result update.
+  resultSummary:
+    $ref: '../../data-models/WorkContent.yaml'
+    description: Bounded customer-visible result summary without raw prompts or secrets.

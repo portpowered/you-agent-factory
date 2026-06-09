@@ -1574,7 +1574,7 @@ func (s *stubFactoryCoordinator) MoveWorkForSession(_ context.Context, sessionID
 	return s.moveResult, nil
 }
 
-func (s *stubFactoryCoordinator) SubscribeFactoryEventsForSession(_ context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+func (s *stubFactoryCoordinator) SubscribeFactoryEventsForSession(_ context.Context, sessionID string, _ *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	s.calls = append(s.calls, "subscribe-session-events")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.eventStream, nil
@@ -1728,7 +1728,7 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if _, err := svc.MoveWorkForSession(context.Background(), "session-a", "work-1", "done", "request-2"); err != nil {
 		t.Fatalf("MoveWorkForSession: %v", err)
 	}
-	if _, err := svc.SubscribeFactoryEventsForSession(context.Background(), "session-a"); err != nil {
+	if _, err := svc.SubscribeFactoryEventsForSession(context.Background(), "session-a", nil); err != nil {
 		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
 	}
 	snapshot, err := svc.GetEngineStateSnapshotForSession(context.Background(), "session-a")

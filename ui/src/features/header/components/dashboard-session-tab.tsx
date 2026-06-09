@@ -194,7 +194,7 @@ function SessionTabStatusIndicator({
         className={cn(
           "absolute inset-0 rounded-full",
           status === "live" && "bg-success",
-          status === "connecting" && "bg-primary",
+          (status === "connecting" || status === "reconnecting") && "bg-primary",
           status === "offline" && "bg-error",
         )}
       />

@@ -1,0 +1,52 @@
+type: object
+additionalProperties: false
+description: >-
+  Dispatch queued for execution on the canonical factory event stream. Dispatch
+  identity lives in FactoryEvent.context and Petri transition fields are not
+  required for JavaScript workflow dispatches.
+required:
+  - dispatchKind
+properties:
+  dispatchKind:
+    $ref: '../../data-models/FactoryDispatchKind.yaml'
+  label:
+    type: string
+    description: Customer-visible dispatch label.
+  coordinationRef:
+    type: string
+    description: Optional coordination reference for grouped child work.
+  runnerId:
+    type: string
+    description: Selected runner identifier when applicable.
+  model:
+    type: string
+    description: Selected model identifier when applicable.
+  provider:
+    type: string
+    description: Selected provider identifier when applicable.
+  parentDispatchId:
+    type: string
+    description: Parent dispatch identifier when this dispatch was spawned from another dispatch.
+  retryOfDispatchId:
+    type: string
+    description: Prior dispatch identifier when this dispatch is a retry.
+  queuePosition:
+    type: integer
+    minimum: 0
+    description: Queue position when known.
+  promptDigest:
+    type: string
+    description: Stable digest of rendered prompt material.
+  schemaDigest:
+    type: string
+    description: Stable digest of the output schema when applicable.
+  inputArtifactIds:
+    type: array
+    items:
+      type: string
+    description: Input artifact identifiers consumed by the dispatch.
+  inputWorkIds:
+    type: array
+    items:
+      type: string
+    description: Input work identifiers consumed by the dispatch.

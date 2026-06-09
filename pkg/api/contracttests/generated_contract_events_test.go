@@ -337,6 +337,7 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 			}),
 		},
 	}
+	events = append(events, generatedFactorySessionLifecycleEvents(t, eventTime)...)
 	events = append(events, generatedFactoryOrchestratorLifecycleEvents(t, eventTime)...)
 	return events
 }

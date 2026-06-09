@@ -251,6 +251,37 @@ func assertLiveEventReplay(t *testing.T, reader *bufio.Reader, liveEvents chan f
 	}
 }
 
+func TestGetEvents_ReconnectAfterEventIDSkipsAcknowledgedHistory(t *testing.T) {
+	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	historical := testHistoricalFactoryEvents(t, eventTime)
+	liveEvents := make(chan factoryapi.FactoryEvent, 1)
+	mf := &testutil.MockFactory{FactoryEventStream: &interfaces.FactoryEventStream{History: historical, Events: liveEvents}}
+
+	logger, _ := zap.NewDevelopment()
+	server := httptest.NewServer(api.NewServer(mf, 8080, logger).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/events?after_event_id="+historical[1].Id, nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("stream request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, body = %s", resp.StatusCode, string(body))
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	replayed := readAPISSEFactoryEvent(t, reader)
+	if replayed.Id != historical[2].Id {
+		t.Fatalf("reconnect replay = %q, want only events after %q", replayed.Id, historical[1].Id)
+	}
+}
+
 func TestGetEvents_ClientDisconnectCancelsSubscription(t *testing.T) {
 	liveEvents := make(chan factoryapi.FactoryEvent)
 	mf := &testutil.MockFactory{

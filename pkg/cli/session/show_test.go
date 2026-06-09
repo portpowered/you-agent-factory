@@ -13,17 +13,8 @@ import (
 )
 
 func TestShow_PerformsGETFactorySession(t *testing.T) {
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		if r.Method != http.MethodGet {
-			t.Fatalf("method = %s, want GET", r.Method)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(sampleFactorySession()); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
+	var gotPaths []string
+	srv := httptest.NewServer(sessionShowTestHandler(t, &gotPaths))
 	defer srv.Close()
 
 	var out bytes.Buffer
@@ -35,18 +26,13 @@ func TestShow_PerformsGETFactorySession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Show: %v", err)
 	}
-	if gotPath != "/factory-sessions/session-beta" {
-		t.Fatalf("path = %q, want /factory-sessions/session-beta", gotPath)
+	if len(gotPaths) == 0 || gotPaths[0] != "/factory-sessions/session-beta" {
+		t.Fatalf("paths = %#v, want session show path first", gotPaths)
 	}
 }
 
 func TestShow_HumanOutputRendersJavaScriptFactorySession(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(sampleFactorySession()); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
+	srv := httptest.NewServer(sessionShowTestHandler(t, nil))
 	defer srv.Close()
 
 	var out bytes.Buffer
@@ -63,6 +49,11 @@ func TestShow_HumanOutputRendersJavaScriptFactorySession(t *testing.T) {
 	for _, want := range []string{
 		"Factory session:\tsession-beta",
 		"Orchestrator kind:\tJAVASCRIPT",
+		"Session started:\t",
+		"Dispatch:\tdispatch-1 (review child) status=RECONCILED kind=JAVASCRIPT_AGENT",
+		"Artifact ref:\tartifact-1 (review output) kind=CHILD_RESULT visibility=PUBLIC",
+		"Partial result ref:\tartifact-partial (FINDING)",
+		"Final result ref:\tartifact-final (FINAL_RESULT)",
 		"Dynamic workflow:\tJavaScript factory session",
 		"Phase:\treview",
 		"Child dispatches:\tqueued=1 running=2 completed=4",
@@ -112,12 +103,7 @@ func TestShow_HumanOutputRendersPetriFactorySession(t *testing.T) {
 }
 
 func TestShow_JSONModeEmitsFactorySession(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(sampleFactorySession()); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
+	srv := httptest.NewServer(sessionShowTestHandler(t, nil))
 	defer srv.Close()
 
 	var out bytes.Buffer
@@ -161,10 +147,54 @@ func TestShow_NotFoundReportsSessionID(t *testing.T) {
 	}
 }
 
+func sessionShowTestHandler(t *testing.T, gotPaths *[]string) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Fatalf("method = %s, want GET", r.Method)
+		}
+		if gotPaths != nil {
+			*gotPaths = append(*gotPaths, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/factory-sessions/session-beta/partial-result":
+			if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionPartialResult{
+				PartialResultArtifactRef: &factoryapi.FactoryArtifactRef{
+					Id:   "artifact-partial",
+					Kind: factoryapi.FactoryArtifactKindFINDING,
+				},
+				SessionId: "session-beta",
+			}); err != nil {
+				t.Fatalf("encode partial result: %v", err)
+			}
+		case "/factory-sessions/session-beta/result":
+			if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLiveResult{
+				ResultArtifactRef: &factoryapi.FactoryArtifactRef{
+					Id:   "artifact-final",
+					Kind: factoryapi.FactoryArtifactKindFINALRESULT,
+				},
+				SessionId: "session-beta",
+				Status:    factoryapi.FactorySessionStatusIDLE,
+			}); err != nil {
+				t.Fatalf("encode result: %v", err)
+			}
+		default:
+			if err := json.NewEncoder(w).Encode(sampleFactorySession()); err != nil {
+				t.Fatalf("encode response: %v", err)
+			}
+		}
+	}
+}
+
 func sampleFactorySession() factoryapi.FactorySession {
 	phase := "review"
 	summary := "saved plan checkpoint"
 	label := "plan"
+	dispatchLabel := "review child"
+	artifactLabel := "review output"
+	startedAt := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
+	updatedAt := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
 	return factoryapi.FactorySession{
 		Id:         "session-beta",
 		FactoryDir: "/workspace/root/beta",
@@ -177,6 +207,22 @@ func sampleFactorySession() factoryapi.FactorySession {
 		Runtime: factoryapi.FactorySessionRuntime{
 			OrchestratorKind: factoryapi.JAVASCRIPT,
 			Status:           factoryapi.FactorySessionStatusIDLE,
+			Lifecycle: factoryapi.FactorySessionLifecycle{
+				StartedAt: startedAt,
+				UpdatedAt: updatedAt,
+			},
+			Artifacts: &[]factoryapi.FactoryArtifact{{
+				Id:         "artifact-1",
+				Kind:       factoryapi.FactoryArtifactKindCHILDRESULT,
+				Label:      &artifactLabel,
+				Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+			}},
+			Dispatches: &[]factoryapi.FactoryDispatch{{
+				DispatchKind: factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+				Id:           "dispatch-1",
+				Label:        &dispatchLabel,
+				Status:       factoryapi.FactoryDispatchStatus("RECONCILED"),
+			}},
 			Progress: factoryapi.FactorySessionProgress{
 				FactoryState:  "RUNNING",
 				Categories:    factoryapi.StatusCategories{},
@@ -216,6 +262,10 @@ func samplePetriFactorySession() factoryapi.FactorySession {
 		Runtime: factoryapi.FactorySessionRuntime{
 			OrchestratorKind: factoryapi.PETRI,
 			Status:           factoryapi.FactorySessionStatusIDLE,
+			Lifecycle: factoryapi.FactorySessionLifecycle{
+				StartedAt: time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC),
+			},
 			Progress: factoryapi.FactorySessionProgress{
 				FactoryState:  "RUNNING",
 				Categories:    factoryapi.StatusCategories{},

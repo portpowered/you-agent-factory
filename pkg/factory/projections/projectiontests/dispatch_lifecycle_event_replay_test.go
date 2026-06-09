@@ -1,0 +1,176 @@
+package projections_test
+
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+	"time"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	. "github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleReconstructsQueueInterruptReconcileAndArtifact(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 14, 10, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		javascriptRunRequestEvent(t0),
+		dispatchQueuedEvent(1, t0.Add(2*time.Second)),
+		dispatchInterruptedEvent(2, t0.Add(3*time.Second)),
+		dispatchReconciledEvent(3, t0.Add(4*time.Second)),
+		javascriptArtifactCreatedEvent(3, t0.Add(5*time.Second)),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	assertJavaScriptDispatchLifecycleReplay(t, worldState)
+
+	view := BuildFactoryWorldView(worldState)
+	if view.Runtime.JavaScript == nil {
+		t.Fatal("javascript projection = nil, want dispatch lifecycle projection")
+	}
+	if view.Runtime.JavaScript.ChildDispatchCounts.Completed != 1 {
+		t.Fatalf("child dispatch counts = %#v, want one completed dispatch", view.Runtime.JavaScript.ChildDispatchCounts)
+	}
+	if len(view.Runtime.JavaScript.Artifacts) != 1 {
+		t.Fatalf("javascript artifacts = %#v, want one artifact", view.Runtime.JavaScript.Artifacts)
+	}
+}
+
+func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsRepresentable(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 14, 15, 0, 0, time.UTC)
+	workItem := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), workItem),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-petri-1",
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "work-1",
+				PlaceID:  "task:init",
+				WorkItem: &workItem,
+			}},
+		}),
+		workstationResponseEvent(2, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
+			DispatchID:   "dispatch-petri-1",
+			TransitionID: "t-review",
+			Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeContinue)},
+		}),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if len(worldState.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want one Petri dispatch completion", worldState.CompletedDispatches)
+	}
+	if worldState.JavaScriptRuntime != nil {
+		t.Fatalf("javascript runtime = %#v, want nil for Petri replay", worldState.JavaScriptRuntime)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this replay assertion keeps JavaScript dispatch lifecycle counts, metadata, and artifacts visible in one scenario.
+func assertJavaScriptDispatchLifecycleReplay(t *testing.T, worldState interfaces.FactoryWorldState) {
+	t.Helper()
+	if worldState.JavaScriptRuntime == nil {
+		t.Fatal("javascript runtime = nil, want dispatch lifecycle projection")
+	}
+	if len(worldState.JavaScriptRuntime.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one dispatch", worldState.JavaScriptRuntime.Dispatches)
+	}
+	dispatch := worldState.JavaScriptRuntime.Dispatches[0]
+	if dispatch.ID != "dispatch-js-1" || dispatch.Status != string(factoryapi.FactoryDispatchStatusCOMPLETED) {
+		t.Fatalf("dispatch = %#v, want dispatch-js-1 COMPLETED", dispatch)
+	}
+	if dispatch.Phase != "execute" || dispatch.PromptDigest != "sha256:prompt" {
+		t.Fatalf("dispatch metadata = %#v, want execute phase and prompt digest", dispatch)
+	}
+	if dispatch.JavaScript == nil || dispatch.JavaScript.TaskKind != "AGENT" {
+		t.Fatalf("javascript dispatch = %#v, want AGENT task kind", dispatch.JavaScript)
+	}
+	if len(dispatch.ArtifactIDs) != 1 || dispatch.ArtifactIDs[0] != "artifact-result-1" {
+		t.Fatalf("dispatch artifact ids = %#v, want artifact-result-1", dispatch.ArtifactIDs)
+	}
+	if len(worldState.Artifacts) != 1 || worldState.Artifacts[0].ID != "artifact-result-1" {
+		t.Fatalf("artifacts = %#v, want artifact-result-1", worldState.Artifacts)
+	}
+
+	encoded, err := json.Marshal(worldState)
+	if err != nil {
+		t.Fatalf("marshal world state: %v", err)
+	}
+	body := string(encoded)
+	for _, forbidden := range []string{"rawBody", "storagePath", "vmState", "systemPrompt", "userMessage"} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("dispatch lifecycle world state leaked %q: %s", forbidden, body)
+		}
+	}
+}
+
+func dispatchQueuedEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {
+	sessionID := "session-js"
+	kind := factoryapi.JAVASCRIPT
+	dispatchID := "dispatch-js-1"
+	phaseID := "phase-execute"
+	phaseName := "execute"
+	queuePosition := 0
+	context := factoryapi.FactoryEventContext{
+		SessionId:        &sessionID,
+		OrchestratorKind: &kind,
+		PhaseId:          stringPointer(phaseID),
+		PhaseName:        stringPointer(phaseName),
+		DispatchId:       stringPointer(dispatchID),
+	}
+	payload := factoryapi.DispatchQueuedEventPayload{
+		DispatchKind:  factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+		Label:         stringPointer("summarize findings"),
+		QueuePosition: &queuePosition,
+		PromptDigest:  stringPointer("sha256:prompt"),
+		SchemaDigest:  stringPointer("sha256:schema"),
+		InputWorkIds:  &[]string{"work-1"},
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchQueued, "dispatch-queued/"+dispatchID, tick, eventTime, context, payload)
+}
+
+func dispatchInterruptedEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {
+	sessionID := "session-js"
+	kind := factoryapi.JAVASCRIPT
+	dispatchID := "dispatch-js-1"
+	context := factoryapi.FactoryEventContext{
+		SessionId:        &sessionID,
+		OrchestratorKind: &kind,
+		DispatchId:       stringPointer(dispatchID),
+	}
+	payload := factoryapi.DispatchInterruptedEventPayload{
+		Reason:         "provider disconnected",
+		ObservedStatus: factoryapi.FactoryDispatchStatusFAILED,
+		InterruptedAt:  eventTime,
+		RetryPlanned:   true,
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchInterrupted, "dispatch-interrupted/"+dispatchID, tick, eventTime, context, payload)
+}
+
+func dispatchReconciledEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {
+	sessionID := "session-js"
+	kind := factoryapi.JAVASCRIPT
+	dispatchID := "dispatch-js-1"
+	source := "replay"
+	context := factoryapi.FactoryEventContext{
+		SessionId:        &sessionID,
+		OrchestratorKind: &kind,
+		DispatchId:       stringPointer(dispatchID),
+		Source:           &source,
+	}
+	payload := factoryapi.DispatchReconciledEventPayload{
+		ReconciledStatus:     factoryapi.FactoryDispatchStatusCOMPLETED,
+		ReconciliationSource: factoryapi.PROVIDERSESSION,
+		Replayed:             true,
+		ArtifactIds:          &[]string{"artifact-result-1"},
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchReconciled, "dispatch-reconciled/"+dispatchID, tick, eventTime, context, payload)
+}

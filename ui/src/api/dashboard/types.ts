@@ -1,5 +1,8 @@
 import type { FactoryDefinition, InferenceOutcome } from "../events";
 import type { components } from "../generated/openapi";
+import type { DashboardSessionBracket } from "./session-lifecycle-types";
+
+export type { DashboardSessionBracket } from "./session-lifecycle-types";
 
 type DashboardRunnerID = components["schemas"]["RunnerID"];
 type DashboardRunnerSelectionSource =
@@ -358,6 +361,7 @@ export interface DashboardWorkMoveOperation {
 }
 
 export interface DashboardSessionRuntime {
+  bracket?: DashboardSessionBracket;
   has_data: boolean;
   dispatched_count: number;
   completed_count: number;
@@ -412,7 +416,7 @@ export interface DashboardSnapshot {
 }
 
 export interface DashboardStreamState {
-  status: "connecting" | "live" | "offline";
+  status: "connecting" | "live" | "offline" | "reconnecting";
   message: string;
 }
 

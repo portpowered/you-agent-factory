@@ -36,6 +36,7 @@ export function emptyReplayWorldState(tick: number): ReplayWorldState {
     workStateChangesByWorkID: {},
     workstationRequestsByDispatchID: {},
     workRequestsByID: {},
+    sessionArtifacts: [],
   };
 }
 

@@ -830,7 +830,7 @@ func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession
 	betaSession := harness.requireSession(t, betaSessionID)
 	submitSessionWorkWithType(t, betaSession, "story", "beta-after-replace-work", "trace-beta-after-replace")
 	waitForSessionEventsToContain(t, betaSession, "beta-after-replace-work", time.Second)
-	stream, err := liveSessionHandle(betaSession).runtime.factory.SubscribeFactoryEvents(context.Background())
+	stream, err := liveSessionHandle(betaSession).runtime.factory.SubscribeFactoryEvents(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
 	if err != nil {
 		t.Fatalf("SubscribeFactoryEvents after replace save: %v", err)
 	}

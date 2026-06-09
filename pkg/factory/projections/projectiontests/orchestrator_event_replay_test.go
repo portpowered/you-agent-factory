@@ -46,8 +46,9 @@ func TestReconstructFactoryWorldState_JavaScriptFixtureReconstructsPhaseCheckpoi
 	artifactTime := t0.Add(4 * time.Second)
 	events := []factoryapi.FactoryEvent{
 		javascriptRunRequestEvent(t0),
-		javascriptPhaseChangeEvent(1, t0.Add(2*time.Second)),
-		javascriptCheckpointRefEvent(2, checkpointTime),
+		orchestratorPhaseChangedEvent(1, t0.Add(2*time.Second), "plan", "", factoryapi.ACTIVE, "Planning workflow"),
+		orchestratorPhaseChangedEvent(2, t0.Add(2500*time.Millisecond), "execute", "plan", factoryapi.ACTIVE, "Entered execute phase"),
+		orchestratorCheckpointWrittenEvent(2, checkpointTime),
 		javascriptArtifactCreatedEvent(2, artifactTime),
 	}
 
@@ -74,17 +75,17 @@ func assertJavaScriptWorldStateReplay(t *testing.T, worldState interfaces.Factor
 		t.Fatal("javascript runtime = nil, want phase and dispatch counts")
 	}
 	if worldState.JavaScriptRuntime.Phase != "execute" || len(worldState.JavaScriptRuntime.Phases) != 2 {
-		t.Fatalf("javascript phase = %#v, want execute with two phases", worldState.JavaScriptRuntime)
-	}
-	if worldState.JavaScriptRuntime.QueuedDispatches != 1 || worldState.JavaScriptRuntime.RunningDispatches != 2 || worldState.JavaScriptRuntime.CompletedDispatches != 3 {
-		t.Fatalf("dispatch counts = queued=%d running=%d completed=%d, want 1/2/3",
-			worldState.JavaScriptRuntime.QueuedDispatches,
-			worldState.JavaScriptRuntime.RunningDispatches,
-			worldState.JavaScriptRuntime.CompletedDispatches,
-		)
+		t.Fatalf("javascript phase = %#v, want execute with phase history [plan execute]", worldState.JavaScriptRuntime)
 	}
 	if len(worldState.JavaScriptCheckpoints) != 1 || len(worldState.Artifacts) != 1 {
 		t.Fatalf("checkpoints=%d artifacts=%d, want one each", len(worldState.JavaScriptCheckpoints), len(worldState.Artifacts))
+	}
+	checkpoint := worldState.JavaScriptCheckpoints[0]
+	if checkpoint.ID != "ckpt-1" || checkpoint.ResumabilityStatus != string(factoryapi.RESUMABLE) {
+		t.Fatalf("checkpoint ref = %#v, want ckpt-1 RESUMABLE", checkpoint)
+	}
+	if len(checkpoint.Warnings) != 1 || checkpoint.Warnings[0].Code != "checkpoint_stale_inputs" {
+		t.Fatalf("checkpoint warnings = %#v, want stale input warning", checkpoint.Warnings)
 	}
 }
 
@@ -96,11 +97,15 @@ func assertJavaScriptWorldViewReplay(t *testing.T, view interfaces.FactoryWorldV
 	if view.Runtime.JavaScript.Phase != "execute" || view.Runtime.JavaScript.ScriptStatus != "RUNNING" {
 		t.Fatalf("javascript projection = %#v, want execute/RUNNING", view.Runtime.JavaScript)
 	}
+	if len(view.Runtime.JavaScript.Phases) != 2 || view.Runtime.JavaScript.Phases[0] != "plan" {
+		t.Fatalf("javascript phase history = %#v, want [plan execute]", view.Runtime.JavaScript.Phases)
+	}
 	if len(view.Runtime.JavaScript.Checkpoints) != 1 || len(view.Runtime.JavaScript.Artifacts) != 1 {
 		t.Fatalf("javascript projection refs = %#v, want checkpoint and artifact", view.Runtime.JavaScript)
 	}
-	if view.Runtime.JavaScript.ChildDispatchCounts.Completed != 3 {
-		t.Fatalf("child dispatch counts = %#v, want completed=3", view.Runtime.JavaScript.ChildDispatchCounts)
+	latestCheckpoint := view.Runtime.JavaScript.Checkpoints[0]
+	if latestCheckpoint.ArtifactRef == nil || latestCheckpoint.ArtifactRef.Visibility != interfaces.JavaScriptCheckpointArtifactVisibility {
+		t.Fatalf("latest checkpoint ref = %#v, want INTERNAL_CHECKPOINT artifact ref", latestCheckpoint)
 	}
 
 	encoded, err := json.Marshal(view)
@@ -133,38 +138,77 @@ func javascriptRunRequestEvent(eventTime time.Time) factoryapi.FactoryEvent {
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeRunRequest, "run-request-js", 0, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
-func javascriptPhaseChangeEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {
-	payload := factoryapi.JavaScriptPhaseChangeEventPayload{
-		Phase:      "execute",
-		Phases:     []string{"plan", "execute"},
-		ArgsDigest: stringPointer("sha256:args"),
-		ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusRUNNING,
-		ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
-			Queued:    1,
-			Running:   2,
-			Completed: 3,
-		},
+func orchestratorPhaseChangedEvent(
+	tick int,
+	eventTime time.Time,
+	phaseName string,
+	previousPhaseName string,
+	phaseStatus factoryapi.OrchestratorPhaseStatus,
+	progressSummary string,
+) factoryapi.FactoryEvent {
+	sessionID := "session-js"
+	kind := factoryapi.JAVASCRIPT
+	phaseID := "phase-" + phaseName
+	context := factoryapi.FactoryEventContext{
+		SessionId:        &sessionID,
+		OrchestratorKind: &kind,
+		PhaseId:          stringPointer(phaseID),
+		PhaseName:        stringPointer(phaseName),
 	}
-	return generatedProjectionEvent(factoryapi.FactoryEventTypeJavaScriptPhaseChange, "javascript-phase-change", tick, eventTime, factoryapi.FactoryEventContext{}, payload)
+	payload := factoryapi.OrchestratorPhaseChangedEventPayload{
+		PhaseStatus:     phaseStatus,
+		StartedAt:       &eventTime,
+		ProgressSummary: stringPointer(progressSummary),
+	}
+	if previousPhaseName != "" {
+		previousPhaseID := "phase-" + previousPhaseName
+		payload.PreviousPhaseId = stringPointer(previousPhaseID)
+		payload.PreviousPhaseName = stringPointer(previousPhaseName)
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeOrchestratorPhaseChanged, "orchestrator-phase-changed/"+phaseName, tick, eventTime, context, payload)
 }
 
-func javascriptCheckpointRefEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {
+func orchestratorCheckpointWrittenEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {
+	sessionID := "session-js"
+	kind := factoryapi.JAVASCRIPT
+	phaseID := "phase-execute"
+	phaseName := "execute"
+	checkpointID := "ckpt-1"
 	hash := "sha256:checkpoint-body"
 	size := int64(128)
-	payload := factoryapi.JavaScriptCheckpointRefEventPayload{
-		CheckpointId: "ckpt-1",
-		Label:        stringPointer("after-plan"),
-		Summary:      stringPointer("Completed planning phase"),
-		Timestamp:    &eventTime,
-		ArtifactRef: factoryapi.FactoryArtifactRef{
+	context := factoryapi.FactoryEventContext{
+		SessionId:        &sessionID,
+		OrchestratorKind: &kind,
+		PhaseId:          stringPointer(phaseID),
+		PhaseName:        stringPointer(phaseName),
+		CheckpointId:     stringPointer(checkpointID),
+	}
+	payload := factoryapi.OrchestratorCheckpointWrittenEventPayload{
+		Label:                 "after-plan",
+		Timestamp:             &eventTime,
+		SourceHash:            stringPointer("sha256:source"),
+		RuntimeSnapshotDigest: stringPointer("sha256:snapshot"),
+		ResumabilityStatus:    factoryapi.RESUMABLE,
+		ArtifactRef: &factoryapi.FactoryArtifactRef{
 			Id:          "artifact-ckpt-1",
 			Kind:        factoryapi.FactoryArtifactKindCHECKPOINT,
 			Visibility:  factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
 			ContentHash: &hash,
 			SizeBytes:   &size,
 		},
+		Warnings: &[]factoryapi.FactoryDispatchWarning{{
+			Code:    "checkpoint_stale_inputs",
+			Message: "Some inputs were captured before the latest dispatch completed",
+		}},
 	}
-	return generatedProjectionEvent(factoryapi.FactoryEventTypeJavaScriptCheckpointRef, "javascript-checkpoint-ref", tick, eventTime, factoryapi.FactoryEventContext{}, payload)
+	return generatedProjectionEvent(
+		factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
+		"orchestrator-checkpoint-written/"+checkpointID,
+		tick,
+		eventTime,
+		context,
+		payload,
+	)
 }
 
 func javascriptArtifactCreatedEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {

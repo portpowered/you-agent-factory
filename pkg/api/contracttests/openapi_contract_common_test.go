@@ -28,6 +28,14 @@ var canonicalFactoryEventTypeValues = []string{
 	"WORK_STATE_CHANGE",
 	"FACTORY_STATE_RESPONSE",
 	"RUN_RESPONSE",
+	"SESSION_STARTED",
+	"SESSION_RESULT_UPDATED",
+	"SESSION_COMPLETED",
+	"ORCHESTRATOR_PHASE_CHANGED",
+	"ORCHESTRATOR_CHECKPOINT_WRITTEN",
+	"DISPATCH_QUEUED",
+	"DISPATCH_INTERRUPTED",
+	"DISPATCH_RECONCILED",
 	"JAVASCRIPT_CHECKPOINT_REF",
 	"JAVASCRIPT_PHASE_CHANGE",
 	"ARTIFACT_CREATED",
@@ -82,6 +90,18 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"WorkStateChangeSource",
 	"FactoryStateResponseEventPayload",
 	"RunResponseEventPayload",
+	"FactoryEventSessionResultStatus",
+	"OrchestratorPhaseStatus",
+	"CheckpointResumabilityStatus",
+	"DispatchReconciliationSource",
+	"SessionStartedEventPayload",
+	"SessionResultUpdatedEventPayload",
+	"SessionCompletedEventPayload",
+	"OrchestratorPhaseChangedEventPayload",
+	"OrchestratorCheckpointWrittenEventPayload",
+	"DispatchQueuedEventPayload",
+	"DispatchInterruptedEventPayload",
+	"DispatchReconciledEventPayload",
 	"JavaScriptCheckpointRefEventPayload",
 	"JavaScriptPhaseChangeEventPayload",
 	"ArtifactCreatedEventPayload",
@@ -104,6 +124,14 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/WorkStateChangeEventPayload",
 	"#/components/schemas/FactoryStateResponseEventPayload",
 	"#/components/schemas/RunResponseEventPayload",
+	"#/components/schemas/SessionStartedEventPayload",
+	"#/components/schemas/SessionResultUpdatedEventPayload",
+	"#/components/schemas/SessionCompletedEventPayload",
+	"#/components/schemas/OrchestratorPhaseChangedEventPayload",
+	"#/components/schemas/OrchestratorCheckpointWrittenEventPayload",
+	"#/components/schemas/DispatchQueuedEventPayload",
+	"#/components/schemas/DispatchInterruptedEventPayload",
+	"#/components/schemas/DispatchReconciledEventPayload",
 	"#/components/schemas/JavaScriptCheckpointRefEventPayload",
 	"#/components/schemas/JavaScriptPhaseChangeEventPayload",
 	"#/components/schemas/ArtifactCreatedEventPayload",
@@ -126,6 +154,14 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"WORK_STATE_CHANGE":           "WorkStateChangeEventPayload",
 	"FACTORY_STATE_RESPONSE":      "FactoryStateResponseEventPayload",
 	"RUN_RESPONSE":                "RunResponseEventPayload",
+	"SESSION_STARTED":             "SessionStartedEventPayload",
+	"SESSION_RESULT_UPDATED":      "SessionResultUpdatedEventPayload",
+	"SESSION_COMPLETED":           "SessionCompletedEventPayload",
+	"ORCHESTRATOR_PHASE_CHANGED":  "OrchestratorPhaseChangedEventPayload",
+	"ORCHESTRATOR_CHECKPOINT_WRITTEN": "OrchestratorCheckpointWrittenEventPayload",
+	"DISPATCH_QUEUED":             "DispatchQueuedEventPayload",
+	"DISPATCH_INTERRUPTED":        "DispatchInterruptedEventPayload",
+	"DISPATCH_RECONCILED":         "DispatchReconciledEventPayload",
 	"JAVASCRIPT_CHECKPOINT_REF":   "JavaScriptCheckpointRefEventPayload",
 	"JAVASCRIPT_PHASE_CHANGE":     "JavaScriptPhaseChangeEventPayload",
 	"ARTIFACT_CREATED":            "ArtifactCreatedEventPayload",
@@ -902,80 +938,3 @@ func assertResponseExampleCodeFamilies(t *testing.T, responses map[string]any, r
 	}
 }
 
-func assertPropertiesAbsent(t *testing.T, properties map[string]any, schemaName string, fields ...string) {
-	t.Helper()
-	for _, field := range fields {
-		if _, ok := properties[field]; ok {
-			t.Fatalf("%s.properties.%s must not be advertised", schemaName, field)
-		}
-	}
-}
-
-func assertJSONStringLiteralMissing(t *testing.T, haystack string, needles ...string) {
-	t.Helper()
-	for _, needle := range needles {
-		if strings.Contains(haystack, `"`+needle+`"`) {
-			t.Fatalf("unexpected retired string %q found in fixture", needle)
-		}
-	}
-}
-
-func assertStringSetsMatch(t *testing.T, got []string, want []string) {
-	t.Helper()
-	if len(got) != len(want) {
-		t.Fatalf("string set length = %d, want %d", len(got), len(want))
-	}
-	gotCounts := make(map[string]int, len(got))
-	for _, value := range got {
-		gotCounts[value]++
-	}
-	for _, value := range want {
-		if gotCounts[value] == 0 {
-			t.Fatalf("string set is missing %q", value)
-		}
-		gotCounts[value]--
-	}
-	for value, remaining := range gotCounts {
-		if remaining != 0 {
-			t.Fatalf("string set contains unexpected count for %q: %d", value, remaining)
-		}
-	}
-}
-
-func assertNoDispatchConfigCopies(t *testing.T, properties map[string]any, schemaName string) {
-	t.Helper()
-	for _, field := range []string{
-		"model",
-		"provider",
-		"promptFile",
-		"promptTemplate",
-		"outputSchema",
-		"worktree",
-		"workingDirectory",
-		"workerType",
-		"workstationName",
-		"workstationType",
-	} {
-		if _, ok := properties[field]; ok {
-			t.Fatalf("%s.properties.%s duplicates Worker or Workstation configuration", schemaName, field)
-		}
-	}
-}
-
-func assertJSONKeysAbsent(t *testing.T, object map[string]any, name string, keys ...string) {
-	t.Helper()
-	for _, key := range keys {
-		if _, ok := object[key]; ok {
-			t.Fatalf("%s.%s must not be present", name, key)
-		}
-	}
-}
-
-func assertJSONKeysPresent(t *testing.T, object map[string]any, name string, keys ...string) {
-	t.Helper()
-	for _, key := range keys {
-		if _, ok := object[key]; !ok {
-			t.Fatalf("%s.%s is missing", name, key)
-		}
-	}
-}
