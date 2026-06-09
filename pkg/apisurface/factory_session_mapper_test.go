@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -145,6 +146,48 @@ func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
 			mappedDispatches := apisurface.ListDispatchesResponseToAPI(dispatches)
 			assertDispatchListMapperRoundTrip(t, scenarioID, map[string]any{"sessionId": started.SessionID}, fixtureDispatchRows(mappedDispatches.Dispatches))
 		})
+	}
+}
+
+func TestArtifactDetailCaptureMetadataRoundTrip(t *testing.T) {
+	capturedAt := time.Date(2026, 6, 8, 10, 5, 0, 0, time.UTC)
+	dispatchID := "disp-petri-success-001"
+	mimeType := "text/plain"
+	apiValue := factoryapi.FactorySessionArtifactDetail{
+		SessionId:  "dur-sess-petri-success-001",
+		Id:         "art-petri-final-001",
+		Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
+		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+		CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{
+			CapturedAt:       &capturedAt,
+			SourceDispatchId: &dispatchID,
+			MimeType:         &mimeType,
+		},
+	}
+
+	domain, err := apisurface.ArtifactDetailFromAPI(apiValue)
+	if err != nil {
+		t.Fatalf("ArtifactDetailFromAPI: %v", err)
+	}
+	if domain.CaptureMetadata == nil {
+		t.Fatal("domain captureMetadata = nil, want populated metadata")
+	}
+	if got := domain.CaptureMetadata["sourceDispatchId"]; got != dispatchID {
+		t.Fatalf("domain captureMetadata.sourceDispatchId = %v, want %q", got, dispatchID)
+	}
+
+	mapped := apisurface.ArtifactDetailResponseToAPI(domain)
+	if mapped.CaptureMetadata == nil {
+		t.Fatal("mapped captureMetadata = nil, want populated metadata")
+	}
+	if mapped.CaptureMetadata.SourceDispatchId == nil || *mapped.CaptureMetadata.SourceDispatchId != dispatchID {
+		t.Fatalf("mapped captureMetadata.sourceDispatchId = %v, want %q", mapped.CaptureMetadata.SourceDispatchId, dispatchID)
+	}
+	if mapped.CaptureMetadata.MimeType == nil || *mapped.CaptureMetadata.MimeType != mimeType {
+		t.Fatalf("mapped captureMetadata.mimeType = %v, want %q", mapped.CaptureMetadata.MimeType, mimeType)
+	}
+	if mapped.CaptureMetadata.CapturedAt == nil || !mapped.CaptureMetadata.CapturedAt.Equal(capturedAt) {
+		t.Fatalf("mapped captureMetadata.capturedAt = %v, want %v", mapped.CaptureMetadata.CapturedAt, capturedAt)
 	}
 }
 
@@ -456,6 +499,28 @@ func assertArtifactDetailFieldsPreserved(t *testing.T, fixture map[string]any, m
 	}
 	if mapped.Content != nil && fixture["content"] == nil {
 		t.Fatal("content lost during round trip")
+	}
+	fixtureMetadata, hasFixtureMetadata := fixture["captureMetadata"].(map[string]any)
+	if !hasFixtureMetadata {
+		return
+	}
+	if mapped.CaptureMetadata == nil {
+		t.Fatal("captureMetadata lost during round trip")
+	}
+	if fixtureMetadata["sourceDispatchId"] != nil {
+		if mapped.CaptureMetadata.SourceDispatchId == nil || *mapped.CaptureMetadata.SourceDispatchId != stringValue(fixtureMetadata, "sourceDispatchId") {
+			t.Fatalf("captureMetadata.sourceDispatchId = %v, want %q", mapped.CaptureMetadata.SourceDispatchId, stringValue(fixtureMetadata, "sourceDispatchId"))
+		}
+	}
+	if fixtureMetadata["mimeType"] != nil {
+		if mapped.CaptureMetadata.MimeType == nil || *mapped.CaptureMetadata.MimeType != stringValue(fixtureMetadata, "mimeType") {
+			t.Fatalf("captureMetadata.mimeType = %v, want %q", mapped.CaptureMetadata.MimeType, stringValue(fixtureMetadata, "mimeType"))
+		}
+	}
+	if fixtureMetadata["capturedAt"] != nil {
+		if mapped.CaptureMetadata.CapturedAt == nil {
+			t.Fatal("captureMetadata.capturedAt lost during round trip")
+		}
 	}
 }
 

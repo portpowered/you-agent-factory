@@ -3,6 +3,7 @@ package apisurface
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -197,6 +198,9 @@ func ArtifactDetailResponseToAPI(result factorysessionexecution.ArtifactDetail) 
 	}
 	if ref := artifactRetrievalRefToAPI(result.ContentRef); ref != nil {
 		response.ContentRef = ref
+	}
+	if metadata := artifactCaptureMetadataToAPI(result.CaptureMetadata); metadata != nil {
+		response.CaptureMetadata = metadata
 	}
 	return response
 }
@@ -437,6 +441,55 @@ func artifactRetrievalRefToAPI(ref *factorysessionexecution.ArtifactRetrievalRef
 		out.Method = &methodValue
 	}
 	return &out
+}
+
+func artifactCaptureMetadataToAPI(metadata map[string]any) *factoryapi.FactoryArtifactCaptureMetadata {
+	if len(metadata) == 0 {
+		return nil
+	}
+	projected := &factoryapi.FactoryArtifactCaptureMetadata{}
+	hasValue := false
+	if raw, ok := metadata["capturedAt"]; ok {
+		switch value := raw.(type) {
+		case time.Time:
+			capturedAt := value.UTC()
+			projected.CapturedAt = &capturedAt
+			hasValue = true
+		case string:
+			if capturedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(value)); err == nil {
+				capturedAt = capturedAt.UTC()
+				projected.CapturedAt = &capturedAt
+				hasValue = true
+			}
+		}
+	}
+	if raw, ok := metadata["sourceDispatchId"]; ok {
+		if dispatchID := strings.TrimSpace(stringValueFromAny(raw)); dispatchID != "" {
+			projected.SourceDispatchId = &dispatchID
+			hasValue = true
+		}
+	}
+	if raw, ok := metadata["mimeType"]; ok {
+		if mimeType := strings.TrimSpace(stringValueFromAny(raw)); mimeType != "" {
+			projected.MimeType = &mimeType
+			hasValue = true
+		}
+	}
+	if !hasValue {
+		return nil
+	}
+	return projected
+}
+
+func stringValueFromAny(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return typed
+	case []byte:
+		return string(typed)
+	default:
+		return ""
+	}
 }
 
 func artifactRedactionCountsToAPI(counts *factorysessionexecution.ArtifactRedactionCounts) *factoryapi.FactoryArtifactRedactionCounts {

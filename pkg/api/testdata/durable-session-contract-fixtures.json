@@ -279,6 +279,11 @@
         "createdAt": "2026-06-08T10:05:00Z",
         "dispatchId": "disp-petri-success-001",
         "auditMode": "REDACTED",
+        "captureMetadata": {
+          "capturedAt": "2026-06-08T10:05:00Z",
+          "sourceDispatchId": "disp-petri-success-001",
+          "mimeType": "text/plain"
+        },
         "content": [
           {
             "type": "text",

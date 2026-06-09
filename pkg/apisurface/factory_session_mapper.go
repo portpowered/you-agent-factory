@@ -3,6 +3,7 @@ package apisurface
 import (
 	"encoding/json"
 	"strings"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -336,6 +337,9 @@ func ArtifactDetailFromAPI(response factoryapi.FactorySessionArtifactDetail) (fa
 		}
 		detail.ContentRef = ref
 	}
+	if metadata := artifactCaptureMetadataFromAPI(response.CaptureMetadata); len(metadata) > 0 {
+		detail.CaptureMetadata = metadata
+	}
 	return detail, nil
 }
 
@@ -649,6 +653,30 @@ func artifactRedactionCountsFromAPI(counts factoryapi.FactoryArtifactRedactionCo
 		out.Tokens = *counts.Tokens
 	}
 	return out
+}
+
+func artifactCaptureMetadataFromAPI(metadata *factoryapi.FactoryArtifactCaptureMetadata) map[string]any {
+	if metadata == nil {
+		return nil
+	}
+	capture := make(map[string]any)
+	if metadata.CapturedAt != nil {
+		capture["capturedAt"] = metadata.CapturedAt.UTC().Format(time.RFC3339)
+	}
+	if metadata.SourceDispatchId != nil {
+		if dispatchID := strings.TrimSpace(*metadata.SourceDispatchId); dispatchID != "" {
+			capture["sourceDispatchId"] = dispatchID
+		}
+	}
+	if metadata.MimeType != nil {
+		if mimeType := strings.TrimSpace(*metadata.MimeType); mimeType != "" {
+			capture["mimeType"] = mimeType
+		}
+	}
+	if len(capture) == 0 {
+		return nil
+	}
+	return capture
 }
 
 func artifactRetrievalRefFromAPI(ref factoryapi.FactorySessionArtifactRetrievalRef) (*factorysessionexecution.ArtifactRetrievalRef, error) {
