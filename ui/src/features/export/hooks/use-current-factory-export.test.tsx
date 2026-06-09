@@ -185,6 +185,31 @@ describe("useCurrentFactoryExport", () => {
     });
   });
 
+  it("uses the generic load failure message for non-error rejections", async () => {
+    const pending = createDeferred<CurrentFactoryDocument>();
+    vi.mocked(getCurrentFactoryDocument).mockReturnValue(pending.promise);
+
+    const { result } = renderHook(() => useCurrentFactoryExport(true), {
+      wrapper: createQueryClientWrapper(),
+    });
+
+    await act(async () => {
+      pending.reject("gateway unavailable");
+    });
+
+    await waitFor(() => {
+      expect(result.current).toEqual({
+        currentFactoryExport: {
+          code: "FACTORY_DEFINITION_UNAVAILABLE",
+          message:
+            "The current factory definition could not be loaded from the current-factory API.",
+          ok: false,
+        },
+        isPreparing: false,
+      });
+    });
+  });
+
   it("exports the factory document when snapshot topology would diverge", async () => {
     vi.mocked(getCurrentFactoryDocument).mockResolvedValue(
       divergentDocumentPlaneFactoryDocument,

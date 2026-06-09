@@ -308,6 +308,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/workflow-previews": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview workflow validation and policy
+     * @description Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+     */
+    post: operations["previewWorkflow"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-validations": {
     parameters: {
       query?: never;
@@ -3816,6 +3836,153 @@ export interface components {
       /** @description Inclusive 1-based byte offset where the diagnostic source span starts when available. */
       startOffset: number;
     };
+    WorkflowDiagnostic: {
+      /** @description Stable workflow diagnostic code. */
+      code: string;
+      /** @description Customer-readable diagnostic message. */
+      message: string;
+      /** @description Optional source or config path for the diagnostic. */
+      path?: string;
+      /** @description Optional 1-based source line number. */
+      line?: number;
+      /** @description Optional 1-based source column number. */
+      column?: number;
+    };
+    WorkflowArtifactRootDecision: {
+      /** @description Artifact root requested with the workflow source. */
+      requested: string;
+      /** @description Normalized artifact root when allowed. */
+      effective?: string;
+      /** @description True when the artifact root satisfies policy checks. */
+      allowed: boolean;
+      /** @description Diagnostic explaining artifact-root rejection when present. */
+      diagnostic?: components["schemas"]["WorkflowDiagnostic"];
+    };
+    WorkflowSourceResolution: {
+      /** @description Requested workflow source kind. */
+      requestKind: string;
+      /** @description Original requested workflow source value. */
+      requestValue?: string;
+      /** @description Resolved workflow source kind. */
+      resolvedKind?: string;
+      /** @description Ordered lookup stage that supplied the resolved source. */
+      lookupStage?: string;
+      /** @description Safe resolved workflow source reference. */
+      sourceRef?: string;
+      /** @description Stable hash of the authored workflow source. */
+      sourceHash?: string;
+      /** @description Resolved orchestrator kind for the workflow source. */
+      orchestratorKind?: string;
+      /** @description Resolved workflow dialect label. */
+      dialect?: string;
+      /** @description True when a workflow source was resolved. */
+      found: boolean;
+      /** @description Lookup or conflict diagnostics when source resolution fails or conflicts. */
+      diagnostics?: components["schemas"]["WorkflowDiagnostic"][];
+      artifactRoot?: components["schemas"]["WorkflowArtifactRootDecision"];
+    };
+    WorkflowResultConstraints: {
+      /** @description True when workflow return values must be structured-cloneable JSON-compatible values. */
+      requiresStructuredCloneableJson: boolean;
+      /** @description URI scheme used for session-scoped artifact references. */
+      artifactUriScheme: string;
+      /**
+       * Format: int64
+       * @description Maximum embedded JSON payload size before artifact refs are required.
+       */
+      maxEmbeddedBytes: number;
+      /** @description Non-JSON workflow result kinds rejected by the shared contract. */
+      rejectedValueKinds: string[];
+    };
+    WorkflowPolicyPreview: {
+      /** @description Effective bounded workflow policy for preview or session start. */
+      effectivePolicy: {
+        [key: string]: unknown;
+      };
+      /** @description Stable hash of the effective policy document. */
+      policyHash: string;
+      /** @description Maximum child agent count allowed by effective policy. */
+      maxChildCount: number;
+      /** @description Maximum concurrent child dispatches allowed by effective policy. */
+      maxConcurrency: number;
+      /** @description Capabilities denied by the effective policy before runtime execution. */
+      deniedCapabilities: components["schemas"]["WorkflowDiagnostic"][];
+      /** @description Policy validation issues for the requested or factory default policy. */
+      validationIssues: components["schemas"]["WorkflowDiagnostic"][];
+      /** @description Optional runner allowlist decision for preview surfaces. */
+      runnerDecision?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional model allowlist decision for preview surfaces. */
+      modelDecision?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional route profile allowlist decision for preview surfaces. */
+      profileDecision?: {
+        [key: string]: unknown;
+      };
+      /** @description Timeout and budget decisions for preview surfaces. */
+      timeoutDecisions?: {
+        [key: string]: unknown;
+      };
+      /** @description Child and concurrency budget decisions for preview surfaces. */
+      budgetDecisions?: {
+        [key: string]: unknown;
+      };
+    };
+    WorkflowPreviewRequest: {
+      /**
+       * @description Workflow source request kind.
+       * @enum {string}
+       */
+      sourceKind: WorkflowPreviewRequestSourceKind;
+      /** @description Requested workflow name, file ref, factory id, or inline label. */
+      sourceValue?: string;
+      /** @description Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests. */
+      inlineSource?: string;
+      /** @description Optional absolute artifact root requested with the workflow source. */
+      artifactRoot?: string;
+      /** @description When true, explicit factory lookup is attempted after ordered workflow lookup. */
+      allowFactoryLookup?: boolean;
+      /** @description Project root used for ordered workflow source lookup. */
+      projectRoot?: string;
+      /** @description Optional JavaScript orchestrator metadata to validate with the source. */
+      metadata?: {
+        [key: string]: string;
+      };
+      /** @description Optional JSON Schema object describing workflow invocation arguments. */
+      argsSchema?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional factory default policy layer merged into the effective policy preview. */
+      defaultPolicy?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional request policy overrides merged into the effective policy preview. */
+      requestedPolicy?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional runner requested for preview decision projection. */
+      requestedRunner?: string;
+      /** @description Optional model requested for preview decision projection. */
+      requestedModel?: string;
+      /** @description Optional route profile requested for preview decision projection. */
+      requestedProfile?: string;
+      /**
+       * Format: int64
+       * @description Optional requested timeout in milliseconds for preview decision projection.
+       */
+      timeoutMillis?: number;
+    };
+    WorkflowPreviewResult: {
+      /** @description True when source resolution, validation, policy, and artifact-root checks pass. */
+      valid: boolean;
+      sourceResolution: components["schemas"]["WorkflowSourceResolution"];
+      /** @description Workflow source, loader, and orchestrator validation diagnostics. */
+      sourceValidationIssues: components["schemas"]["WorkflowDiagnostic"][];
+      policyPreview: components["schemas"]["WorkflowPolicyPreview"];
+      resultConstraints: components["schemas"]["WorkflowResultConstraints"];
+    };
     /**
      * @description Validation severity for one factory validation target.
      * @enum {string}
@@ -3998,7 +4165,7 @@ export interface components {
      * @enum {string}
      */
     RelationType: RelationType;
-    /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:. */
+    /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs. */
     WorkContentURLProperty: string;
     /**
      * @deprecated
@@ -4764,6 +4931,32 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  previewWorkflow: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkflowPreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Shared workflow validation, source resolution, and policy preview contract. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowPreviewResult"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -6361,6 +6554,15 @@ export const PromptTemplateDiagnosticKind = {
 } as const;
 export type PromptTemplateDiagnosticKind =
   (typeof PromptTemplateDiagnosticKind)[keyof typeof PromptTemplateDiagnosticKind];
+export const WorkflowPreviewRequestSourceKind = {
+  FACTORY_ID: "FACTORY_ID",
+  FACTORY_INLINE: "FACTORY_INLINE",
+  WORKFLOW_FILE: "WORKFLOW_FILE",
+  WORKFLOW_NAME: "WORKFLOW_NAME",
+  INLINE_WORKFLOW: "INLINE_WORKFLOW",
+} as const;
+export type WorkflowPreviewRequestSourceKind =
+  (typeof WorkflowPreviewRequestSourceKind)[keyof typeof WorkflowPreviewRequestSourceKind];
 export const FactoryValidationSeverity = {
   FactoryValidationSeverityError: "error",
   FactoryValidationSeverityWarning: "warning",

@@ -1065,6 +1065,7 @@ func (r *factoryWorldReducer) applyArtifactCreatedEvent(event factoryapi.Factory
 	return nil
 }
 
+
 func (r *factoryWorldReducer) ensureJavaScriptRuntime() *interfaces.FactorySessionJavaScriptRuntimeState {
 	if r.stateValue.JavaScriptRuntime == nil {
 		r.stateValue.JavaScriptRuntime = &interfaces.FactorySessionJavaScriptRuntimeState{}

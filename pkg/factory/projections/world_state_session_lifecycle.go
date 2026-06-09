@@ -53,7 +53,38 @@ func (r *factoryWorldReducer) applySessionResultUpdatedEvent(event factoryapi.Fa
 	bracket.ResultStatus = string(payload.ResultStatus)
 	bracket.ResultSummary = workcontent.PartsFromGenerated(payload.ResultSummary)
 	bracket.ArtifactIDs = cloneStringSlice(sliceValue(payload.ArtifactIds))
+	if runtime := r.ensureJavaScriptRuntime(); runtime != nil {
+		runtime.PrimaryResult = cloneWorkContentParts(bracket.ResultSummary)
+		runtime.ResultStatus = bracket.ResultStatus
+		for _, artifactID := range bracket.ArtifactIDs {
+			artifact, ok := findArtifactStateByID(r.stateValue.Artifacts, artifactID)
+			if !ok {
+				artifact = interfaces.FactorySessionArtifactState{ID: artifactID}
+				r.stateValue.Artifacts = append(r.stateValue.Artifacts, artifact)
+			}
+			appendUniqueArtifactState(&runtime.Artifacts, artifact)
+		}
+	}
 	return nil
+}
+
+func findArtifactStateByID(artifacts []interfaces.FactorySessionArtifactState, artifactID string) (interfaces.FactorySessionArtifactState, bool) {
+	trimmed := strings.TrimSpace(artifactID)
+	for _, artifact := range artifacts {
+		if strings.TrimSpace(artifact.ID) == trimmed {
+			return artifact, true
+		}
+	}
+	return interfaces.FactorySessionArtifactState{}, false
+}
+
+func appendUniqueArtifactState(artifacts *[]interfaces.FactorySessionArtifactState, artifact interfaces.FactorySessionArtifactState) {
+	for _, existing := range *artifacts {
+		if strings.TrimSpace(existing.ID) == strings.TrimSpace(artifact.ID) {
+			return
+		}
+	}
+	*artifacts = append(*artifacts, artifact)
 }
 
 func (r *factoryWorldReducer) applySessionCompletedEvent(event factoryapi.FactoryEvent) error {

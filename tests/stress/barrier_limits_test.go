@@ -179,12 +179,21 @@ func TestBarrierZeroChildren(t *testing.T) {
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	time.Sleep(200 * time.Millisecond)
-
-	select {
-	case <-h.WaitToComplete():
-		t.Fatal("expected zero-child barrier to remain incomplete")
-	default:
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		select {
+		case <-h.WaitToComplete():
+			t.Fatal("expected zero-child barrier to remain incomplete")
+		default:
+		}
+		snap := h.Marking()
+		if len(snap.Tokens) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("expected 1 token (parent:waiting), got %d", len(snap.Tokens))
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	// Parent stays stuck in waiting with no spawned children.

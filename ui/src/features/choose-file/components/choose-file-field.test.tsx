@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 
 import { ChooseFileField } from "./choose-file-field";
 import { ChooseFileNativeInput } from "./choose-file-native-input";
@@ -54,6 +55,16 @@ describe("ChooseFileField", () => {
     expect(activeShell.className).toContain("bg-af-overlay");
     expect(activeShell.className).not.toContain("bg-primary-container");
     expect(activeShell.className).not.toContain("border-primary");
+  });
+
+  it("rejects non-element controls", () => {
+    expect(() =>
+      render(
+        <ChooseFileField
+          control={"not-an-element" as unknown as ReactElement}
+        />,
+      ),
+    ).toThrow("ChooseFileField requires a single React element control.");
   });
 
   it("composes native file input chrome inside the shared dashed shell", () => {

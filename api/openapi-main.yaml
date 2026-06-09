@@ -465,6 +465,30 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /workflow-previews:
+    post:
+      tags:
+        - Workflows
+      operationId: previewWorkflow
+      summary: Preview workflow validation and policy
+      description: Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowPreviewRequest'
+      responses:
+        '200':
+          description: Shared workflow validation, source resolution, and policy preview contract.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowPreviewResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-validations:
     post:
       tags:
@@ -1866,6 +1890,20 @@ components:
       $ref: './components/schemas/api/PromptTemplateValidationResult.yaml'
     PromptTemplateDiagnostic:
       $ref: './components/schemas/api/PromptTemplateDiagnostic.yaml'
+    WorkflowDiagnostic:
+      $ref: './components/schemas/api/WorkflowDiagnostic.yaml'
+    WorkflowArtifactRootDecision:
+      $ref: './components/schemas/api/WorkflowArtifactRootDecision.yaml'
+    WorkflowSourceResolution:
+      $ref: './components/schemas/api/WorkflowSourceResolution.yaml'
+    WorkflowResultConstraints:
+      $ref: './components/schemas/api/WorkflowResultConstraints.yaml'
+    WorkflowPolicyPreview:
+      $ref: './components/schemas/api/WorkflowPolicyPreview.yaml'
+    WorkflowPreviewRequest:
+      $ref: './components/schemas/api/WorkflowPreviewRequest.yaml'
+    WorkflowPreviewResult:
+      $ref: './components/schemas/api/WorkflowPreviewResult.yaml'
     FactoryValidationSeverity:
       $ref: './components/schemas/api/FactoryValidationSeverity.yaml'
     FactoryValidationSubjectType:

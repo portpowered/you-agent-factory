@@ -10,10 +10,12 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
 )
 
 // ProjectionContext carries the runtime inputs needed to project one live session.
@@ -114,7 +116,7 @@ func projectOrchestratorIdentity(runtime *factoryapi.FactorySessionRuntime, cfg 
 		runtime.Dialect = stringPointerOrNil(js.Dialect)
 		runtime.SourceRef = stringPointerOrNil(js.SourceRef)
 		runtime.SourceHash = stringPointerOrNil(js.SourceHash)
-		if policyHash := digestJSON(js.DefaultPolicy); policyHash != "" {
+		if policyHash := workflowpolicy.HashDocument(js.DefaultPolicy); policyHash != "" {
 			runtime.PolicyHash = &policyHash
 		}
 		if budgets := projectedJavaScriptBudgets(js.DefaultPolicy); budgets != nil {
@@ -300,22 +302,11 @@ func projectedCheckpointArtifactRef(ref interfaces.JavaScriptCheckpointArtifactR
 }
 
 func projectedJavaScriptBudgets(raw json.RawMessage) *factoryapi.FactorySessionBudgets {
-	if len(raw) == 0 {
+	resolution := apisurface.ResolveWorkflowPolicy(workflowpolicy.Request{FactoryDefault: raw})
+	if resolution.Policy.MaxAgents <= 0 {
 		return nil
 	}
-	var policy map[string]any
-	if err := json.Unmarshal(raw, &policy); err != nil {
-		return nil
-	}
-	maxAgentsValue, ok := policy["maxAgents"]
-	if !ok {
-		return nil
-	}
-	maxAgents, ok := maxAgentsValue.(float64)
-	if !ok || maxAgents < 0 {
-		return nil
-	}
-	value := int(maxAgents)
+	value := resolution.Policy.MaxAgents
 	return &factoryapi.FactorySessionBudgets{MaxAgents: &value}
 }
 

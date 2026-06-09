@@ -1,13 +1,16 @@
 package factorysessions
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workflowresult"
 )
 
 // JavaScriptCheckpointStore keeps orchestrator-owned checkpoint bundles for one
@@ -200,18 +203,81 @@ func ProjectSessionResult(
 	store *JavaScriptCheckpointStore,
 ) factoryapi.FactorySessionLiveResult {
 	runtime := ProjectRuntime(ctx)
-	result := factoryapi.FactorySessionLiveResult{
-		SessionId: sessionID,
+	input := workflowresult.SessionResultInput{
+		SessionID: sessionID,
 		Status:    runtime.Status,
 	}
-	if checkpointRefs := ProjectCheckpointRefs(store.List()); len(checkpointRefs) > 0 {
-		result.CheckpointRefs = &checkpointRefs
-		if latest := checkpointRefs[len(checkpointRefs)-1]; latest.ArtifactRef != nil {
-			artifactRef := *latest.ArtifactRef
-			result.ResultArtifactRef = &artifactRef
+	if ctx.JavaScript != nil {
+		input.Artifacts = append(input.Artifacts, ctx.JavaScript.Artifacts...)
+		if primaryJSON := primaryResultJSON(ctx.JavaScript.PrimaryResult); len(primaryJSON) > 0 {
+			input.PrimaryValue = workflowresult.TypedValue{JSON: primaryJSON}
 		}
 	}
-	return result
+	if checkpointRefs := ProjectCheckpointRefs(store.List()); len(checkpointRefs) > 0 {
+		input.CheckpointRefs = checkpointRefs
+		if latest := checkpointRefs[len(checkpointRefs)-1]; latest.ArtifactRef != nil {
+			copied := *latest.ArtifactRef
+			input.ResultArtifact = &copied
+		}
+	}
+	if input.ResultArtifact == nil {
+		input.ResultArtifact = finalResultArtifactRef(input.Artifacts)
+	}
+	return apisurface.BuildWorkflowSessionLiveResult(input)
+}
+
+func finalResultArtifactRef(artifacts []interfaces.FactorySessionArtifactState) *factoryapi.FactoryArtifactRef {
+	for _, artifact := range artifacts {
+		if strings.EqualFold(strings.TrimSpace(artifact.Kind), "FINAL_RESULT") {
+			ref := factoryapi.FactoryArtifactRef{
+				Id:         strings.TrimSpace(artifact.ID),
+				Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
+				Visibility: factoryapi.FactoryArtifactVisibility(strings.TrimSpace(artifact.Visibility)),
+			}
+			if ref.Visibility == "" {
+				ref.Visibility = factoryapi.FactoryArtifactVisibilityPUBLIC
+			}
+			if hash := strings.TrimSpace(artifact.ContentHash); hash != "" {
+				ref.ContentHash = &hash
+			}
+			if artifact.SizeBytes > 0 {
+				size := artifact.SizeBytes
+				ref.SizeBytes = &size
+			}
+			return &ref
+		}
+	}
+	return nil
+}
+
+func primaryResultJSON(parts []interfaces.WorkContentPart) json.RawMessage {
+	if len(parts) == 0 {
+		return nil
+	}
+	for _, part := range parts {
+		if part.Type.Normalized() == interfaces.WorkContentPartTypeJSON && len(part.JSON) > 0 {
+			return part.JSON
+		}
+	}
+	payload := make([]map[string]any, 0, len(parts))
+	for _, part := range parts {
+		entry := map[string]any{"type": string(part.Type.Normalized())}
+		if part.Text != "" {
+			entry["text"] = part.Text
+		}
+		if part.ArtifactID != "" {
+			entry["artifactId"] = part.ArtifactID
+		}
+		if part.URL != "" {
+			entry["url"] = part.URL
+		}
+		payload = append(payload, entry)
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return nil
+	}
+	return raw
 }
 
 // ProjectSessionPartialResult maps one JavaScript session runtime to the partial

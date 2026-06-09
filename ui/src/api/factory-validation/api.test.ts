@@ -153,6 +153,50 @@ describe("validateFactoryDefinition error mapping", () => {
     });
   });
 
+  it("rejects validation payloads when a target is not an object", async () => {
+    await expect(
+      validateFactoryDefinition(emptyFactory, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              targets: ["not-a-target"],
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: factoryValidationAPIErrorMessages.invalidResponse,
+    });
+  });
+
+  it("rejects validation payloads when a target omits required fields", async () => {
+    await expect(
+      validateFactoryDefinition(emptyFactory, {
+        fetch: vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              targets: [{}],
+            }),
+            {
+              headers: { "Content-Type": "application/json" },
+              status: 200,
+              statusText: "OK",
+            },
+          ),
+        ),
+      }),
+    ).rejects.toMatchObject({
+      code: "INTERNAL_ERROR",
+      message: factoryValidationAPIErrorMessages.invalidResponse,
+    });
+  });
+
   it("rejects validation payloads with malformed targets", async () => {
     await expect(
       validateFactoryDefinition(emptyFactory, {

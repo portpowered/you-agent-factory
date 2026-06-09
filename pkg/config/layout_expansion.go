@@ -802,6 +802,16 @@ func GlobalNamedFactoryRootForHome(homeDir string) (string, error) {
 	return filepath.Join(trimmed, defaultNamedFactoryHomeDir, defaultGlobalNamedFactoryDir), nil
 }
 
+// GlobalWorkflowRootForHome builds the customer-owned global workflow lookup root
+// for a resolved home directory.
+func GlobalWorkflowRootForHome(homeDir string) (string, error) {
+	trimmed := strings.TrimSpace(homeDir)
+	if trimmed == "" {
+		return "", fmt.Errorf("user home directory is required")
+	}
+	return filepath.Join(trimmed, defaultNamedFactoryHomeDir, "workflows"), nil
+}
+
 // DefaultGlobalNamedFactoryRoot returns the default global named-factory root
 // under the current user's home directory.
 func DefaultGlobalNamedFactoryRoot() (string, error) {

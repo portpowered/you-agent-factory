@@ -505,4 +505,6 @@ type FactorySessionJavaScriptRuntimeState struct {
 	CompletedDispatches int                                   `json:"completedDispatches"`
 	Dispatches          []FactorySessionDispatchState           `json:"dispatches,omitempty"`
 	Artifacts           []FactorySessionArtifactState           `json:"artifacts,omitempty"`
+	PrimaryResult       []WorkContentPart                       `json:"primaryResult,omitempty"`
+	ResultStatus        string                                  `json:"resultStatus,omitempty"`
 }

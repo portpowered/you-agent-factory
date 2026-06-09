@@ -695,6 +695,15 @@ const (
 	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
 )
 
+// Defines values for WorkflowPreviewRequestSourceKind.
+const (
+	FACTORYID      WorkflowPreviewRequestSourceKind = "FACTORY_ID"
+	FACTORYINLINE  WorkflowPreviewRequestSourceKind = "FACTORY_INLINE"
+	INLINEWORKFLOW WorkflowPreviewRequestSourceKind = "INLINE_WORKFLOW"
+	WORKFLOWFILE   WorkflowPreviewRequestSourceKind = "WORKFLOW_FILE"
+	WORKFLOWNAME   WorkflowPreviewRequestSourceKind = "WORKFLOW_NAME"
+)
+
 // Defines values for WorkstationKind.
 const (
 	WorkstationKindCron     WorkstationKind = "CRON"
@@ -4318,7 +4327,7 @@ type WorkAudioContentPart struct {
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 
-	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 	Url WorkContentURLProperty `json:"url"`
 }
 
@@ -4347,7 +4356,7 @@ type WorkBinaryContentPart struct {
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 
-	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 	Url WorkContentURLProperty `json:"url"`
 }
 
@@ -4389,7 +4398,7 @@ type WorkContentPart struct {
 // WorkContentPartType Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
 type WorkContentPartType string
 
-// WorkContentURLProperty Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+// WorkContentURLProperty Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 type WorkContentURLProperty = string
 
 // WorkDiagnostics defines model for WorkDiagnostics.
@@ -4432,7 +4441,7 @@ type WorkImageContentPart struct {
 	Slot *string             `json:"slot,omitempty"`
 	Type WorkContentPartType `json:"type"`
 
-	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, and data:.
+	// Url Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
 	Url WorkContentURLProperty `json:"url"`
 }
 
@@ -4661,6 +4670,184 @@ type WorkerProvider string
 
 // WorkerType Worker implementation families supported by the public factory-config contract.
 type WorkerType string
+
+// WorkflowArtifactRootDecision defines model for WorkflowArtifactRootDecision.
+type WorkflowArtifactRootDecision struct {
+	// Allowed True when the artifact root satisfies policy checks.
+	Allowed    bool                `json:"allowed"`
+	Diagnostic *WorkflowDiagnostic `json:"diagnostic,omitempty"`
+
+	// Effective Normalized artifact root when allowed.
+	Effective *string `json:"effective,omitempty"`
+
+	// Requested Artifact root requested with the workflow source.
+	Requested string `json:"requested"`
+}
+
+// WorkflowDiagnostic defines model for WorkflowDiagnostic.
+type WorkflowDiagnostic struct {
+	// Code Stable workflow diagnostic code.
+	Code string `json:"code"`
+
+	// Column Optional 1-based source column number.
+	Column *int `json:"column,omitempty"`
+
+	// Line Optional 1-based source line number.
+	Line *int `json:"line,omitempty"`
+
+	// Message Customer-readable diagnostic message.
+	Message string `json:"message"`
+
+	// Path Optional source or config path for the diagnostic.
+	Path *string `json:"path,omitempty"`
+}
+
+// WorkflowPolicyPreview defines model for WorkflowPolicyPreview.
+type WorkflowPolicyPreview struct {
+	// BudgetDecisions Child and concurrency budget decisions for preview surfaces.
+	BudgetDecisions *map[string]interface{} `json:"budgetDecisions,omitempty"`
+
+	// DeniedCapabilities Capabilities denied by the effective policy before runtime execution.
+	DeniedCapabilities []WorkflowDiagnostic `json:"deniedCapabilities"`
+
+	// EffectivePolicy Effective bounded workflow policy for preview or session start.
+	EffectivePolicy map[string]interface{} `json:"effectivePolicy"`
+
+	// MaxChildCount Maximum child agent count allowed by effective policy.
+	MaxChildCount int `json:"maxChildCount"`
+
+	// MaxConcurrency Maximum concurrent child dispatches allowed by effective policy.
+	MaxConcurrency int `json:"maxConcurrency"`
+
+	// ModelDecision Optional model allowlist decision for preview surfaces.
+	ModelDecision *map[string]interface{} `json:"modelDecision,omitempty"`
+
+	// PolicyHash Stable hash of the effective policy document.
+	PolicyHash string `json:"policyHash"`
+
+	// ProfileDecision Optional route profile allowlist decision for preview surfaces.
+	ProfileDecision *map[string]interface{} `json:"profileDecision,omitempty"`
+
+	// RunnerDecision Optional runner allowlist decision for preview surfaces.
+	RunnerDecision *map[string]interface{} `json:"runnerDecision,omitempty"`
+
+	// TimeoutDecisions Timeout and budget decisions for preview surfaces.
+	TimeoutDecisions *map[string]interface{} `json:"timeoutDecisions,omitempty"`
+
+	// ValidationIssues Policy validation issues for the requested or factory default policy.
+	ValidationIssues []WorkflowDiagnostic `json:"validationIssues"`
+}
+
+// WorkflowPreviewRequest defines model for WorkflowPreviewRequest.
+type WorkflowPreviewRequest struct {
+	// AllowFactoryLookup When true, explicit factory lookup is attempted after ordered workflow lookup.
+	AllowFactoryLookup *bool `json:"allowFactoryLookup,omitempty"`
+
+	// ArgsSchema Optional JSON Schema object describing workflow invocation arguments.
+	ArgsSchema *map[string]interface{} `json:"argsSchema,omitempty"`
+
+	// ArtifactRoot Optional absolute artifact root requested with the workflow source.
+	ArtifactRoot *string `json:"artifactRoot,omitempty"`
+
+	// DefaultPolicy Optional factory default policy layer merged into the effective policy preview.
+	DefaultPolicy *map[string]interface{} `json:"defaultPolicy,omitempty"`
+
+	// InlineSource Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
+	InlineSource *string `json:"inlineSource,omitempty"`
+
+	// Metadata Optional JavaScript orchestrator metadata to validate with the source.
+	Metadata *map[string]string `json:"metadata,omitempty"`
+
+	// ProjectRoot Project root used for ordered workflow source lookup.
+	ProjectRoot *string `json:"projectRoot,omitempty"`
+
+	// RequestedModel Optional model requested for preview decision projection.
+	RequestedModel *string `json:"requestedModel,omitempty"`
+
+	// RequestedPolicy Optional request policy overrides merged into the effective policy preview.
+	RequestedPolicy *map[string]interface{} `json:"requestedPolicy,omitempty"`
+
+	// RequestedProfile Optional route profile requested for preview decision projection.
+	RequestedProfile *string `json:"requestedProfile,omitempty"`
+
+	// RequestedRunner Optional runner requested for preview decision projection.
+	RequestedRunner *string `json:"requestedRunner,omitempty"`
+
+	// SourceKind Workflow source request kind.
+	SourceKind WorkflowPreviewRequestSourceKind `json:"sourceKind"`
+
+	// SourceValue Requested workflow name, file ref, factory id, or inline label.
+	SourceValue *string `json:"sourceValue,omitempty"`
+
+	// TimeoutMillis Optional requested timeout in milliseconds for preview decision projection.
+	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
+}
+
+// WorkflowPreviewRequestSourceKind Workflow source request kind.
+type WorkflowPreviewRequestSourceKind string
+
+// WorkflowPreviewResult defines model for WorkflowPreviewResult.
+type WorkflowPreviewResult struct {
+	PolicyPreview     WorkflowPolicyPreview     `json:"policyPreview"`
+	ResultConstraints WorkflowResultConstraints `json:"resultConstraints"`
+	SourceResolution  WorkflowSourceResolution  `json:"sourceResolution"`
+
+	// SourceValidationIssues Workflow source, loader, and orchestrator validation diagnostics.
+	SourceValidationIssues []WorkflowDiagnostic `json:"sourceValidationIssues"`
+
+	// Valid True when source resolution, validation, policy, and artifact-root checks pass.
+	Valid bool `json:"valid"`
+}
+
+// WorkflowResultConstraints defines model for WorkflowResultConstraints.
+type WorkflowResultConstraints struct {
+	// ArtifactUriScheme URI scheme used for session-scoped artifact references.
+	ArtifactUriScheme string `json:"artifactUriScheme"`
+
+	// MaxEmbeddedBytes Maximum embedded JSON payload size before artifact refs are required.
+	MaxEmbeddedBytes int64 `json:"maxEmbeddedBytes"`
+
+	// RejectedValueKinds Non-JSON workflow result kinds rejected by the shared contract.
+	RejectedValueKinds []string `json:"rejectedValueKinds"`
+
+	// RequiresStructuredCloneableJson True when workflow return values must be structured-cloneable JSON-compatible values.
+	RequiresStructuredCloneableJson bool `json:"requiresStructuredCloneableJson"`
+}
+
+// WorkflowSourceResolution defines model for WorkflowSourceResolution.
+type WorkflowSourceResolution struct {
+	ArtifactRoot *WorkflowArtifactRootDecision `json:"artifactRoot,omitempty"`
+
+	// Diagnostics Lookup or conflict diagnostics when source resolution fails or conflicts.
+	Diagnostics *[]WorkflowDiagnostic `json:"diagnostics,omitempty"`
+
+	// Dialect Resolved workflow dialect label.
+	Dialect *string `json:"dialect,omitempty"`
+
+	// Found True when a workflow source was resolved.
+	Found bool `json:"found"`
+
+	// LookupStage Ordered lookup stage that supplied the resolved source.
+	LookupStage *string `json:"lookupStage,omitempty"`
+
+	// OrchestratorKind Resolved orchestrator kind for the workflow source.
+	OrchestratorKind *string `json:"orchestratorKind,omitempty"`
+
+	// RequestKind Requested workflow source kind.
+	RequestKind string `json:"requestKind"`
+
+	// RequestValue Original requested workflow source value.
+	RequestValue *string `json:"requestValue,omitempty"`
+
+	// ResolvedKind Resolved workflow source kind.
+	ResolvedKind *string `json:"resolvedKind,omitempty"`
+
+	// SourceHash Stable hash of the authored workflow source.
+	SourceHash *string `json:"sourceHash,omitempty"`
+
+	// SourceRef Safe resolved workflow source reference.
+	SourceRef *string `json:"sourceRef,omitempty"`
+}
 
 // Workstation A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
 type Workstation struct {
@@ -5024,6 +5211,9 @@ type ValidateFactoryJSONRequestBody = Factory
 
 // InvokeModelJSONRequestBody defines body for InvokeModel for application/json ContentType.
 type InvokeModelJSONRequestBody = ModelInvocationRequest
+
+// PreviewWorkflowJSONRequestBody defines body for PreviewWorkflow for application/json ContentType.
+type PreviewWorkflowJSONRequestBody = WorkflowPreviewRequest
 
 // Getter for additional properties for FactorySessionEffectivePolicy. Returns the specified
 // element and whether it was found
@@ -6399,6 +6589,9 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
+	// Preview workflow validation and policy
+	// (POST /workflow-previews)
+	PreviewWorkflow(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -7563,6 +7756,20 @@ func (siw *ServerInterfaceWrapper) GetStatus(w http.ResponseWriter, r *http.Requ
 	handler.ServeHTTP(w, r)
 }
 
+// PreviewWorkflow operation middleware
+func (siw *ServerInterfaceWrapper) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewWorkflow(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -7755,6 +7962,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/provider-sessions/detail", wrapper.GetProviderSessionDetails).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/status", wrapper.GetStatus).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/workflow-previews", wrapper.PreviewWorkflow).Methods("POST")
 
 	return r
 }

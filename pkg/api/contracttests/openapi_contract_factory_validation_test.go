@@ -66,3 +66,42 @@ func TestOpenAPIContract_FactoryValidationResultSchemaMatchesCanonicalTargetShap
 		t.Fatalf("FactoryValidationResult.example.targets = %#v, want multi-target invalid factory example", resultOpenAPI.Example)
 	}
 }
+
+func TestOpenAPIContract_DefinesWorkflowPreviewEndpoint(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatalf("paths object is missing")
+	}
+
+	pathItem, ok := paths["/workflow-previews"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./workflow-previews is missing")
+	}
+	postOperation, ok := pathItem["post"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./workflow-previews.post is missing")
+	}
+	if got, _ := postOperation["operationId"].(string); got != "previewWorkflow" {
+		t.Fatalf("paths./workflow-previews.post.operationId = %q, want previewWorkflow", got)
+	}
+	assertRequestSchemaRef(t, postOperation, "#/components/schemas/WorkflowPreviewRequest")
+	assertResponseSchemaRef(t, postOperation, "200", "#/components/schemas/WorkflowPreviewResult")
+	assertResponseRef(t, postOperation, "400", "#/components/responses/BadRequest")
+}
+
+func TestOpenAPIContract_WorkflowPreviewResultSchemaMatchesSharedContract(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	resultSchema := schemaObject(t, schemas, "WorkflowPreviewResult")
+	assertRequiredFields(t, resultSchema,
+		"valid",
+		"sourceResolution",
+		"sourceValidationIssues",
+		"policyPreview",
+		"resultConstraints",
+	)
+	resultProperties := schemaProperties(t, resultSchema, "WorkflowPreviewResult")
+	assertPropertyRef(t, resultProperties, "sourceResolution", "#/components/schemas/WorkflowSourceResolution")
+	assertPropertyRef(t, resultProperties, "policyPreview", "#/components/schemas/WorkflowPolicyPreview")
+	assertPropertyRef(t, resultProperties, "resultConstraints", "#/components/schemas/WorkflowResultConstraints")
+}

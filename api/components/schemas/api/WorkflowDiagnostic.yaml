@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - code
+  - message
+properties:
+  code:
+    type: string
+    description: Stable workflow diagnostic code.
+  message:
+    type: string
+    description: Customer-readable diagnostic message.
+  path:
+    type: string
+    description: Optional source or config path for the diagnostic.
+  line:
+    type: integer
+    description: Optional 1-based source line number.
+  column:
+    type: integer
+    description: Optional 1-based source column number.
