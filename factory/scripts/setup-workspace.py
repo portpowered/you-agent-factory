@@ -69,6 +69,18 @@ def local_main_is_ancestor_of_origin_main(repo_root):
     return result.returncode == 0
 
 
+def main_is_checked_out(repo_root):
+    """Return True when refs/heads/main is checked out in any linked worktree."""
+    result = run_git("worktree", "list", "--porcelain", cwd=repo_root, check=False)
+    if result.returncode != 0:
+        return True
+
+    for line in result.stdout.splitlines():
+        if line == "branch refs/heads/main":
+            return True
+    return False
+
+
 def fast_forward_local_main(repo_root, origin_main_sha):
     """Update refs/heads/main to origin/main without checking out main."""
     run_git("update-ref", "refs/heads/main", origin_main_sha, cwd=repo_root)
@@ -99,6 +111,9 @@ def sync_main(repo_root):
         return
 
     if not local_main_is_ancestor_of_origin_main(repo_root):
+        return
+
+    if main_is_checked_out(repo_root):
         return
 
     fast_forward_local_main(repo_root, origin_main_sha)

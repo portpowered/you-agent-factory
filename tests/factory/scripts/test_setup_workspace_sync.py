@@ -161,6 +161,53 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             )
         )
 
+    def test_sync_main_skips_fast_forward_when_main_is_checked_out_dirty(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+        git(["checkout", "main"], local_repo)
+
+        dirty_file = local_repo / "f.txt"
+        dirty_file.write_text("dirty content\n", encoding="utf-8")
+        status_before = git(["status", "--porcelain"], local_repo).stdout
+        head_before = git(["rev-parse", "HEAD"], local_repo).stdout.strip()
+        branch_before = git(["branch", "--show-current"], local_repo).stdout.strip()
+        local_main_sha_before = git(
+            ["rev-parse", "refs/heads/main"],
+            local_repo,
+        ).stdout.strip()
+        origin_main_sha = git(
+            ["rev-parse", "refs/remotes/origin/main"],
+            local_repo,
+        ).stdout.strip()
+        self.assertNotEqual(local_main_sha_before, origin_main_sha)
+
+        recorded, original_run_git = self.record_git_commands()
+        try:
+            self.module.sync_main(local_repo)
+        finally:
+            self.module.run_git = original_run_git
+
+        self.assertEqual(
+            git(["rev-parse", "refs/heads/main"], local_repo).stdout.strip(),
+            local_main_sha_before,
+        )
+        self.assertEqual(git(["rev-parse", "HEAD"], local_repo).stdout.strip(), head_before)
+        self.assertEqual(
+            git(["branch", "--show-current"], local_repo).stdout.strip(),
+            branch_before,
+        )
+        self.assertEqual(git(["status", "--porcelain"], local_repo).stdout, status_before)
+        self.assertEqual(
+            dirty_file.read_text(encoding="utf-8"),
+            "dirty content\n",
+        )
+        self.assertFalse(
+            any(
+                args[:3] == ("update-ref", "refs/heads/main", origin_main_sha)
+                for args in recorded
+            )
+        )
+
     def test_sync_main_fast_forwards_main_without_pull_on_dirty_tree(self):
         local_repo = self.repo_path / "local"
         setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
