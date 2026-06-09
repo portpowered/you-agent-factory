@@ -61,6 +61,9 @@ import type {
   WorkRequestEvent,
   WorkStateChangeEvent,
 } from "./replayWorldStateTypes";
+import { applyDispatchLifecycleEvent } from "./replayDispatchLifecycle";
+import { applyOrchestratorProgressEvent } from "./replayOrchestratorProgress";
+import { applySessionLifecycleEvent } from "./replaySessionLifecycle";
 import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
@@ -152,6 +155,17 @@ function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
       return;
     case FACTORY_EVENT_TYPES.workStateChange:
       applyWorkStateChange(state, event as WorkStateChangeEvent);
+      return;
+    default:
+      if (applySessionLifecycleEvent(state, event)) {
+        return;
+      }
+      if (applyOrchestratorProgressEvent(state, event)) {
+        return;
+      }
+      if (applyDispatchLifecycleEvent(state, event)) {
+        return;
+      }
       return;
   }
 }

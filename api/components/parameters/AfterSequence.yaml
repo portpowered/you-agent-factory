@@ -1,0 +1,10 @@
+name: after_sequence
+in: query
+required: false
+description: >-
+  Reconnect cursor identifying the last acknowledged ordering point. Global
+  event streams use FactoryEvent.context.sequence; session-scoped streams use
+  FactoryEvent.context.sessionSequence when present.
+schema:
+  type: integer
+  minimum: 0

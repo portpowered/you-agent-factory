@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
@@ -26,10 +27,17 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeWorkStateChange,
 	factoryapi.FactoryEventTypeFactoryStateResponse,
 	factoryapi.FactoryEventTypeRunResponse,
+	factoryapi.FactoryEventTypeSessionStarted,
+	factoryapi.FactoryEventTypeSessionResultUpdated,
+	factoryapi.FactoryEventTypeSessionCompleted,
+	factoryapi.FactoryEventTypeOrchestratorPhaseChanged,
+	factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
+	factoryapi.FactoryEventTypeDispatchQueued,
+	factoryapi.FactoryEventTypeDispatchInterrupted,
+	factoryapi.FactoryEventTypeDispatchReconciled,
 	factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
 	factoryapi.FactoryEventTypeJavaScriptPhaseChange,
 	factoryapi.FactoryEventTypeArtifactCreated,
-	factoryapi.FactoryEventTypeSessionResultUpdated,
 }
 
 var retiredFactoryEventTypeStrings = []string{
@@ -107,6 +115,38 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 		_, err := payload.AsRunResponseEventPayload()
 		return err
 	},
+	factoryapi.FactoryEventTypeSessionStarted: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionStartedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeSessionResultUpdated: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionResultUpdatedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeSessionCompleted: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionCompletedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeOrchestratorPhaseChanged: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsOrchestratorPhaseChangedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeOrchestratorCheckpointWritten: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsOrchestratorCheckpointWrittenEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchQueued: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchQueuedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchInterrupted: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchInterruptedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeDispatchReconciled: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsDispatchReconciledEventPayload()
+		return err
+	},
 	factoryapi.FactoryEventTypeJavaScriptCheckpointRef: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsJavaScriptCheckpointRefEventPayload()
 		return err
@@ -117,10 +157,6 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 	},
 	factoryapi.FactoryEventTypeArtifactCreated: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsArtifactCreatedEventPayload()
-		return err
-	},
-	factoryapi.FactoryEventTypeSessionResultUpdated: func(payload factoryapi.FactoryEvent_Payload) error {
-		_, err := payload.AsSessionResultUpdatedEventPayload()
 		return err
 	},
 }
@@ -174,6 +210,30 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	reflect.TypeOf(factoryapi.RunResponseEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromRunResponseEventPayload(value.(factoryapi.RunResponseEventPayload))
 	},
+	reflect.TypeOf(factoryapi.SessionStartedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionStartedEventPayload(value.(factoryapi.SessionStartedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.SessionResultUpdatedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionResultUpdatedEventPayload(value.(factoryapi.SessionResultUpdatedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.SessionCompletedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionCompletedEventPayload(value.(factoryapi.SessionCompletedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.OrchestratorPhaseChangedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromOrchestratorPhaseChangedEventPayload(value.(factoryapi.OrchestratorPhaseChangedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.OrchestratorCheckpointWrittenEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromOrchestratorCheckpointWrittenEventPayload(value.(factoryapi.OrchestratorCheckpointWrittenEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchQueuedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchQueuedEventPayload(value.(factoryapi.DispatchQueuedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchInterruptedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchInterruptedEventPayload(value.(factoryapi.DispatchInterruptedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.DispatchReconciledEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromDispatchReconciledEventPayload(value.(factoryapi.DispatchReconciledEventPayload))
+	},
 	reflect.TypeOf(factoryapi.JavaScriptCheckpointRefEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromJavaScriptCheckpointRefEventPayload(value.(factoryapi.JavaScriptCheckpointRefEventPayload))
 	},
@@ -182,9 +242,6 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.ArtifactCreatedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromArtifactCreatedEventPayload(value.(factoryapi.ArtifactCreatedEventPayload))
-	},
-	reflect.TypeOf(factoryapi.SessionResultUpdatedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
-		return payload.FromSessionResultUpdatedEventPayload(value.(factoryapi.SessionResultUpdatedEventPayload))
 	},
 }
 
@@ -269,6 +326,14 @@ func intPtr(value int) *int {
 	return &value
 }
 
+func durationMillisPtr(value int64) *int64 {
+	return &value
+}
+
+func factoryEventSessionResultStatusPtr(value factoryapi.FactoryEventSessionResultStatus) *factoryapi.FactoryEventSessionResultStatus {
+	return &value
+}
+
 func boolPtr(value bool) *bool {
 	return &value
 }
@@ -292,5 +357,258 @@ func decodeRoundTripJSON[T any](t *testing.T, encoded []byte, target *T, label s
 
 	if err := json.Unmarshal(encoded, target); err != nil {
 		t.Fatalf("unmarshal %s: %v", label, err)
+	}
+}
+
+type generatedSessionLifecycleFixture struct {
+	sessionID           string
+	orchestratorKind    factoryapi.FactoryOrchestratorKind
+	orchestratorDialect string
+	phaseID             string
+	phaseName           string
+	dispatchID          string
+	source              string
+	sessionSequence     int
+}
+
+func (f *generatedSessionLifecycleFixture) nextSessionSequence() int {
+	current := f.sessionSequence
+	f.sessionSequence++
+	return current
+}
+
+func generatedFactorySessionLifecycleEvents(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
+	t.Helper()
+	fixture := &generatedSessionLifecycleFixture{
+		sessionID:           "session-alpha",
+		orchestratorKind:    factoryapi.JAVASCRIPT,
+		orchestratorDialect: "workflow-v1",
+		phaseID:             "phase-plan",
+		phaseName:           "plan",
+		dispatchID:          "dispatch-child-1",
+		source:              "api",
+	}
+	events := make([]factoryapi.FactoryEvent, 0, 8)
+	events = append(events, generatedSessionLifecycleBracketEvents(t, fixture, eventTime)...)
+	events = append(events, generatedSessionLifecycleOrchestratorEvents(t, fixture, eventTime)...)
+	events = append(events, generatedSessionLifecycleDispatchEvents(t, fixture, eventTime)...)
+	return events
+}
+
+func generatedSessionLifecycleBracketEvents(
+	t *testing.T,
+	fixture *generatedSessionLifecycleFixture,
+	eventTime time.Time,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-started",
+			Type:          factoryapi.FactoryEventTypeSessionStarted,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:            10,
+				Tick:                5,
+				EventTime:           eventTime,
+				SessionId:           &fixture.sessionID,
+				SessionSequence:     intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind:    &fixture.orchestratorKind,
+				OrchestratorDialect: &fixture.orchestratorDialect,
+				Source:              &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.SessionStartedEventPayload{
+				FactoryId:  stringPtr("factory-alpha"),
+				SourceRef:  stringPtr("workflow/main.js"),
+				SourceHash: stringPtr("sha256:source"),
+				PolicyHash: stringPtr("sha256:policy"),
+				ArgsDigest: stringPtr("sha256:args"),
+				StartedAt:  eventTime,
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-result-updated",
+			Type:          factoryapi.FactoryEventTypeSessionResultUpdated,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         11,
+				Tick:             6,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				PhaseId:          &fixture.phaseID,
+				PhaseName:        &fixture.phaseName,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.SessionResultUpdatedEventPayload{
+				ResultStatus: factoryapi.PARTIAL,
+				ArtifactIds:  &[]string{"artifact-partial-1"},
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-completed",
+			Type:          factoryapi.FactoryEventTypeSessionCompleted,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         12,
+				Tick:             7,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.SessionCompletedEventPayload{
+				FinalStatus:    factoryapi.FactorySessionStatusFINISHED,
+				CompletedAt:    eventTime,
+				DurationMillis: durationMillisPtr(2000),
+				ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FINAL),
+				ArtifactIds:    &[]string{"artifact-result-1"},
+				DispatchCounts: &factoryapi.FactorySessionJavaScriptChildDispatchCounts{
+					Queued:    0,
+					Running:   0,
+					Completed: 2,
+				},
+			}),
+		},
+	}
+}
+
+func generatedSessionLifecycleOrchestratorEvents(
+	t *testing.T,
+	fixture *generatedSessionLifecycleFixture,
+	eventTime time.Time,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-orchestrator-phase-changed",
+			Type:          factoryapi.FactoryEventTypeOrchestratorPhaseChanged,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         13,
+				Tick:             7,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				PhaseId:          stringPtr("phase-execute"),
+				PhaseName:        stringPtr("execute"),
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.OrchestratorPhaseChangedEventPayload{
+				PreviousPhaseId:   stringPtr("phase-plan"),
+				PreviousPhaseName: stringPtr("plan"),
+				PhaseStatus:       factoryapi.ACTIVE,
+				StartedAt:         &eventTime,
+				ProgressSummary:   stringPtr("Entered execute phase"),
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-orchestrator-checkpoint-written",
+			Type:          factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         14,
+				Tick:             8,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				PhaseId:          stringPtr("phase-execute"),
+				PhaseName:        stringPtr("execute"),
+				CheckpointId:     stringPtr("ckpt-2"),
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.OrchestratorCheckpointWrittenEventPayload{
+				Label:                 "after-plan",
+				Timestamp:             &eventTime,
+				SourceHash:            stringPtr("sha256:source"),
+				RuntimeSnapshotDigest: stringPtr("sha256:snapshot"),
+				ArtifactRef: &factoryapi.FactoryArtifactRef{
+					Id:         "artifact-ckpt-2",
+					Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
+					Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+				},
+				ResumabilityStatus: factoryapi.RESUMABLE,
+			}),
+		},
+	}
+}
+
+func generatedSessionLifecycleDispatchEvents(
+	t *testing.T,
+	fixture *generatedSessionLifecycleFixture,
+	eventTime time.Time,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-dispatch-queued",
+			Type:          factoryapi.FactoryEventTypeDispatchQueued,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         15,
+				Tick:             8,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				PhaseId:          stringPtr("phase-execute"),
+				PhaseName:        stringPtr("execute"),
+				DispatchId:       &fixture.dispatchID,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.DispatchQueuedEventPayload{
+				DispatchKind:  factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+				Label:         stringPtr("summarize findings"),
+				QueuePosition: intPtr(0),
+				PromptDigest:  stringPtr("sha256:prompt"),
+				SchemaDigest:  stringPtr("sha256:schema"),
+				InputWorkIds:  &[]string{"work-1"},
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-dispatch-interrupted",
+			Type:          factoryapi.FactoryEventTypeDispatchInterrupted,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         16,
+				Tick:             8,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				DispatchId:       &fixture.dispatchID,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.DispatchInterruptedEventPayload{
+				Reason:         "provider disconnected",
+				ObservedStatus: factoryapi.FactoryDispatchStatusFAILED,
+				InterruptedAt:  eventTime,
+				RetryPlanned:   true,
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-dispatch-reconciled",
+			Type:          factoryapi.FactoryEventTypeDispatchReconciled,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         17,
+				Tick:             9,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				DispatchId:       &fixture.dispatchID,
+				Source:           stringPtr("replay"),
+			},
+			Payload: factoryEventPayload(t, factoryapi.DispatchReconciledEventPayload{
+				ReconciledStatus:     factoryapi.FactoryDispatchStatusCOMPLETED,
+				ReconciliationSource: factoryapi.PROVIDERSESSION,
+				Replayed:             true,
+				ArtifactIds:          &[]string{"artifact-result-1"},
+			}),
+		},
 	}
 }

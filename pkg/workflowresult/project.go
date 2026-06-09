@@ -79,23 +79,23 @@ func BuildSessionResult(input SessionResultInput) factoryapi.FactorySessionResul
 func BuildSessionResultUpdatedPayload(input SessionResultInput) factoryapi.SessionResultUpdatedEventPayload {
 	sessionResult := BuildSessionResult(input)
 	payload := factoryapi.SessionResultUpdatedEventPayload{
-		SessionId: sessionResult.SessionId,
-		Status:    input.Status,
+		ResultStatus: eventResultStatusFromSessionStatus(input.Status),
 	}
 	if sessionResult.PrimaryResult != nil {
-		payload.PrimaryResult = sessionResult.PrimaryResult
+		payload.ResultSummary = sessionResult.PrimaryResult
 	}
 	if sessionResult.ArtifactIds != nil && len(*sessionResult.ArtifactIds) > 0 {
-		artifactID := (*sessionResult.ArtifactIds)[0]
-		if ref := artifactRefForID(artifactID, input); ref != nil {
-			payload.ResultArtifactRef = ref
-		}
-	}
-	if len(input.CheckpointRefs) > 0 {
-		checkpoints := append([]factoryapi.FactorySessionJavaScriptCheckpointRef(nil), input.CheckpointRefs...)
-		payload.CheckpointRefs = &checkpoints
+		artifactIDs := append([]string(nil), (*sessionResult.ArtifactIds)...)
+		payload.ArtifactIds = &artifactIDs
 	}
 	return payload
+}
+
+func eventResultStatusFromSessionStatus(status factoryapi.FactorySessionStatus) factoryapi.FactoryEventSessionResultStatus {
+	if status == factoryapi.FactorySessionStatusFINISHED {
+		return factoryapi.FINAL
+	}
+	return factoryapi.PARTIAL
 }
 
 func resultStatusFromSessionStatus(status factoryapi.FactorySessionStatus) factoryapi.FactorySessionResultStatus {

@@ -156,4 +156,5 @@ type FactoryWorldSessionRuntime struct {
 	DispatchedByWorkType map[string]int                      `json:"dispatched_by_work_type,omitempty"`
 	CompletedByWorkType  map[string]int                      `json:"completed_by_work_type,omitempty"`
 	FailedByWorkType     map[string]int                      `json:"failed_by_work_type,omitempty"`
+	Bracket              *FactoryWorldSessionBracketProjection `json:"bracket,omitempty"`
 }

@@ -1,0 +1,33 @@
+type: object
+additionalProperties: false
+description: >-
+  Orchestrator checkpoint reference recorded on the canonical factory event
+  stream. Checkpoint identity lives in FactoryEvent.context and raw VM bodies
+  remain orchestrator-owned.
+required:
+  - label
+  - resumabilityStatus
+properties:
+  label:
+    type: string
+    description: Customer-visible checkpoint label.
+  timestamp:
+    type: string
+    format: date-time
+    description: When the checkpoint was recorded.
+  sourceHash:
+    type: string
+    description: Stable hash of the authored workflow source at checkpoint time.
+  runtimeSnapshotDigest:
+    type: string
+    description: Stable digest of replay-safe runtime snapshot metadata.
+  artifactRef:
+    $ref: '../../data-models/FactoryArtifactRef.yaml'
+    description: Checkpoint artifact reference without raw VM checkpoint bodies.
+  resumabilityStatus:
+    $ref: '../CheckpointResumabilityStatus.yaml'
+  warnings:
+    type: array
+    items:
+      $ref: '../../data-models/FactoryDispatchWarning.yaml'
+    description: Customer-visible checkpoint warnings.

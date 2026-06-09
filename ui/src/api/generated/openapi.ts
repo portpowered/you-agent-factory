@@ -137,7 +137,7 @@ export interface paths {
     };
     /**
      * Stream factory events
-     * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection.
+     * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
      */
     get: operations["getEvents"];
     put?: never;
@@ -157,7 +157,7 @@ export interface paths {
     };
     /**
      * Stream factory events for one session
-     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
      */
     get: operations["getEventsBySessionId"];
     put?: never;
@@ -1697,6 +1697,172 @@ export interface components {
       /** @description MIME type of the stored artifact payload when known. */
       mimeType?: string;
     };
+    /**
+     * @description Customer-visible session result availability for result update events.
+     * @enum {string}
+     */
+    FactoryEventSessionResultStatus: FactoryEventSessionResultStatus;
+    /**
+     * @description Canonical workflow phase lifecycle status for orchestrator phase events.
+     * @enum {string}
+     */
+    OrchestratorPhaseStatus: OrchestratorPhaseStatus;
+    /**
+     * @description Whether a recorded checkpoint can be used to resume session execution.
+     * @enum {string}
+     */
+    CheckpointResumabilityStatus: CheckpointResumabilityStatus;
+    /**
+     * @description Source that produced a dispatch reconciliation fact.
+     * @enum {string}
+     */
+    DispatchReconciliationSource: DispatchReconciliationSource;
+    /** @description Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only. */
+    SessionStartedEventPayload: {
+      /** @description Stable factory identifier for the session runtime. */
+      factoryId?: string;
+      /** @description Authored workflow or factory source reference when applicable. */
+      sourceRef?: string;
+      /** @description Stable hash of the authored source material. */
+      sourceHash?: string;
+      /** @description Stable hash of the effective orchestrator policy. */
+      policyHash?: string;
+      /** @description Stable digest of effective session arguments. */
+      argsDigest?: string;
+      /**
+       * Format: date-time
+       * @description When durable session execution started.
+       */
+      startedAt: string;
+    };
+    /** @description Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context. */
+    SessionResultUpdatedEventPayload: {
+      resultStatus: components["schemas"]["FactoryEventSessionResultStatus"];
+      /** @description Artifact identifiers associated with this result update. */
+      artifactIds?: string[];
+      /** @description Bounded customer-visible result summary without raw prompts or secrets. */
+      resultSummary?: components["schemas"]["WorkContent"];
+    };
+    /** @description Authoritative terminal session lifecycle marker on the canonical factory event stream. Session identity lives in FactoryEvent.context. */
+    SessionCompletedEventPayload: {
+      finalStatus: components["schemas"]["FactorySessionStatus"];
+      /**
+       * Format: date-time
+       * @description When durable session execution reached a terminal state.
+       */
+      completedAt: string;
+      /**
+       * Format: int64
+       * @description Total session execution duration in milliseconds.
+       */
+      durationMillis?: number;
+      resultStatus?: components["schemas"]["FactoryEventSessionResultStatus"];
+      /** @description Artifact identifiers associated with the terminal session outcome. */
+      artifactIds?: string[];
+      /** @description Dispatch queue, running, and completed counts at terminal completion. */
+      dispatchCounts?: components["schemas"]["FactorySessionJavaScriptChildDispatchCounts"];
+      /** @description Canonical failure details when the session completed unsuccessfully. */
+      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+    };
+    /** @description Orchestrator workflow phase transition recorded on the canonical factory event stream. Current phase identity lives in FactoryEvent.context. */
+    OrchestratorPhaseChangedEventPayload: {
+      /** @description Previous workflow phase identifier when available. */
+      previousPhaseId?: string;
+      /** @description Previous workflow phase name when available. */
+      previousPhaseName?: string;
+      phaseStatus: components["schemas"]["OrchestratorPhaseStatus"];
+      /**
+       * Format: date-time
+       * @description When the current phase started, when applicable.
+       */
+      startedAt?: string;
+      /**
+       * Format: date-time
+       * @description When the previous phase completed, when applicable.
+       */
+      completedAt?: string;
+      /** @description Bounded customer-visible phase progress summary. */
+      progressSummary?: string;
+    };
+    /** @description Orchestrator checkpoint reference recorded on the canonical factory event stream. Checkpoint identity lives in FactoryEvent.context and raw VM bodies remain orchestrator-owned. */
+    OrchestratorCheckpointWrittenEventPayload: {
+      /** @description Customer-visible checkpoint label. */
+      label: string;
+      /**
+       * Format: date-time
+       * @description When the checkpoint was recorded.
+       */
+      timestamp?: string;
+      /** @description Stable hash of the authored workflow source at checkpoint time. */
+      sourceHash?: string;
+      /** @description Stable digest of replay-safe runtime snapshot metadata. */
+      runtimeSnapshotDigest?: string;
+      /** @description Checkpoint artifact reference without raw VM checkpoint bodies. */
+      artifactRef?: components["schemas"]["FactoryArtifactRef"];
+      resumabilityStatus: components["schemas"]["CheckpointResumabilityStatus"];
+      /** @description Customer-visible checkpoint warnings. */
+      warnings?: components["schemas"]["FactoryDispatchWarning"][];
+    };
+    /** @description Dispatch queued for execution on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context and Petri transition fields are not required for JavaScript workflow dispatches. */
+    DispatchQueuedEventPayload: {
+      dispatchKind: components["schemas"]["FactoryDispatchKind"];
+      /** @description Customer-visible dispatch label. */
+      label?: string;
+      /** @description Optional coordination reference for grouped child work. */
+      coordinationRef?: string;
+      /** @description Selected runner identifier when applicable. */
+      runnerId?: string;
+      /** @description Selected model identifier when applicable. */
+      model?: string;
+      /** @description Selected provider identifier when applicable. */
+      provider?: string;
+      /** @description Parent dispatch identifier when this dispatch was spawned from another dispatch. */
+      parentDispatchId?: string;
+      /** @description Prior dispatch identifier when this dispatch is a retry. */
+      retryOfDispatchId?: string;
+      /** @description Queue position when known. */
+      queuePosition?: number;
+      /** @description Stable digest of rendered prompt material. */
+      promptDigest?: string;
+      /** @description Stable digest of the output schema when applicable. */
+      schemaDigest?: string;
+      /** @description Input artifact identifiers consumed by the dispatch. */
+      inputArtifactIds?: string[];
+      /** @description Input work identifiers consumed by the dispatch. */
+      inputWorkIds?: string[];
+    };
+    /** @description Dispatch interruption recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context. */
+    DispatchInterruptedEventPayload: {
+      /** @description Customer-visible interruption reason. */
+      reason: string;
+      observedStatus: components["schemas"]["FactoryDispatchStatus"];
+      /**
+       * Format: date-time
+       * @description When the interruption was observed.
+       */
+      interruptedAt: string;
+      /** @description Whether a retry dispatch is planned. */
+      retryPlanned: boolean;
+      /** @description Related provider-session reference when applicable. */
+      providerSessionRef?: components["schemas"]["LoadableProviderSessionRef"];
+      /** @description Related checkpoint reference when applicable. */
+      checkpointRef?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"];
+    };
+    /** @description Dispatch reconciliation recorded on the canonical factory event stream. Dispatch identity lives in FactoryEvent.context. */
+    DispatchReconciledEventPayload: {
+      reconciledStatus: components["schemas"]["FactoryDispatchStatus"];
+      reconciliationSource: components["schemas"]["DispatchReconciliationSource"];
+      /** @description Whether reconciliation facts were emitted during stream replay. */
+      replayed: boolean;
+      /** @description Usage summary after reconciliation when available. */
+      usage?: components["schemas"]["FactoryDispatchUsage"];
+      /** @description Result artifact reference without raw artifact bodies. */
+      resultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
+      /** @description Artifact identifiers produced or updated by reconciliation. */
+      artifactIds?: string[];
+      /** @description Canonical failure details when reconciliation failed. */
+      failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+    };
     /** @description Customer-visible JavaScript checkpoint reference recorded on the canonical factory event stream. Raw VM checkpoint bodies remain orchestrator-owned and are not included in this payload. */
     JavaScriptCheckpointRefEventPayload: {
       /** @description Stable checkpoint identifier referenced by the session runtime. */
@@ -2522,10 +2688,17 @@ export interface components {
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
         | components["schemas"]["RunResponseEventPayload"]
+        | components["schemas"]["SessionStartedEventPayload"]
+        | components["schemas"]["SessionResultUpdatedEventPayload"]
+        | components["schemas"]["SessionCompletedEventPayload"]
+        | components["schemas"]["OrchestratorPhaseChangedEventPayload"]
+        | components["schemas"]["OrchestratorCheckpointWrittenEventPayload"]
+        | components["schemas"]["DispatchQueuedEventPayload"]
+        | components["schemas"]["DispatchInterruptedEventPayload"]
+        | components["schemas"]["DispatchReconciledEventPayload"]
         | components["schemas"]["JavaScriptCheckpointRefEventPayload"]
         | components["schemas"]["JavaScriptPhaseChangeEventPayload"]
-        | components["schemas"]["ArtifactCreatedEventPayload"]
-        | components["schemas"]["SessionResultUpdatedEventPayload"];
+        | components["schemas"]["ArtifactCreatedEventPayload"];
     };
     /**
      * @description Canonical event vocabulary for customer-visible runtime changes. Work entering the factory is represented as WORK_REQUEST, including single-work submissions that are normalized into one-work requests.
@@ -2542,6 +2715,20 @@ export interface components {
        * @description Wall-clock event timestamp for customer explanation and diagnostics. ISO8601 timestamp.
        */
       eventTime: string;
+      /** @description Canonical factory session identity for session-scoped events; payloads must not restate it. */
+      sessionId?: string;
+      /** @description Monotonic per-session ordering used for replay deduplication within one session. */
+      sessionSequence?: number;
+      /** @description Canonical orchestrator kind for session-scoped events; payloads must not restate it. */
+      orchestratorKind?: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Optional JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT. */
+      orchestratorDialect?: string;
+      /** @description Canonical workflow phase identifier; payloads must not restate it. */
+      phaseId?: string;
+      /** @description Canonical workflow phase name for customer-visible diagnostics. */
+      phaseName?: string;
+      /** @description Canonical checkpoint identifier for checkpoint-scoped events; payloads must not restate it. */
+      checkpointId?: string;
       /** @description Canonical request identity for all request-scoped events; payload metadata must not restate it. */
       requestId?: string;
       /** @description Canonical trace identifiers that contributed to this event; payloads must not restate them. */
@@ -4142,18 +4329,6 @@ export interface components {
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
     };
-    /** @description JavaScript workflow terminal result recorded on the canonical factory event stream. Result bodies remain orchestrator-owned and are projected through structured WorkContent parts and artifact refs. */
-    SessionResultUpdatedEventPayload: {
-      /** @description Live factory session identifier for this result update. */
-      sessionId: string;
-      status: components["schemas"]["FactorySessionStatus"];
-      /** @description Structured JSON-compatible workflow result projected through WorkContent parts. */
-      primaryResult?: components["schemas"]["WorkContent"];
-      /** @description Final result artifact reference without raw artifact bodies. */
-      resultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
-      /** @description Checkpoint refs associated with the terminal session result. */
-      checkpointRefs?: components["schemas"]["FactorySessionJavaScriptCheckpointRef"][];
-    };
   };
   responses: {
     /** @description Request payload or parameter was invalid. */
@@ -4289,6 +4464,10 @@ export interface components {
     DispatchID: string;
     /** @description Stable factory-session artifact identifier. */
     ArtifactID: string;
+    /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+    AfterEventId: string;
+    /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+    AfterSequence: number;
   };
   requestBodies: never;
   headers: never;
@@ -4522,7 +4701,12 @@ export interface operations {
   };
   getEvents: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        after_event_id?: components["parameters"]["AfterEventId"];
+        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -4543,7 +4727,12 @@ export interface operations {
   };
   getEventsBySessionId: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        after_event_id?: components["parameters"]["AfterEventId"];
+        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+      };
       header?: never;
       path: {
         /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
@@ -5797,6 +5986,48 @@ export const FactoryArtifactAuditMode = {
 } as const;
 export type FactoryArtifactAuditMode =
   (typeof FactoryArtifactAuditMode)[keyof typeof FactoryArtifactAuditMode];
+export const FactoryEventSessionResultStatus = {
+  // A partial customer-visible result is available before terminal completion.
+  PARTIAL: "PARTIAL",
+  // The final customer-visible result is available.
+  FINAL: "FINAL",
+  // Terminal failure occurred after partial customer-visible results were recorded.
+  FAILED_WITH_PARTIAL: "FAILED_WITH_PARTIAL",
+} as const;
+export type FactoryEventSessionResultStatus =
+  (typeof FactoryEventSessionResultStatus)[keyof typeof FactoryEventSessionResultStatus];
+export const OrchestratorPhaseStatus = {
+  // The phase is currently active.
+  ACTIVE: "ACTIVE",
+  // The phase completed successfully.
+  COMPLETED: "COMPLETED",
+  // The phase was skipped without execution.
+  SKIPPED: "SKIPPED",
+} as const;
+export type OrchestratorPhaseStatus =
+  (typeof OrchestratorPhaseStatus)[keyof typeof OrchestratorPhaseStatus];
+export const CheckpointResumabilityStatus = {
+  // The checkpoint can be used to resume execution.
+  RESUMABLE: "RESUMABLE",
+  // The checkpoint cannot be used to resume execution.
+  NOT_RESUMABLE: "NOT_RESUMABLE",
+  // Resumability could not be determined from replay-safe metadata.
+  UNKNOWN: "UNKNOWN",
+} as const;
+export type CheckpointResumabilityStatus =
+  (typeof CheckpointResumabilityStatus)[keyof typeof CheckpointResumabilityStatus];
+export const DispatchReconciliationSource = {
+  // Reconciliation facts were emitted while replaying missed stream events.
+  STREAM_REPLAY: "STREAM_REPLAY",
+  // Reconciliation facts were derived from provider-session state.
+  PROVIDER_SESSION: "PROVIDER_SESSION",
+  // Reconciliation facts were derived from durable dispatch state.
+  DURABLE_STATE: "DURABLE_STATE",
+  // Reconciliation facts were produced by the runtime reconciler after a stream drop.
+  RUNTIME_RECONCILER: "RUNTIME_RECONCILER",
+} as const;
+export type DispatchReconciliationSource =
+  (typeof DispatchReconciliationSource)[keyof typeof DispatchReconciliationSource];
 export const FactorySessionListScope = {
   FactorySessionListScopeLive: "live",
   FactorySessionListScopePersisted: "persisted",
@@ -6004,14 +6235,29 @@ export const FactoryEventType = {
   FactoryEventTypeFactoryStateResponse: "FACTORY_STATE_RESPONSE",
   // A factory run response ended and final metadata is available.
   FactoryEventTypeRunResponse: "RUN_RESPONSE",
+  // Durable factory session execution started and replay-safe session facts are available.
+  FactoryEventTypeSessionStarted: "SESSION_STARTED",
+  // Partial or final customer-visible session result availability was recorded.
+  FactoryEventTypeSessionResultUpdated: "SESSION_RESULT_UPDATED",
+  // Durable factory session execution reached a terminal lifecycle state.
+  FactoryEventTypeSessionCompleted: "SESSION_COMPLETED",
+  // An orchestrator workflow phase transition was recorded.
+  FactoryEventTypeOrchestratorPhaseChanged: "ORCHESTRATOR_PHASE_CHANGED",
+  // An orchestrator checkpoint reference was recorded without exposing raw VM state.
+  FactoryEventTypeOrchestratorCheckpointWritten:
+    "ORCHESTRATOR_CHECKPOINT_WRITTEN",
+  // A child dispatch was queued for execution.
+  FactoryEventTypeDispatchQueued: "DISPATCH_QUEUED",
+  // A dispatch was interrupted before completion.
+  FactoryEventTypeDispatchInterrupted: "DISPATCH_INTERRUPTED",
+  // Durable dispatch state was reconciled after interruption or stream loss.
+  FactoryEventTypeDispatchReconciled: "DISPATCH_RECONCILED",
   // A JavaScript workflow checkpoint reference was recorded without exposing raw VM state.
   FactoryEventTypeJavaScriptCheckpointRef: "JAVASCRIPT_CHECKPOINT_REF",
   // A JavaScript workflow phase transition was recorded without using Petri marking terminology.
   FactoryEventTypeJavaScriptPhaseChange: "JAVASCRIPT_PHASE_CHANGE",
   // A customer-visible factory artifact was created without exposing raw artifact bodies.
   FactoryEventTypeArtifactCreated: "ARTIFACT_CREATED",
-  // A JavaScript workflow terminal result was recorded with structured primaryResult and artifact refs.
-  FactoryEventTypeSessionResultUpdated: "SESSION_RESULT_UPDATED",
 } as const;
 export type FactoryEventType =
   (typeof FactoryEventType)[keyof typeof FactoryEventType];

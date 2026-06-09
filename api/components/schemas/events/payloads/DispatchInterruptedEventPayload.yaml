@@ -1,0 +1,29 @@
+type: object
+additionalProperties: false
+description: >-
+  Dispatch interruption recorded on the canonical factory event stream. Dispatch
+  identity lives in FactoryEvent.context.
+required:
+  - reason
+  - observedStatus
+  - interruptedAt
+  - retryPlanned
+properties:
+  reason:
+    type: string
+    description: Customer-visible interruption reason.
+  observedStatus:
+    $ref: '../../data-models/FactoryDispatchStatus.yaml'
+  interruptedAt:
+    type: string
+    format: date-time
+    description: When the interruption was observed.
+  retryPlanned:
+    type: boolean
+    description: Whether a retry dispatch is planned.
+  providerSessionRef:
+    $ref: '../../api/LoadableProviderSessionRef.yaml'
+    description: Related provider-session reference when applicable.
+  checkpointRef:
+    $ref: '../../api/FactorySessionJavaScriptCheckpointRef.yaml'
+    description: Related checkpoint reference when applicable.

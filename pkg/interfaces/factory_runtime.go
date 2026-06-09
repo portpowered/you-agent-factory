@@ -483,11 +483,13 @@ type SubmissionHookResult struct {
 // FactorySessionJavaScriptCheckpointRef is a customer-visible JavaScript checkpoint
 // reference without raw VM checkpoint payload bodies.
 type FactorySessionJavaScriptCheckpointRef struct {
-	ID          string                           `json:"id"`
-	Label       string                           `json:"label"`
-	Summary     string                           `json:"summary"`
-	Timestamp   time.Time                        `json:"timestamp,omitempty"`
-	ArtifactRef *JavaScriptCheckpointArtifactRef `json:"artifactRef,omitempty"`
+	ID                 string                           `json:"id"`
+	Label              string                           `json:"label"`
+	Summary            string                           `json:"summary"`
+	Timestamp          time.Time                        `json:"timestamp,omitempty"`
+	ArtifactRef        *JavaScriptCheckpointArtifactRef `json:"artifactRef,omitempty"`
+	ResumabilityStatus string                           `json:"resumabilityStatus,omitempty"`
+	Warnings           []FactorySessionDispatchWarning  `json:"warnings,omitempty"`
 }
 
 // FactorySessionJavaScriptRuntimeState carries JavaScript orchestrator runtime

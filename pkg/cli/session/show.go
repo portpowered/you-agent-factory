@@ -98,7 +98,11 @@ func Show(cfg ShowConfig) error {
 		encoder := json.NewEncoder(cfg.Output)
 		return encoder.Encode(result)
 	}
-	return renderShowResult(cfg.Output, result)
+	partialResult, liveResult, err := fetchSessionResultProjections(cfg)
+	if err != nil {
+		return err
+	}
+	return renderShowResult(cfg.Output, result, partialResult, liveResult)
 }
 
 func showEndpoint(cfg ShowConfig) (url.URL, error) {
@@ -114,7 +118,57 @@ func showEndpoint(cfg ShowConfig) (url.URL, error) {
 	return *endpoint, nil
 }
 
-func renderShowResult(output io.Writer, session factoryapi.FactorySession) error {
+func fetchSessionResultProjections(
+	cfg ShowConfig,
+) (*factoryapi.FactorySessionPartialResult, *factoryapi.FactorySessionLiveResult, error) {
+	partialPath := sessionpath.ScopedPath("/partial-result", cfg.SessionID)
+	partialEndpoint, err := cliserver.RequestURL(cfg.Server, partialPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	resultPath := sessionpath.ScopedPath("/result", cfg.SessionID)
+	resultEndpoint, err := cliserver.RequestURL(cfg.Server, resultPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	client := &http.Client{Timeout: showRequestTimeout}
+	var partialResult *factoryapi.FactorySessionPartialResult
+	var liveResult *factoryapi.FactorySessionLiveResult
+	var decodedPartial factoryapi.FactorySessionPartialResult
+	if resp, err := clihttp.GetJSON(
+		context.Background(),
+		client,
+		partialEndpoint,
+		&decodedPartial,
+		clihttp.RequestOptions{EndpointPath: partialPath},
+	); err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			partialResult = &decodedPartial
+		}
+	}
+	var decodedResult factoryapi.FactorySessionLiveResult
+	if resp, err := clihttp.GetJSON(
+		context.Background(),
+		client,
+		resultEndpoint,
+		&decodedResult,
+		clihttp.RequestOptions{EndpointPath: resultPath},
+	); err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			liveResult = &decodedResult
+		}
+	}
+	return partialResult, liveResult, nil
+}
+
+func renderShowResult(
+	output io.Writer,
+	session factoryapi.FactorySession,
+	partialResult *factoryapi.FactorySessionPartialResult,
+	liveResult *factoryapi.FactorySessionLiveResult,
+) error {
 	rows := []struct {
 		label string
 		value string
@@ -156,6 +210,18 @@ func renderShowResult(output io.Writer, session factoryapi.FactorySession) error
 			return err
 		}
 	}
+	if err := writeSessionLifecycleFields(output, session.Runtime.Lifecycle); err != nil {
+		return err
+	}
+	if err := writeSessionDispatchLines(output, session.Runtime.Dispatches); err != nil {
+		return err
+	}
+	if err := writeSessionArtifactLines(output, session.Runtime.Artifacts); err != nil {
+		return err
+	}
+	if err := writeSessionResultLines(output, partialResult, liveResult); err != nil {
+		return err
+	}
 
 	switch session.Runtime.OrchestratorKind {
 	case factoryapi.JAVASCRIPT:
@@ -163,6 +229,102 @@ func renderShowResult(output io.Writer, session factoryapi.FactorySession) error
 	default:
 		return renderPetriSessionProjection(output, session.Runtime.Petri)
 	}
+}
+
+func writeSessionLifecycleFields(
+	output io.Writer,
+	lifecycle factoryapi.FactorySessionLifecycle,
+) error {
+	if _, err := fmt.Fprintf(output, "Session started:\t%s\n", lifecycle.StartedAt.Format(time.RFC3339)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(output, "Session updated:\t%s\n", lifecycle.UpdatedAt.Format(time.RFC3339)); err != nil {
+		return err
+	}
+	if lifecycle.FinishedAt != nil {
+		if _, err := fmt.Fprintf(output, "Session finished:\t%s\n", lifecycle.FinishedAt.Format(time.RFC3339)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeSessionDispatchLines(
+	output io.Writer,
+	dispatches *[]factoryapi.FactoryDispatch,
+) error {
+	if dispatches == nil {
+		return nil
+	}
+	for _, dispatch := range *dispatches {
+		label := dispatch.Id
+		if dispatch.Label != nil && strings.TrimSpace(*dispatch.Label) != "" {
+			label = fmt.Sprintf("%s (%s)", dispatch.Id, strings.TrimSpace(*dispatch.Label))
+		}
+		if _, err := fmt.Fprintf(
+			output,
+			"Dispatch:\t%s status=%s kind=%s\n",
+			label,
+			dispatch.Status,
+			dispatch.DispatchKind,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeSessionArtifactLines(
+	output io.Writer,
+	artifacts *[]factoryapi.FactoryArtifact,
+) error {
+	if artifacts == nil {
+		return nil
+	}
+	for _, artifact := range *artifacts {
+		label := artifact.Id
+		if artifact.Label != nil && strings.TrimSpace(*artifact.Label) != "" {
+			label = fmt.Sprintf("%s (%s)", artifact.Id, strings.TrimSpace(*artifact.Label))
+		}
+		if _, err := fmt.Fprintf(
+			output,
+			"Artifact ref:\t%s kind=%s visibility=%s\n",
+			label,
+			artifact.Kind,
+			artifact.Visibility,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeSessionResultLines(
+	output io.Writer,
+	partialResult *factoryapi.FactorySessionPartialResult,
+	liveResult *factoryapi.FactorySessionLiveResult,
+) error {
+	if partialResult != nil && partialResult.PartialResultArtifactRef != nil {
+		if _, err := fmt.Fprintf(
+			output,
+			"Partial result ref:\t%s (%s)\n",
+			partialResult.PartialResultArtifactRef.Id,
+			partialResult.PartialResultArtifactRef.Kind,
+		); err != nil {
+			return err
+		}
+	}
+	if liveResult != nil && liveResult.ResultArtifactRef != nil {
+		if _, err := fmt.Fprintf(
+			output,
+			"Final result ref:\t%s (%s)\n",
+			liveResult.ResultArtifactRef.Id,
+			liveResult.ResultArtifactRef.Kind,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func renderPetriSessionProjection(output io.Writer, petri *factoryapi.FactorySessionPetriProjection) error {

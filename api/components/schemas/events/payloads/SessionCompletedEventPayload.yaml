@@ -1,0 +1,32 @@
+type: object
+additionalProperties: false
+description: >-
+  Authoritative terminal session lifecycle marker on the canonical factory event
+  stream. Session identity lives in FactoryEvent.context.
+required:
+  - finalStatus
+  - completedAt
+properties:
+  finalStatus:
+    $ref: '../../api/FactorySessionStatus.yaml'
+  completedAt:
+    type: string
+    format: date-time
+    description: When durable session execution reached a terminal state.
+  durationMillis:
+    type: integer
+    format: int64
+    description: Total session execution duration in milliseconds.
+  resultStatus:
+    $ref: '../FactoryEventSessionResultStatus.yaml'
+  artifactIds:
+    type: array
+    items:
+      type: string
+    description: Artifact identifiers associated with the terminal session outcome.
+  dispatchCounts:
+    $ref: '../../api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    description: Dispatch queue, running, and completed counts at terminal completion.
+  failureDetail:
+    $ref: '../../data-models/FactoryDispatchFailureDetail.yaml'
+    description: Canonical failure details when the session completed unsuccessfully.

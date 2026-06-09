@@ -337,6 +337,7 @@ func generatedFactoryLifecycleEvents(t *testing.T) []factoryapi.FactoryEvent {
 			}),
 		},
 	}
+	events = append(events, generatedFactorySessionLifecycleEvents(t, eventTime)...)
 	events = append(events, generatedFactoryOrchestratorLifecycleEvents(t, eventTime)...)
 	return events
 }
@@ -392,24 +393,6 @@ func generatedFactoryOrchestratorLifecycleEvents(t *testing.T, eventTime time.Ti
 					Summary:    stringPtr("Completed review findings"),
 				},
 				CapturedAt: &eventTime,
-			}),
-		},
-		{
-			SchemaVersion: factoryapi.AgentFactoryEventV1,
-			Id:            "event-session-result-updated",
-			Type:          factoryapi.FactoryEventTypeSessionResultUpdated,
-			Context:       factoryapi.FactoryEventContext{Sequence: 13, Tick: 7, EventTime: eventTime},
-			Payload: factoryEventPayload(t, factoryapi.SessionResultUpdatedEventPayload{
-				SessionId: "session-js",
-				Status:    factoryapi.FactorySessionStatusFINISHED,
-				PrimaryResult: &factoryapi.WorkContent{
-					mustGeneratedJSONPart(t, map[string]any{"ok": true}),
-				},
-				ResultArtifactRef: &factoryapi.FactoryArtifactRef{
-					Id:         "artifact-result-1",
-					Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
-					Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
-				},
 			}),
 		},
 	}

@@ -577,7 +577,6 @@ func factoryStateEvent(tick int, eventTime time.Time, previous string, next stri
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeFactoryStateResponse, "state/"+next, tick, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this event fixture builder keeps the supported replay payload variants on one canonical helper.
 func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, tick int, eventTime time.Time, context factoryapi.FactoryEventContext, payload any) factoryapi.FactoryEvent {
 	context.Tick = tick
 	context.EventTime = eventTime
@@ -587,6 +586,12 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          eventType,
 	}
+	assignGeneratedProjectionPayload(&event, payload)
+	return event
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this event fixture builder keeps the supported replay payload variants on one canonical helper.
+func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload any) {
 	switch typed := payload.(type) {
 	case factoryapi.RunRequestEventPayload:
 		if err := event.Payload.FromRunRequestEventPayload(typed); err != nil {
@@ -652,18 +657,53 @@ func generatedProjectionEvent(eventType factoryapi.FactoryEventType, id string, 
 		if err := event.Payload.FromJavaScriptPhaseChangeEventPayload(typed); err != nil {
 			panic(err)
 		}
+	default:
+		assignGeneratedProjectionSessionLifecyclePayload(event, payload)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity session lifecycle fixture payloads stay on one generated-type switch for replay tests.
+func assignGeneratedProjectionSessionLifecyclePayload(event *factoryapi.FactoryEvent, payload any) {
+	switch typed := payload.(type) {
 	case factoryapi.ArtifactCreatedEventPayload:
 		if err := event.Payload.FromArtifactCreatedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.SessionStartedEventPayload:
+		if err := event.Payload.FromSessionStartedEventPayload(typed); err != nil {
 			panic(err)
 		}
 	case factoryapi.SessionResultUpdatedEventPayload:
 		if err := event.Payload.FromSessionResultUpdatedEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.SessionCompletedEventPayload:
+		if err := event.Payload.FromSessionCompletedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.OrchestratorPhaseChangedEventPayload:
+		if err := event.Payload.FromOrchestratorPhaseChangedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.OrchestratorCheckpointWrittenEventPayload:
+		if err := event.Payload.FromOrchestratorCheckpointWrittenEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.DispatchQueuedEventPayload:
+		if err := event.Payload.FromDispatchQueuedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.DispatchInterruptedEventPayload:
+		if err := event.Payload.FromDispatchInterruptedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.DispatchReconciledEventPayload:
+		if err := event.Payload.FromDispatchReconciledEventPayload(typed); err != nil {
+			panic(err)
+		}
 	default:
 		panic("unsupported projection test payload")
 	}
-	return event
 }
 
 func inferenceRequestEvent(tick int, eventTime time.Time, payload factoryapi.InferenceRequestEventPayload) factoryapi.FactoryEvent {

@@ -202,18 +202,18 @@ func TestBuildSessionResultAndEventPayload_ProjectSameResultAndArtifactIDs(t *te
 	if sessionResult.PrimaryResult == nil {
 		t.Fatal("expected primaryResult on session result")
 	}
-	if eventPayload.PrimaryResult == nil {
-		t.Fatal("expected primaryResult on event payload")
+	if eventPayload.ResultSummary == nil {
+		t.Fatal("expected resultSummary on event payload")
 	}
-	if sessionResult.ArtifactIds == nil || len(*sessionResult.ArtifactIds) == 0 || eventPayload.ResultArtifactRef == nil {
+	if sessionResult.ArtifactIds == nil || len(*sessionResult.ArtifactIds) == 0 || eventPayload.ArtifactIds == nil || len(*eventPayload.ArtifactIds) == 0 {
 		t.Fatal("expected result artifact ids")
 	}
-	if (*sessionResult.ArtifactIds)[0] != eventPayload.ResultArtifactRef.Id {
-		t.Fatalf("artifact ids differ: %q vs %q", (*sessionResult.ArtifactIds)[0], eventPayload.ResultArtifactRef.Id)
+	if (*sessionResult.ArtifactIds)[0] != (*eventPayload.ArtifactIds)[0] {
+		t.Fatalf("artifact ids differ: %q vs %q", (*sessionResult.ArtifactIds)[0], (*eventPayload.ArtifactIds)[0])
 	}
 
 	sessionParts := workcontent.PartsFromGenerated(sessionResult.PrimaryResult)
-	eventParts := workcontent.PartsFromGenerated(eventPayload.PrimaryResult)
+	eventParts := workcontent.PartsFromGenerated(eventPayload.ResultSummary)
 	if len(sessionParts) != len(eventParts) {
 		t.Fatalf("primary result part counts differ: %d vs %d", len(sessionParts), len(eventParts))
 	}
