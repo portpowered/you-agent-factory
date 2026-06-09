@@ -24,6 +24,7 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 		Name:         runtimeFactoryName(runtimeConfig),
 		Resources:    factoryResources(net.Resources),
 		Constraints:  factoryConstraints(net, runtimeConfig),
+		Layout:       runtimeFactoryLayout(runtimeConfig),
 		Workers:      factoryWorkers(net.Transitions, runtimeConfig),
 		WorkTypes:    factoryWorkTypes(net.WorkTypes),
 		Workstations: factoryWorkstations(net.Transitions, runtimeConfig),
@@ -38,6 +39,18 @@ func runtimeFactoryName(runtimeConfig interfaces.RuntimeDefinitionLookup) string
 		return ""
 	}
 	return reader.FactoryConfig().Name
+}
+
+func runtimeFactoryLayout(runtimeConfig interfaces.RuntimeDefinitionLookup) *interfaces.FactoryLayoutConfig {
+	reader, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
+	if !ok || reader.FactoryConfig() == nil || reader.FactoryConfig().Layout == nil {
+		return nil
+	}
+	cloned, err := config.CloneFactoryConfig(reader.FactoryConfig())
+	if err != nil || cloned == nil {
+		return nil
+	}
+	return cloned.Layout
 }
 
 func factoryResources(resources map[string]*state.ResourceDef) []interfaces.FactoryResource {

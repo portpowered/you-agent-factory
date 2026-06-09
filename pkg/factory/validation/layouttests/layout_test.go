@@ -12,6 +12,12 @@ import (
 
 func validLayoutFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{{
+				Type:       interfaces.BundledFileTypeDoc,
+				TargetPath: "factory/docs/guide.md",
+			}},
+		},
 		WorkTypes: []interfaces.WorkTypeConfig{{
 			Name: "story",
 			States: []interfaces.StateConfig{
@@ -159,6 +165,22 @@ func TestValidate_LayoutWarningsDoNotBlockTopologyValidation(t *testing.T) {
 	}
 }
 
+func TestValidate_UnknownBundledDocLayoutNodeBlocksTopologyValidation(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		ID:       "doc:factory/docs/missing.md",
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+	})
+
+	result := factoryvalidation.Validate(cfg)
+	if !result.HasBlockingTargets() {
+		t.Fatal("expected unknown bundled doc layout node to block save")
+	}
+	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutUnknownNodeReference)
+}
+
 func TestValidate_InvalidTopologyStillReportsBlockingTargetsSeparatelyFromLayout(t *testing.T) {
 	t.Parallel()
 
@@ -260,5 +282,103 @@ func TestPruneLayout_RejectsInvalidGroupBoundsGeometry(t *testing.T) {
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
 	if len(cfg.Layout.Groups) != 0 {
 		t.Fatalf("groups after geometry rejection = %#v, want []", cfg.Layout.Groups)
+	}
+}
+
+func TestPruneLayout_EsotericFailureModes(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		mutate func(cfg *interfaces.FactoryConfig)
+		assert func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result)
+	}{
+		{
+			name: "invalid bundled doc node size rejects only the poisoned document node",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+					ID:       "doc:factory/docs/guide.md",
+					Position: interfaces.FactoryLayoutPointConfig{X: 40, Y: 80},
+					Size:     &interfaces.FactoryLayoutSizeConfig{Width: math.NaN(), Height: 120},
+				})
+			},
+			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+				t.Helper()
+				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+				if len(cfg.Layout.Nodes) != 1 || cfg.Layout.Nodes[0].ID != "workstation:plan-task" {
+					t.Fatalf("nodes after bundled doc size rejection = %#v, want only workstation node", cfg.Layout.Nodes)
+				}
+			},
+		},
+		{
+			name: "valid edge with finite waypoints but non-finite label position is rejected wholesale",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				cfg.Layout.Edges[0].Waypoints = []interfaces.FactoryLayoutPointConfig{{X: 10, Y: 20}}
+				cfg.Layout.Edges[0].LabelPosition = &interfaces.FactoryLayoutPointConfig{X: math.Inf(1), Y: 30}
+			},
+			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+				t.Helper()
+				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+				if len(cfg.Layout.Edges) != 0 {
+					t.Fatalf("edges after label position rejection = %#v, want []", cfg.Layout.Edges)
+				}
+			},
+		},
+		{
+			name: "group member pruning preserves duplicate valid members while removing blanks and unknowns",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				cfg.Layout.Groups[0].NodeIDs = []string{
+					"workstation:plan-task",
+					"",
+					"workstation:missing",
+					"workstation:plan-task",
+				}
+			},
+			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+				t.Helper()
+				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutUnknownGroupMemberReference)
+				want := []string{"workstation:plan-task", "workstation:plan-task"}
+				if len(cfg.Layout.Groups) != 1 || strings.Join(cfg.Layout.Groups[0].NodeIDs, ",") != strings.Join(want, ",") {
+					t.Fatalf("group members after pruning = %#v, want %#v", cfg.Layout.Groups, want)
+				}
+			},
+		},
+		{
+			name: "viewport rejection leaves otherwise valid layout entities intact",
+			mutate: func(cfg *interfaces.FactoryConfig) {
+				cfg.Layout.Viewport = &interfaces.FactoryLayoutViewportConfig{X: 0, Y: 0, Zoom: math.NaN()}
+				cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+					ID:       "doc:factory/docs/guide.md",
+					Position: interfaces.FactoryLayoutPointConfig{X: 12, Y: 24},
+				})
+			},
+			assert: func(t *testing.T, cfg *interfaces.FactoryConfig, result factoryvalidation.Result) {
+				t.Helper()
+				validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+				if cfg.Layout.Viewport != nil {
+					t.Fatalf("viewport after rejection = %#v, want nil", cfg.Layout.Viewport)
+				}
+				if len(cfg.Layout.Nodes) != 2 {
+					t.Fatalf("nodes after viewport-only rejection = %#v, want both valid nodes preserved", cfg.Layout.Nodes)
+				}
+				if len(cfg.Layout.Edges) != 1 || len(cfg.Layout.Groups) != 1 {
+					t.Fatalf("layout after viewport-only rejection = %#v, want edges/groups preserved", cfg.Layout)
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := validLayoutFactoryConfig()
+			tc.mutate(cfg)
+
+			topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+			result := factoryvalidation.PruneLayout(cfg, topology)
+
+			tc.assert(t, cfg, result)
+		})
 	}
 }

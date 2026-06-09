@@ -807,6 +807,7 @@ func bundledFilesAPIFromInternal(bundledFiles []interfaces.BundledFileConfig) *[
 	values := make([]factoryapi.BundledFile, len(sorted))
 	for i, file := range sorted {
 		values[i] = factoryapi.BundledFile{
+			Id:         stringPtrIfNotEmpty(interfaces.CanonicalBundledFileID(file.ID, file.TargetPath)),
 			Type:       factoryapi.BundledFileType(file.Type),
 			TargetPath: file.TargetPath,
 			Content:    bundledFileContentAPIFromInternal(file),

@@ -778,8 +778,8 @@ func TestPrepareFactoryLayoutPayload_RejectsInvalidGroupBoundsGeometry(t *testin
 	cfg.Layout.Groups[0].Bounds.Width = math.NaN()
 
 	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
-	layoutOutcomes := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
-	validationassert.HasDomainTargetCode(t, layoutOutcomes.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
+	pruned := factoryvalidation.PruneLayout(cfg, topology)
+	validationassert.HasDomainTargetCode(t, pruned.Targets, factoryvalidation.CodeLayoutInvalidGeometry)
 	if len(cfg.Layout.Groups) != 0 {
 		t.Fatalf("pruned layout groups = %#v, want []", cfg.Layout.Groups)
 	}

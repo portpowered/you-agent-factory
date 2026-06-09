@@ -17,6 +17,7 @@ func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Fac
 
 	return factoryapi.Factory{
 		Name:         generatedFactoryName(payload.Name),
+		Layout:       generatedFactoryLayout(payload.Layout),
 		Resources:    slicePtr(resources),
 		WorkTypes:    slicePtr(workTypes),
 		Workers:      slicePtr(workers),
@@ -29,6 +30,138 @@ func generatedFactoryName(name string) factoryapi.FactoryName {
 		return "factory"
 	}
 	return factoryapi.FactoryName(name)
+}
+
+func generatedFactoryLayout(layout *interfaces.FactoryLayoutConfig) *factoryapi.FactoryLayout {
+	if layout == nil {
+		return nil
+	}
+	return &factoryapi.FactoryLayout{
+		SchemaVersion: int32(layout.SchemaVersion),
+		Nodes:         generatedFactoryLayoutNodes(layout.Nodes),
+		Edges:         generatedFactoryLayoutEdges(layout.Edges),
+		Groups:        generatedFactoryLayoutGroups(layout.Groups),
+		Viewport:      generatedFactoryLayoutViewport(layout.Viewport),
+		Preferences:   generatedFactoryLayoutPreferences(layout.Preferences),
+	}
+}
+
+func generatedFactoryLayoutNodes(nodes []interfaces.FactoryLayoutNodeConfig) *[]factoryapi.FactoryLayoutNode {
+	if len(nodes) == 0 {
+		return nil
+	}
+	out := make([]factoryapi.FactoryLayoutNode, len(nodes))
+	for i, node := range nodes {
+		out[i] = factoryapi.FactoryLayoutNode{
+			Id:       node.ID,
+			Position: generatedFactoryLayoutPoint(node.Position),
+			Size:     generatedFactoryLayoutSize(node.Size),
+			Locked:   node.Locked,
+		}
+	}
+	return &out
+}
+
+func generatedFactoryLayoutEdges(edges []interfaces.FactoryLayoutEdgeConfig) *[]factoryapi.FactoryLayoutEdge {
+	if len(edges) == 0 {
+		return nil
+	}
+	out := make([]factoryapi.FactoryLayoutEdge, len(edges))
+	for i, edge := range edges {
+		out[i] = factoryapi.FactoryLayoutEdge{
+			Id:            edge.ID,
+			Waypoints:     generatedFactoryLayoutPoints(edge.Waypoints),
+			LabelPosition: generatedFactoryLayoutPointPtr(edge.LabelPosition),
+		}
+	}
+	return &out
+}
+
+func generatedFactoryLayoutGroups(groups []interfaces.FactoryLayoutGroupConfig) *[]factoryapi.FactoryLayoutGroup {
+	if len(groups) == 0 {
+		return nil
+	}
+	out := make([]factoryapi.FactoryLayoutGroup, len(groups))
+	for i, group := range groups {
+		out[i] = factoryapi.FactoryLayoutGroup{
+			Id:            group.ID,
+			Label:         stringPtrIfNotEmpty(group.Label),
+			Bounds:        generatedFactoryLayoutBounds(group.Bounds),
+			NodeIds:       append([]string(nil), group.NodeIDs...),
+			ParentGroupId: group.ParentGroupID,
+			Color:         stringPtrIfNotEmpty(group.Color),
+			Locked:        group.Locked,
+		}
+	}
+	return &out
+}
+
+func generatedFactoryLayoutViewport(viewport *interfaces.FactoryLayoutViewportConfig) *factoryapi.FactoryLayoutViewport {
+	if viewport == nil {
+		return nil
+	}
+	return &factoryapi.FactoryLayoutViewport{
+		X:    float32(viewport.X),
+		Y:    float32(viewport.Y),
+		Zoom: float32(viewport.Zoom),
+	}
+}
+
+func generatedFactoryLayoutPreferences(preferences *interfaces.FactoryLayoutPreferencesConfig) *factoryapi.FactoryLayoutPreferences {
+	if preferences == nil {
+		return nil
+	}
+	out := &factoryapi.FactoryLayoutPreferences{}
+	if strings.TrimSpace(preferences.Direction) != "" {
+		direction := factoryapi.FactoryLayoutPreferencesDirection(preferences.Direction)
+		out.Direction = &direction
+	}
+	return out
+}
+
+func generatedFactoryLayoutPoint(point interfaces.FactoryLayoutPointConfig) factoryapi.FactoryLayoutPoint {
+	return factoryapi.FactoryLayoutPoint{
+		X: float32(point.X),
+		Y: float32(point.Y),
+	}
+}
+
+func generatedFactoryLayoutPointPtr(point *interfaces.FactoryLayoutPointConfig) *factoryapi.FactoryLayoutPoint {
+	if point == nil {
+		return nil
+	}
+	out := generatedFactoryLayoutPoint(*point)
+	return &out
+}
+
+func generatedFactoryLayoutPoints(points []interfaces.FactoryLayoutPointConfig) *[]factoryapi.FactoryLayoutPoint {
+	if len(points) == 0 {
+		return nil
+	}
+	out := make([]factoryapi.FactoryLayoutPoint, len(points))
+	for i, point := range points {
+		out[i] = generatedFactoryLayoutPoint(point)
+	}
+	return &out
+}
+
+func generatedFactoryLayoutSize(size *interfaces.FactoryLayoutSizeConfig) *factoryapi.FactoryLayoutSize {
+	if size == nil {
+		return nil
+	}
+	return &factoryapi.FactoryLayoutSize{
+		Width:  float32(size.Width),
+		Height: float32(size.Height),
+	}
+}
+
+func generatedFactoryLayoutBounds(bounds interfaces.FactoryLayoutBoundsConfig) factoryapi.FactoryLayoutBounds {
+	return factoryapi.FactoryLayoutBounds{
+		X:      float32(bounds.X),
+		Y:      float32(bounds.Y),
+		Width:  float32(bounds.Width),
+		Height: float32(bounds.Height),
+	}
 }
 
 func generatedResources(resources []interfaces.FactoryResource) []factoryapi.Resource {

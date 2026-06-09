@@ -313,6 +313,7 @@ func bundledFilesInternalFromAPI(bundledFiles *[]factoryapi.BundledFile) []inter
 	values := make([]interfaces.BundledFileConfig, len(*bundledFiles))
 	for i, file := range *bundledFiles {
 		values[i] = interfaces.BundledFileConfig{
+			ID:         interfaces.CanonicalBundledFileID(stringValue(file.Id), file.TargetPath),
 			Type:       string(file.Type),
 			TargetPath: file.TargetPath,
 			Content: interfaces.BundledFileContentConfig{
@@ -1035,7 +1036,6 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 		return interfaces.GuardType(strings.TrimSpace(string(value)))
 	}
 }
-
 
 func orchestratorInternalFromAPI(value *factoryapi.FactoryOrchestrator) (*interfaces.FactoryOrchestratorConfig, error) {
 	if value == nil {

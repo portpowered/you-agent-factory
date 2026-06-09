@@ -14,7 +14,6 @@ func (s *Service) saveUpsertNamedAndActivateForSession(
 	sessionID string,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	request = stripEphemeralFactoryResponseFields(request)
 	if err := validateUpsertNamedFactoryRequest(request, s.workstationLoader()); err != nil {
 		return factoryapi.Factory{}, err
 	}
@@ -65,9 +64,6 @@ func (s *Service) saveUpsertNamedAndActivateForSession(
 			factoryDir,
 			request,
 		)
-		if finalizeErr == nil {
-			saved = withLayoutOutcomes(saved, prepared.LayoutOutcomes)
-		}
 		return finalizeErr
 	})
 	if err != nil {

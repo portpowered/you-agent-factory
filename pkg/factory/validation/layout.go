@@ -66,6 +66,7 @@ func layoutNodeTargets(layout *interfaces.FactoryLayoutConfig, topology interfac
 				fmt.Sprintf("layout node %q does not match any pending graph node.", node.ID),
 				node.ID,
 				path+".id",
+				layoutUnknownNodeReferenceSeverity(node.ID),
 			))
 		}
 		targets = append(targets, invalidLayoutGeometryTargets(
@@ -99,6 +100,7 @@ func layoutEdgeTargets(layout *interfaces.FactoryLayoutConfig, topology interfac
 				fmt.Sprintf("layout edge %q does not match any pending graph edge.", edge.ID),
 				edge.ID,
 				path+".id",
+				SeverityWarning,
 			))
 		}
 		for waypointIndex, waypoint := range edge.Waypoints {
@@ -147,6 +149,7 @@ func layoutGroupTargets(layout *interfaces.FactoryLayoutConfig, topology interfa
 					fmt.Sprintf("layout group %q references unknown graph node %q.", groupID, nodeID),
 					groupID,
 					fmt.Sprintf("%s.nodeIds[%d]", path, memberIndex),
+					SeverityWarning,
 				))
 			}
 		}
@@ -154,10 +157,10 @@ func layoutGroupTargets(layout *interfaces.FactoryLayoutConfig, topology interfa
 	return targets
 }
 
-func layoutReferenceTarget(code, message, subjectID, path string) Target {
+func layoutReferenceTarget(code, message, subjectID, path string, severity Severity) Target {
 	return Target{
 		Code:     code,
-		Severity: SeverityWarning,
+		Severity: severity,
 		Message:  message,
 		Subject: Subject{
 			Type:     SubjectTypeFactory,
@@ -166,6 +169,13 @@ func layoutReferenceTarget(code, message, subjectID, path string) Target {
 		},
 		Path: path,
 	}
+}
+
+func layoutUnknownNodeReferenceSeverity(nodeID string) Severity {
+	if interfaces.IsBundledFileGraphNodeID(nodeID) {
+		return SeverityError
+	}
+	return SeverityWarning
 }
 
 func invalidLayoutGeometryTargets(path, label string, values ...float64) []Target {
@@ -451,7 +461,7 @@ func pruneLayoutViewport(layout *interfaces.FactoryLayoutConfig) []Target {
 }
 
 func prunedLayoutReferenceTarget(code, message, subjectID, path string) Target {
-	return layoutReferenceTarget(code, message, subjectID, path)
+	return layoutReferenceTarget(code, message, subjectID, path, SeverityWarning)
 }
 
 func rejectedLayoutGeometryTargets(geometryTargets []Target, label string) []Target {

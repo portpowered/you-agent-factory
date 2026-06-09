@@ -30,6 +30,7 @@ type InitialStructurePayload struct {
 	Name         string               `json:"name,omitempty"`
 	Resources    []FactoryResource    `json:"resources,omitempty"`
 	Constraints  []FactoryConstraint  `json:"constraints,omitempty"`
+	Layout       *FactoryLayoutConfig `json:"layout,omitempty"`
 	Workers      []FactoryWorker      `json:"workers,omitempty"`
 	WorkTypes    []FactoryWorkType    `json:"work_types,omitempty"`
 	Workstations []FactoryWorkstation `json:"workstations,omitempty"`
@@ -188,14 +189,14 @@ type WorkstationOutput struct {
 
 // WorkstationResult describes the business result of a workstation execution.
 type WorkstationResult struct {
-	Outcome                     string                   `json:"outcome"`
-	Output                      string                   `json:"output,omitempty"`
-	Error                       string                   `json:"error,omitempty"`
-	Feedback                    string                   `json:"feedback,omitempty"`
-	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
-	FailureReason               string                   `json:"failure_reason,omitempty"`
-	FailureMessage              string                   `json:"failure_message,omitempty"`
-	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
+	Outcome                     string               `json:"outcome"`
+	Output                      string               `json:"output,omitempty"`
+	Error                       string               `json:"error,omitempty"`
+	Feedback                    string               `json:"feedback,omitempty"`
+	SelectedClassificationLabel string               `json:"selected_classification_label,omitempty"`
+	FailureReason               string               `json:"failure_reason,omitempty"`
+	FailureMessage              string               `json:"failure_message,omitempty"`
+	FailureMetadata             *WorkFailureMetadata `json:"failure_metadata,omitempty"`
 }
 
 // FactoryTraceData carries trace identifiers attached to a runtime event.
