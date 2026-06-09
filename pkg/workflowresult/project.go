@@ -26,7 +26,10 @@ func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interf
 			Path:    "$",
 		}}}
 	}
-	parts := projectDecodedValue(sessionID, decoded, artifacts, "$")
+	parts, issues := projectDecodedValue(sessionID, decoded, artifacts, "$")
+	if len(issues) > 0 {
+		return nil, Result{Issues: issues}
+	}
 	if len(parts) == 0 {
 		return nil, Result{}
 	}
@@ -173,34 +176,54 @@ func projectDecodedValue(
 	value any,
 	artifacts []interfaces.FactorySessionArtifactState,
 	path string,
-) []interfaces.WorkContentPart {
+) ([]interfaces.WorkContentPart, []Issue) {
 	switch typed := value.(type) {
 	case nil:
-		return []interfaces.WorkContentPart{jsonPart(nil, path)}
+		return []interfaces.WorkContentPart{jsonPart(nil, path)}, nil
 	case bool, float64, json.Number:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}
+		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
 	case string:
-		if artifact, ok := artifactForEmbeddedString(typed, artifacts); ok {
-			return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}
+		if issues := validateEmbeddedArtifactURI(sessionID, typed, path); len(issues) > 0 {
+			return nil, issues
+		}
+		if artifact, ok := artifactForEmbeddedString(sessionID, typed, artifacts); ok {
+			return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
 		}
 		if len(typed) > DefaultMaxEmbeddedBytes {
 			if artifact := syntheticLargeTextArtifact(typed, path); artifact.ID != "" {
-				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}
+				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
 			}
 		}
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}
+		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
 	case []any:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}
+		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
 	case map[string]any:
 		if artifactID, ok := typed["artifactId"].(string); ok {
 			if artifact, found := findArtifact(artifacts, artifactID); found {
-				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, "")}
+				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, "")}, nil
 			}
 		}
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}
+		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
 	default:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}
+		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
 	}
+}
+
+func validateEmbeddedArtifactURI(sessionID, value, path string) []Issue {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, ArtifactURIScheme+"://") {
+		return nil
+	}
+	issues := ValidateArtifactURIForSession(trimmed, sessionID)
+	if len(issues) == 0 {
+		return nil
+	}
+	for index := range issues {
+		if path != "" && path != "$" {
+			issues[index].Path = path
+		}
+	}
+	return issues
 }
 
 func jsonPart(value any, path string) interfaces.WorkContentPart {
@@ -280,9 +303,12 @@ func artifactBackedPart(sessionID string, artifact interfaces.FactorySessionArti
 	}
 }
 
-func artifactForEmbeddedString(value string, artifacts []interfaces.FactorySessionArtifactState) (interfaces.FactorySessionArtifactState, bool) {
+func artifactForEmbeddedString(sessionID, value string, artifacts []interfaces.FactorySessionArtifactState) (interfaces.FactorySessionArtifactState, bool) {
 	trimmed := strings.TrimSpace(value)
 	if !strings.HasPrefix(trimmed, ArtifactURIScheme+"://") {
+		return interfaces.FactorySessionArtifactState{}, false
+	}
+	if issues := ValidateArtifactURIForSession(trimmed, sessionID); len(issues) > 0 {
 		return interfaces.FactorySessionArtifactState{}, false
 	}
 	parsed, issues := ParseArtifactURI(trimmed)

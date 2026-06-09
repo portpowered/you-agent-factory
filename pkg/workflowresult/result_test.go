@@ -143,6 +143,37 @@ func TestProjectPrimaryResult_MapsJSONAndArtifactBackedOutputs(t *testing.T) {
 	}
 }
 
+func TestProjectPrimaryResult_RejectsCrossSessionArtifactURI(t *testing.T) {
+	sessionID := "session-fixture"
+	foreignURI := workflowresult.FormatArtifactURI("session-other", "artifact-image-1")
+	raw, err := json.Marshal(foreignURI)
+	if err != nil {
+		t.Fatalf("marshal foreign uri: %v", err)
+	}
+	artifacts := []interfaces.FactorySessionArtifactState{{
+		ID:         "artifact-image-1",
+		Kind:       "IMAGE",
+		Visibility: "PUBLIC",
+	}}
+	parts, validation := workflowresult.ProjectPrimaryResult(sessionID, workflowresult.TypedValue{JSON: raw}, artifacts)
+	if !validation.HasIssues() {
+		t.Fatalf("parts = %#v, expected cross-session artifact URI rejection", parts)
+	}
+	if validation.Issues[0].Code != workflowresult.CodeArtifactURISessionMismatch {
+		t.Fatalf("issue code = %q, want %q", validation.Issues[0].Code, workflowresult.CodeArtifactURISessionMismatch)
+	}
+
+	sessionResult := workflowresult.BuildSessionResult(workflowresult.SessionResultInput{
+		SessionID:    sessionID,
+		Status:       factoryapi.FactorySessionStatusFINISHED,
+		PrimaryValue: workflowresult.TypedValue{JSON: raw},
+		Artifacts:    artifacts,
+	})
+	if sessionResult.PrimaryResult != nil {
+		t.Fatalf("primaryResult = %#v, want nil for cross-session artifact URI", sessionResult.PrimaryResult)
+	}
+}
+
 func TestBuildSessionResultAndEventPayload_ProjectSameResultAndArtifactIDs(t *testing.T) {
 	sessionID := "session-fixture"
 	raw, err := json.Marshal(map[string]any{"ok": true})

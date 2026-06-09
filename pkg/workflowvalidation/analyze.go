@@ -57,7 +57,9 @@ func (a *sourceAnalyzer) inspectCall(call *js.CallExpr) {
 		}
 		if _, supported := supportedRootGlobals[name]; !supported {
 			a.addIssue(CodeUnsupportedGlobal, fmt.Sprintf("unsupported workflow global %q", name), call)
+			return
 		}
+		a.validateSupportedPrimitiveShape(call, name)
 	case *js.DotExpr:
 		root, member, ok := memberAccess(callee)
 		if !ok {
@@ -71,11 +73,15 @@ func (a *sourceAnalyzer) inspectCall(call *js.CallExpr) {
 		case "workflow":
 			if _, supported := supportedWorkflowMembers[member]; !supported {
 				a.addIssue(CodeUnsupportedPrimitive, fmt.Sprintf("unsupported workflow primitive workflow.%s", member), call)
+				return
 			}
+			a.validateSupportedPrimitiveShape(call, "workflow."+member)
 		case "agent":
 			if _, supported := supportedAgentMembers[member]; !supported {
 				a.addIssue(CodeUnsupportedPrimitive, fmt.Sprintf("unsupported workflow primitive agent.%s", member), call)
+				return
 			}
+			a.validateSupportedPrimitiveShape(call, "agent."+member)
 		default:
 			a.addIssue(CodeUnsupportedGlobal, fmt.Sprintf("unsupported workflow global %q", root), call)
 		}
@@ -121,11 +127,33 @@ func (a *sourceAnalyzer) inspectIdentifierUse(v *js.Var) {
 
 func memberAccess(dot *js.DotExpr) (root string, member string, ok bool) {
 	rootVar, isRoot := dot.X.(*js.Var)
-	memberVar, isMember := dot.Y.(*js.Var)
-	if !isRoot || !isMember {
+	if !isRoot {
 		return "", "", false
 	}
-	return string(rootVar.Name()), string(memberVar.Name()), true
+	member, ok = identifierName(dot.Y)
+	if !ok {
+		return "", "", false
+	}
+	return string(rootVar.Name()), member, true
+}
+
+func identifierName(expr js.IExpr) (string, bool) {
+	switch node := expr.(type) {
+	case *js.Var:
+		return string(node.Name()), true
+	case js.LiteralExpr:
+		if node.TokenType != js.IdentifierToken {
+			return "", false
+		}
+		return string(node.Data), true
+	case *js.LiteralExpr:
+		if node.TokenType != js.IdentifierToken {
+			return "", false
+		}
+		return string(node.Data), true
+	default:
+		return "", false
+	}
 }
 
 func (a *sourceAnalyzer) addIssue(code, message string, node js.INode) {

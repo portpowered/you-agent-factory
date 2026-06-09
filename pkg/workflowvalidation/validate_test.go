@@ -109,6 +109,61 @@ func TestWorkflowSourceTargets_RejectsFileBackedSyntaxError(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsInvalidPrimitiveCallShapes(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		code string
+	}{
+		{
+			name: "invalid meta",
+			src:  `meta("bad");`,
+			code: workflowvalidation.CodeInvalidMetadata,
+		},
+		{
+			name: "invalid workflow artifact",
+			src:  `workflow.artifact("log");`,
+			code: workflowvalidation.CodeUnsupportedPrimitive,
+		},
+		{
+			name: "invalid agent run",
+			src:  `agent.run("review");`,
+			code: workflowvalidation.CodeUnsupportedPrimitive,
+		},
+		{
+			name: "invalid parallel",
+			src:  `parallel("not-array");`,
+			code: workflowvalidation.CodeUnsupportedPrimitive,
+		},
+		{
+			name: "invalid pipeline",
+			src:  `pipeline("not-array");`,
+			code: workflowvalidation.CodeUnsupportedPrimitive,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := workflowvalidation.Validate(workflowvalidation.Request{
+				Source:    tc.src,
+				SourceRef: "inline",
+			})
+			if !result.HasIssues() {
+				t.Fatal("expected primitive shape validation issue")
+			}
+			found := false
+			for _, issue := range result.Issues {
+				if issue.Code == tc.code {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("issues = %#v, want code %q", result.Issues, tc.code)
+			}
+		})
+	}
+}
+
 func TestValidateFactory_RejectsInlineForbiddenHostAccess(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{
 		Name: "dynamic-workflow",
